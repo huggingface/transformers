@@ -15,7 +15,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -139,7 +138,7 @@ class FunAsrNanoSANMAttention(nn.Module):
         k = k.view(b, t, self.num_heads, self.d_k).transpose(1, 2)
         v_heads = v.view(b, t, self.num_heads, self.d_k).transpose(1, 2)
 
-        scores = torch.matmul(q, k.transpose(-2, -1)) * (self.d_k ** -0.5)
+        scores = torch.matmul(q, k.transpose(-2, -1)) * (self.d_k**-0.5)
 
         if mask is not None:
             mask_for_attn = mask.unsqueeze(1).eq(0)
@@ -245,46 +244,52 @@ class FunAsrNanoEncoder(PreTrainedModel):
 
         self.embed = FunAsrNanoSinusoidalPositionEncoder()
 
-        self.encoders0 = nn.ModuleList([
-            FunAsrNanoEncoderLayer(
-                in_size=config.input_size,
-                hidden_size=config.output_size,
-                num_heads=config.attention_heads,
-                linear_units=config.linear_units,
-                dropout_rate=config.dropout_rate,
-                attention_dropout_rate=config.attention_dropout_rate,
-                kernel_size=config.kernel_size,
-                sanm_shift=config.sanm_shift,
-            )
-        ])
+        self.encoders0 = nn.ModuleList(
+            [
+                FunAsrNanoEncoderLayer(
+                    in_size=config.input_size,
+                    hidden_size=config.output_size,
+                    num_heads=config.attention_heads,
+                    linear_units=config.linear_units,
+                    dropout_rate=config.dropout_rate,
+                    attention_dropout_rate=config.attention_dropout_rate,
+                    kernel_size=config.kernel_size,
+                    sanm_shift=config.sanm_shift,
+                )
+            ]
+        )
 
-        self.encoders = nn.ModuleList([
-            FunAsrNanoEncoderLayer(
-                in_size=config.output_size,
-                hidden_size=config.output_size,
-                num_heads=config.attention_heads,
-                linear_units=config.linear_units,
-                dropout_rate=config.dropout_rate,
-                attention_dropout_rate=config.attention_dropout_rate,
-                kernel_size=config.kernel_size,
-                sanm_shift=config.sanm_shift,
-            )
-            for _ in range(config.num_blocks - 1)
-        ])
+        self.encoders = nn.ModuleList(
+            [
+                FunAsrNanoEncoderLayer(
+                    in_size=config.output_size,
+                    hidden_size=config.output_size,
+                    num_heads=config.attention_heads,
+                    linear_units=config.linear_units,
+                    dropout_rate=config.dropout_rate,
+                    attention_dropout_rate=config.attention_dropout_rate,
+                    kernel_size=config.kernel_size,
+                    sanm_shift=config.sanm_shift,
+                )
+                for _ in range(config.num_blocks - 1)
+            ]
+        )
 
-        self.tp_encoders = nn.ModuleList([
-            FunAsrNanoEncoderLayer(
-                in_size=config.output_size,
-                hidden_size=config.output_size,
-                num_heads=config.attention_heads,
-                linear_units=config.linear_units,
-                dropout_rate=config.dropout_rate,
-                attention_dropout_rate=config.attention_dropout_rate,
-                kernel_size=config.kernel_size,
-                sanm_shift=config.sanm_shift,
-            )
-            for _ in range(config.tp_blocks)
-        ])
+        self.tp_encoders = nn.ModuleList(
+            [
+                FunAsrNanoEncoderLayer(
+                    in_size=config.output_size,
+                    hidden_size=config.output_size,
+                    num_heads=config.attention_heads,
+                    linear_units=config.linear_units,
+                    dropout_rate=config.dropout_rate,
+                    attention_dropout_rate=config.attention_dropout_rate,
+                    kernel_size=config.kernel_size,
+                    sanm_shift=config.sanm_shift,
+                )
+                for _ in range(config.tp_blocks)
+            ]
+        )
 
         self.after_norm = FunAsrNanoLayerNorm(config.output_size)
         self.tp_norm = FunAsrNanoLayerNorm(config.output_size)
@@ -307,7 +312,7 @@ class FunAsrNanoEncoder(PreTrainedModel):
         else:
             mask = None
 
-        hidden_states = hidden_states * (self.config.output_size ** 0.5)
+        hidden_states = hidden_states * (self.config.output_size**0.5)
         hidden_states = self.embed(hidden_states)
 
         all_hidden_states = () if output_hidden_states else None
@@ -366,7 +371,7 @@ class FunAsrNanoAdaptorAttention(nn.Module):
         k = self.linear_k(x).view(b, t, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.linear_v(x).view(b, t, self.num_heads, self.head_dim).transpose(1, 2)
 
-        scores = torch.matmul(q, k.transpose(-2, -1)) * (self.head_dim ** -0.5)
+        scores = torch.matmul(q, k.transpose(-2, -1)) * (self.head_dim**-0.5)
 
         if mask is not None:
             # mask shape: (batch, 1, time)
@@ -419,20 +424,20 @@ class FunAsrNanoAdaptor(nn.Module):
         self.linear2 = nn.Linear(config.ffn_dim, config.llm_dim)
 
         if config.num_layers > 0:
-            self.blocks = nn.ModuleList([
-                FunAsrNanoAdaptorLayer(
-                    hidden_size=config.llm_dim,
-                    num_heads=config.attention_heads,
-                    dropout_rate=config.dropout_rate,
-                )
-                for _ in range(config.num_layers)
-            ])
+            self.blocks = nn.ModuleList(
+                [
+                    FunAsrNanoAdaptorLayer(
+                        hidden_size=config.llm_dim,
+                        num_heads=config.attention_heads,
+                        dropout_rate=config.dropout_rate,
+                    )
+                    for _ in range(config.num_layers)
+                ]
+            )
         else:
             self.blocks = None
 
-    def forward(
-        self, encoder_out: torch.Tensor, encoder_out_lens: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, encoder_out: torch.Tensor, encoder_out_lens: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_len, dim = encoder_out.size()
         k = self.downsample_rate
 
@@ -476,23 +481,23 @@ class FunAsrNanoCtcDecoder(nn.Module):
         self.linear2 = nn.Linear(config.ffn_dim, config.decoder_dim)
 
         if config.num_layers > 0:
-            self.blocks = nn.ModuleList([
-                FunAsrNanoAdaptorLayer(
-                    hidden_size=config.decoder_dim,
-                    num_heads=8,
-                    dropout_rate=config.dropout_rate,
-                )
-                for _ in range(config.num_layers)
-            ])
+            self.blocks = nn.ModuleList(
+                [
+                    FunAsrNanoAdaptorLayer(
+                        hidden_size=config.decoder_dim,
+                        num_heads=8,
+                        dropout_rate=config.dropout_rate,
+                    )
+                    for _ in range(config.num_layers)
+                ]
+            )
         else:
             self.blocks = None
 
         self.ctc_lo = nn.Linear(config.decoder_dim, config.vocab_size)
         self.blank_id = config.blank_id
 
-    def forward(
-        self, encoder_out: torch.Tensor, encoder_out_lens: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, encoder_out: torch.Tensor, encoder_out_lens: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_len, dim = encoder_out.size()
         k = self.config.downsample_rate
 
@@ -640,16 +645,16 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
             if input_features is not None and input_ids.shape[1] != 1:
-                audio_embeds, audio_embed_lens, _, _ = self.encode_audio(
-                    input_features, feature_lengths
-                )
+                audio_embeds, audio_embed_lens, _, _ = self.encode_audio(input_features, feature_lengths)
 
                 # Mask and scatter audio embeddings into token positions
-                special_audio_mask = (input_ids == self.audio_token_index)
+                special_audio_mask = input_ids == self.audio_token_index
                 special_audio_mask_expanded = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds)
 
                 num_audios, max_audio_len, embed_dim = audio_embeds.shape
-                audio_len_mask = torch.arange(max_audio_len, device=audio_embeds.device)[None, :] < audio_embed_lens[:, None]
+                audio_len_mask = (
+                    torch.arange(max_audio_len, device=audio_embeds.device)[None, :] < audio_embed_lens[:, None]
+                )
                 flat_audio = audio_embeds[audio_len_mask]
 
                 inputs_embeds = inputs_embeds.masked_scatter(
