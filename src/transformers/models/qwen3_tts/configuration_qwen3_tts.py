@@ -52,8 +52,6 @@ class Qwen3TTSSpeakerEncoderConfig(PreTrainedConfig):
             The sample rate of the audio.
     """
 
-    model_type = "qwen3_tts_speaker_encoder"
-
     def __init__(
         self,
         mel_dim: int | None = 128,
@@ -135,7 +133,6 @@ class Qwen3TTSTalkerCodePredictorConfig(PreTrainedConfig):
             Padding token ID.
     """
 
-    model_type = "qwen3_tts_talker_code_predictor"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -276,8 +273,7 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
         pad_token_id (`int`, *optional*):
             Padding token ID.
     """
-
-    model_type = "qwen3_tts_talker"
+    
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"code_predictor_config": Qwen3TTSTalkerCodePredictorConfig}
 

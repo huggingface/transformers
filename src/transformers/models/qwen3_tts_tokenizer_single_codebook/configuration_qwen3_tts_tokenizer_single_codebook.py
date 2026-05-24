@@ -76,8 +76,6 @@ class Qwen3TTSTokenizerSingleCodebookDiTConfig(PreTrainedConfig):
             Maximum sequence length.
     """
 
-    model_type = "qwen3_tts_dit"
-
     def __init__(
         self,
         hidden_size: int | None = 1024,
@@ -151,8 +149,6 @@ class Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig(PreTrainedConfig):
             Kernel sizes for each upsampling layer.
     """
 
-    model_type = "qwen3_tts_tokenizer_single_codebook_decoder_bigvgan"
-
     def __init__(
         self,
         mel_dim: int | None = 80,
@@ -188,7 +184,6 @@ class Qwen3TTSTokenizerSingleCodebookDecoderConfig(PreTrainedConfig):
             Configuration for the BigVGAN sub-model.
     """
 
-    model_type = "qwen3_tts_tokenizer_single_codebook_decoder"
     sub_configs = {
         "dit_config": Qwen3TTSTokenizerSingleCodebookDiTConfig,
         "bigvgan_config": Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig,
@@ -258,8 +253,6 @@ class Qwen3TTSTokenizerSingleCodebookEncoderConfig(PreTrainedConfig):
         audio_vq_ds_rate (`int`, *optional*, defaults to 2):
             Downsampling rate inside the VQ module.
     """
-
-    model_type = "qwen3_tts_tokenizer_SingleCodebook_encoder"
 
     def __init__(
         self,
