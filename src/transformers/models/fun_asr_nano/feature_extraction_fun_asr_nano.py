@@ -13,8 +13,6 @@
 # limitations under the License.
 """Feature extractor for Fun-ASR-Nano (mel-spectrogram with LFR)."""
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -173,11 +171,11 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        sampling_rate: Optional[int] = None,
-        return_tensors: Optional[str] = None,
-        padding: Union[bool, str] = True,
-        max_length: Optional[int] = None,
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        sampling_rate: int | None = None,
+        return_tensors: str | None = None,
+        padding: bool | str = True,
+        max_length: int | None = None,
         truncation: bool = False,
         **kwargs,
     ) -> BatchFeature:
@@ -202,12 +200,9 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
             )
 
         # Handle single input
-        is_batched = True
         if isinstance(raw_speech, np.ndarray) and raw_speech.ndim == 1:
-            is_batched = False
             raw_speech = [raw_speech]
         elif isinstance(raw_speech, list) and isinstance(raw_speech[0], (float, int)):
-            is_batched = False
             raw_speech = [np.array(raw_speech, dtype=np.float32)]
         elif isinstance(raw_speech, list) and isinstance(raw_speech[0], np.ndarray):
             pass

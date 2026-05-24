@@ -13,8 +13,6 @@
 # limitations under the License.
 """Processor for Fun-ASR-Nano."""
 
-from typing import Optional, Union
-
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
@@ -71,10 +69,10 @@ class FunAsrNanoProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         audio=None,
-        sampling_rate: Optional[int] = None,
-        return_tensors: Optional[str] = None,
+        sampling_rate: int | None = None,
+        return_tensors: str | None = None,
         **kwargs,
     ):
         """
@@ -135,10 +133,10 @@ class FunAsrNanoProcessor(ProcessorMixin):
         self,
         audio_path_or_array,
         prompt: str = "语音转写：",
-        language: Optional[str] = None,
-        hotwords: Optional[list[str]] = None,
+        language: str | None = None,
+        hotwords: list[str] | None = None,
         system_prompt: str = "You are a helpful assistant.",
-        sampling_rate: Optional[int] = None,
+        sampling_rate: int | None = None,
         return_tensors: str = "pt",
     ):
         """
@@ -192,16 +190,16 @@ class FunAsrNanoProcessor(ProcessorMixin):
         # Load audio if path
         if isinstance(audio_path_or_array, str):
             import soundfile as sf
+
             audio_array, sr = sf.read(audio_path_or_array, dtype="float32")
             if sr != (sampling_rate or self.feature_extractor.sampling_rate):
-                import torchaudio
                 import torch
+                import torchaudio
+
                 audio_tensor = torch.from_numpy(audio_array).float()
                 if audio_tensor.ndim == 1:
                     audio_tensor = audio_tensor.unsqueeze(0)
-                audio_tensor = torchaudio.functional.resample(
-                    audio_tensor, sr, self.feature_extractor.sampling_rate
-                )
+                audio_tensor = torchaudio.functional.resample(audio_tensor, sr, self.feature_extractor.sampling_rate)
                 audio_array = audio_tensor.squeeze(0).numpy()
         else:
             audio_array = np.asarray(audio_path_or_array, dtype=np.float32)
@@ -238,6 +236,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
         input_ids = prefix_ids + audio_token_ids + suffix_ids
 
         import torch
+
         result = {
             "input_ids": torch.tensor([input_ids], dtype=torch.long),
             "attention_mask": torch.ones(1, len(input_ids), dtype=torch.long),
