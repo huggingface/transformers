@@ -29,6 +29,9 @@ python src/transformers/models/qwen3_tts/convert_qwen3_tts_to_hf.py \
     --output_dir ./qwen3_tts_hf \
     --push_to_hub your-username/Qwen3-TTS-12Hz-0.6B-Base-HF
 ```
+
+To convert the Qwen3-TTS-Tokenizer-12Hz (multi-codebook) model, use the dedicated script:
+    src/transformers/models/qwen3_tts_tokenizer_multi_codebook/convert_qwen3_tts_tokenizer_multi_codebook_to_hf.py
 """
 
 import argparse
@@ -43,12 +46,6 @@ from safetensors.torch import load_file
 from transformers import (
     Qwen3TTSConfig,
     Qwen3TTSForConditionalGeneration,
-)
-from transformers.models.qwen3_tts_tokenizer_multi_codebook.configuration_qwen3_tts_tokenizer_multi_codebook import (
-    Qwen3TTSTokenizerMultiCodebookConfig,
-)
-from transformers.models.qwen3_tts_tokenizer_multi_codebook.modeling_qwen3_tts_tokenizer_multi_codebook import (
-    Qwen3TTSTokenizerMultiCodebookModel,
 )
 
 
@@ -196,72 +193,6 @@ def create_config_from_checkpoint(checkpoint_path: Path) -> Qwen3TTSConfig:
     return config
 
 
-def remap_tokenizer_multi_codebook_keys(state_dict: dict) -> dict:
-    """Remap original Qwen3-TTS-Tokenizer-12Hz keys to HF key names."""
-    new_state_dict = {}
-    for key, value in state_dict.items():
-        new_key = key
-
-        # rvq_first → semantic_residual_vector_quantizer
-        new_key = new_key.replace(
-            "decoder.quantizer.rvq_first.",
-            "decoder.quantizer.semantic_residual_vector_quantizer.",
-        )
-        # rvq_rest → acoustic_residual_vector_quantizer
-        new_key = new_key.replace(
-            "decoder.quantizer.rvq_rest.",
-            "decoder.quantizer.acoustic_residual_vector_quantizer.",
-        )
-        # Remove the .vq. level: .vq.layers.N. → .layers.N.
-        new_key = new_key.replace(".vq.layers.", ".layers.")
-        # ._codebook. → .codebook.
-        new_key = new_key.replace("._codebook.", ".codebook.")
-        # .embedding_sum → .embed_sum
-        new_key = new_key.replace(".embedding_sum", ".embed_sum")
-
-        new_state_dict[new_key] = value
-
-    return new_state_dict
-
-
-def convert_tokenizer_multi_codebook(checkpoint_path, output_dir, push_to_hub, bfloat16, max_shard_size):
-    """Convert Qwen3-TTS-Tokenizer-12Hz (multi-codebook) checkpoint to HF format."""
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    logger.info(f"Loading tokenizer checkpoint from {checkpoint_path}")
-    original_state_dict = load_original_checkpoint(Path(checkpoint_path))
-    logger.info(f"Original keys: {len(original_state_dict)}")
-
-    logger.info("Remapping keys")
-    converted_state_dict = remap_tokenizer_multi_codebook_keys(original_state_dict)
-
-    config = Qwen3TTSTokenizerMultiCodebookConfig()
-    config.save_pretrained(str(output_path))
-
-    dtype = torch.bfloat16 if bfloat16 else torch.float32
-    model = Qwen3TTSTokenizerMultiCodebookModel(config).to(dtype)
-
-    load_result = model.load_state_dict(converted_state_dict, strict=False)
-    if load_result.missing_keys:
-        logger.warning(f"Missing keys ({len(load_result.missing_keys)}): {load_result.missing_keys}")
-    if load_result.unexpected_keys:
-        logger.warning(f"Unexpected keys ({len(load_result.unexpected_keys)}): {load_result.unexpected_keys}")
-
-    # Set initialized buffers to True (not saved in original checkpoint)
-    for module in model.modules():
-        if hasattr(module, "initialized"):
-            module.initialized.fill_(1.0)
-
-    logger.info(f"Saving to {output_path}")
-    model.save_pretrained(str(output_path), max_shard_size=max_shard_size)
-
-    if push_to_hub:
-        model.push_to_hub(push_to_hub, max_shard_size=max_shard_size)
-
-    logger.info("Tokenizer conversion complete!")
-
-
 def convert_checkpoint(checkpoint_path, output_dir, push_to_hub, bfloat16, max_shard_size):
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -338,23 +269,7 @@ def main():
         default="2.5GB",
         help="Maximum shard size for safetensors files.",
     )
-    parser.add_argument(
-        "--tokenizer_12hz",
-        action="store_true",
-        help="Convert Qwen3-TTS-Tokenizer-12Hz (multi-codebook) instead of the main model.",
-    )
-
     args = parser.parse_args()
-
-    if args.tokenizer_12hz:
-        convert_tokenizer_multi_codebook(
-            checkpoint_path=args.checkpoint_path,
-            output_dir=args.output_dir,
-            push_to_hub=args.push_to_hub,
-            bfloat16=not args.float32,
-            max_shard_size=args.max_shard_size,
-        )
-        return
 
     convert_checkpoint(
         checkpoint_path=args.checkpoint_path,
