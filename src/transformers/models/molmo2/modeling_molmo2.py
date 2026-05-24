@@ -1076,7 +1076,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
 
 
 class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.wte.weight"}
+    _tied_weights_keys = []  # Weights are not tied
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Molmo2Config
