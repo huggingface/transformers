@@ -272,8 +272,6 @@ class Qwen3TTSForConditionalGenerationIntegrationTest(unittest.TestCase):
                 subtalker_dosample=False,
             )
 
-        hf_codes = talker_codes_list[0].cpu().tolist()
-
         # Compare only the first 6 codes of row 0 — the code predictor has near-tied logits
         # in bfloat16 (top-2 logits collapse to identical values), causing argmax to differ
         # between implementations due to different internal computation order.

@@ -273,7 +273,7 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
         pad_token_id (`int`, *optional*):
             Padding token ID.
     """
-    
+
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"code_predictor_config": Qwen3TTSTalkerCodePredictorConfig}
 
