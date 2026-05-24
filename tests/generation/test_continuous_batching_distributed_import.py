@@ -113,5 +113,6 @@ class TestContinuousBatchingDistributedImportGuard(unittest.TestCase):
         self.assertEqual(result.returncode, 0, msg=f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}")
         self.assertIn("OK", result.stdout)
 
+
 if __name__ == "__main__":
     unittest.main()
