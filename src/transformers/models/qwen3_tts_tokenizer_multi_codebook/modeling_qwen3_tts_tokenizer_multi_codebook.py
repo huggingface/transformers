@@ -100,14 +100,14 @@ class Qwen3TTSTokenizerMultiCodebookCausalTransConvNet(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1):
         super().__init__()
         self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride=stride)
-
         pad = kernel_size - stride
-        self.left_pad = math.ceil(pad)
-        self.right_pad = pad = self.left_pad
+        self.left_pad = 0
+        self.right_pad = int(pad)
 
     def forward(self, hidden_state):
         hidden_state = self.conv(hidden_state)
-        hidden_state = hidden_state[..., self.left_pad : hidden_state.shape[-1] - self.right_pad]
+        if self.right_pad > 0:
+            hidden_state = hidden_state[..., : hidden_state.shape[-1] - self.right_pad]
         return hidden_state.contiguous()
 
 
@@ -737,8 +737,8 @@ class Qwen3TTSTokenizerMultiCodebookConv1dPaddingCache:
         return current_cache
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Qwen3TTSTokenizerMultiCodebookEncoderOutput(ModelOutput):
     r"""
     audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
@@ -982,15 +982,15 @@ class Qwen3TTSTokenizerMultiCodebookPreTrainedModel(PreTrainedModel):
             init.copy_(module.original_inv_freq, buffer_value)
 
 
-class Qwen3TTSTokenizerMultiCodebookDecoderPreTrainedModel(Qwen3TTSTokenizerMultiCodebookPreTrainedModel):
+class Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel(Qwen3TTSTokenizerMultiCodebookPreTrainedModel):
     config_class = Qwen3TTSTokenizerMultiCodebookCode2WavConfig
     _no_split_modules = ["Qwen3TTSTokenizerMultiCodebookBlock"]
 
 
-# ─── Transformer model (decoder side) ────────────────────────────────────────
+#  Transformer model (decoder side)
 
 
-class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3TTSTokenizerMultiCodebookDecoderPreTrainedModel):
+class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel):
     def __init__(self, config: Qwen3TTSTokenizerMultiCodebookCode2WavConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
@@ -1040,9 +1040,8 @@ class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3TTSTokenizerMul
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
@@ -1296,13 +1295,13 @@ class Qwen3TTSTokenizerMultiCodebookSplitResidualVectorQuantizer(nn.Module):
         return quantized_out
 
 
-# ─── Decoder ─────────────────────────────────────────────────────────────────
+#  Decoder
 
 
-class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookDecoderPreTrainedModel):
+class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel):
     config_class = Qwen3TTSTokenizerMultiCodebookCode2WavConfig
 
-    def __init__(self, config: Qwen3TTSTokenizerMultiCodebookCode2WavConfig):
+    def __init__(self, config: config_class):
         super().__init__(config)
         self.total_upsample = int(np.prod(list(config.upsample_rates) + list(config.upsampling_ratios)))
         self.pre_transformer = Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel._from_config(config)
@@ -1376,8 +1375,8 @@ class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookDecode
         return torch.cat(wavs, dim=-1)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Qwen3TTSTokenizerMultiCodebookDecoderOutput(ModelOutput):
     r"""
     audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
@@ -2351,7 +2350,7 @@ class Qwen3TTSTokenizerMultiCodebookEncoderModel(Qwen3TTSTokenizerMultiCodebookP
         )
 
 
-# ─── Top-level Model ──────────────────────────────────────────────────────────
+#  Top-level Model
 
 
 @auto_docstring

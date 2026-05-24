@@ -499,9 +499,8 @@ class Qwen3TTSTalkerModel(Qwen3TTSTalkerTextPreTrainedModel):
         mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
         causal_mask = mask_function(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=text_position_ids,
         )
@@ -637,9 +636,8 @@ class Qwen3TTSTalkerCodePredictorModel(Qwen3TTSPreTrainedModel):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
@@ -998,6 +996,9 @@ class Qwen3TTSTalkerForConditionalGeneration(Qwen3TTSTalkerTextPreTrainedModel, 
                 position_ids, rope_deltas = self.get_rope_index(attention_mask)
                 rope_deltas = rope_deltas - delta0
                 self.rope_deltas = rope_deltas
+                # Trim to match actual input length (avoids broadcast during decode when
+                # attention_mask covers all past tokens but inputs_embeds is 1 token)
+                position_ids = position_ids[:, :, -inputs_embeds.shape[1] :]
             else:
                 batch_size, seq_length = input_ids.shape
                 delta = cache_position[0] + self.rope_deltas if cache_position is not None else 0
