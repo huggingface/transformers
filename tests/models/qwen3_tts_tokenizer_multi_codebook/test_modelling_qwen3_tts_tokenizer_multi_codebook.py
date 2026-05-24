@@ -347,9 +347,6 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
             encoded = model.encode(input_values, padding_mask=padding_mask)
             codes = encoded.audio_codes[0]  # [time, num_quantizers]
 
-        print(f"\n[HF]       codes[0]: {codes[0].cpu().tolist()}")
-        print(f"[expected] codes[0]: {expected['audio_codes'][0]}")
-
         torch.testing.assert_close(
             codes.cpu().long(),
             torch.tensor(expected["audio_codes"], dtype=torch.long),
