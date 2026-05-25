@@ -687,34 +687,56 @@ class WeightTransform:
         self.collected_tensors[source_pattern].append(future)
         self.layer_targets[target_key].add(source_key)
 
-    def _scoped_match(self, source_key: str) -> tuple[str | None, str, re.Match[str]] | None:
+    def _scoped_match(
+        self, source_key: str, base_model_prefix: str | None = None
+    ) -> tuple[str | None, str, re.Match[str]] | None:
         """
-        Apply `scope_prefix` stripping (if any), then match `compiled_sources` against the suffix.
+        Strip `scope_prefix` (if any) from `source_key`, then match `compiled_sources` against the
+        remaining suffix.
 
-        Returns `(prefix_dot, key_to_match, match_object)` when a branch matches, where `prefix_dot` is `None`
-        if `scope_prefix` is unset, else `f"{scope_prefix}."`. Returns `None` when out of scope or unmatched.
+        Returns `(prefix_dot, key_to_match, match_object)` on match, else `None`. `prefix_dot` is
+        the prefix consumed from `source_key`: either `f"{scope_prefix}."` or that same string with
+        one `base_model_prefix` level stripped or prepended when the former didn't match.
+        `None` when `scope_prefix` is unset.
         """
-        prefix_dot = None
-        key_to_match = source_key
-        if self.scope_prefix is not None:
-            prefix_dot = self.scope_prefix + "."
-            if not source_key.startswith(prefix_dot):
+        if self.scope_prefix is None:
+            match_object = self.compiled_sources.search(source_key)
+            if match_object is None:
                 return None
-            key_to_match = source_key[len(prefix_dot) :]
+            return (None, source_key, match_object)
+
+        scope_prefix_dot = self.scope_prefix + "."
+        # Try `scope_prefix.` first; then a single `base_model_prefix` adjustment - strip it off if
+        # `scope_prefix.` already starts with it, otherwise prepend it.
+        candidates = [scope_prefix_dot]
+        if base_model_prefix is not None:
+            base_dot = base_model_prefix + "."
+            if scope_prefix_dot.startswith(base_dot):
+                candidates.append(scope_prefix_dot[len(base_dot) :])
+            else:
+                candidates.append(base_dot + scope_prefix_dot)
+
+        for candidate in candidates:
+            if source_key.startswith(candidate):
+                key_to_match = source_key[len(candidate) :]
+                prefix_dot = candidate
+                break
+        else:
+            return None
 
         match_object = self.compiled_sources.search(key_to_match)
         if match_object is None:
             return None
         return (prefix_dot, key_to_match, match_object)
 
-    def rename_source_key(self, source_key: str) -> tuple[str, str | None]:
+    def rename_source_key(self, source_key: str, base_model_prefix: str | None = None) -> tuple[str, str | None]:
         """
         Return a tuple (renamed_key, source_pattern_producing_the_match).
         Try renaming `source_key` according to the source and target patterns of the current WeightTransform.
         In case of a one-to-many transform, i.e. we have several target patterns, the matching source pattern
         will be replaced by the first of all the target patterns (they are then correctly expanded in the Operations).
         """
-        matched = self._scoped_match(source_key)
+        matched = self._scoped_match(source_key, base_model_prefix)
         if matched is None:
             return source_key, None
 
@@ -1142,7 +1164,7 @@ def rename_source_key(
     source_key: str,
     weight_renamings: list[WeightRenaming],
     weight_converters: list[WeightConverter],
-    prefix: str | None = None,
+    base_model_prefix: str | None = None,
     meta_state_dict: dict | None = None,
 ) -> tuple[str, str | None]:
     """
@@ -1160,10 +1182,10 @@ def rename_source_key(
             Applied in order; every matching renaming fires (they may chain).
         weight_converters (`list[WeightConverter]`):
             Applied after all renamings; at most one may match. Subsequent converters are skipped.
-        prefix (`str`, *optional*):
-            Base-model prefix to add or strip when both `prefix` and `meta_state_dict` are given.
+        base_model_prefix (`str`, *optional*):
+            Base-model prefix to add or strip when both `base_model_prefix` and `meta_state_dict` are given.
         meta_state_dict (`dict`, *optional*):
-            Meta state dict used to decide whether `prefix` should be added or stripped.
+            Meta state dict used to decide whether `base_model_prefix` should be added or stripped.
 
     Returns:
         `tuple[str, str | None]`: The renamed key and the matched converter's source pattern
@@ -1173,25 +1195,25 @@ def rename_source_key(
     # 1. apply all renamings in turns (if multiple match, it's the responsibility of the mappings to make sure they
     # are coherent)
     for renaming in weight_renamings:
-        renamed_key, _ = renaming.rename_source_key(renamed_key)
+        renamed_key, _ = renaming.rename_source_key(renamed_key, base_model_prefix=base_model_prefix)
 
     # 2. apply renaming through weight conversions on the key if we have any WeightConverter (here we stop after
     # the first match, as we assume only 1 converter can match any source key)
     source_pattern = None
     for converter in weight_converters:
-        renamed_key, source_pattern = converter.rename_source_key(renamed_key)
+        renamed_key, source_pattern = converter.rename_source_key(renamed_key, base_model_prefix=base_model_prefix)
         if source_pattern is not None:
             break
 
-    # 3. check if we need to add or remove prefix if necessary (only during loading, not saving)
-    if prefix is not None and meta_state_dict is not None:
+    # 3. check if we need to add or remove base_model_prefix if necessary (only during loading, not saving)
+    if base_model_prefix is not None and meta_state_dict is not None:
         if (
-            renamed_key.startswith(prefix)
-            and meta_state_dict.get(re.sub(f"^{prefix}.", "", renamed_key, count=1)) is not None
+            renamed_key.startswith(base_model_prefix)
+            and meta_state_dict.get(re.sub(f"^{base_model_prefix}.", "", renamed_key, count=1)) is not None
         ):
-            renamed_key = re.sub(f"^{prefix}.", "", renamed_key, count=1)
-        elif meta_state_dict.get(f"{prefix}.{renamed_key}") is not None:
-            renamed_key = f"{prefix}.{renamed_key}"
+            renamed_key = re.sub(f"^{base_model_prefix}.", "", renamed_key, count=1)
+        elif meta_state_dict.get(f"{base_model_prefix}.{renamed_key}") is not None:
+            renamed_key = f"{base_model_prefix}.{renamed_key}"
 
     return renamed_key, source_pattern
 
@@ -1289,7 +1311,7 @@ def convert_and_load_state_dict_in_model(
     ```
 
     """
-    prefix = model.base_model_prefix
+    base_model_prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
     hf_quantizer = load_config.hf_quantizer
     dtype = load_config.dtype
@@ -1349,12 +1371,16 @@ def convert_and_load_state_dict_in_model(
     for original_key, tensor in state_dict:
         # 1. Rename the key according to all renaming and weight conversion patterns.
         renamed_key, source_pattern = rename_source_key(
-            original_key, renamings, converters, prefix=prefix, meta_state_dict=meta_model_state_dict
+            original_key,
+            renamings,
+            converters,
+            base_model_prefix=base_model_prefix,
+            meta_state_dict=meta_model_state_dict,
         )
         if renamed_key not in meta_model_state_dict and original_key in meta_model_state_dict:
             # Key should probably not have been renamed but we might need the `prefix` to be added.
             renamed_key, source_pattern = rename_source_key(
-                original_key, [], [], prefix=prefix, meta_state_dict=meta_model_state_dict
+                original_key, [], [], base_model_prefix=base_model_prefix, meta_state_dict=meta_model_state_dict
             )
 
         # 2. finally, collect the tensor into the proper converter
