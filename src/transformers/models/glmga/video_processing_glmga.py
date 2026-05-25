@@ -20,6 +20,7 @@
 
 import numpy as np
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
@@ -31,14 +32,10 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, add_start_docstrings, is_torchvision_available
+from ...utils import TensorType, add_start_docstrings
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from .image_processing_glmga import smart_resize
-
-
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
 
 
 class GlmgaVideoProcessorInitKwargs(VideosKwargs, total=False):
@@ -47,6 +44,7 @@ class GlmgaVideoProcessorInitKwargs(VideosKwargs, total=False):
     temporal_patch_size: int
     merge_size: int
     patch_expand_factor: int
+    max_frames: int
 
 
 @add_start_docstrings(
@@ -82,6 +80,7 @@ class GlmgaVideoProcessor(BaseVideoProcessor):
 
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
     patch_expand_factor = 1
+    max_frames = 640
 
     def __init__(self, **kwargs: Unpack[GlmgaVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
@@ -123,11 +122,10 @@ class GlmgaVideoProcessor(BaseVideoProcessor):
         max_frame_idx = total_frames - 1
         duration = metadata.duration or round(max_frame_idx / metadata.fps) + 1
 
-        MAX_FRAME_COUNT_DYNAMIC = 640
         target_fps = fps if fps is not None else self.fps
 
         extract_t = int(duration * target_fps)
-        extract_t = min(extract_t, MAX_FRAME_COUNT_DYNAMIC)
+        extract_t = min(extract_t, self.max_frames)
 
         duration_per_frame = 1 / metadata.fps
         timestamps = [i * duration_per_frame for i in range(total_frames)]

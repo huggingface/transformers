@@ -14,6 +14,7 @@
 
 import numpy as np
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -24,16 +25,12 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import ImagesKwargs, VideosKwargs
-from ...utils import TensorType, is_torchvision_available
+from ...utils import TensorType
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from ..glm46v.configuration_glm46v import Glm46VConfig
 from ..glm46v.image_processing_glm46v import Glm46VImageProcessor, smart_resize
 from ..glm46v.image_processing_pil_glm46v import Glm46VImageProcessorPil
 from ..glm46v.video_processing_glm46v import Glm46VVideoProcessor
-
-
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
 
 
 # Glmga reuses GLM-4.6V's modeling and processor as-is; only the config and the
@@ -301,11 +298,13 @@ class GlmgaVideoProcessorInitKwargs(VideosKwargs, total=False):
     temporal_patch_size: int
     merge_size: int
     patch_expand_factor: int
+    max_frames: int
 
 
 class GlmgaVideoProcessor(Glm46VVideoProcessor):
     fps = 2
     patch_expand_factor = 1
+    max_frames = 640
 
     def sample_frames(
         self,
@@ -333,11 +332,10 @@ class GlmgaVideoProcessor(Glm46VVideoProcessor):
         max_frame_idx = total_frames - 1
         duration = metadata.duration or round(max_frame_idx / metadata.fps) + 1
 
-        MAX_FRAME_COUNT_DYNAMIC = 640
         target_fps = fps if fps is not None else self.fps
 
         extract_t = int(duration * target_fps)
-        extract_t = min(extract_t, MAX_FRAME_COUNT_DYNAMIC)
+        extract_t = min(extract_t, self.max_frames)
 
         duration_per_frame = 1 / metadata.fps
         timestamps = [i * duration_per_frame for i in range(total_frames)]
