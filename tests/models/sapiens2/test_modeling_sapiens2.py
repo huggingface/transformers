@@ -670,7 +670,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         img_w, img_h = 640, 432
         norm_boxes = [[[b / s for b, s in zip(boxes[0][0], [img_w, img_h, img_w, img_h])]]]
         results_norm = image_processor.post_process_pose_estimation(
-            outputs, boxes=norm_boxes, target_sizes=[(img_w, img_h)]
+            outputs, boxes=norm_boxes, target_sizes=[(img_h, img_w)]
         )
         torch.testing.assert_close(results_norm[0][0]["keypoints"], keypoints)
         torch.testing.assert_close(results_norm[0][0]["bbox"], bbox)

@@ -10,7 +10,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Union
@@ -178,71 +177,43 @@ class Sapiens2MattingOutput(ModelOutput):
 
 def box_to_center_and_scale(bbox: torch.Tensor, padding: float = 1.25) -> tuple[torch.Tensor, torch.Tensor]:
     """Convert COCO bbox (x, y, w, h) to center and scale for affine warp."""
-    x, y, w, h = bbox[:4].float().unbind()
-    center = torch.stack([x + w * 0.5, y + h * 0.5])
-    scale = torch.stack([w * padding, h * padding])
+    x, y, width, height = bbox
+    center = torch.stack([x + width * 0.5, y + height * 0.5])
+    scale = torch.stack([width * padding, height * padding])
     return center, scale
 
 
-def get_warp_matrix_torch(
-    theta_deg: float, size_input: torch.Tensor, size_dst: torch.Tensor, size_target: torch.Tensor
+def crop_and_resize(
+    image: torch.Tensor,
+    bbox_center: torch.Tensor,
+    bbox_scale: torch.Tensor,
+    output_size: tuple[int, int],
 ) -> torch.Tensor:
-    """Compute a 2x3 affine warp matrix (pure torch). Mirrors get_warp_matrix from vitpose.
+    """Crop and resize a CHW uint8 tensor around a bounding box center to output_size (height, width).
 
-    Args:
-        theta_deg: Rotation angle in degrees.
-        size_input: [width, height] of the input ROI centre (= center * 2).
-        size_dst: [width, height] of the output crop (= output_size - 1).
-        size_target: [width, height] of the ROI region (= scale).
+    Uses bilinear interpolation for downscaling and bicubic for upscaling.
     """
-    theta = math.radians(theta_deg)
-    cos_t, sin_t = math.cos(theta), math.sin(theta)
-    sx = (size_dst[0] / size_target[0]).item()
-    sy = (size_dst[1] / size_target[1]).item()
-    si = size_input.tolist()
-    st = size_target.tolist()
-    return torch.tensor(
-        [
-            [cos_t * sx, -sin_t * sx, sx * (-0.5 * si[0] * cos_t + 0.5 * si[1] * sin_t + 0.5 * st[0])],
-            [sin_t * sy, cos_t * sy, sy * (-0.5 * si[0] * sin_t - 0.5 * si[1] * cos_t + 0.5 * st[1])],
-        ],
-        dtype=torch.float32,
-    )
-
-
-def torch_warp_affine(image: torch.Tensor, warp_mat: torch.Tensor, output_size: tuple[int, int]) -> torch.Tensor:
-    """Warp-affine crop a CHW uint8 tensor using torch. output_size = (width, height).
-
-    Uses bilinear interpolation for downscaling (approximating cv2.INTER_AREA) and bicubic for
-    upscaling (approximating cv2.INTER_CUBIC). Max per-pixel difference vs cv2 is ≤9 uint8 counts
-    with 100% of pixels within 10 counts; no cv2 dependency required.
-    """
-    out_w, out_h = output_size
-    in_h, in_w = image.shape[-2], image.shape[-1]
-    device = image.device
-
-    img = image.float().unsqueeze(0)  # (1, C, H, W)
-
-    scale_factor = min(torch.linalg.norm(warp_mat[0, :2]).item(), torch.linalg.norm(warp_mat[1, :2]).item())
-    mode = "bilinear" if scale_factor < 1.0 else "bicubic"
-
-    bottom = torch.tensor([[0.0, 0.0, 1.0]], dtype=torch.float32, device=device)
-    M_3x3 = torch.cat([warp_mat.to(device).float(), bottom], dim=0)
-    M_inv = torch.linalg.inv(M_3x3)
+    output_height, output_width = output_size
+    input_height, input_width = image.shape[-2:]
+    center_x, center_y = bbox_center
+    bbox_w, bbox_h = bbox_scale
+    scale_x = (output_width - 1) / bbox_w
+    scale_y = (output_height - 1) / bbox_h
+    mode = "bilinear" if min(scale_x, scale_y) < 1.0 else "bicubic"
 
     grid_y, grid_x = torch.meshgrid(
-        torch.arange(out_h, dtype=torch.float32, device=device),
-        torch.arange(out_w, dtype=torch.float32, device=device),
+        torch.arange(output_height, dtype=torch.float32, device=image.device),
+        torch.arange(output_width, dtype=torch.float32, device=image.device),
         indexing="ij",
     )
-    in_x = M_inv[0, 0] * grid_x + M_inv[0, 1] * grid_y + M_inv[0, 2]
-    in_y = M_inv[1, 0] * grid_x + M_inv[1, 1] * grid_y + M_inv[1, 2]
-    grid = torch.stack([2.0 * in_x / (in_w - 1) - 1.0, 2.0 * in_y / (in_h - 1) - 1.0], dim=-1).unsqueeze(
-        0
-    )  # (1, H_out, W_out, 2)
+    in_x = grid_x / scale_x + center_x - 0.5 * bbox_w
+    in_y = grid_y / scale_y + center_y - 0.5 * bbox_h
+    grid = torch.stack(
+        [2.0 * in_x / (input_width - 1) - 1.0, 2.0 * in_y / (input_height - 1) - 1.0], dim=-1
+    ).unsqueeze(0)
 
-    out = F.grid_sample(img, grid, mode=mode, padding_mode="zeros", align_corners=True)
-    return out.squeeze(0).clamp(0, 255).round().byte()
+    output = F.grid_sample(image.float().unsqueeze(0), grid, mode=mode, padding_mode="zeros", align_corners=True)
+    return output.squeeze(0).clamp(0, 255).round().byte()
 
 
 def torchvision_gaussian_blur(heatmaps: torch.Tensor, kernel: int = 11) -> torch.Tensor:
@@ -252,11 +223,13 @@ def torchvision_gaussian_blur(heatmaps: torch.Tensor, kernel: int = 11) -> torch
     For kernel=11 (default): max per-value difference vs cv2 is ~1e-6 (float32 rounding noise).
     Blurs all keypoints in a single batched torchvision call.
     """
-    assert kernel % 2 == 1
+    if kernel % 2 == 0 or kernel <= 1:
+        raise ValueError("Kernel size must be an odd integer greater than 1.")
     sigma = 0.3 * ((kernel - 1) * 0.5 - 1) + 0.8
     border = (kernel - 1) // 2
     origin_maxes = heatmaps.amax(dim=(1, 2))  # (K,)
 
+    # Padding required to prevent border effect from gaussian blur. Torchvision uses reflect padding internally.
     padded = F.pad(heatmaps, (border, border, border, border), mode="constant", value=0.0)
     blurred = tvF.gaussian_blur(padded, kernel_size=[kernel, kernel], sigma=[sigma, sigma])
     result = blurred[:, border:-border, border:-border]
@@ -270,11 +243,11 @@ def torchvision_gaussian_blur(heatmaps: torch.Tensor, kernel: int = 11) -> torch
 def fix_aspect_ratio(scale: torch.Tensor, width: int, height: int) -> torch.Tensor:
     """Adjust scale so the crop aspect ratio matches the given width/height."""
     aspect_ratio = width / height
-    sw, sh = scale[0], scale[1]
+    scale_width, scale_height = scale[0], scale[1]
     return torch.where(
-        sw > sh * aspect_ratio,
-        torch.stack([sw, sw / aspect_ratio]),
-        torch.stack([sh * aspect_ratio, sh]),
+        scale_width > scale_height * aspect_ratio,
+        torch.stack([scale_width, scale_width / aspect_ratio]),
+        torch.stack([scale_height * aspect_ratio, scale_height]),
     )
 
 
@@ -282,38 +255,51 @@ def post_dark_unbiased_data_processing(
     keypoints: torch.Tensor, heatmaps: torch.Tensor, blur_kernel_size: int = 11
 ) -> torch.Tensor:
     """Sub-pixel refinement via Hessian on log-heatmaps (UDP Dark Pose). In-place, returns keypoints."""
-    N, K = keypoints.shape[:2]
-    H, W = heatmaps.shape[1:]
+    num_persons, num_keypoints = keypoints.shape[:2]
+    heatmap_height, heatmap_width = heatmaps.shape[1:]
     device = heatmaps.device
 
     heatmaps = torchvision_gaussian_blur(heatmaps, blur_kernel_size)
     heatmaps = heatmaps.clamp(1e-3, 50.0).log()
 
-    heatmaps_pad = F.pad(heatmaps.unsqueeze(0), (1, 1, 1, 1), mode="replicate").squeeze(0)
-    heatmaps_flat = heatmaps_pad.flatten()
+    heatmaps_padded = F.pad(heatmaps.unsqueeze(0), (1, 1, 1, 1), mode="replicate").squeeze(0)
+    heatmaps_flattened = heatmaps_padded.flatten()
 
-    for n in range(N):
-        index = keypoints[n, :, 0].long() + 1 + (keypoints[n, :, 1].long() + 1) * (W + 2)
-        index = index + (W + 2) * (H + 2) * torch.arange(K, device=device, dtype=torch.long)
-        index = index.unsqueeze(1)  # (K, 1)
-        i_ = heatmaps_flat[index]
-        ix1 = heatmaps_flat[index + 1]
-        iy1 = heatmaps_flat[index + W + 2]
-        ix1y1 = heatmaps_flat[index + W + 3]
-        ix1_y1_ = heatmaps_flat[index - W - 3]
-        ix1_ = heatmaps_flat[index - 1]
-        iy1_ = heatmaps_flat[index - 2 - W]
+    for person_index in range(num_persons):
+        index = (
+            keypoints[person_index, :, 0].long() + 1 + (keypoints[person_index, :, 1].long() + 1) * (heatmap_width + 2)
+        )
+        index = index + (heatmap_width + 2) * (heatmap_height + 2) * torch.arange(
+            num_keypoints, device=device, dtype=torch.long
+        )
+        index = index.unsqueeze(1)  # (num_keypoints, 1)
+        value_center = heatmaps_flattened[index]
+        value_right = heatmaps_flattened[index + 1]
+        value_below = heatmaps_flattened[index + heatmap_width + 2]
+        value_right_below = heatmaps_flattened[index + heatmap_width + 3]
+        value_left_above = heatmaps_flattened[index - heatmap_width - 3]
+        value_left = heatmaps_flattened[index - 1]
+        value_above = heatmaps_flattened[index - 2 - heatmap_width]
 
-        dx = 0.5 * (ix1 - ix1_)
-        dy = 0.5 * (iy1 - iy1_)
-        derivative = torch.cat([dx, dy], dim=1).reshape(K, 2, 1)
+        gradient_x = 0.5 * (value_right - value_left)
+        gradient_y = 0.5 * (value_below - value_above)
+        derivative = torch.cat([gradient_x, gradient_y], dim=1).reshape(num_keypoints, 2, 1)
 
-        dxx = ix1 - 2 * i_ + ix1_
-        dyy = iy1 - 2 * i_ + iy1_
-        dxy = 0.5 * (ix1y1 - ix1 - iy1 + i_ + i_ - ix1_ - iy1_ + ix1_y1_)
-        hessian = torch.cat([dxx, dxy, dxy, dyy], dim=1).reshape(K, 2, 2)
+        hessian_xx = value_right - 2 * value_center + value_left
+        hessian_yy = value_below - 2 * value_center + value_above
+        hessian_xy = 0.5 * (
+            value_right_below
+            - value_right
+            - value_below
+            + value_center
+            + value_center
+            - value_left
+            - value_above
+            + value_left_above
+        )
+        hessian = torch.cat([hessian_xx, hessian_xy, hessian_xy, hessian_yy], dim=1).reshape(num_keypoints, 2, 2)
         hessian = torch.linalg.inv(hessian + torch.finfo(torch.float32).eps * torch.eye(2, device=device))
-        keypoints[n] -= torch.einsum("imn,ink->imk", hessian, derivative).squeeze()
+        keypoints[person_index] -= (hessian @ derivative).squeeze()
 
     return keypoints
 
@@ -408,12 +394,12 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
 
     def reduce_label(self, labels: list["torch.Tensor"]) -> list["torch.Tensor"]:
         """Reduce label values by 1, replacing 0 with 255."""
-        for idx in range(len(labels)):
-            label = labels[idx]
+        for index in range(len(labels)):
+            label = labels[index]
             label = torch.where(label == 0, torch.tensor(255, dtype=label.dtype, device=label.device), label)
             label = label - 1
             label = torch.where(label == 254, torch.tensor(255, dtype=label.dtype, device=label.device), label)
-            labels[idx] = label
+            labels[index] = label
         return labels
 
     def _preprocess(
@@ -436,16 +422,14 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         **kwargs,
     ) -> list["torch.Tensor"]:
         if boxes is not None:
-            output_size = (size["width"], size["height"])  # (W, H)
-            output_size_t = torch.tensor(output_size, dtype=torch.float32) - 1  # [W-1, H-1]
+            output_size = (size["height"], size["width"])  # (H, W)
             crops = []
             for image, image_boxes in zip(images, boxes):
                 for bbox in image_boxes:
                     bbox_t = torch.tensor(bbox, dtype=torch.float32)
                     center, scale = box_to_center_and_scale(bbox_t)
                     scale = fix_aspect_ratio(scale, size["width"], size["height"])
-                    warp_mat = get_warp_matrix_torch(0, center * 2, output_size_t, scale)
-                    crops.append(torch_warp_affine(image, warp_mat, output_size).to(image.device))
+                    crops.append(crop_and_resize(image, bbox_center=center, bbox_scale=scale, output_size=output_size))
             images = crops
             do_resize = False  # affine crop already produces the target size
 
@@ -505,7 +489,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 Score threshold. Keypoints with scores at or below this value are
                 filtered out from the result dictionaries.
             target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
-                Tensor of shape `(N_total, 2)` or list of `(width, height)` tuples, one per person (i.e. one
+                Tensor of shape `(N_total, 2)` or list of `(height, width)` tuples, one per person (i.e. one
                 per flattened box). When provided, each box is multiplied by
                 `[width, height, width, height]` before processing, which is useful when boxes are given in
                 normalized [0, 1] coordinates.
@@ -519,7 +503,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             - `bbox` (`torch.FloatTensor` of shape `(4,)`): the padded, aspect-ratio-corrected input bounding box
               in xyxy format (x_min, y_min, x_max, y_max), i.e. the actual image region used for preprocessing.
         """
-        heatmaps = outputs.heatmaps.cpu().float()  # (N_total, K, H_hm, W_hm)
+        heatmaps = outputs.heatmaps.cpu().float()  # (num_total_persons, num_keypoints, heatmap_height, heatmap_width)
         flattened_boxes = [torch.tensor(bbox, dtype=torch.float32) for image_boxes in boxes for bbox in image_boxes]
 
         if target_sizes is not None and len(flattened_boxes) != len(target_sizes):
@@ -528,38 +512,40 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 "(i.e. the sum of boxes across all images)."
             )
 
-        _, K, H_hm, W_hm = heatmaps.shape
-        heatmap_size = torch.tensor([W_hm - 1, H_hm - 1], dtype=torch.float32)
+        _, num_keypoints, heatmap_height, heatmap_width = heatmaps.shape
+        heatmap_size = torch.tensor([heatmap_width - 1, heatmap_height - 1], dtype=torch.float32)
 
         person_results = []
-        for i, bbox in enumerate(flattened_boxes):
+        for person_index, bbox in enumerate(flattened_boxes):
             if target_sizes is not None:
-                image_width, image_height = target_sizes[i][0], target_sizes[i][1]
+                image_height, image_width = target_sizes[person_index][0], target_sizes[person_index][1]
                 bbox = bbox * torch.tensor([image_width, image_height, image_width, image_height], dtype=torch.float32)
             center, scale = box_to_center_and_scale(bbox)
             scale = fix_aspect_ratio(scale, self.size["width"], self.size["height"])
-            heatmap_i = heatmaps[i].clone()  # (K, H_hm, W_hm) — clone to avoid mutating
+            person_heatmap = heatmaps[
+                person_index
+            ].clone()  # (num_keypoints, heatmap_height, heatmap_width) — clone to avoid mutating
 
             # Inline keypoint prediction (equivalent to get_keypoint_predictions from vitpose)
-            hm_flat = heatmap_i.reshape(K, -1)  # (K, H*W)
-            scores_i = hm_flat.amax(dim=1)  # (K,)
-            idx = hm_flat.argmax(dim=1)  # (K,)
-            locs_x = (idx % W_hm).float()
-            locs_y = (idx // W_hm).float()
-            locs = torch.where(
-                scores_i.unsqueeze(-1) > 0.0,
-                torch.stack([locs_x, locs_y], dim=-1),
-                torch.full((K, 2), -1.0),
-            ).unsqueeze(0)  # (1, K, 2)
+            heatmap_flat = person_heatmap.reshape(num_keypoints, -1)  # (num_keypoints, heatmap_height*heatmap_width)
+            person_scores = heatmap_flat.amax(dim=1)  # (num_keypoints,)
+            flat_index = heatmap_flat.argmax(dim=1)  # (num_keypoints,)
+            locations_x = (flat_index % heatmap_width).float()
+            locations_y = (flat_index // heatmap_width).float()
+            locations = torch.where(
+                person_scores.unsqueeze(-1) > 0.0,
+                torch.stack([locations_x, locations_y], dim=-1),
+                torch.full((num_keypoints, 2), -1.0),
+            ).unsqueeze(0)  # (1, num_keypoints, 2)
 
-            locs = post_dark_unbiased_data_processing(locs, heatmap_i, blur_kernel_size)
-            locs = locs[0]  # (K, 2)
+            locations = post_dark_unbiased_data_processing(locations, person_heatmap, blur_kernel_size)
+            locations = locations[0]  # (num_keypoints, 2)
 
-            locs = locs / heatmap_size * scale + center - 0.5 * scale
+            locations = locations / heatmap_size * scale + center - 0.5 * scale
 
-            keypoints = locs
-            scores = scores_i
-            labels = torch.arange(0, K)
+            keypoints = locations
+            scores = person_scores
+            labels = torch.arange(0, num_keypoints)
             bbox_tensor = torch.cat([center - scale / 2, center + scale / 2])
 
             if threshold is not None:
@@ -572,11 +558,11 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
 
         # Reassemble into list[list[dict]] grouped by image
         result = []
-        idx = 0
+        person_offset = 0
         for image_boxes in boxes:
-            n = len(image_boxes)
-            result.append(person_results[idx : idx + n])
-            idx += n
+            num_persons_in_image = len(image_boxes)
+            result.append(person_results[person_offset : person_offset + num_persons_in_image])
+            person_offset += num_persons_in_image
         return result
 
     def post_process_semantic_segmentation(
@@ -606,10 +592,10 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 )
 
             semantic_segmentation = []
-            for idx in range(len(logits)):
+            for index in range(len(logits)):
                 resized_logits = F.interpolate(
-                    logits[idx].unsqueeze(0),
-                    size=target_sizes[idx],
+                    logits[index].unsqueeze(0),
+                    size=target_sizes[index],
                     mode="bilinear",
                     align_corners=False,
                     antialias=False,
@@ -663,25 +649,31 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the normals")
 
         result = []
-        model_h = self.size["height"]
-        model_w = self.size["width"]
+        model_height = self.size["height"]
+        model_width = self.size["width"]
 
         normals = F.normalize(normals, p=2, dim=1, eps=1e-8)
 
-        for idx in range(len(normals)):
-            normal = normals[idx]
+        for index in range(len(normals)):
+            normal = normals[index]
 
             if do_remove_padding:
-                orig_h, orig_w = source_sizes[idx]
-                new_h, new_w = get_image_size_for_max_height_width((orig_h, orig_w), model_h, model_w)
-                pad_top = (model_h - new_h) // 2 if new_h < model_h else 0
-                pad_left = (model_w - new_w) // 2 if new_w < model_w else 0
-                normal = normal[:, pad_top : pad_top + min(new_h, model_h), pad_left : pad_left + min(new_w, model_w)]
+                original_height, original_width = source_sizes[index]
+                new_height, new_width = get_image_size_for_max_height_width(
+                    (original_height, original_width), model_height, model_width
+                )
+                pad_top = (model_height - new_height) // 2 if new_height < model_height else 0
+                pad_left = (model_width - new_width) // 2 if new_width < model_width else 0
+                normal = normal[
+                    :,
+                    pad_top : pad_top + min(new_height, model_height),
+                    pad_left : pad_left + min(new_width, model_width),
+                ]
 
             final_size = (
-                target_sizes[idx]
+                target_sizes[index]
                 if target_sizes is not None
-                else (source_sizes[idx] if source_sizes is not None else None)
+                else (source_sizes[index] if source_sizes is not None else None)
             )
 
             if final_size is not None:
@@ -740,38 +732,44 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the pointmap")
 
         result = []
-        model_h = self.size["height"]
-        model_w = self.size["width"]
+        model_height = self.size["height"]
+        model_width = self.size["width"]
 
-        for idx in range(len(pointmaps)):
-            pm = pointmaps[idx]
+        for index in range(len(pointmaps)):
+            pointmap = pointmaps[index]
 
             if outputs.scales is not None:
-                pm = pm / outputs.scales[idx]
+                pointmap = pointmap / outputs.scales[index]
 
             if do_remove_padding:
-                orig_h, orig_w = source_sizes[idx]
-                new_h, new_w = get_image_size_for_max_height_width((orig_h, orig_w), model_h, model_w)
-                pad_top = (model_h - new_h) // 2 if new_h < model_h else 0
-                pad_left = (model_w - new_w) // 2 if new_w < model_w else 0
-                pm = pm[:, pad_top : pad_top + min(new_h, model_h), pad_left : pad_left + min(new_w, model_w)]
+                original_height, original_width = source_sizes[index]
+                new_height, new_width = get_image_size_for_max_height_width(
+                    (original_height, original_width), model_height, model_width
+                )
+                pad_top = (model_height - new_height) // 2 if new_height < model_height else 0
+                pad_left = (model_width - new_width) // 2 if new_width < model_width else 0
+                pointmap = pointmap[
+                    :,
+                    pad_top : pad_top + min(new_height, model_height),
+                    pad_left : pad_left + min(new_width, model_width),
+                ]
 
             final_size = (
-                target_sizes[idx]
+                target_sizes[index]
                 if target_sizes is not None
-                else (source_sizes[idx] if source_sizes is not None else None)
+                else (source_sizes[index] if source_sizes is not None else None)
             )
 
             if final_size is not None:
-                pm = F.interpolate(
-                    pm.unsqueeze(0),
+                pointmap = F.interpolate(
+                    pointmap.unsqueeze(0),
                     size=final_size,
                     mode="bilinear",
                     align_corners=False,
                     antialias=False,
                 )[0]
 
-            result.append(pm)
+            result.append(pointmap)
 
         return result
 
@@ -822,33 +820,34 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             device = matting.device
             dtype = matting.dtype
             background_tensors = [
-                tvF.to_dtype_image(tvF.to_image(bg), dtype=dtype, scale=True).to(device) for bg in background_list
+                tvF.to_dtype_image(tvF.to_image(background_image), dtype=dtype, scale=True).to(device)
+                for background_image in background_list
             ]
 
         result = []
-        for idx in range(len(matting)):
-            mat = matting[idx]
+        for index in range(len(matting)):
+            matting_item = matting[index]
 
             if target_sizes is not None:
-                mat = F.interpolate(
-                    mat.unsqueeze(0),
-                    size=target_sizes[idx],
+                matting_item = F.interpolate(
+                    matting_item.unsqueeze(0),
+                    size=target_sizes[index],
                     mode="bilinear",
                     align_corners=False,
                     antialias=False,
                 )[0]
 
-            mat = mat.clamp(0.0, 1.0)
-            foreground = mat[:3]
-            alpha = mat[3:]
+            matting_item = matting_item.clamp(0.0, 1.0)
+            foreground = matting_item[:3]
+            alpha = matting_item[3:]
             composite = None
 
             if background_tensors is not None:
-                background = background_tensors[0] if len(background_tensors) == 1 else background_tensors[idx]
-                if background.shape[-2:] != mat.shape[-2:]:
+                background = background_tensors[0] if len(background_tensors) == 1 else background_tensors[index]
+                if background.shape[-2:] != matting_item.shape[-2:]:
                     background = F.interpolate(
                         background.unsqueeze(0),
-                        size=mat.shape[-2:],
+                        size=matting_item.shape[-2:],
                         mode="bilinear",
                         align_corners=False,
                         antialias=False,
