@@ -811,7 +811,7 @@ class Sapiens2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, Sapiens2LayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
         elif isinstance(module, Sapiens2RopePositionEmbedding):
-            inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)
+            inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
             init.copy_(module.inv_freq, inv_freq)
         elif isinstance(
             module,
