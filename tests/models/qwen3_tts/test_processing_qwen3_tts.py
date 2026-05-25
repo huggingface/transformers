@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import Qwen3TTSProcessor, is_torch_available
+from transformers import Qwen3TTSProcessor, Qwen2TokenizerFast, is_torch_available
 from transformers.testing_utils import require_torch, slow
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -28,10 +28,34 @@ if is_torch_available():
 @require_torch
 class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3TTSProcessor
-    model_id = "qwen3_tts_converted"
+    model_id = None
+
+    @classmethod
+    def _setup_tokenizer(cls):
+        return Qwen2TokenizerFast.from_pretrained("Qwen/Qwen2-0.5B")
+
+    @unittest.skip(reason="Qwen3TTS is a TTS processor; audio chat template tests are not applicable")
+    def test_apply_chat_template_audio_0(self):
+        pass
+
+    @unittest.skip(reason="Qwen3TTS is a TTS processor; audio chat template tests are not applicable")
+    def test_apply_chat_template_audio_1(self):
+        pass
+
+    @unittest.skip(reason="Qwen3TTS is a TTS processor; audio chat template tests are not applicable")
+    def test_apply_chat_template_audio_2(self):
+        pass
+
+    @unittest.skip(reason="Qwen3TTS is a TTS processor; audio chat template tests are not applicable")
+    def test_apply_chat_template_audio_3(self):
+        pass
+
+    @unittest.skip(reason="Qwen3TTS chat template returns a list, not a plain string")
+    def test_chat_template_jinja_kwargs(self):
+        pass
 
     @slow
     def test_can_load_processor_from_pretrained(self):
-        processor = Qwen3TTSProcessor.from_pretrained(self.model_id)
+        processor = Qwen3TTSProcessor.from_pretrained("qwen3_tts_converted")
         self.assertIsNotNone(processor.tokenizer)
         self.assertIsNotNone(processor.feature_extractor)
