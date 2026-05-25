@@ -255,6 +255,7 @@ IGNORE_NON_TESTED = (
         "Qwen3OmniMoeForConditionalGeneration",  # Bigger model tested through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
         "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",  # Building part of bigger (tested) model. Tested implicitly through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
         "Qwen3TTSBasePreTrainedModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3TTSForConditionalGeneration.
+        "Qwen3TTSTalkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3TTSForConditionalGeneration.
         "Qwen3TTSTalkerTextPreTrainedModel",  # Building part of bigger (tested) model.
         "Qwen3TTSTalkerCodePredictorModel",  # Building part of bigger (tested) model.
         "Qwen3TTSTalkerCodePredictorModelForConditionalGeneration",  # Building part of bigger (tested) model.
