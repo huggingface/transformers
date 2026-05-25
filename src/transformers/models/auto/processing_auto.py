@@ -89,6 +89,7 @@ else:
             ("glm4v_moe", "Glm4vProcessor"),
             ("glm_image", "Glm4vProcessor"),
             ("glmasr", "GlmAsrProcessor"),
+            ("glmga", "GlmgaProcessor"),
             ("got_ocr2", "GotOcr2Processor"),
             ("granite4_vision", "Granite4VisionProcessor"),
             ("granite_speech", "GraniteSpeechProcessor"),
