@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-04-23 and added to Hugging Face Transformers on 2026-05-21.*
+*This model was released on 2026-04-23 and added to Hugging Face Transformers on 2026-05-25.*
 
 
 # Sapiens2
@@ -200,9 +200,7 @@ boxes = [[[270.8, 0.6, 294.1, 379.5]]]
 inputs = image_processor(image, boxes=boxes, return_tensors="pt")
 pixel_values = inputs["pixel_values"]
 
-# flip_pairs lists [left, right] index pairs for symmetric keypoints.
-# The full 308-keypoint list ships with the model card; this is a short illustration.
-flip_pairs = torch.tensor([[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], ...])
+flip_pairs = torch.tensor(model.config.flip_pairs)
 
 with torch.inference_mode():
     outputs = model(pixel_values)

@@ -92,6 +92,10 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     head_scale_final_hidden_sizes (`list[int]`, *optional*):
         Hidden-layer sizes for the MLP that maps flattened scale features to the scalar scale output.
         When `None` (default), no scale branch is built.
+    flip_pairs (`list[list[int]]`, *optional*):
+        Pairs of keypoint indices that are left/right mirrors of each other (e.g. `[[1, 2], [3, 4]]`).
+        Used when running the model on horizontally flipped images and averaging heatmaps for test-time
+        augmentation.
     """
 
     model_type = "sapiens2"
@@ -137,6 +141,7 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     head_scale_conv_out_channels: list[int] | None = None
     head_scale_conv_kernel_sizes: list[int] | None = None
     head_scale_final_hidden_sizes: list[int] | None = None
+    flip_pairs: list[list[int]] | None = None
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads_per_layer is None:
