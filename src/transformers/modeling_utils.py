@@ -4193,9 +4193,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if device_mesh.device_type == "cpu":
                 device_map = {"": torch.device("cpu")}
             else:
-                device_map = {
-                    "": torch.device(device_mesh.device_type, getattr(torch, device_mesh.device_type).current_device())
-                }
+                device_map = {"": torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))}
         else:
             # Accelerate path
             if device_map == "auto" and int(os.environ.get("WORLD_SIZE", "0")):
