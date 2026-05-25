@@ -376,14 +376,7 @@ class StaticLayer(CacheLayerMixin):
         return kv_length, kv_offset
 
     def get_seq_length(self) -> int | torch.Tensor:
-        """Returns the sequence length of the cached states.
-
-        Note: returns a shape-``(1,)`` ``torch.Tensor`` rather than a Python
-        ``int`` so that updates to ``cumulative_length`` can stay in-place and
-        ``torch.compile``-friendly (calling ``.item()`` would force a CUDA
-        sync). The returned tensor broadcasts in arithmetic identically to an
-        ``int`` for the call sites that consume this value.
-        """
+        """Returns the sequence length of the cached states."""
         return self.cumulative_length if self.is_initialized else 0
 
     def get_max_cache_shape(self) -> int:
