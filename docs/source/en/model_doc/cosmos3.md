@@ -24,10 +24,8 @@ rendered properly in your Markdown viewer.
 
 [Cosmos3](https://huggingface.co/nvidia/Cosmos3-Nano) is a mixture-of-transformers (MoT) Vision Foundation Model from NVIDIA, composed of a *Reasoner* tower and a *Generator* tower. The two towers share the same input embedding and visual encoder but use disjoint MoT experts for understanding vs. generation, plus cross-modal adapters (`proj_out`, `audio_proj_out`, `action_proj_out`, etc.) that connect the language model to image / audio / action heads.
 
-The transformers integration loads **only the Reasoner tower** from a unified Cosmos3 checkpoint. The Reasoner is architecturally identical to [Qwen3-VL](./qwen3_vl) — `Cosmos3ForConditionalGeneration` is a thin subclass of `Qwen3VLForConditionalGeneration`. Loading is driven by two transformations registered automatically when `model_type` is `"cosmos3_omni"`:
+The transformers integration loads **only the Reasoner tower** from a unified Cosmos3 checkpoint. The Reasoner is architecturally identical to [Qwen3-VL](./qwen3_vl) — `Cosmos3ForConditionalGeneration` is a thin subclass of `Qwen3VLForConditionalGeneration`.
 
-1. The checkpoint's flat namespaces are re-targeted to Qwen3-VL's nested layout: `layers.*` / `embed_tokens.*` / `norm.*` → `model.language_model.*` and `blocks.*` / `merger.*` / `patch_embed.*` / `pos_embed.*` / `deepstack_merger_list.*` → `model.visual.*`. Diffusers-style attention names are also mapped to Qwen3-VL names: `to_q`, `to_k`, `to_v`, `to_out`, `norm_q`, and `norm_k` become `q_proj`, `k_proj`, `v_proj`, `o_proj`, `q_norm`, and `k_norm`.
-2. Generator / sound / action parameters (`add_q_proj`, `add_k_proj`, `add_v_proj`, `to_add_out`, `norm_added_q`, `norm_added_k`, `moe_gen`, `proj_out`, `proj_in`, `time_embedder`, `audio_proj_out`, `audio_proj_in`, `audio_modality_embed`, `action_proj_out`, `action_proj_in`, `action_modality_embed`) are skipped on load.
 
 ## Usage
 
