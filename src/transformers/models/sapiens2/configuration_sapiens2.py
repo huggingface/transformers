@@ -66,8 +66,6 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
         `num_attention_heads` gives full multi-head attention; a smaller value gives grouped-query
         attention. Defaults to `num_attention_heads` for the first 8 and last 8 layers and
         `num_attention_heads // 2` for all other layers.
-    pos_embed_dtype (`str`, *optional*, defaults to `"bfloat16"`):
-        Dtype used for positional embedding computations (RoPE angles, cos/sin).
     semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
         Label index ignored when computing the segmentation loss.
     head_upsample_out_channels (`list[int]`, *optional*):
@@ -92,10 +90,6 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     head_scale_final_hidden_sizes (`list[int]`, *optional*):
         Hidden-layer sizes for the MLP that maps flattened scale features to the scalar scale output.
         When `None` (default), no scale branch is built.
-    flip_pairs (`list[list[int]]`, *optional*):
-        Pairs of keypoint indices that are left/right mirrors of each other (e.g. `[[1, 2], [3, 4]]`).
-        Used when running the model on horizontally flipped images and averaging heatmaps for test-time
-        augmentation.
     """
 
     model_type = "sapiens2"
@@ -132,7 +126,6 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     use_mask_token: bool = False
     use_qk_norm: bool = True
     num_key_value_heads_per_layer: list[int] | None = None
-    pos_embed_dtype: str = "bfloat16"
     semantic_loss_ignore_index: int = 255
     head_upsample_out_channels: list[int] | None = None
     head_upsample_kernel_sizes: list[int] | None = None
@@ -141,7 +134,6 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     head_scale_conv_out_channels: list[int] | None = None
     head_scale_conv_kernel_sizes: list[int] | None = None
     head_scale_final_hidden_sizes: list[int] | None = None
-    flip_pairs: list[list[int]] | None = None
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads_per_layer is None:

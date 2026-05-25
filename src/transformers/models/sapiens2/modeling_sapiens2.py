@@ -17,7 +17,7 @@
 # limitations under the License.
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 import numpy as np
@@ -264,10 +264,14 @@ class Sapiens2RopePositionEmbedding(nn.Module):
         self.config = config
         self.base = config.rope_theta
         self.head_dim = config.hidden_size // config.num_attention_heads
-        inv_freq = 1 / self.base ** (
-            2 * torch.arange(self.head_dim // 4, dtype=getattr(torch, config.pos_embed_dtype)) / (self.head_dim // 2)
-        )
+
+        inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
+        image_size = config.image_size
+        image_h, image_w = image_size if isinstance(image_size, Iterable) else (image_size, image_size)
+        patch_size = config.patch_size if isinstance(config.patch_size, int) else config.patch_size[0]
+        self.num_patches_h = image_h // patch_size
+        self.num_patches_w = image_w // patch_size
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = pixel_values.shape
@@ -277,9 +281,12 @@ class Sapiens2RopePositionEmbedding(nn.Module):
         device = pixel_values.device
         device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
 
-        with maybe_autocast(device_type=device_type, enabled=False):
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            # Although we could precompute static patch_coords from image_size and patch_size in the config,
+            # the model was trained with random_scale, so it can process images of varying sizes.
+            # Therefore, it's better to compute patch_coords dynamically (with lru_cache).
             patch_coords = get_patches_center_coordinates(
-                num_patches_h, num_patches_w, dtype=self.inv_freq.dtype, device=device
+                num_patches_h, num_patches_w, dtype=torch.float32, device=device
             )
             if self.training:
                 patch_coords = augment_patches_center_coordinates(
@@ -297,7 +304,8 @@ class Sapiens2RopePositionEmbedding(nn.Module):
             cos = torch.cos(angles)
             sin = torch.sin(angles)
 
-        return cos, sin
+        dtype = pixel_values.dtype
+        return cos.to(dtype=dtype), sin.to(dtype=dtype)
 
 
 def rotate_half(x):
@@ -341,6 +349,39 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def apply_rotary_pos_emb(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, **kwargs
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Applies Rotary Position Embedding to the query and key tensors, but only to the patch tokens,
+    ignoring the prefix tokens (cls token and register tokens).
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+
+    num_tokens = q.shape[-2]
+    num_patches = sin.shape[-2]
+    num_prefix_tokens = num_tokens - num_patches  # cls token + register tokens
+
+    q_prefix_tokens, q_patches = q.split((num_prefix_tokens, num_patches), dim=-2)
+    k_prefix_tokens, k_patches = k.split((num_prefix_tokens, num_patches), dim=-2)
+
+    # apply rope only to patch tokens
+    q_patches = (q_patches * cos) + (rotate_half(q_patches) * sin)
+    k_patches = (k_patches * cos) + (rotate_half(k_patches) * sin)
+
+    q = torch.cat((q_prefix_tokens, q_patches), dim=-2)
+    k = torch.cat((k_prefix_tokens, k_patches), dim=-2)
+
+    return q, k
+
+
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -351,33 +392,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
         return hidden_states
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def apply_rotary_pos_emb(
-    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, **kwargs
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Applies Rotary Position Embedding to the query and key tensors, but only to the patch tokens,
-    ignoring the prefix tokens (cls token and register tokens).
-
-    Casts all q/k tokens to the rope dtype before applying the rotation and casts back afterwards.
-    This matches the original model behavior where all tokens are cast to rope_dtype before the
-    prefix/patch split, even though RoPE is only applied to patch tokens.
-    """
-    q_dtype, k_dtype = q.dtype, k.dtype
-    rope_dtype = cos.dtype
-    q = q.to(rope_dtype)
-    k = k.to(rope_dtype)
-
-    num_tokens = q.shape[-2]
-    num_patches = sin.shape[-2]
-    num_prefix_tokens = num_tokens - num_patches
-
-    q_patches = q[..., num_prefix_tokens:, :]
-    k_patches = k[..., num_prefix_tokens:, :]
-    q[..., num_prefix_tokens:, :] = q_patches * cos + rotate_half(q_patches) * sin
-    k[..., num_prefix_tokens:, :] = k_patches * cos + rotate_half(k_patches) * sin
-
-    return q.to(q_dtype), k.to(k_dtype)
 
 
 class Sapiens2Attention(nn.Module):
@@ -797,9 +811,7 @@ class Sapiens2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, Sapiens2LayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
         elif isinstance(module, Sapiens2RopePositionEmbedding):
-            inv_freq = 1 / module.base ** (
-                2 * torch.arange(module.head_dim // 4, dtype=module.inv_freq.dtype) / (module.head_dim // 2)
-            )
+            inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)
             init.copy_(module.inv_freq, inv_freq)
         elif isinstance(
             module,

@@ -10,8 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Union
 
@@ -41,7 +40,7 @@ from ...modeling_outputs import ModelOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, is_cv2_available, logging, requires_backends
-from ...utils.generic import can_return_tuple, maybe_autocast
+from ...utils.generic import can_return_tuple
 from ..beit.modeling_beit import BeitConvLayer
 from ..dinov3_vit.configuration_dinov3_vit import DINOv3ViTConfig
 from ..dinov3_vit.modeling_dinov3_vit import (
@@ -53,9 +52,8 @@ from ..dinov3_vit.modeling_dinov3_vit import (
     DINOv3ViTLayerScale,
     DINOv3ViTModel,
     DINOv3ViTPreTrainedModel,
-    augment_patches_center_coordinates,
-    get_patches_center_coordinates,
-    rotate_half,
+    DINOv3ViTRopePositionEmbedding,
+    apply_rotary_pos_emb,
 )
 from ..gemma2.modeling_gemma2 import eager_attention_forward
 from ..vitpose.image_processing_vitpose import get_keypoint_predictions, get_warp_matrix
@@ -853,8 +851,6 @@ class Sapiens2Config(DINOv3ViTConfig):
         `num_attention_heads` gives full multi-head attention; a smaller value gives grouped-query
         attention. Defaults to `num_attention_heads` for the first 8 and last 8 layers and
         `num_attention_heads // 2` for all other layers.
-    pos_embed_dtype (`str`, *optional*, defaults to `"bfloat16"`):
-        Dtype used for positional embedding computations (RoPE angles, cos/sin).
     semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
         Label index ignored when computing the segmentation loss.
     head_upsample_out_channels (`list[int]`, *optional*):
@@ -879,10 +875,6 @@ class Sapiens2Config(DINOv3ViTConfig):
     head_scale_final_hidden_sizes (`list[int]`, *optional*):
         Hidden-layer sizes for the MLP that maps flattened scale features to the scalar scale output.
         When `None` (default), no scale branch is built.
-    flip_pairs (`list[list[int]]`, *optional*):
-        Pairs of keypoint indices that are left/right mirrors of each other (e.g. `[[1, 2], [3, 4]]`).
-        Used when running the model on horizontally flipped images and averaging heatmaps for test-time
-        augmentation.
     """
 
     model_type = "sapiens2"
@@ -899,7 +891,6 @@ class Sapiens2Config(DINOv3ViTConfig):
     key_bias: bool = True
     use_qk_norm: bool = True
     num_key_value_heads_per_layer: list[int] | None = None
-    pos_embed_dtype: str = "bfloat16"
     semantic_loss_ignore_index: int = 255
     head_upsample_out_channels: list[int] | None = None
     head_upsample_kernel_sizes: list[int] | None = None
@@ -908,7 +899,6 @@ class Sapiens2Config(DINOv3ViTConfig):
     head_scale_conv_out_channels: list[int] | None = None
     head_scale_conv_kernel_sizes: list[int] | None = None
     head_scale_final_hidden_sizes: list[int] | None = None
-    flip_pairs: list[list[int]] | None = None
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads_per_layer is None:
@@ -939,76 +929,17 @@ class Sapiens2Embeddings(DINOv3ViTEmbeddings):
         return super().forward(pixel_values, bool_masked_pos)
 
 
-class Sapiens2RopePositionEmbedding(nn.Module):
-    inv_freq: torch.Tensor
-
+class Sapiens2RopePositionEmbedding(DINOv3ViTRopePositionEmbedding):
     def __init__(self, config: Sapiens2Config):
-        super().__init__()
+        super().__init__(self)
 
-        self.config = config
-        self.base = config.rope_theta
-        self.head_dim = config.hidden_size // config.num_attention_heads
-        inv_freq = 1 / self.base ** (
-            2 * torch.arange(self.head_dim // 4, dtype=getattr(torch, config.pos_embed_dtype)) / (self.head_dim // 2)
-        )
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        _, _, height, width = pixel_values.shape
-        num_patches_h = height // self.config.patch_size
-        num_patches_w = width // self.config.patch_size
-
-        device = pixel_values.device
-        device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
-
-        with maybe_autocast(device_type=device_type, enabled=False):
-            patch_coords = get_patches_center_coordinates(
-                num_patches_h, num_patches_w, dtype=self.inv_freq.dtype, device=device
-            )
-            if self.training:
-                patch_coords = augment_patches_center_coordinates(
-                    patch_coords,
-                    shift=self.config.pos_embed_shift,
-                    jitter=self.config.pos_embed_jitter,
-                    rescale=self.config.pos_embed_rescale,
-                )
-
-            # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
-            angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :]
-            angles = angles.flatten(1, 2)
-            angles = angles.tile(2)
-
-            cos = torch.cos(angles)
-            sin = torch.sin(angles)
-
-        return cos, sin
-
-
-def apply_rotary_pos_emb(
-    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, **kwargs
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Applies Rotary Position Embedding to the query and key tensors, but only to the patch tokens,
-    ignoring the prefix tokens (cls token and register tokens).
-
-    Casts all q/k tokens to the rope dtype before applying the rotation and casts back afterwards.
-    This matches the original model behavior where all tokens are cast to rope_dtype before the
-    prefix/patch split, even though RoPE is only applied to patch tokens.
-    """
-    q_dtype, k_dtype = q.dtype, k.dtype
-    rope_dtype = cos.dtype
-    q = q.to(rope_dtype)
-    k = k.to(rope_dtype)
-
-    num_tokens = q.shape[-2]
-    num_patches = sin.shape[-2]
-    num_prefix_tokens = num_tokens - num_patches
-
-    q_patches = q[..., num_prefix_tokens:, :]
-    k_patches = k[..., num_prefix_tokens:, :]
-    q[..., num_prefix_tokens:, :] = q_patches * cos + rotate_half(q_patches) * sin
-    k[..., num_prefix_tokens:, :] = k_patches * cos + rotate_half(k_patches) * sin
-
-    return q.to(q_dtype), k.to(k_dtype)
+        del self.num_patches_h
+        del self.num_patches_w
+        image_size = config.image_size
+        image_h, image_w = image_size if isinstance(image_size, Iterable) else (image_size, image_size)
+        patch_size = config.patch_size if isinstance(config.patch_size, int) else config.patch_size[0]
+        self.num_patches_h = image_h // patch_size
+        self.num_patches_w = image_w // patch_size
 
 
 class Sapiens2Attention(DINOv3ViTAttention):
@@ -1294,9 +1225,7 @@ class Sapiens2PreTrainedModel(DINOv3ViTPreTrainedModel):
         elif isinstance(module, Sapiens2LayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
         elif isinstance(module, Sapiens2RopePositionEmbedding):
-            inv_freq = 1 / module.base ** (
-                2 * torch.arange(module.head_dim // 4, dtype=module.inv_freq.dtype) / (module.head_dim // 2)
-            )
+            inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)
             init.copy_(module.inv_freq, inv_freq)
         elif isinstance(
             module,
