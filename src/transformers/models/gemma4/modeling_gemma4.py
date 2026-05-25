@@ -2239,9 +2239,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
         llm_input_ids = None
         if inputs_embeds is None:
             llm_input_ids = input_ids.clone()
-            llm_input_ids[multimodal_mask] = torch.where(
-                multimodal_mask, self.config.text_config.pad_token_id, llm_input_ids
-            )
+            llm_input_ids = torch.where(multimodal_mask, self.config.text_config.pad_token_id, llm_input_ids)
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if per_layer_inputs is None and self.config.get_text_config().hidden_size_per_layer_input:
