@@ -39,6 +39,7 @@ from safetensors import safe_open
 from safetensors.torch import load as _safe_load_bytes
 from safetensors.torch import save_file as safe_save_file
 from torch import Tensor, nn
+from torch.distributed.tensor import DTensor
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
@@ -52,9 +53,22 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
+from .distributed.fsdp import is_fsdp_enabled
+from .distributed.sharding_utils import _dtensor_from_local_like
+from .distributed.tensor_parallel import (
+    _get_parameter_tp_plan,
+    verify_tp_plan,
+)
+from .distributed.utils import (
+    _distributed_barrier,
+    distribute_model,
+    gather_full_state_dict,
+    init_device_mesh,
+    save_model_checkpoint_distributed,
+)
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
-from .integrations import PeftAdapterMixin, deepspeed_config, hub_kernels, is_deepspeed_zero3_enabled, is_fsdp_enabled
+from .integrations import PeftAdapterMixin, deepspeed_config, hub_kernels, is_deepspeed_zero3_enabled
 from .integrations.accelerate import (
     _get_device_map,
     accelerate_disk_offload,
@@ -75,15 +89,6 @@ from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
-from .integrations.tensor_parallel import (
-    ALL_PARALLEL_STYLES,
-    _get_parameter_tp_plan,
-    distribute_model,
-    gather_state_dict_for_save,
-    initialize_tensor_parallelism,
-    shard_and_distribute_module,
-    verify_tp_plan,
-)
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import (
     FLASH_ATTENTION_COMPATIBILITY_MATRIX,
@@ -93,7 +98,7 @@ from .modeling_flash_attention_utils import (
 )
 from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from .monkey_patching import apply_patches, patch_output_recorders
-from .pytorch_utils import id_tensor_storage
+from .pytorch_utils import _torch_distributed_available, id_tensor_storage
 from .quantizers import HfQuantizer
 from .quantizers.auto import get_hf_quantizer
 from .quantizers.quantizers_utils import get_module_from_name
@@ -143,8 +148,6 @@ if TYPE_CHECKING:
     from ._typing import DeviceMeshLike
 
 
-_torch_distributed_available = torch.distributed.is_available()
-
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
     from smdistributed.modelparallel import __version__ as SMP_VERSION
@@ -182,6 +185,7 @@ class LoadStateDictConfig:
     dtype_plan: dict = field(default_factory=dict)
     hf_quantizer: HfQuantizer | None = None
     device_mesh: "DeviceMeshLike | None" = None
+    tp_plan: dict[str, str] | None = None
     weights_only: bool = True
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
     disable_mmap: bool | None = None
@@ -1128,7 +1132,16 @@ class EmbeddingAccessMixin:
         model = getattr(self, "model", None)
         if model is not None and hasattr(model, name):
             return getattr(model, name)
+        # 4) Multimodal LMs that wrap a text sub-model at `self.language_model`.
+        language_model = getattr(self, "language_model", None)
+        if (
+            language_model is not None
+            and language_model is not self
+            and hasattr(language_model, "get_input_embeddings")
+        ):
+            return language_model.get_input_embeddings()
 
+        # 5) recurse once into the registered *base* model (e.g. for encoder/decoder)
         base_model = getattr(self, "base_model", None)
         if base_model is not None and base_model is not self and hasattr(base_model, "get_input_embeddings"):
             return base_model.get_input_embeddings()
@@ -1159,7 +1172,14 @@ class EmbeddingAccessMixin:
         # 3) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
         elif (model := getattr(self, "model", None)) is not None and hasattr(model, name):
             setattr(model, name, value)
-        # 4) recurse once into the registered *base* model (e.g. for encoder/decoder)
+        # 4) Multimodal LMs that wrap a text sub-model at `self.language_model`.
+        elif (
+            (language_model := getattr(self, "language_model", None)) is not None
+            and language_model is not self
+            and hasattr(language_model, "set_input_embeddings")
+        ):
+            language_model.set_input_embeddings(value)
+        # 5) recurse once into the registered *base* model (e.g. for encoder/decoder)
         elif (
             (base_model := getattr(self, "base_model", None)) is not None
             and base_model is not self
@@ -1255,6 +1275,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # For top-level models, this attribute is currently defined in respective model code. For base models, this attribute comes
     # from `config.base_model_tp_plan` during `post_init`.
     _tp_plan: dict[str, str] = None
+    # Sequence-parallel plan used when `distributed_config.enable_sequence_parallel` is set. For top-level models, this
+    # attribute is defined on the head class (e.g. `*ForCausalLM`). For base models, it comes from
+    # `config.base_model_sp_plan` during `post_init`.
+    _sp_plan: dict[str, str] = None
     # Tensor parallel degree to which model is sharded to
     _tp_size = None
     # A pipeline parallel plan specifying the layers which may not be present on all ranks when PP is enabled. For top-level
@@ -1394,13 +1418,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         correctly in the case of composite models (that is, the top level model should know about those properties from its children).
         """
         # Attach the different parallel plans and tied weight keys to the top-most model, so that everything is
-        # easily available
-        self._tp_plan, self._ep_plan, self._pp_plan = {}, {}, {}
-        # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
+        # easily available. Seed with the class-level plans (e.g. `*ForCausalLM._tp_plan = {"lm_head": ...}`)
+        # before the instance attribute shadows them — task-head plans live on the head class.
+        cls_tp_plan = getattr(self, "_tp_plan", None) or {}
+        cls_sp_plan = getattr(self, "_sp_plan", None) or {}
+        cls_fsdp_plan = getattr(self, "_fsdp_plan", None) or {}
+        self._tp_plan = dict(cls_tp_plan)
+        self._sp_plan = dict(cls_sp_plan)
+        self._ep_plan = {}
+        self._pp_plan = {}
+        self._fsdp_plan = dict(cls_fsdp_plan)
+        # If current model is a base model, attach `base_model_*_plan` from config
         if self.base_model is self:
             self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
             self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
+            self._sp_plan = self.config.base_model_sp_plan.copy() if self.config.base_model_sp_plan is not None else {}
             self._ep_plan = self.config.base_model_ep_plan.copy() if self.config.base_model_ep_plan is not None else {}
+            self._fsdp_plan = (
+                self.config.base_model_fsdp_plan.copy() if self.config.base_model_fsdp_plan is not None else {}
+            )
+
         # Current submodel should register its tied weights
         self.all_tied_weights_keys = self.get_expanded_tied_weights_keys(all_submodels=False)
         # Current submodel should register its `_keep_in_fp32_modules`
@@ -1422,8 +1459,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_tp_plan", None):
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_sp_plan", None):
+                self._sp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_pp_plan", None):
                 self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_fsdp_plan", None):
+                self._fsdp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             # Always attach the keys of the children (if the children's config says to NOT tie, then it's empty)
             if tied_keys := getattr(module, "all_tied_weights_keys", None):
                 self.all_tied_weights_keys.update({f"{name}.{k}": f"{name}.{v}" for k, v in tied_keys.copy().items()})
@@ -1471,14 +1512,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
         if not isinstance(plan, dict):
             raise ValueError("Can only set a dictionary as `tp_plan`")
-
-        # Ensure the styles are all valid
-        for layer_pattern, parallel_style in plan.items():
-            if parallel_style not in ALL_PARALLEL_STYLES:
-                raise ValueError(
-                    f"Unsupported tensor parallel style '{parallel_style}' for layer '{layer_pattern}'. "
-                    f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
-                )
 
         # Validate that the layer patterns match existing model structure. We check this by getting all parameter
         # names and seeing if any match the patterns
@@ -2076,6 +2109,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """Detect whether the class supports setting its attention implementation dynamically. It is an ugly check based on
         opening the file, but avoids maintaining yet another property flag.
         """
+        # Skip dynamic wrappers like FSDP2's FSDP<ModelName>, whose __module__ is inside torch.*
+        cls = next((k for k in cls.__mro__ if not k.__module__.startswith("torch.")), cls)
         class_module = sys.modules.get(cls.__module__)
         # Missing module entry (e.g. cleared by a test) or custom model in a jupyter notebook / repl -> do not allow to set it
         if class_module is None or not hasattr(class_module, "__file__"):
@@ -2095,6 +2130,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """Detect whether the class supports setting its experts implementation dynamically. It is an ugly check based on
         opening the file, but avoids maintaining yet another property flag.
         """
+        # Skip dynamic wrappers like FSDP2's FSDP<ModelName>, whose __module__ is inside torch.*
+        cls = next((k for k in cls.__mro__ if not k.__module__.startswith("torch.")), cls)
         class_module = sys.modules.get(cls.__module__)
         # Missing module entry (e.g. cleared by a test) or custom model in a jupyter notebook / repl -> do not allow to set it
         if class_module is None or not hasattr(class_module, "__file__"):
@@ -2427,9 +2464,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
             if getattr(module, "weight", None) is not None:
-                init.normal_(module.weight.float(), mean=0.0, std=std)
+                init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
+        elif isinstance(module, nn.LSTM):
+            for name, param in module.named_parameters():
+                if "weight" in name:
+                    init.xavier_uniform_(param)
+                elif "bias" in name:
+                    init.constant_(param, 0.0)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=std)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
@@ -3309,6 +3352,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         token: str | bool | None = None,
         save_peft_format: bool = True,
         save_original_format: bool = True,
+        distributed_checkpoint: bool = False,
         **kwargs,
     ):
         """
@@ -3374,7 +3418,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         # we need to check against tp_size, not tp_plan, as tp_plan is substituted to the class one
-        if self._tp_size is not None and not is_huggingface_hub_greater_or_equal("0.31.4"):
+        if self.tp_size is not None and not is_huggingface_hub_greater_or_equal("0.31.4"):
             raise ImportError(
                 "Saving a model with tensor parallelism requires `huggingface_hub` version 0.31.4 or higher."
             )
@@ -3384,9 +3428,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
 
         os.makedirs(save_directory, exist_ok=True)
+        save_on_this_rank = is_main_process
+        if torch.distributed.is_initialized() and getattr(self, "device_mesh", None) is not None:
+            # DTensor gather materializes a full plain state dict only on global rank 0.
+            save_on_this_rank = save_on_this_rank and torch.distributed.get_rank() == 0
         save_directory_path = os.fspath(save_directory)
 
-        if push_to_hub:
+        if push_to_hub and save_on_this_rank:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory_path.split(os.path.sep)[-1])
             create_pr = kwargs.pop("create_pr", False)
@@ -3411,46 +3459,72 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
-        if self._auto_class is not None:
+        if self._auto_class is not None and save_on_this_rank:
             custom_object_save(self, save_directory, config=self.config)
 
+        # Don't persist distributed_config in saved config — it's runtime-only
+        # (otherwise AutoConfig absorbs it on reload, preventing from_pretrained from seeing it as a kwarg).
+        # Keep a runtime copy around because TP/FSDP save helpers still rely on it after config serialization.
+        distributed_config = getattr(model_to_save.config, "distributed_config", None)
+        if distributed_config is not None:
+            del model_to_save.config.distributed_config
+
         # Save the config
-        if is_main_process:
-            if not _hf_peft_config_loaded:
-                model_to_save.config.save_pretrained(save_directory)
-            if self.can_generate():
-                model_to_save.generation_config.save_pretrained(save_directory)
+        try:
+            if save_on_this_rank:
+                if not _hf_peft_config_loaded:
+                    model_to_save.config.save_pretrained(save_directory)
+                if self.can_generate():
+                    model_to_save.generation_config.save_pretrained(save_directory)
 
-            if _hf_peft_config_loaded:
-                logger.info(
-                    "Detected adapters on the model, saving the model in the PEFT format, only adapter weights will be saved."
-                )
-                state_dict = model_to_save.get_adapter_state_dict(state_dict=state_dict)
-
-                if save_peft_format:
+                if _hf_peft_config_loaded:
                     logger.info(
-                        "To match the expected format of the PEFT library, all keys of the state dict of adapters will be prepended with `base_model.model`."
+                        "Detected adapters on the model, saving the model in the PEFT format, only adapter weights will be saved."
                     )
-                    peft_state_dict = {}
-                    for key, value in state_dict.items():
-                        peft_state_dict[f"base_model.model.{key}"] = value
-                    state_dict = peft_state_dict
+                    state_dict = model_to_save.get_adapter_state_dict(state_dict=state_dict)
 
-                active_adapter = self.active_adapters()
+                    if save_peft_format:
+                        logger.info(
+                            "To match the expected format of the PEFT library, all keys of the state dict of adapters will be prepended with `base_model.model`."
+                        )
+                        peft_state_dict = {}
+                        for key, value in state_dict.items():
+                            peft_state_dict[f"base_model.model.{key}"] = value
+                        state_dict = peft_state_dict
 
-                if len(active_adapter) > 1:
-                    raise ValueError(
-                        "Multiple active adapters detected, saving multiple active adapters is not supported yet. You can save adapters separately one by one "
-                        "by iteratively calling `model.set_adapter(adapter_name)` then `model.save_pretrained(...)`"
-                    )
-                active_adapter = active_adapter[0]
+                    active_adapter = self.active_adapters()
 
-                current_peft_config = self.peft_config[active_adapter]
-                current_peft_config.save_pretrained(save_directory)
+                    if len(active_adapter) > 1:
+                        raise ValueError(
+                            "Multiple active adapters detected, saving multiple active adapters is not supported yet. You can save adapters separately one by one "
+                            "by iteratively calling `model.set_adapter(adapter_name)` then `model.save_pretrained(...)`"
+                        )
+                    active_adapter = active_adapter[0]
 
-        # Get the model state_dict
+                    current_peft_config = self.peft_config[active_adapter]
+                    current_peft_config.save_pretrained(save_directory)
+        finally:
+            if distributed_config is not None:
+                model_to_save.config.distributed_config = distributed_config
+
+        if distributed_checkpoint:
+            if torch.distributed.is_initialized() and getattr(self, "device_mesh", None) is None:
+                raise ValueError(
+                    "save_pretrained(distributed_checkpoint=True) requires the model to have been "
+                    "initialized with a distributed_config (device_mesh is None)."
+                )
+            save_model_checkpoint_distributed(self, save_directory)
+            return
+
+        # Get the model state_dict (handles FSDP unshard + TP gather in one call)
+        used_distributed_gather = False
         if state_dict is None:
-            state_dict = model_to_save.state_dict()
+            if getattr(self, "device_mesh", None) is not None:
+                # Pass self (not model_to_save) so device_mesh/tp_size/tp_plan are available
+                state_dict = gather_full_state_dict(self)
+                used_distributed_gather = True
+            else:
+                state_dict = model_to_save.state_dict()
 
         # if any model parameters are offloaded, we need to know it for later
         is_offloaded = False
@@ -3475,10 +3549,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             for ignore_key in self._keys_to_ignore_on_save:
                 if ignore_key in state_dict:
                     del state_dict[ignore_key]
-
-        # If model was sharded with TP, gather full tensors for saving
-        if self._tp_size is not None:
-            state_dict = gather_state_dict_for_save(state_dict, self._tp_plan, self._device_mesh, self._tp_size)
 
         # Remove tied weights as safetensors do not handle them
         state_dict = remove_tied_weights_from_state_dict(state_dict, model_to_save)
@@ -3521,54 +3591,55 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 filename.startswith(weights_no_suffix)
                 and os.path.isfile(full_filename)
                 and filename not in state_dict_split.filename_to_tensors
-                and is_main_process
+                and save_on_this_rank
                 and reg.fullmatch(filename_no_suffix) is not None
             ):
                 os.remove(full_filename)
 
         # Save the model
-        for shard_file, tensor_names in logging.tqdm(
-            state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
-        ):
-            filename = os.path.join(save_directory, shard_file)
-            shard_state_dict = {}
-            for tensor_name in tensor_names:
-                # Get the tensor, and remove it from state_dict to avoid keeping the ref
-                tensor = state_dict.pop(tensor_name)
+        if save_on_this_rank:
+            for shard_file, tensor_names in logging.tqdm(
+                state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
+            ):
+                filename = os.path.join(save_directory, shard_file)
+                shard_state_dict = {}
+                for tensor_name in tensor_names:
+                    # Get the tensor, and remove it from state_dict to avoid keeping the ref
+                    tensor = state_dict.pop(tensor_name)
 
-                # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
-                # but it would otherwise not be contained in the saved shard if we were to simply move the file
-                # or something
-                if is_offloaded and tensor.device.type == "meta":
-                    tensor = load_offloaded_parameter(model_to_save, tensor_name)
+                    # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
+                    # but it would otherwise not be contained in the saved shard if we were to simply move the file
+                    # or something
+                    if is_offloaded and tensor.device.type == "meta":
+                        tensor = load_offloaded_parameter(model_to_save, tensor_name)
 
-                # only do contiguous after it's permuted correctly in case of TP
-                shard_state_dict[tensor_name] = tensor.contiguous()
+                    # only do contiguous after it's permuted correctly in case of TP
+                    shard_state_dict[tensor_name] = tensor.contiguous()
 
-            # TODO: it would be very nice to do the writing concurrently, but safetensors never releases the GIL,
-            # so it's not possible for now....
-            # Write the shard to disk
-            safe_save_file(shard_state_dict, filename, metadata=metadata)
-            # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
-            del shard_state_dict
+                # TODO: it would be very nice to do the writing concurrently, but safetensors never releases the GIL,
+                # so it's not possible for now....
+                # Write the shard to disk
+                safe_save_file(shard_state_dict, filename, metadata=metadata)
+                # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
+                del shard_state_dict
 
-        if index is None:
-            path_to_weights = os.path.join(save_directory, weights_name)
-            logger.info(f"Model weights saved in {path_to_weights}")
-        else:
-            save_index_file = SAFE_WEIGHTS_INDEX_NAME
-            save_index_file = os.path.join(save_directory, _add_variant(save_index_file, variant))
-            # Save the index as well
-            with open(save_index_file, "w", encoding="utf-8") as f:
-                content = json.dumps(index, indent=2, sort_keys=True) + "\n"
-                f.write(content)
-            logger.info(
-                f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
-                f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
-                f"index located at {save_index_file}."
-            )
+            if index is None:
+                path_to_weights = os.path.join(save_directory, weights_name)
+                logger.info(f"Model weights saved in {path_to_weights}")
+            else:
+                save_index_file = SAFE_WEIGHTS_INDEX_NAME
+                save_index_file = os.path.join(save_directory, _add_variant(save_index_file, variant))
+                # Save the index as well
+                with open(save_index_file, "w", encoding="utf-8") as f:
+                    content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+                    f.write(content)
+                logger.info(
+                    f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
+                    f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
+                    f"index located at {save_index_file}."
+                )
 
-        if push_to_hub:
+        if push_to_hub and save_on_this_rank:
             # Eventually create an empty model card
             model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
 
@@ -3583,6 +3654,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 token=token,
                 create_pr=create_pr,
             )
+
+        # `gather_full_state_dict` concentrates the full state on rank 0 only;
+        # other ranks then loop over an empty shard list and would race ahead
+        # of rank 0's safetensors writes. Barrier so any subsequent
+        # `from_pretrained` on this path sees the consolidated files.
+        if used_distributed_gather:
+            _distributed_barrier()
 
     @wraps(PushToHubMixin.push_to_hub)
     def push_to_hub(self, *args, **kwargs):
@@ -3977,13 +4055,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             max_memory (`Dict`, *optional*):
                 A dictionary device identifier to maximum memory if using `device_map`. Will default to the maximum memory available for each
                 GPU and the available CPU RAM if unset.
-            tp_plan (`Optional[Union[dict, str]]`, *optional*):
-                A torch tensor parallel plan, see [here](https://pytorch.org/tutorials/intermediate/TP_tutorial.html). Use `tp_plan="auto"` to
-                use the predefined plan based on the model. If it's a dict, then it should match between module names and desired layout.
-                Note that if you use it, you should launch your script accordingly with `torchrun [args] script.py`. This will be much
-                faster than using a `device_map`, but has limitations.
-            tp_size (`str`, *optional*):
-                A torch tensor parallel degree. If not provided would default to world size.
+            distributed_config ([`DistributedConfig`], *optional*):
+                Configuration for native distributed training (FSDP2 + TP) via `torch.distributed`. Mutually
+                exclusive with `quantization_config` (for now) and `device_map`. When set, accelerate is not used for
+                device placement or dispatch. Launch with `torchrun --nproc_per_node=N script.py`.
+
+                Accepts `tp_size`, `tp_plan`, `fsdp_size`, `fsdp_plan`. When a size is specified without a
+                plan, the plan defaults to the model's predefined behavior: TP uses the model's predefined
+                tensor parallel sharding plan, FSDP wraps each transformer layer individually with FSDP2
+                (`fully_shard`). Both plans also accept a `dict` for manual control: `tp_plan` maps
+                parameter names to parallel styles (e.g. `{"model.layers.*.self_attn.q_proj": "colwise"}`),
+                `fsdp_plan` maps module names to wrap (e.g. `{"model.layers.0": {}, "model.layers.1": {}}`).
+
+                Examples:
+                    - TP-only: `DistributedConfig(tp_size=4)`
+                    - FSDP-only: `DistributedConfig(fsdp_size=4)`
+                    - 2D parallel: `DistributedConfig(tp_size=2, fsdp_size=2)` on 4 GPUs
             device_mesh (`torch.distributed.DeviceMesh`, *optional*):
                 A torch device mesh. If not provided would default to world size. Used only for tensor parallel for now.
                 If provided, it has to contain dimension named `"tp"` in case it's > 1 dimensional, this dimension will be used for tensor parallelism
@@ -4077,8 +4164,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         adapter_name = kwargs.pop("adapter_name", "default")
         generation_config = kwargs.pop("generation_config", None)
         gguf_file = kwargs.pop("gguf_file", None)
-        tp_plan = kwargs.pop("tp_plan", None)
-        tp_size = kwargs.pop("tp_size", None)
         distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
@@ -4090,8 +4175,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         kernel_config = kwargs.pop("kernel_config", None)
         key_mapping = kwargs.pop("key_mapping", None)
 
-        if distributed_config is not None and tp_plan is None:
-            tp_plan = "auto"
+        if distributed_config is not None:
+            if device_map is not None:
+                raise ValueError(
+                    "`distributed_config` and `device_map` are mutually exclusive. "
+                    "`distributed_config` handles device placement natively via torch.distributed."
+                )
+            # NOTE(3outeille): support quantization (fp4/fp8) with distributed training later
+            if quantization_config is not None:
+                raise ValueError(
+                    "Quantization is not currently supported with distributed training. Please disable quantization or distributed_config."
+                )
 
         # Not used anymore -- remove them from the kwargs
         for name in ["mirror", "_fast_init", "low_cpu_mem_usage", "from_tf", "from_flax", "offload_state_dict"]:
@@ -4126,17 +4220,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 "`state_dict` cannot be passed together with a model name or a `gguf_file`. Use one of the two loading strategies."
             )
 
-        if device_map == "auto" and int(os.environ.get("WORLD_SIZE", "0")):
-            logger.info(
-                "You've set device_map=`auto` while triggering a distributed run with torchrun. This might lead to unexpected behavior. "
-                "If your plan is to load the model on each device, you should set device_map={"
-                ": PartialState().process_index} where PartialState comes from accelerate library"
-            )
+        if distributed_config is not None:
+            device_mesh = init_device_mesh(distributed_config)
+        else:
+            # Accelerate path
+            if device_map == "auto" and int(os.environ.get("WORLD_SIZE", "0")):
+                logger.info(
+                    "You've set device_map=`auto` while triggering a distributed run with torchrun. This might lead to unexpected behavior. "
+                    "If your plan is to load the model on each device, you should set device_map={"
+                    ": PartialState().process_index} where PartialState comes from accelerate library"
+                )
 
-        if tp_plan is not None or tp_size is not None:  # TP warnings, and setup
-            device_map, device_mesh, tp_size = initialize_tensor_parallelism(
-                tp_plan, tp_size=tp_size, device_mesh=device_mesh, device_map=device_map
-            )
+            device_map = check_and_set_device_map(device_map)  # validate & normalize (requires accelerate)
 
         # Auto-detect ``.gguf`` when the caller passes a Hub repo (or a local
         # directory) that contains exactly one GGUF file — saves them from
@@ -4155,7 +4250,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             download_kwargs_with_commit,
             **adapter_kwargs,
         )
-        device_map = check_and_set_device_map(device_map)  # warn, error and fix the device map
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -4297,17 +4391,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # instantiated model, as the flags can be modified by instances sometimes)
         dtype_plan = model._get_dtype_plan(dtype)
 
-        # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
+        # Obtain the weight conversion mapping for this model if any are registered
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
-        if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
-            model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size)
-
-        # Prepare the full device map
-        if device_map is not None:
-            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
+        if distributed_config is not None:
+            model = distribute_model(model, distributed_config, device_mesh)
+        else:
+            # Accelerate path: auto device mapping
+            if device_map is not None:
+                device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
 
         # Finalize model weight initialization
+        active_tp_plan = (
+            getattr(model, "_tp_plan", None) if getattr(distributed_config, "tp_size", None) is not None else None
+        )
         load_config = LoadStateDictConfig(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             ignore_mismatched_sizes=ignore_mismatched_sizes,
@@ -4319,6 +4416,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             dtype_plan=dtype_plan,
             hf_quantizer=hf_quantizer,
             device_mesh=device_mesh,
+            tp_plan=active_tp_plan,
             weights_only=weights_only,
             weight_mapping=weight_conversions,
             use_safetensors=use_safetensors,
@@ -4387,7 +4485,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
 
         if logger.level >= logging.WARNING:
-            verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
+            verify_tp_plan(expected_keys, load_config.tp_plan)
 
         # This offload index if for params explicitly on the "disk" in the device_map
         disk_offload_index = None
@@ -4459,7 +4557,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 model=model,
                 state_dict=merged_state_dict,
                 load_config=load_config,
-                tp_plan=model.tp_plan,
+                tp_plan=load_config.tp_plan,
                 disk_offload_index=disk_offload_index,
             )
 
@@ -4611,8 +4709,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         Returns the model's tensor parallelism degree.
         """
-        # if None, the model didn't undergo tensor parallel sharding
-        return self._tp_size
+        dc = getattr(self.config, "distributed_config", None)
+        return dc.tp_size if dc is not None else None
 
     @property
     def supports_pp_plan(self):
@@ -4767,15 +4865,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # will be re-initialized for nothing (which can be quite long)
         for key in missing_keys - self.all_tied_weights_keys.keys():
             param = self.get_parameter_or_buffer(key)
-            param_device = get_device(device_map, key, valid_torch_device=True)
-            value = torch.empty_like(param, device=param_device)
-            # For TP, we may need to shard the param
-            if device_mesh is not None:
-                shard_and_distribute_module(
-                    self, value, param, key, None, False, device_mesh.get_local_rank(), device_mesh
+            if isinstance(param, DTensor):
+                # DTensor from parallelize_module on meta — materialize on actual device
+                local_value = torch.empty(
+                    param._local_tensor.shape,
+                    dtype=param.dtype,
+                    device=torch.device(param.device_mesh.device_type, torch.cuda.current_device()),
                 )
-            # Otherwise, just move it to device
+                new_dtensor = _dtensor_from_local_like(local_value, param)
+                with torch.no_grad():
+                    new_param = torch.nn.Parameter(new_dtensor, requires_grad=param.requires_grad)
+                    torch.utils.swap_tensors(param, new_param)
             else:
+                param_device = get_device(device_map, key, valid_torch_device=True)
+                value = torch.empty_like(param, device=param_device)
                 _load_parameter_into_model(self, key, value)
         # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
         for key, buffer in self.named_non_persistent_buffers():
@@ -4858,7 +4961,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         later as they will be tied (overwritten) anyway.
         This is very important as most embeddings are tied, and they are huge params (vocabularies are often 256k), so
         running inits on them is very costly."""
-        for tied_param in getattr(self, "all_tied_weights_keys", {}).keys():
+        for tied_param in self.all_tied_weights_keys.keys():
             param = self.get_parameter(tied_param)
             setattr(param, "_is_hf_initialized", True)
 
@@ -4992,7 +5095,7 @@ def get_total_byte_count(
 
     total_byte_count = defaultdict(lambda: 0)
     tied_param_names = model.all_tied_weights_keys.keys()
-    tp_plan = model._tp_plan if _is_torch_distributed_initialized() else []
+    tp_plan = model.tp_plan if _is_torch_distributed_initialized() else []
 
     for param_name, device in accelerator_device_map.items():
         # Skip if the parameter has already been accounted for (tied weights)

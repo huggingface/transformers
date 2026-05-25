@@ -94,9 +94,9 @@ class Ernie4_5_VLMoeVisionConfig(Qwen2VLVisionConfig):
 
     base_model_tp_plan = {
         "blocks.*.attn.qkv": "colwise",
-        "blocks.*.attn.proj": "rowwise",
+        "blocks.*.attn.proj": "rowwise_allreduce",
         "blocks.*.mlp.fc1": "colwise",
-        "blocks.*.mlp.fc2": "rowwise",
+        "blocks.*.mlp.fc2": "rowwise_allreduce",
     }
 
     hidden_size: int = 1280
@@ -134,13 +134,13 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise_allreduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
     }
     ignore_keys_at_rope_validation = {"mrope_section"}
 
