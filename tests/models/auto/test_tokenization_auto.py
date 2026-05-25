@@ -22,6 +22,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+from parameterized import parameterized
 
 import transformers
 from transformers import (
@@ -391,6 +392,29 @@ class AutoTokenizerTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")
         # There is no fast CTRL so this always gives us a slow tokenizer.
         self.assertIsInstance(tokenizer, CTRLTokenizer)
+
+    TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS = [
+        ("aria", "rhymes-ai/Aria", [1894, 93332, 93421, 2575, 109, 109, 20, 21, 22, 897]),
+        ("blip2_flan_t5_xl", "Salesforce/blip2-flan-t5-xl", [5575, 32, 834, 1047, 3, 14574, 3]),
+        ("bigbird_pegasus_large_pubmed", "google/bigbird-pegasus-large-pubmed", [110, 42417, 940, 4839, 14575]),
+        ("kosmos_2_patch14_224", "microsoft/kosmos-2-patch14-224", [54177, 1831, 4423, 19531, 106]),
+        ("olmo_2_0425_1b", "allenai/OLMo-2-0425-1B", [8134, 14725, 271, 4513, 220]),
+        ("stablelm_2", "stabilityai/tiny-random-stablelm-2", [8134, 14725, 271, 16, 17, 18, 220]),
+    ]
+
+    @slow
+    @require_tokenizers
+    @parameterized.expand(TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS)
+    def test_actual_checkpoints_use_tokenizers_backend_auto_mappings(self, _name, repo_id, expected_input_ids):
+        # PR #45936: v5 tokenizer auto mapping changes to use TokenizersBackend
+        TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT = "foo_bar\n\n123 "
+
+        tokenizer = AutoTokenizer.from_pretrained(repo_id)
+        self.assertIsInstance(tokenizer, TokenizersBackend)
+        self.assertEqual(
+            tokenizer(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT, add_special_tokens=False)["input_ids"],
+            expected_input_ids,
+        )
 
     def test_get_tokenizer_config(self):
         # Check we can load the tokenizer config of an online model.
@@ -828,7 +852,6 @@ class NopConfig(PreTrainedConfig):
 
         fake_config = mock.MagicMock()
         fake_config.model_type = "m2m_100"
-        fake_config._name_or_path = ""
         mock_tokenizer = mock.MagicMock(spec=NllbTokenizer)
 
         with (
