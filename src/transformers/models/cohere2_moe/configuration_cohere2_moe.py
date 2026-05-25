@@ -133,7 +133,7 @@ class Cohere2MoeConfig(PreTrainedConfig):
     shared_expert_combination_strategy: str = "average"
     expert_selection_fn: str = "softmax"
     layer_types: list[str] | None = None
-    first_k_dense_replace: int = 0
+    mlp_layer_types: list | None = None
     prefix_dense_sliding_window_pattern: int = 1
     norm_topk_prob: bool = True
     prefix_dense_intermediate_size: int | None = None
@@ -159,19 +159,19 @@ class Cohere2MoeConfig(PreTrainedConfig):
                 for i in range(self.num_hidden_layers - self.first_k_dense_replace)
             ]
             self.layer_types = prefix_layers + rest_layers
-
         self.validate_layer_type()
 
-        if len(self.layer_types) != self.num_hidden_layers:
-            raise ValueError(
-                f"The length of layer_types ({len(self.layer_types)}) does not match "
-                f"num_hidden_layers ({self.num_hidden_layers})"
-            )
+        if self.mlp_layer_types is None:
+            first_k_dense_replace = kwargs.pop("first_k_dense_replace", 0)
+            self.mlp_layer_types = [
+                "dense" if i < first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
+            ]
 
         super().__post_init__(**kwargs)
         self._update_sp_plan()
 
     def _update_sp_plan(self):
+        """Depending on layers, `mlp` can be a MoE or an MLP layer - so we update the plan dynamically here to avoid collisions"""
         self.base_model_sp_plan = self.base_model_sp_plan.copy()
         for i in range(self.num_hidden_layers):
             # This is a MLP layer

@@ -350,7 +350,7 @@ class Cohere2MoeDecoderLayer(GradientCheckpointingLayer):
         self.self_attn = Cohere2MoeAttention(config=config, layer_idx=layer_idx)
         self.mlp = (
             Cohere2MoeMLP(config, config.prefix_dense_intermediate_size)
-            if layer_idx < config.first_k_dense_replace
+            if config.mlp_layer_types[layer_idx] == "dense"
             else Cohere2MoeSparseMoeBlock(config)
         )
         self.input_layernorm = (

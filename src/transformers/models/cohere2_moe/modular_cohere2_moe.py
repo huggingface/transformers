@@ -183,7 +183,7 @@ class Cohere2MoeDecoderLayer(Cohere2DecoderLayer):
         )
         self.mlp = (
             Cohere2MoeMLP(config, config.prefix_dense_intermediate_size)
-            if layer_idx < config.first_k_dense_replace
+            if config.mlp_layer_types[layer_idx] == "dense"
             else Cohere2MoeSparseMoeBlock(config)
         )
 
