@@ -15,6 +15,7 @@
 
 import copy
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -28,6 +29,7 @@ from ...distributed.fsdp import is_fsdp_managed_module
 from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -36,12 +38,50 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
     Wav2Vec2BaseModelOutput,
 )
-from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from .configuration_seamless_m4t_v2 import SeamlessM4Tv2Config
 
 
 logger = logging.get_logger(__name__)
+
+
+# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t._get_vocoder_config with SeamlessM4T->SeamlessM4Tv2
+def _get_vocoder_config(config: SeamlessM4Tv2Config) -> SeamlessM4Tv2Config:
+    vocoder_config = copy.deepcopy(config)
+    vocoder_config._attn_implementation_internal = "eager"
+    return vocoder_config
+
 
 SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS = r"""
     input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
@@ -364,6 +404,7 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
     def __init__(self, config, use_position_embeddings=True):
         super().__init__()
 
+        self.config = config
         self.head_size = config.hidden_size // config.speech_encoder_attention_heads
         self.num_heads = config.speech_encoder_attention_heads
         self.position_embeddings_type = config.position_embeddings_type if use_position_embeddings else None
@@ -404,8 +445,6 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
 
-        attn_weights = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_size)
-
         if self.position_embeddings_type == "relative_key":
             query_length, key_length = query.shape[2], key.shape[2]
 
@@ -418,21 +457,30 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
             positional_embedding = positional_embedding.to(dtype=query.dtype)  # fp16 compatibility
 
             relative_position_attn_weights = torch.einsum("bhld,lrd->bhlr", query, positional_embedding)
-            attn_weights = attn_weights + (relative_position_attn_weights / math.sqrt(self.head_size))
+            relative_position_attn_weights = relative_position_attn_weights / math.sqrt(self.head_size)
+            attention_mask = (
+                relative_position_attn_weights
+                if attention_mask is None
+                else attention_mask + relative_position_attn_weights
+            )
 
-        # apply attention_mask if necessary
-        if attention_mask is not None:
-            attn_weights = attn_weights + attention_mask
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        # => (batch, head, time1, time2)
-        attn_weights = torch.softmax(attn_weights, dim=-1)
-        attn_weights = self.dropout(attn_weights)
-
-        # => (batch, head, time1, d_k)
-        attn_output = torch.matmul(attn_weights, value)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout.p,
+            scaling=self.head_size**-0.5,
+            output_attentions=output_attentions,
+        )
 
         # => (batch, time1, hidden_size)
-        attn_output = attn_output.transpose(1, 2).reshape(batch_size, -1, self.num_heads * self.head_size)
+        attn_output = attn_output.reshape(batch_size, -1, self.num_heads * self.head_size)
         attn_output = self.linear_out(attn_output)
 
         if not output_attentions:
@@ -909,12 +957,15 @@ class SeamlessM4Tv2Attention(nn.Module):
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        **kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         is_cross_attention = encoder_hidden_states is not None
-        batch_size, seq_length = hidden_states.shape[:2]
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         is_updated = False
         if past_key_values is not None:
@@ -936,8 +987,9 @@ class SeamlessM4Tv2Attention(nn.Module):
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
-            key_states = key_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+            kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
+            key_states = key_states.view(kv_shape).transpose(1, 2)
+            value_states = value_states.view(kv_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
@@ -946,23 +998,27 @@ class SeamlessM4Tv2Attention(nn.Module):
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
-        query_states = self.q_proj(hidden_states)
-        query_states = query_states.reshape(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        query_states = query_states * self.scaling
-        attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        if attention_mask is not None:
-            attention_scores = attention_scores + attention_mask
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            output_attentions=output_attentions,
+            **kwargs,
+        )
 
-        # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = nn.functional.softmax(attention_scores.float(), dim=-1).type_as(attention_scores)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.out_proj(attn_output)
 
-        #  attn_output = torch.bmm(attn_probs, value_states) ?
-        context_states = torch.matmul(attn_weights, value_states)
-        # attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim) ?
-        context_states = context_states.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)
-        attn_output = self.out_proj(context_states)
+        if not output_attentions:
+            attn_weights = None
 
         return attn_output, attn_weights
 
@@ -1004,6 +1060,7 @@ class SeamlessM4Tv2EncoderLayer(GradientCheckpointingLayer):
             embed_dim=self.embed_dim,
             num_heads=encoder_attention_heads,
             dropout=config.attention_dropout,
+            config=config,
         )
         self.attn_dropout = nn.Dropout(config.dropout)
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -1071,6 +1128,8 @@ class SeamlessM4Tv2DecoderLayer(GradientCheckpointingLayer):
             num_heads=decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
+            is_causal=True,
+            config=config,
             layer_idx=layer_idx,
         )
         self.dropout = config.dropout
@@ -1083,6 +1142,7 @@ class SeamlessM4Tv2DecoderLayer(GradientCheckpointingLayer):
             decoder_attention_heads,
             config.attention_dropout,
             is_decoder=True,
+            config=config,
             layer_idx=layer_idx,
         )
         self.cross_attention_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -1178,6 +1238,7 @@ class SeamlessM4Tv2TextToUnitDecoderLayer(GradientCheckpointingLayer):
             num_heads=decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
+            config=config,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
 
@@ -1249,6 +1310,7 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
     config: SeamlessM4Tv2Config
     base_model_prefix = "seamless_m4t_v2"
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
     _no_split_modules = [
         "SeamlessM4Tv2EncoderLayer",
         "SeamlessM4Tv2DecoderLayer",
@@ -3188,7 +3250,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         self.t2u_model = SeamlessM4Tv2TextToUnitForConditionalGeneration(config)
-        self.vocoder = SeamlessM4Tv2CodeHifiGan(config)
+        self.vocoder = SeamlessM4Tv2CodeHifiGan(_get_vocoder_config(config))
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -3538,7 +3600,7 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMix
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         self.t2u_model = SeamlessM4Tv2TextToUnitForConditionalGeneration(config)
-        self.vocoder = SeamlessM4Tv2CodeHifiGan(config)
+        self.vocoder = SeamlessM4Tv2CodeHifiGan(_get_vocoder_config(config))
         self.post_init()
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech.get_encoder
@@ -3909,7 +3971,7 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
 
         # these models already call post_init in their initialization
         self.t2u_model = SeamlessM4Tv2TextToUnitForConditionalGeneration(config)
-        self.vocoder = SeamlessM4Tv2CodeHifiGan(config)
+        self.vocoder = SeamlessM4Tv2CodeHifiGan(_get_vocoder_config(config))
 
         # Initialize weights and apply final processing
         self.post_init()

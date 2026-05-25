@@ -19,6 +19,7 @@ import unittest
 from functools import cached_property
 
 import pytest
+from parameterized import parameterized
 
 from transformers import SeamlessM4TConfig, is_speech_available, is_torch_available
 from transformers.testing_utils import require_speech, require_torch, slow, torch_device
@@ -26,6 +27,7 @@ from transformers.trainer_utils import set_seed
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
@@ -364,6 +366,10 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_sdpa_inference(self, *args):
+        self.skipTest("The generic SDPA equivalence helper does not handle SeamlessM4T's dynamic modality switch.")
 
     @slow
     def test_model_from_pretrained(self):

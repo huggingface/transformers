@@ -15,6 +15,7 @@
 
 import copy
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -28,6 +29,7 @@ from ...distributed.fsdp import is_fsdp_managed_module
 from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -36,12 +38,49 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
     Wav2Vec2BaseModelOutput,
 )
-from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from .configuration_seamless_m4t import SeamlessM4TConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+def _get_vocoder_config(config: SeamlessM4TConfig) -> SeamlessM4TConfig:
+    vocoder_config = copy.deepcopy(config)
+    vocoder_config._attn_implementation_internal = "eager"
+    return vocoder_config
+
 
 SEAMLESS_M4T_COMMON_CUSTOM_ARGS = r"""
     input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
@@ -448,6 +487,7 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
     def __init__(self, config, use_position_embeddings=True):
         super().__init__()
 
+        self.config = config
         self.head_size = config.hidden_size // config.speech_encoder_attention_heads
         self.num_heads = config.speech_encoder_attention_heads
         self.position_embeddings_type = config.position_embeddings_type if use_position_embeddings else None
@@ -467,7 +507,6 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
             self.pos_bias_u = nn.Parameter(torch.zeros(self.num_heads, self.head_size))
             self.pos_bias_v = nn.Parameter(torch.zeros(self.num_heads, self.head_size))
 
-    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerSelfAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -499,36 +538,40 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
 
+        attention_mask = self._prepare_attention_mask(
+            query=query,
+            key=key,
+            attention_mask=attention_mask,
+            relative_position_embeddings=relative_position_embeddings,
+        )
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
         if self.position_embeddings_type == "relative":
             if relative_position_embeddings is None:
                 raise ValueError(
                     "`relative_position_embeddings` has to be defined when `self.position_embeddings_type =="
                     " 'relative'"
                 )
-            # apply relative_position_embeddings to qk scores
-            # as proposed in Transformer_XL: https://huggingface.co/papers/1901.02860
-            scores = self._apply_relative_embeddings(
-                query=query, key=key, relative_position_embeddings=relative_position_embeddings
-            )
-        else:
-            scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_size)
+            query = query + self.pos_bias_u[None, :, None, :]
 
-        # apply attention_mask if necessary
-        if attention_mask is not None:
-            scores = scores + attention_mask
+        hidden_states, attn_weights = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout.p,
+            scaling=self.head_size**-0.5,
+            output_attentions=output_attentions,
+        )
 
-        # => (batch, head, time1, time2)
-        probs = torch.softmax(scores, dim=-1)
-        probs = self.dropout(probs)
-
-        # => (batch, head, time1, d_k)
-        hidden_states = torch.matmul(probs, value)
-
-        # => (batch, time1, hidden_size)
-        hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, self.num_heads * self.head_size)
+        hidden_states = hidden_states.reshape(batch_size, -1, self.num_heads * self.head_size)
         hidden_states = self.linear_out(hidden_states)
 
-        return hidden_states, probs
+        return hidden_states, attn_weights
 
     # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerSelfAttention._apply_rotary_embedding
     def _apply_rotary_embedding(self, hidden_states, relative_position_embeddings):
@@ -589,6 +632,48 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
         scores = (scores_ac + scores_bd) / math.sqrt(self.head_size)
 
         return scores
+
+    def _prepare_attention_mask(self, query, key, attention_mask, relative_position_embeddings):
+        if self.position_embeddings_type != "relative":
+            return attention_mask
+
+        if relative_position_embeddings is None:
+            raise ValueError(
+                "`relative_position_embeddings` has to be defined when `self.position_embeddings_type == 'relative'`"
+            )
+
+        proj_relative_position_embeddings = self.linear_pos(relative_position_embeddings)
+        proj_relative_position_embeddings = proj_relative_position_embeddings.view(
+            relative_position_embeddings.size(0), -1, self.num_heads, self.head_size
+        )
+        proj_relative_position_embeddings = proj_relative_position_embeddings.transpose(1, 2)
+        proj_relative_position_embeddings = proj_relative_position_embeddings.transpose(2, 3)
+
+        query = query.transpose(1, 2)
+        q_with_bias_v = (query + self.pos_bias_v).transpose(1, 2)
+
+        relative_attention_scores = torch.matmul(q_with_bias_v, proj_relative_position_embeddings)
+
+        zero_pad = torch.zeros(
+            (*relative_attention_scores.size()[:3], 1),
+            device=relative_attention_scores.device,
+            dtype=relative_attention_scores.dtype,
+        )
+        relative_attention_scores_padded = torch.cat([zero_pad, relative_attention_scores], dim=-1)
+        relative_attention_scores_padded_shape = relative_attention_scores.size()[:2] + (
+            relative_attention_scores.shape[3] + 1,
+            relative_attention_scores.shape[2],
+        )
+        relative_attention_scores_padded = relative_attention_scores_padded.view(
+            *relative_attention_scores_padded_shape
+        )
+        relative_attention_scores = relative_attention_scores_padded[:, :, 1:].view_as(relative_attention_scores)
+        relative_attention_scores = relative_attention_scores[:, :, :, : key.size(2)]
+        relative_attention_scores = relative_attention_scores / math.sqrt(self.head_size)
+
+        if attention_mask is not None:
+            relative_attention_scores = relative_attention_scores + attention_mask
+        return relative_attention_scores
 
 
 class SeamlessM4TConformerEncoderLayer(GradientCheckpointingLayer):
@@ -1034,7 +1119,7 @@ class SeamlessM4TAttention(nn.Module):
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        **kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
@@ -1042,10 +1127,10 @@ class SeamlessM4TAttention(nn.Module):
         # for the decoder
         is_cross_attention = encoder_hidden_states is not None
 
-        bsz, tgt_len, _ = hidden_states.size()
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        # get query proj
-        query_states = self.q_proj(hidden_states) * self.scaling
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         is_updated = False
         if past_key_values is not None:
@@ -1067,8 +1152,9 @@ class SeamlessM4TAttention(nn.Module):
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
-            key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+            kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
+            key_states = key_states.view(kv_shape).transpose(1, 2)
+            value_states = value_states.view(kv_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
@@ -1077,61 +1163,30 @@ class SeamlessM4TAttention(nn.Module):
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = query_states.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
-        query_states = query_states.reshape(*proj_shape)
-        key_states = key_states.reshape(*proj_shape)
-        value_states = value_states.reshape(*proj_shape)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            output_attentions=output_attentions,
+            **kwargs,
+        )
 
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to be reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights_reshaped = None
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value_states)
-
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-
-        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned across GPUs when using tensor-parallelism.
-        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
 
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights_reshaped
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeDenseActDense with NllbMoe->SeamlessM4T,DenseActDense->FeedForwardNetwork, d_model->hidden_size
@@ -1170,6 +1225,7 @@ class SeamlessM4TEncoderLayer(GradientCheckpointingLayer):
             embed_dim=self.embed_dim,
             num_heads=encoder_attention_heads,
             dropout=config.attention_dropout,
+            config=config,
         )
         self.attn_dropout = nn.Dropout(config.dropout)
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -1234,6 +1290,8 @@ class SeamlessM4TDecoderLayer(GradientCheckpointingLayer):
             num_heads=decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
+            is_causal=True,
+            config=config,
             layer_idx=layer_idx,
         )
         self.dropout = config.dropout
@@ -1246,6 +1304,7 @@ class SeamlessM4TDecoderLayer(GradientCheckpointingLayer):
             decoder_attention_heads,
             config.attention_dropout,
             is_decoder=True,
+            config=config,
             layer_idx=layer_idx,
         )
         self.cross_attention_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -1334,6 +1393,7 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
     config: SeamlessM4TConfig
     base_model_prefix = "seamless_m4t"
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
     _no_split_modules = ["SeamlessM4TEncoderLayer", "SeamlessM4TDecoderLayer", "SeamlessM4TConformerEncoderLayer"]
 
     @torch.no_grad()
@@ -2975,7 +3035,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
-        self.vocoder = SeamlessM4TCodeHifiGan(config)
+        self.vocoder = SeamlessM4TCodeHifiGan(_get_vocoder_config(config))
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -3288,7 +3348,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
-        self.vocoder = SeamlessM4TCodeHifiGan(config)
+        self.vocoder = SeamlessM4TCodeHifiGan(_get_vocoder_config(config))
         self.post_init()
 
     def get_encoder(self):
@@ -3623,7 +3683,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
 
         # these models already call post_init in their initialization
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
-        self.vocoder = SeamlessM4TCodeHifiGan(config)
+        self.vocoder = SeamlessM4TCodeHifiGan(_get_vocoder_config(config))
 
         # Initialize weights and apply final processing
         self.post_init()
