@@ -264,6 +264,7 @@ IGNORE_NON_TESTED = (
         "Molmo2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
         "Molmo2Adapter",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
         "Qwen3TTSBasePreTrainedModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3TTSForConditionalGeneration.
+        "Qwen3TTSTalkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3TTSForConditionalGeneration.
         "Qwen3TTSTalkerTextPreTrainedModel",  # Building part of bigger (tested) model.
         "Qwen3TTSTalkerCodePredictorModel",  # Building part of bigger (tested) model.
         "Qwen3TTSTalkerCodePredictorModelForConditionalGeneration",  # Building part of bigger (tested) model.
