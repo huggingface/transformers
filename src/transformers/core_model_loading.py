@@ -799,7 +799,7 @@ class WeightTransform:
                 tensors = [future.result() for future in tensors if future.result() is not None]
             # Sync loading
             elif callable(tensors[0]):
-                tensors = [tensor for func in tensors if (tensor := func()) is not None]
+                tensors = [func() for func in tensors]
             # Add them to the new dictionary
             collected_tensors[key] = tensors
 
@@ -1019,9 +1019,10 @@ def spawn_materialize(
 
     if thread_pool is not None:
         return thread_pool.submit(_job)
-    # Return the Callable here, not the Tensor itself, so we actually delay loading
-    # to avoid saturating cpu memory during Conversion
-    return _job
+    else:
+        # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
+        # memory during Conversion
+        return _job
 
 
 def dot_natural_key(s: str):
@@ -1307,21 +1308,9 @@ def convert_and_load_state_dict_in_model(
     """
     base_model_prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
+    device_map = load_config.device_map or {"": "cpu"}
     hf_quantizer = load_config.hf_quantizer
     dtype = load_config.dtype
-    device_mesh = load_config.device_mesh
-
-    if load_config.device_map is not None:
-        device_map = load_config.device_map
-    elif device_mesh is not None:
-        if device_mesh.device_type == "cpu":
-            device_map = {"": torch.device("cpu")}
-        else:
-            device_map = {
-                "": torch.device(device_mesh.device_type, getattr(torch, device_mesh.device_type).current_device())
-            }
-    else:
-        device_map = {"": "cpu"}
     disk_offload_folder = load_config.disk_offload_folder
     offload_buffers = load_config.offload_buffers
     dtype_plan = load_config.dtype_plan or {}
