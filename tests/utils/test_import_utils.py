@@ -44,7 +44,9 @@ class TestFlashAttnDistributionMapMissing(unittest.TestCase):
     """
 
     def _map_without_flash_attn(self):
-        return {k: v for k, v in PACKAGE_DISTRIBUTION_MAPPING.items() if k not in ("flash_attn", "flash_attn_interface")}
+        return {
+            k: v for k, v in PACKAGE_DISTRIBUTION_MAPPING.items() if k not in ("flash_attn", "flash_attn_interface")
+        }
 
     def test_is_flash_attn_2_available_no_keyerror(self):
         with patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", self._map_without_flash_attn()):
