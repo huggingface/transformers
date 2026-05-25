@@ -15,18 +15,20 @@ from __future__ import annotations
 
 import contextlib
 import re
+from typing import Any
+
+import torch
+from torch import nn
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
 
 
-if is_torch_available():
-    import torch
-
-if is_torch_available() and is_torch_greater_or_equal("2.5"):
+if is_torch_greater_or_equal("2.5"):
     import torch.distributed as dist
-    from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
+    from torch.distributed.device_mesh import DeviceMesh
+    from torch.distributed.tensor import DTensor, Partial, Placement, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.parallel import (
         ColwiseParallel,
         PrepareModuleInput,
@@ -36,7 +38,7 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
     from torch.distributed.tensor.parallel.style import ParallelStyle
     from torch.distributed.tensor.placement_types import _StridedShard
 
-    # Cache this result has it's a C FFI call which can be pretty time-consuming
+    # Cache this result as it's a C FFI call which can be pretty time-consuming
     _torch_distributed_available = torch.distributed.is_available()
 
 
