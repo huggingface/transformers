@@ -476,14 +476,11 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
     enable_sp = sp_requested and sp_supported
 
     if tp_plan is None:
-        if enable_sp:
-            tp_plan = dict(model._sp_plan or {})
-        else:
-            tp_plan = dict(model._tp_plan or {})
+        tp_plan = dict(model._sp_plan or {}) if enable_sp else dict(model._tp_plan or {})
 
     # tie_weights() replaces lm_head.weight with embed_tokens.weight after TP is applied.
     # If embed_tokens isn't in the plan, sharding lm_head as a DTensor causes tie to
-    # clobber it with a plain tensor (and forward then mixes DTensor/Tensor). Skip
+    # replace it with a plain tensor (and forward then mixes DTensor/Tensor). Skip
     # lm_head TP in that case so both ends stay plain and the tie is a real alias.
     if getattr(model.config, "tie_word_embeddings", False):
         tied_source_in_plan = any(k.endswith("embed_tokens") for k in tp_plan)
