@@ -1561,6 +1561,22 @@ Hey how are you doing"""  # noqa: W293
             # Assert that the serialized list is correctly reconstructed as a single dict
             self.assertEqual(new_tokenizer.chat_template, tokenizer.chat_template)
 
+    def test_chat_template_dict_saving_rejects_path_traversal(self):
+        # A malicious chat_template dict key must not be usable to escape the save directory and write
+        # attacker-controlled content to an arbitrary path (path traversal, CWE-22). The dict key is used
+        # verbatim as a `<name>.jinja` filename, so `save_pretrained` must reject names that are not plain
+        # filenames instead of silently writing outside the target directory.
+        tokenizer = self.get_tokenizer()
+        tokenizer.chat_template = {"default": "{{'a'}}", "../../PWNED": "attacker content"}
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            save_dir = os.path.join(tmp_dir_name, "save")
+            # Where the "../../PWNED" key would land if traversal succeeded:
+            # save/additional_chat_templates/../../PWNED.jinja -> tmp_dir_name/PWNED.jinja
+            canary = Path(tmp_dir_name, "PWNED.jinja")
+            with self.assertRaises(ValueError):
+                tokenizer.save_pretrained(save_dir)
+            self.assertFalse(canary.exists())
+
     @require_jinja
     def test_chat_template_file_priority(self):
         dummy_template1 = "a"
