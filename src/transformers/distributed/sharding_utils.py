@@ -30,6 +30,10 @@ if is_torch_available():
     from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
     from torch.distributed.tensor.placement_types import Shard, _StridedShard
 
+    # torch < 2.10 names as an underscore before `local_shard_size_and_offset`: alias it the non-underscored version
+    if not hasattr(Shard, "local_shard_size_and_offset") and hasattr(Shard, "_local_shard_size_and_offset"):
+        Shard.local_shard_size_and_offset = Shard._local_shard_size_and_offset
+
 
 class DtensorShardOperation:
     """Shard-on-read: slice a full checkpoint tensor down to this rank's local
