@@ -57,6 +57,7 @@ class Cohere2MoeModelTester(CausalLMModelTester):
         super().__init__(*args, **kwargs)
         self.layer_types = ["full_attention", "sliding_attention"]
         self.first_k_dense_replace = 1  # first layer will be MLP, 2nd will be MoE
+        self.logit_scale = 1.0  # needed for `test_training_overfit` - otherwise the loss does not go down fast enough
 
 
 @require_torch
