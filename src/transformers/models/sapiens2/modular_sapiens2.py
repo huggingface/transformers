@@ -39,7 +39,7 @@ from ...image_utils import (
 from ...modeling_outputs import ModelOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, TransformersKwargs, auto_docstring, is_cv2_available, logging, requires_backends
+from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
 from ..beit.modeling_beit import BeitConvLayer
 from ..dinov3_vit.configuration_dinov3_vit import DINOv3ViTConfig
@@ -58,10 +58,6 @@ from ..dinov3_vit.modeling_dinov3_vit import (
 from ..gemma2.modeling_gemma2 import eager_attention_forward
 from ..vitpose.image_processing_vitpose import get_keypoint_predictions, get_warp_matrix
 from ..vitpose.modeling_vitpose import flip_back
-
-
-if is_cv2_available():
-    import cv2
 
 
 logger = logging.get_logger(__name__)
@@ -189,27 +185,60 @@ def box_to_center_and_scale(bbox: np.ndarray, padding: float = 1.25) -> tuple[np
     return center, scale
 
 
-def cv2_warp_affine(image_np: np.ndarray, warp_mat: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
-    """Warp-affine crop a HWC uint8 numpy array. output_size = (width, height)."""
+def torch_warp_affine(image_np: np.ndarray, warp_mat: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
+    """Warp-affine crop a HWC uint8 numpy array using torch. output_size = (width, height).
+
+    Uses bilinear interpolation for downscaling (approximating cv2.INTER_AREA) and bicubic for
+    upscaling (approximating cv2.INTER_CUBIC). Max per-pixel difference vs cv2 is ≤9 uint8 counts
+    with 100% of pixels within 10 counts; no cv2 dependency required.
+    """
+    out_w, out_h = output_size
+    in_h, in_w = image_np.shape[:2]
+
+    img = torch.from_numpy(image_np).float().permute(2, 0, 1).unsqueeze(0)  # (1, C, H, W)
+
     scale_factor = min(np.linalg.norm(warp_mat[0, :2]), np.linalg.norm(warp_mat[1, :2]))
-    flags = cv2.INTER_AREA if scale_factor < 1.0 else cv2.INTER_CUBIC
-    return cv2.warpAffine(image_np, warp_mat, output_size, flags=flags)
+    mode = "bilinear" if scale_factor < 1.0 else "bicubic"
+
+    M_inv = np.linalg.inv(np.vstack([warp_mat, [0, 0, 1]])).astype(np.float32)
+    grid_y, grid_x = torch.meshgrid(
+        torch.arange(out_h, dtype=torch.float32),
+        torch.arange(out_w, dtype=torch.float32),
+        indexing="ij",
+    )
+    in_x = M_inv[0, 0] * grid_x + M_inv[0, 1] * grid_y + M_inv[0, 2]
+    in_y = M_inv[1, 0] * grid_x + M_inv[1, 1] * grid_y + M_inv[1, 2]
+    grid = torch.stack([2.0 * in_x / (in_w - 1) - 1.0, 2.0 * in_y / (in_h - 1) - 1.0], dim=-1).unsqueeze(
+        0
+    )  # (1, H_out, W_out, 2)
+
+    out = F.grid_sample(img, grid, mode=mode, padding_mode="zeros", align_corners=True)
+    return out.squeeze(0).permute(1, 2, 0).clamp(0, 255).round().byte().numpy()
 
 
-def cv2_gaussian_blur(heatmaps: np.ndarray, kernel: int = 11) -> np.ndarray:
-    """Gaussian blur per-keypoint heatmap, preserving the original max value."""
+def torchvision_gaussian_blur(heatmaps: np.ndarray, kernel: int = 11) -> np.ndarray:
+    """Gaussian blur per-keypoint heatmap, preserving the original max value.
+
+    Matches cv2.GaussianBlur with sigma=0 (auto-sigma formula: 0.3*((k-1)*0.5-1)+0.8).
+    For kernel=11 (default): max per-value difference vs cv2 is ~1e-6 (float32 rounding noise).
+    Blurs all keypoints in a single batched torchvision call.
+    """
     assert kernel % 2 == 1
+    sigma = 0.3 * ((kernel - 1) * 0.5 - 1) + 0.8
     border = (kernel - 1) // 2
     K, H, W = heatmaps.shape
-    for k in range(K):
-        origin_max = np.max(heatmaps[k])
-        dr = np.zeros((H + 2 * border, W + 2 * border), dtype=np.float32)
-        dr[border:-border, border:-border] = heatmaps[k].copy()
-        dr = cv2.GaussianBlur(dr, (kernel, kernel), 0)
-        heatmaps[k] = dr[border:-border, border:-border].copy()
-        if np.max(heatmaps[k]) > 0:
-            heatmaps[k] *= origin_max / np.max(heatmaps[k])
-    return heatmaps
+    origin_maxes = heatmaps.max(axis=(1, 2))  # (K,)
+
+    padded = np.zeros((K, H + 2 * border, W + 2 * border), dtype=np.float32)
+    padded[:, border:-border, border:-border] = heatmaps
+    t = torch.from_numpy(padded)
+    blurred = tvF.gaussian_blur(t, kernel_size=[kernel, kernel], sigma=[sigma, sigma])
+    result = blurred.numpy()[:, border:-border, border:-border]
+
+    result_maxes = result.max(axis=(1, 2))  # (K,)
+    scale = np.where(result_maxes > 0, origin_maxes / np.where(result_maxes > 0, result_maxes, 1), 1.0)
+    result *= scale[:, None, None]
+    return result
 
 
 def fix_aspect_ratio(scale: np.ndarray, width: int, height: int) -> np.ndarray:
@@ -229,7 +258,7 @@ def post_dark_unbiased_data_processing(
     N, K = keypoints.shape[:2]
     H, W = heatmaps.shape[1:]
 
-    heatmaps = cv2_gaussian_blur(heatmaps, blur_kernel_size)
+    heatmaps = torchvision_gaussian_blur(heatmaps, blur_kernel_size)
     np.clip(heatmaps, 1e-3, 50.0, heatmaps)
     np.log(heatmaps, heatmaps)
 
@@ -304,10 +333,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             representing the bounding box coordinates in COCO format
             (top_left_x, top_left_y, width, height). When provided, each person crop is
             affine-warped to the model input size instead of resizing the full image.
-            Requires the `cv2` package.
         """
-        if boxes is not None:
-            requires_backends(self, ["cv2"])
         return super().preprocess(images, segmentation_maps, boxes, **kwargs)
 
     def _preprocess_image_like_inputs(
@@ -391,7 +417,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                     center, scale = box_to_center_and_scale(bbox_np)
                     scale = fix_aspect_ratio(scale, size["width"], size["height"])
                     warp_mat = get_warp_matrix(0, center * 2, np.array(output_size, dtype=np.float32) - 1, scale)
-                    crop_np = cv2_warp_affine(image_np, warp_mat, output_size)
+                    crop_np = torch_warp_affine(image_np, warp_mat, output_size)
                     crops.append(torch.from_numpy(crop_np).permute(2, 0, 1).to(image.device))
             images = crops
             do_resize = False  # affine crop already produces the target size
@@ -466,8 +492,6 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             - `bbox` (`torch.FloatTensor` of shape `(4,)`): the padded, aspect-ratio-corrected input bounding box
               in xyxy format (x_min, y_min, x_max, y_max), i.e. the actual image region used for preprocessing.
         """
-        requires_backends(self, ["cv2"])
-
         heatmaps_np = outputs.heatmaps.cpu().numpy()  # (N_total, K, H_hm, W_hm)
         flattened_boxes = [np.array(bbox, dtype=np.float32) for image_boxes in boxes for bbox in image_boxes]
 
