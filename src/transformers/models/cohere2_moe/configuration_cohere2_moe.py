@@ -90,12 +90,7 @@ class Cohere2MoeConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise_reduce_scatter",
-        "layers.*.mlp": "module_allgather_split",
-        # Depending on layers, `mlp` can be a MoE or an MLP layer
-        "layers.*.mlp.experts": "moe_experts_allreduce",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_reduce_scatter",
+        # Depending on layers, `mlp` can be a MoE or an MLP layer - so they are updated by `_update_sp_plan` to avoid collisions
         "norm": "activation",
     }
     base_model_pp_plan = {
@@ -174,6 +169,27 @@ class Cohere2MoeConfig(PreTrainedConfig):
             )
 
         super().__post_init__(**kwargs)
+        self._update_sp_plan()
+
+    def _update_sp_plan(self):
+        self.base_model_sp_plan = self.base_model_sp_plan.copy()
+        for i in range(self.num_hidden_layers):
+            if i < self.first_k_dense_replace:
+                self.base_model_sp_plan.update(
+                    {
+                        f"layers.{i}.mlp": "module_allgather_split",
+                        f"layers.{i}.mlp.experts": "moe_experts_allreduce",
+                    }
+                )
+            else:
+                self.base_model_sp_plan.update(
+                    {
+                        f"layers.{i}.mlp": "module_allgather",
+                        f"layers.{i}.mlp.gate_proj": "colwise",
+                        f"layers.{i}.mlp.up_proj": "colwise",
+                        f"layers.{i}.mlp.down_proj": "rowwise_reduce_scatter",
+                    }
+                )
 
 
 __all__ = ["Cohere2MoeConfig"]
