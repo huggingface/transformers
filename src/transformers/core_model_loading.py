@@ -38,12 +38,12 @@ from .utils.logging import get_logger, tqdm
 
 
 _torch_distributed_available = torch.distributed.is_available()
+if _torch_distributed_available:
+    from torch.distributed.tensor import DTensor
 
 if TYPE_CHECKING:
     from .modeling_utils import LoadStateDictConfig, PreTrainedModel
     from .quantizers import HfQuantizer
-elif _torch_distributed_available:
-    from torch.distributed.tensor import DTensor
 
 logger = get_logger(__name__)
 
@@ -800,6 +800,8 @@ class WeightTransform:
             # Sync loading
             elif callable(tensors[0]):
                 tensors = [func() for func in tensors]
+                # Some may be None for some distributed setups
+                tensors = [tensor for tensor in tensors if tensor is not None]
             # Add them to the new dictionary
             collected_tensors[key] = tensors
 
