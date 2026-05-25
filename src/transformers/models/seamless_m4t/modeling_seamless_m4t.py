@@ -550,11 +550,6 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
         )
 
         if self.position_embeddings_type == "relative":
-            if relative_position_embeddings is None:
-                raise ValueError(
-                    "`relative_position_embeddings` has to be defined when `self.position_embeddings_type =="
-                    " 'relative'"
-                )
             query = query + self.pos_bias_u[None, :, None, :]
 
         hidden_states, attn_weights = attention_interface(
@@ -653,27 +648,17 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
         q_with_bias_v = (query + self.pos_bias_v).transpose(1, 2)
 
         relative_attention_scores = torch.matmul(q_with_bias_v, proj_relative_position_embeddings)
-
-        zero_pad = torch.zeros(
-            (*relative_attention_scores.size()[:3], 1),
-            device=relative_attention_scores.device,
-            dtype=relative_attention_scores.dtype,
+        relative_attention_scores_shape = relative_attention_scores.shape
+        relative_attention_scores = nn.functional.pad(relative_attention_scores, (1, 0)).view(
+            *relative_attention_scores_shape[:2],
+            relative_attention_scores_shape[3] + 1,
+            relative_attention_scores_shape[2],
         )
-        relative_attention_scores_padded = torch.cat([zero_pad, relative_attention_scores], dim=-1)
-        relative_attention_scores_padded_shape = relative_attention_scores.size()[:2] + (
-            relative_attention_scores.shape[3] + 1,
-            relative_attention_scores.shape[2],
-        )
-        relative_attention_scores_padded = relative_attention_scores_padded.view(
-            *relative_attention_scores_padded_shape
-        )
-        relative_attention_scores = relative_attention_scores_padded[:, :, 1:].view_as(relative_attention_scores)
+        relative_attention_scores = relative_attention_scores[:, :, 1:].view(relative_attention_scores_shape)
         relative_attention_scores = relative_attention_scores[:, :, :, : key.size(2)]
         relative_attention_scores = relative_attention_scores / math.sqrt(self.head_size)
 
-        if attention_mask is not None:
-            relative_attention_scores = relative_attention_scores + attention_mask
-        return relative_attention_scores
+        return relative_attention_scores if attention_mask is None else relative_attention_scores + attention_mask
 
 
 class SeamlessM4TConformerEncoderLayer(GradientCheckpointingLayer):
