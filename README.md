@@ -212,6 +212,20 @@ pipeline(
 
 </details>
 
+## New to Transformers?
+
+If you're getting started with 🤗 Transformers, check out the beginner onboarding guide:
+
+👉 [Transformers in Your First 15 Minutes](docs/source/en/first_15_minutes.md)
+
+The guide covers:
+- installation
+- text generation
+- chat models
+- embeddings
+- image classification
+- beginner-friendly optimization tips
+
 ## Why should I use Transformers?
 
 1. Easy-to-use state-of-the-art models:
