@@ -137,7 +137,7 @@ class RopeTest(unittest.TestCase):
             self.assertIn("implicit factor", logs.output[0])
 
     def test_convert_rope_params_to_dict_with_list_ignore_keys(self):
-        # Regression test: `ignore_keys_at_rope_validation` becomes a list when loaded from a config.json
+        # Regression test for #46121: `ignore_keys_at_rope_validation` becomes a list when loaded from a config.json
         # (JSON has no set type). `convert_rope_params_to_dict` used to do `list | set` and crash with
         # TypeError when `partial_rotary_factor` was also set.
         config = LlamaConfig(partial_rotary_factor=0.25)
