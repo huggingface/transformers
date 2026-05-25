@@ -142,6 +142,11 @@ class Glm5NextConfig(PreTrainedConfig):
                 "partial_rotary_factor": 1.0,
             }
 
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (
+                self.num_hidden_layers - 3
+            )
+
         if self.linear_attn_config is None:
             kda_layers = [idx for idx in range(self.num_hidden_layers) if idx % 4 != 3]
             full_attn_layers = [idx for idx in range(self.num_hidden_layers) if idx % 4 == 3]
