@@ -662,7 +662,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("xpu", None): [32001] * 32 + [2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 372, 338, 19500, 1623, 263, 19587, 4272],
+                ("xpu", 5): [32001] * 32 + [2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 372, 338, 19500, 1623, 263, 19587, 4272],
                 ("cuda", None): [32001] * 32 + [2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 19500, 373, 263, 19587, 4272, 11952, 29889],
             }
         )  # fmt: off
@@ -670,7 +670,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("xpu", None): "What is unusual about this image? The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while it is driving down a busy city",
+                ("xpu", 5): "What is unusual about this image? The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while it is driving down a busy city",
                 ("cuda", None): "What is unusual about this image? The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while driving on a busy city street.",
             }
         )  # fmt: off
