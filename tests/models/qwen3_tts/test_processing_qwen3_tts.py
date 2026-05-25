@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import Qwen3TTSProcessor, Qwen2TokenizerFast, is_torch_available
+from transformers import Qwen2TokenizerFast, Qwen3TTSProcessor, is_torch_available
 from transformers.testing_utils import require_torch, slow
 
 from ...test_processing_common import ProcessorTesterMixin
