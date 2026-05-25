@@ -297,7 +297,7 @@ class Cohere2MoeAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.force_rope = (
-            self.layer_idx < config.first_k_dense_replace and config.prefix_dense_sliding_window_pattern == 1
+            config.mlp_layer_types[layer_idx] == "dense" and config.prefix_dense_sliding_window_pattern == 1
         )
 
     def forward(

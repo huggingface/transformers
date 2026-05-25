@@ -41,8 +41,8 @@ class Cohere2MoeConfig(PreTrainedConfig):
         Expert selection function of router.
     layer_types (`list`, *optional*):
         Attention pattern for each layer.
-    first_k_dense_replace (`int`, *optional*, defaults to 0):
-        Number of dense layers before MoE layers.
+    mlp_layer_types (`list`, *optional*):
+        MLP (Moe vs Dense) pattern for each layer.
     prefix_dense_sliding_window_pattern (`int`, *optional*, defaults to 1):
         Sliding window pattern for the prefix dense layers.
     norm_topk_prob (`bool`, *optional*, defaults to `True`):
