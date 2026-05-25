@@ -19,10 +19,11 @@
 # limitations under the License.
 
 from collections.abc import Callable
+from typing import Optional
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -74,7 +75,7 @@ class MellumRotaryEmbedding(nn.Module):
     @staticmethod
     def compute_default_rope_parameters(
         config: MellumConfig | None = None,
-        device: "torch.device | None" = None,
+        device: Optional["torch.device"] = None,
         seq_len: int | None = None,
         layer_type: str | None = None,
     ) -> tuple["torch.Tensor", float]:
@@ -90,17 +91,19 @@ class MellumRotaryEmbedding(nn.Module):
             layer_type (`str`, *optional*):
                 The current layer type if the model has different RoPE parameters per type.
                 Should not be used unless `config.layer_types is not None`
-
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        # Logic is identical to Gemma3 but must be inlined due to codegen
-        # limitations (no cross-imports; `pass` pulls in the base method
-        # with the wrong type annotation).
         base = config.rope_parameters[layer_type]["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        attention_factor = 1.0
+        # key difference to gemma3: partial rope
+        partial_rotary_factor = config.rope_parameters[layer_type].get("partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
         inv_freq = 1.0 / (
             base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
         )
@@ -244,12 +247,7 @@ class MellumAttention(nn.Module):
         )
         self.q_norm = MellumRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = MellumRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
-        self.sliding_window = getattr(config, "sliding_window", None)
-        self.layer_type = config.layer_types[layer_idx]
-        if config.use_sliding_window and self.layer_type == "sliding_attention":
-            self.sliding_window = config.sliding_window
-        else:
-            self.sliding_window = None
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
     def forward(
         self,
@@ -458,9 +456,6 @@ class MellumPreTrainedModel(PreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, MellumTopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
-        # Per-layer-type RoPE stores buffers under dynamic names like
-        # `full_attention_inv_freq` that the base _init_weights doesn't know
-        # about. Therefore, they need to be initialized here.
         if isinstance(module, MellumRotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters
@@ -485,7 +480,6 @@ class MellumModel(MellumPreTrainedModel):
         self.norm = MellumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = MellumRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self.has_sliding_layers = "sliding_attention" in config.layer_types
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -525,11 +519,13 @@ class MellumModel(MellumPreTrainedModel):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
+            mask_creation_functions = {
+                "full_attention": lambda: create_causal_mask(**mask_kwargs),
+                "sliding_attention": lambda: create_sliding_window_causal_mask(**mask_kwargs),
             }
-            if self.has_sliding_layers:
-                causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
+            causal_mask_mapping = {}
+            for layer_type in set(self.config.layer_types):
+                causal_mask_mapping[layer_type] = mask_creation_functions[layer_type]()
 
         hidden_states = inputs_embeds
         position_embeddings = {}
@@ -540,10 +536,9 @@ class MellumModel(MellumPreTrainedModel):
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                position_embeddings=position_embeddings[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                use_cache=use_cache,
-                position_embeddings=position_embeddings[self.config.layer_types[i]],
                 **kwargs,
             )
 
@@ -551,7 +546,7 @@ class MellumModel(MellumPreTrainedModel):
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            past_key_values=past_key_values if use_cache else None,
         )
 
 

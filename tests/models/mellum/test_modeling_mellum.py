@@ -48,18 +48,6 @@ class MellumModelTest(CausalLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     model_tester_class = MellumModelTester
 
-    def is_pipeline_test_to_skip(
-        self,
-        pipeline_test_case_name,
-        config_class,
-        model_architecture,
-        tokenizer_name,
-        image_processor_name,
-        feature_extractor_name,
-        processor_name,
-    ):
-        return True
-
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip("RoPE-scaling-from-config test doesn't match Mellum's nested per-layer-type rope_parameters.")
     def test_model_rope_scaling_from_config(self, scaling_type):

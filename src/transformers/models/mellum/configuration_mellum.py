@@ -31,11 +31,6 @@ class MellumConfig(PreTrainedConfig):
     r"""
     mlp_only_layers (`list[int]`, *optional*, defaults to `[]`):
         Layers that use a dense MLP instead of a sparse MoE block.
-    rope_theta (`float`, *optional*, defaults to 500000.0):
-        Base period of the RoPE embeddings.
-    layer_types (`list[str]`, *optional*):
-        Per-layer attention type — `"full_attention"` or `"sliding_attention"`.
-        Length must equal `num_hidden_layers`. Defaults to all `"full_attention"`.
 
     ```python
     >>> from transformers import MellumModel, MellumConfig
@@ -97,7 +92,6 @@ class MellumConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
     rope_parameters: dict | RopeParameters | None = None
     attention_bias: bool = False
-    use_sliding_window: bool = True
     sliding_window: int | None = 1024
     attention_dropout: float | int = 0.0
     decoder_sparse_step: int = 1
@@ -112,9 +106,6 @@ class MellumConfig(PreTrainedConfig):
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
     head_dim: int = 128
-    max_window_layers: int = 0
-    rope_theta: float = 500000.0
-
     layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
@@ -134,9 +125,7 @@ class MellumConfig(PreTrainedConfig):
         )
 
     def convert_rope_params_to_dict(self, **kwargs):
-        # Same no-op as Laguna/Gemma3: the base implementation assumes
-        # a flat `rope_parameters` dict and would add a top-level
-        # `rope_theta` key, breaking the per-layer-type format.
+        # No need to handle BC for new models, because they have no old-format `rope_scaling`
         return kwargs
 
 
