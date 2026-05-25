@@ -162,6 +162,7 @@ class Cohere2MoeConfig(PreTrainedConfig):
         self.validate_layer_type()
 
         if self.mlp_layer_types is None:
+            # Some config may use `first_k_dense_replace` instead of `mlp_layer_types`
             first_k_dense_replace = kwargs.pop("first_k_dense_replace", 0)
             self.mlp_layer_types = [
                 "dense" if i < first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
