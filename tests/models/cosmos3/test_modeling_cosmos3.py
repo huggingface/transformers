@@ -76,6 +76,23 @@ class Cosmos3ConfigTest(unittest.TestCase):
 
 
 class Cosmos3ConversionMappingTest(unittest.TestCase):
+    def assert_checkpoint_conversion_mapping_targets_new_checkpoint_namespaces(self, mapping_key):
+        mapping = get_checkpoint_conversion_mapping(mapping_key)
+        renamings = [entry for entry in mapping if isinstance(entry, WeightRenaming)]
+
+        self.assertEqual(
+            rename_source_key("layers.0.self_attn.to_out.weight", renamings, [])[0],
+            "model.language_model.layers.0.self_attn.o_proj.weight",
+        )
+        self.assertEqual(
+            rename_source_key("blocks.0.norm1.weight", renamings, [])[0],
+            "model.visual.blocks.0.norm1.weight",
+        )
+        self.assertEqual(
+            rename_source_key("embed_tokens.weight", renamings, [])[0],
+            "model.language_model.embed_tokens.weight",
+        )
+
     def test_checkpoint_conversion_mapping_targets_new_checkpoint_namespaces_and_attention_names(self):
         mapping = get_checkpoint_conversion_mapping("cosmos3_omni")
         renamings = [entry for entry in mapping if isinstance(entry, WeightRenaming)]
@@ -118,6 +135,12 @@ class Cosmos3ConversionMappingTest(unittest.TestCase):
         legacy_key = "model.layers.0.self_attn.q_proj.weight"
         self.assertEqual(rename_source_key(legacy_key, renamings, [])[0], legacy_key)
 
+    def test_checkpoint_conversion_mapping_is_available_by_cosmos3_class_name(self):
+        self.assert_checkpoint_conversion_mapping_targets_new_checkpoint_namespaces(
+            "Cosmos3ForConditionalGeneration"
+        )
+        self.assert_checkpoint_conversion_mapping_targets_new_checkpoint_namespaces("Cosmos3Model")
+
 
 @require_torch
 class Cosmos3ModelTest(unittest.TestCase):
@@ -131,6 +154,7 @@ class Cosmos3ModelTest(unittest.TestCase):
 
     def test_unified_checkpoint_unexpected_keys_are_ignored(self):
         self.assertIn(r"\.add_q_proj\.", Cosmos3Model._keys_to_ignore_on_load_unexpected)
+        self.assertIn(r"moe_gen", Cosmos3Model._keys_to_ignore_on_load_unexpected)
         self.assertIn(r"^audio_proj_out\.", Cosmos3ForConditionalGeneration._keys_to_ignore_on_load_unexpected)
         self.assertIn(r"^audio_modality_embed$", Cosmos3ForConditionalGeneration._keys_to_ignore_on_load_unexpected)
         self.assertIn(r"^action_proj_out\.", Cosmos3ForConditionalGeneration._keys_to_ignore_on_load_unexpected)

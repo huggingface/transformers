@@ -1021,6 +1021,10 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming("mlp.experts.e_score_correction_bias", "mlp.gate.e_score_correction_bias"),
         WeightRenaming("mlp.shared_expert.", "mlp.shared_experts."),
     ]
+    # Cosmos3 checkpoints may carry a base Qwen3-VL config, so loading through the
+    # Cosmos3 classes must still get the Cosmos3 checkpoint key normalization.
+    mapping["Cosmos3Model"] = mapping["cosmos3_omni"].copy()
+    mapping["Cosmos3ForConditionalGeneration"] = mapping["cosmos3_omni"].copy()
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:

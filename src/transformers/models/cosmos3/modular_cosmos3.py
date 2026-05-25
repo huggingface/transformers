@@ -42,6 +42,7 @@ _COSMOS3_DROPPED_UNIFIED_CHECKPOINT_KEYS = [
     r"\.to_add_out\.",
     r"\.norm_added_q\.",
     r"\.norm_added_k\.",
+    r"moe_gen",
     r"^proj_out\.",
     r"^proj_in\.",
     r"^time_embedder\.",
