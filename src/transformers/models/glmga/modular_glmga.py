@@ -60,6 +60,8 @@ class GlmgaConfig(Glm46VConfig):
     >>> configuration = model.config
     ```"""
 
+    model_type = "glmga"
+
 
 class GlmgaImageProcessorKwargs(ImagesKwargs, total=False):
     """
