@@ -490,38 +490,72 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs.to(device=torch_device)
         predictions = model.generate(**inputs, max_new_tokens=100)
 
-        EXPECTED_PREDICTION_IDS = [
-            [2, 0, 0, 0, 50269, 50269, 51268, 50944, 50269, 50269, 50631, 50940, 50269, 50269, 50575, 50940, 51032, 50269, 51268, 50932, 50793, 50813, 51190, 51031, 50432, 50401, 50632, 50691, 51071, 50943, 51159, 51027, 50835, 50946, 50915, 51029, 2],
-            [2, 0, 5901, 50321, 50603, 51201, 51043, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-        ]  # fmt: skip
+        EXPECTED_PREDICTION_IDS = Expectations(
+            {
+                (None, None): [
+                    [2, 0, 0, 0, 50269, 50269, 51268, 50944, 50269, 50269, 50631, 50940, 50269, 50269, 50575, 50940, 51032, 50269, 51268, 50932, 50793, 50813, 51190, 51031, 50432, 50401, 50632, 50691, 51071, 50943, 51159, 51027, 50835, 50946, 50915, 51029, 2],
+                    [2, 0, 5901, 50321, 50603, 51201, 51043, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                ],
+                ("xpu", 5): [
+                    [2, 0, 0, 0, 50269, 50269, 51268, 50944, 50269, 50269, 50579, 50940, 51032, 50269, 51268, 50932, 50793, 50813, 51190, 51031, 50432, 50401, 50632, 50691, 51071, 50943, 51159, 51027, 50835, 50946, 50915, 51029, 2],
+                    [2, 0, 5901, 50321, 50603, 51201, 51043, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                ],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(predictions.tolist(), EXPECTED_PREDICTION_IDS)
 
         generated_texts = processor.batch_decode(predictions, skip_special_tokens=False)
 
-        EXPECTED_GENERATED_TEXTS = [
-            "</s><s><s><s><loc_0><loc_0><loc_999><loc_675><loc_0><loc_0><loc_362><loc_671><loc_0><loc_0><loc_306><loc_671><loc_763><loc_0><loc_999><loc_663><loc_524><loc_544><loc_921><loc_762><loc_163><loc_132><loc_363><loc_422><loc_802><loc_674><loc_890><loc_758><loc_566><loc_677><loc_646><loc_760></s>",
-            "</s><s>car<loc_52><loc_334><loc_932><loc_774></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
-        ]
+        EXPECTED_GENERATED_TEXTS = Expectations(
+            {
+                (None, None): [
+                    "</s><s><s><s><loc_0><loc_0><loc_999><loc_675><loc_0><loc_0><loc_362><loc_671><loc_0><loc_0><loc_306><loc_671><loc_763><loc_0><loc_999><loc_663><loc_524><loc_544><loc_921><loc_762><loc_163><loc_132><loc_363><loc_422><loc_802><loc_674><loc_890><loc_758><loc_566><loc_677><loc_646><loc_760></s>",
+                    "</s><s>car<loc_52><loc_334><loc_932><loc_774></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+                ],
+                ("xpu", 5): [
+                    "</s><s><s><s><loc_0><loc_0><loc_999><loc_675><loc_0><loc_0><loc_310><loc_671><loc_763><loc_0><loc_999><loc_663><loc_524><loc_544><loc_921><loc_762><loc_163><loc_132><loc_363><loc_422><loc_802><loc_674><loc_890><loc_758><loc_566><loc_677><loc_646><loc_760></s>",
+                    "</s><s>car<loc_52><loc_334><loc_932><loc_774></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(generated_texts, EXPECTED_GENERATED_TEXTS)
 
         parsed_answer_0 = processor.post_process_generation(
             generated_texts[0], task="<REGION_PROPOSAL>", image_size=(images[0].width, images[0].height)
         )
-        EXPECTED_PARSED_ANSWER_0 = {
-            "<REGION_PROPOSAL>": {
-                "bboxes": [
-                    [0, 0, 1299, 591],
-                    [0, 0, 471, 588],
-                    [0, 0, 398, 588],
-                    [992, 0, 1299, 581],
-                    [681, 476, 1197, 667],
-                    [212, 116, 472, 370],
-                    [1043, 590, 1157, 664],
-                    [736, 593, 840, 666],
-                ],
-                "labels": ["", "", "", "", "", "", "", ""],
+        EXPECTED_PARSED_ANSWER_0 = Expectations(
+            {
+                (None, None): {
+                    "<REGION_PROPOSAL>": {
+                        "bboxes": [
+                            [0, 0, 1299, 591],
+                            [0, 0, 471, 588],
+                            [0, 0, 398, 588],
+                            [992, 0, 1299, 581],
+                            [681, 476, 1197, 667],
+                            [212, 116, 472, 370],
+                            [1043, 590, 1157, 664],
+                            [736, 593, 840, 666],
+                        ],
+                        "labels": ["", "", "", "", "", "", "", ""],
+                    }
+                },
+                ("xpu", 5): {
+                    "<REGION_PROPOSAL>": {
+                        "bboxes": [
+                            [0, 0, 1299, 591],
+                            [0, 0, 403, 588],
+                            [992, 0, 1299, 581],
+                            [681, 476, 1197, 667],
+                            [212, 116, 472, 370],
+                            [1043, 590, 1157, 664],
+                            [736, 593, 840, 666],
+                        ],
+                        "labels": ["", "", "", "", "", "", ""],
+                    }
+                },
             }
-        }
+        ).get_expectation()
         self.assertEqual(parsed_answer_0, EXPECTED_PARSED_ANSWER_0)
 
         parsed_answer_1 = processor.post_process_generation(
