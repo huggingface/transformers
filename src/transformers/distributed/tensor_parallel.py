@@ -73,6 +73,73 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     return None
 
 
+
+def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tensor) -> torch.Tensor:
+    """Stitch a local grad back onto the original DTensor parameter.
+
+    During forward we replace the DTensor param with a detached plain-tensor
+    leaf (see ``_swap_dtensor_params_for_local``) because ``grouped_mm`` / fused
+    ops don't accept DTensor inputs. That swap breaks the autograd link between
+    the local leaf's grad and the DTensor param's ``.grad``, so this tensor hook
+    runs on the leaf and copies/accumulates the grad onto the original DTensor.
+
+    NOTE: An autograd-aware ``param.to_local()`` swap would let backward stitch
+    the grad automatically, but DTensor's backward path then redistributes the
+    resulting grad — and that redistribute does not currently support
+    ``_StridedShard`` placements (used by ``MoEExpertsParallel`` / ``PackedColwiseParallel``).
+    """
+    tensor_meta = original_param._spec.tensor_meta
+    detached_grad = local_grad.detach()
+    grad_dtensor = DTensor.from_local(
+        detached_grad,
+        original_param.device_mesh,
+        original_param.placements,
+        run_check=False,
+        shape=tensor_meta.shape,
+        stride=tensor_meta.stride,
+    )
+    with torch.no_grad():
+        existing_grad = original_param.grad
+        if existing_grad is None:
+            original_param.grad = grad_dtensor
+        elif isinstance(existing_grad, DTensor):
+            existing_grad._local_tensor.add_(detached_grad)
+        else:
+            existing_grad.add_(detached_grad)
+    return local_grad
+
+
+@contextlib.contextmanager
+def _swap_dtensor_params_for_local(module):
+    """Temporarily replace DTensor params with local-shard ``Parameter``s for forward.
+
+    ``grouped_mm`` / fused kernels don't accept DTensor inputs, so each DTensor
+    param is swapped for a detached local ``Parameter``. A tensor hook
+    (``_accumulate_local_param_grad``) on the local leaf copies the backward
+    grad back onto the original DTensor.
+
+    The original DTensor params are restored on exit (even on exception) so
+    save_pretrained / state-dict still see sharded params.
+    """
+    shadows = {}
+    for name, param in list(module.named_parameters(recurse=False)):
+        if not isinstance(param, DTensor):
+            continue
+        shadows[name] = param
+        local = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
+        if param.requires_grad:
+            local.register_hook(lambda g, p=param: _accumulate_local_param_grad(p, g))
+        module._parameters.pop(name)
+        setattr(module, name, local)
+    try:
+        yield
+    finally:
+        for name, param in shadows.items():
+            if hasattr(module, name):
+                delattr(module, name)
+            module.register_parameter(name, param)
+
+
 # =============================================================================
 # High-Level API Functions
 # =============================================================================
@@ -179,71 +246,6 @@ class PrepareModuleInputOutput(TensorParallelStyle):
             output = DTensor.from_local(output, mesh, [Replicate()], run_check=False)
         return output.redistribute(placements=[Shard(1)]).to_local()
 
-
-def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tensor) -> torch.Tensor:
-    """Stitch a local grad back onto the original DTensor parameter.
-
-    During forward we replace the DTensor param with a detached plain-tensor
-    leaf (see ``_swap_dtensor_params_for_local``) because ``grouped_mm`` / fused
-    ops don't accept DTensor inputs. That swap breaks the autograd link between
-    the local leaf's grad and the DTensor param's ``.grad``, so this tensor hook
-    runs on the leaf and copies/accumulates the grad onto the original DTensor.
-
-    NOTE: An autograd-aware ``param.to_local()`` swap would let backward stitch
-    the grad automatically, but DTensor's backward path then redistributes the
-    resulting grad — and that redistribute does not currently support
-    ``_StridedShard`` placements (used by ``MoEExpertsParallel`` / ``PackedColwiseParallel``).
-    """
-    tensor_meta = original_param._spec.tensor_meta
-    detached_grad = local_grad.detach()
-    grad_dtensor = DTensor.from_local(
-        detached_grad,
-        original_param.device_mesh,
-        original_param.placements,
-        run_check=False,
-        shape=tensor_meta.shape,
-        stride=tensor_meta.stride,
-    )
-    with torch.no_grad():
-        existing_grad = original_param.grad
-        if existing_grad is None:
-            original_param.grad = grad_dtensor
-        elif isinstance(existing_grad, DTensor):
-            existing_grad._local_tensor.add_(detached_grad)
-        else:
-            existing_grad.add_(detached_grad)
-    return local_grad
-
-
-@contextlib.contextmanager
-def _swap_dtensor_params_for_local(module):
-    """Temporarily replace DTensor params with local-shard ``Parameter``s for forward.
-
-    ``grouped_mm`` / fused kernels don't accept DTensor inputs, so each DTensor
-    param is swapped for a detached local ``Parameter``. A tensor hook
-    (``_accumulate_local_param_grad``) on the local leaf copies the backward
-    grad back onto the original DTensor.
-
-    The original DTensor params are restored on exit (even on exception) so
-    save_pretrained / state-dict still see sharded params.
-    """
-    shadows = {}
-    for name, param in list(module.named_parameters(recurse=False)):
-        if not isinstance(param, DTensor):
-            continue
-        shadows[name] = param
-        local = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
-        if param.requires_grad:
-            local.register_hook(lambda g, p=param: _accumulate_local_param_grad(p, g))
-        module._parameters.pop(name)
-        setattr(module, name, local)
-    try:
-        yield
-    finally:
-        for name, param in shadows.items():
-            if hasattr(module, name):
-                delattr(module, name)
-            module.register_parameter(name, param)
 
 
 class PackedColwiseParallel(TensorParallelStyle):
