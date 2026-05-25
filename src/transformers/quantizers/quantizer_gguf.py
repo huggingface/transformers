@@ -27,10 +27,16 @@ Three load paths:
 from __future__ import annotations
 
 import logging
-
-import torch
+from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
+
+
+# `quantizers/__init__.py` is imported even from torch-less installs (PIL-only
+# CI does this). Keep the top-level import set torch-free; the methods that
+# actually need torch import it lazily.
+if TYPE_CHECKING:
+    import torch  # noqa: F401
 
 
 logger = logging.getLogger(__name__)
@@ -146,6 +152,8 @@ class GGUFQuantizer(HfQuantizer):
             — for those the swap step skips the layer and the bytes would
             otherwise be assigned raw into a plain `nn.Linear.weight`.
         """
+        import torch
+
         from ..integrations.gguf_dequant import GGUFQuantizedTensor, dequantize_gguf_tensor
         from ..integrations.gguf_kernels import metal_kernels_available
         from ..integrations.gguf_linear import gguf_linear_supports
@@ -217,6 +225,8 @@ class GGUFQuantizer(HfQuantizer):
         Records the swap plan on `quantization_config.module_quant_types`
         so it survives `save_pretrained` → `from_pretrained`.
         """
+        import torch
+
         from ..integrations.gguf_kernels import metal_kernels_available
 
         has_module_map = bool(getattr(self.quantization_config, "module_quant_types", None))
