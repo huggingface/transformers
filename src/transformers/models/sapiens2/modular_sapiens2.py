@@ -10,11 +10,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Union
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -56,7 +56,6 @@ from ..dinov3_vit.modeling_dinov3_vit import (
     apply_rotary_pos_emb,
 )
 from ..gemma2.modeling_gemma2 import eager_attention_forward
-from ..vitpose.image_processing_vitpose import get_keypoint_predictions, get_warp_matrix
 from ..vitpose.modeling_vitpose import flip_back
 
 
@@ -177,33 +176,63 @@ class Sapiens2MattingOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-def box_to_center_and_scale(bbox: np.ndarray, padding: float = 1.25) -> tuple[np.ndarray, np.ndarray]:
+def box_to_center_and_scale(bbox: torch.Tensor, padding: float = 1.25) -> tuple[torch.Tensor, torch.Tensor]:
     """Convert COCO bbox (x, y, w, h) to center and scale for affine warp."""
-    x, y, w, h = bbox[:4].astype(np.float32)
-    center = np.array([x + w * 0.5, y + h * 0.5], dtype=np.float32)
-    scale = np.array([w * padding, h * padding], dtype=np.float32)
+    x, y, w, h = bbox[:4].float().unbind()
+    center = torch.stack([x + w * 0.5, y + h * 0.5])
+    scale = torch.stack([w * padding, h * padding])
     return center, scale
 
 
-def torch_warp_affine(image_np: np.ndarray, warp_mat: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
-    """Warp-affine crop a HWC uint8 numpy array using torch. output_size = (width, height).
+def get_warp_matrix_torch(
+    theta_deg: float, size_input: torch.Tensor, size_dst: torch.Tensor, size_target: torch.Tensor
+) -> torch.Tensor:
+    """Compute a 2x3 affine warp matrix (pure torch). Mirrors get_warp_matrix from vitpose.
+
+    Args:
+        theta_deg: Rotation angle in degrees.
+        size_input: [width, height] of the input ROI centre (= center * 2).
+        size_dst: [width, height] of the output crop (= output_size - 1).
+        size_target: [width, height] of the ROI region (= scale).
+    """
+    theta = math.radians(theta_deg)
+    cos_t, sin_t = math.cos(theta), math.sin(theta)
+    sx = (size_dst[0] / size_target[0]).item()
+    sy = (size_dst[1] / size_target[1]).item()
+    si = size_input.tolist()
+    st = size_target.tolist()
+    return torch.tensor(
+        [
+            [cos_t * sx, -sin_t * sx, sx * (-0.5 * si[0] * cos_t + 0.5 * si[1] * sin_t + 0.5 * st[0])],
+            [sin_t * sy, cos_t * sy, sy * (-0.5 * si[0] * sin_t - 0.5 * si[1] * cos_t + 0.5 * st[1])],
+        ],
+        dtype=torch.float32,
+    )
+
+
+def torch_warp_affine(image: torch.Tensor, warp_mat: torch.Tensor, output_size: tuple[int, int]) -> torch.Tensor:
+    """Warp-affine crop a CHW uint8 tensor using torch. output_size = (width, height).
 
     Uses bilinear interpolation for downscaling (approximating cv2.INTER_AREA) and bicubic for
     upscaling (approximating cv2.INTER_CUBIC). Max per-pixel difference vs cv2 is ≤9 uint8 counts
     with 100% of pixels within 10 counts; no cv2 dependency required.
     """
     out_w, out_h = output_size
-    in_h, in_w = image_np.shape[:2]
+    in_h, in_w = image.shape[-2], image.shape[-1]
+    device = image.device
 
-    img = torch.from_numpy(image_np).float().permute(2, 0, 1).unsqueeze(0)  # (1, C, H, W)
+    img = image.float().unsqueeze(0)  # (1, C, H, W)
 
-    scale_factor = min(np.linalg.norm(warp_mat[0, :2]), np.linalg.norm(warp_mat[1, :2]))
+    scale_factor = min(torch.linalg.norm(warp_mat[0, :2]).item(), torch.linalg.norm(warp_mat[1, :2]).item())
     mode = "bilinear" if scale_factor < 1.0 else "bicubic"
 
-    M_inv = np.linalg.inv(np.vstack([warp_mat, [0, 0, 1]])).astype(np.float32)
+    bottom = torch.tensor([[0.0, 0.0, 1.0]], dtype=torch.float32, device=device)
+    M_3x3 = torch.cat([warp_mat.to(device).float(), bottom], dim=0)
+    M_inv = torch.linalg.inv(M_3x3)
+
     grid_y, grid_x = torch.meshgrid(
-        torch.arange(out_h, dtype=torch.float32),
-        torch.arange(out_w, dtype=torch.float32),
+        torch.arange(out_h, dtype=torch.float32, device=device),
+        torch.arange(out_w, dtype=torch.float32, device=device),
         indexing="ij",
     )
     in_x = M_inv[0, 0] * grid_x + M_inv[0, 1] * grid_y + M_inv[0, 2]
@@ -213,10 +242,10 @@ def torch_warp_affine(image_np: np.ndarray, warp_mat: np.ndarray, output_size: t
     )  # (1, H_out, W_out, 2)
 
     out = F.grid_sample(img, grid, mode=mode, padding_mode="zeros", align_corners=True)
-    return out.squeeze(0).permute(1, 2, 0).clamp(0, 255).round().byte().numpy()
+    return out.squeeze(0).clamp(0, 255).round().byte()
 
 
-def torchvision_gaussian_blur(heatmaps: np.ndarray, kernel: int = 11) -> np.ndarray:
+def torchvision_gaussian_blur(heatmaps: torch.Tensor, kernel: int = 11) -> torch.Tensor:
     """Gaussian blur per-keypoint heatmap, preserving the original max value.
 
     Matches cv2.GaussianBlur with sigma=0 (auto-sigma formula: 0.3*((k-1)*0.5-1)+0.8).
@@ -226,66 +255,65 @@ def torchvision_gaussian_blur(heatmaps: np.ndarray, kernel: int = 11) -> np.ndar
     assert kernel % 2 == 1
     sigma = 0.3 * ((kernel - 1) * 0.5 - 1) + 0.8
     border = (kernel - 1) // 2
-    K, H, W = heatmaps.shape
-    origin_maxes = heatmaps.max(axis=(1, 2))  # (K,)
+    origin_maxes = heatmaps.amax(dim=(1, 2))  # (K,)
 
-    padded = np.zeros((K, H + 2 * border, W + 2 * border), dtype=np.float32)
-    padded[:, border:-border, border:-border] = heatmaps
-    t = torch.from_numpy(padded)
-    blurred = tvF.gaussian_blur(t, kernel_size=[kernel, kernel], sigma=[sigma, sigma])
-    result = blurred.numpy()[:, border:-border, border:-border]
+    padded = F.pad(heatmaps, (border, border, border, border), mode="constant", value=0.0)
+    blurred = tvF.gaussian_blur(padded, kernel_size=[kernel, kernel], sigma=[sigma, sigma])
+    result = blurred[:, border:-border, border:-border]
 
-    result_maxes = result.max(axis=(1, 2))  # (K,)
-    scale = np.where(result_maxes > 0, origin_maxes / np.where(result_maxes > 0, result_maxes, 1), 1.0)
-    result *= scale[:, None, None]
-    return result
+    result_maxes = result.amax(dim=(1, 2))  # (K,)
+    safe_maxes = torch.where(result_maxes > 0, result_maxes, torch.ones_like(result_maxes))
+    scale = torch.where(result_maxes > 0, origin_maxes / safe_maxes, torch.ones_like(origin_maxes))
+    return result * scale[:, None, None]
 
 
-def fix_aspect_ratio(scale: np.ndarray, width: int, height: int) -> np.ndarray:
+def fix_aspect_ratio(scale: torch.Tensor, width: int, height: int) -> torch.Tensor:
     """Adjust scale so the crop aspect ratio matches the given width/height."""
     aspect_ratio = width / height
-    sw, sh = scale
-    if sw > sh * aspect_ratio:
-        return np.array([sw, sw / aspect_ratio], dtype=scale.dtype)
-    else:
-        return np.array([sh * aspect_ratio, sh], dtype=scale.dtype)
+    sw, sh = scale[0], scale[1]
+    return torch.where(
+        sw > sh * aspect_ratio,
+        torch.stack([sw, sw / aspect_ratio]),
+        torch.stack([sh * aspect_ratio, sh]),
+    )
 
 
 def post_dark_unbiased_data_processing(
-    keypoints: np.ndarray, heatmaps: np.ndarray, blur_kernel_size: int = 11
-) -> np.ndarray:
+    keypoints: torch.Tensor, heatmaps: torch.Tensor, blur_kernel_size: int = 11
+) -> torch.Tensor:
     """Sub-pixel refinement via Hessian on log-heatmaps (UDP Dark Pose). In-place, returns keypoints."""
     N, K = keypoints.shape[:2]
     H, W = heatmaps.shape[1:]
+    device = heatmaps.device
 
     heatmaps = torchvision_gaussian_blur(heatmaps, blur_kernel_size)
-    np.clip(heatmaps, 1e-3, 50.0, heatmaps)
-    np.log(heatmaps, heatmaps)
+    heatmaps = heatmaps.clamp(1e-3, 50.0).log()
 
-    heatmaps_pad = np.pad(heatmaps, ((0, 0), (1, 1), (1, 1)), mode="edge").flatten()
+    heatmaps_pad = F.pad(heatmaps.unsqueeze(0), (1, 1, 1, 1), mode="replicate").squeeze(0)
+    heatmaps_flat = heatmaps_pad.flatten()
 
     for n in range(N):
-        index = keypoints[n, :, 0] + 1 + (keypoints[n, :, 1] + 1) * (W + 2)
-        index += (W + 2) * (H + 2) * np.arange(0, K)
-        index = index.astype(int).reshape(-1, 1)
-        i_ = heatmaps_pad[index]
-        ix1 = heatmaps_pad[index + 1]
-        iy1 = heatmaps_pad[index + W + 2]
-        ix1y1 = heatmaps_pad[index + W + 3]
-        ix1_y1_ = heatmaps_pad[index - W - 3]
-        ix1_ = heatmaps_pad[index - 1]
-        iy1_ = heatmaps_pad[index - 2 - W]
+        index = keypoints[n, :, 0].long() + 1 + (keypoints[n, :, 1].long() + 1) * (W + 2)
+        index = index + (W + 2) * (H + 2) * torch.arange(K, device=device, dtype=torch.long)
+        index = index.unsqueeze(1)  # (K, 1)
+        i_ = heatmaps_flat[index]
+        ix1 = heatmaps_flat[index + 1]
+        iy1 = heatmaps_flat[index + W + 2]
+        ix1y1 = heatmaps_flat[index + W + 3]
+        ix1_y1_ = heatmaps_flat[index - W - 3]
+        ix1_ = heatmaps_flat[index - 1]
+        iy1_ = heatmaps_flat[index - 2 - W]
 
         dx = 0.5 * (ix1 - ix1_)
         dy = 0.5 * (iy1 - iy1_)
-        derivative = np.concatenate([dx, dy], axis=1).reshape(K, 2, 1)
+        derivative = torch.cat([dx, dy], dim=1).reshape(K, 2, 1)
 
         dxx = ix1 - 2 * i_ + ix1_
         dyy = iy1 - 2 * i_ + iy1_
         dxy = 0.5 * (ix1y1 - ix1 - iy1 + i_ + i_ - ix1_ - iy1_ + ix1_y1_)
-        hessian = np.concatenate([dxx, dxy, dxy, dyy], axis=1).reshape(K, 2, 2)
-        hessian = np.linalg.inv(hessian + np.finfo(np.float32).eps * np.eye(2))
-        keypoints[n] -= np.einsum("imn,ink->imk", hessian, derivative).squeeze()
+        hessian = torch.cat([dxx, dxy, dxy, dyy], dim=1).reshape(K, 2, 2)
+        hessian = torch.linalg.inv(hessian + torch.finfo(torch.float32).eps * torch.eye(2, device=device))
+        keypoints[n] -= torch.einsum("imn,ink->imk", hessian, derivative).squeeze()
 
     return keypoints
 
@@ -408,17 +436,16 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         **kwargs,
     ) -> list["torch.Tensor"]:
         if boxes is not None:
-            output_size = (size["width"], size["height"])  # (W, H) for cv2
+            output_size = (size["width"], size["height"])  # (W, H)
+            output_size_t = torch.tensor(output_size, dtype=torch.float32) - 1  # [W-1, H-1]
             crops = []
             for image, image_boxes in zip(images, boxes):
-                image_np = image.permute(1, 2, 0).cpu().numpy()  # (H, W, 3) uint8
                 for bbox in image_boxes:
-                    bbox_np = np.array(bbox, dtype=np.float32)
-                    center, scale = box_to_center_and_scale(bbox_np)
+                    bbox_t = torch.tensor(bbox, dtype=torch.float32)
+                    center, scale = box_to_center_and_scale(bbox_t)
                     scale = fix_aspect_ratio(scale, size["width"], size["height"])
-                    warp_mat = get_warp_matrix(0, center * 2, np.array(output_size, dtype=np.float32) - 1, scale)
-                    crop_np = torch_warp_affine(image_np, warp_mat, output_size)
-                    crops.append(torch.from_numpy(crop_np).permute(2, 0, 1).to(image.device))
+                    warp_mat = get_warp_matrix_torch(0, center * 2, output_size_t, scale)
+                    crops.append(torch_warp_affine(image, warp_mat, output_size).to(image.device))
             images = crops
             do_resize = False  # affine crop already produces the target size
 
@@ -454,7 +481,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
     def post_process_pose_estimation(
         self,
         outputs: Sapiens2PoseEstimatorOutput,
-        boxes: list[list[list[float]]] | np.ndarray,
+        boxes: list[list[list[float]]],
         blur_kernel_size: int = 11,
         threshold: float | None = None,
         target_sizes: TensorType | list[tuple] | None = None,
@@ -492,8 +519,8 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             - `bbox` (`torch.FloatTensor` of shape `(4,)`): the padded, aspect-ratio-corrected input bounding box
               in xyxy format (x_min, y_min, x_max, y_max), i.e. the actual image region used for preprocessing.
         """
-        heatmaps_np = outputs.heatmaps.cpu().numpy()  # (N_total, K, H_hm, W_hm)
-        flattened_boxes = [np.array(bbox, dtype=np.float32) for image_boxes in boxes for bbox in image_boxes]
+        heatmaps = outputs.heatmaps.cpu().float()  # (N_total, K, H_hm, W_hm)
+        flattened_boxes = [torch.tensor(bbox, dtype=torch.float32) for image_boxes in boxes for bbox in image_boxes]
 
         if target_sizes is not None and len(flattened_boxes) != len(target_sizes):
             raise ValueError(
@@ -501,37 +528,39 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 "(i.e. the sum of boxes across all images)."
             )
 
-        _, K, H_hm, W_hm = heatmaps_np.shape
-        heatmap_size = np.array([W_hm - 1, H_hm - 1], dtype=np.float32)
+        _, K, H_hm, W_hm = heatmaps.shape
+        heatmap_size = torch.tensor([W_hm - 1, H_hm - 1], dtype=torch.float32)
 
         person_results = []
         for i, bbox in enumerate(flattened_boxes):
             if target_sizes is not None:
                 image_width, image_height = target_sizes[i][0], target_sizes[i][1]
-                bbox = bbox * np.array([image_width, image_height, image_width, image_height], dtype=np.float32)
+                bbox = bbox * torch.tensor([image_width, image_height, image_width, image_height], dtype=torch.float32)
             center, scale = box_to_center_and_scale(bbox)
             scale = fix_aspect_ratio(scale, self.size["width"], self.size["height"])
-            heatmap_i = heatmaps_np[i].copy()  # copy to avoid mutating caller's tensor
+            heatmap_i = heatmaps[i].clone()  # (K, H_hm, W_hm) — clone to avoid mutating
 
-            locs, scores_i = get_keypoint_predictions(heatmap_i[None])  # (1, K, 2), (1, K, 1)
-            scores_i = scores_i[0, :, 0]  # (K,)
+            # Inline keypoint prediction (equivalent to get_keypoint_predictions from vitpose)
+            hm_flat = heatmap_i.reshape(K, -1)  # (K, H*W)
+            scores_i = hm_flat.amax(dim=1)  # (K,)
+            idx = hm_flat.argmax(dim=1)  # (K,)
+            locs_x = (idx % W_hm).float()
+            locs_y = (idx // W_hm).float()
+            locs = torch.where(
+                scores_i.unsqueeze(-1) > 0.0,
+                torch.stack([locs_x, locs_y], dim=-1),
+                torch.full((K, 2), -1.0),
+            ).unsqueeze(0)  # (1, K, 2)
+
             locs = post_dark_unbiased_data_processing(locs, heatmap_i, blur_kernel_size)
             locs = locs[0]  # (K, 2)
 
             locs = locs / heatmap_size * scale + center - 0.5 * scale
 
-            keypoints = torch.tensor(locs, dtype=torch.float32)
-            scores = torch.tensor(scores_i, dtype=torch.float32)
+            keypoints = locs
+            scores = scores_i
             labels = torch.arange(0, K)
-            bbox_tensor = torch.tensor(
-                [
-                    center[0] - scale[0] / 2,
-                    center[1] - scale[1] / 2,
-                    center[0] + scale[0] / 2,
-                    center[1] + scale[1] / 2,
-                ],
-                dtype=torch.float32,
-            )
+            bbox_tensor = torch.cat([center - scale / 2, center + scale / 2])
 
             if threshold is not None:
                 keep = scores > threshold
