@@ -76,14 +76,24 @@ class Cosmos3ConfigTest(unittest.TestCase):
 
 
 class Cosmos3ConversionMappingTest(unittest.TestCase):
-    def test_checkpoint_conversion_mapping_targets_unified_checkpoint_namespaces(self):
+    def test_checkpoint_conversion_mapping_targets_new_checkpoint_namespaces_and_attention_names(self):
         mapping = get_checkpoint_conversion_mapping("cosmos3_omni")
         renamings = [entry for entry in mapping if isinstance(entry, WeightRenaming)]
 
-        self.assertEqual(
-            rename_source_key("model.layers.0.self_attn.q_proj.weight", renamings, [])[0],
-            "model.language_model.layers.0.self_attn.q_proj.weight",
-        )
+        attention_name_mapping = {
+            "to_q": "q_proj",
+            "to_k": "k_proj",
+            "to_v": "v_proj",
+            "to_out": "o_proj",
+            "norm_q": "q_norm",
+            "norm_k": "k_norm",
+        }
+        for source_name, target_name in attention_name_mapping.items():
+            self.assertEqual(
+                rename_source_key(f"layers.0.self_attn.{source_name}.weight", renamings, [])[0],
+                f"model.language_model.layers.0.self_attn.{target_name}.weight",
+            )
+
         self.assertEqual(
             rename_source_key("blocks.0.norm1.weight", renamings, [])[0],
             "model.visual.blocks.0.norm1.weight",
@@ -93,8 +103,20 @@ class Cosmos3ConversionMappingTest(unittest.TestCase):
             "model.visual.merger.mlp.0.weight",
         )
 
+        self.assertEqual(
+            rename_source_key("embed_tokens.weight", renamings, [])[0],
+            "model.language_model.embed_tokens.weight",
+        )
+        self.assertEqual(
+            rename_source_key("norm.weight", renamings, [])[0],
+            "model.language_model.norm.weight",
+        )
+
         already_nested_key = "model.language_model.layers.0.self_attn.q_proj.weight"
         self.assertEqual(rename_source_key(already_nested_key, renamings, [])[0], already_nested_key)
+
+        legacy_key = "model.layers.0.self_attn.q_proj.weight"
+        self.assertEqual(rename_source_key(legacy_key, renamings, [])[0], legacy_key)
 
 
 @require_torch
@@ -108,7 +130,10 @@ class Cosmos3ModelTest(unittest.TestCase):
         )
 
     def test_unified_checkpoint_unexpected_keys_are_ignored(self):
-        self.assertIn(r"_moe_gen", Cosmos3Model._keys_to_ignore_on_load_unexpected)
-        self.assertIn(r"^llm2sound\.", Cosmos3ForConditionalGeneration._keys_to_ignore_on_load_unexpected)
+        self.assertIn(r"\.add_q_proj\.", Cosmos3Model._keys_to_ignore_on_load_unexpected)
+        self.assertIn(r"^audio_proj_out\.", Cosmos3ForConditionalGeneration._keys_to_ignore_on_load_unexpected)
+        self.assertIn(r"^audio_modality_embed$", Cosmos3ForConditionalGeneration._keys_to_ignore_on_load_unexpected)
+        self.assertIn(r"^action_proj_out\.", Cosmos3ForConditionalGeneration._keys_to_ignore_on_load_unexpected)
+        self.assertIn(r"^action_proj_in\.", Cosmos3ForConditionalGeneration._keys_to_ignore_on_load_unexpected)
         self.assertIn(r"^lm_head\.weight$", Cosmos3Model._keys_to_ignore_on_load_unexpected)
         self.assertNotIn(r"^lm_head\.weight$", Cosmos3ForConditionalGeneration._keys_to_ignore_on_load_unexpected)

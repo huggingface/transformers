@@ -36,17 +36,22 @@ class Cosmos3Config(Qwen3VLConfig):
 
 _COSMOS3_DROPPED_UNIFIED_CHECKPOINT_KEYS = [
     # Generator (image / video diffusion) MoT expert + cross-modal projections
-    r"_moe_gen",
-    r"^llm2vae\.",
-    r"^vae2llm\.",
+    r"\.add_q_proj\.",
+    r"\.add_k_proj\.",
+    r"\.add_v_proj\.",
+    r"\.to_add_out\.",
+    r"\.norm_added_q\.",
+    r"\.norm_added_k\.",
+    r"^proj_out\.",
+    r"^proj_in\.",
     r"^time_embedder\.",
     # Sound tower
-    r"^llm2sound\.",
-    r"^sound2llm\.",
-    r"^sound_modality_embed$",
+    r"^audio_proj_out\.",
+    r"^audio_proj_in\.",
+    r"^audio_modality_embed$",
     # Action tower
-    r"^llm2action\.",
-    r"^action2llm\.",
+    r"^action_proj_out\.",
+    r"^action_proj_in\.",
     r"^action_modality_embed$",
 ]
 

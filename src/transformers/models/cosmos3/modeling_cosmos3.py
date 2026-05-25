@@ -25,17 +25,22 @@ from .configuration_cosmos3 import Cosmos3Config
 
 _COSMOS3_DROPPED_UNIFIED_CHECKPOINT_KEYS = [
     # Generator (image / video diffusion) MoT expert + cross-modal projections
-    r"_moe_gen",
-    r"^llm2vae\.",
-    r"^vae2llm\.",
+    r"\.add_q_proj\.",
+    r"\.add_k_proj\.",
+    r"\.add_v_proj\.",
+    r"\.to_add_out\.",
+    r"\.norm_added_q\.",
+    r"\.norm_added_k\.",
+    r"^proj_out\.",
+    r"^proj_in\.",
     r"^time_embedder\.",
     # Sound tower
-    r"^llm2sound\.",
-    r"^sound2llm\.",
-    r"^sound_modality_embed$",
+    r"^audio_proj_out\.",
+    r"^audio_proj_in\.",
+    r"^audio_modality_embed$",
     # Action tower
-    r"^llm2action\.",
-    r"^action2llm\.",
+    r"^action_proj_out\.",
+    r"^action_proj_in\.",
     r"^action_modality_embed$",
 ]
 
@@ -45,9 +50,7 @@ class Cosmos3Model(Qwen3VLModel):
 
     # Base-model loading from a unified Cosmos3 checkpoint drops the Generator tower,
     # cross-modal adapters, and the causal-LM head.
-    _keys_to_ignore_on_load_unexpected = _COSMOS3_DROPPED_UNIFIED_CHECKPOINT_KEYS + [
-        r"^lm_head\.weight$"
-    ]
+    _keys_to_ignore_on_load_unexpected = _COSMOS3_DROPPED_UNIFIED_CHECKPOINT_KEYS + [r"^lm_head\.weight$"]
 
 
 class Cosmos3ForConditionalGeneration(Qwen3VLForConditionalGeneration):
