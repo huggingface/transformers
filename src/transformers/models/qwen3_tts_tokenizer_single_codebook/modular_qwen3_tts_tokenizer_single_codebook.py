@@ -133,7 +133,7 @@ def _v1_sinusoids(length, channels, max_timescale=10000):
     return torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1)
 
 
-# ── VQ core classes (inference-only port of core_vq.py) ──────────────────────
+#  VQ core classes (inference-only port of core_vq.py)
 
 
 class Qwen3TTSTokenizerSingleCodebookEuclideanCodebook(nn.Module):
