@@ -81,6 +81,11 @@ class HrmTextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
+    def test_flash_attn_2_fp32_ln(self):
+        if torch_device == "xpu":
+            self.skipTest("bitsandbytes 4-bit FlashAttention path is not supported on XPU for this model yet.")
+        return super().test_flash_attn_2_fp32_ln()
+
     def test_prefix_lm_forward(self):
         """`config.prefix_lm=True` with `token_type_ids` produces a different forward pass than
         the pure-causal default. Guards the PrefixLM mask path that the slow integration tests
@@ -238,6 +243,7 @@ class HrmTextIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = Expectations(
             {
                 ("cuda", None): "The capital of France isParis",
+                ("xpu", None): "The capital of France isParis",
             }
         ).get_expectation()
 
@@ -255,6 +261,10 @@ class HrmTextIntegrationTest(unittest.TestCase):
             {
                 ("cuda", (8, 6)): torch.tensor(
                     [[-6.8750, -5.0000, -7.0625], [-5.3750, -3.2656, -4.5938], [2.1875, 2.2031, 2.5625]],
+                    dtype=torch.bfloat16,
+                ),
+                ("xpu", None): torch.tensor(
+                    [[-6.8750, -5.0000, -7.0625], [-5.3438, -3.2656, -4.5938], [2.1719, 2.1562, 2.5469]],
                     dtype=torch.bfloat16,
                 ),
             }
