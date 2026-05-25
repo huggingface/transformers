@@ -23,7 +23,6 @@ import requests
 from transformers import AutoProcessor, is_torch_available
 from transformers.models.lfm2_vl.modeling_lfm2_vl import Lfm2VlForConditionalGeneration
 from transformers.testing_utils import (
-    Expectations,
     cleanup,
     require_deterministic_for_xpu,
     require_torch,
