@@ -41,8 +41,8 @@ class Cohere2MoeConfig(PreTrainedConfig):
         Expert selection function of router.
     layer_types (`list`, *optional*):
         Attention pattern for each layer.
-    first_k_dense_replace (`int`, *optional*, defaults to 0):
-        Number of dense layers before MoE layers.
+    mlp_layer_types (`list`, *optional*):
+        MLP (Moe vs Dense) pattern for each layer.
     prefix_dense_sliding_window_pattern (`int`, *optional*, defaults to 1):
         Sliding window pattern for the prefix dense layers.
     norm_topk_prob (`bool`, *optional*, defaults to `True`):
@@ -74,15 +74,35 @@ class Cohere2MoeConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        # Depending on layers, `mlp` can be a MoE or an MLP layer
+        "layers.*.mlp.experts": "moe_experts_allreduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
+    }
+    # TP + Sequence Parallelism plan (for training).
+    base_model_sp_plan = {
+        "embed_tokens": "vocab_reduce_scatter",
+        "layers.*.input_layernorm": "activation",
+        "layers.*.self_attn": "module_allgather_hidden_states",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_reduce_scatter",
+        # Depending on layers, `mlp` can be a MoE or an MLP layer - so they are updated by `_update_sp_plan` to avoid collisions
+        "norm": "activation",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    # FSDP2 plan (see Qwen3Config.base_model_fsdp_plan for shape rationale).
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
     }
 
     vocab_size: int = 256000
@@ -113,7 +133,7 @@ class Cohere2MoeConfig(PreTrainedConfig):
     shared_expert_combination_strategy: str = "average"
     expert_selection_fn: str = "softmax"
     layer_types: list[str] | None = None
-    first_k_dense_replace: int = 0
+    mlp_layer_types: list | None = None
     prefix_dense_sliding_window_pattern: int = 1
     norm_topk_prob: bool = True
     prefix_dense_intermediate_size: int | None = None
@@ -128,27 +148,52 @@ class Cohere2MoeConfig(PreTrainedConfig):
         self.standardize_rope_params()
         self.validate_rope()
 
+        # Some configs may use `first_k_dense_replace` instead of `layer_types`/`mlp_layer_types`
+        first_k_dense_replace = kwargs.pop("first_k_dense_replace", 0)
+
         if self.layer_types is None:
             # The first k dense layers (MLP instead of MoE) do not use the same sliding window pattern as the MoE layers
             prefix_layers = [
                 "sliding_attention" if ((i + 1) % self.prefix_dense_sliding_window_pattern) != 0 else "full_attention"
-                for i in range(self.first_k_dense_replace)
+                for i in range(first_k_dense_replace)
             ]
             rest_layers = [
                 "sliding_attention" if ((i + 1) % self.sliding_window_pattern) != 0 else "full_attention"
-                for i in range(self.num_hidden_layers - self.first_k_dense_replace)
+                for i in range(self.num_hidden_layers - first_k_dense_replace)
             ]
             self.layer_types = prefix_layers + rest_layers
-
         self.validate_layer_type()
 
-        if len(self.layer_types) != self.num_hidden_layers:
-            raise ValueError(
-                f"The length of layer_types ({len(self.layer_types)}) does not match "
-                f"num_hidden_layers ({self.num_hidden_layers})"
-            )
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = [
+                "dense" if i < first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
+            ]
 
         super().__post_init__(**kwargs)
+        self._update_sp_plan()
+
+    def _update_sp_plan(self):
+        """Depending on layers, `mlp` can be a MoE or an MLP layer - so we update the plan dynamically here to avoid collisions"""
+        self.base_model_sp_plan = self.base_model_sp_plan.copy()
+        for i, mlp_type in enumerate(self.mlp_layer_types):
+            # This is a MLP layer
+            if mlp_type == "dense":
+                self.base_model_sp_plan.update(
+                    {
+                        f"layers.{i}.mlp": "module_allgather",
+                        f"layers.{i}.mlp.gate_proj": "colwise",
+                        f"layers.{i}.mlp.up_proj": "colwise",
+                        f"layers.{i}.mlp.down_proj": "rowwise_reduce_scatter",
+                    }
+                )
+            # This is a MoE layer
+            else:
+                self.base_model_sp_plan.update(
+                    {
+                        f"layers.{i}.mlp": "module_allgather_split",
+                        f"layers.{i}.mlp.experts": "moe_experts_allreduce",
+                    }
+                )
 
 
 __all__ = ["Cohere2MoeConfig"]
