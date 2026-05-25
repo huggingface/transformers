@@ -158,6 +158,12 @@ class RopeTest(unittest.TestCase):
         reloaded.convert_rope_params_to_dict(partial_rotary_factor=0.25)
         self.assertIsInstance(reloaded.ignore_keys_at_rope_validation, set)
 
+        # Also accept None (the class-level attribute can be cleared on an instance).
+        config_none = LlamaConfig(partial_rotary_factor=0.25)
+        config_none.ignore_keys_at_rope_validation = None
+        config_none.convert_rope_params_to_dict(partial_rotary_factor=0.25)
+        self.assertEqual(config_none.ignore_keys_at_rope_validation, {"partial_rotary_factor"})
+
     def test_rope_validation_with_per_attention_type_nested_rope(self):
         """Mirrors `test_rope_validation` with `config.layer_types` set, so that
         `rope_parameters` takes the per-attention-type nested shape."""
