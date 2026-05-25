@@ -52,6 +52,8 @@ class Qwen3TTSSpeakerEncoderConfig(PreTrainedConfig):
             The sample rate of the audio.
     """
 
+    base_config_key = "speaker_encoder_config"
+
     def __init__(
         self,
         mel_dim: int | None = 128,
@@ -274,6 +276,7 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
             Padding token ID.
     """
 
+    base_config_key = "talker_config"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"code_predictor_config": Qwen3TTSTalkerCodePredictorConfig}
 
@@ -368,33 +371,6 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-12Hz-0.6B-Base")
 @strict
 class Qwen3TTSConfig(PreTrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`Qwen3TTSForConditionalGeneration`].
-    It is used to instantiate a Qwen3-TTS model according to the specified arguments, defining the model architecture.
-
-    Args:
-        talker_config (`Qwen3TTSTalkerConfig`, *optional*):
-            Configuration for the talker sub-model (text-to-acoustic backbone).
-        speaker_encoder_config (`Qwen3TTSSpeakerEncoderConfig`, *optional*):
-            Configuration for the speaker encoder sub-model (extracts speaker embeddings).
-        tokenizer_type (`str`, *optional*):
-            Type of audio tokenizer to use (e.g., "12hz", "25hz").
-        tts_model_size (`str`, *optional*):
-            Size of the TTS model.
-        tts_model_type (`str`, *optional*):
-            Type of TTS model.
-        im_start_token_id (`int`, *optional*, defaults to 151644):
-            The beginning-of-image token ID (used as special marker in input).
-        im_end_token_id (`int`, *optional*, defaults to 151645):
-            The end-of-image token ID (used as special marker in input).
-        tts_pad_token_id (`int`, *optional*, defaults to 151671):
-            The padding token ID for TTS generation.
-        tts_bos_token_id (`int`, *optional*, defaults to 151672):
-            The beginning-of-sequence token ID for TTS generation.
-        tts_eos_token_id (`int`, *optional*, defaults to 151673):
-            The end-of-sequence token ID for TTS generation.
-    """
-
     model_type = "qwen3_tts"
     sub_configs = {
         "talker_config": Qwen3TTSTalkerConfig,
@@ -415,6 +391,32 @@ class Qwen3TTSConfig(PreTrainedConfig):
         tts_eos_token_id: int | None = 151673,
         **kwargs,
     ):
+        r"""
+        This is the configuration class to store the configuration of a [`Qwen3TTSForConditionalGeneration`].
+        It is used to instantiate a Qwen3-TTS model according to the specified arguments, defining the model architecture.
+
+        Args:
+            talker_config (`Qwen3TTSTalkerConfig`, *optional*):
+                Configuration for the talker sub-model (text-to-acoustic backbone).
+            speaker_encoder_config (`Qwen3TTSSpeakerEncoderConfig`, *optional*):
+                Configuration for the speaker encoder sub-model (extracts speaker embeddings).
+            tokenizer_type (`str`, *optional*):
+                Type of audio tokenizer to use (e.g., "12hz", "25hz").
+            tts_model_size (`str`, *optional*):
+                Size of the TTS model.
+            tts_model_type (`str`, *optional*):
+                Type of TTS model.
+            im_start_token_id (`int`, *optional*, defaults to 151644):
+                The beginning-of-image token ID (used as special marker in input).
+            im_end_token_id (`int`, *optional*, defaults to 151645):
+                The end-of-image token ID (used as special marker in input).
+            tts_pad_token_id (`int`, *optional*, defaults to 151671):
+                The padding token ID for TTS generation.
+            tts_bos_token_id (`int`, *optional*, defaults to 151672):
+                The beginning-of-sequence token ID for TTS generation.
+            tts_eos_token_id (`int`, *optional*, defaults to 151673):
+                The end-of-sequence token ID for TTS generation.
+        """
         super().__init__(**kwargs)
 
         if talker_config is None:
