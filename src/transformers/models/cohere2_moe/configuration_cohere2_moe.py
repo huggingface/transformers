@@ -148,22 +148,23 @@ class Cohere2MoeConfig(PreTrainedConfig):
         self.standardize_rope_params()
         self.validate_rope()
 
+        # Some configs may use `first_k_dense_replace` instead of `layer_types`/`mlp_layer_types`
+        first_k_dense_replace = kwargs.pop("first_k_dense_replace", 0)
+
         if self.layer_types is None:
             # The first k dense layers (MLP instead of MoE) do not use the same sliding window pattern as the MoE layers
             prefix_layers = [
                 "sliding_attention" if ((i + 1) % self.prefix_dense_sliding_window_pattern) != 0 else "full_attention"
-                for i in range(self.first_k_dense_replace)
+                for i in range(first_k_dense_replace)
             ]
             rest_layers = [
                 "sliding_attention" if ((i + 1) % self.sliding_window_pattern) != 0 else "full_attention"
-                for i in range(self.num_hidden_layers - self.first_k_dense_replace)
+                for i in range(self.num_hidden_layers - first_k_dense_replace)
             ]
             self.layer_types = prefix_layers + rest_layers
         self.validate_layer_type()
 
         if self.mlp_layer_types is None:
-            # Some config may use `first_k_dense_replace` instead of `mlp_layer_types`
-            first_k_dense_replace = kwargs.pop("first_k_dense_replace", 0)
             self.mlp_layer_types = [
                 "dense" if i < first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
             ]
