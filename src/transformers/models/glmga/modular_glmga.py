@@ -29,14 +29,6 @@ from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from ..glm46v.configuration_glm46v import Glm46VConfig
 from ..glm46v.image_processing_glm46v import Glm46VImageProcessor, smart_resize
 from ..glm46v.image_processing_pil_glm46v import Glm46VImageProcessorPil
-from ..glm46v.modeling_glm46v import (
-    Glm46VCausalLMOutputWithPast,
-    Glm46VForConditionalGeneration,
-    Glm46VModel,
-    Glm46VModelOutputWithPast,
-    Glm46VPreTrainedModel,
-)
-from ..glm46v.processing_glm46v import Glm46VProcessor, Glm46VProcessorKwargs
 from ..glm46v.video_processing_glm46v import Glm46VVideoProcessor
 
 
@@ -44,28 +36,32 @@ if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
 
 
+# Glmga reuses GLM-4.6V's modeling and processor as-is; only the config and the
+# image/video processors differ. The model and processor are wired to the glm46v
+# classes through the auto-mappings, so no modeling/processing classes live here.
 class GlmgaConfig(Glm46VConfig):
-    pass
+    r"""
+    image_start_token_id (`int`, *optional*, defaults to 151339):
+        The image start token index to encode the start of image.
+    image_end_token_id (`int`, *optional*, defaults to 151340):
+        The image end token index to encode the end of image.
+    video_start_token_id (`int`, *optional*, defaults to 151361):
+        The video start token index to encode the start of video.
+    video_end_token_id (`int`, *optional*, defaults to 151362):
+        The video end token index to encode the end of video.
 
+    ```python
+    >>> from transformers import AutoModelForImageTextToText, GlmgaConfig
 
-class GlmgaPreTrainedModel(Glm46VPreTrainedModel):
-    pass
+    >>> # Initializing a Glmga style configuration
+    >>> configuration = GlmgaConfig()
 
+    >>> # Initializing a model (reusing the GLM-4.6V implementation) from that configuration
+    >>> model = AutoModelForImageTextToText.from_config(configuration)
 
-class GlmgaModelOutputWithPast(Glm46VModelOutputWithPast):
-    pass
-
-
-class GlmgaModel(Glm46VModel):
-    pass
-
-
-class GlmgaCausalLMOutputWithPast(Glm46VCausalLMOutputWithPast):
-    pass
-
-
-class GlmgaForConditionalGeneration(Glm46VForConditionalGeneration):
-    pass
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
 
 class GlmgaImageProcessorKwargs(ImagesKwargs, total=False):
@@ -480,21 +476,9 @@ class GlmgaVideoProcessor(Glm46VVideoProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-class GlmgaProcessorKwargs(Glm46VProcessorKwargs):
-    pass
-
-
-class GlmgaProcessor(Glm46VProcessor):
-    pass
-
-
 __all__ = [
     "GlmgaConfig",
-    "GlmgaModel",
-    "GlmgaPreTrainedModel",
-    "GlmgaForConditionalGeneration",
     "GlmgaImageProcessor",
     "GlmgaImageProcessorPil",
     "GlmgaVideoProcessor",
-    "GlmgaProcessor",
 ]

@@ -41,23 +41,13 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 <INSERT SOME NICE EXAMPLES HERE>
 
+Glmga reuses the [GLM-4.6V](./glm46v) modeling and processor; only its configuration and image/video
+processors are model-specific. Load it with the `Auto*` classes (e.g. `AutoModelForImageTextToText`,
+`AutoProcessor`), which resolve to the GLM-4.6V implementation.
+
 ## GlmgaConfig
 
 [[autodoc]] GlmgaConfig
-
-## GlmgaModel
-
-[[autodoc]] GlmgaModel
-    - forward
-
-## GlmgaPreTrainedModel
-
-[[autodoc]] GlmgaPreTrainedModel
-    - forward
-
-## GlmgaForConditionalGeneration
-
-[[autodoc]] GlmgaForConditionalGeneration
 
 ## GlmgaImageProcessor
 
@@ -70,7 +60,3 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## GlmgaImageProcessorPil
 
 [[autodoc]] GlmgaImageProcessorPil
-
-## GlmgaProcessor
-
-[[autodoc]] GlmgaProcessor

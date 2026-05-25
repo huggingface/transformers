@@ -39,13 +39,13 @@ class GlmgaConfig(PreTrainedConfig):
         The video end token index to encode the end of video.
 
     ```python
-    >>> from transformers import GlmgaForConditionalGeneration, GlmgaConfig
+    >>> from transformers import AutoModelForImageTextToText, GlmgaConfig
 
-    >>> # Initializing a GLM-4.6V style configuration
+    >>> # Initializing a Glmga style configuration
     >>> configuration = GlmgaConfig()
 
-    >>> # Initializing a model from the GLM-4.6V style configuration
-    >>> model = Glm4vForConditionalGeneration(configuration)
+    >>> # Initializing a model (reusing the GLM-4.6V implementation) from that configuration
+    >>> model = AutoModelForImageTextToText.from_config(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
