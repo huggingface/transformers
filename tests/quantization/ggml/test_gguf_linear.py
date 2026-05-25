@@ -80,9 +80,9 @@ class GgufLinearConstructionTest(unittest.TestCase):
         self.assertFalse(gguf_linear_supports(gguf.GGMLQuantizationType.F32))
 
     def test_weight_buffer_size(self):
-        # Q4_K: 144 bytes / 256 elems → out_features * (in/256) * 144.
+        # Q4_K: 144 bytes / 256 elems → buffer shape (out_features, bytes_per_row).
         layer = GgufLinear(in_features=256, out_features=32, quant_type="Q4_K", bias=False)
-        self.assertEqual(layer.weight.numel(), 32 * (256 // 256) * 144)
+        self.assertEqual(tuple(layer.weight.shape), (32, (256 // 256) * 144))
         self.assertEqual(layer.weight.dtype, torch.uint8)
 
     def test_rejects_unsupported_dim(self):
@@ -99,7 +99,8 @@ class GgufLinearStateDictRoundtripTest(unittest.TestCase):
         K, M = 64, 32
         qb = _random_q4_0_bytes(M, K)
         layer = GgufLinear(in_features=K, out_features=M, quant_type="Q4_0", bias=False)
-        layer.weight.copy_(torch.frombuffer(bytearray(qb), dtype=torch.uint8))
+        # Buffer is `(out_features, bytes_per_row)` 2D uint8.
+        layer.weight.copy_(torch.frombuffer(bytearray(qb), dtype=torch.uint8).view_as(layer.weight))
         clone = GgufLinear(in_features=K, out_features=M, quant_type="Q4_0", bias=False)
         clone.load_state_dict(layer.state_dict())
         self.assertTrue(torch.equal(layer.weight, clone.weight))
@@ -124,12 +125,16 @@ class ReplaceWithGgufLinearTest(unittest.TestCase):
         self.assertEqual(n, 1)
         self.assertIsInstance(m.a, GgufLinear)
         self.assertIsInstance(m.b, nn.Linear)
-        # Buffer shape is dimension-correct for Q4_0.
-        self.assertEqual(m.a.weight.numel(), 32 * (64 // 32) * 18)
+        # Buffer shape is (out_features, bytes_per_row) for Q4_0: 32 × 2 blocks × 18 bytes.
+        self.assertEqual(tuple(m.a.weight.shape), (32, (64 // 32) * 18))
 
     def test_moe_registry_lookup(self):
-        self.assertIn("qwen2_moe", MODEL_TYPE_TO_GGUF_EXPERTS)
-        self.assertIs(MODEL_TYPE_TO_GGUF_EXPERTS["qwen2_moe"], GgufExperts)
+        # Every MoE arch we promise byte-passthrough support for must land on
+        # the GgufExperts base. gpt_oss is intentionally excluded — see
+        # `test_gguf_arch_coverage.py::GgufExpertsRegistryTests` for the why.
+        for arch in ("qwen2_moe", "qwen3_moe", "minimax_m2", "mixtral", "deepseek_v3"):
+            self.assertIn(arch, MODEL_TYPE_TO_GGUF_EXPERTS, arch)
+            self.assertIs(MODEL_TYPE_TO_GGUF_EXPERTS[arch], GgufExperts, arch)
 
 
 @require_torch
@@ -198,6 +203,10 @@ class GenerationDefaultsTest(unittest.TestCase):
     def test_defaults_applied(self):
         if not torch.backends.mps.is_available():
             self.skipTest("GgufLinear swap only triggers on MPS")
+        from transformers.integrations.gguf_kernels import metal_kernels_available
+
+        if not metal_kernels_available():
+            self.skipTest("GgufLinear swap also requires the `ArthurZ/gguf-kernels` package")
         from transformers import AutoModelForCausalLM
         from transformers.generation.configuration_utils import CompileConfig
 
@@ -219,7 +228,8 @@ class SaveRoundtripTest(unittest.TestCase):
         # Quick check that uint8 buffer values survive a CPU round-trip via state_dict.
         K, M = 32, 32
         layer = GgufLinear(in_features=K, out_features=M, quant_type="Q4_0", bias=False)
-        layer.weight.copy_(torch.frombuffer(bytearray(_random_q4_0_bytes(M, K, seed=11)), dtype=torch.uint8))
+        src = torch.frombuffer(bytearray(_random_q4_0_bytes(M, K, seed=11)), dtype=torch.uint8)
+        layer.weight.copy_(src.view_as(layer.weight))
         with tempfile.TemporaryDirectory():
             sd = layer.state_dict()
             clone = GgufLinear(in_features=K, out_features=M, quant_type="Q4_0", bias=False)

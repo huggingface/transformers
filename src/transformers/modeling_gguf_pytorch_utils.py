@@ -93,6 +93,14 @@ if is_torch_available():
         WeightRenaming(r"\.ffn_norm\.weight", ".post_attention_layernorm.weight"),
     ]
     _NORM_SUBTRACT_ONE_CONVERTERS = [
+        # Nemotron / Gemma store every RMSNorm weight as `w + 1` (legacy
+        # `NemotronTensorProcessor` / `Gemma2TensorProcessor`). The final
+        # `output_norm` is no exception — apply `SubtractOne` there too.
+        WeightConverter(
+            source_patterns=r"^output_norm\.weight",
+            target_patterns="model.norm.weight",
+            operations=[SubtractOne()],
+        ),
         WeightConverter(
             source_patterns=r"\.attn_norm\.weight",
             target_patterns=".input_layernorm.weight",
@@ -105,8 +113,31 @@ if is_torch_available():
         ),
     ]
 
+    # Only the `llama` arch itself applies llama.cpp's head-pair Q/K permute.
+    # Every other "Llama-family" arch (mistral, phi3, cohere, qwen2/3, deci,
+    # nemotron, gemma2/3, stablelm, lfm2) stores `attn_q` / `attn_k` in
+    # HF-native head layout — they need plain renames, not a permute, or the
+    # row shuffle corrupts attention.
+    _PLAIN_ATTN_QK_RENAMES = [
+        WeightRenaming(r"\.attn_q\.weight", ".self_attn.q_proj.weight"),
+        WeightRenaming(r"\.attn_k\.weight", ".self_attn.k_proj.weight"),
+    ]
     _LLAMA_CONVERTERS = _LLAMA_SHARED_RENAMES + _NORM_RENAMES + _ROPE_ATTN_CONVERTERS
-    _NEMOTRON_CONVERTERS = _LLAMA_SHARED_RENAMES + _NORM_SUBTRACT_ONE_CONVERTERS + _ROPE_ATTN_CONVERTERS
+    _LLAMA_FAMILY_CONVERTERS = _LLAMA_SHARED_RENAMES + _NORM_RENAMES + _PLAIN_ATTN_QK_RENAMES
+    # Nemotron handles `output_norm` via the `SubtractOne` converter above,
+    # so we drop the plain `^output_norm\.weight` rename from the shared
+    # list to avoid double-mapping the same source key.
+    _NEMOTRON_SHARED_RENAMES = [r for r in _LLAMA_SHARED_RENAMES if r.source_patterns[0] != r"^output_norm\.weight"]
+    # Nemotron uses LayerNorm (not RMSNorm), so every norm carries a `.bias`
+    # alongside the `.weight`. Biases pass through as-is (no `SubtractOne`).
+    _NEMOTRON_NORM_BIAS_RENAMES = [
+        WeightRenaming(r"^output_norm\.bias", "model.norm.bias"),
+        WeightRenaming(r"\.attn_norm\.bias", ".input_layernorm.bias"),
+        WeightRenaming(r"\.ffn_norm\.bias", ".post_attention_layernorm.bias"),
+    ]
+    _NEMOTRON_CONVERTERS = (
+        _NEMOTRON_SHARED_RENAMES + _NORM_SUBTRACT_ONE_CONVERTERS + _NEMOTRON_NORM_BIAS_RENAMES + _PLAIN_ATTN_QK_RENAMES
+    )
 
     # Gemma-2/3 have four layer norms per block (input + post-attention + pre-ffn + post-ffn)
     # and store every RMSNorm weight as `w + 1` (so we apply SubtractOne everywhere).
@@ -134,8 +165,19 @@ if is_torch_available():
             target_patterns=".post_feedforward_layernorm.weight",
             operations=[SubtractOne()],
         ),
+        # Output norm also stored as `w + 1` for Gemma2/3 — needs `SubtractOne`.
+        WeightConverter(
+            source_patterns=r"^output_norm\.weight",
+            target_patterns="model.norm.weight",
+            operations=[SubtractOne()],
+        ),
     ]
-    _GEMMA2_CONVERTERS = _LLAMA_SHARED_RENAMES + _GEMMA_NORM_CONVERTERS + _ROPE_ATTN_CONVERTERS
+    # Gemma2/3 share `_LLAMA_SHARED_RENAMES` for everything that isn't a norm —
+    # but the shared block also includes the plain `output_norm.weight → model.norm.weight`
+    # rename that we override above. Strip it from the shared list to avoid
+    # double-mapping the same source key.
+    _GEMMA_SHARED_RENAMES = [r for r in _LLAMA_SHARED_RENAMES if r.source_patterns[0] != r"^output_norm\.weight"]
+    _GEMMA2_CONVERTERS = _GEMMA_SHARED_RENAMES + _GEMMA_NORM_CONVERTERS + _PLAIN_ATTN_QK_RENAMES
 
     # Gemma-3 adds per-head q/k RMSNorm inside attention (also stored as `w + 1`).
     _GEMMA3_CONVERTERS = _GEMMA2_CONVERTERS + [
@@ -175,8 +217,14 @@ if is_torch_available():
         WeightRenaming(r"\.ffn_down\.weight", ".DenseReluDense.wo.weight"),
     ]
 
-    # --- StableLM (Llama-like + optional q_norm/k_norm and attn biases) --------
-    _STABLELM_CONVERTERS = _LLAMA_CONVERTERS + [
+    # --- StableLM (Llama-family attn — no rope permute — plus q_norm/k_norm and biases)
+    # StableLM uses LayerNorm (not RMSNorm) so every norm carries a `bias`
+    # alongside `weight`. The base `_NORM_RENAMES` and `_LLAMA_SHARED_RENAMES`
+    # only cover `.weight`; add the matching `.bias` renames here.
+    _STABLELM_CONVERTERS = _LLAMA_FAMILY_CONVERTERS + [
+        WeightRenaming(r"^output_norm\.bias", "model.norm.bias"),
+        WeightRenaming(r"\.attn_norm\.bias", ".input_layernorm.bias"),
+        WeightRenaming(r"\.ffn_norm\.bias", ".post_attention_layernorm.bias"),
         WeightRenaming(r"\.attn_(q|k)_norm\.weight", r".self_attn.\1_layernorm.weight"),
         WeightRenaming(r"\.attn_(q|k|v)\.bias", r".self_attn.\1_proj.bias"),
     ]
@@ -194,7 +242,8 @@ if is_torch_available():
         WeightRenaming(r"\.ffn_down\.(weight|bias)", r".mlp.c_proj.\1"),
         WeightRenaming(r"\.attn_norm\.(weight|bias)", r".input_layernorm.\1"),
         WeightRenaming(r"\.ffn_norm\.(weight|bias)", r".post_attention_layernorm.\1"),
-        *_ROPE_ATTN_CONVERTERS,
+        # Starcoder2 stores Q/K in HF-native head layout; no rope permute.
+        *_PLAIN_ATTN_QK_RENAMES,
     ]
 
     # --- Falcon (merged QKV, dense_h_to_4h MLP, 7B vs 40B norm variants) -------
@@ -248,7 +297,8 @@ if is_torch_available():
         WeightRenaming(r"\.ffn_gate_inp\.weight", ".mlp.gate.weight"),
         WeightRenaming(r"\.exp_probs_b\.bias", ".mlp.e_score_correction_bias"),
         WeightRenaming(r"\.ffn_down_exps\.weight", ".mlp.experts.down_proj"),
-        *_ROPE_ATTN_CONVERTERS,
+        # MiniMax-M2 stores Q/K in HF-native head layout; no rope permute.
+        *_PLAIN_ATTN_QK_RENAMES,
         WeightConverter(
             source_patterns=[r"\.ffn_gate_exps\.weight", r"\.ffn_up_exps\.weight"],
             target_patterns=".mlp.experts.gate_up_proj",
@@ -296,9 +346,9 @@ if is_torch_available():
         WeightRenaming(r"^token_embd_norm\.(weight|bias)", r"transformer.word_embeddings_layernorm.\1"),
         WeightRenaming(r"^output_norm\.(weight|bias)", r"transformer.ln_f.\1"),
         WeightRenaming(r"^model\.layers\.", "transformer.h."),
-        WeightRenaming(r"\.attn_norm\.(weight|bias)", r".ln_attn.\1"),
+        WeightRenaming(r"\.attn_norm\.(weight|bias)", r".input_layernorm.\1"),
         WeightRenaming(r"\.attn_output\.(weight|bias)", r".self_attention.dense.\1"),
-        WeightRenaming(r"\.ffn_norm\.(weight|bias)", r".ln_mlp.\1"),
+        WeightRenaming(r"\.ffn_norm\.(weight|bias)", r".post_attention_layernorm.\1"),
         WeightRenaming(r"\.ffn_up\.(weight|bias)", r".mlp.dense_h_to_4h.\1"),
         WeightRenaming(r"\.ffn_down\.(weight|bias)", r".mlp.dense_4h_to_h.\1"),
         WeightConverter(
@@ -347,7 +397,7 @@ if is_torch_available():
     # --- Mamba (SSM) -----------------------------------------------------------
     _MAMBA_CONVERTERS = [
         WeightRenaming(r"^blk\.", "backbone.layers."),
-        WeightRenaming(r"^token_embd\.weight", "backbone.embedding.weight"),
+        WeightRenaming(r"^token_embd\.weight", "backbone.embeddings.weight"),
         WeightRenaming(r"^output_norm\.weight", "backbone.norm_f.weight"),
         WeightRenaming(r"^output\.weight", "lm_head.weight"),
         WeightRenaming(r"\.ssm_in\.weight", ".mixer.in_proj.weight"),
@@ -366,8 +416,8 @@ if is_torch_available():
         WeightConverter(source_patterns=r"\.ssm_a$", target_patterns=".mixer.A_log", operations=[LogNegate()]),
     ]
 
-    # --- LFM2 (Llama + shortconv) ----------------------------------------------
-    _LFM2_CONVERTERS = _LLAMA_CONVERTERS + [
+    # --- LFM2 (Llama-family attn — no rope permute — plus shortconv) ----------
+    _LFM2_CONVERTERS = _LLAMA_FAMILY_CONVERTERS + [
         WeightConverter(
             source_patterns=r"\.shortconv\.conv\.weight",
             target_patterns=".conv.weight",
@@ -376,14 +426,17 @@ if is_torch_available():
     ]
 
     _GGUF_ARCH_CONVERTERS: dict[str, list] = {
-        # RoPE Llama family
+        # Llama itself is the only arch where llama.cpp applies the head-pair
+        # Q/K permute (`LlamaTensorProcessor` was the only legacy processor
+        # using `_reverse_permute_weights`). Everything else uses HF-native
+        # head layout — plain renames via `_LLAMA_FAMILY_CONVERTERS`.
         "llama": _LLAMA_CONVERTERS,
-        "mistral": _LLAMA_CONVERTERS,
-        "phi3": _LLAMA_CONVERTERS,
-        "cohere": _LLAMA_CONVERTERS,
-        "qwen2": _LLAMA_CONVERTERS,
-        "qwen3": _LLAMA_CONVERTERS,
-        "deci": _LLAMA_CONVERTERS,
+        "mistral": _LLAMA_FAMILY_CONVERTERS,
+        "phi3": _LLAMA_FAMILY_CONVERTERS,
+        "cohere": _LLAMA_FAMILY_CONVERTERS,
+        "qwen2": _LLAMA_FAMILY_CONVERTERS,
+        "qwen3": _LLAMA_FAMILY_CONVERTERS,
+        "deci": _LLAMA_FAMILY_CONVERTERS,
         # Norm-subtract-one variants
         "nemotron": _NEMOTRON_CONVERTERS,
         "gemma2": _GEMMA2_CONVERTERS,
@@ -571,6 +624,31 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
         if isinstance(_scoring, int):
             parsed_parameters["config"]["scoring_func"] = _gating_func_map.get(_scoring, "softmax")
 
+    # Llama-3 family (Meta-Llama-3 / Llama-3.1 / Llama-3.2) ship the
+    # `llama3` rope_scaling implicitly — the GGUF file doesn't store
+    # `rope.scaling.*` keys, so we infer it from the well-known signature
+    # (arch=llama + freq_base=500000 + context_length >= 8192). HF expects
+    # `rope_scaling.rope_type = "llama3"` with the official factors; without
+    # this the model decodes as gibberish for any non-trivial prompt.
+    if (
+        updated_architecture == "llama"
+        and parsed_parameters["config"].get("rope_theta") == 500000.0
+        and (parsed_parameters["config"].get("max_position_embeddings", 0) or 0) >= 8192 * 2
+    ):
+        max_pos = parsed_parameters["config"]["max_position_embeddings"]
+        # Llama-3.0 = 8192 → factor 1 (no scaling); Llama-3.1/3.2 use factor
+        # max_position_embeddings / original_max_position_embeddings.
+        original = 8192
+        factor = max(1.0, float(max_pos) / float(original))
+        if factor > 1.0:
+            parsed_parameters["config"]["rope_scaling"] = {
+                "rope_type": "llama3",
+                "factor": factor,
+                "low_freq_factor": 1.0,
+                "high_freq_factor": 4.0,
+                "original_max_position_embeddings": original,
+            }
+
     # GPT-OSS: reconstruct rope_scaling from the architecture-prefixed metadata keys
     if updated_architecture == "gpt_oss":
         rope_type_field = reader.fields.get("gpt-oss.rope.scaling.type")
@@ -613,14 +691,18 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
         # Wrap raw uint8 bytes in a `torch.Tensor` subclass that carries `quant_type`.
         # `GGUFDequantize` does the actual dequant inside the WeightConverter chain,
         # on whatever device the loader has moved the bytes to.
+        import numpy as np
         import torch  # local: keep top-of-file import-light when torch isn't required
 
         # Tensors GGUF ships as metadata for its own runtime but HF models compute on the
         # fly (or don't store as a parameter). Skip so they don't show up as "unexpected".
         _GGUF_RUNTIME_AUX_TENSORS = frozenset({"rope_freqs.weight"})
 
+        # `np.copy(tensor.data)` materializes a writable buffer — the mmap view
+        # returned by GGUFReader is non-writable, and downstream `.to(device,dtype)`
+        # casts (especially on MPS) treat the storage as scratch and corrupt it.
         parsed_parameters["tensors"] = {
-            tensor.name: GGUFQuantizedTensor(torch.from_numpy(tensor.data), quant_type=tensor.tensor_type)
+            tensor.name: GGUFQuantizedTensor(torch.from_numpy(np.copy(tensor.data)), quant_type=tensor.tensor_type)
             for tensor in reader.tensors
             if tensor.name not in _GGUF_RUNTIME_AUX_TENSORS
         }

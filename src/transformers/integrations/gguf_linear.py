@@ -239,6 +239,7 @@ MODEL_TYPE_TO_GGUF_EXPERTS: dict[str, type[nn.Module]] = {
     # transposed-aware `mul_mat_id` kernel exists.
 }
 
+
 @torch.no_grad()
 def gguf_bmm_experts_forward(
     self: nn.Module,
@@ -350,6 +351,7 @@ def replace_with_gguf_linear(
         setattr(parent, leaf, new_module)
         swapped += 1
     return swapped
+
 
 __all__: list[str] = [
     "ALL_GGUF_EXPERTS_FUNCTIONS",

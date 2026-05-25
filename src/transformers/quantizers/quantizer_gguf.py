@@ -82,31 +82,17 @@ class GGUFQuantizer(HfQuantizer):
         produced from the source `.gguf` (`load_checkpoint_state` populates
         `self.weight_mapping`) onto the model's existing conversion list.
 
-        Same shape as `Fp8Quantizer.update_weight_conversions`: only inject
-        `GGUFDequantize` when we're actually dequantizing (`not self.linear_mode`).
-        On the GgufLinear / GgufExperts swap path the raw uint8 source bytes
-        flow straight into the swapped buffers — every other op in the chain
-        (`ReversePermuteAttn*`, `Concatenate(dim=1)`) operates on the row /
-        expert axis, which is identical between byte and element tensors.
+        FP8's `update_weight_conversions` exists to *fuse per-block scales*
+        into the weight tensors before any merge/concat ops. GGUF has no
+        separate scale tensor — each block carries its own scale inline — so
+        there's nothing to fuse here. The dequant decision is binary and
+        made up-front in `load_checkpoint_state` (every quantized source is
+        either kept as bytes for the GgufLinear/GgufExperts swap, or already
+        dequantized at load time when `dequantize=True`). By the time this
+        runs, the value side is settled; we just splice the GGUF rename map
+        in front of the model-side conversions.
         """
-        if self.linear_mode:
-            return list(self.weight_mapping) + list(weight_conversions)
-
-        from ..core_model_loading import WeightConverter, WeightRenaming
-        from ..gguf_conversion_ops import GGUFDequantize
-
-        injected = []
-        for conv in self.weight_mapping:
-            if isinstance(conv, WeightConverter):
-                conv = WeightConverter(
-                    source_patterns=conv._original_source_patterns,
-                    target_patterns=conv._original_target_patterns,
-                    operations=[GGUFDequantize(self), *conv.operations],
-                )
-            elif isinstance(conv, WeightRenaming):
-                conv.quantization_operation = GGUFDequantize(self)
-            injected.append(conv)
-        return injected + list(weight_conversions)
+        return list(self.weight_mapping) + list(weight_conversions)
 
     def get_quantize_ops(self):
         """On-the-fly path: the loader calls this when `param_needs_quantization`
@@ -141,17 +127,79 @@ class GGUFQuantizer(HfQuantizer):
 
         Called by :func:`PreTrainedModel.from_pretrained` for the gguf_file path
         after :func:`_get_resolved_checkpoint_files` resolves the file. Returns
-        the state-dict (`{gguf_name: GGUFQuantizedTensor}`) that the standard
-        loader needs — GGUF isn't a safetensors format, so this hook gives the
-        quantizer ownership of the on-disk → in-memory state load.
+        the state-dict that the standard loader needs — GGUF isn't a
+        safetensors format, so this hook gives the quantizer ownership of the
+        on-disk → in-memory state load.
+
+        Dequant decision lives here, not in a conversion op:
+
+          * `dequantize=True` (or non-MPS): dequant every quantized tensor
+            up-front. Modules stay as plain `nn.Linear` / `nn.Embedding`
+            with fp weights. No op in the conversion chain.
+          * Default (MPS swap path): keep quantized tensors as
+            `GGUFQuantizedTensor` raw bytes when their quant_type has a
+            Metal kernel (`_QUANT_INFO`) — they flow into `GgufLinear` /
+            `GgufExperts` uint8 buffers. Anything else still has to be
+            pre-dequanted: embedding-bound tensors (their HF target is
+            `nn.Embedding`, not a swappable Linear), and any quant_type
+            without a Metal kernel (IQ1_S, IQ2_*, IQ3_*, Q2_K, Q3_K, Q4_1)
+            — for those the swap step skips the layer and the bytes would
+            otherwise be assigned raw into a plain `nn.Linear.weight`.
         """
+        from ..integrations.gguf_dequant import GGUFQuantizedTensor, dequantize_gguf_tensor
+        from ..integrations.gguf_kernels import metal_kernels_available
+        from ..integrations.gguf_linear import gguf_linear_supports
         from ..modeling_gguf_pytorch_utils import load_gguf_checkpoint
 
         parsed = load_gguf_checkpoint(gguf_path, return_tensors=True)
         self.weight_mapping = list(parsed.get("weight_mapping", []) or [])
-        self.gguf_tensors = parsed["tensors"]
+        tensors = parsed["tensors"]
+        # Gemma2 / Gemma3 / Nemotron store every RMSNorm weight as `w + 1`
+        # in the GGUF; the matching `SubtractOne` op in the converter chain
+        # runs *after* the loader's `.to(dtype)` cast, which on fp16/bf16
+        # loses 1 ULP near `w = 1` (the steady-state norm scale) and breaks
+        # the weights-conversion tests. Pre-apply the subtraction here on
+        # the fp32 source so the loader's cast is the only rounding step,
+        # matching the legacy `NemotronTensorProcessor.process` / `Gemma2TensorProcessor.process`.
+        arch = (parsed.get("config", {}) or {}).get("model_type")
+        if arch in ("gemma2", "gemma3", "gemma3_text", "nemotron"):
+            for name, t in tensors.items():
+                # Only norm *weights* are stored as `w + 1`; biases pass through
+                # unchanged.
+                if name.endswith("_norm.weight") and isinstance(t, torch.Tensor) and t.is_floating_point():
+                    # Detach to break any GGUFQuantizedTensor wrapping; clone to
+                    # own the storage the loader will cast.
+                    tensors[name] = t.detach().clone() - 1.0
+        # Linear-mode (byte passthrough → GgufLinear) requires MPS + the metal
+        # kernels package; without either, fall back to dequant-at-load so the
+        # model can still run as plain `nn.Linear` weights.
+        dequant_all = (
+            self.quantization_config.dequantize
+            or not torch.backends.mps.is_available()
+            or not metal_kernels_available()
+        )
+        # GGUF tensor names whose HF target is an `nn.Embedding` need fp values
+        # at assignment time. `token_embd` is universal; extend as more archs land.
+        embedding_prefixes = ("token_embd",)
+        for name, t in list(tensors.items()):
+            if not isinstance(t, GGUFQuantizedTensor):
+                continue
+            # Already-float sources (F32 / F16 / BF16) need no dequant — just
+            # drop the `GGUFQuantizedTensor` subclass so downstream ops see a
+            # plain tensor (the subclass's `__torch_function__` re-wraps on
+            # `.to`, which on MPS corrupts mmap-backed storage during the
+            # device cast).
+            if t.is_floating_point():
+                tensors[name] = t.as_subclass(torch.Tensor)
+                continue
+            needs_dequant = (
+                dequant_all or name.split(".")[0] in embedding_prefixes or not gguf_linear_supports(t.quant_type)
+            )
+            if needs_dequant:
+                tensors[name] = dequantize_gguf_tensor(t, t.quant_type, device=t.device)
+        self.gguf_tensors = tensors
         self.gguf_kv = parsed.get("raw_kv", {}) or {}
-        return parsed["tensors"]
+        return tensors
 
     def _process_model_before_weight_loading(self, model, **kwargs):
         """Swap nn.Linear / fused-expert modules in place at meta time.
@@ -169,11 +217,18 @@ class GGUFQuantizer(HfQuantizer):
         Records the swap plan on `quantization_config.module_quant_types`
         so it survives `save_pretrained` → `from_pretrained`.
         """
+        from ..integrations.gguf_kernels import metal_kernels_available
+
         has_module_map = bool(getattr(self.quantization_config, "module_quant_types", None))
         if has_module_map:
             self.linear_mode = True
         elif not self.on_the_fly:
-            self.linear_mode = torch.backends.mps.is_available() and not self.quantization_config.dequantize
+            # Byte-passthrough swap requires MPS + the metal kernels package.
+            self.linear_mode = (
+                torch.backends.mps.is_available()
+                and not self.quantization_config.dequantize
+                and metal_kernels_available()
+            )
         if not self.linear_mode:
             return
         from ..integrations.gguf_linear import replace_with_gguf_linear

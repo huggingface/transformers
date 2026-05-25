@@ -459,6 +459,16 @@ def dequantize_gguf_tensor(data, quant_type, dtype=None, device=None) -> torch.T
         dtype = torch.float32
     target_device = torch.device(device) if device is not None else None
 
+    # F32 / F16 / BF16 sources arrive as regular floating-point tensors when
+    # wrapped via `GGUFQuantizedTensor(torch.from_numpy(...))` — no byte-view
+    # round-trip needed. The uint8 reinterpret path below is destructive on
+    # MPS for non-quantized fp tensors.
+    if isinstance(data, torch.Tensor) and data.is_floating_point():
+        out = data.to(dtype=dtype) if dtype is not None and data.dtype != dtype else data
+        if target_device is not None and out.device != target_device:
+            out = out.to(target_device, non_blocking=True)
+        return out
+
     # Accept either a numpy array (gguf reader) or a torch.Tensor (e.g. a
     # `GGUFQuantizedTensor` already moved to the target device). For numpy
     # we materialise the mmap view into RAM and wrap zero-copy; for torch we
@@ -477,7 +487,8 @@ def dequantize_gguf_tensor(data, quant_type, dtype=None, device=None) -> torch.T
     if target_device is not None and flat.device != target_device:
         flat = flat.to(target_device, non_blocking=True)
 
-    # Already-float types: just reinterpret the bytes.
+    # Already-float types coming in as raw uint8 bytes (e.g. from `numpy`
+    # path above): reinterpret as the matching float dtype.
     if quant_type == gguf.GGMLQuantizationType.F32:
         out = flat.view(torch.float32).reshape(byte_shape[:-1] + (byte_shape[-1] // 4,))
         return out.to(dtype) if dtype != torch.float32 else out
@@ -485,17 +496,24 @@ def dequantize_gguf_tensor(data, quant_type, dtype=None, device=None) -> torch.T
         out = flat.view(torch.float16).reshape(byte_shape[:-1] + (byte_shape[-1] // 2,))
         return out.to(dtype) if dtype != torch.float16 else out
 
-    kernel = _DISPATCH.get(quant_type)
-    if kernel is None:
-        raise NotImplementedError(
-            f"No torch dequant kernel for GGUF quant type {quant_type!r}. "
-            f"Supported types: {sorted(t.name for t in _DISPATCH)}"
-        )
-
     block_size, type_size = gguf.GGML_QUANT_SIZES[quant_type]
     # logical_shape recovers the per-element shape from the byte shape (last
     # dim shrinks from `n_blocks * type_size` bytes → `n_blocks * block_size` elements).
     logical_shape = (*byte_shape[:-1], byte_shape[-1] // type_size * block_size)
+
+    kernel = _DISPATCH.get(quant_type)
+    if kernel is None:
+        # Fall back to gguf-py's numpy dequant for types without a fast torch
+        # kernel (IQ1_S/M, IQ2_*, IQ3_*). These are uncommon, CPU-side, and
+        # avoid us having to port every llama.cpp i-quant by hand.
+        import numpy as np
+
+        cpu_bytes = flat.detach().to("cpu", non_blocking=True).numpy()
+        dequanted = gguf.quants.dequantize(cpu_bytes.reshape(-1, type_size), quant_type)
+        out = torch.from_numpy(np.ascontiguousarray(dequanted)).to(dtype=dtype)
+        if target_device is not None and out.device != target_device:
+            out = out.to(target_device, non_blocking=True)
+        return out.reshape(logical_shape)
 
     blocks = flat.reshape((-1, type_size))
     out = kernel(blocks, block_size, type_size, dtype=dtype)

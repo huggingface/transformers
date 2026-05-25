@@ -28,6 +28,7 @@ _KERNEL_FMT: dict[str, str] = {
     "IQ4_XS": "iq4_xs",
 }
 
+
 # TODO Change the repo name to kernel community once merged.
 def ensure_metal_kernels(repo: str = "ArthurZ/gguf-kernels"):
     """Return the loaded kernels handle, caching across calls. Raises
@@ -55,3 +56,16 @@ def ensure_metal_kernels(repo: str = "ArthurZ/gguf-kernels"):
             f"once migrated this path Just Works."
         ) from exc
     return _GGUF_METAL_KERNELS
+
+
+def metal_kernels_available() -> bool:
+    """Probe whether `ensure_metal_kernels()` would succeed, without raising.
+    Used by the quantizer to gate the GgufLinear swap path — if the kernels
+    can't load, the safer choice is to fall back to dequant-on-load instead
+    of installing modules whose forward will raise.
+    """
+    try:
+        ensure_metal_kernels()
+        return True
+    except Exception:
+        return False

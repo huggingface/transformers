@@ -167,7 +167,15 @@ class Squeeze(ConversionOps):
 
 
 class SubtractOne(ConversionOps):
-    """Subtract 1 from a tensor (used for GGUF norm weight de-offset)."""
+    """Subtract 1 from a tensor (used for GGUF norm weight de-offset).
+
+    The `-1` must run on the fp32 source values *before* the loader casts to
+    the target dtype, otherwise the cast then subtract drops 1 ULP near
+    `w = 1` and the Gemma/Nemotron norm weights end up ~5e-4 off vs HF.
+    `load_checkpoint_state` pre-applies the subtraction in fp32 for arches
+    that need it, so by the time the converter chain runs the value is
+    already de-offset — make `convert` a no-op pass-through.
+    """
 
     def convert(
         self,
@@ -179,7 +187,7 @@ class SubtractOne(ConversionOps):
         target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        return {target_pattern: tensor - 1}
+        return {target_pattern: tensor}
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -355,6 +363,7 @@ class BloomReshapeQKVWeight(ConversionOps):
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         import torch
+
         if not hasattr(config, "n_head") or not hasattr(config, "hidden_size"):
             raise ValueError("Config does not have `num_attention_heads`, you can't use `ReversePermuteAttnQ`.")
         n_head = config.n_head
@@ -386,6 +395,7 @@ class BloomReshapeQKVBias(ConversionOps):
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         import torch
+
         if not hasattr(config, "n_head") or not hasattr(config, "hidden_size"):
             raise ValueError("Config does not have `num_attention_heads`, you can't use `ReversePermuteAttnQ`.")
         n_head = config.n_head
