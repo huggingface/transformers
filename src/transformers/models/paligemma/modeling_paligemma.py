@@ -105,7 +105,7 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _can_compile_fullgraph = False
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -133,14 +133,6 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 
         self.text_config_dtype = self.config.get_text_config().dtype or self.dtype
         self.post_init()
-
-    # Copied from transformers.models.llava.modeling_llava.LlavaModel.get_input_embeddings with Llava->PaliGemma
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    # Copied from transformers.models.llava.modeling_llava.LlavaModel.set_input_embeddings with Llava->PaliGemma
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring(

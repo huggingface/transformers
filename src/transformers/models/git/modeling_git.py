@@ -70,33 +70,6 @@ class GitVisionModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-def token_type_ids_mask_function(group_ids: torch.Tensor) -> Callable:
-    """
-    This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,
-    not start and end indices.
-    Args:
-        group_ids (`torch.Tensor`):
-            A tensor of shape `(bs, len)` assigning each token to a vision group. Tokens with the same group
-            come from the same input image. Text is denoted by `-1`.
-    """
-
-    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        seq_length = group_ids.shape[-1]
-
-        # clamp indices because with static cache they can go beyond `group_ids.shape[-1]`
-        q_idx_clamped = q_idx.clamp(max=seq_length - 1)
-        kv_idx_clamped = kv_idx.clamp(max=seq_length - 1)
-
-        # Unmask if the q and kv come from same group which is not -1 (i.e. non-text)
-        q_group = group_ids[batch_idx, q_idx_clamped]
-        kv_group = group_ids[batch_idx, kv_idx_clamped]
-        q_group = torch.where(q_idx < seq_length, q_group, -1)
-        kv_group = torch.where(kv_idx < seq_length, kv_group, -1)
-        return (q_group == kv_group) & (q_group >= 0)
-
-    return inner_mask
-
-
 class GitEmbeddings(nn.Module):
     """Construct the embeddings from word and position embeddings."""
 

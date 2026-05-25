@@ -244,7 +244,7 @@ class VibeVoiceAsrPreTrainedModel(PreTrainedModel):
     _no_split_modules = None
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -264,6 +264,7 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
     _keep_in_fp32_modules_strict = None
     _supports_attention_backend = True
     _tp_plan = None
+    _sp_plan = None
     _pp_plan = None
 
     def __init__(self, config: VibeVoiceAsrConfig):
@@ -276,12 +277,6 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
