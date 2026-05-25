@@ -147,6 +147,10 @@ PRIVATE_MODELS = [
     "VoxtralRealtimeTextModel",
     "VoxtralRealtimeTextForCausalLM",
     "VoxtralRealtimeTextPreTrainedModel",
+    "Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel",
+    "Qwen3TTSTokenizerMultiCodebookDecoderBlock",
+    "Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel",
+    "Qwen3TTSTokenizerMultiCodebookEncoderModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
