@@ -56,11 +56,7 @@ class Cohere2MoeLayerNorm(Cohere2LayerNorm):
 class Cohere2MoeMLP(Cohere2MLP):
     def __init__(self, config: Cohere2MoeConfig, intermediate_size=None):
         super().__init__(config)
-        if intermediate_size is not None:
-            self.intermediate_size = intermediate_size
-            self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-            self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-            self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
 
 
 class Cohere2MoeExperts(MixtralExperts):
