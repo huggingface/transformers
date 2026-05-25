@@ -1595,6 +1595,9 @@ class ProcessorMixin(PushToHubMixin):
                             f"Keyword argument {modality_key} was passed two times:\n"
                             f"in a dictionary for {modality} and as a **kwarg."
                         )
+                    # fall back to the flat kwarg when the modality dict is present but doesn't carry this key
+                    if kwarg_value == "__empty__" and modality_key in non_modality_kwargs:
+                        kwarg_value = kwargs[modality_key]
                 elif modality_key in kwargs:
                     # we get a modality_key instead of popping it because modality-specific processors
                     # can have overlapping kwargs
