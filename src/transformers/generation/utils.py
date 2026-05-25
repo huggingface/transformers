@@ -1943,12 +1943,9 @@ class GenerationMixin(ContinuousMixin):
             and cache_name in model_kwargs
             and not isinstance(model_kwargs[cache_name], EncoderDecoderCache)
         ):
-            cross_attention_cache_kwargs = {
-                key: value for key, value in dynamic_cache_kwargs.items() if key != "config"
-            }
             model_kwargs[cache_name] = EncoderDecoderCache(
                 model_kwargs[cache_name],  # self-attention cache
-                DynamicCache(**cross_attention_cache_kwargs),  # cross-attention cache
+                DynamicCache(**dynamic_cache_kwargs),  # cross-attention cache
             )
 
     def _supports_logits_to_keep(self: "GenerativePreTrainedModel") -> bool:

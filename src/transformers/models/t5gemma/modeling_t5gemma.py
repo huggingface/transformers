@@ -769,6 +769,16 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
             # We do not pass the config to the cross attn cache to avoid initializing SWA
             # --> we use full attention between our cross attentions
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache())
+        elif (
+            past_key_values is not None
+            and any(past_key_values.cross_attention_cache.is_sliding)
+            and all(
+                past_key_values.cross_attention_cache.get_seq_length(layer_idx) == 0
+                for layer_idx in range(len(past_key_values.cross_attention_cache))
+            )
+        ):
+            # `generate` may pre-create the cross-attention cache with the decoder config, which would enable SWA.
+            past_key_values = EncoderDecoderCache(past_key_values.self_attention_cache, DynamicCache())
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -792,12 +802,15 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
             }
 
         if not isinstance(cross_attn_mask_mapping := encoder_attention_mask, dict):
+            if encoder_attention_mask is None:
+                encoder_attention_mask = torch.ones(
+                    encoder_hidden_states.shape[:2], device=inputs_embeds.device, dtype=torch.bool
+                )
             cross_attn_mask_mapping = {
                 "full_attention": create_bidirectional_mask(
                     config=self.config,
                     inputs_embeds=inputs_embeds,
                     attention_mask=encoder_attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
                 )
             }
 
