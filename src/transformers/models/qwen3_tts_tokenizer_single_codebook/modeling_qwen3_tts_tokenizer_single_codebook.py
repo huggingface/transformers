@@ -464,7 +464,7 @@ class Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel(Qwen3TTSTokenizerSingle
         return torch.clamp(output_waveform, min=-1.0, max=1.0).squeeze().cpu()
 
 
-# ── VQ core classes (inference-only port of core_vq.py) ──────────────────────
+#  VQ core classes (inference-only port of core_vq.py)
 
 
 class Qwen3TTSTokenizerSingleCodebookEuclideanCodebook(nn.Module):
@@ -626,7 +626,7 @@ class Qwen3TTSTokenizerSingleCodebookDistributedGroupRVQ(nn.Module):
         return torch.cat([mod.decode(item.squeeze(1)) for mod, item in zip(self.rvqs, q_indices_lst)], dim=1)
 
 
-# ── Whisper encoder classes (port of vq/whisper_encoder.py) ──────────────────
+# Whisper encoder classes (port of vq/whisper_encoder.py)
 
 
 class _V1Conv1d(nn.Conv1d):
@@ -934,7 +934,7 @@ class Qwen3TTSTokenizerSingleCodebookWhisperEncoderVQ(Qwen3TTSTokenizerSingleCod
         return output
 
 
-# ── Qwen3TTSTokenizerSingleCodebookXVectorExtractor (lazy external imports) ─────────────────────────────────
+#  Qwen3TTSTokenizerSingleCodebookXVectorExtractor (lazy external imports) ─
 
 
 class Qwen3TTSTokenizerSingleCodebookMelSpectrogramFeatures(nn.Module):
@@ -1038,7 +1038,7 @@ class Qwen3TTSTokenizerSingleCodebookXVectorExtractor(nn.Module):
         return self.tfm.build_array(input_array=audio, sample_rate_in=16000)
 
 
-# ── SingleCodebook Encoder PreTrainedModel + Encoder ────────────────────────
+#  SingleCodebook Encoder PreTrainedModel + Encoder
 
 
 @dataclass
@@ -1186,7 +1186,7 @@ class Qwen3TTSTokenizerSingleCodebookEncoder(Qwen3TTSTokenizerSingleCodebookEnco
         return self.mel2code(mels)
 
 
-# ── SingleCodebook Top-level model ──────────────────────────────────────────
+#  SingleCodebook Top-level model
 
 
 @auto_docstring(
