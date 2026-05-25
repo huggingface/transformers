@@ -37,18 +37,18 @@ The abstract from the paper is the following:
 
 ### Basic Text-to-Speech
 
-The standard workflow uses `Qwen3TTSForConditionalGeneration` to generate speech codes from text, then decodes them to audio using `Qwen3TTSTokenizerV2Model`:
+The standard workflow uses `Qwen3TTSForConditionalGeneration` to generate speech codes from text, then decodes them to audio using `Qwen3TTSTokenizerMultiCodebookModel`:
 
 ```python
 import torch
 import soundfile as sf
-from transformers import Qwen3TTSForConditionalGeneration, Qwen3TTSProcessor, Qwen3TTSTokenizerV2Model
+from transformers import Qwen3TTSForConditionalGeneration, Qwen3TTSProcessor, Qwen3TTSTokenizerMultiCodebookModel
 
 model_id = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
 
 processor = Qwen3TTSProcessor.from_pretrained(model_id)
 model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
-speech_tokenizer = Qwen3TTSTokenizerV2Model.from_pretrained(
+speech_tokenizer = Qwen3TTSTokenizerMultiCodebookModel.from_pretrained(
     model_id, subfolder="speech_tokenizer", device_map="auto"
 )
 
@@ -74,13 +74,13 @@ CustomVoice models ship with built-in voice presets. Pass a `speakers` list to `
 ```python
 import torch
 import soundfile as sf
-from transformers import Qwen3TTSForConditionalGeneration, Qwen3TTSProcessor, Qwen3TTSTokenizerV2Model
+from transformers import Qwen3TTSForConditionalGeneration, Qwen3TTSProcessor, Qwen3TTSTokenizerMultiCodebookModel
 
 model_id = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
 
 processor = Qwen3TTSProcessor.from_pretrained(model_id)
 model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
-speech_tokenizer = Qwen3TTSTokenizerV2Model.from_pretrained(
+speech_tokenizer = Qwen3TTSTokenizerMultiCodebookModel.from_pretrained(
     model_id, subfolder="speech_tokenizer", device_map="auto"
 )
 
@@ -107,13 +107,13 @@ Pass a list of `input_ids` and corresponding `languages` for batch generation:
 ```python
 import torch
 import soundfile as sf
-from transformers import Qwen3TTSForConditionalGeneration, Qwen3TTSProcessor, Qwen3TTSTokenizerV2Model
+from transformers import Qwen3TTSForConditionalGeneration, Qwen3TTSProcessor, Qwen3TTSTokenizerMultiCodebookModel
 
 model_id = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
 
 processor = Qwen3TTSProcessor.from_pretrained(model_id)
 model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
-speech_tokenizer = Qwen3TTSTokenizerV2Model.from_pretrained(
+speech_tokenizer = Qwen3TTSTokenizerMultiCodebookModel.from_pretrained(
     model_id, subfolder="speech_tokenizer", device_map="auto"
 )
 
@@ -139,13 +139,13 @@ VoiceDesign models accept a natural language description of the desired voice vi
 ```python
 import torch
 import soundfile as sf
-from transformers import Qwen3TTSForConditionalGeneration, Qwen3TTSProcessor, Qwen3TTSTokenizerV2Model
+from transformers import Qwen3TTSForConditionalGeneration, Qwen3TTSProcessor, Qwen3TTSTokenizerMultiCodebookModel
 
 model_id = "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"
 
 processor = Qwen3TTSProcessor.from_pretrained(model_id)
 model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
-speech_tokenizer = Qwen3TTSTokenizerV2Model.from_pretrained(
+speech_tokenizer = Qwen3TTSTokenizerMultiCodebookModel.from_pretrained(
     model_id, subfolder="speech_tokenizer", device_map="auto"
 )
 
@@ -203,17 +203,6 @@ model = Qwen3TTSForConditionalGeneration.from_pretrained(
 
 [[autodoc]] Qwen3TTSTalkerCodePredictorConfig
 
-## Qwen3TTSTokenizerV2Config
-
-[[autodoc]] Qwen3TTSTokenizerV2Config
-
-## Qwen3TTSTokenizerV2Code2WavConfig
-
-[[autodoc]] Qwen3TTSTokenizerV2Code2WavConfig
-
-## Qwen3TTSTokenizerV1Config
-
-[[autodoc]] Qwen3TTSTokenizerV1Config
 
 ## Qwen3TTSProcessor
 
@@ -231,14 +220,55 @@ model = Qwen3TTSForConditionalGeneration.from_pretrained(
     - forward
     - generate
 
-## Qwen3TTSTokenizerV2Model
 
-[[autodoc]] Qwen3TTSTokenizerV2Model
+## Qwen3TTSFeatureExtractor
+
+[[autodoc]] Qwen3TTSFeatureExtractor
+
+## Qwen3TTSTokenizerMultiCodebookConfig
+
+[[autodoc]] Qwen3TTSTokenizerMultiCodebookConfig
+
+## Qwen3TTSTokenizerMultiCodebookCode2WavConfig
+
+[[autodoc]] Qwen3TTSTokenizerMultiCodebookCode2WavConfig
+
+## Qwen3TTSTokenizerMultiCodebookModel
+
+[[autodoc]] Qwen3TTSTokenizerMultiCodebookModel
     - encode
     - decode
 
-## Qwen3TTSTokenizerV1Model
+## Qwen3TTSTokenizerSingleCodebookConfig
 
-[[autodoc]] Qwen3TTSTokenizerV1Model
+[[autodoc]] Qwen3TTSTokenizerSingleCodebookConfig
+
+## Qwen3TTSTokenizerSingleCodebookDiTConfig
+
+[[autodoc]] Qwen3TTSTokenizerSingleCodebookDiTConfig
+
+## Qwen3TTSTokenizerSingleCodebookEncoderConfig
+
+[[autodoc]] Qwen3TTSTokenizerSingleCodebookEncoderConfig
+
+## Qwen3TTSTokenizerSingleCodebookDecoderConfig
+
+[[autodoc]] Qwen3TTSTokenizerSingleCodebookDecoderConfig
+
+## Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig
+
+[[autodoc]] Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig
+
+## Qwen3TTSTokenizerSingleCodebookModel
+
+[[autodoc]] Qwen3TTSTokenizerSingleCodebookModel
     - encode
     - decode
+
+## Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel
+
+[[autodoc]] Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel
+
+## Qwen3TTSTokenizerSingleCodebookDecoderDiTModel
+
+[[autodoc]] Qwen3TTSTokenizerSingleCodebookDecoderDiTModel
