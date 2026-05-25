@@ -174,20 +174,22 @@ class Cohere2MoeConfig(PreTrainedConfig):
     def _update_sp_plan(self):
         self.base_model_sp_plan = self.base_model_sp_plan.copy()
         for i in range(self.num_hidden_layers):
+            # This is a MLP layer
             if i < self.first_k_dense_replace:
-                self.base_model_sp_plan.update(
-                    {
-                        f"layers.{i}.mlp": "module_allgather_split",
-                        f"layers.{i}.mlp.experts": "moe_experts_allreduce",
-                    }
-                )
-            else:
                 self.base_model_sp_plan.update(
                     {
                         f"layers.{i}.mlp": "module_allgather",
                         f"layers.{i}.mlp.gate_proj": "colwise",
                         f"layers.{i}.mlp.up_proj": "colwise",
                         f"layers.{i}.mlp.down_proj": "rowwise_reduce_scatter",
+                    }
+                )
+            # This is a MoE layer
+            else:
+                self.base_model_sp_plan.update(
+                    {
+                        f"layers.{i}.mlp": "module_allgather_split",
+                        f"layers.{i}.mlp.experts": "moe_experts_allreduce",
                     }
                 )
 
