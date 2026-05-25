@@ -173,9 +173,9 @@ class Cohere2MoeConfig(PreTrainedConfig):
     def _update_sp_plan(self):
         """Depending on layers, `mlp` can be a MoE or an MLP layer - so we update the plan dynamically here to avoid collisions"""
         self.base_model_sp_plan = self.base_model_sp_plan.copy()
-        for i in range(self.num_hidden_layers):
+        for i, mlp_type in enumerate(self.mlp_layer_types):
             # This is a MLP layer
-            if i < self.first_k_dense_replace:
+            if mlp_type == "dense":
                 self.base_model_sp_plan.update(
                     {
                         f"layers.{i}.mlp": "module_allgather",
