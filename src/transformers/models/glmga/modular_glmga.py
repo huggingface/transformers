@@ -302,6 +302,8 @@ class GlmgaVideoProcessorInitKwargs(VideosKwargs, total=False):
 
 
 class GlmgaVideoProcessor(Glm46VVideoProcessor):
+    size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 2 * 55790}
+    max_image_size = {"longest_edge": 28 * 28 * 2 * 55790}
     fps = 2
     patch_expand_factor = 1
     max_frames = 640

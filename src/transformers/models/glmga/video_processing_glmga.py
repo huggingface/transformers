@@ -61,8 +61,8 @@ class GlmgaVideoProcessorInitKwargs(VideosKwargs, total=False):
 )
 class GlmgaVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
-    size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 2 * 30000}
-    max_image_size = {"longest_edge": 28 * 28 * 2 * 30000}
+    size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 2 * 55790}
+    max_image_size = {"longest_edge": 28 * 28 * 2 * 55790}
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
     do_resize = True
