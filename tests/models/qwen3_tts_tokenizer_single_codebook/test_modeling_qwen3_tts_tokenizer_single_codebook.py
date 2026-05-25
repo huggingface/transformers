@@ -13,13 +13,38 @@
 # limitations under the License.
 import unittest
 
-from transformers import Qwen3TTSTokenizerSingleCodebookModel, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import require_torch
+
+if is_torch_available():
+    from transformers import (
+        Qwen3TTSTokenizerSingleCodebookDecoder,
+        Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel,
+        Qwen3TTSTokenizerSingleCodebookDecoderDiTModel,
+        Qwen3TTSTokenizerSingleCodebookDecoderPreTrainedModel,
+        Qwen3TTSTokenizerSingleCodebookEncoder,
+        Qwen3TTSTokenizerSingleCodebookEncoderPreTrainedModel,
+        Qwen3TTSTokenizerSingleCodebookModel,
+        Qwen3TTSTokenizerSingleCodebookPreTrainedModel,
+    )
 
 
 @require_torch
 class Qwen3TTSTokenizerSingleCodebookModelTest(unittest.TestCase):
-    all_model_classes = (Qwen3TTSTokenizerSingleCodebookModel,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            Qwen3TTSTokenizerSingleCodebookModel,
+            Qwen3TTSTokenizerSingleCodebookPreTrainedModel,
+            Qwen3TTSTokenizerSingleCodebookEncoderPreTrainedModel,
+            Qwen3TTSTokenizerSingleCodebookDecoderPreTrainedModel,
+            Qwen3TTSTokenizerSingleCodebookEncoder,
+            Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel,
+            Qwen3TTSTokenizerSingleCodebookDecoderDiTModel,
+            Qwen3TTSTokenizerSingleCodebookDecoder,
+        )
+        if is_torch_available()
+        else ()
+    )
 
     def test_placeholder(self):
         pass
