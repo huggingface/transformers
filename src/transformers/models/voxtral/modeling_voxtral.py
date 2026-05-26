@@ -21,6 +21,7 @@
 
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 from torch import nn
@@ -35,7 +36,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..auto import AutoModel, AutoModelForCausalLM
+from ..auto import AutoModel
 from .configuration_voxtral import VoxtralConfig, VoxtralEncoderConfig
 
 
@@ -359,35 +360,34 @@ class VoxtralMultiModalProjector(nn.Module):
         return hidden_states
 
 
+@dataclass
 @auto_docstring(
     custom_intro="""
-    The Voxtral model, which consists of Whisper encoder, a multi-modal projector and a LLama language model.
+    Base class for Voxtral outputs, with hidden states and attentions.
     """
 )
-class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
-    _keep_in_fp32_modules_strict = ["embed_positions"]
+class VoxtralModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    audio_hidden_states (`torch.FloatTensor`, *optional*):
+        Projected audio hidden states.
+    """
 
+    audio_hidden_states: torch.FloatTensor | None = None
+
+
+@auto_docstring(
+    custom_intro="""
+    The Voxtral model, which consists of Whisper encoder, a multi-modal projector and a Llama language model,
+    without a language modeling head.
+    """
+)
+class VoxtralModel(VoxtralPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.vocab_size = config.text_config.vocab_size
         self.audio_tower = AutoModel.from_config(config.audio_config)
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        self.language_model = AutoModel.from_config(config.text_config)
         self.multi_modal_projector = VoxtralMultiModalProjector(config)
-
-        # Initialize weights and apply final processing
         self.post_init()
-
-    def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
-
-    def set_decoder(self, decoder):
-        self.language_model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.language_model.get_decoder()
 
     @can_return_tuple
     @auto_docstring(
@@ -446,11 +446,73 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | VoxtralModelOutputWithPast:
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        audio_embeds = None
+        if input_features is not None and input_ids is not None:
+            audio_embeds = self.get_audio_features(input_features, return_dict=True).pooler_output
+
+            # replace text-audio token placeholders with audio embeddings
+            special_audio_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds.to(inputs_embeds.device))
+
+        outputs: BaseModelOutputWithPast = self.language_model(
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        return VoxtralModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            audio_hidden_states=audio_embeds,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
+    The Voxtral model, which consists of Whisper encoder, a multi-modal projector and a Llama language model.
+    """
+)
+class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
+    _keep_in_fp32_modules_strict = ["embed_positions"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = VoxtralModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.post_init()
+
+    def get_audio_features(self, *args, **kwargs):
+        return self.model.get_audio_features(*args, **kwargs)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         Example:
 
@@ -484,29 +546,34 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         >>> processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
         ["This audio is a humorous conversation between two friends, likely in English, where one of them is trying to figure out what the other's tattoo says."]
         ```"""
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_features, return_dict=True).pooler_output
-
-            # replace text-audio token placeholders with audio embeddings
-            special_audio_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
-            )
-            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds.to(inputs_embeds.device))
-
-        outputs: BaseModelOutputWithPast = self.language_model(
+        outputs = self.model(
+            input_ids=input_ids,
+            input_features=input_features,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            labels=labels,
             use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
             **kwargs,
         )
-        return outputs
+
+        hidden_states = outputs.last_hidden_state
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
     def prepare_inputs_for_generation(self, *args, **kwargs):
         # Overwritten -- we should not pass input_features when we are in cached decoding stage
@@ -523,4 +590,4 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-__all__ = ["VoxtralPreTrainedModel", "VoxtralEncoder", "VoxtralForConditionalGeneration"]
+__all__ = ["VoxtralPreTrainedModel", "VoxtralEncoder", "VoxtralModel", "VoxtralForConditionalGeneration"]
