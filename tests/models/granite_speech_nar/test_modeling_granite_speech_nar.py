@@ -14,11 +14,15 @@
 """Tests for GraniteSpeechNar model."""
 
 import math
+import unittest
 
+import pytest
 import torch
 
 from transformers import (
     AutoConfig,
+    AutoModel,
+    AutoProcessor,
     GraniteConfig,
     GraniteSpeechNarConfig,
 )
@@ -32,6 +36,11 @@ from transformers.models.granite_speech_nar.modeling_granite_speech_nar import (
     GraniteSpeechNarOutput,
     GraniteSpeechNarProjector,
 )
+from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.utils import is_datasets_available
+
+if is_datasets_available():
+    from datasets import load_dataset
 
 
 def _make_small_config():
@@ -364,3 +373,75 @@ class TestBidirectionalAttention:
         model = GraniteSpeechNarForASR(config)
         for i, layer in enumerate(model.language_model.model.layers):
             assert layer.self_attn.is_causal is False, f"Layer {i} is_causal is not False"
+
+
+# === Integration tests ===
+
+
+@require_torch
+class GraniteSpeechNarIntegrationTest(unittest.TestCase):
+    model_path = "ibm-granite/granite-speech-4.1-2b-nar"
+    _dataset = None
+
+    @classmethod
+    def _load_dataset(cls):
+        if cls._dataset is None:
+            cls._dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
+    def _load_datasamples(self, num_samples):
+        self._load_dataset()
+        samples = self._dataset.sort("id")[:num_samples]["audio"]
+        return [torch.tensor(x["array"], dtype=torch.float32) for x in samples]
+
+    @slow
+    def test_single_sample_transcription(self):
+        model = AutoModel.from_pretrained(
+            self.model_path, attn_implementation="flash_attention_2", device_map=torch_device, dtype=torch.bfloat16
+        ).eval()
+        processor = AutoProcessor.from_pretrained(self.model_path)
+
+        waveforms = self._load_datasamples(1)
+        inputs = processor(waveforms, device=torch_device)
+        output = model.transcribe(**inputs)
+        transcriptions = processor.batch_decode(output.preds)
+
+        expected = "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
+        self.assertEqual(transcriptions[0], expected)
+
+    @slow
+    def test_batch_transcription(self):
+        model = AutoModel.from_pretrained(
+            self.model_path, attn_implementation="flash_attention_2", device_map=torch_device, dtype=torch.bfloat16
+        ).eval()
+        processor = AutoProcessor.from_pretrained(self.model_path)
+
+        waveforms = self._load_datasamples(2)
+        inputs = processor(waveforms, device=torch_device)
+        output = model.transcribe(**inputs)
+        transcriptions = processor.batch_decode(output.preds)
+
+        expected = [
+            "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
+            "nor is mister quilter's manner less interesting than his matter",
+        ]
+        self.assertEqual(len(transcriptions), 2)
+        self.assertEqual(transcriptions, expected)
+
+    @slow
+    @pytest.mark.skipif(not is_datasets_available(), reason="datasets not installed")
+    def test_processor_output_shapes(self):
+        processor = AutoProcessor.from_pretrained(self.model_path)
+
+        waveforms = self._load_datasamples(2)
+        inputs = processor(waveforms, device="cpu")
+
+        self.assertEqual(inputs["input_features"].ndim, 3)
+        self.assertEqual(inputs["input_features"].shape[0], 2)
+        self.assertEqual(inputs["input_features"].shape[2], 160)
+
+        self.assertEqual(inputs["attention_mask"].shape, inputs["input_features"].shape[:2])
+
+        # Shorter sample should have False values at end
+        mask_sums = inputs["attention_mask"].sum(dim=1)
+        self.assertEqual(mask_sums[0].item(), inputs["input_features"].shape[1])
+        self.assertLess(mask_sums[1].item(), mask_sums[0].item())
