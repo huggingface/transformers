@@ -309,7 +309,7 @@ def _load_training_state(model, optimizer, training_state_dir):
 
 def train_ddp(rank, batches, lr, device, dtype, init_model_dir):
     _set_determinism(SEED)
-    model = AutoModelForCausalLM.from_pretrained(init_model_dir, torch_dtype=dtype, attn_implementation="eager").to(
+    model = AutoModelForCausalLM.from_pretrained(init_model_dir, torch_dtype=dtype).to(
         device
     )
     # MoE/conditional-routing variants) may not use all params on
@@ -357,8 +357,7 @@ def train_fsdp2(
     pre_ckpt_model = AutoModelForCausalLM.from_pretrained(
         init_model_dir,
         torch_dtype=dtype,
-        distributed_config=distributed_config,
-        attn_implementation="eager",
+        distributed_config=distributed_config
     )
     pre_ckpt_model.train()
     pre_ckpt_optimizer = torch.optim.Adam(pre_ckpt_model.parameters(), lr=lr)
@@ -394,8 +393,7 @@ def train_fsdp2(
         resumed_model = AutoModelForCausalLM.from_pretrained(
             model_dir,
             torch_dtype=dtype,
-            distributed_config=distributed_config,
-            attn_implementation="eager",
+            distributed_config=distributed_config
         )
         resumed_model.train()
         resumed_optimizer = torch.optim.Adam(resumed_model.parameters(), lr=lr)
@@ -446,8 +444,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
         _set_determinism(SEED)
         model = AutoModelForCausalLM.from_pretrained(
             init_tmpdir,
-            distributed_config=distributed_config,
-            attn_implementation="eager",
+            distributed_config=distributed_config
         )
         dist.barrier()
     finally:
@@ -471,8 +468,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
 
         new_model = AutoModelForCausalLM.from_pretrained(
             tmpdir,
-            distributed_config=distributed_config,
-            attn_implementation="eager",
+            distributed_config=distributed_config
         )
         dist.barrier()
     finally:
@@ -517,8 +513,7 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
         _set_determinism(SEED)
         model = AutoModelForCausalLM.from_pretrained(
             init_tmpdir,
-            distributed_config=DistributedConfig(fsdp_size=dist.get_world_size()),
-            attn_implementation="eager",
+            distributed_config=DistributedConfig(fsdp_size=dist.get_world_size())
         )
         dist.barrier()
     finally:
