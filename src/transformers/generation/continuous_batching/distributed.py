@@ -12,13 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
-from typing import TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import torch
-import torch.distributed as dist
-from torch.distributed.tensor.device_mesh import DeviceMesh
+import torch.distributed as _dist
 
 from .requests import logger
+
+
+dist: Any = _dist
+
+
+if TYPE_CHECKING:
+    from torch.distributed.device_mesh import DeviceMesh
+elif torch.distributed.is_available():
+    from torch.distributed.device_mesh import DeviceMesh
+else:
+    DeviceMesh = object
 
 
 T = TypeVar("T")
