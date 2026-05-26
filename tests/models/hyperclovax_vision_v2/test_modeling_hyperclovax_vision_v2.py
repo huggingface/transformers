@@ -18,7 +18,7 @@ import unittest
 
 import requests
 
-from transformers import HCXVisionV2Config, is_torch_available, is_vision_available
+from transformers import HyperCLOVAXVisionV2Config, is_torch_available, is_vision_available
 from transformers.image_utils import load_image
 from transformers.testing_utils import (
     Expectations,
@@ -246,12 +246,12 @@ class HyperCLOVAXVisionV2ModelTest(VLMModelTest, unittest.TestCase):
 
 @require_torch
 @require_torch_accelerator
-class HCXVisionV2IntegrationTest(unittest.TestCase):
+class HyperCLOVAXVisionV2IntegrationTest(unittest.TestCase):
     model_id = "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B"
 
     def setUp(self):
-        self.processor = HCXVisionV2Processor.from_pretrained(self.model_id)
-        self.model = HCXVisionV2ForConditionalGeneration.from_pretrained(
+        self.processor = HyperCLOVAXVisionV2Processor.from_pretrained(self.model_id)
+        self.model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
             self.model_id, dtype=torch.bfloat16, device_map="auto"
         )
         cleanup(torch_device, gc_collect=True)
@@ -336,12 +336,15 @@ class HCXVisionV2IntegrationTest(unittest.TestCase):
             f.flush()
             cap = cv2.VideoCapture(f.name)
             frames = []
+            idx = 0
             while True:
                 ret, frame = cap.read()
                 if not ret:
                     break
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frames.append(Image.fromarray(frame_rgb).resize((224, 224), Image.BICUBIC))
+                if idx % 4 == 0:  # sample every 4th frame for memory efficiency
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    frames.append(Image.fromarray(frame_rgb).resize((224, 224), Image.BICUBIC))
+                idx += 1
             cap.release()
 
         inputs = self.processor(text=[text], videos=[frames], return_tensors="pt")

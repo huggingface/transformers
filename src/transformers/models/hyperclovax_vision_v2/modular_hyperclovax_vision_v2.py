@@ -19,6 +19,7 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
+from ...generation.utils import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -339,7 +340,6 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # HyperCLOVAX Vision V2 uses 1D position_ids (not Qwen2.5-VL's 3D/4D rope_deltas-based ids)
-        from ...generation.utils import GenerationMixin
 
         return GenerationMixin._prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs)
 
