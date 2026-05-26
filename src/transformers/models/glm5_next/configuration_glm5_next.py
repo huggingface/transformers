@@ -42,8 +42,6 @@ class Glm5NextConfig(PreTrainedConfig):
         Numerical floor used by MHC Sinkhorn normalization.
     hc_sinkhorn_iters (`int`, *optional*, defaults to 20):
         Number of Sinkhorn iterations used by MHC routing.
-    mhc_post_mult_value (`float`, *optional*, defaults to 2.0):
-        Post multiplier applied by MHC after each sublayer.
     index_head_dim (`int`, *optional*, defaults to 128):
         DSA indexer projection head dimension.
     index_n_heads (`int`, *optional*, defaults to 32):
@@ -119,7 +117,6 @@ class Glm5NextConfig(PreTrainedConfig):
     hc_mult: int = 4
     hc_eps: float = 1e-6
     hc_sinkhorn_iters: int = 20
-    mhc_post_mult_value: float = 2.0
     index_head_dim: int = 128
     index_n_heads: int = 32
     index_topk: int | None = 2048

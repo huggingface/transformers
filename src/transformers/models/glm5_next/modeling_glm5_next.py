@@ -19,15 +19,15 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from typing import Optional
+from copy import copy
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, LinearAttentionLayer
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -54,8 +54,7 @@ class Glm5NextHyperConnection(nn.Module):
     """
     GLM-5-Next MHC wrapper over the DeepSeek-V4 HyperConnection implementation.
 
-    GLM-5-Next uses the same stream collapse / Sinkhorn residual mixer as DeepSeek-V4, but keeps
-    `mhc_post_mult_value` configurable to match the reference sglang implementation.
+    GLM-5-Next uses the same stream collapse / Sinkhorn residual mixer as DeepSeek-V4.
     """
 
     def __init__(self, config: Glm5NextConfig):
@@ -72,7 +71,7 @@ class Glm5NextHyperConnection(nn.Module):
         # H×H residual combine matrix that gets Sinkhorn-projected onto the
         # doubly-stochastic manifold). Each output gets its own learned scale.
         self.scale = nn.Parameter(torch.empty(3))
-        self.post_mult_value = config.mhc_post_mult_value
+        self.post_mult_value = 2.0
 
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         r"""
@@ -102,6 +101,18 @@ class Glm5NextHyperConnection(nn.Module):
         collapsed = (pre.unsqueeze(-1) * hidden_streams).sum(dim=2).to(hidden_streams.dtype)
         return post, comb, collapsed
 
+    def apply_residual_update(
+        self,
+        post: torch.Tensor,
+        residual: torch.Tensor,
+        hidden_streams: torch.Tensor,
+        sublayer_output: torch.Tensor,
+    ) -> torch.Tensor:
+        dtype = hidden_streams.dtype
+        return post.to(dtype).unsqueeze(-1) * sublayer_output.unsqueeze(-2) + torch.matmul(
+            residual.to(dtype).transpose(-1, -2), hidden_streams
+        )
+
 
 class Glm5NextHyperHead(nn.Module):
     """Final GLM-5-Next HC-stream collapse. Unlike DeepSeek-V4, this is an unweighted mean."""
@@ -113,6 +124,121 @@ class Glm5NextHyperHead(nn.Module):
 # =============================================================================
 # KDA Linear Attention
 # =============================================================================
+
+
+class Glm5NextShortConv(nn.Conv1d):
+    def __init__(self, channels: int, kernel_size: int):
+        super().__init__(
+            channels,
+            channels,
+            kernel_size,
+            groups=channels,
+            bias=False,
+            dtype=torch.float32,
+        )
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        seq_len: int,
+        dtype: torch.dtype,
+        has_left_context: bool,
+    ) -> torch.Tensor:
+        if not has_left_context:
+            hidden_states = F.pad(hidden_states, (self.kernel_size[0] - 1, 0))
+        out = super().forward(hidden_states.to(self.weight.dtype))
+        out = F.silu(out)
+        if has_left_context:
+            out = out[:, :, -seq_len:]
+        return out.transpose(1, 2).to(dtype)
+
+
+class Glm5NextForgetGate(nn.Module):
+    def __init__(self, hidden_size: int, config: Glm5NextConfig):
+        super().__init__()
+        linear_attn_config = config.linear_attn_config
+        self.head_dim = linear_attn_config["head_dim"]
+        self.num_heads = linear_attn_config["num_heads"]
+        self.safe_gate_lower_bound = linear_attn_config.get("lower_bound")
+        qk_projection_size = self.head_dim * self.num_heads
+        self.f_a_proj = nn.Linear(hidden_size, self.head_dim, bias=False)
+        self.f_b_proj = nn.Linear(self.head_dim, qk_projection_size, bias=False)
+        self.dt_bias = nn.Parameter(torch.empty(qk_projection_size, dtype=torch.float32))
+        self.A_log = nn.Parameter(torch.empty(1, 1, self.num_heads, 1, dtype=torch.float32))
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        forget_gate = self.f_b_proj(self.f_a_proj(hidden_states))
+        batch_size, seq_len = forget_gate.shape[:2]
+        g = forget_gate.float() + self.dt_bias.view(1, 1, -1)
+        g = g.view(batch_size, seq_len, self.num_heads, self.head_dim)
+
+        if self.safe_gate_lower_bound is not None:
+            return self.safe_gate_lower_bound * torch.sigmoid(torch.exp(self.A_log.float()) * g)
+
+        threshold = 20.0
+        g_linear = g > threshold
+        sp = torch.where(g_linear, g, torch.log(1.0 + torch.exp(g)))
+        return -torch.exp(self.A_log.float()) * sp
+
+
+class Glm5NextKdaSequential(nn.Module):
+    def forward(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        g: torch.Tensor,
+        beta: torch.Tensor,
+        initial_state: torch.Tensor | None = None,
+        output_final_state: bool = False,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        B, S, H, D = q.shape
+        V = v.shape[-1]
+        dtype = q.dtype
+
+        if initial_state is None:
+            h = torch.zeros(B, H, D, V, device=q.device, dtype=torch.float32)
+        else:
+            h = initial_state.to(device=q.device, dtype=torch.float32)
+        o = torch.empty(B, S, H, V, device=q.device, dtype=dtype)
+        scale = D**-0.5
+
+        for t in range(S):
+            q_t = q[:, t].float()
+            k_t = k[:, t].float()
+            v_t = v[:, t].float()
+
+            q_t = q_t / torch.sqrt(torch.sum(q_t * q_t, dim=-1, keepdim=True) + 1e-6)
+            k_t = k_t / torch.sqrt(torch.sum(k_t * k_t, dim=-1, keepdim=True) + 1e-6)
+
+            h = h * torch.exp(g[:, t, :, :, None])
+            delta_v = v_t - torch.einsum("bhkv,bhk->bhv", h, k_t)
+            delta_v = delta_v * beta[:, t, :, None]
+            h = h + torch.einsum("bhk,bhv->bhkv", k_t, delta_v)
+            o[:, t] = torch.einsum("bhkv,bhk->bhv", h, q_t * scale).to(dtype)
+
+        return o, h if output_final_state else None
+
+
+class Glm5NextLinearAttentionCacheLayer(LinearAttentionLayer):
+    def update_conv_state(
+        self, conv_states: torch.Tensor, conv_kernel_size: int | None = None, **kwargs
+    ) -> torch.Tensor:
+        if not self.has_previous_state and conv_kernel_size is not None:
+            if conv_states.shape[-1] >= conv_kernel_size:
+                conv_states = conv_states[..., -conv_kernel_size:]
+            else:
+                conv_states = F.pad(conv_states, (conv_kernel_size - conv_states.shape[-1], 0))
+        return super().update_conv_state(conv_states, **kwargs)
+
+
+class Glm5NextDynamicCache(DynamicCache):
+    def __init__(self, *args, config: Glm5NextConfig | None = None, **kwargs):
+        super().__init__(*args, config=config, **kwargs)
+        if config is not None:
+            for layer_idx, layer_type in enumerate(config.layer_types):
+                if layer_type == "linear_attention":
+                    self.layers[layer_idx] = Glm5NextLinearAttentionCacheLayer(config)
 
 
 class Glm5NextLinearAttention(nn.Module):
@@ -148,7 +274,6 @@ class Glm5NextLinearAttention(nn.Module):
         self.v_head_dim = linear_attn_config["v_head_dim"]
         self.num_heads = linear_attn_config["num_heads"]
         self.conv_kernel_size = linear_attn_config.get("short_conv_kernel_size", 4)
-        self.safe_gate_lower_bound = linear_attn_config.get("lower_bound")
 
         qk_projection_size = self.head_dim * self.num_heads
         v_projection_size = self.v_head_dim * self.num_heads
@@ -158,37 +283,10 @@ class Glm5NextLinearAttention(nn.Module):
         self.k_proj = nn.Linear(hidden_size, qk_projection_size, bias=False)
         self.v_proj = nn.Linear(hidden_size, v_projection_size, bias=False)
 
-        # Short depthwise causal conv1d. nn.Conv1d with groups=channels matches
-        # checkpoint naming: q_conv1d.weight, k_conv1d.weight, v_conv1d.weight
-        # Checkpoint weight shape: [C, 1, kernel_size]
-        self.q_conv1d = nn.Conv1d(
-            qk_projection_size,
-            qk_projection_size,
-            self.conv_kernel_size,
-            groups=qk_projection_size,
-            bias=False,
-            dtype=torch.float32,
-        )
-        self.k_conv1d = nn.Conv1d(
-            qk_projection_size,
-            qk_projection_size,
-            self.conv_kernel_size,
-            groups=qk_projection_size,
-            bias=False,
-            dtype=torch.float32,
-        )
-        self.v_conv1d = nn.Conv1d(
-            v_projection_size,
-            v_projection_size,
-            self.conv_kernel_size,
-            groups=v_projection_size,
-            bias=False,
-            dtype=torch.float32,
-        )
-
-        # Forget gate: hidden -> head_dim -> qk_projection_size
-        self.f_a_proj = nn.Linear(hidden_size, self.head_dim, bias=False)
-        self.f_b_proj = nn.Linear(self.head_dim, qk_projection_size, bias=False)
+        self.q_conv1d = Glm5NextShortConv(qk_projection_size, self.conv_kernel_size)
+        self.k_conv1d = Glm5NextShortConv(qk_projection_size, self.conv_kernel_size)
+        self.v_conv1d = Glm5NextShortConv(v_projection_size, self.conv_kernel_size)
+        self.forget_gate = Glm5NextForgetGate(hidden_size, config)
 
         # Beta (input gate): hidden -> num_heads
         self.b_proj = nn.Linear(hidden_size, self.num_heads, bias=False)
@@ -197,112 +295,13 @@ class Glm5NextLinearAttention(nn.Module):
         self.g_a_proj = nn.Linear(hidden_size, self.v_head_dim, bias=False)
         self.g_b_proj = nn.Linear(self.v_head_dim, v_projection_size, bias=False)
 
-        # Learnable gating parameters (fp32, matches checkpoint)
-        self.dt_bias = nn.Parameter(torch.empty(qk_projection_size, dtype=torch.float32))
-        self.A_log = nn.Parameter(torch.empty(1, 1, self.num_heads, 1, dtype=torch.float32))
-
         # FusedRMSNormGated equivalent; keep the module wrapper so checkpoint
         # keys match `self_attn.o_norm.weight`.
         self.o_norm = Glm5NextRMSNorm(self.v_head_dim, eps=rms_norm_eps)
+        self.kda_sequential = Glm5NextKdaSequential()
 
         # Output projection
         self.o_proj = nn.Linear(v_projection_size, hidden_size, bias=False)
-
-    def _causal_depthwise_conv1d(self, x: torch.Tensor, conv: nn.Conv1d) -> torch.Tensor:
-        """Apply causal depthwise conv1d: [B, S, C] -> [B, S, C]."""
-        # Conv1d expects [B, C, S]
-        x_t = x.transpose(1, 2)  # [B, C, S]
-        # Causal padding: pad left only
-        kernel_size = conv.kernel_size[0]
-        x_padded = F.pad(x_t, (kernel_size - 1, 0))
-        out = conv(x_padded.to(conv.weight.dtype))  # [B, C, S]
-        out = F.silu(out)
-        return out.transpose(1, 2).to(x.dtype)  # [B, S, C]
-
-    def _depthwise_conv1d_from_channels(
-        self, x_t: torch.Tensor, conv: nn.Conv1d, seq_len: int, dtype: torch.dtype, has_left_context: bool
-    ) -> torch.Tensor:
-        """Apply depthwise conv to [B, C, S] states, using cached left context when present."""
-        if not has_left_context:
-            x_t = F.pad(x_t, (conv.kernel_size[0] - 1, 0))
-        out = conv(x_t.to(conv.weight.dtype))
-        out = F.silu(out)
-        if has_left_context:
-            out = out[:, :, -seq_len:]
-        return out.transpose(1, 2).to(dtype)
-
-    def _fixed_conv_state(self, x_t: torch.Tensor) -> torch.Tensor:
-        """Return a fixed-width conv cache state [B, C, K] for first-token cache initialization."""
-        if x_t.shape[-1] >= self.conv_kernel_size:
-            return x_t[:, :, -self.conv_kernel_size :]
-        return F.pad(x_t, (self.conv_kernel_size - x_t.shape[-1], 0))
-
-    def _compute_gate(self, forget_gate: torch.Tensor) -> torch.Tensor:
-        """Compute the KDA forget gate."""
-        batch_size, seq_len = forget_gate.shape[:2]
-        g = forget_gate.float() + self.dt_bias.view(1, 1, -1)
-        g = g.view(batch_size, seq_len, self.num_heads, self.head_dim)
-
-        if self.safe_gate_lower_bound is not None:
-            return self.safe_gate_lower_bound * torch.sigmoid(torch.exp(self.A_log.float()) * g)
-
-        # Numerically stable softplus
-        threshold = 20.0
-        g_linear = g > threshold
-        sp = torch.where(g_linear, g, torch.log(1.0 + torch.exp(g)))
-
-        g = -torch.exp(self.A_log.float()) * sp
-        return g
-
-    def _kda_sequential(
-        self,
-        q: torch.Tensor,
-        k: torch.Tensor,
-        v: torch.Tensor,
-        g: torch.Tensor,
-        beta: torch.Tensor,
-        initial_state: torch.Tensor | None = None,
-        output_final_state: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """
-        Sequential KDA recurrence (pure PyTorch, O(S * D²) per head).
-
-        h_t = h_{t-1} * exp(g_t)
-        v_delta = (v_t - h_t @ k_t) * beta_t
-        h_t = h_t + k_t ⊗ v_delta
-        o_t = h_t @ (q_t * head_dim^-0.5)
-        """
-        B, S, H, D = q.shape
-        V = v.shape[-1]
-        dtype = q.dtype
-
-        if initial_state is None:
-            h = torch.zeros(B, H, D, V, device=q.device, dtype=torch.float32)
-        else:
-            h = initial_state.to(device=q.device, dtype=torch.float32)
-        o = torch.empty(B, S, H, V, device=q.device, dtype=dtype)
-        scale = D**-0.5
-
-        for t in range(S):
-            q_t = q[:, t].float()
-            k_t = k[:, t].float()
-            v_t = v[:, t].float()
-
-            q_t = q_t / torch.sqrt(torch.sum(q_t * q_t, dim=-1, keepdim=True) + 1e-6)
-            k_t = k_t / torch.sqrt(torch.sum(k_t * k_t, dim=-1, keepdim=True) + 1e-6)
-
-            # Decay: h *= exp(g_t)
-            h = h * torch.exp(g[:, t, :, :, None])  # [B, H, D, D]
-
-            # Delta rule: v <- (v - h @ k) * beta; h <- h + k outer v
-            delta_v = v_t - torch.einsum("bhkv,bhk->bhv", h, k_t)
-            delta_v = delta_v * beta[:, t, :, None]
-            h = h + torch.einsum("bhk,bhv->bhkv", k_t, delta_v)
-
-            # Output: h @ scaled q
-            o[:, t] = torch.einsum("bhkv,bhk->bhv", h, q_t * scale).to(dtype)
-
-        return o, h if output_final_state else None
 
     def _gated_rms_norm(self, x: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
         """FusedRMSNormGated(..., activation="sigmoid") reference path."""
@@ -332,32 +331,35 @@ class Glm5NextLinearAttention(nn.Module):
             [self.q_proj(hidden_states), self.k_proj(hidden_states), self.v_proj(hidden_states)], dim=-1
         ).transpose(1, 2)
 
-        conv_input = torch.cat([conv_state, mixed_qkv], dim=-1) if has_cache_state else mixed_qkv
+        q_input, k_input, v_input = torch.split(
+            mixed_qkv, [qk_projection_size, qk_projection_size, v_projection_size], dim=1
+        )
+        if has_cache_state:
+            q_state, k_state, v_state = torch.split(
+                conv_state, [qk_projection_size, qk_projection_size, v_projection_size], dim=1
+            )
+            q_input = torch.cat([q_state, q_input], dim=-1)
+            k_input = torch.cat([k_state, k_input], dim=-1)
+            v_input = torch.cat([v_state, v_input], dim=-1)
 
         if past_key_values is not None:
-            new_conv_state = mixed_qkv if has_cache_state else self._fixed_conv_state(mixed_qkv)
-            past_key_values.update_conv_state(new_conv_state, self.layer_idx)
-
-        q_input, k_input, v_input = torch.split(
-            conv_input, [qk_projection_size, qk_projection_size, v_projection_size], dim=1
-        )
+            past_key_values.update_conv_state(mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size)
 
         # Q, K, V projections and causal conv1d
-        q = self._depthwise_conv1d_from_channels(q_input, self.q_conv1d, seq_len, hidden_states.dtype, has_cache_state)
-        k = self._depthwise_conv1d_from_channels(k_input, self.k_conv1d, seq_len, hidden_states.dtype, has_cache_state)
-        v = self._depthwise_conv1d_from_channels(v_input, self.v_conv1d, seq_len, hidden_states.dtype, has_cache_state)
+        q = self.q_conv1d(q_input, seq_len, hidden_states.dtype, has_cache_state)
+        k = self.k_conv1d(k_input, seq_len, hidden_states.dtype, has_cache_state)
+        v = self.v_conv1d(v_input, seq_len, hidden_states.dtype, has_cache_state)
 
         q = q.view(batch_size, seq_len, self.num_heads, self.head_dim)
         k = k.view(batch_size, seq_len, self.num_heads, self.head_dim)
         v = v.view(batch_size, seq_len, self.num_heads, self.v_head_dim)
 
         # Forget gate and input gate
-        forget_gate = self.f_b_proj(self.f_a_proj(hidden_states))
-        g = self._compute_gate(forget_gate)
+        g = self.forget_gate(hidden_states)
         beta = torch.sigmoid(self.b_proj(hidden_states))
 
         # KDA sequential recurrence
-        core_attn_out, last_recurrent_state = self._kda_sequential(
+        core_attn_out, last_recurrent_state = self.kda_sequential(
             q,
             k,
             v,
@@ -388,17 +390,44 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(
+@use_kernel_func_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
+def apply_rotary_pos_emb_to_single(
     x: torch.Tensor,
     cos: torch.Tensor,
     sin: torch.Tensor,
     unsqueeze_dim: int = 1,
 ) -> torch.Tensor:
-    """Applies Rotary Position Embedding to a single tensor (NeoX/Llama split-half style)."""
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    x_rotated = (x * cos) + (rotate_half(x) * sin)
-    return x_rotated
+    return apply_rotary_pos_emb(x, x, cos, sin, unsqueeze_dim=unsqueeze_dim)[0]
+
+
+# =============================================================================
+# MLA (Multi-head Latent Attention) with optional DSA indexer scaffold
+# =============================================================================
 
 
 class Glm5NextIndexer(nn.Module):
@@ -406,10 +435,9 @@ class Glm5NextIndexer(nn.Module):
     GLM-5-Next DSA/NSA indexer.
 
     This mirrors sglang's NSA `Indexer` parameter layout (`wq_b`, `wk`,
-    `weights_proj`, `k_norm`) through the PyTorch reference implementation in
-    `GlmMoeDsaIndexer`. sglang computes the final scores with optimized
-    `fp8_index`/NSA kernels; the inherited implementation computes the same
-    top-k sparse-attention indices with regular PyTorch ops.
+    `weights_proj`, `k_norm`). sglang computes the final scores with optimized
+    `fp8_index`/NSA kernels; this path computes the same top-k sparse-attention
+    indices with regular PyTorch ops.
     """
 
     def __init__(self, config: Glm5NextConfig, layer_idx: int):
@@ -424,18 +452,57 @@ class Glm5NextIndexer(nn.Module):
         self.index_topk: int = config.index_topk
         self.q_lora_rank: int = config.q_lora_rank
 
-        # Named to match checkpoint: wq_b, wk, k_norm
         self.wq_b = nn.Linear(self.q_lora_rank, self.n_heads * self.head_dim, bias=False)
         self.wk = nn.Linear(self.hidden_size, self.head_dim, bias=False)
         self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
-        # Named to match checkpoint: weights_proj
-        # In the reference, this is fp32; the HF FP8 checkpoint stores a bf16 tensor.
-        # Keeping it as a plain Linear prevents FP8 conversion (see `_keep_in_fp32_modules`).
         self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
         self.softmax_scale = self.head_dim**-0.5
 
-        # Indexer maintains its own key cache (not in DynamicCache, which is sized for attention layers only)
-        self.register_buffer("_cached_keys", None, persistent=False)
+    def _update_key_cache(self, k: torch.Tensor, past_key_values: Cache | None) -> torch.Tensor:
+        if past_key_values is None:
+            return k
+
+        cache_layer = past_key_values.layers[self.layer_idx]
+        cached_keys = getattr(cache_layer, "indexer_keys", None)
+        if k.shape[1] > 1 or cached_keys is None or cached_keys.shape[0] != k.shape[0]:
+            k_cached = k
+        else:
+            k_cached = torch.cat([cached_keys.to(k.device), k], dim=1)
+        cache_layer.indexer_keys = k_cached
+        return k_cached
+
+    def _indexer_score_mask(self, attention_mask: torch.Tensor | None, total_len: int) -> torch.Tensor | None:
+        if attention_mask is None:
+            return None
+        if attention_mask.dim() == 4:
+            return attention_mask[:, 0, :, :total_len]
+        if attention_mask.dim() == 2:
+            return attention_mask[:, None, :total_len]
+        return attention_mask[..., :total_len]
+
+    def build_attention_mask(
+        self,
+        topk_indices: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        batch_size: int,
+        seq_length: int,
+        total_len: int,
+        dtype: torch.dtype,
+        device: torch.device,
+    ) -> torch.Tensor:
+        index_mask = torch.full(
+            (batch_size, seq_length, total_len),
+            float("-inf"),
+            device=device,
+            dtype=dtype,
+        )
+        index_mask.scatter_(-1, topk_indices, 0.0)
+        index_mask = index_mask.unsqueeze(1)
+        if attention_mask is not None and attention_mask.dim() == 4:
+            return index_mask + attention_mask[..., :total_len]
+        if attention_mask is not None:
+            return attention_mask.masked_fill(index_mask == float("-inf"), float("-inf"))
+        return index_mask
 
     @torch.no_grad()
     def forward(
@@ -444,85 +511,63 @@ class Glm5NextIndexer(nn.Module):
         q_resid: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        use_cache: bool = False,
-    ) -> torch.LongTensor:
-        """
-        Computes top-k token indices for sparse attention (DSA).
-
-        This is the bf16 equivalent of the reference Indexer which uses `rotate_activation` (Hadamard transform)
-        and `fp8_index` (FP8 quantized scoring kernel). Since the Hadamard transform is orthogonal (dot products
-        are preserved: Hq·Hk = q·k), and FP8 quantization is a precision optimization, we skip both and compute
-        scores directly in bf16/fp32.
-
-        The scoring logic computes:
-            index_score[b,s,t] = Σ_h (weight[b,s,h] · softmax_scale · q[b,s,h,:] · k[b,t,:])
-
-        Args:
-            hidden_states: Input hidden states `[B, S, hidden_size]`.
-            q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
-            position_embeddings: `(cos, sin)` from RotaryEmbedding.
-            attention_mask: Causal mask, broadcastable to `[B, S, T]`.
-            use_cache: Whether to store/update the indexer's own key cache for autoregressive decode.
-
-        Returns:
-            `torch.LongTensor`: Top-k token indices of shape `[B, S, topk]`.
-        """
+        past_key_values: Cache | None = None,
+        mask_dtype: torch.dtype | None = None,
+        total_len: int | None = None,
+        topk_indices: torch.Tensor | None = None,
+    ) -> tuple[torch.LongTensor, torch.Tensor]:
         batch_size, seq_len, _ = hidden_states.shape
-        cos, sin = position_embeddings
+        total_len = seq_len if total_len is None else total_len
+        mask_dtype = hidden_states.dtype if mask_dtype is None else mask_dtype
 
-        # === Queries ===
-        q = self.wq_b(q_resid)  # [B, S, H*D]
-        q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
-        q_pe, q_nope = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-        q_pe = apply_rotary_pos_emb(q_pe, cos, sin, unsqueeze_dim=2)  # [B, S, H, rope_D]
-        q = torch.cat([q_pe, q_nope], dim=-1)  # [B, S, H, D]
+        if topk_indices is None:
+            cos, sin = position_embeddings
+            q = self.wq_b(q_resid)
+            q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)
+            q_pe, q_nope = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+            q_pe = apply_rotary_pos_emb_to_single(q_pe, cos, sin, unsqueeze_dim=2)
+            q = torch.cat([q_pe, q_nope], dim=-1)
 
-        # === Keys ===
-        k = self.k_norm(self.wk(hidden_states))  # [B, S, D]
-        k_pe, k_nope = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-        k_pe = apply_rotary_pos_emb(k_pe.unsqueeze(2), cos, sin, unsqueeze_dim=2).squeeze(2)  # [B, S, rope_D]
-        k = torch.cat([k_pe, k_nope], dim=-1)  # [B, S, D]
+            k = self.k_norm(self.wk(hidden_states))
+            k_pe, k_nope = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+            k_pe = apply_rotary_pos_emb_to_single(k_pe.unsqueeze(2), cos, sin, unsqueeze_dim=2).squeeze(2)
+            k = torch.cat([k_pe, k_nope], dim=-1)
+            k_cached = self._update_key_cache(k, past_key_values)
 
-        # === Key cache (managed by the indexer, not DynamicCache) ===
-        # Reset cache on prefill (new prompt) to avoid stale keys / batch-size mismatch
-        if seq_len > 1:
-            self._cached_keys = None
+            weights = self.weights_proj(hidden_states).float() * (self.n_heads**-0.5)
+            scores = torch.einsum("bshd,btd->bsht", q.float(), k_cached.float()) * self.softmax_scale
+            scores = F.relu(scores)
+            index_scores = torch.einsum("bsht,bsh->bst", scores, weights)
 
-        if use_cache:
-            if self._cached_keys is not None:
-                k_cached = torch.cat([self._cached_keys, k], dim=1)  # [B, T, D]
-            else:
-                k_cached = k
-            self._cached_keys = k_cached
-        else:
-            k_cached = k
+            score_mask = self._indexer_score_mask(attention_mask, index_scores.shape[-1])
+            if score_mask is not None:
+                index_scores = index_scores + score_mask
 
-        # === Scoring ===
-        # Reference: weights = weights_proj(x.float()) * n_heads^(-0.5)
-        # Reference: weights = weights.unsqueeze(-1) * q_scale * softmax_scale
-        # Reference: index_score = fp8_index(q_fp8, weights, k_cache, k_scale_cache)
-        #
-        # In bf16 mode (no FP8), q_scale = 1. The fp8_index kernel computes:
-        #   score[b,s,t] = sum_h(weights[b,s,h] * dot(q[b,s,h,:], k[b,t,:]))
-        # where weights already absorbs n_heads^(-0.5) and softmax_scale.
+            topk = min(self.index_topk, index_scores.shape[-1])
+            topk_indices = index_scores.topk(topk, dim=-1).indices
 
-        # Don't force fp32 inputs here: the checkpoint stores `weights_proj.weight` in bf16.
-        # Use native dtype for matmul, then upcast the result for scoring stability.
-        weights = self.weights_proj(hidden_states).float() * (self.n_heads**-0.5)  # [B, S, H]
+        attention_mask = self.build_attention_mask(
+            topk_indices,
+            attention_mask,
+            batch_size,
+            seq_len,
+            total_len,
+            mask_dtype,
+            hidden_states.device,
+        )
+        return topk_indices, attention_mask
 
-        # q·k^T per head: [B, S, H, D] @ [B, T, D]^T → [B, S, H, T]
-        scores = torch.einsum("bshd,btd->bsht", q.float(), k_cached.float()) * self.softmax_scale
-        scores = F.relu(scores)
-        # Weight per head and sum across heads → [B, S, T]
-        index_scores = torch.einsum("bsht,bsh->bst", scores, weights)
 
-        if attention_mask is not None:
-            index_scores = index_scores + attention_mask
-
-        total_len = index_scores.shape[-1]
-        topk = min(self.index_topk, total_len)
-        topk_indices = index_scores.topk(topk, dim=-1).indices  # [B, S, topk]
-        return topk_indices
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 def eager_attention_forward(
@@ -548,15 +593,6 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """Equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep)."""
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 class Glm5NextAttention(nn.Module):
@@ -658,41 +694,17 @@ class Glm5NextAttention(nn.Module):
         if self.indexer is not None:
             if q_resid is None:
                 raise ValueError("GLM-5-Next DSA indexer requires q_lora_rank to be set.")
-            if not self.skip_topk or prev_topk_indices is None:
-                indexer_mask = (
-                    attention_mask[:, 0, :, :]
-                    if attention_mask is not None and attention_mask.dim() == 4
-                    else attention_mask.unsqueeze(1)
-                    if attention_mask is not None
-                    else None
-                )
-                topk_indices = self.indexer(
-                    hidden_states,
-                    q_resid,
-                    position_embeddings,
-                    indexer_mask,
-                    use_cache=past_key_values is not None,
-                )
-            else:
-                topk_indices = prev_topk_indices
-
-            total_len = key_states.shape[2]
-            index_mask = torch.full(
-                (batch_size, seq_length, total_len),
-                float("-inf"),
-                device=hidden_states.device,
-                dtype=query_states.dtype,
+            reused_topk_indices = prev_topk_indices if self.skip_topk else None
+            topk_indices, attention_mask = self.indexer(
+                hidden_states,
+                q_resid,
+                position_embeddings,
+                attention_mask,
+                past_key_values=past_key_values,
+                mask_dtype=query_states.dtype,
+                total_len=key_states.shape[2],
+                topk_indices=reused_topk_indices,
             )
-            index_mask.scatter_(-1, topk_indices, 0.0)
-            index_mask = index_mask.unsqueeze(1)
-            if attention_mask is not None and attention_mask.dim() == 4:
-                attention_mask = index_mask + attention_mask[..., :total_len]
-            else:
-                attention_mask = (
-                    attention_mask.masked_fill(index_mask == float("-inf"), float("-inf"))
-                    if attention_mask is not None
-                    else index_mask
-                )
 
         # Flash attention head_dim padding
         if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
@@ -745,12 +757,19 @@ class Glm5NextRMSNorm(nn.Module):
 class Glm5NextMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
-        self.config = config
+        original_config = config
+        config = copy(config)
+        config.intermediate_size = (
+            original_config.intermediate_size if intermediate_size is None else intermediate_size
+        )
+        config.mlp_bias = False
+        config.hidden_act = "silu"
+        self.config = original_config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = nn.SiLU()
         self.swiglu_limit = getattr(config, "swiglu_limit", None)
 
@@ -764,44 +783,29 @@ class Glm5NextMLP(nn.Module):
 
 
 class Glm5NextTopkRouter(nn.Module):
-    def __init__(self, config: Glm5NextConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
-        self.top_k = config.num_experts_per_tok
         self.n_routed_experts = config.n_routed_experts
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
 
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros((self.n_routed_experts), dtype=torch.float32))
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
 
     def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        hidden_states = hidden_states.reshape(-1, self.config.hidden_size)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         return router_logits
 
 
-class Glm5NextExpert(nn.Module):
+class Glm5NextExpert(Glm5NextMLP):
     def __init__(self, config):
-        super().__init__()
-        self.gate_proj = nn.Linear(config.hidden_size, config.moe_intermediate_size, bias=False)
-        self.up_proj = nn.Linear(config.hidden_size, config.moe_intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.moe_intermediate_size, config.hidden_size, bias=False)
-        self.act_fn = nn.SiLU()
-        self.swiglu_limit = getattr(config, "swiglu_limit", None)
-
-    def forward(self, hidden_states):
-        gate = self.gate_proj(hidden_states)
-        up = self.up_proj(hidden_states)
-        if self.swiglu_limit is not None:
-            gate = gate.clamp(max=self.swiglu_limit)
-            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
-        return self.down_proj(self.act_fn(gate) * up)
+        super().__init__(config, intermediate_size=config.moe_intermediate_size)
 
 
 class Glm5NextNaiveMoe(nn.ModuleList):
+    # Per-expert ModuleList layout: GLM-5-Next checkpoints use separate
+    # `gate_proj`/`up_proj`/`down_proj` per expert (not Mixtral's fused
+    # `gate_up_proj`).
     def __init__(self, config):
         super().__init__([Glm5NextExpert(config) for _ in range(config.n_routed_experts)])
         self.num_experts = config.n_routed_experts
@@ -810,6 +814,9 @@ class Glm5NextNaiveMoe(nn.ModuleList):
 
     def forward(self, hidden_states, top_k_index, top_k_weights):
         final_hidden_states = torch.zeros_like(hidden_states)
+        if hidden_states.numel() == 0 or top_k_index.numel() == 0:
+            return final_hidden_states
+        top_k_weights = top_k_weights.to(device=hidden_states.device, dtype=hidden_states.dtype)
         with torch.no_grad():
             expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
             expert_mask = expert_mask.permute(2, 1, 0)
@@ -820,6 +827,8 @@ class Glm5NextNaiveMoe(nn.ModuleList):
             if expert_idx == self.num_experts:
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            if token_idx.numel() == 0:
+                continue
             current_state = hidden_states[token_idx]
             current_hidden_states = self[expert_idx](current_state)
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
@@ -829,6 +838,10 @@ class Glm5NextNaiveMoe(nn.ModuleList):
 
 
 class Glm5NextMoE(nn.Module):
+    """
+    A mixed expert module containing shared experts.
+    """
+
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -874,14 +887,9 @@ class Glm5NextMoE(nn.Module):
         orig_shape = hidden_states.shape
         router_logits = self.gate(hidden_states)
         topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
-        hidden_states = hidden_states + self.shared_experts(residuals)
-        return hidden_states
-
-
-def _collapse_hc_streams(hidden_states: torch.Tensor) -> torch.Tensor:
-    return hidden_states.mean(dim=2) if hidden_states.ndim == 4 else hidden_states
+        hidden_states = hidden_states.reshape(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).reshape(*orig_shape)
+        return hidden_states + self.shared_experts(residuals)
 
 
 # =============================================================================
@@ -944,7 +952,6 @@ class Glm5NextDecoderLayer(GradientCheckpointingLayer):
         if self.layer_idx == 0:
             hidden_states = hidden_states.unsqueeze(2).expand(-1, -1, self.hc_mult, -1).contiguous()
 
-        dtype = hidden_states.dtype
         h_post_attn, h_res_attn, attn_input = self.attn_hc(hidden_states)
         attn_input = self.input_layernorm(attn_input)
         attn_output, _, _ = self.self_attn(
@@ -956,18 +963,14 @@ class Glm5NextDecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             **kwargs,
         )
-        hidden_states = h_post_attn.to(dtype).unsqueeze(-1) * attn_output.unsqueeze(-2) + torch.matmul(
-            h_res_attn.to(dtype).transpose(-1, -2), hidden_states
-        )
+        hidden_states = self.attn_hc.apply_residual_update(h_post_attn, h_res_attn, hidden_states, attn_output)
 
         h_post_mlp, h_res_mlp, mlp_input = self.ffn_hc(hidden_states)
         mlp_input = self.post_attention_layernorm(mlp_input)
         mlp_output = self.mlp(mlp_input)
-        hidden_states = h_post_mlp.to(dtype).unsqueeze(-1) * mlp_output.unsqueeze(-2) + torch.matmul(
-            h_res_mlp.to(dtype).transpose(-1, -2), hidden_states
-        )
+        hidden_states = self.ffn_hc.apply_residual_update(h_post_mlp, h_res_mlp, hidden_states, mlp_output)
 
-        return hidden_states, _collapse_hc_streams(hidden_states)
+        return hidden_states, hidden_states.mean(dim=2) if hidden_states.ndim == 4 else hidden_states
 
 
 # =============================================================================
@@ -1003,9 +1006,10 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
         if isinstance(module, Glm5NextTopkRouter):
             nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             nn.init.zeros_(module.e_score_correction_bias)
-        elif isinstance(module, Glm5NextLinearAttention):
+        elif isinstance(module, Glm5NextForgetGate):
             nn.init.normal_(module.A_log, mean=0.0, std=0.02)
             nn.init.zeros_(module.dt_bias)
+        elif isinstance(module, Glm5NextLinearAttention):
             nn.init.ones_(module.o_norm.weight)
         elif isinstance(module, Glm5NextHyperConnection):
             nn.init.normal_(module.fn, mean=0.0, std=0.02)
@@ -1014,12 +1018,13 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
 
 
 class Glm5NextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: Glm5NextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
+
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]
@@ -1034,11 +1039,23 @@ class Glm5NextRotaryEmbedding(nn.Module):
     @staticmethod
     def compute_default_rope_parameters(
         config: Glm5NextConfig | None = None,
-        device: Optional["torch.device"] = None,
+        device: torch.device | None = None,
         seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    ) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
         base = config.rope_parameters["rope_theta"]
-        # Use qk_rope_head_dim for RoPE frequency computation
         head_dim = config.qk_rope_head_dim
         attention_factor = 1.0
         if head_dim == 0:
@@ -1050,18 +1067,13 @@ class Glm5NextRotaryEmbedding(nn.Module):
         return inv_freq, attention_factor
 
     @torch.no_grad()
-    @dynamic_rope_update
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        if self.inv_freq.numel() == 0:
-            shape = position_ids.shape + (0,)
-            empty = torch.empty(shape, device=x.device, dtype=x.dtype)
-            return empty, empty
-
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -1084,10 +1096,10 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
         self.norm = Glm5NextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Glm5NextRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-
         self.hc_mult = config.hc_mult
         self.hc_head = Glm5NextHyperHead()
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @merge_with_config_defaults
@@ -1110,7 +1122,7 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
             inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+            past_key_values = Glm5NextDynamicCache(config=self.config)
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1139,8 +1151,7 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
                 **kwargs,
             )
 
-        if self.hc_head is not None:
-            hidden_states = self.hc_head(hidden_states)
+        hidden_states = self.hc_head(hidden_states)
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -1148,16 +1159,13 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
         )
 
 
-def _has_kda_layers(config: Glm5NextConfig) -> bool:
-    linear_attn_config = getattr(config, "linear_attn_config", None) or {}
-    return bool(linear_attn_config.get("kda_layers"))
-
-
 @auto_docstring
 class Glm5NextForCausalLM(Glm5NextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_allgather"}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -1166,31 +1174,6 @@ class Glm5NextForCausalLM(Glm5NextPreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         self.post_init()
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids: torch.LongTensor,
-        next_sequence_length: int | None = None,
-        past_key_values: Cache | None = None,
-        attention_mask: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        is_first_iteration: bool | None = False,
-        **kwargs,
-    ):
-        if _has_kda_layers(self.config):
-            kwargs["use_cache"] = False
-            next_sequence_length = None
-            past_key_values = None
-
-        return super().prepare_inputs_for_generation(
-            input_ids=input_ids,
-            next_sequence_length=next_sequence_length,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
 
     @can_return_tuple
     @auto_docstring
@@ -1206,6 +1189,23 @@ class Glm5NextForCausalLM(Glm5NextPreTrainedModel, GenerationMixin):
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, Glm5NextForCausalLM
+
+        >>> model = Glm5NextForCausalLM.from_pretrained("meta-glm5_next/Glm5Next-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-glm5_next/Glm5Next-2-7b-hf")
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1217,6 +1217,7 @@ class Glm5NextForCausalLM(Glm5NextPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
@@ -1230,6 +1231,31 @@ class Glm5NextForCausalLM(Glm5NextPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: torch.LongTensor,
+        next_sequence_length: int | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        is_first_iteration: bool | None = False,
+        **kwargs,
+    ):
+        if bool((getattr(self.config, "linear_attn_config", None) or {}).get("kda_layers")):
+            kwargs["use_cache"] = False
+            next_sequence_length = None
+            past_key_values = None
+
+        return super().prepare_inputs_for_generation(
+            input_ids=input_ids,
+            next_sequence_length=next_sequence_length,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
         )
 
 

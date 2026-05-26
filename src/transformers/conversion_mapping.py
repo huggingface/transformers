@@ -1015,6 +1015,22 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_fn$", target_patterns=r"layers.\1.ffn_hc.fn"),
         WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_base$", target_patterns=r"layers.\1.ffn_hc.base"),
         WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_scale$", target_patterns=r"layers.\1.ffn_hc.scale"),
+        WeightRenaming(
+            source_patterns=r"^model\.layers\.(\d+)\.self_attn\.f_a_proj\.",
+            target_patterns=r"model.layers.\1.self_attn.forget_gate.f_a_proj.",
+        ),
+        WeightRenaming(
+            source_patterns=r"^model\.layers\.(\d+)\.self_attn\.f_b_proj\.",
+            target_patterns=r"model.layers.\1.self_attn.forget_gate.f_b_proj.",
+        ),
+        WeightRenaming(
+            source_patterns=r"^model\.layers\.(\d+)\.self_attn\.dt_bias$",
+            target_patterns=r"model.layers.\1.self_attn.forget_gate.dt_bias",
+        ),
+        WeightRenaming(
+            source_patterns=r"^model\.layers\.(\d+)\.self_attn\.A_log$",
+            target_patterns=r"model.layers.\1.self_attn.forget_gate.A_log",
+        ),
     ]
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
