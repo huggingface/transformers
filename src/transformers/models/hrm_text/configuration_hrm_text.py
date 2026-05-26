@@ -140,10 +140,14 @@ class HrmTextConfig(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.hidden_size % self.num_attention_heads != 0:
+        # When head_dim is derived (not user-supplied), hidden_size must be exactly divisible
+        # by num_attention_heads so that head_dim = hidden_size / num_attention_heads is lossless.
+        # When head_dim is supplied explicitly the attention projections are sized from
+        # num_attention_heads * head_dim, so the divisibility constraint does not apply.
+        if self.hidden_size % self.num_attention_heads != 0 and not self._head_dim_was_explicit:
             raise ValueError(
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({self.num_attention_heads})."
+                f"heads ({self.num_attention_heads}). Pass an explicit `head_dim` to override."
             )
 
     @property

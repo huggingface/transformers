@@ -101,6 +101,10 @@ class ArceeConfig(PreTrainedConfig):
     head_dim: int | None = None
 
     def __post_init__(self, **kwargs):
+        # Track whether head_dim was supplied by the caller before we derive a fallback.
+        # validate_architecture uses this to skip the hidden_size divisibility check when
+        # the caller has explicitly defined the per-head dimension.
+        self._head_dim_was_explicit = self.head_dim is not None
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
@@ -110,10 +114,14 @@ class ArceeConfig(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.hidden_size % self.num_attention_heads != 0:
+        # When head_dim is derived (not user-supplied), hidden_size must be exactly divisible
+        # by num_attention_heads so that head_dim = hidden_size / num_attention_heads is lossless.
+        # When head_dim is supplied explicitly the attention projections are sized from
+        # num_attention_heads * head_dim, so the divisibility constraint does not apply.
+        if self.hidden_size % self.num_attention_heads != 0 and not self._head_dim_was_explicit:
             raise ValueError(
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({self.num_attention_heads})."
+                f"heads ({self.num_attention_heads}). Pass an explicit `head_dim` to override."
             )
 
 
