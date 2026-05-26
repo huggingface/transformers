@@ -325,6 +325,24 @@ apply the transform per element. Each array element's keys are unpacked into the
 },
 ```
 
+This will convert an output like this:
+
+```json
+[
+    {"tool_name": "greet_user", "parameters": {"greeting": "Hi!"}},
+    {"tool_name": "search", "parameters": {"query": "weather tomorrow"}}
+]
+```
+
+Into an output like this, which fits our standard API:
+
+```json
+[
+    {"type": "function", "function": {"name": "greet_user", "arguments": {"greeting": "Hi!"}}},
+    {"type": "function", "function": {"name": "search", "arguments": {"query": "weather tomorrow"}}}
+]
+```
+
 The `transform_each` flag is only needed when `content` is already a list; for the more common case where each
 match contributes one element (and `repeats: True` accumulates them), then the transform will apply to each element
 by default.
