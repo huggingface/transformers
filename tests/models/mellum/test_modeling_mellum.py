@@ -19,6 +19,7 @@ from parameterized import parameterized
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_torch,
     require_torch_accelerator,
@@ -42,11 +43,17 @@ class MellumModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = MellumModel
 
+    def __init__(self, parent):
+        super().__init__(parent=parent)
+        # Override for the TP plan tests.
+        self.mlp_layer_types = ["dense", "sparse"]
+
 
 @require_torch
 class MellumModelTest(CausalLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     model_tester_class = MellumModelTester
+    model_split_percents = [0.5, 0.8, 0.9]
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip("RoPE-scaling-from-config test doesn't match Mellum's nested per-layer-type rope_parameters.")
@@ -54,6 +61,7 @@ class MellumModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     def test_model_rope_scaling_frequencies(self):
+        # Copied from Gemma3
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         config.layer_types = ["full_attention", "sliding_attention"]
 
@@ -158,9 +166,7 @@ class MellumModelTest(CausalLMModelTest, unittest.TestCase):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
     def test_load_balancing_loss(self):
-        r"""
-        Let's make sure we can actually compute the loss and do a backward on it.
-        """
+        # Copied from Qwen3-Moe
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.num_experts = 3
@@ -180,7 +186,6 @@ class MellumModelTest(CausalLMModelTest, unittest.TestCase):
             atol=1e-2,
         )
 
-        # First, we make sure that adding padding tokens doesn't change the loss
         pad_length = input_ids.shape[1] * 4
         padding_block = torch.ones(input_ids.shape[0], pad_length, dtype=torch.int32).to(torch_device)
         padded_input_ids = torch.cat((padding_block, input_ids), dim=1)
@@ -189,9 +194,7 @@ class MellumModelTest(CausalLMModelTest, unittest.TestCase):
         padded_result = model(padded_input_ids, attention_mask=padded_attention_mask)
         torch.testing.assert_close(result.aux_loss.cpu(), padded_result.aux_loss.cpu(), rtol=1e-4, atol=1e-4)
 
-        # We make sure that the loss of including padding tokens != the loss without padding tokens
         include_padding_result = model(padded_input_ids, attention_mask=None)
-
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
 
@@ -208,7 +211,14 @@ class MellumIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     def test_model_generation(self):
-        model = MellumForCausalLM.from_pretrained(self.checkpoint, torch_dtype=torch.bfloat16, device_map="auto")
+        expected_texts = Expectations(
+            {
+                ("cuda", 8): "def fibonacci(n):\n    if n == 0:\n        return 0\n    elif n == 1:\n        return 1\n    else:\n       ",
+            }
+        )  # fmt: skip
+        expected_text = expected_texts.get_expectation()
+
+        model = MellumForCausalLM.from_pretrained(self.checkpoint, dtype=torch.bfloat16, device_map="auto")
         tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
 
         prompt = "def fibonacci(n):"
@@ -217,5 +227,4 @@ class MellumIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=32, do_sample=False)
         output = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
-        self.assertTrue(len(output) > len(prompt))
-        self.assertTrue(output.startswith(prompt))
+        self.assertEqual(output, expected_text)

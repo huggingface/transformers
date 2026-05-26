@@ -29,8 +29,9 @@ from ...utils import auto_docstring
 @strict
 class MellumConfig(PreTrainedConfig):
     r"""
-    mlp_only_layers (`list[int]`, *optional*, defaults to `[]`):
-        Layers that use a dense MLP instead of a sparse MoE block.
+    mlp_layer_types (`list[str]`, *optional*):
+        Per-layer MLP type — `"dense"` or `"sparse"`. Length must equal
+        `num_hidden_layers`. Defaults to all sparse.
 
     ```python
     >>> from transformers import MellumModel, MellumConfig
@@ -94,24 +95,24 @@ class MellumConfig(PreTrainedConfig):
     attention_bias: bool = False
     sliding_window: int | None = 1024
     attention_dropout: float | int = 0.0
-    decoder_sparse_step: int = 1
     moe_intermediate_size: int = 896
     num_experts_per_tok: int = 8
     num_experts: int = 64
     norm_topk_prob: bool = True
     output_router_logits: bool = False
     router_aux_loss_coef: float = 0.001
-    mlp_only_layers: list[int] | None = None
     pad_token_id: int | None = None
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
     head_dim: int = 128
     layer_types: list[str] | None = None
+    mlp_layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
             self.layer_types = ["full_attention"] * self.num_hidden_layers
-        self.mlp_only_layers = [] if self.mlp_only_layers is None else self.mlp_only_layers
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = ["sparse"] * self.num_hidden_layers
 
         if self.rope_parameters is None:
             self.rope_parameters = {
@@ -127,6 +128,19 @@ class MellumConfig(PreTrainedConfig):
     def convert_rope_params_to_dict(self, **kwargs):
         # No need to handle BC for new models, because they have no old-format `rope_scaling`
         return kwargs
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation."""
+        if len(self.layer_types) != self.num_hidden_layers:
+            raise ValueError(
+                f"layer_types length ({len(self.layer_types)}) "
+                f"must equal num_hidden_layers ({self.num_hidden_layers})."
+            )
+        if len(self.mlp_layer_types) != self.num_hidden_layers:
+            raise ValueError(
+                f"mlp_layer_types length ({len(self.mlp_layer_types)}) "
+                f"must equal num_hidden_layers ({self.num_hidden_layers})."
+            )
 
 
 __all__ = ["MellumConfig"]

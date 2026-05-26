@@ -28,7 +28,10 @@ from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeAttention,
     Qwen3MoeDecoderLayer,
     Qwen3MoeForCausalLM,
+    Qwen3MoeMLP,
     Qwen3MoePreTrainedModel,
+    Qwen3MoeRMSNorm,
+    Qwen3MoeSparseMoeBlock,
 )
 
 
@@ -39,8 +42,9 @@ logger = logging.get_logger(__name__)
 @strict
 class MellumConfig(Qwen3MoeConfig):
     r"""
-    mlp_only_layers (`list[int]`, *optional*, defaults to `[]`):
-        Layers that use a dense MLP instead of a sparse MoE block.
+    mlp_layer_types (`list[str]`, *optional*):
+        Per-layer MLP type — `"dense"` or `"sparse"`. Length must equal
+        `num_hidden_layers`. Defaults to all sparse.
 
     ```python
     >>> from transformers import MellumModel, MellumConfig
@@ -64,14 +68,18 @@ class MellumConfig(Qwen3MoeConfig):
     moe_intermediate_size: int = 896
     norm_topk_prob: bool = True
     layer_types: list[str] | None = None
+    mlp_layer_types: list[str] | None = None
     rope_parameters: dict | RopeParameters | None = None
 
     use_sliding_window = AttributeError()
+    decoder_sparse_step = AttributeError()
+    mlp_only_layers = AttributeError()
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
             self.layer_types = ["full_attention"] * self.num_hidden_layers
-        self.mlp_only_layers = [] if self.mlp_only_layers is None else self.mlp_only_layers
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = ["sparse"] * self.num_hidden_layers
 
         if self.rope_parameters is None:
             self.rope_parameters = {
@@ -89,6 +97,19 @@ class MellumConfig(Qwen3MoeConfig):
         # No need to handle BC for new models, because they have no old-format `rope_scaling`
         return kwargs
 
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation."""
+        if len(self.layer_types) != self.num_hidden_layers:
+            raise ValueError(
+                f"layer_types length ({len(self.layer_types)}) "
+                f"must equal num_hidden_layers ({self.num_hidden_layers})."
+            )
+        if len(self.mlp_layer_types) != self.num_hidden_layers:
+            raise ValueError(
+                f"mlp_layer_types length ({len(self.mlp_layer_types)}) "
+                f"must equal num_hidden_layers ({self.num_hidden_layers})."
+            )
+
 
 class MellumRotaryEmbedding(LagunaRotaryEmbedding):
     pass
@@ -100,8 +121,29 @@ class MellumAttention(Qwen3MoeAttention):
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
 
-class MellumDecoderLayer(Qwen3MoeDecoderLayer):
+class MellumMLP(Qwen3MoeMLP):
     pass
+
+
+class MellumSparseMoeBlock(Qwen3MoeSparseMoeBlock):
+    pass
+
+
+class MellumRMSNorm(Qwen3MoeRMSNorm):
+    pass
+
+
+class MellumDecoderLayer(Qwen3MoeDecoderLayer):
+    def __init__(self, config: MellumConfig, layer_idx: int):
+        torch.nn.Module.__init__(self)
+        self.hidden_size = config.hidden_size
+        self.self_attn = MellumAttention(config, layer_idx)
+        if config.mlp_layer_types[layer_idx] == "sparse":
+            self.mlp = MellumSparseMoeBlock(config)
+        else:
+            self.mlp = MellumMLP(config, intermediate_size=config.intermediate_size)
+        self.input_layernorm = MellumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MellumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class MellumPreTrainedModel(Qwen3MoePreTrainedModel):
