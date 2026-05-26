@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # SLANeXt
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -39,13 +36,15 @@ The example below demonstrates how to detect text with PP-OCRV5_Mobile_Det using
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForTableRecognition
 
+
 model_path="PaddlePaddle/SLANeXt_wired_safetensors"
-model = AutoModelForTableRecognition.from_pretrained(model_path, dtype=torch.float32, device_map="auto")
+model = AutoModelForTableRecognition.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/table_recognition.jpg", stream=True).raw)

@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 # Data2Vec
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -67,9 +66,11 @@ SDPA is used by default for `torch>=2.1.1` when an implementation is available, 
 
 The SDPA implementation is currently available for the Data2VecAudio and Data2VecVision models.
 
-```py
+```python
 from transformers import Data2VecVisionForImageClassification
-model = Data2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base", attn_implementation="sdpa", dtype=torch.float16)
+
+
+model = Data2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base", attn_implementation="sdpa", device_map="auto")
 ...
 ```
 

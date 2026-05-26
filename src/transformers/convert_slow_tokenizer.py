@@ -657,7 +657,7 @@ class SpmConverter(Converter):
                     dropout=None,
                 )
             )
-        elif isinstance(vocab, list) and vocab and isinstance(vocab[0], (tuple, list)):
+        elif isinstance(vocab, list) and vocab and isinstance(vocab[0], tuple | list):
             tokenizer = Tokenizer(
                 Unigram(
                     vocab=vocab,
@@ -1842,8 +1842,8 @@ class ParakeetConverter(SpmConverter):
     def tokenizer(self, proto):
         vocab_scores = self.vocab(proto)
 
-        _, merges = self.SpmExtractor(self.vocab_file).extract(vocab_scores)
         bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
+        merges = generate_merges(bpe_vocab, vocab_scores)
         tokenizer = Tokenizer(
             BPE(
                 bpe_vocab,

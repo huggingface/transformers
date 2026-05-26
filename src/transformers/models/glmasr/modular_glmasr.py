@@ -29,6 +29,7 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
+    AudioFlamingo3Model,
     AudioFlamingo3MultiModalProjector,
     AudioFlamingo3PreTrainedModel,
 )
@@ -49,31 +50,8 @@ logger = logging.get_logger(__name__)
 class GlmAsrProcessorKwargs(AudioFlamingo3ProcessorKwargs): ...
 
 
+@auto_docstring
 class GlmAsrProcessor(AudioFlamingo3Processor):
-    r"""
-    Constructs an GlmAsr processor which wraps an GlmAsr feature extractor and an GlmAsr
-    tokenizer into a single processor.
-
-    [`GlmAsrProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`] and
-    [`Qwen2TokenizerFast`]. See the [`~GlmAsrProcessor.__call__`] for more information.
-
-    Args:
-            feature_extractor ([`WhisperFeatureExtractor`]):
-                The feature extractor is a required input.
-            tokenizer ([`Qwen2TokenizerFast`]):
-                The tokenizer is a required input.
-            chat_template (`Optional[str]`, *optional*):
-                The Jinja template to use for formatting the conversation. If not provided, the tokenizer's default chat
-                template will be used.
-            audio_token (`Optional[str]`, *optional*, defaults to `"<|pad|>`"):
-                Special token used to represent audio inputs in the chat template.
-            default_transcription_prompt (`str`, *optional*, defaults to `"Please transcribe this audio into text"`):
-                Default prompt to use for transcription tasks when applying transcription requests.
-            max_audio_len (`int`, *optional*, defaults to 655):
-                Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
-                655 gives approximately 8192 tokens, corresponding to the maximum sequence length of the text model.
-    """
-
     def __init__(
         self,
         feature_extractor,
@@ -83,6 +61,15 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
         default_transcription_prompt="Please transcribe this audio into text",
         max_audio_len=655,
     ):
+        r"""
+        audio_token (`Optional[str]`, *optional*, defaults to `"<|pad|>`"):
+            Special token used to represent audio inputs in the chat template.
+        default_transcription_prompt (`str`, *optional*, defaults to `"Please transcribe this audio into text"`):
+            Default prompt to use for transcription tasks when applying transcription requests.
+        max_audio_len (`int`, *optional*, defaults to 655):
+            Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
+            655 gives approximately 8192 tokens, corresponding to the maximum sequence length of the text model.
+        """
         super().__init__(
             feature_extractor,
             tokenizer,
@@ -356,7 +343,7 @@ class GlmAsrMultiModalProjector(AudioFlamingo3MultiModalProjector):
     The GlmAsr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Llama language model.
     """
 )
-class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
+class GlmAsrModel(AudioFlamingo3Model):
     @can_return_tuple
     @auto_docstring(
         custom_intro="Compute audio embeddings from log-mel input features using the audio encoder and multi-modal projector."
@@ -384,6 +371,18 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         audio_outputs.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
 
         return audio_outputs
+
+
+@auto_docstring(
+    custom_intro="""
+    The GlmAsr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Llama language model.
+    """
+)
+class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = GlmAsrModel(config)
+        self.post_init()
 
     def forward(
         self,
@@ -440,4 +439,10 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         )
 
 
-__all__ = ["GlmAsrEncoder", "GlmAsrForConditionalGeneration", "GlmAsrProcessor", "GlmAsrPreTrainedModel"]
+__all__ = [
+    "GlmAsrEncoder",
+    "GlmAsrForConditionalGeneration",
+    "GlmAsrModel",
+    "GlmAsrProcessor",
+    "GlmAsrPreTrainedModel",
+]

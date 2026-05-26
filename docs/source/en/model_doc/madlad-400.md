@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # MADLAD-400
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -43,14 +40,15 @@ This is a machine translation model that supports many low-resource languages, a
 One can directly use MADLAD-400 weights without finetuning the model:
 
 ```python
->>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
->>> model = AutoModelForSeq2SeqLM.from_pretrained("google/madlad400-3b-mt")
->>> tokenizer = AutoTokenizer.from_pretrained("google/madlad400-3b-mt")
 
->>> inputs = tokenizer("<2pt> I love pizza!", return_tensors="pt")
->>> outputs = model.generate(**inputs)
->>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
+model = AutoModelForSeq2SeqLM.from_pretrained("google/madlad400-3b-mt", device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("google/madlad400-3b-mt")
+
+inputs = tokenizer("<2pt> I love pizza!", return_tensors="pt").to(model.device)
+outputs = model.generate(**inputs)
+print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ['Eu amo pizza!']
 ```
 

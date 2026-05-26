@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # Granite Speech
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -50,14 +47,14 @@ Granite Speech is a multimodal speech-to-text model that can transcribe audio an
 ### Basic Speech Transcription
 
 ```python
+from datasets import Audio, load_dataset
+
 from transformers import GraniteSpeechForConditionalGeneration, GraniteSpeechProcessor
-from datasets import load_dataset, Audio
-import torch
+
 
 # Load model and processor
 model = GraniteSpeechForConditionalGeneration.from_pretrained(
     "ibm-granite/granite-3.2-8b-speech",
-    torch_dtype=torch.bfloat16,
     device_map="auto"
 )
 processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-speech")
@@ -81,13 +78,13 @@ print(transcription)
 For instruction-following with audio, use the chat template with audio directly in the conversation format:
 
 ```python
+from datasets import Audio, load_dataset
+
 from transformers import GraniteSpeechForConditionalGeneration, GraniteSpeechProcessor
-from datasets import load_dataset, Audio
-import torch
+
 
 model = GraniteSpeechForConditionalGeneration.from_pretrained(
     "ibm-granite/granite-3.2-8b-speech",
-    torch_dtype=torch.bfloat16,
     device_map="auto"
 )
 processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-speech")
@@ -122,13 +119,13 @@ print(output_text)
 Process multiple audio files efficiently:
 
 ```python
+from datasets import Audio, load_dataset
+
 from transformers import GraniteSpeechForConditionalGeneration, GraniteSpeechProcessor
-from datasets import load_dataset, Audio
-import torch
+
 
 model = GraniteSpeechForConditionalGeneration.from_pretrained(
     "ibm-granite/granite-3.2-8b-speech",
-    torch_dtype=torch.bfloat16,
     device_map="auto"
 )
 processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-speech")
@@ -165,6 +162,11 @@ for i, transcription in enumerate(transcriptions):
 ## GraniteSpeechFeatureExtractor
 
 [[autodoc]] GraniteSpeechFeatureExtractor
+
+## GraniteSpeechModel
+
+[[autodoc]] GraniteSpeechModel
+    - forward
 
 ## GraniteSpeechForConditionalGeneration
 
