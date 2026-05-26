@@ -508,6 +508,14 @@ class Trainer:
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.can_return_loss = can_return_loss(model_to_inspect.__class__)
 
+        # Causal LM losses shift labels internally (predictions at position i target label[i+1]), so position 0 of
+        # each row is never a prediction target. The valid-prediction count used by `num_items_in_batch` must therefore
+        # be taken over `labels[..., 1:]`, not the full label tensor
+        self._loss_shifts_labels = getattr(model_to_inspect, "loss_type", None) in (
+            "ForCausalLM",
+            "ForConditionalGeneration",
+        )
+
         if self.args.label_smoothing_factor != 0:
             if getattr(self.model.config, "problem_type", None) == "multi_label_classification":
                 warnings.warn(
@@ -2133,7 +2141,13 @@ class Trainer:
         if count_num_items_in_batch:
             # For now we don't support object detection
             try:
-                num_items_in_batch = sum((batch["labels"].ne(-100)).sum() for batch in batch_samples)
+                # Causal LM losses shift labels; count over `labels[..., 1:]` to avoid over-counting position 0.
+                labels_for_count = (
+                    [batch["labels"][..., 1:] for batch in batch_samples]
+                    if self._loss_shifts_labels
+                    else [batch["labels"] for batch in batch_samples]
+                )
+                num_items_in_batch = sum(labels.ne(-100).sum() for labels in labels_for_count)
             except (TypeError, AttributeError):
                 pass
 
