@@ -105,10 +105,15 @@ def ensure_decode_fast_path_is_available(
     # Then, if the decode fast path is not turned off, check if it is available
     if cb_config.max_blocks_per_request != 0:
         # NOTE: For CUDA, block table should be available with FA2 and FA3, but there seems to be an issue with FA2 atm
-        if is_flash_attention_requested(config, version=3):
+        cuda_available = torch.cuda.is_available()
+        fa_cuda = is_flash_attention_requested(config, version=3) and cuda_available
+        # XPU support is given through its kernel variation `kernels-community/flash-attn2`
+        xpu_available = is_torch_xpu_available()
+        fa_xpu = is_flash_attention_requested(config, version=2) and xpu_available
+        if fa_cuda or fa_xpu:
             flash_attn_with_kvcache = lazy_import_paged_flash_attention(config._attn_implementation)[1]
             conditions = [
-                torch.cuda.is_available(),  # Block table is only supported on CUDA
+                fa_cuda or fa_xpu,  # Block table is only supported on these
                 flash_attn_with_kvcache is not None,  # The `flash_attn_with_kvcache` fn is needed
             ]
             # Throw a warning only if the decode fast path was requested by the user
@@ -119,25 +124,15 @@ def ensure_decode_fast_path_is_available(
                         f"because at least one condition is not met: {conditions}."
                     )
                 cb_config.max_blocks_per_request = 0
-        elif torch.xpu.is_available() and is_flash_attention_requested(config, version=2):
-            flash_attn_with_kvcache = lazy_import_paged_flash_attention(config._attn_implementation)[1]
-            conditions = [
-                is_torch_xpu_available(),  # Block table is supported on XPU through kernels-community/flash-attn2
-                flash_attn_with_kvcache is not None,
-            ]
-            if not all(conditions):
-                if user_requested:
-                    logger.warning(
-                        f"Although {cb_config.max_blocks_per_request = }, the decode fast path is not available "
-                        f"because at least one condition is not met: {conditions}."
-                    )
-                cb_config.max_blocks_per_request = 0
-        # Specific warning for attn implementation other than FA3
+        # Specific warning for unsupported attention implementation/device combinations
         else:
             if user_requested:
                 logger.warning(
                     f"Although {cb_config.max_blocks_per_request = }, the decode fast path is not available "
-                    f"because the attention implementation is not FA3. Got {config._attn_implementation = }."
+                    "because the attention implementation and device combination is not supported. Supported "
+                    "combinations are Flash Attention 3 on CUDA, or Flash Attention 2 on XPU through "
+                    "`kernels-community/flash-attn2`. "
+                    f"Got {config._attn_implementation = }, {cuda_available = }, {xpu_available = }."
                 )
             cb_config.max_blocks_per_request = 0
 
