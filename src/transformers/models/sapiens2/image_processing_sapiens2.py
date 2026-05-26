@@ -57,28 +57,66 @@ class Sapiens2ImageProcessorKwargs(ImagesKwargs, total=False):
     do_reduce_labels: bool
 
 
-def box_to_center_and_scale(bbox: torch.Tensor, padding: float = 1.25) -> tuple[torch.Tensor, torch.Tensor]:
-    """Convert COCO bbox (x, y, w, h) to center and scale for affine warp."""
-    x, y, width, height = bbox
-    center = torch.stack([x + width * 0.5, y + height * 0.5])
-    scale = torch.stack([width * padding, height * padding])
+def box_xywh_to_cxcywh(x):
+    x, y, w, h = x.unbind(-1)
+    b = [(x + 0.5 * w), (y + 0.5 * h), (w), (h)]
+    return torch.stack(b, dim=-1)
+
+
+def cxcywh_to_crop_params(
+    bbox_cxcywh: torch.Tensor,
+    output_size: tuple[int, int],
+    padding: float = 1.25,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Compute crop center and scale from a cxcywh bbox, applying padding and aspect ratio correction.
+
+    Accepts either a single box `(4,)` or a batch `(N, 4)` and returns center/scale with a matching
+    leading dimension.
+    """
+    center_x, center_y, bbox_w, bbox_h = bbox_cxcywh.unbind(-1)
+    center = torch.stack([center_x, center_y], dim=-1)
+    scale_w, scale_h = bbox_w * padding, bbox_h * padding
+    output_height, output_width = output_size
+    aspect_ratio = output_width / output_height
+    scale = torch.where(
+        (scale_w > scale_h * aspect_ratio)[..., None],
+        torch.stack([scale_w, scale_w / aspect_ratio], dim=-1),
+        torch.stack([scale_h * aspect_ratio, scale_h], dim=-1),
+    )
     return center, scale
 
 
 def crop_and_resize(
     image: torch.Tensor,
-    bbox_center: torch.Tensor,
-    bbox_scale: torch.Tensor,
+    bbox_cxcywh: torch.Tensor,
     output_size: tuple[int, int],
+    padding: float = 1.25,
 ) -> torch.Tensor:
-    """Crop and resize a CHW uint8 tensor around a bounding box center to output_size (height, width).
+    """Crops and resizes a bbox region from the input image to the target output size.
 
+    Applies padding and aspect ratio correction to the crop before resizing.
     Uses bilinear interpolation for downscaling and bicubic for upscaling.
+
+    This implementation is equivalent to the cv2 affine warp with rotation=0 used in the original
+    Sapiens2 codebase. Rotation is always zero because we don't support rotated bounding boxes.
+
+    Args:
+        image (`torch.Tensor`): Input image tensor of shape `(C, H, W)` in float32.
+        bbox_cxcywh (`torch.Tensor`): Bounding box in (center-x, center-y, width, height) format,
+            shape `(4,)`, with values in pixel coordinates.
+        output_size (`tuple[int, int]`): Target output size as `(height, width)`.
+        padding (`float`, *optional*, defaults to `1.25`): Multiplicative factor applied to the
+            bounding box dimensions before cropping, adding context around the region of interest.
+
+    Returns:
+        `torch.Tensor`: Cropped and resized image of shape `(C, output_height, output_width)`.
     """
     output_height, output_width = output_size
     input_height, input_width = image.shape[-2:]
-    center_x, center_y = bbox_center
-    bbox_w, bbox_h = bbox_scale
+    center, scale = cxcywh_to_crop_params(bbox_cxcywh, output_size, padding)
+    center_x, center_y = center
+    bbox_w, bbox_h = scale
+
     scale_x = (output_width - 1) / bbox_w
     scale_y = (output_height - 1) / bbox_h
     mode = "bilinear" if min(scale_x, scale_y) < 1.0 else "bicubic"
@@ -94,8 +132,13 @@ def crop_and_resize(
         [2.0 * in_x / (input_width - 1) - 1.0, 2.0 * in_y / (input_height - 1) - 1.0], dim=-1
     ).unsqueeze(0)
 
-    output = F.grid_sample(image.float().unsqueeze(0), grid, mode=mode, padding_mode="zeros", align_corners=True)
-    return output.squeeze(0).clamp(0, 255).round().byte()
+    return F.grid_sample(
+        image.unsqueeze(0),
+        grid,
+        mode=mode,
+        padding_mode="zeros",
+        align_corners=True,
+    ).squeeze(0)
 
 
 def torchvision_gaussian_blur(heatmaps: torch.Tensor, kernel: int = 11) -> torch.Tensor:
@@ -122,68 +165,91 @@ def torchvision_gaussian_blur(heatmaps: torch.Tensor, kernel: int = 11) -> torch
     return result * scale[:, None, None]
 
 
-def fix_aspect_ratio(scale: torch.Tensor, width: int, height: int) -> torch.Tensor:
-    """Adjust scale so the crop aspect ratio matches the given width/height."""
-    aspect_ratio = width / height
-    scale_width, scale_height = scale[0], scale[1]
-    return torch.where(
-        scale_width > scale_height * aspect_ratio,
-        torch.stack([scale_width, scale_width / aspect_ratio]),
-        torch.stack([scale_height * aspect_ratio, scale_height]),
+def get_keypoint_predictions(heatmaps: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Predict keypoint locations and confidence scores from heatmaps.
+
+    Args:
+        heatmaps: Shape `(num_persons, num_keypoints, height, width)`.
+
+    Returns:
+        locations: `(num_persons, num_keypoints, 2)` x/y in heatmap pixel coordinates.
+        scores: `(num_persons, num_keypoints)` per-keypoint confidence.
+    """
+    num_persons, num_keypoints, _, heatmap_width = heatmaps.shape
+    device = heatmaps.device
+    heatmap_flat = heatmaps.reshape(num_persons, num_keypoints, -1)
+    scores = heatmap_flat.amax(dim=-1)
+    flat_index = heatmap_flat.argmax(dim=-1)
+    locations_x = (flat_index % heatmap_width).float()
+    locations_y = (flat_index // heatmap_width).float()
+    locations = torch.where(
+        scores.unsqueeze(-1) > 0.0,
+        torch.stack([locations_x, locations_y], dim=-1),
+        torch.full((num_persons, num_keypoints, 2), -1.0, device=device),
     )
+    return locations, scores
 
 
 def post_dark_unbiased_data_processing(
     keypoints: torch.Tensor, heatmaps: torch.Tensor, blur_kernel_size: int = 11
 ) -> torch.Tensor:
-    """Sub-pixel refinement via Hessian on log-heatmaps (UDP Dark Pose). In-place, returns keypoints."""
-    num_persons, num_keypoints = keypoints.shape[:2]
-    heatmap_height, heatmap_width = heatmaps.shape[1:]
+    """Sub-pixel refinement via Hessian on log-heatmaps (UDP Dark Pose).
+
+    Args:
+        keypoints: Shape `(num_persons, num_keypoints, 2)` x/y in heatmap pixel coordinates.
+        heatmaps: Shape `(num_persons, num_keypoints, height, width)`.
+
+    Returns:
+        `(num_persons, num_keypoints, 2)` refined keypoint locations.
+    """
+    num_persons, num_keypoints, heatmap_height, heatmap_width = heatmaps.shape
     device = heatmaps.device
 
-    heatmaps = torchvision_gaussian_blur(heatmaps, blur_kernel_size)
+    heatmaps = torchvision_gaussian_blur(
+        heatmaps.reshape(num_persons * num_keypoints, heatmap_height, heatmap_width), blur_kernel_size
+    ).reshape(num_persons, num_keypoints, heatmap_height, heatmap_width)
     heatmaps = heatmaps.clamp(1e-3, 50.0).log()
 
-    heatmaps_padded = F.pad(heatmaps.unsqueeze(0), (1, 1, 1, 1), mode="replicate").squeeze(0)
+    heatmaps_padded = F.pad(heatmaps, (1, 1, 1, 1), mode="replicate")
     heatmaps_flattened = heatmaps_padded.flatten()
 
-    for person_index in range(num_persons):
-        index = (
-            keypoints[person_index, :, 0].long() + 1 + (keypoints[person_index, :, 1].long() + 1) * (heatmap_width + 2)
-        )
-        index = index + (heatmap_width + 2) * (heatmap_height + 2) * torch.arange(
-            num_keypoints, device=device, dtype=torch.long
-        )
-        index = index.unsqueeze(1)  # (num_keypoints, 1)
-        value_center = heatmaps_flattened[index]
-        value_right = heatmaps_flattened[index + 1]
-        value_below = heatmaps_flattened[index + heatmap_width + 2]
-        value_right_below = heatmaps_flattened[index + heatmap_width + 3]
-        value_left_above = heatmaps_flattened[index - heatmap_width - 3]
-        value_left = heatmaps_flattened[index - 1]
-        value_above = heatmaps_flattened[index - 2 - heatmap_width]
+    keypoint_stride = (heatmap_height + 2) * (heatmap_width + 2)
+    person_stride = num_keypoints * keypoint_stride
 
-        gradient_x = 0.5 * (value_right - value_left)
-        gradient_y = 0.5 * (value_below - value_above)
-        derivative = torch.cat([gradient_x, gradient_y], dim=1).reshape(num_keypoints, 2, 1)
+    index = keypoints[:, :, 0].long() + 1 + (keypoints[:, :, 1].long() + 1) * (heatmap_width + 2)
+    index = index + keypoint_stride * torch.arange(num_keypoints, device=device, dtype=torch.long)[None, :]
+    index = index + person_stride * torch.arange(num_persons, device=device, dtype=torch.long)[:, None]
+    index = index.unsqueeze(-1)  # (num_persons, num_keypoints, 1)
 
-        hessian_xx = value_right - 2 * value_center + value_left
-        hessian_yy = value_below - 2 * value_center + value_above
-        hessian_xy = 0.5 * (
-            value_right_below
-            - value_right
-            - value_below
-            + value_center
-            + value_center
-            - value_left
-            - value_above
-            + value_left_above
-        )
-        hessian = torch.cat([hessian_xx, hessian_xy, hessian_xy, hessian_yy], dim=1).reshape(num_keypoints, 2, 2)
-        hessian = torch.linalg.inv(hessian + torch.finfo(torch.float32).eps * torch.eye(2, device=device))
-        keypoints[person_index] -= (hessian @ derivative).squeeze()
+    value_center = heatmaps_flattened[index]
+    value_right = heatmaps_flattened[index + 1]
+    value_below = heatmaps_flattened[index + heatmap_width + 2]
+    value_right_below = heatmaps_flattened[index + heatmap_width + 3]
+    value_left_above = heatmaps_flattened[index - heatmap_width - 3]
+    value_left = heatmaps_flattened[index - 1]
+    value_above = heatmaps_flattened[index - heatmap_width - 2]
 
-    return keypoints
+    gradient_x = 0.5 * (value_right - value_left)
+    gradient_y = 0.5 * (value_below - value_above)
+    derivative = torch.cat([gradient_x, gradient_y], dim=-1).reshape(num_persons, num_keypoints, 2, 1)
+
+    hessian_xx = value_right - 2 * value_center + value_left
+    hessian_yy = value_below - 2 * value_center + value_above
+    hessian_xy = 0.5 * (
+        value_right_below
+        - value_right
+        - value_below
+        + value_center
+        + value_center
+        - value_left
+        - value_above
+        + value_left_above
+    )
+    hessian = torch.cat([hessian_xx, hessian_xy, hessian_xy, hessian_yy], dim=-1).reshape(
+        num_persons, num_keypoints, 2, 2
+    )
+    hessian = torch.linalg.inv(hessian + torch.finfo(torch.float32).eps * torch.eye(2, device=device))
+    return keypoints - (hessian @ derivative).squeeze(-1)
 
 
 class Sapiens2ImageProcessor(TorchvisionBackend):
@@ -293,16 +359,16 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         **kwargs,
     ) -> list["torch.Tensor"]:
         if boxes is not None:
-            output_size = (size["height"], size["width"])  # (H, W)
+            output_size = (size["height"], size["width"])
             crops = []
             for image, image_boxes in zip(images, boxes):
-                for bbox in image_boxes:
-                    bbox_t = torch.tensor(bbox, dtype=torch.float32)
-                    center, scale = box_to_center_and_scale(bbox_t)
-                    scale = fix_aspect_ratio(scale, size["width"], size["height"])
-                    crops.append(crop_and_resize(image, bbox_center=center, bbox_scale=scale, output_size=output_size))
+                image = tvF.to_dtype_image(image, dtype=torch.float32, scale=False)
+                bboxes_cxcywh = box_xywh_to_cxcywh(torch.tensor(image_boxes, dtype=torch.float32, device=image.device))
+                for bbox_cxcywh in bboxes_cxcywh:
+                    crop = crop_and_resize(image, bbox_cxcywh=bbox_cxcywh, output_size=output_size)
+                    crops.append(crop)
             images = crops
-            do_resize = False  # affine crop already produces the target size
+            do_resize = False  # crop_and_resize already produces the target size
 
         if do_reduce_labels:
             images = self.reduce_label(images)
@@ -374,50 +440,53 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             - `bbox` (`torch.FloatTensor` of shape `(4,)`): the padded, aspect-ratio-corrected input bounding box
               in xyxy format (x_min, y_min, x_max, y_max), i.e. the actual image region used for preprocessing.
         """
-        heatmaps = outputs.heatmaps.cpu().float()  # (num_total_persons, num_keypoints, heatmap_height, heatmap_width)
-        flattened_boxes = [torch.tensor(bbox, dtype=torch.float32) for image_boxes in boxes for bbox in image_boxes]
+        heatmaps = outputs.heatmaps.float()  # (num_total_persons, num_keypoints, heatmap_height, heatmap_width)
+        device = heatmaps.device
+        num_total_persons, num_keypoints, heatmap_height, heatmap_width = heatmaps.shape
 
-        if target_sizes is not None and len(flattened_boxes) != len(target_sizes):
+        if target_sizes is not None and num_total_persons != len(target_sizes):
             raise ValueError(
                 "Make sure that you pass in as many target sizes as the total number of persons "
                 "(i.e. the sum of boxes across all images)."
             )
 
-        _, num_keypoints, heatmap_height, heatmap_width = heatmaps.shape
-        heatmap_size = torch.tensor([heatmap_width - 1, heatmap_height - 1], dtype=torch.float32)
+        if num_total_persons == 0:
+            return [[] for _ in boxes]
+
+        # (num_total_persons, 4)
+        boxes_xywh = torch.tensor(
+            [bbox for image_boxes in boxes for bbox in image_boxes], dtype=torch.float32, device=device
+        )
+
+        if target_sizes is not None:
+            # (num_total_persons, 4)
+            scale_factors = torch.tensor(
+                [[width, height, width, height] for (height, width) in target_sizes],
+                dtype=torch.float32,
+                device=device,
+            )
+            boxes_xywh = boxes_xywh * scale_factors
+
+        output_size = (self.size["height"], self.size["width"])
+        boxes_cxcywh = box_xywh_to_cxcywh(boxes_xywh)
+        centers, scales = cxcywh_to_crop_params(boxes_cxcywh, output_size=output_size)
+
+        # (num_total_persons, num_keypoints, 2), (num_total_persons, num_keypoints)
+        all_keypoints, all_scores = get_keypoint_predictions(heatmaps)
+        all_keypoints = post_dark_unbiased_data_processing(
+            keypoints=all_keypoints, heatmaps=heatmaps, blur_kernel_size=blur_kernel_size
+        )
+        heatmap_size = torch.tensor([heatmap_width - 1, heatmap_height - 1], dtype=torch.float32, device=device)
+        all_keypoints = (
+            all_keypoints / heatmap_size * scales[:, None, :] + centers[:, None, :] - 0.5 * scales[:, None, :]
+        )
+        all_boxes = torch.cat([centers - scales / 2, centers + scales / 2], dim=-1)  # (num_total_persons, 4)
 
         person_results = []
-        for person_index, bbox in enumerate(flattened_boxes):
-            if target_sizes is not None:
-                image_height, image_width = target_sizes[person_index][0], target_sizes[person_index][1]
-                bbox = bbox * torch.tensor([image_width, image_height, image_width, image_height], dtype=torch.float32)
-            center, scale = box_to_center_and_scale(bbox)
-            scale = fix_aspect_ratio(scale, self.size["width"], self.size["height"])
-            person_heatmap = heatmaps[
-                person_index
-            ].clone()  # (num_keypoints, heatmap_height, heatmap_width) — clone to avoid mutating
-
-            # Inline keypoint prediction (equivalent to get_keypoint_predictions from vitpose)
-            heatmap_flat = person_heatmap.reshape(num_keypoints, -1)  # (num_keypoints, heatmap_height*heatmap_width)
-            person_scores = heatmap_flat.amax(dim=1)  # (num_keypoints,)
-            flat_index = heatmap_flat.argmax(dim=1)  # (num_keypoints,)
-            locations_x = (flat_index % heatmap_width).float()
-            locations_y = (flat_index // heatmap_width).float()
-            locations = torch.where(
-                person_scores.unsqueeze(-1) > 0.0,
-                torch.stack([locations_x, locations_y], dim=-1),
-                torch.full((num_keypoints, 2), -1.0),
-            ).unsqueeze(0)  # (1, num_keypoints, 2)
-
-            locations = post_dark_unbiased_data_processing(locations, person_heatmap, blur_kernel_size)
-            locations = locations[0]  # (num_keypoints, 2)
-
-            locations = locations / heatmap_size * scale + center - 0.5 * scale
-
-            keypoints = locations
-            scores = person_scores
-            labels = torch.arange(0, num_keypoints)
-            bbox_tensor = torch.cat([center - scale / 2, center + scale / 2])
+        for person_index in range(num_total_persons):
+            keypoints = all_keypoints[person_index]
+            scores = all_scores[person_index]
+            labels = torch.arange(num_keypoints, device=device)
 
             if threshold is not None:
                 keep = scores > threshold
@@ -425,7 +494,9 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 scores = scores[keep]
                 labels = labels[keep]
 
-            person_results.append({"keypoints": keypoints, "scores": scores, "labels": labels, "bbox": bbox_tensor})
+            person_results.append(
+                {"keypoints": keypoints, "scores": scores, "labels": labels, "bbox": all_boxes[person_index]}
+            )
 
         # Reassemble into list[list[dict]] grouped by image
         result = []
