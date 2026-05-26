@@ -415,6 +415,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("rt_detr", "RTDetrModel"),
         ("rt_detr_v2", "RTDetrV2Model"),
         ("rwkv", "RwkvModel"),
+        ("rio2", "Rio2Model"),
         ("sam", "SamModel"),
         ("sam2", "Sam2Model"),
         ("sam2_hiera_det_model", "Sam2HieraDetModel"),
