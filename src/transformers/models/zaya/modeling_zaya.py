@@ -159,7 +159,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 class ZayaCCAProjection(nn.Module):
     """
     Projects hidden states into attention q/k/v states with ZAYA's Compressed Convolutional Attention (CCA) path.
-    See https://arxiv.org/abs/2510.04476.
+    See https://huggingface.co/papers/2510.04476.
 
     This follows the usual q/k/v projection flow, with three ZAYA-specific changes: q/k are mixed by a causal 1D
     convolution, q/k keep residual projection paths, and v uses a delayed recurrent state.
