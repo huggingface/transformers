@@ -485,7 +485,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             if not (layers is not None and hasattr(self, "num_hidden_layers")):
                 return
             elif not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layers):
-                raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES} but got {layers}")
+                raise ValueError(f"The `(mlp)_layer_types` entries must be in {ALLOWED_LAYER_TYPES} but got {layers}")
             elif self.num_hidden_layers is not None and self.num_hidden_layers != len(layers):
                 raise ValueError(
                     f"`num_hidden_layers` ({self.num_hidden_layers}) must be equal to the number of layer types "
