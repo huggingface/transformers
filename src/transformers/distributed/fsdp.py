@@ -29,7 +29,6 @@ if is_torch_available():
     import torch
 
 if is_torch_available() and is_torch_greater_or_equal("2.6"):
-    import torch.distributed as dist
     from torch.distributed._composable.fsdp import fully_shard
     from torch.distributed.fsdp import CPUOffloadPolicy, MixedPrecisionPolicy, OffloadPolicy
 

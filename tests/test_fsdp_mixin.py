@@ -309,9 +309,7 @@ def _load_training_state(model, optimizer, training_state_dir):
 
 def train_ddp(rank, batches, lr, device, dtype, init_model_dir):
     _set_determinism(SEED)
-    model = AutoModelForCausalLM.from_pretrained(init_model_dir, torch_dtype=dtype).to(
-        device
-    )
+    model = AutoModelForCausalLM.from_pretrained(init_model_dir, torch_dtype=dtype).to(device)
     # MoE/conditional-routing variants) may not use all params on
     # every step, and DDP would otherwise fail. Specifying find_unused_parameters=True allows running backward on a subgraph of the model.
     ddp_kwargs = {"find_unused_parameters": True}
@@ -355,9 +353,7 @@ def train_fsdp2(
     _set_determinism(SEED)
     distributed_config = DistributedConfig(fsdp_size=dist.get_world_size(), fsdp_plan=fsdp_plan)
     pre_ckpt_model = AutoModelForCausalLM.from_pretrained(
-        init_model_dir,
-        torch_dtype=dtype,
-        distributed_config=distributed_config
+        init_model_dir, torch_dtype=dtype, distributed_config=distributed_config
     )
     pre_ckpt_model.train()
     pre_ckpt_optimizer = torch.optim.Adam(pre_ckpt_model.parameters(), lr=lr)
@@ -391,9 +387,7 @@ def train_fsdp2(
         # Intentionally scramble RNG to prove checkpoint restore works
         _set_determinism(SEED + 1234)
         resumed_model = AutoModelForCausalLM.from_pretrained(
-            model_dir,
-            torch_dtype=dtype,
-            distributed_config=distributed_config
+            model_dir, torch_dtype=dtype, distributed_config=distributed_config
         )
         resumed_model.train()
         resumed_optimizer = torch.optim.Adam(resumed_model.parameters(), lr=lr)
@@ -442,10 +436,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
     init_tmpdir, init_tmpdir_obj = _save_init_pretrained(rank, config, torch.float32)
     try:
         _set_determinism(SEED)
-        model = AutoModelForCausalLM.from_pretrained(
-            init_tmpdir,
-            distributed_config=distributed_config
-        )
+        model = AutoModelForCausalLM.from_pretrained(init_tmpdir, distributed_config=distributed_config)
         dist.barrier()
     finally:
         if rank == 0 and init_tmpdir_obj is not None:
@@ -466,10 +457,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
         model.save_pretrained(tmpdir, is_main_process=(rank == 0))
         dist.barrier()
 
-        new_model = AutoModelForCausalLM.from_pretrained(
-            tmpdir,
-            distributed_config=distributed_config
-        )
+        new_model = AutoModelForCausalLM.from_pretrained(tmpdir, distributed_config=distributed_config)
         dist.barrier()
     finally:
         if rank == 0:
@@ -512,8 +500,7 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
     try:
         _set_determinism(SEED)
         model = AutoModelForCausalLM.from_pretrained(
-            init_tmpdir,
-            distributed_config=DistributedConfig(fsdp_size=dist.get_world_size())
+            init_tmpdir, distributed_config=DistributedConfig(fsdp_size=dist.get_world_size())
         )
         dist.barrier()
     finally:
