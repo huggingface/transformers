@@ -802,15 +802,12 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
             }
 
         if not isinstance(cross_attn_mask_mapping := encoder_attention_mask, dict):
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(
-                    encoder_hidden_states.shape[:2], device=inputs_embeds.device, dtype=torch.bool
-                )
             cross_attn_mask_mapping = {
                 "full_attention": create_bidirectional_mask(
                     config=self.config,
                     inputs_embeds=inputs_embeds,
                     attention_mask=encoder_attention_mask,
+                    encoder_hidden_states=encoder_hidden_states,
                 )
             }
 
