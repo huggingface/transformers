@@ -227,6 +227,13 @@ Then, in `compute_metrics` function we collect `predicted` and `target` bounding
 ...     pred_boxes: torch.Tensor
 
 
+>>> def _get_orig_size(image_target):
+...     """Robust orig_size extraction - Trainer serialization can truncate to 1 element."""
+...     orig = np.atleast_1d(np.asarray(image_target["orig_size"])).flatten()
+...     if len(orig) >= 2:
+...         return (int(orig[0]), int(orig[1]))
+...     return (int(orig[0]), int(orig[0]))
+
 >>> @torch.no_grad()
 >>> def compute_metrics(evaluation_results, image_processor, threshold=0.0, id2label=None):
 ...     predictions, targets = evaluation_results.predictions, evaluation_results.label_ids
@@ -235,13 +242,15 @@ Then, in `compute_metrics` function we collect `predicted` and `target` bounding
 ...     post_processed_predictions = []
 ...
 ...     for batch in targets:
-...         batch_image_sizes = torch.tensor(np.array([x["orig_size"] for x in batch]))
-...         image_sizes.append(batch_image_sizes)
+...         batch_sizes = []
 ...         for image_target in batch:
+...             h, w = _get_orig_size(image_target)
+...             batch_sizes.append([h, w])
 ...             boxes = torch.tensor(image_target["boxes"])
-...             boxes = convert_bbox_yolo_to_pascal(boxes, image_target["orig_size"])
+...             boxes = convert_bbox_yolo_to_pascal(boxes, (h, w))
 ...             labels = torch.tensor(image_target["class_labels"])
 ...             post_processed_targets.append({"boxes": boxes, "labels": labels})
+...         image_sizes.append(torch.tensor(batch_sizes))
 ...
 ...     for batch, target_sizes in zip(predictions, image_sizes):
 ...         batch_logits, batch_boxes = batch[1], batch[2]
