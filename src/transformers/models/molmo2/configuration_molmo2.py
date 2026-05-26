@@ -58,6 +58,7 @@ class Molmo2VitConfig(PreTrainedConfig):
     image_num_pos: int = 577
     attention_dropout: float = 0.0
     residual_dropout: float = 0.0
+    float32_attention: bool = True
     initializer_range: float = 0.02
 
     @property
@@ -91,6 +92,7 @@ class Molmo2AdapterConfig(PreTrainedConfig):
     head_dim: int = 72
     attention_dropout: float = 0.0
     residual_dropout: float = 0.0
+    float32_attention: bool = True
     hidden_act: str = "silu"
     intermediate_size: int = 18944
     text_hidden_size: int = 3584

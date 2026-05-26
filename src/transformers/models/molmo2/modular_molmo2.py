@@ -853,6 +853,13 @@ class Molmo2GQAAttention(nn.Module):
         key_states = key_states.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
+        target_dtype = query_states.dtype
+        if getattr(self.config, "float32_attention", False):
+            query_states = query_states.float()
+            key_states = key_states.float()
+            if self.config._attn_implementation == "sdpa" and not torch.is_autocast_enabled():
+                value_states = value_states.float()
+
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
@@ -868,6 +875,7 @@ class Molmo2GQAAttention(nn.Module):
             dropout=0.0 if not self.training else self.attention_dropout,
         )
 
+        attn_output = attn_output.to(target_dtype)
         attn_output = attn_output.reshape(batch_size, -1, self.num_heads * self.head_dim).contiguous()
         attn_output = self.out_proj(attn_output)
 
