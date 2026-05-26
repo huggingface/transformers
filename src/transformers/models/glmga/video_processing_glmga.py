@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+
 import numpy as np
 import torch
 from torchvision.transforms.v2 import functional as tvF
@@ -131,7 +133,7 @@ class GlmgaVideoProcessor(BaseVideoProcessor):
         timestamps = [i * duration_per_frame for i in range(total_frames)]
 
         if total_frames < extract_t:
-            frame_indices = np.linspace(0, total_frames - 1, extract_t, dtype=int).tolist()
+            frame_indices = [math.floor(_i * total_frames / extract_t) for _i in range(extract_t)]
         else:
             frame_indices = []
             current_second = 0
