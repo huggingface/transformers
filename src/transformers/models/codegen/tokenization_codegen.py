@@ -161,9 +161,8 @@ class CodeGenTokenizer(TokenizersBackend):
                 Whether or not to clean up the tokenization spaces. If `None`, will default to
                 `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
             truncate_before_pattern (`List[str]`, *optional*, defaults to `None`):
-                A list of regular expression strings that will be used to truncate the returned string. This can be
-                used to remove extra pieces of code (e.g. truncate if observing a comment symbol "#" at the beginning
-                of a new line). An example pattern could be `["^#", re.escape("<|endoftext|>"), "^'''", "\n\n\n"]`.
+                A list of literal stop strings that will be used to truncate the returned string at the first
+                occurrence of any entry. An example pattern could be `["<|endoftext|>", "\n\n\n"]`.
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific decode method.
 
@@ -184,11 +183,12 @@ class CodeGenTokenizer(TokenizersBackend):
         return decoded_text
 
     def truncate(self, completion, truncate_before_pattern):
+        # `truncate_before_pattern` is caller-controlled; match each entry as a literal string
+        # to avoid catastrophic regex backtracking (ReDoS) on attacker-supplied patterns.
         def find_re(string, pattern, start_pos):
-            m = pattern.search(string, start_pos)
-            return m.start() if m else -1
+            return string.find(pattern, start_pos)
 
-        terminals = [re.compile(pattern, re.MULTILINE) for pattern in truncate_before_pattern]
+        terminals = list(truncate_before_pattern)
 
         prints = list(re.finditer("^print", completion, re.MULTILINE))
 
