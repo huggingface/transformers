@@ -58,7 +58,6 @@ To get started, we'll define global constants, namely the model name and image s
 
 ```py
 >>> MODEL_NAME = "Roboflow/rf-detr-medium"
->>> IMAGE_SIZE = 480
 ```
 
 ## Load the mobile-ui-design dataset
@@ -86,14 +85,11 @@ The dataset uses string category names and bounding boxes in COCO format `(x, y,
 categories to integer ids, compute areas, and filter out degenerate bounding boxes before training:
 
 ```py
->>> IMAGE_ID_TO_SIZE = {}
-
 >>> def prepare_example(example, idx):
 ...     objects = example["objects"]
 ...     bboxes = objects["bbox"]
 ...     categories = objects["category"]
 ...     img_w, img_h = example["width"], example["height"]
-...     IMAGE_ID_TO_SIZE[idx] = (img_h, img_w)
 ...     good_bboxes, good_cats, good_areas, good_ids = [], [], [], []
 ...     for i, (bbox, cat) in enumerate(zip(bboxes, categories)):
 ...         x, y, w, h = bbox
@@ -135,13 +131,7 @@ Train: 6669, Validation: 1177
 >>> from functools import partial
 >>> from transformers import AutoImageProcessor
 
->>> image_processor = AutoImageProcessor.from_pretrained(
-...     MODEL_NAME,
-...     do_resize=True,
-...     size={"max_height": IMAGE_SIZE, "max_width": IMAGE_SIZE},
-...     do_pad=True,
-...     pad_size={"height": IMAGE_SIZE, "width": IMAGE_SIZE},
-... )
+>>> image_processor = AutoImageProcessor.from_pretrained(MODEL_NAME)
 ```
 
 The `image_processor` expects annotations in the COCO format: `{'image_id': int, 'annotations': list[Dict]}`. We format each example's annotations and let the processor handle the rest:
@@ -237,16 +227,6 @@ Then, in `compute_metrics` function we collect `predicted` and `target` bounding
 ...     pred_boxes: torch.Tensor
 
 
->>> def _get_orig_size(image_target):
-...     """Trainer serialization can truncate orig_size. Fall back to precomputed lookup."""
-...     orig = np.atleast_1d(np.asarray(image_target["orig_size"])).flatten()
-...     if len(orig) >= 2:
-...         return (int(orig[0]), int(orig[1]))
-...     image_id = int(np.asarray(image_target["image_id"]).flat[0])
-...     if image_id in IMAGE_ID_TO_SIZE:
-...         return IMAGE_ID_TO_SIZE[image_id]
-...     return (int(orig[0]), int(orig[0]))
-
 >>> @torch.no_grad()
 >>> def compute_metrics(evaluation_results, image_processor, threshold=0.0, id2label=None):
 ...     predictions, targets = evaluation_results.predictions, evaluation_results.label_ids
@@ -255,15 +235,13 @@ Then, in `compute_metrics` function we collect `predicted` and `target` bounding
 ...     post_processed_predictions = []
 ...
 ...     for batch in targets:
-...         batch_sizes = []
+...         batch_image_sizes = torch.tensor(np.array([x["orig_size"] for x in batch]))
+...         image_sizes.append(batch_image_sizes)
 ...         for image_target in batch:
-...             h, w = _get_orig_size(image_target)
-...             batch_sizes.append([h, w])
 ...             boxes = torch.tensor(image_target["boxes"])
-...             boxes = convert_bbox_yolo_to_pascal(boxes, (h, w))
+...             boxes = convert_bbox_yolo_to_pascal(boxes, image_target["orig_size"])
 ...             labels = torch.tensor(image_target["class_labels"])
 ...             post_processed_targets.append({"boxes": boxes, "labels": labels})
-...         image_sizes.append(torch.tensor(batch_sizes))
 ...
 ...     for batch, target_sizes in zip(predictions, image_sizes):
 ...         batch_logits, batch_boxes = batch[1], batch[2]
@@ -320,15 +298,7 @@ and `id2label` maps that you created earlier from the dataset's metadata. Additi
 ... )
 ```
 
-In the [`TrainingArguments`] use `output_dir` to specify where to save your model, then configure hyperparameters as you see fit. For `num_train_epochs=30` training will take about 35 minutes in Google Colab T4 GPU, increase the number of epoch to get better results.
-
-Important notes:
-
-- Do not remove unused columns because this will drop the image column. Without the image column, you
-can't create `pixel_values`. For this reason, set `remove_unused_columns` to `False`.
-- Set `eval_do_concat_batches=False` to get proper evaluation results. Images have different number of target boxes, if batches are concatenated we will not be able to determine which boxes belongs to particular image.
-
-If you wish to share your model by pushing to the Hub, set `push_to_hub` to `True` (you must be signed in to Hugging
+In the [`TrainingArguments`] use `output_dir` to specify where to save your model, then configure hyperparameters as you see fit. If you wish to share your model by pushing to the Hub, set `push_to_hub` to `True` (you must be signed in to Hugging
 Face to upload your model).
 
 ```py
@@ -337,7 +307,7 @@ Face to upload your model).
 >>> training_args = TrainingArguments(
 ...     output_dir="rf_detr_finetuned_mobile_ui",
 ...     num_train_epochs=3,
-...     fp16=False,
+...     bf16=True,
 ...     per_device_train_batch_size=8,
 ...     dataloader_num_workers=4,
 ...     learning_rate=5e-5,
@@ -593,3 +563,6 @@ Let's plot the result:
 >>> image
 ```
 
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/mobile_ui_detection_result.png" alt="Mobile UI detection result"/>
+</div>
