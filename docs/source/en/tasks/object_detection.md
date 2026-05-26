@@ -307,7 +307,15 @@ and `id2label` maps that you created earlier from the dataset's metadata. Additi
 ... )
 ```
 
-In the [`TrainingArguments`] use `output_dir` to specify where to save your model, then configure hyperparameters as you see fit. If you wish to share your model by pushing to the Hub, set `push_to_hub` to `True` (you must be signed in to Hugging
+In the [`TrainingArguments`] use `output_dir` to specify where to save your model, then configure hyperparameters as you see fit. For `num_train_epochs=5` training will take about 35 minutes on an A100 GPU, increase the number of epochs to get better results.
+
+Important notes:
+
+- Do not remove unused columns because this will drop the image column. Without the image column, you
+can't create `pixel_values`. For this reason, set `remove_unused_columns` to `False`.
+- Set `eval_do_concat_batches=False` to get proper evaluation results. Images have different number of target boxes, if batches are concatenated we will not be able to determine which boxes belongs to particular image.
+
+If you wish to share your model by pushing to the Hub, set `push_to_hub` to `True` (you must be signed in to Hugging
 Face to upload your model).
 
 ```py
@@ -315,7 +323,7 @@ Face to upload your model).
 
 >>> training_args = TrainingArguments(
 ...     output_dir="rf_detr_finetuned_mobile_ui",
-...     num_train_epochs=3,
+...     num_train_epochs=5,
 ...     bf16=True,
 ...     per_device_train_batch_size=8,
 ...     dataloader_num_workers=4,
@@ -357,8 +365,8 @@ Finally, bring everything together, and call [`~transformers.Trainer.train`]:
 
 <div>
 
-  <progress value='2502' max='2502' style='width:300px; height:20px; vertical-align: middle;'></progress>
-  [2502/2502 25:00, Epoch 3/3]
+  <progress value='2085' max='2085' style='width:300px; height:20px; vertical-align: middle;'></progress>
+  [2085/2085 38:39, Epoch 5/5]
 </div>
 
 <table border="1" class="dataframe">
@@ -392,78 +400,128 @@ Finally, bring everything together, and call [`~transformers.Trainer.train`]:
   <tbody>
     <tr>
       <td>1</td>
-      <td>11.0942</td>
-      <td>9.9381</td>
-      <td>0.1688</td>
-      <td>0.2846</td>
-      <td>0.1613</td>
-      <td>0.0971</td>
-      <td>0.2213</td>
-      <td>0.2664</td>
-      <td>0.0496</td>
-      <td>0.2614</td>
-      <td>0.4531</td>
-      <td>0.2878</td>
-      <td>0.5438</td>
-      <td>0.6976</td>
-      <td>0.1149</td>
-      <td>0.4920</td>
-      <td>0.2175</td>
-      <td>0.5140</td>
-      <td>0.1588</td>
-      <td>0.3979</td>
-      <td>0.1839</td>
-      <td>0.4086</td>
+      <td>No log</td>
+      <td>9.9234</td>
+      <td>0.1303</td>
+      <td>0.2236</td>
+      <td>0.1478</td>
+      <td>0.0909</td>
+      <td>0.2030</td>
+      <td>0.2524</td>
+      <td>0.0421</td>
+      <td>0.2520</td>
+      <td>0.4683</td>
+      <td>0.3113</td>
+      <td>0.5607</td>
+      <td>0.6782</td>
+      <td>0.1244</td>
+      <td>0.5122</td>
+      <td>0.0958</td>
+      <td>0.5035</td>
+      <td>0.1285</td>
+      <td>0.4328</td>
+      <td>0.1725</td>
+      <td>0.4413</td>
     </tr>
     <tr>
       <td>2</td>
-      <td>9.3961</td>
-      <td>9.7847</td>
-      <td>0.2351</td>
-      <td>0.3664</td>
-      <td>0.2358</td>
-      <td>0.1466</td>
-      <td>0.2948</td>
-      <td>0.3522</td>
-      <td>0.0590</td>
-      <td>0.3117</td>
-      <td>0.5121</td>
-      <td>0.3544</td>
-      <td>0.6044</td>
-      <td>0.7382</td>
-      <td>0.1859</td>
-      <td>0.5530</td>
-      <td>0.2823</td>
-      <td>0.5667</td>
-      <td>0.2271</td>
-      <td>0.4730</td>
-      <td>0.2451</td>
-      <td>0.4555</td>
+      <td>No log</td>
+      <td>9.8472</td>
+      <td>0.1893</td>
+      <td>0.3017</td>
+      <td>0.2124</td>
+      <td>0.1347</td>
+      <td>0.2789</td>
+      <td>0.3038</td>
+      <td>0.0549</td>
+      <td>0.2961</td>
+      <td>0.5140</td>
+      <td>0.3433</td>
+      <td>0.5941</td>
+      <td>0.7406</td>
+      <td>0.1305</td>
+      <td>0.5423</td>
+      <td>0.1979</td>
+      <td>0.5578</td>
+      <td>0.1964</td>
+      <td>0.4648</td>
+      <td>0.2324</td>
+      <td>0.4437</td>
     </tr>
     <tr>
       <td>3</td>
-      <td>8.9251</td>
-      <td>9.7019</td>
-      <td>0.2574</td>
-      <td>0.3945</td>
-      <td>0.2605</td>
-      <td>0.1647</td>
-      <td>0.3192</td>
-      <td>0.3859</td>
-      <td>0.0608</td>
-      <td>0.3245</td>
-      <td>0.5255</td>
-      <td>0.3726</td>
-      <td>0.6123</td>
-      <td>0.7518</td>
-      <td>0.2044</td>
-      <td>0.5677</td>
-      <td>0.3079</td>
-      <td>0.5844</td>
-      <td>0.2518</td>
-      <td>0.4841</td>
-      <td>0.2656</td>
-      <td>0.4659</td>
+      <td>No log</td>
+      <td>9.6401</td>
+      <td>0.2275</td>
+      <td>0.3547</td>
+      <td>0.2657</td>
+      <td>0.1698</td>
+      <td>0.3336</td>
+      <td>0.3892</td>
+      <td>0.0611</td>
+      <td>0.3204</td>
+      <td>0.5270</td>
+      <td>0.3625</td>
+      <td>0.6143</td>
+      <td>0.7496</td>
+      <td>0.1602</td>
+      <td>0.5684</td>
+      <td>0.2617</td>
+      <td>0.5763</td>
+      <td>0.2249</td>
+      <td>0.4684</td>
+      <td>0.2631</td>
+      <td>0.4692</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>No log</td>
+      <td>9.5770</td>
+      <td>0.2733</td>
+      <td>0.4068</td>
+      <td>0.3133</td>
+      <td>0.2100</td>
+      <td>0.3867</td>
+      <td>0.4343</td>
+      <td>0.0668</td>
+      <td>0.3456</td>
+      <td>0.5593</td>
+      <td>0.3875</td>
+      <td>0.6393</td>
+      <td>0.7725</td>
+      <td>0.2013</td>
+      <td>0.5941</td>
+      <td>0.3158</td>
+      <td>0.6065</td>
+      <td>0.2733</td>
+      <td>0.4998</td>
+      <td>0.3028</td>
+      <td>0.4756</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>10.3700</td>
+      <td>11.0500</td>
+      <td>0.2827</td>
+      <td>0.4193</td>
+      <td>0.2913</td>
+      <td>0.2021</td>
+      <td>0.2814</td>
+      <td>0.3763</td>
+      <td>0.0609</td>
+      <td>0.3403</td>
+      <td>0.5668</td>
+      <td>0.4138</td>
+      <td>0.5669</td>
+      <td>0.7317</td>
+      <td>0.2092</td>
+      <td>0.5979</td>
+      <td>0.3334</td>
+      <td>0.6295</td>
+      <td>0.2793</td>
+      <td>0.5245</td>
+      <td>0.3089</td>
+      <td>0.5151</td>
     </tr>
   </tbody>
 </table><p>
@@ -482,27 +540,27 @@ Hugging Face Hub. Upon training completion, push the final model to the Hub as w
 
 >>> metrics = trainer.evaluate(eval_dataset=val_ds, metric_key_prefix="test")
 >>> pprint(metrics)
-{'test_loss': 9.7019,
- 'test_map': 0.2574,
- 'test_map_50': 0.3945,
- 'test_map_75': 0.2605,
- 'test_map_group': 0.2044,
- 'test_map_image': 0.3079,
- 'test_map_large': 0.3859,
- 'test_map_medium': 0.3192,
- 'test_map_rectangle': 0.2518,
- 'test_map_small': 0.1647,
- 'test_map_text': 0.2656,
- 'test_mar_1': 0.0608,
- 'test_mar_10': 0.3245,
- 'test_mar_100': 0.5255,
- 'test_mar_100_group': 0.5677,
- 'test_mar_100_image': 0.5844,
- 'test_mar_100_rectangle': 0.4841,
- 'test_mar_100_text': 0.4659,
- 'test_mar_large': 0.7518,
- 'test_mar_medium': 0.6123,
- 'test_mar_small': 0.3726}
+{'test_loss': 11.05,
+ 'test_map': 0.2827,
+ 'test_map_50': 0.4193,
+ 'test_map_75': 0.2913,
+ 'test_map_group': 0.2092,
+ 'test_map_image': 0.3334,
+ 'test_map_large': 0.3763,
+ 'test_map_medium': 0.2814,
+ 'test_map_rectangle': 0.2793,
+ 'test_map_small': 0.2021,
+ 'test_map_text': 0.3089,
+ 'test_mar_1': 0.0609,
+ 'test_mar_10': 0.3403,
+ 'test_mar_100': 0.5668,
+ 'test_mar_100_group': 0.5979,
+ 'test_mar_100_image': 0.6295,
+ 'test_mar_100_rectangle': 0.5245,
+ 'test_mar_100_text': 0.5151,
+ 'test_mar_large': 0.7317,
+ 'test_mar_medium': 0.5669,
+ 'test_mar_small': 0.4138}
 ```
 
 These results can be further improved by increasing the number of epochs or adjusting other hyperparameters in [`TrainingArguments`]. Give it a go!
@@ -538,7 +596,7 @@ And detect bounding boxes:
 ...     inputs = image_processor(images=[image], return_tensors="pt")
 ...     outputs = model(**inputs)
 ...     target_sizes = torch.tensor([[image.size[1], image.size[0]]])
-...     results = image_processor.post_process_object_detection(outputs, threshold=0.3, target_sizes=target_sizes)[0]
+...     results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[0]
 
 >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
 ...     box = [round(i, 2) for i in box.tolist()]
@@ -546,13 +604,13 @@ And detect bounding boxes:
 ...         f"Detected {model.config.id2label[label.item()]} with confidence "
 ...         f"{round(score.item(), 3)} at location {box}"
 ...     )
-Detected text with confidence 0.495 at location [146.74, 206.6, 194.26, 226.94]
-Detected image with confidence 0.48 at location [199.07, 474.49, 206.11, 490.26]
-Detected text with confidence 0.471 at location [146.44, 428.13, 193.85, 451.67]
-Detected image with confidence 0.468 at location [326.65, 118.81, 334.42, 132.98]
-Detected text with confidence 0.462 at location [173.22, 250.74, 176.64, 265.97]
-Detected text with confidence 0.449 at location [118.86, 717.66, 238.45, 738.71]
-Detected group with confidence 0.4 at location [139.55, 135.98, 273.58, 275.09]
+Detected text with confidence 0.727 at location [324.02, 340.55, 339.52, 359.12]
+Detected rectangle with confidence 0.717 at location [39.97, 705.14, 335.93, 753.54]
+Detected text with confidence 0.702 at location [199.94, 473.66, 213.41, 490.6]
+Detected text with confidence 0.678 at location [153.14, 474.81, 165.33, 491.0]
+Detected text with confidence 0.675 at location [262.67, 718.28, 281.44, 740.81]
+Detected rectangle with confidence 0.655 at location [143.57, 242.51, 214.32, 274.26]
+Detected text with confidence 0.653 at location [298.68, 637.77, 345.68, 656.26]
 ```
 
 Let's plot the result:
@@ -573,5 +631,9 @@ Let's plot the result:
 ```
 
 <div class="flex justify-center">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/mobile_ui_detection_result.png" alt="Mobile UI detection result"/>
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/mobile_ui_result_5.png" alt="Object detection result on a cart screen"/>
+</div>
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/mobile_ui_result_50.png" alt="Object detection result on a followers screen"/>
 </div>
