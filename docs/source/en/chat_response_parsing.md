@@ -240,7 +240,7 @@ The end of generation will close and finalize any open regions, even if their cl
 
 ### Parsing the content of a field
 
-Once we define how to capture a field, we also need to specify how to parse the raw text inside that capture. There are three
+Once we define how to capture a field, we also need to specify how to parse the raw text inside that capture. There are four
 keys that control this:
 
 | Key              | Type         | Purpose                                                                                  |
@@ -250,25 +250,84 @@ keys that control this:
 | `transform`      | dict/list    | Optional post-parse template that reshapes the parsed body (see **Transform**).          |
 | `transform_each` | bool         | If true, the parsed content must be a list and `transform` is applied per-element.       |
 
-Let's go through these keys in order. The first (and most important) key is `content`. This indicates the content type
+The first (and most important) key is `content`. This indicates the content type
 of the field, which determines the parser that will be used to convert the raw text captured in the field to the final output.
 `content_args` are used to configure the parser, and allow us to support various format quirks without needing custom code.
+We'll take a look at each type of parser and its arguments in turn.
 
-The available parsers are:
+#### Basic types
+`text`, `int`, `float` and `bool` are the basic types. These content types all just strip whitespace and then do a simple
+type conversion if required. They do not have any `content_args`, except for `text` which supports the arg `strip`,
+which strips whitespace from the start and end of the captured text, and defaults to `true`.
 
-| Parser       | Produces      | Useful `content_args`                                                                           |
-|--------------|---------------|-------------------------------------------------------------------------------------------------|
-| `text`       | string        | `strip` (default `true`). Set to `false` to preserve trailing whitespace                        |
-| `int`        | int           | (no args)                                                                                       |
-| `float`      | float         | (no args)                                                                                       |
-| `bool`       | bool          | (no args); accepts `"true"`/`"1"` (case-insensitive) as true                                    |
-| `json`       | any           | `allow_non_json`, `unquoted_keys`, `string_delims: [[open, close],...]`                         |
-| `xml-inline` | dict          | `tag_pattern` (regex w/ named groups `key`/`value`), `value_parser`, `merge_duplicates`         |
-| `kv-lines`   | dict          | `line_sep`, `kv_sep`, `value_parser`, `strip` (default `true`)                                  |
+#### json
 
-The `json` parser also accepts dialect arguments (`unquoted_keys`, `string_delims`) for models that emit JSON with cute
-quirks that completely break the standard parser. The model authors who are responsible for this being necessary
-know who they are and should feel an appropriate amount of shame.
+The `json` parser parses the captured text as JSON. It's the workhorse for tool-call arguments and
+anything else with nested structure. It accepts a handful of optional `content_args` to handle the
+various ways models mangle JSON in the wild:
+
+- `unquoted_keys` (bool, default `false`): rewrite bare-identifier keys (e.g. `{name: "foo"}`) into
+  quoted form (`{"name": "foo"}`) before parsing. Useful for models that emit Javascript-style
+  object literals rather than strict JSON.
+- `string_delims` (list of `[open, close]` pairs, optional): for models that wrap string
+  values in custom delimiters instead of `"..."`. Each pair gives an opening and closing marker;
+  matching regions are extracted and spliced back in as standard JSON strings before parsing.
+- `allow_non_json` (bool, default `false`): if parsing fails, return the stripped raw text instead
+  of raising. Useful as a fallback for fields where the model *usually* emits JSON but occasionally
+  drops to plain text.
+
+The model authors responsible for the existence of `unquoted_keys` and `string_delims` know who
+they are and should feel an appropriate amount of shame.
+
+#### xml-inline
+
+The `xml-inline` parser is for regions made up of a flat sequence of XML-ish tags, where each tag
+becomes one entry in a dict. It's most often used inside a `tool_calls` field for models that emit
+each argument as its own tag rather than as a JSON blob:
+
+- `tag_pattern` (str, **required**): regex matching a single tag. Must contain named groups
+  `key` (the resulting dict key) and `value` (the raw text that becomes the dict value).
+- `value_parser` (dict, optional): nested content parser applied to each captured `value`. A dict
+  with `name` (the parser, e.g. `"json"`, `"int"`) and optional `args` (its `content_args`). If
+  omitted, values stay as raw strings.
+- `merge_duplicates` (bool, default `false`): when the same key appears multiple times, collect the
+  values into a list instead of letting later matches overwrite earlier ones.
+
+For example, Qwen3 emits each tool-call argument as its own `<parameter>` tag, and we parse it
+like this:
+
+```python
+"tool_calls": {
+    "open_pattern": r"<tool_call>\s*<function=(?P<name>\w+)>",
+    "close": "</tool_call>",
+    "repeats": True,
+    "content": "xml-inline",
+    "content_args": {
+        "tag_pattern": r"<parameter=(?P<key>\w+)>\s*(?P<value>.*?)\s*</parameter>",
+        "value_parser": {"name": "json", "args": {"allow_non_json": True}},
+    },
+    "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
+}
+```
+
+Note the nested `value_parser`: each parameter value is itself run through the `json` parser (with
+`allow_non_json` so plain strings still pass through).
+
+#### kv-lines
+
+The `kv-lines` parser handles line-delimited `key: value` pairs (think YAML-ish metadata or `.env`
+files). Each line becomes one entry in the resulting dict. All arguments are optional:
+
+- `line_sep` (str, default `"\n"`): separator between pairs.
+- `kv_sep` (str, default `":"`): separator between a key and its value inside a single line. Only
+  the first occurrence is used as the split point, so values may themselves contain the separator.
+- `strip` (bool, default `true`): strip surrounding whitespace from each key and value.
+- `value_parser` (dict, optional): nested content parser applied to each value, in the same
+  `{"name": ..., "args": ...}` format as for `xml-inline`. If omitted, values stay as raw strings.
+
+Lines that are empty or do not contain `kv_sep` are silently skipped, so stray blank lines in the
+captured region are tolerated.
+
 
 ### Transform
 
