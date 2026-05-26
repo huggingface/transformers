@@ -39,6 +39,7 @@ from transformers.models.granite_speech_nar.modeling_granite_speech_nar import (
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_datasets_available
 
+
 if is_datasets_available():
     from datasets import load_dataset
 
