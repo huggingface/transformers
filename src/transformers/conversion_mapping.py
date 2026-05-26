@@ -60,6 +60,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "flex_olmo": "qwen2_moe",
     "olmoe": "qwen2_moe",
     "exaone_moe": "qwen2_moe",
+    "cohere2_moe": "qwen2_moe",
     "rt_detr_v2": "rt_detr",
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
@@ -117,6 +118,24 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "hrm_text": [
+            WeightConverter(
+                source_patterns="mlp.gate_up_proj.weight",
+                target_patterns=["mlp.gate_proj.weight", "mlp.up_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="attn.gqkv_proj.weight",
+                target_patterns=[
+                    "self_attn.gate_proj.weight",
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming(source_patterns=r"\.attn\.o_proj\.", target_patterns=".self_attn.o_proj."),
+        ],
         "ViTModel": [
             WeightRenaming(r"encoder\.layer\.", "layers."),
             WeightRenaming("attention.query", "q_proj"),
@@ -383,12 +402,12 @@ def _build_checkpoint_conversion_mapping():
                     "mlp.experts.*.w1.weight",
                     "mlp.experts.*.w3.weight",
                 ],
-                target_patterns="mlp.experts.gate_up_proj",
+                target_patterns="mlp.experts.gate_up_proj$",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
                 source_patterns="mlp.experts.*.w2.weight",
-                target_patterns="mlp.experts.down_proj",
+                target_patterns="mlp.experts.down_proj$",
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
@@ -1109,9 +1128,14 @@ def get_model_conversion_mapping(
 
         is_root_model = module_name == ""
         if not is_root_model:
-            # Scope each transform so it only matches keys under this sub-module's prefix.
+            # Scope each transform so it only matches keys under this sub-module's prefix - but we still allow to
+            # arbitrary add/remove base_model_prefix to load ForXXX model from BaseModel and the opposite
+            # Note that we need 2 removeprefix calls here, as only one level of nesting would not have the ending dot to module_name
+            scope_prefix = module_name.removeprefix(model.base_model_prefix)
+            scope_prefix = module_name.removeprefix(".")
             for transform in conversions:
-                transform.scope_prefix = module_name
+                transform.scope_prefix = scope_prefix
+                transform.base_model_prefix = model.base_model_prefix
         weight_conversions.extend(conversions)
 
         seen_identifiers[class_name].append(module_name)
