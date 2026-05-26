@@ -158,6 +158,7 @@ else:
             ("qwen3_omni_moe", "Qwen3OmniMoeProcessor"),
             ("qwen3_vl", "Qwen3VLProcessor"),
             ("qwen3_vl_moe", "Qwen3VLProcessor"),
+            ("rio2", "Rio2Processor"),
             ("sam", "SamProcessor"),
             ("sam2", "Sam2Processor"),
             ("sam3", "Sam3Processor"),
