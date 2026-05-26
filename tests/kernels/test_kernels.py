@@ -38,6 +38,9 @@ from transformers.core_model_loading import (
 from transformers.integrations.hub_kernels import (
     _HUB_KERNEL_MAPPING,
     _KERNEL_MODULE_MAPPING,
+    _apply_converter_to_module,
+    _make_converted_child_class,
+    _strip_converter_prefix,
     infer_kernel_fusion_transforms,
     is_kernel,
     lazy_load_kernel,
@@ -926,3 +929,96 @@ class TestFusedModuleWeightConversions(unittest.TestCase):
         )
 
         self.assertEqual(original_keys, set(fused.state_dict().keys()))
+
+
+class TestConvertedChildClass(unittest.TestCase):
+    def test_strip_converter_prefix_removes_prefix(self):
+        converter = WeightConverter(
+            ["MLP.gate_proj.weight", "MLP.up_proj.weight"],
+            "MLP.gate_up_proj.weight",
+            operations=[Concatenate(dim=0)],
+        )
+        stripped = _strip_converter_prefix(converter, "MLP")
+        self.assertEqual(stripped._original_source_patterns, ["gate_proj.weight", "up_proj.weight"])
+        self.assertEqual(stripped._original_target_patterns, ["gate_up_proj.weight"])
+
+    def test_strip_converter_prefix_leaves_non_matching_unchanged(self):
+        converter = WeightConverter(
+            ["gate_proj.weight", "up_proj.weight"],
+            "gate_up_proj.weight",
+            operations=[Concatenate(dim=0)],
+        )
+        stripped = _strip_converter_prefix(converter, "MLP")
+        self.assertEqual(stripped._original_source_patterns, ["gate_proj.weight", "up_proj.weight"])
+        self.assertEqual(stripped._original_target_patterns, ["gate_up_proj.weight"])
+
+    def test_apply_converter_to_module_creates_linear(self):
+        class MLP(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.gate_proj = nn.Linear(4, 8, bias=False)
+                self.up_proj = nn.Linear(4, 8, bias=False)
+
+        mlp = MLP()
+        converter = WeightConverter(
+            ["gate_proj.weight", "up_proj.weight"],
+            "gate_up_proj.weight",
+            operations=[Concatenate(dim=0)],
+        )
+        _apply_converter_to_module(mlp, converter)
+        state_dict = mlp.state_dict()
+        self.assertIn("gate_up_proj.weight", state_dict)
+        self.assertNotIn("gate_proj.weight", state_dict)
+        self.assertNotIn("up_proj.weight", state_dict)
+        self.assertEqual(state_dict["gate_up_proj.weight"].shape, (16, 4))
+        self.assertIsInstance(mlp.gate_up_proj, nn.Linear)
+        self.assertFalse(hasattr(mlp, "gate_proj"))
+        self.assertFalse(hasattr(mlp, "up_proj"))
+
+    def test_apply_converter_to_module_preserves_bias(self):
+        class MLP(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.gate_proj = nn.Linear(4, 8, bias=True)
+                self.up_proj = nn.Linear(4, 8, bias=True)
+
+        mlp = MLP()
+        converter = WeightConverter(
+            ["gate_proj.weight", "up_proj.weight"],
+            "gate_up_proj.weight",
+            operations=[Concatenate(dim=0)],
+        )
+        _apply_converter_to_module(mlp, converter)
+        self.assertIsInstance(mlp.gate_up_proj, nn.Linear)
+        self.assertIsNotNone(mlp.gate_up_proj.bias)
+
+    def test_make_converted_child_class_applies_conversion(self):
+        class MLP(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.gate_proj = nn.Linear(4, 8, bias=False)
+                self.up_proj = nn.Linear(4, 8, bias=False)
+
+        converter = WeightConverter(
+            ["gate_proj.weight", "up_proj.weight"],
+            "gate_up_proj.weight",
+            operations=[Concatenate(dim=0)],
+        )
+        ConvertedMLP = _make_converted_child_class(MLP, [converter])
+        mlp = ConvertedMLP()
+        state_dict = mlp.state_dict()
+        self.assertIn("gate_up_proj.weight", state_dict)
+        self.assertNotIn("gate_proj.weight", state_dict)
+        self.assertNotIn("up_proj.weight", state_dict)
+        self.assertEqual(state_dict["gate_up_proj.weight"].shape, (16, 4))
+        self.assertIsInstance(mlp.gate_up_proj, nn.Linear)
+
+    def test_make_converted_child_class_is_subclass(self):
+        class Base(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(2, 2, bias=False)
+
+        Converted = _make_converted_child_class(Base, [])
+        self.assertTrue(issubclass(Converted, Base))
+        self.assertEqual(Converted.__name__, "ConvertedBase")

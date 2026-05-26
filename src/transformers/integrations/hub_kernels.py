@@ -526,7 +526,6 @@ class FusedModuleBase(nn.Module):
         self,
         modules_to_fuse: list["nn.Module"],
         fused_module_names: list[str] | None = None,
-        conversion_mapping: list | None = None,
     ):
         """
         Args:
@@ -535,9 +534,6 @@ class FusedModuleBase(nn.Module):
                 child of this container (i.e. `self.<name>`). When `None`, the
                 `kernel_layer_name` attribute of each source module is used. Pass this
                 explicitly when the source modules do not carry `@use_kernel_forward_from_hub`.
-            conversion_mapping: Optional list of WeightConverter transforms to apply immediately
-                after the child modules are registered, reshaping parameters to the structure
-                the kernel expects (e.g. concatenating q/k/v into qkv). Cost-free on meta device.
         """
         super().__init__()
         if len(modules_to_fuse) == 0:
@@ -561,9 +557,6 @@ class FusedModuleBase(nn.Module):
                     )
                 self.add_module(attr_name, module)
             self._fused_module_names = [m.kernel_layer_name for m in modules_to_fuse]
-
-        if conversion_mapping:
-            self._apply_weight_conversions(conversion_mapping)
 
         # `kernelize` validates the kernel's forward signature against the class being replaced.
         # Since the fused container sits at the position of the first module in the chain, the
@@ -659,7 +652,7 @@ class FusedModuleBase(nn.Module):
             for target_key, meta_val in result.items():
                 meta_tensor = meta_val[0] if isinstance(meta_val, list) else meta_val
                 t_mod_path, _, t_attr = target_key.rpartition(".")
-                target_mod = self._get_or_create_submodule(t_mod_path, original_mod, meta_tensor)
+                target_mod = FusedModuleBase._get_or_create_submodule(self, t_mod_path, original_mod, meta_tensor)
                 if not isinstance(meta_tensor, nn.Parameter):
                     meta_tensor = nn.Parameter(meta_tensor, requires_grad=meta_tensor.is_floating_point())
                 target_mod.register_parameter(t_attr, meta_tensor)
@@ -706,18 +699,154 @@ def make_fused_module_class(source_layer_names: tuple[str, ...], kernel_layer_na
     )
 
 
+def _strip_converter_prefix(converter, prefix: str):
+    """Return a new WeightConverter with `prefix.` stripped from all source and target patterns."""
+    from ..core_model_loading import WeightConverter
+
+    prefix_dot = prefix + "."
+    new_src = [p.removeprefix(prefix_dot) for p in converter._original_source_patterns]
+    new_tgt = [p.removeprefix(prefix_dot) for p in converter._original_target_patterns]
+    return WeightConverter(new_src, new_tgt, operations=converter.operations)
+
+
+def _apply_converter_to_module(module: "nn.Module", converter) -> None:
+    """
+    Apply a single WeightConverter to any nn.Module.
+
+    Uses the converter's _original_source_patterns / _original_target_patterns to locate
+    source submodules directly (no state-dict walk), infers output shape by running the
+    converter operations on the existing meta tensors, then creates the target submodule
+    with the proper typed class (nn.Linear, nn.Embedding, …) and removes the source
+    submodules that become empty afterwards.
+    """
+    from copy import deepcopy
+
+    from ..core_model_loading import dot_natural_key, rename_source_key
+
+    src_patterns = converter._original_source_patterns
+
+    # Collect source tensors directly from the module — bail if any are missing.
+    src_tensors: dict[str, torch.Tensor] = {}
+    for pattern in src_patterns:
+        mod_path, _, attr = pattern.rpartition(".")
+        try:
+            src_mod = module.get_submodule(mod_path) if mod_path else module
+        except AttributeError:
+            return
+        t = src_mod._parameters.get(attr)
+        if t is None:
+            t = src_mod._buffers.get(attr)
+        if t is None:
+            return
+        src_tensors[pattern] = t
+
+    # Feed the source tensors into a converter copy and run the operation to get the
+    # result meta tensor (shape inference is free on meta device).
+    conv = deepcopy(converter)
+    for param_name in sorted(src_tensors, key=dot_natural_key):
+        renamed_key, source_pattern = rename_source_key(param_name, [], [conv])
+        if source_pattern is not None:
+            conv.add_tensor(renamed_key, param_name, source_pattern, src_tensors[param_name])
+
+    target_keys = list(conv.layer_targets)
+    if not target_keys:
+        return
+    target_key = target_keys[0]
+    result = conv.convert(target_key)
+
+    # Infer the typed module class from the first source submodule.
+    first_src_path = src_patterns[0].rpartition(".")[0]
+    try:
+        first_src_mod = module.get_submodule(first_src_path) if first_src_path else module
+    except AttributeError:
+        first_src_mod = None
+
+    # Remove source parameters before creating the target so shape queries stay clean.
+    for pattern in src_patterns:
+        mod_path, _, attr = pattern.rpartition(".")
+        try:
+            src_mod = module.get_submodule(mod_path) if mod_path else module
+        except AttributeError:
+            continue
+        src_mod._parameters.pop(attr, None)
+        src_mod._buffers.pop(attr, None)
+
+    # Create the target submodule with the correct shape inferred from the result.
+    # The module is initialised with the right in/out dimensions — no parameter replacement needed.
+    for result_key, meta_val in result.items():
+        meta_tensor = meta_val[0] if isinstance(meta_val, list) else meta_val
+        t_mod_path, _, _ = result_key.rpartition(".")
+
+        if t_mod_path:
+            parent_path, _, mod_name = t_mod_path.rpartition(".")
+            parent_mod = module.get_submodule(parent_path) if parent_path else module
+            if mod_name not in parent_mod._modules:
+                parent_mod.add_module(mod_name, _create_typed_module(first_src_mod, meta_tensor))
+
+    # Prune source submodules that are now completely empty.
+    for pattern in src_patterns:
+        mod_path = pattern.rpartition(".")[0]
+        if not mod_path:
+            continue
+        try:
+            src_mod = module.get_submodule(mod_path)
+        except AttributeError:
+            continue
+        if (
+            all(p is None for p in src_mod._parameters.values())
+            and all(b is None for b in src_mod._buffers.values())
+            and all(m is None for m in src_mod._modules.values())
+        ):
+            parent_path, _, mod_name = mod_path.rpartition(".")
+            parent_mod = module.get_submodule(parent_path) if parent_path else module
+            parent_mod._modules.pop(mod_name, None)
+
+
+def _create_typed_module(source_mod: "nn.Module | None", weight: "torch.Tensor") -> "nn.Module":
+    """Instantiate a properly-typed nn.Module whose shape matches weight, inferred from source_mod."""
+    cls_ = type(source_mod) if source_mod is not None else nn.Module
+    if cls_ is nn.Linear:
+        out_features, in_features = weight.shape
+        return cls_(in_features=in_features, out_features=out_features, bias=source_mod.bias is not None)
+    if cls_ is nn.Embedding:
+        num_embeddings, embedding_dim = weight.shape
+        return cls_(
+            num_embeddings=num_embeddings,
+            embedding_dim=embedding_dim,
+            padding_idx=source_mod.padding_idx,
+            max_norm=source_mod.max_norm,
+            norm_type=source_mod.norm_type,
+            scale_grad_by_freq=source_mod.scale_grad_by_freq,
+            sparse=source_mod.sparse,
+        )
+    raise ValueError(f"Cannot create target module: unsupported source class {cls_.__name__!r}")
+
+
+def _make_converted_child_class(child_cls: type, stripped_converters: list) -> type:
+    """Return a subclass of child_cls whose __init__ applies weight conversions after construction."""
+    original_init = child_cls.__init__
+    _converters = list(stripped_converters)
+
+    def converted_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        for converter in _converters:
+            _apply_converter_to_module(self, converter)
+
+    converted_cls = type(f"Converted{child_cls.__name__}", (child_cls,), {"__init__": converted_init})
+    converted_cls.__qualname__ = f"Converted{child_cls.__qualname__}"
+    return converted_cls
+
+
 def make_fused_parent_class(
     parent_cls: type,
     child_names: list[str],
     source_names: list[str],
     kernel_layer_name: str,
-    conversion_mapping: list | None = None,
 ) -> type:
     original_init = parent_cls.__init__
     _child_names = list(child_names)
     _source_names = list(source_names)
     _kernel_layer_name = kernel_layer_name
-    _conversion_mapping = list(conversion_mapping) if conversion_mapping else []
 
     fused_module_cls = make_fused_module_class(tuple(_source_names), _kernel_layer_name)
 
@@ -727,7 +856,6 @@ def make_fused_parent_class(
         fused = fused_module_cls(
             modules_to_fuse,
             fused_module_names=list(_source_names),
-            conversion_mapping=_conversion_mapping or None,
         )
         setattr(self, _child_names[0], fused)
         for name in _child_names[1:]:
@@ -874,6 +1002,7 @@ def register_kernel_fusions(
             meta_model = cls(config)
 
         seen: set[type] = set()
+        seen_children: set[type] = set()
         patch_mapping: dict[str, type] = {}
         for module in meta_model.modules():
             module_cls = type(module)
@@ -882,13 +1011,24 @@ def register_kernel_fusions(
             if not all(hasattr(module, name) for name in child_names):
                 continue
             seen.add(module_cls)
-            fused_parent_cls = make_fused_parent_class(
-                module_cls,
-                child_names,
-                source_names,
-                kernel_layer_name,
-                conversion_mapping=kernel_conversion_mapping,
-            )
+
+            if kernel_conversion_mapping:
+                for source_name, child_name in zip(source_names, child_names):
+                    child_cls = type(getattr(module, child_name))
+                    if child_cls in seen_children:
+                        continue
+                    seen_children.add(child_cls)
+                    prefix_dot = source_name + "."
+                    relevant = [
+                        c
+                        for c in kernel_conversion_mapping
+                        if any(p.startswith(prefix_dot) for p in c._original_source_patterns)
+                    ]
+                    if relevant:
+                        stripped = [_strip_converter_prefix(c, source_name) for c in relevant]
+                        patch_mapping[child_cls.__name__] = _make_converted_child_class(child_cls, stripped)
+
+            fused_parent_cls = make_fused_parent_class(module_cls, child_names, source_names, kernel_layer_name)
             patch_mapping[module_cls.__name__] = fused_parent_cls
 
         if not patch_mapping:
