@@ -60,6 +60,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "flex_olmo": "qwen2_moe",
     "olmoe": "qwen2_moe",
     "exaone_moe": "qwen2_moe",
+    "cohere2_moe": "qwen2_moe",
     "rt_detr_v2": "rt_detr",
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
@@ -1132,9 +1133,14 @@ def get_model_conversion_mapping(
 
         is_root_model = module_name == ""
         if not is_root_model:
-            # Scope each transform so it only matches keys under this sub-module's prefix.
+            # Scope each transform so it only matches keys under this sub-module's prefix - but we still allow to
+            # arbitrary add/remove base_model_prefix to load ForXXX model from BaseModel and the opposite
+            # Note that we need 2 removeprefix calls here, as only one level of nesting would not have the ending dot to module_name
+            scope_prefix = module_name.removeprefix(model.base_model_prefix)
+            scope_prefix = module_name.removeprefix(".")
             for transform in conversions:
-                transform.scope_prefix = module_name
+                transform.scope_prefix = scope_prefix
+                transform.base_model_prefix = model.base_model_prefix
         weight_conversions.extend(conversions)
 
         seen_identifiers[class_name].append(module_name)

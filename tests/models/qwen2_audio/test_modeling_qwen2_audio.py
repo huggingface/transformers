@@ -55,12 +55,6 @@ class Qwen2AudioModelTester(ALMModelTester):
         kwargs.setdefault("max_source_positions", kwargs["feat_seq_length"] // 2)
         super().__init__(parent, **kwargs)
 
-    def create_audio_mask(self):
-        # Deterministic full-length mask: the base default randomizes via Python's `random`, which isn't
-        # re-seeded per test call and desynchronizes the two `prepare_config_and_inputs_for_common`
-        # invocations inside generation-comparison tests (e.g. test_greedy_generate_dict_outputs).
-        return torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.bool).to(torch_device)
-
     def get_audio_embeds_mask(self, audio_mask):
         # Mirrors Qwen2AudioEncoder._get_feat_extract_output_lengths: conv2 (k=3,s=2,p=1) then avg_pool (k=2,s=2).
         input_lengths = audio_mask.sum(-1)
