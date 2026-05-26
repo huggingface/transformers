@@ -591,7 +591,11 @@ class Gemma4VisionPatchEmbedder(nn.Module):
         (shape ``(2, position_embedding_size, hidden_size)``).  The result is the
         sum of the x- and y-embeddings for each patch.
         """
-        clamped_positions = pixel_position_ids.clamp(min=0, max=self.position_embedding_size - 1)
+        # Clamp only the lower bound: negative values encode padding and must be
+        # mapped to a valid index before lookup (padding embeddings are zeroed
+        # out unconditionally below).  Valid positions are always in-range by
+        # construction, so no upper-bound clamping is needed.
+        clamped_positions = pixel_position_ids.clamp(min=0)
         # position_embedding_table: (2, position_embedding_size, hidden_size)
         # clamped_positions[..., 0]: (batch, num_patches) — x indices
         # clamped_positions[..., 1]: (batch, num_patches) — y indices
