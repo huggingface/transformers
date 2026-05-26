@@ -28,8 +28,7 @@ if TYPE_CHECKING:
 if is_torch_available():
     import torch
 
-if is_torch_available() and is_torch_greater_or_equal("2.5"):
-    import torch.distributed as dist
+if is_torch_available() and is_torch_greater_or_equal("2.6"):
     from torch.distributed._composable.fsdp import fully_shard
     from torch.distributed.fsdp import CPUOffloadPolicy, MixedPrecisionPolicy, OffloadPolicy
 
@@ -65,94 +64,6 @@ def is_fsdp_managed_module(module: nn.Module) -> bool:
     except ImportError:
         return False
     return isinstance(module, FullyShardedDataParallel)
-
-
-def initialize_fsdp(
-    fsdp_plan: dict[str, Any] | None,
-    device_mesh=None,
-    device_map=None,
-):
-    """
-    Sets up the device mesh for FSDP2 (Fully Sharded Data Parallel).
-    This function is called when the model is loaded and fsdp_plan is set.
-
-    Args:
-        fsdp_plan: Optional FSDP config dict. Manual mode is signaled by the
-            presence of a ``"modules"`` key; otherwise auto mode is used.
-        device_mesh: Optional pre-created DeviceMesh for FSDP.
-        device_map: Optional device map.
-
-    Returns:
-        Tuple of (device_map, device_mesh, fsdp_size)
-    """
-    if not is_torch_available():
-        raise ImportError("PyTorch is required for FSDP support")
-
-    if fsdp_plan is None:
-        return device_map, device_mesh, None
-
-    if not is_torch_greater_or_equal("2.5"):
-        raise OSError("FSDP2 is only supported for `torch>=2.5`.")
-
-    if device_mesh is None:
-        # Detect the accelerator on the machine
-        device_type = torch._C._get_accelerator().type
-        current_device = getattr(torch, device_type)
-
-        if not dist.is_initialized():
-            try:
-                rank = int(os.environ["RANK"])
-                local_rank = int(os.environ["LOCAL_RANK"])
-                world_size = int(os.environ["WORLD_SIZE"])
-
-                backend_map = {
-                    "cuda": "nccl",
-                    "cpu": "gloo",
-                    "xpu": "xccl",
-                    "hpu": "hccl",
-                    "neuron": "neuron",
-                    "tpu": "tpu_dist",
-                }
-                backend = backend_map.get(device_type)
-                if device_type == "cpu" and int(os.environ.get("CCL_WORKER_COUNT", "0")):
-                    backend = "ccl"
-                if device_type == "xpu" and not is_torch_greater_or_equal("2.8", accept_dev=True):
-                    backend = "ccl"
-
-                dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
-                if device_type != "cpu":
-                    current_device.set_device(local_rank)
-
-            except Exception as e:
-                raise OSError(
-                    "We tried to initialize torch.distributed for you, but it failed. Make "
-                    "sure you init torch distributed in your script to use `fsdp_plan`."
-                ) from e
-
-        if device_type != "cpu":
-            current_device.set_device(int(os.environ["LOCAL_RANK"]))
-            index = current_device.current_device()
-            fsdp_device = torch.device(device_type, index)
-            device_map = fsdp_device
-        else:
-            fsdp_device = torch.device(device_type)
-            device_map = device_type or {}
-
-        fsdp_size = dist.get_world_size()
-        device_mesh = torch.distributed.init_device_mesh(fsdp_device.type, (fsdp_size,), mesh_dim_names=("dp_shard",))
-    else:
-        # Use provided device mesh
-        if device_mesh.ndim > 1:
-            if "dp_shard" not in device_mesh.mesh_dim_names:
-                raise ValueError(
-                    "When using `fsdp_plan` with n-d `device_mesh`, it must contain a 'dp_shard' dimension. "
-                    "Please provide a valid `device_mesh`."
-                )
-            device_mesh = device_mesh["dp_shard"]
-        fsdp_size = device_mesh.size()
-        device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
-
-    return device_map, device_mesh, fsdp_size
 
 
 def _get_policy_kwargs(fsdp_plan: dict[str, Any]) -> dict[str, Any]:
@@ -338,8 +249,8 @@ def apply_fully_shard_data_parallel(
     if not is_torch_available():
         raise ImportError("PyTorch is required for FSDP support")
 
-    if not is_torch_greater_or_equal("2.5"):
-        raise OSError("FSDP2 requires torch>=2.5")
+    if not is_torch_greater_or_equal("2.6"):
+        raise OSError("FSDP2 requires torch>=2.6")
 
     if fsdp_plan is None:
         fsdp_plan = {}
