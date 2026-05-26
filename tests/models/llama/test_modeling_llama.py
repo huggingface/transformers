@@ -58,6 +58,64 @@ class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
     _torch_compile_train_cls = LlamaForCausalLM if is_torch_available() else None
 
 
+class LlamaConfigTest(unittest.TestCase):
+    """Tests for LlamaConfig validation logic."""
+
+    def test_explicit_head_dim_allows_non_divisible_hidden_size(self):
+        """Explicit head_dim should bypass the hidden_size % num_attention_heads check."""
+        from transformers import LlamaConfig
+
+        # 512 % 9 != 0, but head_dim is explicitly provided — must not raise.
+        config = LlamaConfig(
+            vocab_size=99,
+            hidden_size=512,
+            intermediate_size=1024,
+            num_hidden_layers=1,
+            num_attention_heads=9,
+            num_key_value_heads=1,
+            head_dim=56,
+        )
+        self.assertEqual(config.head_dim, 56)
+        self.assertTrue(config._head_dim_was_explicit)
+
+    def test_derived_head_dim_requires_divisible_hidden_size(self):
+        """Without an explicit head_dim the divisibility constraint must still be enforced."""
+        import huggingface_hub.errors as hf_errors
+
+        from transformers import LlamaConfig
+
+        with self.assertRaises(hf_errors.StrictDataclassClassValidationError):
+            LlamaConfig(
+                vocab_size=99,
+                hidden_size=512,
+                intermediate_size=1024,
+                num_hidden_layers=1,
+                num_attention_heads=9,  # 512 % 9 != 0, no explicit head_dim
+            )
+
+    def test_explicit_head_dim_roundtrip(self):
+        """A config with an explicit head_dim should survive a save/load cycle."""
+        import tempfile
+
+        from transformers import LlamaConfig
+
+        config = LlamaConfig(
+            vocab_size=99,
+            hidden_size=512,
+            intermediate_size=1024,
+            num_hidden_layers=1,
+            num_attention_heads=9,
+            num_key_value_heads=1,
+            head_dim=56,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config.save_pretrained(tmpdir)
+            reloaded = LlamaConfig.from_pretrained(tmpdir)
+        self.assertEqual(reloaded.head_dim, 56)
+        # head_dim is present in the JSON so it is still treated as explicit on reload.
+        self.assertTrue(reloaded._head_dim_was_explicit)
+
+
 @require_torch_accelerator
 class LlamaIntegrationTest(unittest.TestCase):
     def setup(self):
