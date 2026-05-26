@@ -992,6 +992,7 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
         query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device)
         if qformer_attention_mask is None:
             qformer_attention_mask = torch.ones_like(qformer_input_ids)
+        qformer_attention_mask = qformer_attention_mask.to(query_attention_mask.device)
         qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
         query_outputs = self.qformer(
             input_ids=qformer_input_ids,
@@ -1156,6 +1157,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device)
         if qformer_attention_mask is None:
             qformer_attention_mask = torch.ones_like(qformer_input_ids)
+        qformer_attention_mask = qformer_attention_mask.to(query_attention_mask.device)
         qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
         qformer_outputs = self.qformer(
             input_ids=qformer_input_ids,
