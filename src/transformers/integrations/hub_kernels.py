@@ -672,7 +672,7 @@ def _apply_weight_conversions(module: "nn.Module", conversion_mapping: list) -> 
             if (
                 all(p is None for p in source_mod._parameters.values())
                 and all(b is None for b in source_mod._buffers.values())
-                and all(m is None for m in source_mod._modules.values())
+                and not source_mod._modules
             ):
                 parent_path, _, mod_name = mod_path.rpartition(".")
                 parent_mod = module.get_submodule(parent_path) if parent_path else module
@@ -736,8 +736,11 @@ def _apply_converter_to_module(module: "nn.Module", converter) -> None:
     target_keys = list(conv.layer_targets)
     if not target_keys:
         return
-    target_key = target_keys[0]
-    result = conv.convert(target_key)
+
+    # Collect results from all target keys; a converter may produce more than one output tensor.
+    result: dict = {}
+    for target_key in target_keys:
+        result.update(conv.convert(target_key))
 
     # Infer the typed module class from the first source submodule.
     first_src_path = src_patterns[0].rpartition(".")[0]
@@ -777,10 +780,13 @@ def _apply_converter_to_module(module: "nn.Module", converter) -> None:
             src_mod = module.get_submodule(mod_path)
         except AttributeError:
             continue
+        # _parameters and _buffers may hold None-valued entries (e.g. bias=False in nn.Linear
+        # registers _parameters['bias'] = None), so check all-None rather than emptiness.
+        # _modules entries are always non-None module objects, so use emptiness there.
         if (
             all(p is None for p in src_mod._parameters.values())
             and all(b is None for b in src_mod._buffers.values())
-            and all(m is None for m in src_mod._modules.values())
+            and not src_mod._modules
         ):
             parent_path, _, mod_name = mod_path.rpartition(".")
             parent_mod = module.get_submodule(parent_path) if parent_path else module
@@ -790,10 +796,10 @@ def _apply_converter_to_module(module: "nn.Module", converter) -> None:
 def _create_typed_module(source_mod: "nn.Module | None", weight: "torch.Tensor") -> "nn.Module":
     """Instantiate a properly-typed nn.Module whose shape matches weight, inferred from source_mod."""
     cls_ = type(source_mod) if source_mod is not None else nn.Module
-    if cls_ is nn.Linear:
+    if issubclass(cls_, nn.Linear):
         out_features, in_features = weight.shape
         return cls_(in_features=in_features, out_features=out_features, bias=source_mod.bias is not None)
-    if cls_ is nn.Embedding:
+    if issubclass(cls_, nn.Embedding):
         num_embeddings, embedding_dim = weight.shape
         return cls_(
             num_embeddings=num_embeddings,
@@ -831,9 +837,8 @@ def make_fused_parent_class(
     original_init = parent_cls.__init__
     _child_names = list(child_names)
     _source_names = list(source_names)
-    _kernel_layer_name = kernel_layer_name
 
-    fused_module_cls = make_fused_module_class(tuple(_source_names), _kernel_layer_name)
+    fused_module_cls = make_fused_module_class(tuple(_source_names), kernel_layer_name)
 
     def fused_init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
