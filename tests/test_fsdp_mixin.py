@@ -791,27 +791,27 @@ class FSDPTesterMixin(ABC):
         set_seed(SEED)
         model = AutoModelForCausalLM.from_config(config)
 
+        attn = model.get_submodule("model.layers.0.self_attn")
         mlp = model.get_submodule("model.layers.0.mlp")
-        norm = model.get_submodule("model.norm")
         with unittest.mock.patch("transformers.distributed.fsdp.fully_shard") as mock_shard:
             apply_fully_shard_data_parallel(
                 model,
                 unittest.mock.MagicMock(),
                 fsdp_plan={
                     "modules": {
+                        "model.layers.0.self_attn": ["keep_full_weight"],
                         "model.layers.0.mlp": ["free_full_weight", "cpu_offload", "mixed_precision"],
-                        "model.norm": ["keep_full_weight"],
                     }
                 },
             )
 
+        attn_call = next(c for c in mock_shard.call_args_list if c.args and c.args[0] is attn)
         mlp_call = next(c for c in mock_shard.call_args_list if c.args and c.args[0] is mlp)
-        norm_call = next(c for c in mock_shard.call_args_list if c.args and c.args[0] is norm)
+
+        self.assertNotIn("offload_policy", attn_call.kwargs)
+        self.assertNotIn("mp_policy", attn_call.kwargs)
+        self.assertFalse(attn_call.kwargs["reshard_after_forward"])
 
         self.assertIsInstance(mlp_call.kwargs["offload_policy"], CPUOffloadPolicy)
         self.assertIsInstance(mlp_call.kwargs["mp_policy"], MixedPrecisionPolicy)
         self.assertTrue(mlp_call.kwargs["reshard_after_forward"])
-
-        self.assertNotIn("offload_policy", norm_call.kwargs)
-        self.assertNotIn("mp_policy", norm_call.kwargs)
-        self.assertFalse(norm_call.kwargs["reshard_after_forward"])
