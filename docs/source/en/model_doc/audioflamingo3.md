@@ -403,6 +403,11 @@ are forwarded, so you can tweak padding or tensor formats just like when calling
 [[autodoc]] AudioFlamingo3Encoder
     - forward
 
+## AudioFlamingo3Model
+
+[[autodoc]] AudioFlamingo3Model
+    - forward
+
 ## AudioFlamingo3ForConditionalGeneration
 
 [[autodoc]] AudioFlamingo3ForConditionalGeneration

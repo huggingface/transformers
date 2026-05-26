@@ -20,6 +20,7 @@ from transformers import (
     GraniteSpeechPlusConfig,
     GraniteSpeechPlusEncoderConfig,
     GraniteSpeechPlusForConditionalGeneration,
+    GraniteSpeechPlusModel,
 )
 from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 from transformers.utils import is_datasets_available, is_torch_available
@@ -43,6 +44,7 @@ class GraniteSpeechPlusForConditionalGenerationModelTester(GraniteSpeechModelTes
     """
 
     config_class = GraniteSpeechPlusConfig
+    base_model_class = GraniteSpeechPlusModel
     conditional_generation_class = GraniteSpeechPlusForConditionalGeneration
     audio_config_class = GraniteSpeechPlusEncoderConfig
 

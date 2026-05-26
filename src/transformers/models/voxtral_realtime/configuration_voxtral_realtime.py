@@ -176,6 +176,7 @@ class VoxtralRealtimeConfig(PreTrainedConfig):
     audio_length_per_tok: int = 8
     default_num_delay_tokens: int = 6
     downsample_factor: int = 4
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):

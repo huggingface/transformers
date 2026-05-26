@@ -143,6 +143,11 @@ for k in range(NUM_SEGMENTS):
 
 [[autodoc]] GraniteSpeechPlusEncoderConfig
 
+## GraniteSpeechPlusModel
+
+[[autodoc]] GraniteSpeechPlusModel
+    - forward
+
 ## GraniteSpeechPlusForConditionalGeneration
 
 [[autodoc]] GraniteSpeechPlusForConditionalGeneration

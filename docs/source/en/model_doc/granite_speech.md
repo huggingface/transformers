@@ -163,6 +163,11 @@ for i, transcription in enumerate(transcriptions):
 
 [[autodoc]] GraniteSpeechFeatureExtractor
 
+## GraniteSpeechModel
+
+[[autodoc]] GraniteSpeechModel
+    - forward
+
 ## GraniteSpeechForConditionalGeneration
 
 [[autodoc]] GraniteSpeechForConditionalGeneration

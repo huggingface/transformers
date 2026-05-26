@@ -231,6 +231,11 @@ assert decoded_outputs == EXPECTED_OUTPUT
 [[autodoc]] GlmAsrEncoder
     - forward
 
+## GlmAsrModel
+
+[[autodoc]] GlmAsrModel
+    - forward
+
 ## GlmAsrForConditionalGeneration
 
 [[autodoc]] GlmAsrForConditionalGeneration

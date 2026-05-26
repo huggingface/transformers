@@ -24,6 +24,7 @@ from transformers import (
     AutoProcessor,
     MusicFlamingoConfig,
     MusicFlamingoForConditionalGeneration,
+    MusicFlamingoModel,
     Qwen2Config,
     is_torch_available,
 )
@@ -51,6 +52,7 @@ class MusicFlamingoModelTester(ALMModelTester):
     """
 
     config_class = MusicFlamingoConfig
+    base_model_class = MusicFlamingoModel
     conditional_generation_class = MusicFlamingoForConditionalGeneration
     text_config_class = Qwen2Config
     audio_config_class = AudioFlamingo3EncoderConfig
@@ -96,7 +98,7 @@ class MusicFlamingoForConditionalGenerationModelTest(ALMModelTest, unittest.Test
 
     def test_rotary_window_axis_resets_per_audio(self):
         config = self.model_tester.get_config()
-        pos_emb = MusicFlamingoForConditionalGeneration(config).pos_emb.to(torch_device)
+        pos_emb = MusicFlamingoForConditionalGeneration(config).model.pos_emb.to(torch_device)
 
         timestamps = torch.tensor(
             [
@@ -126,7 +128,7 @@ class MusicFlamingoForConditionalGenerationModelTest(ALMModelTest, unittest.Test
         input_ids[0, :45] = config.audio_token_id
         input_ids[1, :30] = config.audio_token_id
 
-        _, post_lengths = model.audio_tower._get_feat_extract_output_lengths(
+        _, post_lengths = model.model.audio_tower._get_feat_extract_output_lengths(
             input_features_mask.sum(-1).to(torch.long)
         )
         max_post_length = int(post_lengths.max().item())
@@ -144,7 +146,7 @@ class MusicFlamingoForConditionalGenerationModelTest(ALMModelTest, unittest.Test
             ]
         )
 
-        inferred = model._build_audio_timestamps(input_ids, post_lengths, max_post_length)
+        inferred = model.model._build_audio_timestamps(input_ids, post_lengths, max_post_length)
         torch.testing.assert_close(inferred, audio_timestamps)
 
     @unittest.skip(

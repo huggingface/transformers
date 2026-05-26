@@ -19,6 +19,7 @@ from transformers import (
     AutoProcessor,
     GlmAsrConfig,
     GlmAsrForConditionalGeneration,
+    GlmAsrModel,
     LlamaConfig,
     is_torch_available,
 )
@@ -39,6 +40,7 @@ if is_torch_available():
 
 class GlmAsrModelTester(ALMModelTester):
     config_class = GlmAsrConfig
+    base_model_class = GlmAsrModel
     conditional_generation_class = GlmAsrForConditionalGeneration
     text_config_class = LlamaConfig
     audio_config_class = GlmAsrEncoderConfig
@@ -47,6 +49,12 @@ class GlmAsrModelTester(ALMModelTester):
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("head_dim", 8)
         super().__init__(parent, **kwargs)
+
+    def create_audio_mask(self):
+        # Deterministic full-length mask: the base default randomizes lengths in [1, feat_seq_length],
+        # and short samples collapse to 0 audio tokens after conv2 (s=2) + merge_factor=4, breaking
+        # test_mismatching_num_audio_tokens (a 0-contribution sample makes "duplicate audio" a no-op).
+        return torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.bool).to(torch_device)
 
     def get_audio_embeds_mask(self, audio_mask):
         # conv1 (s=1) preserves length; conv2 (s=2, k=3, p=1) halves; merge_factor=4 post-projector.

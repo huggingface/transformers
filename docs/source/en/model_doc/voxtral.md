@@ -352,6 +352,11 @@ This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb)
 [[autodoc]] VoxtralEncoder
     - forward
 
+## VoxtralModel
+
+[[autodoc]] VoxtralModel
+    - forward
+
 ## VoxtralForConditionalGeneration
 
 [[autodoc]] VoxtralForConditionalGeneration
