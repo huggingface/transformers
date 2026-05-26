@@ -140,10 +140,11 @@ print("Pointmaps shape:", outputs.pointmaps.shape)  # [1, 3, 1024, 768]
 
 # Remove preprocessing padding, resize to original size, and apply focal-length scale
 original_size = (image.height, image.width)
-pointmaps = image_processor.post_process_pointmap(
+result = image_processor.post_process_pointmap(
     outputs, source_sizes=[original_size], target_sizes=[original_size]
-)[0]
-print("Pointmap shape:", pointmaps.shape)  # [3, original_height, original_width]
+)
+pointmap = result[0]["pointmap"]
+print("Pointmap shape:", pointmap.shape)  # [3, original_height, original_width]
 ```
 
 ### Pose estimation

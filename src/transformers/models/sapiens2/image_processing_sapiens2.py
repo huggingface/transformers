@@ -698,7 +698,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         source_sizes: list[tuple] | None = None,
         target_sizes: list[tuple] | None = None,
         do_remove_padding: bool | None = None,
-    ) -> list[torch.Tensor]:
+    ) -> list[dict[str, torch.Tensor]]:
         """
         Converts the output of [`Sapiens2ForPointmapEstimation`] into pointmap tensors in image space.
 
@@ -717,9 +717,9 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 Defaults to `True` when `source_sizes` is provided, `False` otherwise.
 
         Returns:
-            `list[torch.Tensor]` of length `batch_size`, each of shape `(3, height, width)`.
-            Values are per-pixel 3D XYZ coordinates in canonical camera space, optionally divided
-            by `outputs.scales` to convert to metric coordinates.
+            `list[dict[str, torch.Tensor]]` of length `batch_size`. Each dict has a `"pointmap"` key
+            mapping to a tensor of shape `(3, height, width)` with per-pixel 3D XYZ coordinates in
+            canonical camera space, optionally divided by `outputs.scales` to convert to metric coordinates.
         """
         if do_remove_padding is None:
             do_remove_padding = source_sizes is not None
@@ -772,7 +772,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                     antialias=False,
                 )[0]
 
-            result.append(pointmap)
+            result.append({"pointmap": pointmap})
 
         return result
 

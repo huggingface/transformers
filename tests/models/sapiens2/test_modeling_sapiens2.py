@@ -429,7 +429,6 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         # without target_sizes: spatial dims match normals, values are L2-normalized
         result = image_processor.post_process_normal_estimation(outputs)
         self.assertEqual(len(result), batch_size)
-        self.assertIn("normals", result[0])
         self.assertEqual(result[0]["normals"].shape, torch.Size([num_labels, height, width]))
         norms = result[0]["normals"].norm(p=2, dim=0)
         torch.testing.assert_close(norms, torch.ones_like(norms), rtol=1e-4, atol=1e-4)
@@ -454,13 +453,13 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         # without target_sizes: spatial dims match pointmap
         result = image_processor.post_process_pointmap(outputs)
         self.assertEqual(len(result), batch_size)
-        self.assertEqual(result[0].shape, torch.Size([num_labels, height, width]))
+        self.assertEqual(result[0]["pointmap"].shape, torch.Size([num_labels, height, width]))
 
         # with target_sizes: output is resized to requested size
         target_sizes = [(height * 2, width * 2)] * batch_size
         result = image_processor.post_process_pointmap(outputs, target_sizes=target_sizes)
         self.assertEqual(len(result), batch_size)
-        self.assertEqual(result[0].shape, torch.Size([num_labels, height * 2, width * 2]))
+        self.assertEqual(result[0]["pointmap"].shape, torch.Size([num_labels, height * 2, width * 2]))
 
         # with scales: scale division is applied
         scale = torch.tensor([[2.0], [0.5]])
@@ -468,8 +467,8 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             pointmaps=torch.ones(batch_size, num_labels, height, width), scales=scale
         )
         result = image_processor.post_process_pointmap(outputs_with_scale)
-        torch.testing.assert_close(result[0], torch.full((num_labels, height, width), 0.5))
-        torch.testing.assert_close(result[1], torch.full((num_labels, height, width), 2.0))
+        torch.testing.assert_close(result[0]["pointmap"], torch.full((num_labels, height, width), 0.5))
+        torch.testing.assert_close(result[1]["pointmap"], torch.full((num_labels, height, width), 2.0))
 
         # mismatched batch size raises ValueError
         with self.assertRaises(ValueError):
@@ -761,7 +760,6 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
         result = image_processor.post_process_normal_estimation(outputs, source_sizes=[(image_height, image_width)])
         self.assertEqual(len(result), 1)
-        self.assertIn("normals", result[0])
         self.assertEqual(result[0]["normals"].shape, torch.Size([3, 432, 640]))
 
         expected_postprocessed_normals = torch.tensor(
@@ -804,7 +802,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
         result = image_processor.post_process_pointmap(outputs, source_sizes=[(image_height, image_width)])
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].shape, torch.Size([3, image_height, image_width]))
+        self.assertEqual(result[0]["pointmap"].shape, torch.Size([3, image_height, image_width]))
 
         # Head and post-processing are exactly identical to original code but differences from backbone
         # get amplified after scaling and resizing so we need to relax the tolerance here.
@@ -812,7 +810,9 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
             [[0.0771, 0.1335, 0.3025], [-0.1179, 0.2904, 0.7140], [0.0337, 0.3037, 0.4390]],
             device=torch_device,
         )
-        torch.testing.assert_close(result[0][0, :3, :3], expected_postprocessed_pointmap, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(
+            result[0]["pointmap"][0, :3, :3], expected_postprocessed_pointmap, rtol=1e-2, atol=1e-2
+        )
 
     @slow
     def test_inference_matting(self):
