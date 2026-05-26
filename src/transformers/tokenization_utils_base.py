@@ -3315,6 +3315,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 else:
                     Path(chat_template_dir).mkdir(exist_ok=True)
                     template_filepath = os.path.join(chat_template_dir, f"{template_name}.jinja")
+                    # template_name is an untrusted dict key; reject path traversal (CWE-22)
+                    if Path(template_filepath).resolve().parent != Path(chat_template_dir).resolve():
+                        raise ValueError(f"Invalid chat template name: {template_name!r}")
                     with open(template_filepath, "w", encoding="utf-8") as f:
                         f.write(template)
                     logger.info(f"chat template saved in {template_filepath}")
