@@ -623,6 +623,8 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         image_processor = self.default_image_processor
         image = prepare_img()
 
+        image_height, image_width = image.shape[-2:]
+
         # person bbox in COCO format (x, y, w, h)
         boxes = [[[2.7080630e02, 5.7221174e-01, 2.9409006e02, 3.7946970e02]]]
         inputs = image_processor(image, boxes=boxes, return_tensors="pt").to(torch_device)
@@ -663,18 +665,32 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(scores[:3], expected_scores, rtol=1e-2, atol=1e-2)
 
         bbox = person["bbox"]
-        # Padded, aspect-ratio-corrected xyxy box derived from center ± scale/2
-        expected_bbox = torch.tensor([234.04503, -54.76801, 601.65761, 435.38211], device=torch_device)
-        torch.testing.assert_close(bbox, expected_bbox, rtol=1e-3, atol=1e-3)
-
-        # Passing normalised boxes + target_sizes must produce identical results
-        img_w, img_h = 640, 432
-        norm_boxes = [[[b / s for b, s in zip(boxes[0][0], [img_w, img_h, img_w, img_h])]]]
-        results_norm = image_processor.post_process_pose_estimation(
-            outputs, boxes=norm_boxes, target_sizes=[(img_h, img_w)]
+        expected_bbox_xywh = torch.tensor(boxes[0][0], device=torch_device)
+        expected_bbox_xyxy = torch.tensor(
+            [
+                expected_bbox_xywh[0],
+                expected_bbox_xywh[1],
+                expected_bbox_xywh[0] + expected_bbox_xywh[2],
+                expected_bbox_xywh[1] + expected_bbox_xywh[3],
+            ],
+            device=torch_device,
         )
-        torch.testing.assert_close(results_norm[0][0]["keypoints"], keypoints)
-        torch.testing.assert_close(results_norm[0][0]["bbox"], bbox)
+        torch.testing.assert_close(bbox, expected_bbox_xyxy, rtol=1e-3, atol=1e-3)
+
+        # target_sizes without source_sizes must raise
+        with self.assertRaises(ValueError):
+            image_processor.post_process_pose_estimation(outputs, boxes=boxes, target_sizes=[(432, 640)])
+
+        # source_sizes + target_sizes: keypoints and bbox scaled by target/source
+        target_height, target_width = image_height * 2, image_width * 2
+        results_scaled = image_processor.post_process_pose_estimation(
+            outputs,
+            boxes=boxes,
+            source_sizes=[(image_height, image_width)],
+            target_sizes=[(target_height, target_width)],
+        )
+        torch.testing.assert_close(results_scaled[0][0]["keypoints"], keypoints * 2.0)
+        torch.testing.assert_close(results_scaled[0][0]["bbox"], expected_bbox_xyxy * 2.0)
 
         # Test flipping
         flipped_inputs = {"pixel_values": inputs["pixel_values"].flip(-1)}
@@ -715,7 +731,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(final_scores[:3], expected_final_scores, rtol=1e-2, atol=1e-2)
 
         final_bbox = final_person["bbox"]
-        torch.testing.assert_close(final_bbox, expected_bbox, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(final_bbox, expected_bbox_xyxy, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_inference_normal_estimation(self):

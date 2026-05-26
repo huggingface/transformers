@@ -57,6 +57,12 @@ class Sapiens2ImageProcessorKwargs(ImagesKwargs, total=False):
     do_reduce_labels: bool
 
 
+def box_xywh_to_xyxy(x):
+    x, y, w, h = x.unbind(-1)
+    b = [(x), (y), (x + w), (y + h)]
+    return torch.stack(b, dim=-1)
+
+
 def box_xywh_to_cxcywh(x):
     x, y, w, h = x.unbind(-1)
     b = [(x + 0.5 * w), (y + 0.5 * h), (w), (h)]
@@ -72,16 +78,31 @@ def cxcywh_to_crop_params(
 
     Accepts either a single box `(4,)` or a batch `(N, 4)` and returns center/scale with a matching
     leading dimension.
+
+    Args:
+        bbox_cxcywh (`torch.Tensor` of shape `(4,)` or `(N, 4)`): Bounding box in
+            COCO (center-x, center-y, width, height) format, with values in pixel coordinates.
+        output_size (`tuple[int, int]`): Target output size as `(height, width)`, used to compute
+            the aspect ratio for scale correction.
+        padding (`float`, *optional*, defaults to `1.25`): Multiplicative factor applied to the
+            bounding box dimensions, adding context around the region of interest.
+
+    Returns:
+        `tuple[torch.Tensor, torch.Tensor]`: A pair `(center, scale)` where `center` has shape
+        `(..., 2)` with (x, y) in input-image pixel coordinates, and `scale` has shape `(..., 2)`
+        with (width, height) in input-image pixels representing the dimensions of the padded,
+        aspect-ratio-corrected crop window.
     """
-    center_x, center_y, bbox_w, bbox_h = bbox_cxcywh.unbind(-1)
+    center_x, center_y, width, height = bbox_cxcywh.unbind(-1)
     center = torch.stack([center_x, center_y], dim=-1)
-    scale_w, scale_h = bbox_w * padding, bbox_h * padding
+    scaled_width = width * padding
+    scaled_height = height * padding
     output_height, output_width = output_size
     aspect_ratio = output_width / output_height
     scale = torch.where(
-        (scale_w > scale_h * aspect_ratio)[..., None],
-        torch.stack([scale_w, scale_w / aspect_ratio], dim=-1),
-        torch.stack([scale_h * aspect_ratio, scale_h], dim=-1),
+        (scaled_width > scaled_height * aspect_ratio)[..., None],
+        torch.stack([scaled_width, scaled_width / aspect_ratio], dim=-1),
+        torch.stack([scaled_height * aspect_ratio, scaled_height], dim=-1),
     )
     return center, scale
 
@@ -113,7 +134,7 @@ def crop_and_resize(
     """
     output_height, output_width = output_size
     input_height, input_width = image.shape[-2:]
-    center, scale = cxcywh_to_crop_params(bbox_cxcywh, output_size, padding)
+    center, scale = cxcywh_to_crop_params(bbox_cxcywh, output_size=output_size, padding=padding)
     center_x, center_y = center
     bbox_w, bbox_h = scale
 
@@ -405,7 +426,8 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         boxes: list[list[list[float]]],
         blur_kernel_size: int = 11,
         threshold: float | None = None,
-        target_sizes: TensorType | list[tuple] | None = None,
+        source_sizes: list[tuple] | None = None,
+        target_sizes: list[tuple] | None = None,
     ) -> list[list[dict[str, torch.Tensor]]]:
         """
         Converts the output of [`Sapiens2ForPoseEstimation`] into keypoint predictions in image space.
@@ -416,8 +438,8 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 `(N_total, num_keypoints, heatmap_height, heatmap_width)` where
                 `N_total = sum(len(b) for b in boxes)`.
             boxes (`list[list[list[float]]]` or `np.ndarray`):
-                List or array of bounding boxes for each image. Each box should be a list of 4 floats
-                representing the bounding box coordinates in COCO format
+                List or array of bounding boxes for each image in absolute pixel coordinates. Each box
+                should be a list of 4 floats representing the bounding box coordinates in COCO format
                 (top_left_x, top_left_y, width, height). Must match the `boxes` argument passed to
                 `preprocess`.
             blur_kernel_size (`int`, *optional*, defaults to 11):
@@ -425,30 +447,35 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             threshold (`float`, *optional*):
                 Score threshold. Keypoints with scores at or below this value are
                 filtered out from the result dictionaries.
-            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
-                Tensor of shape `(N_total, 2)` or list of `(height, width)` tuples, one per person (i.e. one
-                per flattened box). When provided, each box is multiplied by
-                `[width, height, width, height]` before processing, which is useful when boxes are given in
-                normalized [0, 1] coordinates.
+            source_sizes (`list[tuple[int, int]]` of length `batch_size`, *optional*):
+                Original `(height, width)` of each image in pixels. Required when `target_sizes` is
+                provided, as the source coordinate space for scaling keypoints and bounding boxes.
+            target_sizes (`list[tuple[int, int]]` of length `batch_size`, *optional*):
+                Desired output `(height, width)` coordinate space for each image. When provided
+                alongside `source_sizes`, keypoint coordinates and bounding boxes are scaled from
+                source to target space.
 
         Returns:
             `list[list[dict]]`: Outer list is over images, inner list is over persons.
             Each dict contains:
-            - `keypoints` (`torch.FloatTensor` of shape `(num_keypoints, 2)`): x/y in image coords.
+            - `keypoints` (`torch.FloatTensor` of shape `(num_keypoints, 2)`): absolut x/y coordinates in
+              the source image space, or in target space if `target_sizes` is provided.
             - `scores` (`torch.FloatTensor` of shape `(num_keypoints,)`): per-keypoint confidence.
             - `labels` (`torch.LongTensor` of shape `(num_keypoints,)`): keypoint indices.
-            - `bbox` (`torch.FloatTensor` of shape `(4,)`): the padded, aspect-ratio-corrected input bounding box
-              in xyxy format (x_min, y_min, x_max, y_max), i.e. the actual image region used for preprocessing.
+            - `bbox` (`torch.FloatTensor` of shape `(4,)`): bounding box in absolute (x_min, y_min, x_max, y_max)
+               format, in the same coordinate space as `keypoints`.
         """
-        heatmaps = outputs.heatmaps.float()  # (num_total_persons, num_keypoints, heatmap_height, heatmap_width)
+        heatmaps = outputs.heatmaps  # (num_total_persons, num_keypoints, heatmap_height, heatmap_width)
         device = heatmaps.device
         num_total_persons, num_keypoints, heatmap_height, heatmap_width = heatmaps.shape
+        num_images = len(boxes)
 
-        if target_sizes is not None and num_total_persons != len(target_sizes):
-            raise ValueError(
-                "Make sure that you pass in as many target sizes as the total number of persons "
-                "(i.e. the sum of boxes across all images)."
-            )
+        if target_sizes is not None and source_sizes is None:
+            raise ValueError("`source_sizes` must be provided when `target_sizes` is specified.")
+        if source_sizes is not None and num_images != len(source_sizes):
+            raise ValueError("Make sure that you pass in as many source sizes as the number of images.")
+        if target_sizes is not None and num_images != len(target_sizes):
+            raise ValueError("Make sure that you pass in as many target sizes as the number of images.")
 
         if num_total_persons == 0:
             return [[] for _ in boxes]
@@ -458,29 +485,39 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             [bbox for image_boxes in boxes for bbox in image_boxes], dtype=torch.float32, device=device
         )
 
-        if target_sizes is not None:
-            # (num_total_persons, 4)
-            scale_factors = torch.tensor(
-                [[width, height, width, height] for (height, width) in target_sizes],
-                dtype=torch.float32,
-                device=device,
-            )
-            boxes_xywh = boxes_xywh * scale_factors
-
-        output_size = (self.size["height"], self.size["width"])
-        boxes_cxcywh = box_xywh_to_cxcywh(boxes_xywh)
-        centers, scales = cxcywh_to_crop_params(boxes_cxcywh, output_size=output_size)
+        heatmaps = heatmaps.float()  # For consistency with original numpy/cv2 implementation which uses float32.
 
         # (num_total_persons, num_keypoints, 2), (num_total_persons, num_keypoints)
         all_keypoints, all_scores = get_keypoint_predictions(heatmaps)
         all_keypoints = post_dark_unbiased_data_processing(
             keypoints=all_keypoints, heatmaps=heatmaps, blur_kernel_size=blur_kernel_size
         )
+
+        # Remap coordinates from heatmap space to original image space
+        boxes_cxcywh = box_xywh_to_cxcywh(boxes_xywh)
+        centers, scales = cxcywh_to_crop_params(boxes_cxcywh, output_size=(self.size["height"], self.size["width"]))
         heatmap_size = torch.tensor([heatmap_width - 1, heatmap_height - 1], dtype=torch.float32, device=device)
         all_keypoints = (
             all_keypoints / heatmap_size * scales[:, None, :] + centers[:, None, :] - 0.5 * scales[:, None, :]
         )
-        all_boxes = torch.cat([centers - scales / 2, centers + scales / 2], dim=-1)  # (num_total_persons, 4)
+        all_boxes = box_xywh_to_xyxy(boxes_xywh)  # (num_total_persons, 4)
+
+        if source_sizes is not None and target_sizes is not None:
+            # (num_images, 2)
+            per_image_scale = torch.tensor(
+                [
+                    [target_width / source_width, target_height / source_height]
+                    for (source_height, source_width), (target_height, target_width) in zip(source_sizes, target_sizes)
+                ],
+                dtype=torch.float32,
+                device=device,
+            )
+            # (num_total_persons, 2)
+            per_person_scale = torch.cat(
+                [per_image_scale[i].unsqueeze(0).expand(len(boxes[i]), 2) for i in range(num_images)]
+            )
+            all_keypoints = all_keypoints * per_person_scale[:, None, :]
+            all_boxes = all_boxes * per_person_scale[:, [0, 1, 0, 1]]
 
         person_results = []
         for person_index in range(num_total_persons):
