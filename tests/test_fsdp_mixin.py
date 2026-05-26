@@ -48,7 +48,11 @@ if is_torch_available():
     from torch.nn.parallel import DistributedDataParallel as DDP
 
     from transformers.distributed import DistributedConfig
-    from transformers.distributed.tensor_parallel import replace_layer_number_by_wildcard
+    from transformers.distributed.fsdp import (
+        _iter_plan_targets,
+        apply_fully_shard_data_parallel,
+        tied_source_path,
+    )
     from transformers.distributed.utils import (
         gather_full_state_dict,
         load_optimizer_distributed,
@@ -219,48 +223,16 @@ def _gather_ddp_state_dict(model):
     return {k: v.clone().detach().cpu() for k, v in model.module.state_dict().items()}
 
 
-def _resolve_fsdp_plan_paths(model):
-    """Expand model._fsdp_plan into (paths, strategy) entries.
-
-    Wildcard keys are expanded via ``replace_layer_number_by_wildcard``. When
-    weights are tied, the standalone embed_tokens entry is skipped and any
-    ``"lm_head"`` keep entry is rewritten to the tied source path (the keep
-    group will wrap the shared parameter once).
-    """
-    plan = model._fsdp_plan
-
+def _is_weights_tied(model):
     input_embed = model.get_input_embeddings()
     output_embed = model.get_output_embeddings()
-    weights_tied = (
+    return (
         input_embed is not None
         and output_embed is not None
         and hasattr(input_embed, "weight")
         and hasattr(output_embed, "weight")
         and input_embed.weight is output_embed.weight
     )
-    tied_source = None
-    if weights_tied:
-        for name, mod in model.named_modules():
-            if mod is input_embed:
-                tied_source = name
-                break
-
-    name_to_module = dict(model.named_modules())
-    entries: list[tuple[list[str], str]] = []
-    for key, strategy in plan.items():
-        if weights_tied and key == tied_source:
-            continue
-        if weights_tied and key == "lm_head" and strategy == "keep_full_weight":
-            entries.append(([tied_source], strategy))
-            continue
-
-        if key in name_to_module:
-            entries.append(([key], strategy))
-            continue
-        matched = [name for name in name_to_module if replace_layer_number_by_wildcard(name) == key]
-        if matched:
-            entries.append((matched, strategy))
-    return entries
 
 
 def _build_manual_fsdp_plan(config, device):
@@ -268,13 +240,15 @@ def _build_manual_fsdp_plan(config, device):
     set_seed(SEED)
     model = AutoModelForCausalLM.from_config(config).to(device)
 
-    module_plan: dict[str, list[str]] = {}
-    for paths, strategy in _resolve_fsdp_plan_paths(model):
-        for path in paths:
-            module_plan[path] = [strategy]
+    weights_tied = _is_weights_tied(model)
+    tied_source = tied_source_path(model) if weights_tied else None
+    modules = {
+        name: [strategy]
+        for name, _, strategy in _iter_plan_targets(model, model._fsdp_plan, weights_tied, tied_source)
+    }
 
     del model
-    return {"modules": module_plan}
+    return {"modules": modules}
 
 
 def _save_init_pretrained(rank, config, dtype):
@@ -511,9 +485,11 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
     # Expected FSDP targets come from model._fsdp_plan: every resolved path gets a
     # fully_shard call (keep_full_weight entries are bundled into one group, but each
     # member still appears as an FSDP-wrapped module in named_modules), plus the root.
+    weights_tied = _is_weights_tied(model)
+    tied_source = tied_source_path(model) if weights_tied else None
     expected_targets = {""}
-    for paths, _strategy in _resolve_fsdp_plan_paths(model):
-        expected_targets.update(paths)
+    for name, _, _ in _iter_plan_targets(model, model._fsdp_plan, weights_tied, tied_source):
+        expected_targets.add(name)
 
     actual_targets = {name for name, module in model.named_modules() if type(module).__name__.startswith("FSDP")}
 
