@@ -2015,7 +2015,12 @@ class Trainer:
             and (self.model_accepts_loss_kwargs or self.compute_loss_func)
             and num_items_in_batch is not None
         ):
-            loss *= self.accelerator.num_processes if self.args.n_gpu <= 1 else self.args.n_gpu
+            # TP and EP-as-TP ranks see replicated batches; `num_processes` over-counts
+            # them by `tp_size`. Mirror the divisor used in `_get_num_items_in_batch`.
+            loss_scale = self.accelerator.num_processes
+            if (pc := getattr(self.accelerator, "parallelism_config", None)) is not None:
+                loss_scale //= pc.tp_size
+            loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
 
         return (loss, outputs) if return_outputs else loss
 
