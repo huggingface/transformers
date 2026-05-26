@@ -1027,15 +1027,22 @@ class Molmo2Model(Molmo2PreTrainedModel):
         image_features: torch.FloatTensor | None = None
         if images is not None:
             image_features = self.vision_backbone(images, token_pooling)
-            sample_count = image_grids.shape[0] if pixel_values is not None else video_grids.shape[0]
-            if input_ids.shape[0] != sample_count:
-                num_beams = input_ids.shape[0] // sample_count
-                features_per_sample = image_features.shape[0] // sample_count
-                image_features = (
-                    image_features.view(sample_count, features_per_sample, -1)
-                    .repeat_interleave(num_beams, dim=0)
-                    .view(-1, image_features.shape[-1])
-                )
+            image_token_counts = (input_ids == self.config.image_token_id).sum(dim=-1)
+            total_image_tokens = image_token_counts.sum()
+            if total_image_tokens != image_features.shape[0] and total_image_tokens % image_features.shape[0] == 0:
+                num_beams = total_image_tokens // image_features.shape[0]
+                original_image_token_counts = image_token_counts[::num_beams]
+                if original_image_token_counts.sum() == image_features.shape[0]:
+                    image_features = torch.cat(
+                        [
+                            image_features_slice
+                            for image_features_slice in image_features.split(
+                                [int(count) for count in original_image_token_counts.tolist()]
+                            )
+                            for _ in range(num_beams)
+                        ],
+                        dim=0,
+                    )
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(
                 special_image_mask,
