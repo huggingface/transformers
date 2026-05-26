@@ -40,6 +40,8 @@ class Molmo2VitConfig(PreTrainedConfig):
         Size of each image patch.
     image_num_pos (`int`, *optional*, defaults to 577):
         Number of positional embeddings for the image.
+    float32_attention (`bool`, *optional*, defaults to `True`):
+        Whether to compute vision attention scores in float32 for compatibility with the original checkpoint.
     """
 
     model_type = "molmo2"
@@ -79,6 +81,8 @@ class Molmo2AdapterConfig(PreTrainedConfig):
         Hidden size of the text model (used for projection).
     image_feature_dropout (`float`, *optional*, defaults to 0.0):
         Dropout rate for image features.
+    float32_attention (`bool`, *optional*, defaults to `True`):
+        Whether to compute adapter attention scores in float32 for compatibility with the original checkpoint.
     """
 
     model_type = "molmo2"

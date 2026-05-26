@@ -54,7 +54,6 @@ from ...utils import (
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata
-from ..cohere2_vision.image_processing_cohere2_vision import get_optimal_tiled_canvas
 from ..gemma3.modeling_gemma3 import get_block_sequence_ids_for_mask
 from ..llama.modeling_llama import (
     LlamaPreTrainedModel,
@@ -81,6 +80,29 @@ from .configuration_molmo2 import Molmo2AdapterConfig, Molmo2Config, Molmo2TextC
 
 
 logger = logging.get_logger(__name__)
+
+
+def select_tiling(height: int, width: int, patch_size: int, max_num_crops: int) -> tuple[int, int]:
+    """Select the image tiling in the same height/width order as the original Molmo2 processor."""
+    tilings = []
+    for tile_height in range(1, max_num_crops + 1):
+        for tile_width in range(1, max_num_crops + 1):
+            if tile_height * tile_width <= max_num_crops:
+                tilings.append((tile_height, tile_width))
+    tilings.sort(key=lambda x: (x[0] * x[1], x[0]))
+
+    candidate_resolutions = np.array(tilings, dtype=np.int32) * patch_size
+    original_size = np.stack([height, width], dtype=np.float32)
+
+    with np.errstate(divide="ignore"):
+        required_scales = candidate_resolutions.astype(np.float32) / original_size
+    required_scale = np.min(required_scales, axis=-1, keepdims=True)
+
+    if np.all(required_scale < 1):
+        return tilings[np.argmax(required_scale)]
+
+    required_scale = np.where(required_scale < 1.0, 10e9, required_scale)
+    return tilings[np.argmin(required_scale)]
 
 
 def batch_pixels_to_patches(array: torch.Tensor, patch_size: int) -> torch.Tensor:
@@ -222,12 +244,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         margin_size = (left_margin + right_margin) * image_patch_size
 
         _, original_h, original_w = image_chw.shape
-        tiling_w, tiling_h = get_optimal_tiled_canvas(
-            original_image_size=(original_h - margin_size, original_w - margin_size),
-            target_tile_size=(window_size, window_size),
-            min_image_tiles=1,
-            max_image_tiles=max_crops,
-        )
+        tiling_h, tiling_w = select_tiling(original_h - margin_size, original_w - margin_size, window_size, max_crops)
         src_h = tiling_h * window_size + margin_size
         src_w = tiling_w * window_size + margin_size
 
@@ -425,12 +442,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
         effective_h = height - total_margin_pixels
         effective_w = width - total_margin_pixels
-        tiling_w, tiling_h = get_optimal_tiled_canvas(
-            original_image_size=(effective_h, effective_w),
-            target_tile_size=(crop_window_size, crop_window_size),
-            min_image_tiles=1,
-            max_image_tiles=max_crops,
-        )
+        tiling_h, tiling_w = select_tiling(effective_h, effective_w, crop_window_size, max_crops)
 
         high_res_h = tiling_h * crop_window_patches + left_margin + right_margin
         high_res_w = tiling_w * crop_window_patches + left_margin + right_margin
