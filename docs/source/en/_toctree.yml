@@ -32,8 +32,15 @@
         title: Contribute to Transformers
       - local: modular_transformers
         title: Add a model with modular transformers
-      - local: add_vision_processing_components
-        title: Add vision processing components
+      - title: Multimodal models
+        isExpanded: false
+        sections:
+        - local: multimodal_processing
+          title: Multimodal processors
+        - local: add_vision_processing_components
+          title: Vision processing components
+        - local: add_audio_processing_components
+          title: Audio processing components
       - local: modeling_rules
         title: Model structure rules
       - local: model_output_tracing
@@ -543,6 +550,8 @@
         title: Cohere
       - local: model_doc/cohere2
         title: Cohere2
+      - local: model_doc/cohere2_moe
+        title: Cohere2Moe
       - local: model_doc/convbert
         title: ConvBERT
       - local: model_doc/cpm
@@ -665,6 +674,8 @@
         title: Helium
       - local: model_doc/herbert
         title: HerBERT
+      - local: model_doc/hrm_text
+        title: HRM-Text
       - local: model_doc/hunyuan_v1_dense
         title: HunYuanDenseV1
       - local: model_doc/hunyuan_v1_moe
@@ -1361,12 +1372,22 @@
         title: PP-OCRv5_server_det
       - local: model_doc/pp_ocrv5_server_rec
         title: PP-OCRv5_server_rec
+      - local: model_doc/pp_ocrv6_medium_det
+        title: PP-OCRv6_medium_det
+      - local: model_doc/pp_ocrv6_small_det
+        title: PP-OCRv6_small_det
+      - local: model_doc/pp_ocrv6_small_rec
+        title: PP-OCRv6_small_rec
+      - local: model_doc/pp_ocrv6_tiny_rec
+        title: PP-OCRv6_tiny_rec
       - local: model_doc/pp_chart2table
         title: PPChart2Table
       - local: model_doc/pp_lcnet
         title: PPLCNet
       - local: model_doc/pp_lcnet_v3
         title: PPLCNetV3
+      - local: model_doc/pp_lcnet_v4
+        title: PPLCNetV4
       - local: model_doc/qianfan_ocr
         title: QianfanOCR
       - local: model_doc/qwen2_5_omni

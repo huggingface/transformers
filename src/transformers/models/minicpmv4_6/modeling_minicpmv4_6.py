@@ -598,12 +598,6 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         self.merger = MiniCPMV4_6Merger(config)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     @can_return_tuple
     @auto_docstring(custom_intro="Extract image features: vision encoder, insert merger, then MLP merger.")
     def get_image_features(

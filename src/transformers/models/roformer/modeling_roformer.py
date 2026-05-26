@@ -282,6 +282,7 @@ class RoFormerAttention(nn.Module):
             encoder_hidden_states=encoder_hidden_states,
             past_key_values=past_key_values,
             output_attentions=output_attentions,
+            **kwargs,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -351,6 +352,7 @@ class RoFormerLayer(GradientCheckpointingLayer):
             sinusoidal_pos=sinusoidal_pos,
             output_attentions=output_attentions,
             past_key_values=past_key_values,
+            **kwargs,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -369,6 +371,7 @@ class RoFormerLayer(GradientCheckpointingLayer):
                 encoder_hidden_states=encoder_hidden_states,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
+                **kwargs,
             )
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:]  # add cross attentions if we output attention weights
@@ -435,6 +438,7 @@ class RoFormerEncoder(nn.Module):
                 encoder_attention_mask,
                 past_key_values,
                 output_attentions,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -744,6 +748,7 @@ class RoFormerModel(RoFormerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
         sequence_output = encoder_outputs[0]
 
@@ -821,6 +826,7 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -927,6 +933,7 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -1018,6 +1025,7 @@ class RoFormerForSequenceClassification(RoFormerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -1128,6 +1136,7 @@ class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -1193,6 +1202,7 @@ class RoFormerForTokenClassification(RoFormerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -1255,6 +1265,7 @@ class RoFormerForQuestionAnswering(RoFormerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]

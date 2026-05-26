@@ -183,7 +183,7 @@ checkpoint: जाँच बिंदु
 1. कम कम्प्यूटेशनल ओवरहेड और कम कार्बन उत्सर्जन:
     - शोधकर्ता हर बार नए सिरे से प्रशिक्षण देने के बजाय प्रशिक्षित मॉडल साझा कर सकते हैं
     - इंजीनियर गणना समय और उत्पादन ओवरहेड को कम कर सकते हैं
-    - दर्जनों मॉडल आर्किटेक्चर, 2,000 से अधिक पूर्व-प्रशिक्षित मॉडल, 100 से अधिक भाषाओं का समर्थन
+    - सैकड़ों मॉडल आर्किटेक्चर, 2,000 से अधिक पूर्व-प्रशिक्षित मॉडल, 100 से अधिक भाषाओं का समर्थन
 
 1.मॉडल जीवनचक्र के हर हिस्से को शामिल करता है:
     - कोड की केवल 3 पंक्तियों में उन्नत मॉडलों को प्रशिक्षित करें
@@ -261,7 +261,7 @@ conda install conda-forge::transformers
 
 ## उद्धरण
 
-हमने आधिकारिक तौर पर इस लाइब्रेरी का [पेपर](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) प्रकाशित किया है, अगर आप ट्रान्सफ़ॉर्मर्स लाइब्रेरी का उपयोग करते हैं, तो कृपया उद्धृत करें:
+हमने आधिकारिक तौर पर इस लाइब्रेरी का [पेपर](https://aclanthology.org/2020.emnlp-demos.6/) प्रकाशित किया है, अगर आप ट्रान्सफ़ॉर्मर्स लाइब्रेरी का उपयोग करते हैं, तो कृपया उद्धृत करें:
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
@@ -271,7 +271,7 @@ conda install conda-forge::transformers
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://aclanthology.org/2020.emnlp-demos.6/",
     pages = "38--45"
 }
 ```

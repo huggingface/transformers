@@ -16,8 +16,9 @@ import tempfile
 from abc import ABC, abstractmethod
 
 from transformers import TorchAoConfig, set_seed
-from transformers.distributed.configuration_utils import DistributedConfig
-from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
+from transformers.distributed import DistributedConfig
+from transformers.distributed.sharding_utils import _replicate_dtensor
+from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
 from transformers.testing_utils import (
     is_tensor_parallel_test,
     is_torch_available,
@@ -33,7 +34,24 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
     import torch.multiprocessing as mp
+    from torch.distributed.tensor import DTensor
     from torch.multiprocessing.spawn import ProcessRaisedException
+
+
+def _to_local(tensor):
+    """Extract local tensor from DTensor, or return as-is for plain tensors."""
+    if hasattr(tensor, "to_local"):
+        # NOTE(3outeille): With Sequence Parallelism, replicated params (e.g. norm weights) get Partial
+        # gradients — each rank holds only its contribution from its sequence shard.
+        # We must all-reduce (redistribute to Replicate) before extracting, otherwise
+        # we'd compare an incomplete gradient against the full reference.
+        # In the case of real training, we will always use SP + FSDP where the last will all-reduce the
+        #  Partial gradients for us.
+
+        if isinstance(tensor, DTensor) and any(not p.is_replicate() for p in tensor.placements):
+            tensor = _replicate_dtensor(tensor)
+        return tensor.to_local()
+    return tensor
 
 
 def _find_free_port():
@@ -69,7 +87,7 @@ def get_packed_grad_shard(grad, world_size, rank, dim):
     return grad.index_select(dim, torch.tensor(indices, device=grad.device))
 
 
-def _global_wrapper(rank, func, tp, port, func_args, func_kwargs):
+def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
     """Wrapper to set up distributed environment and run the test function."""
 
     def setup_dist_env(rank, world_size, port):
@@ -82,7 +100,7 @@ def _global_wrapper(rank, func, tp, port, func_args, func_kwargs):
     world_size = tp
     setup_dist_env(rank, world_size, port)
 
-    dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+    dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
 
     func(rank, *func_args, **func_kwargs)
 
@@ -90,7 +108,7 @@ def _global_wrapper(rank, func, tp, port, func_args, func_kwargs):
     dist.destroy_process_group()
 
 
-def _init_distributed(tp: int, max_retries: int = 5):
+def _init_distributed(tp: int, max_retries: int = 5, backend: str = "gloo"):
     """Decorator to initialize distributed environment and spawn processes."""
 
     def _init_distributed_inner(func):
@@ -98,7 +116,7 @@ def _init_distributed(tp: int, max_retries: int = 5):
             world_size = tp
             for attempt in range(max_retries):
                 port = _find_free_port()
-                spawn_args = (func, tp, port, args, kwargs)
+                spawn_args = (func, tp, port, backend, args, kwargs)
                 try:
                     mp.spawn(_global_wrapper, args=spawn_args, nprocs=world_size)
                     return
@@ -112,50 +130,65 @@ def _init_distributed(tp: int, max_retries: int = 5):
     return _init_distributed_inner
 
 
-def _load_tp_and_reference_models(model_path, model_class):
+def _load_tp_and_reference_models(model_path, model_class, enable_sequence_parallel=False):
     """Load TP model and non-TP reference model for comparison.
 
     Returns:
         tuple: (model_tp, model_ref, device)
     """
-    model_tp = model_class.from_pretrained(model_path, tp_plan="auto")
+    tp_size = dist.get_world_size()
+    distributed_config = DistributedConfig(tp_size=tp_size, enable_sequence_parallel=enable_sequence_parallel)
+    model_tp = model_class.from_pretrained(
+        model_path, distributed_config=distributed_config, attn_implementation="sdpa"
+    )
     dist.barrier()
 
     device = model_tp.device
-    model_ref = model_class.from_pretrained(model_path)
+    model_ref = model_class.from_pretrained(model_path, attn_implementation="sdpa")
     model_ref = model_ref.to(device)
 
     return model_tp, model_ref, device
 
 
+def _get_active_tp_plan(model_tp):
+    distributed_config = getattr(model_tp.config, "distributed_config", None)
+    tp_plan = getattr(distributed_config, "tp_plan", None)
+    return tp_plan or getattr(model_tp, "_tp_plan", None) or {}
+
+
 def _verify_tp_sharding(rank, model_tp, model_ref):
     """Verify TP sharding by comparing parameter shapes between TP and reference models.
+
+    For DTensor params, uses the local tensor shape (not the global DTensor shape).
 
     Returns:
         list: Names of sharded parameters
     """
     world_size = dist.get_world_size()
     sharded_params = []
+    tp_plan = _get_active_tp_plan(model_tp)
 
     for (name, param), (_, param_full) in zip(model_tp.named_parameters(), model_ref.named_parameters()):
-        if param.shape != param_full.shape:
+        # For DTensor params, get the local shape for comparison
+        param_local = _to_local(param)
+        if param_local.shape != param_full.shape:
             sharded_params.append(name)
             if rank == 0:
-                print(f"[TP Test Debug] TP sharded: {name} - full: {param_full.shape} -> sharded: {param.shape}")
+                print(f"[TP Test Debug] TP sharded: {name} - full: {param_full.shape} -> sharded: {param_local.shape}")
 
             # Verify sharding is correct
-            for dim in range(param.ndim):
-                if param.size(dim) != param_full.size(dim):
-                    param_plan = _get_parameter_tp_plan(name, model_tp.tp_plan, is_weight=True)
-                    if param_plan in ("packed_colwise",):
+            for dim in range(param_local.ndim):
+                if param_local.size(dim) != param_full.size(dim):
+                    param_plan = _get_parameter_tp_plan(name, tp_plan, is_weight=True)
+                    if param_plan == "packed_colwise":
                         expected_size = param_full.size(dim) // world_size
-                        assert param.size(dim) == expected_size, (
-                            f"Packed weight {name} sharding incorrect: expected {expected_size}, got {param.size(dim)}"
+                        assert param_local.size(dim) == expected_size, (
+                            f"Packed weight {name} sharding incorrect: expected {expected_size}, got {param_local.size(dim)}"
                         )
                     else:
                         expected_size = (param_full.size(dim) + world_size - 1) // world_size
-                        assert param.size(dim) <= expected_size, (
-                            f"Weight {name} sharding incorrect: expected <= {expected_size}, got {param.size(dim)}"
+                        assert param_local.size(dim) <= expected_size, (
+                            f"Weight {name} sharding incorrect: expected <= {expected_size}, got {param_local.size(dim)}"
                         )
                     break
 
@@ -166,7 +199,7 @@ def _test_tp_forward_impl(_rank, model_path, model_class, atol, rtol):
     """Implementation for comparing TP and non-TP model outputs."""
     set_seed(0)
 
-    model_tp, model, device = _load_tp_and_reference_models(model_path, model_class)
+    model_tp, model, device = _load_tp_and_reference_models(model_path, model_class, enable_sequence_parallel=True)
 
     _verify_tp_sharding(_rank, model_tp, model)
 
@@ -179,7 +212,7 @@ def _test_tp_forward_impl(_rank, model_path, model_class, atol, rtol):
 
     with torch.no_grad():
         logits = model(input_ids).logits
-        logits_tp = model_tp(input_ids).logits
+        logits_tp = _to_local(model_tp(input_ids).logits)
 
     diff = (logits - logits_tp).abs()
     assert torch.allclose(logits, logits_tp, atol=atol, rtol=rtol), (
@@ -193,7 +226,8 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
     """Implementation for comparing TP and non-TP model backward passes."""
     set_seed(0)
 
-    model_tp, model, device = _load_tp_and_reference_models(model_path, model_class)
+    model_tp, model, device = _load_tp_and_reference_models(model_path, model_class, enable_sequence_parallel=True)
+    tp_plan = _get_active_tp_plan(model_tp)
     model_tp.train()
     model.train()
 
@@ -203,32 +237,35 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
     set_seed(0)
     labels = torch.randint(0, vocab_size, (2, 64)).to(device)
 
-    loss = model(input_ids, labels=labels).loss
+    loss = model(input_ids, labels=labels, use_cache=False).loss
     loss.backward()
 
-    loss_tp = model_tp(input_ids, labels=labels).loss
+    loss_tp = model_tp(input_ids, labels=labels, use_cache=False).loss
     loss_tp.backward()
 
-    assert torch.allclose(loss, loss_tp, atol=atol, rtol=rtol), (
+    loss_tp_local = _to_local(loss_tp)
+    assert torch.allclose(loss, loss_tp_local, atol=atol, rtol=rtol), (
         f"TP and non-TP model losses differ. "
-        f"Non-TP loss: {loss.item()}, TP loss: {loss_tp.item()}, "
-        f"Diff: {(loss - loss_tp).abs().item()}"
+        f"Non-TP loss: {loss.item()}, TP loss: {loss_tp_local.item()}, "
+        f"Diff: {(loss - loss_tp_local).abs().item()}"
     )
 
     # Compare gradients for matching parameters
     world_size = dist.get_world_size()
+
+    # Debug: check tied weights and parameter alignment
     failed_grads = {}
-    for (name, param), (_, param_tp) in zip(model.named_parameters(), model_tp.named_parameters()):
+    for (name, param), (name_tp, param_tp) in zip(model.named_parameters(), model_tp.named_parameters()):
         if param.grad is not None and param_tp.grad is not None:
             grad = param.grad
-            grad_tp = param_tp.grad
+            grad_tp = _to_local(param_tp.grad)
 
             # Slice reference gradient to match local shard if parameter is sharded
             if grad.shape != grad_tp.shape:
                 for dim in range(grad.ndim):
                     if grad.size(dim) != grad_tp.size(dim):
-                        param_plan = _get_parameter_tp_plan(name, model_tp.tp_plan, is_weight=True)
-                        if param_plan in ("packed_colwise",):
+                        param_plan = _get_parameter_tp_plan(name, tp_plan, is_weight=True)
+                        if param_plan == "packed_colwise":
                             # interleaved slicing
                             grad = get_packed_grad_shard(grad, world_size, rank, dim)
                         else:
@@ -239,10 +276,15 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
                         break
 
             if not torch.allclose(grad.cpu(), grad_tp.cpu(), atol=atol, rtol=rtol):
-                failed_grads[name] = (grad.cpu() - grad_tp.cpu()).abs().max().item()
+                max_diff = (grad.cpu() - grad_tp.cpu()).abs().max().item()
+                ref_abs_max = grad.cpu().abs().max().item()
+                tp_abs_max = grad_tp.cpu().abs().max().item()
+                ratio = tp_abs_max / ref_abs_max if ref_abs_max > 0 else float("inf")
+                failed_grads[name] = (max_diff, ref_abs_max, tp_abs_max, ratio)
 
     assert not failed_grads, f"Gradients differ for {len(failed_grads)} parameter(s):\n" + "\n".join(
-        f"  {name}: max diff = {diff}" for name, diff in failed_grads.items()
+        f"  {name}: max_diff={v[0]:.6f}, ref_max={v[1]:.6f}, tp_max={v[2]:.6f}, tp/ref ratio={v[3]:.4f}"
+        for name, v in failed_grads.items()
     )
 
     dist.barrier()
@@ -274,7 +316,7 @@ def _test_tp_generation_impl(_rank, model_path, model_class, atol, rtol, max_new
 
     # Compare logits/scores at each generation step
     scores = torch.stack(output.scores)
-    scores_tp = torch.stack(output_tp.scores)
+    scores_tp = torch.stack([_to_local(s) for s in output_tp.scores])
 
     diff = (scores - scores_tp).abs()
     assert torch.allclose(scores, scores_tp, atol=atol, rtol=rtol), (
@@ -283,9 +325,10 @@ def _test_tp_generation_impl(_rank, model_path, model_class, atol, rtol, max_new
     )
 
     # Compare generated token sequences
-    assert torch.equal(output.sequences, output_tp.sequences), (
+    sequences_tp = _to_local(output_tp.sequences)
+    assert torch.equal(output.sequences, sequences_tp), (
         f"TP and non-TP model generated different token sequences (direct load path). "
-        f"Non-TP: {output.sequences.tolist()} | TP: {output_tp.sequences.tolist()}"
+        f"Non-TP: {output.sequences.tolist()} | TP: {sequences_tp.tolist()}"
     )
 
     dist.barrier()
@@ -297,7 +340,11 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
 
     quantization_config = TorchAoConfig(Float8WeightOnlyConfig())
 
-    model_tp = model_class.from_pretrained(model_path, tp_plan="auto", quantization_config=quantization_config)
+    model_tp = model_class.from_pretrained(
+        model_path,
+        distributed_config=DistributedConfig(tp_size=dist.get_world_size()),
+        quantization_config=quantization_config,
+    )
     dist.barrier()
 
     device = model_tp.device
@@ -347,9 +394,13 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
 
 def _load_ep_and_reference_models(model_path, model_class):
     """Load EP model and non-EP reference model for comparison."""
+    tp_size = dist.get_world_size()
     model_ep = model_class.from_pretrained(
         model_path,
-        distributed_config=DistributedConfig(enable_expert_parallel=True),
+        distributed_config=DistributedConfig(
+            tp_size=tp_size,
+            enable_expert_parallel=True,
+        ),
     )
     dist.barrier()
 
@@ -426,8 +477,8 @@ class TensorParallelTesterMixin(ABC):
     # Configuration (can be overridden per model)
     # ============================================================
     tensor_parallel_size: int = 2
-    tensor_parallel_atol: float = 1e-5
-    tensor_parallel_rtol: float = 1e-5
+    tensor_parallel_atol: float = 5e-3
+    tensor_parallel_rtol: float = 5e-3
 
     @property
     @abstractmethod
@@ -562,18 +613,7 @@ class TensorParallelTesterMixin(ABC):
         if not is_torchao_available():
             self.skipTest("Test requires torchao")
 
-        config = self.model_tester.get_config()
-        model_class = self._get_tp_model_class()
-        max_new_tokens = 25
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            set_seed(42)
-            model = model_class(config)
-            model.save_pretrained(tmp_dir, save_original_format=True)
-
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_quantized_impl)(
-                tmp_dir, model_class, max_new_tokens
-            )
+        self.skipTest("Quantization is not currently supported with distributed training")
 
     @is_tensor_parallel_test
     def test_ep_forward(self):

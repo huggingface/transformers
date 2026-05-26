@@ -1390,16 +1390,6 @@ def is_mistral_common_available() -> bool:
 
 
 @lru_cache
-def is_opentelemetry_available() -> bool:
-    try:
-        return _is_package_available("opentelemetry")[0] and version.parse(
-            importlib.metadata.version("opentelemetry-api")
-        ) >= version.parse("1.30.0")
-    except Exception as _:
-        return False
-
-
-@lru_cache
 def is_pynvml_available() -> bool:
     return _is_package_available("pynvml")[0]
 

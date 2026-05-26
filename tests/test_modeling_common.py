@@ -132,8 +132,8 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
+    from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
     from transformers.integrations.accelerate import compute_module_sizes
-    from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
 
@@ -5271,7 +5271,10 @@ class ModelTesterMixin(ExportTesterMixin):
                 elif hasattr(audio_config, "hidden_size"):
                     hidden_size = audio_config.hidden_size
                 elif hasattr(audio_config, "encoder_config"):
-                    hidden_size = audio_config.encoder_config.hidden_dim
+                    if hasattr(audio_config.encoder_config, "hidden_size"):
+                        hidden_size = audio_config.encoder_config.hidden_size
+                    else:
+                        hidden_size = audio_config.encoder_config.hidden_dim
                 elif hasattr(audio_config, "encoder_ffn_dim"):
                     hidden_size = audio_config.encoder_ffn_dim
                 self.assertEqual(
