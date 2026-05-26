@@ -15,9 +15,8 @@ class Rio2Config(PretrainedConfig):
     r"""
     Configuration class for [`Rio2Model`].
 
-    RIO-2 is a SO101 robotics policy that preserves the original
-    `allenai/MolmoAct2-SO100_101` weights as much as possible while exposing a
-    Helix-style two-rate runtime:
+    RIO-2 is a generative robotics policy that preserves the original
+    `allenai/MolmoAct2-SO100_101` weights as much as possible while exposing two-rate runtime:
 
     - S2: low-frequency semantic/context refresh from the MolmoAct2 VLM path.
     - S1: high-frequency action generation, preferably using the original
