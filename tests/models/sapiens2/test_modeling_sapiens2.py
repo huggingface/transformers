@@ -189,8 +189,6 @@ class Sapiens2ModelTester:
         model.eval()
         with torch.no_grad():
             result = model(pixel_values)
-        # patch_height = image_size // patch_size = 30 // 2 = 15
-        # 2 deconv layers with stride=2: 15 * 2^2 = 60
         patch_height = self.image_size // self.patch_size
         expected_h = patch_height * (2 ** len(config.head_upsample_out_channels))
         self.parent.assertEqual(
