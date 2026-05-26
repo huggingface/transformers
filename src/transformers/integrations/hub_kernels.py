@@ -911,6 +911,18 @@ def infer_kernel_fusion_transforms(
     return transforms
 
 
+def _first_str_leaf(obj) -> str | None:
+    """Recursively extract the first string leaf from a potentially nested dict (device → mode → str)."""
+    if isinstance(obj, str):
+        return obj
+    if isinstance(obj, dict):
+        for v in obj.values():
+            result = _first_str_leaf(v)
+            if result is not None:
+                return result
+    return None
+
+
 def _try_load_kernel_class(repo_str: str, use_local: bool = False) -> type | None:
     if ":" not in repo_str:
         return None
@@ -971,12 +983,11 @@ def register_kernel_fusions(
         glob_patterns = [item[1] for item in layer_name]
         child_names = [p.rsplit(".", 1)[1] for p in glob_patterns]
 
-        # Resolve kernel_layer_name from "org/repo:ClassName" or device-nested dict.
-        repo_str = hub_repo
-        if isinstance(repo_str, dict):
-            repo_str = next(iter(repo_str.values()))
-        if isinstance(repo_str, dict):
-            repo_str = next(iter(repo_str.values()))
+        # Resolve kernel_layer_name from "org/repo:ClassName" or a device/mode-nested dict.
+        # All leaf strings in the nested dict point to the same kernel class, so any will do.
+        repo_str = _first_str_leaf(hub_repo)
+        if repo_str is None:
+            raise ValueError(f"Cannot resolve a repo string from hub_repo={hub_repo!r}")
         kernel_layer_name = repo_str.split(":")[1] if ":" in repo_str else repo_str.split("/")[-1]
 
         # 1. Load the kernel class to get any conversion_mapping it declares.
