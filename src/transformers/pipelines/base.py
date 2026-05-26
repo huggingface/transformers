@@ -1100,7 +1100,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                     supported_models_names.append(model_name)
             if hasattr(supported_models, "_model_mapping"):
                 for model in supported_models._model_mapping._extra_content.values():
-                    if isinstance(model_name, tuple):
+                    if isinstance(model, tuple):
                         supported_models_names.extend([m.__name__ for m in model])
                     else:
                         supported_models_names.append(model.__name__)
