@@ -32,6 +32,7 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
         PrepareModuleInput,
         RowwiseParallel,
         SequenceParallel,
+        loss_parallel,
     )
     from torch.distributed.tensor.parallel.style import ParallelStyle
     from torch.distributed.tensor.placement_types import _StridedShard
@@ -89,10 +90,10 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         return
 
     # Filter out module-level comm hooks — they don't shard weights.
-    # Plan values are registry names; entries beginning with "activation" or "module"
-    # configure communication hooks rather than parameter sharding.
+    # Plan values are registry names; entries beginning with "activation", "module",
+    # or "sp_" configure communication hooks / SP-only injection rather than parameter sharding.
     weight_plan = {
-        k: v for k, v in tp_plan.items() if not (v == "activation" or v.startswith(("activation_", "module_")))
+        k: v for k, v in tp_plan.items() if not (v == "activation" or v.startswith(("activation_", "module_", "sp_")))
     }
 
     generic_keys = {replace_layer_number_by_wildcard(key) for key in expected_keys}
@@ -399,6 +400,27 @@ class MoEExpertsParallel(TensorParallelStyle):
         return output.to_local()
 
 
+class SequenceParallelInputInjector(TensorParallelStyle):
+    """Inject ``position_ids`` on the base model when SP is enabled.
+
+    Under SP, ``inputs_embeds`` is sequence-sharded after ``embed_tokens``, so
+    auto-generated ``position_ids`` would use the wrong (local) ``seq_len``.
+    This pre-forward transform builds ``position_ids`` from the original
+    ``input_ids`` shape before any sharding happens.
+
+    Addressed in plans via the ``"@self"`` sentinel inside ``base_model_sp_plan``.
+    """
+
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
+        input_ids = kwargs.get("input_ids", args[0] if args else None)
+        if input_ids is None:
+            return args, kwargs
+        if "position_ids" not in kwargs or kwargs["position_ids"] is None:
+            seq_len = input_ids.shape[1]
+            kwargs["position_ids"] = torch.arange(seq_len, device=input_ids.device).unsqueeze(0)
+        return args, kwargs
+
+
 class ParallelInterface(GeneralInterface):
     """Registry of named TP styles. Configs and modeling files reference these by string name.
 
@@ -451,6 +473,9 @@ class ParallelInterface(GeneralInterface):
                     "down_proj": Shard(-1),
                 },
             ),
+            # SP-only: injects position_ids on the base model. Addressed in plans
+            # via the "@self" sentinel (see SequenceParallelInputInjector).
+            "sp_inject_position_ids": SequenceParallelInputInjector(),
         }
         if is_torch_available() and is_torch_greater_or_equal("2.5") and _torch_distributed_available
         else {}
@@ -494,23 +519,6 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
             continue
         ALL_PARALLEL_STYLES[style_value]._apply(submodule, tp_mesh)
 
-    # Under SP, inputs_embeds is sequence-sharded after embed_tokens, so
-    # auto-generated position_ids would use the wrong (local) seq_len.
-    # Inject position_ids from the original input_ids shape before the model forward
-    if enable_sp:
-        base_model = getattr(model, model.base_model_prefix, model)
-
-        def _inject_sp_metadata(mod, args, kwargs):
-            input_ids = kwargs.get("input_ids", args[0] if args else None)
-            if input_ids is None:
-                return args, kwargs
-            if "position_ids" not in kwargs or kwargs["position_ids"] is None:
-                seq_len = input_ids.shape[1]
-                kwargs["position_ids"] = torch.arange(seq_len, device=input_ids.device).unsqueeze(0)
-            return args, kwargs
-
-        base_model.register_forward_pre_hook(_inject_sp_metadata, with_kwargs=True)
-
     # If the plan uses loss_parallel on lm_head, enable it globally so
     # the model's internal loss computation handles DTensor logits correctly.
     # loss_parallel patches F.cross_entropy to work with Shard(-1) logits.
@@ -518,8 +526,6 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
     # once rather than as a context manager.
     has_loss_parallel = any(v == "colwise_loss_parallel" for v in tp_plan.values())
     if has_loss_parallel:
-        from torch.distributed.tensor.parallel import loss_parallel
-
         model._loss_parallel_ctx = loss_parallel()
         model._loss_parallel_ctx.__enter__()
 

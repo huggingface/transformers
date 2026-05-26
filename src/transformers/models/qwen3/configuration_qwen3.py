@@ -61,6 +61,7 @@ class Qwen3Config(PreTrainedConfig):
     # Not compatible with autoregressive decode (because seq_len=1 can't be split across ranks)
     # or KV cache (which stores plain tensors).
     base_model_sp_plan = {
+        "@self": "sp_inject_position_ids",
         "embed_tokens": "vocab_reduce_scatter",
         "layers.*.input_layernorm": "activation",
         "layers.*.self_attn": "module_allgather_hidden_states",
