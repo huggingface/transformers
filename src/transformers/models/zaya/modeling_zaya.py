@@ -158,7 +158,8 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 class ZayaCCAProjection(nn.Module):
     """
-    Projects hidden states into attention q/k/v states with ZAYA's CCA path.
+    Projects hidden states into attention q/k/v states with ZAYA's Compressed Convolutional Attention (CCA) path.
+    See https://arxiv.org/abs/2510.04476.
 
     This follows the usual q/k/v projection flow, with three ZAYA-specific changes: q/k are mixed by a causal 1D
     convolution, q/k keep residual projection paths, and v uses a delayed recurrent state.
@@ -457,6 +458,8 @@ class ZayaDecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         residual = hidden_states
+        # Match upstream's residual_in_fp32 path by keeping the residual stream in fp32 and avoiding extra
+        # fp32->bf16 round trips in the residual module.
         hidden_states = self.input_layernorm(residual.to(dtype=self.input_layernorm.weight.dtype))
 
         hidden_states, _ = self.self_attn(
@@ -623,6 +626,7 @@ class ZayaSparseMoeBlock(nn.Module):
         hidden_states: torch.Tensor,
         prev_router_hidden_states: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        # ZAYA carries router hidden states across decoder layers; the next layer consumes this state in its router.
         _, router_probs, router_indices, prev_router_hidden_states = self.gate(
             hidden_states, router_states=prev_router_hidden_states
         )
@@ -770,6 +774,8 @@ class ZayaModel(ZayaPreTrainedModel):
 
         for idx, decoder_layer in enumerate(self.layers):
             layer_type = self.config.layer_types[idx]
+            # Attention uses the prepared causal mask, while CCA projection still needs the raw 2D padding mask to
+            # zero padding tokens before convolution.
             hidden_states, prev_router_hidden_states = decoder_layer(
                 hidden_states,
                 prev_router_hidden_states,

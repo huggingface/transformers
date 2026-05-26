@@ -19,7 +19,7 @@ from huggingface_hub.errors import StrictDataclassClassValidationError
 from parameterized import parameterized
 
 from transformers import is_torch_available
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -213,30 +213,19 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
             ZayaConfig(num_experts_per_tok=2)
 
     def test_sliding_attention_mask_is_used(self):
-        config = ZayaConfig(
-            vocab_size=128,
-            hidden_size=32,
-            moe_intermediate_size=32,
-            num_hidden_layers=2,
-            num_experts=4,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            head_dim=8,
-            router_hidden_size=4,
-            layer_types=["hybrid_sliding", "hybrid"],
-            sliding_window=3,
-            tie_word_embeddings=False,
-            attn_implementation="eager",
-        )
-        model = ZayaModel(config).to(torch_device)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.layer_types = ["hybrid_sliding"] + ["hybrid"] * (config.num_hidden_layers - 1)
+        config.sliding_window = 3
+        config._attn_implementation = "eager"
+
+        model = ZayaModel._from_config(config, attn_implementation="eager").to(torch_device)
         model.eval()
-        input_ids = torch.arange(6, device=torch_device).unsqueeze(0)
 
         with torch.no_grad():
-            outputs = model(input_ids=input_ids, output_attentions=True)
+            outputs = model(input_ids=inputs_dict["input_ids"].to(torch_device), output_attentions=True)
 
         sliding_attention = outputs.attentions[0]
-        self.assertTrue(torch.all(sliding_attention[:, :, -1, :3] == 0))
+        self.assertTrue(torch.all(sliding_attention[:, :, -1, : -config.sliding_window] == 0))
 
     def test_cca_cache_matches_full_forward_multi_token(self):
         config = ZayaConfig(
@@ -334,6 +323,18 @@ class ZayaIntegrationTest(unittest.TestCase):
         self.assertEqual(logits.shape, (1, inputs.input_ids.shape[-1], model.config.vocab_size))
         self.assertTrue(torch.isfinite(logits).all().item())
 
+        EXPECTED_LOGITS = Expectations(
+            {
+                (None, None): [
+                    [0.3613, 0.3633, 0.3633],
+                    [-1.3672, -1.3672, -1.3672],
+                    [-2.8750, -2.8750, -2.8750],
+                ]
+            }
+        )  # fmt: skip
+        expected_slice = torch.tensor(EXPECTED_LOGITS.get_expectation(), dtype=logits.dtype)
+        torch.testing.assert_close(logits[0, -3:, -3:], expected_slice, rtol=1e-3, atol=1e-3)
+
         expected_argmax = torch.tensor([[105, 9731, 107, 740, 564, 1601, 611, 236881, 236881, 107, 107]])
         torch.testing.assert_close(logits.argmax(-1), expected_argmax)
 
@@ -366,6 +367,16 @@ class ZayaIntegrationTest(unittest.TestCase):
         inputs = self.get_inputs().to(model.model.embed_tokens.weight.device)
 
         with torch.no_grad():
-            generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=3, top_k=None, top_p=None)
+            generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=16, top_k=None, top_p=None)
 
-        self.assertEqual(generated_ids[0, -3:].tolist(), [107, 262146, 108])
+        expected_generated_ids = Expectations(
+            {
+                (None, None): [
+                    107, 262146, 108, 9259, 236888, 2088, 740, 564,
+                    6361, 611, 3124, 236881, 108, 236769, 10282, 236787,
+                ]
+            }
+        )  # fmt: skip
+        self.assertEqual(
+            generated_ids[0, inputs.input_ids.shape[-1] :].tolist(), expected_generated_ids.get_expectation()
+        )
