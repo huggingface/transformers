@@ -206,10 +206,7 @@ with torch.inference_mode():
     outputs = model(pixel_values)
     outputs_flipped = model(pixel_values.flip(-1), flip_pairs=flip_pairs)
 
-# Average original and flip-augmented heatmaps
-outputs.heatmaps = (outputs.heatmaps + outputs_flipped.heatmaps) / 2
-
-results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)[0]
+results = image_processor.post_process_pose_estimation(outputs, outputs_flipped=outputs_flipped, boxes=boxes)[0]
 keypoints = results[0]["keypoints"]
 scores = results[0]["scores"]
 ```

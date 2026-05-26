@@ -45,7 +45,6 @@ if is_torch_available():
         Sapiens2MattingOutput,
         Sapiens2NormalEstimatorOutput,
         Sapiens2PointmapEstimatorOutput,
-        Sapiens2PoseEstimatorOutput,
     )
 
 
@@ -712,9 +711,9 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
             flipped_heatmaps[0, 0, 70:73, 70:73], expected_flipped_heatmaps, rtol=1e-2, atol=1e-2
         )
 
-        final_heatmaps = (heatmaps + flipped_heatmaps) / 2.0
-        final_outputs = Sapiens2PoseEstimatorOutput(heatmaps=final_heatmaps)
-        final_results = image_processor.post_process_pose_estimation(final_outputs, boxes=boxes)
+        final_results = image_processor.post_process_pose_estimation(
+            outputs, outputs_flipped=flipped_outputs, boxes=boxes
+        )
         self.assertEqual(len(final_results), 1)
         self.assertEqual(len(final_results[0]), 1)
 

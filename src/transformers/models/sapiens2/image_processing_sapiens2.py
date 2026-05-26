@@ -156,9 +156,9 @@ def crop_and_resize(
 
     num_boxes = bboxes_cxcywh.shape[0]
     output = torch.empty(num_boxes, num_channels, output_height, output_width, device=image.device, dtype=image.dtype)
-    image_4d = image.unsqueeze(0)
 
     # Apply grid sampling separately for upscaling and downscaling to use the appropriate interpolation mode
+    image_4d = image.unsqueeze(0)
     for mask, mode in [(is_bilinear, "bilinear"), (~is_bilinear, "bicubic")]:
         if mask.any():
             output[mask] = F.grid_sample(
@@ -438,6 +438,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         self,
         outputs: Sapiens2PoseEstimatorOutput,
         boxes: list[list[list[float]]],
+        outputs_flipped: Sapiens2PoseEstimatorOutput | None = None,
         blur_kernel_size: int = 11,
         threshold: float | None = None,
         source_sizes: list[tuple] | None = None,
@@ -456,6 +457,10 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 should be a list of 4 floats representing the bounding box coordinates in COCO format
                 (top_left_x, top_left_y, width, height). Must match the `boxes` argument passed to
                 `preprocess`.
+            outputs_flipped (`Sapiens2PoseEstimatorOutput`, *optional*):
+                Outputs from running the model on horizontally flipped inputs. When provided, heatmaps
+                are averaged with `outputs` before keypoint extraction to improve accuracy:
+                `avg_heatmaps = (outputs.heatmaps + outputs_flipped.heatmaps) / 2`.
             blur_kernel_size (`int`, *optional*, defaults to 11):
                 Kernel size for the Gaussian blur used in UDP Dark Pose refinement.
             threshold (`float`, *optional*):
@@ -479,9 +484,6 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             - `bbox` (`torch.FloatTensor` of shape `(4,)`): bounding box in absolute (x_min, y_min, x_max, y_max)
                format, in the same coordinate space as `keypoints`.
         """
-        heatmaps = outputs.heatmaps  # (num_total_persons, num_keypoints, heatmap_height, heatmap_width)
-        device = heatmaps.device
-        num_total_persons, num_keypoints, heatmap_height, heatmap_width = heatmaps.shape
         num_images = len(boxes)
 
         if target_sizes is not None and source_sizes is None:
@@ -490,6 +492,13 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             raise ValueError("Make sure that you pass in as many source sizes as the number of images.")
         if target_sizes is not None and num_images != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the number of images.")
+
+        heatmaps = outputs.heatmaps  # (num_total_persons, num_keypoints, heatmap_height, heatmap_width)
+        if outputs_flipped is not None:
+            heatmaps = (heatmaps + outputs_flipped.heatmaps) / 2
+
+        device = heatmaps.device
+        num_total_persons, num_keypoints, heatmap_height, heatmap_width = heatmaps.shape
 
         if num_total_persons == 0:
             return [[] for _ in boxes]
