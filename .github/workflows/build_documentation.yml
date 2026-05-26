@@ -14,7 +14,7 @@ permissions:
 
 jobs:
    build:
-    uses: huggingface/doc-builder/.github/workflows/build_main_documentation.yml@2430c1ec91d04667414e2fa31ecfc36c153ea391  # main
+    uses: huggingface/doc-builder/.github/workflows/build_main_documentation.yml@b0f9a6e3b6aa912656cbda9f74896eb721d29421  # main
     with:
       commit_sha: ${{ github.sha }}
       package: transformers
@@ -26,7 +26,7 @@ jobs:
       hf_token: ${{ secrets.HF_DOC_BUILD_PUSH }}
 
    build_other_lang:
-    uses: huggingface/doc-builder/.github/workflows/build_main_documentation.yml@2430c1ec91d04667414e2fa31ecfc36c153ea391  # main
+    uses: huggingface/doc-builder/.github/workflows/build_main_documentation.yml@b0f9a6e3b6aa912656cbda9f74896eb721d29421  # main
     with:
       commit_sha: ${{ github.sha }}
       package: transformers
