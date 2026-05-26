@@ -1,4 +1,4 @@
-# Copyright 2026 NAVER Corp. and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 NAVER Corp. and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch HyperCLOVAX Vision model."""
+"""PyTorch HyperCLOVAX Vision V2 model."""
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -19,17 +19,15 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
-from ..auto.modeling_auto import AutoModel
+from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_ForConditionalGeneration
 from ..exaone4_5.processing_exaone4_5 import Exaone4_5_Processor
 from ..gemma3.modeling_gemma3 import Gemma3ForSequenceClassification
 from ..video_llama_3.modeling_video_llama_3 import VideoLlama3Model, VideoLlama3PreTrainedModel
@@ -40,30 +38,25 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 @strict
-class HCXVisionV2Config(PreTrainedConfig):
+class HyperCLOVAXVisionV2Config(PreTrainedConfig):
     r"""
     text_config (`dict` or [`HyperCLOVAXConfig`], *optional*):
-        Configuration for the LLM backbone.  Defaults to [`HyperCLOVAXConfig`].
+        Configuration for the LLM backbone. Defaults to [`HyperCLOVAXConfig`].
     vision_config (`dict` or config, *optional*):
-        Configuration for the vision encoder.  Defaults to
-        [`Qwen2_5_VLVisionConfig`].
-    image_token_id (`int`, *optional*):
-        Token ID used as a placeholder for image patches in the input
-        sequence. Falls back to `img_start_id` for backward compatibility
-        with older checkpoints.
-    video_token_id (`int`, *optional*):
-        Token ID used as a placeholder for video patches in the input
-        sequence. Falls back to `video_start_id` for backward
-        compatibility with older checkpoints.
+        Configuration for the vision encoder. Defaults to [`Qwen2_5_VLVisionConfig`].
+    image_token_id (`int`, *optional*, defaults to 128060):
+        Token ID used as a placeholder for image patches in the input sequence.
+    video_token_id (`int`, *optional*, defaults to 128061):
+        Token ID used as a placeholder for video patches in the input sequence.
 
     ```python
-    >>> from transformers import HCXVisionV2Config, HCXVisionV2ForConditionalGeneration
+    >>> from transformers import HyperCLOVAXVisionV2Config, HyperCLOVAXVisionV2ForConditionalGeneration
 
-    >>> # Initializing a HyperCLOVAX Vision configuration with defaults
-    >>> configuration = HCXVisionV2Config()
+    >>> # Initializing a HyperCLOVAX Vision V2 configuration with defaults
+    >>> configuration = HyperCLOVAXVisionV2Config()
 
     >>> # Initializing a model from the configuration
-    >>> model = HCXVisionV2ForConditionalGeneration(configuration)
+    >>> model = HyperCLOVAXVisionV2ForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -76,8 +69,8 @@ class HCXVisionV2Config(PreTrainedConfig):
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
-    image_token_id: int | None = None
-    video_token_id: int | None = None
+    image_token_id: int = 128060
+    video_token_id: int = 128061
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
@@ -96,11 +89,6 @@ class HCXVisionV2Config(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["hyperclovax"]()
 
-        if self.image_token_id is None:
-            self.image_token_id = kwargs.pop("img_start_id", 128060)
-        if self.video_token_id is None:
-            self.video_token_id = kwargs.pop("video_start_id", 128061)
-
         # This is necessary to properly find the weight conversion mapping.
         if kwargs.get("model_type") == "vlm":
             kwargs["model_type"] = "hyperclovax_vision_v2"
@@ -109,13 +97,17 @@ class HCXVisionV2Config(PreTrainedConfig):
 
 
 @auto_docstring
-class HCXVisionV2Processor(Exaone4_5_Processor):
-    pass
+class HyperCLOVAXVisionV2Processor(Exaone4_5_Processor):
+    @property
+    def model_input_names(self):
+        # HyperCLOVAX Vision V2 does not use second_per_grid_ts (no temporal RoPE) or mm_token_type_ids
+        names = super().model_input_names
+        return [n for n in names if n not in ("second_per_grid_ts", "mm_token_type_ids")]
 
 
 @auto_docstring
-class HCXVisionV2PreTrainedModel(VideoLlama3PreTrainedModel):
-    config: HCXVisionV2Config
+class HyperCLOVAXVisionV2PreTrainedModel(VideoLlama3PreTrainedModel):
+    config: HyperCLOVAXVisionV2Config
     input_modalities = ("image", "video", "text")
     _no_split_modules = ["HyperCLOVAXDecoderLayer"]
     _can_record_outputs = {
@@ -125,16 +117,10 @@ class HCXVisionV2PreTrainedModel(VideoLlama3PreTrainedModel):
 
 
 @auto_docstring
-class HCXVisionV2Model(HCXVisionV2PreTrainedModel, VideoLlama3Model):
-    def __init__(self, config: HCXVisionV2Config):
+class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, VideoLlama3Model):
+    def __init__(self, config: HyperCLOVAXVisionV2Config):
         super().__init__(config)
-
-        self.vision_model = AutoModel.from_config(config.vision_config)
-
         self.projector = nn.Linear(config.vision_config.out_hidden_size, config.text_config.hidden_size)
-
-        self.language_model = AutoModel.from_config(config.text_config)
-        self.post_init()
 
     def get_rope_index(self):
         raise AttributeError("HyperCLOVAX Vision V2 does not need 3D positions")
@@ -249,49 +235,19 @@ class HCXVisionV2Model(HCXVisionV2PreTrainedModel, VideoLlama3Model):
 
 
 @auto_docstring
-class HCXVisionV2ForConditionalGeneration(HCXVisionV2PreTrainedModel, GenerationMixin):
+class HyperCLOVAXVisionV2ForConditionalGeneration(
+    HyperCLOVAXVisionV2PreTrainedModel, Exaone4_5_ForConditionalGeneration
+):
+    # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
-    def __init__(self, config: HCXVisionV2Config):
+    def __init__(self, config: HyperCLOVAXVisionV2Config):
         super().__init__(config)
-        self.model = HCXVisionV2Model(config)
+        self.model = HyperCLOVAXVisionV2Model(config)
         self.vocab_size = config.text_config.vocab_size
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
-        return self.model.get_video_features(
-            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
-        )
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
-        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -330,14 +286,14 @@ class HCXVisionV2ForConditionalGeneration(HCXVisionV2PreTrainedModel, Generation
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import HCXVisionV2Processor, HCXVisionV2ForConditionalGeneration
+        >>> from transformers import HyperCLOVAXVisionV2Processor, HyperCLOVAXVisionV2ForConditionalGeneration
 
-        >>> model = HCXVisionV2ForConditionalGeneration.from_pretrained(
+        >>> model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
         ...     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
         ...     torch_dtype="auto",
         ...     device_map="auto",
         ... )
-        >>> processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+        >>> processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 
         >>> messages = [
         ...     {"role": "user", "content": [
@@ -367,9 +323,7 @@ class HCXVisionV2ForConditionalGeneration(HCXVisionV2PreTrainedModel, Generation
         )
         hidden_states = outputs[0]
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :]) * getattr(
-            self.config.text_config, "logits_scaling", 1
-        )
+        logits = self.lm_head(hidden_states[:, slice_indices, :]) * self.config.text_config.logits_scaling
 
         loss = None
         if labels is not None:
@@ -382,6 +336,12 @@ class HCXVisionV2ForConditionalGeneration(HCXVisionV2PreTrainedModel, Generation
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        # HyperCLOVAX Vision V2 uses 1D position_ids (not Qwen2.5-VL's 3D/4D rope_deltas-based ids)
+        from ...generation.utils import GenerationMixin
+
+        return GenerationMixin._prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs)
 
     def prepare_inputs_for_generation(
         self,
@@ -417,90 +377,22 @@ class HCXVisionV2ForConditionalGeneration(HCXVisionV2PreTrainedModel, Generation
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
 
+        # HyperCLOVAX Vision V2 uses 1D position_ids — do NOT force None like Exaone4.5 does for 2D-RoPE
         return model_inputs
 
 
-class HCXVisionV2ForSequenceClassification(Gemma3ForSequenceClassification, HCXVisionV2PreTrainedModel):
-    config: HCXVisionV2Config
+class HyperCLOVAXVisionV2ForSequenceClassification(
+    Gemma3ForSequenceClassification, HyperCLOVAXVisionV2PreTrainedModel
+):
+    config: HyperCLOVAXVisionV2Config
     input_modalities = ("text",)
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        token_type_ids: torch.LongTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> SequenceClassifierOutputWithPast:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-
-        transformer_outputs = self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            pixel_values=pixel_values,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            token_type_ids=token_type_ids,
-            use_cache=use_cache,
-            **kwargs,
-        )
-        hidden_states = transformer_outputs.last_hidden_state
-        logits = self.score(hidden_states)
-
-        if input_ids is not None:
-            batch_size = input_ids.shape[0]
-        else:
-            batch_size = inputs_embeds.shape[0]
-
-        if self.config.text_config.pad_token_id is None and batch_size != 1:
-            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-        if self.config.text_config.pad_token_id is None:
-            last_non_pad_token = -1
-        elif input_ids is not None:
-            # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
-            non_pad_mask = (input_ids != self.config.text_config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
-            last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
-        else:
-            last_non_pad_token = -1
-            logger.warning_once(
-                f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
-            )
-
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
-
-        return SequenceClassifierOutputWithPast(
-            loss=loss,
-            logits=pooled_logits,
-            past_key_values=transformer_outputs.past_key_values,
-            hidden_states=transformer_outputs.hidden_states,
-            attentions=transformer_outputs.attentions,
-        )
 
 
 __all__ = [
-    "HCXVisionV2Config",
-    "HCXVisionV2ForConditionalGeneration",
-    "HCXVisionV2ForSequenceClassification",
-    "HCXVisionV2Model",
-    "HCXVisionV2PreTrainedModel",
-    "HCXVisionV2Processor",
+    "HyperCLOVAXVisionV2Config",
+    "HyperCLOVAXVisionV2ForConditionalGeneration",
+    "HyperCLOVAXVisionV2ForSequenceClassification",
+    "HyperCLOVAXVisionV2Model",
+    "HyperCLOVAXVisionV2PreTrainedModel",
+    "HyperCLOVAXVisionV2Processor",
 ]

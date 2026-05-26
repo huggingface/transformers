@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-05-18.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2026-05-26.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -31,19 +31,19 @@ You can find the original HyperCLOVAX-SEED-Think-32B checkpoint on the [naver-hy
 > [!TIP]
 > The `model_type` in the released checkpoint's `config.json` is `"vlm"`, while the Transformers implementation registers this model as `"hyperclovax_vision_v2"`. Due to this mismatch, loading via `AutoModel` or `AutoModelForCausalLM` is not supported. Use the model class directly as shown in the examples below.
 
-The example below demonstrates how to generate text based on an image with [`HCXVisionV2ForConditionalGeneration`].
+The example below demonstrates how to generate text based on an image with [`HyperCLOVAXVisionV2ForConditionalGeneration`].
 
 <hfoptions id="usage">
 <hfoption id="Image input">
 
 ```python
-from transformers import HCXVisionV2ForConditionalGeneration, HCXVisionV2Processor
+from transformers import HyperCLOVAXVisionV2ForConditionalGeneration, HyperCLOVAXVisionV2Processor
 
-model = HCXVisionV2ForConditionalGeneration.from_pretrained(
+model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
     device_map="auto",
 )
-processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 
 messages = [
     {
@@ -84,13 +84,13 @@ print(output_text)
 <hfoption id="Video input">
 
 ```python
-from transformers import HCXVisionV2ForConditionalGeneration, HCXVisionV2Processor
+from transformers import HyperCLOVAXVisionV2ForConditionalGeneration, HyperCLOVAXVisionV2Processor
 
-model = HCXVisionV2ForConditionalGeneration.from_pretrained(
+model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
     device_map="auto",
 )
-processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 
 messages = [
     {
@@ -141,15 +141,15 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to load the model in 4-bit.
 
 ```python
-from transformers import BitsAndBytesConfig, HCXVisionV2ForConditionalGeneration, HCXVisionV2Processor
+from transformers import BitsAndBytesConfig, HyperCLOVAXVisionV2ForConditionalGeneration, HyperCLOVAXVisionV2Processor
 
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
-model = HCXVisionV2ForConditionalGeneration.from_pretrained(
+model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
     device_map="auto",
     quantization_config=quantization_config,
 )
-processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 ```
 
 ## Notes
@@ -254,30 +254,30 @@ processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-
     print(tokenizer.decode(output[0], skip_special_tokens=True))
     ```
 
-## HCXVisionV2Config
+## HyperCLOVAXVisionV2Config
 
-[[autodoc]] HCXVisionV2Config
+[[autodoc]] HyperCLOVAXVisionV2Config
 
-## HCXVisionV2Processor
+## HyperCLOVAXVisionV2Processor
 
-[[autodoc]] HCXVisionV2Processor
+[[autodoc]] HyperCLOVAXVisionV2Processor
     - __call__
 
-## HCXVisionV2Model
+## HyperCLOVAXVisionV2Model
 
-[[autodoc]] HCXVisionV2Model
+[[autodoc]] HyperCLOVAXVisionV2Model
     - forward
     - get_image_features
     - get_video_features
 
-## HCXVisionV2ForConditionalGeneration
+## HyperCLOVAXVisionV2ForConditionalGeneration
 
-[[autodoc]] HCXVisionV2ForConditionalGeneration
+[[autodoc]] HyperCLOVAXVisionV2ForConditionalGeneration
     - forward
     - get_image_features
     - get_video_features
 
-## HCXVisionV2ForSequenceClassification
+## HyperCLOVAXVisionV2ForSequenceClassification
 
-[[autodoc]] HCXVisionV2ForSequenceClassification
+[[autodoc]] HyperCLOVAXVisionV2ForSequenceClassification
     - forward

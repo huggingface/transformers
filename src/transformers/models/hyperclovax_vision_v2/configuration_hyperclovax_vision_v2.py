@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_hyperclovax_vision_v2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2026 NAVER Corp. and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 NAVER Corp. and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,30 +26,25 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 @strict
-class HCXVisionV2Config(PreTrainedConfig):
+class HyperCLOVAXVisionV2Config(PreTrainedConfig):
     r"""
     text_config (`dict` or [`HyperCLOVAXConfig`], *optional*):
-        Configuration for the LLM backbone.  Defaults to [`HyperCLOVAXConfig`].
+        Configuration for the LLM backbone. Defaults to [`HyperCLOVAXConfig`].
     vision_config (`dict` or config, *optional*):
-        Configuration for the vision encoder.  Defaults to
-        [`Qwen2_5_VLVisionConfig`].
-    image_token_id (`int`, *optional*):
-        Token ID used as a placeholder for image patches in the input
-        sequence. Falls back to `img_start_id` for backward compatibility
-        with older checkpoints.
-    video_token_id (`int`, *optional*):
-        Token ID used as a placeholder for video patches in the input
-        sequence. Falls back to `video_start_id` for backward
-        compatibility with older checkpoints.
+        Configuration for the vision encoder. Defaults to [`Qwen2_5_VLVisionConfig`].
+    image_token_id (`int`, *optional*, defaults to 128060):
+        Token ID used as a placeholder for image patches in the input sequence.
+    video_token_id (`int`, *optional*, defaults to 128061):
+        Token ID used as a placeholder for video patches in the input sequence.
 
     ```python
-    >>> from transformers import HCXVisionV2Config, HCXVisionV2ForConditionalGeneration
+    >>> from transformers import HyperCLOVAXVisionV2Config, HyperCLOVAXVisionV2ForConditionalGeneration
 
-    >>> # Initializing a HyperCLOVAX Vision configuration with defaults
-    >>> configuration = HCXVisionV2Config()
+    >>> # Initializing a HyperCLOVAX Vision V2 configuration with defaults
+    >>> configuration = HyperCLOVAXVisionV2Config()
 
     >>> # Initializing a model from the configuration
-    >>> model = HCXVisionV2ForConditionalGeneration(configuration)
+    >>> model = HyperCLOVAXVisionV2ForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -62,8 +57,8 @@ class HCXVisionV2Config(PreTrainedConfig):
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
-    image_token_id: int | None = None
-    video_token_id: int | None = None
+    image_token_id: int = 128060
+    video_token_id: int = 128061
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
@@ -82,11 +77,6 @@ class HCXVisionV2Config(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["hyperclovax"]()
 
-        if self.image_token_id is None:
-            self.image_token_id = kwargs.pop("img_start_id", 128060)
-        if self.video_token_id is None:
-            self.video_token_id = kwargs.pop("video_start_id", 128061)
-
         # This is necessary to properly find the weight conversion mapping.
         if kwargs.get("model_type") == "vlm":
             kwargs["model_type"] = "hyperclovax_vision_v2"
@@ -94,4 +84,4 @@ class HCXVisionV2Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["HCXVisionV2Config"]
+__all__ = ["HyperCLOVAXVisionV2Config"]

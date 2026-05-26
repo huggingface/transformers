@@ -45,23 +45,23 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        HCXVisionV2Config,
-        HCXVisionV2ForConditionalGeneration,
-        HCXVisionV2ForSequenceClassification,
-        HCXVisionV2Model,
-        HCXVisionV2Processor,
         HyperCLOVAXConfig,
+        HyperCLOVAXVisionV2Config,
+        HyperCLOVAXVisionV2ForConditionalGeneration,
+        HyperCLOVAXVisionV2ForSequenceClassification,
+        HyperCLOVAXVisionV2Model,
+        HyperCLOVAXVisionV2Processor,
         Qwen2_5_VLVisionConfig,
     )
 
 
 class HCXVisionV2VisionText2TextModelTester(VLMModelTester):
-    base_model_class = HCXVisionV2Model
-    config_class = HCXVisionV2Config
+    base_model_class = HyperCLOVAXVisionV2Model
+    config_class = HyperCLOVAXVisionV2Config
     text_config_class = HyperCLOVAXConfig
     vision_config_class = Qwen2_5_VLVisionConfig
-    conditional_generation_class = HCXVisionV2ForConditionalGeneration
-    sequence_classification_class = HCXVisionV2ForSequenceClassification
+    conditional_generation_class = HyperCLOVAXVisionV2ForConditionalGeneration
+    sequence_classification_class = HyperCLOVAXVisionV2ForSequenceClassification
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("image_size", 14)
@@ -114,12 +114,11 @@ class HCXVisionV2VisionText2TextModelTester(VLMModelTester):
 
 
 @require_torch
-class HCXVisionV2ModelTest(VLMModelTest, unittest.TestCase):
+class HyperCLOVAXVisionV2ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = HCXVisionV2VisionText2TextModelTester
 
     test_cpu_offload = False
-    test_disk_offload_safetensors = False
-    test_disk_offload_bin = False
+    model_split_percents = [0.5, 0.7, 0.8]
 
     def test_mismatching_num_image_tokens(self):
         """
