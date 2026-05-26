@@ -129,18 +129,5 @@ class MellumConfig(PreTrainedConfig):
         # No need to handle BC for new models, because they have no old-format `rope_scaling`
         return kwargs
 
-    def validate_architecture(self):
-        """Part of `@strict`-powered validation."""
-        if len(self.layer_types) != self.num_hidden_layers:
-            raise ValueError(
-                f"layer_types length ({len(self.layer_types)}) "
-                f"must equal num_hidden_layers ({self.num_hidden_layers})."
-            )
-        if len(self.mlp_layer_types) != self.num_hidden_layers:
-            raise ValueError(
-                f"mlp_layer_types length ({len(self.mlp_layer_types)}) "
-                f"must equal num_hidden_layers ({self.num_hidden_layers})."
-            )
-
 
 __all__ = ["MellumConfig"]

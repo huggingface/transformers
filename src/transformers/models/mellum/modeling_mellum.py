@@ -128,6 +128,27 @@ class MellumRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+@use_kernel_forward_from_hub("RMSNorm")
+class MellumRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        MellumRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -270,22 +291,6 @@ class MellumAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class MellumMLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
 @use_experts_implementation
 class MellumExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
@@ -361,30 +366,25 @@ class MellumSparseMoeBlock(nn.Module):
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class MellumRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        MellumRMSNorm is equivalent to T5LayerNorm
-        """
+class MellumMLP(nn.Module):
+    def __init__(self, config, intermediate_size=None):
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class MellumDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MellumConfig, layer_idx: int):
-        torch.nn.Module.__init__(self)
+        super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = MellumAttention(config, layer_idx)
         if config.mlp_layer_types[layer_idx] == "sparse":
