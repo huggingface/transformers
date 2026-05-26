@@ -22,6 +22,7 @@ import sys
 import tempfile
 import time
 import traceback
+import unittest.mock
 from abc import ABC, abstractmethod
 
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, is_torch_available
@@ -43,6 +44,7 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
     import torch.multiprocessing as mp
+    from torch.distributed.fsdp import CPUOffloadPolicy, MixedPrecisionPolicy
     from torch.nn.parallel import DistributedDataParallel as DDP
 
     from transformers.distributed import DistributedConfig
@@ -262,16 +264,15 @@ def _resolve_fsdp_plan_paths(model):
     return entries
 
 
-def _build_manual_fsdp_plan(config, device, policy_options=None):
+def _build_manual_fsdp_plan(config, device):
     """Build a manual FSDP2 plan by expanding model._fsdp_plan."""
-    policy_options = policy_options or []
     set_seed(SEED)
     model = AutoModelForCausalLM.from_config(config).to(device)
 
     module_plan: dict[str, list[str]] = {}
     for paths, strategy in _resolve_fsdp_plan_paths(model):
         for path in paths:
-            module_plan[path] = [strategy, *policy_options]
+            module_plan[path] = [strategy]
 
     del model
     return {"modules": module_plan}
@@ -547,33 +548,23 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
         logger.debug(f"  FSDP sharding structure OK ({len(actual_targets)} targets)")
 
 
-def _test_fsdp2_plan_vs_ddp_impl(
-    rank, config_class, config_dict, tie_word_embeddings, plan_mode, policy_options=None, dtype=None
-):
+def _test_fsdp2_plan_vs_ddp_impl(rank, config_class, config_dict, tie_word_embeddings, plan_mode, dtype=None):
     """Validate DDP-vs-FSDP2 trace matching for either auto or manual plan mode."""
     init_test_logger()
 
     if dtype is None:
         dtype = torch.float32
 
-    policy_options = policy_options or []
-    assert "mixed_precision" not in policy_options, (
-        "Use the mixed-precision specific tests when enabling mixed_precision policy."
-    )
-
     device = _get_rank_device(rank)
     config = config_class.from_dict(config_dict)
     config.tie_word_embeddings = tie_word_embeddings
 
     if plan_mode == "auto":
-        fsdp_plan = {
-            "cpu_offload": "cpu_offload" in policy_options,
-            "mixed_precision": "mixed_precision" in policy_options,
-        }
-        test_label = f"FSDP2(auto{'+policies' if policy_options else ''})"
+        fsdp_plan = None
+        test_label = "FSDP2(auto)"
     elif plan_mode == "manual":
-        fsdp_plan = _build_manual_fsdp_plan(config, device, policy_options=policy_options)
-        test_label = f"FSDP2(manual{'+policies' if policy_options else ''})"
+        fsdp_plan = _build_manual_fsdp_plan(config, device)
+        test_label = "FSDP2(manual)"
     else:
         raise ValueError(f"Unsupported plan_mode '{plan_mode}'. Expected 'auto' or 'manual'.")
 
@@ -796,3 +787,69 @@ class FSDPTesterMixin(ABC):
         self._run_fsdp2_distributed_test(
             "test_fsdp2_manual_plan_vs_ddp_tied", _test_fsdp2_plan_vs_ddp_impl, True, "manual"
         )
+
+    # =========================================================================
+    # Policy propagation tests (CPU-only, patch fully_shard, no distributed)
+    # =========================================================================
+
+    @is_fsdp_test
+    @require_fsdp
+    def test_fsdp2_policies_propagate_auto(self):
+        """Auto plan with cpu_offload+mixed_precision flags routes both policies into every fully_shard call."""
+        self._skip_if_fsdp_disabled()
+        self._skip_if_fsdp_model_not_selected()
+        config_class, config_dict = self._get_tiny_config()
+        config = config_class.from_dict(config_dict)
+        set_seed(SEED)
+        model = AutoModelForCausalLM.from_config(config)
+
+        with unittest.mock.patch("transformers.distributed.fsdp.fully_shard") as mock_shard:
+            apply_fully_shard_data_parallel(
+                model,
+                unittest.mock.MagicMock(),
+                fsdp_plan={"cpu_offload": True, "mixed_precision": True},
+            )
+
+        self.assertGreater(mock_shard.call_count, 0, "fully_shard was never called")
+        for call in mock_shard.call_args_list:
+            self.assertIsInstance(call.kwargs.get("offload_policy"), CPUOffloadPolicy)
+            mp_policy = call.kwargs.get("mp_policy")
+            self.assertIsInstance(mp_policy, MixedPrecisionPolicy)
+            self.assertEqual(mp_policy.param_dtype, torch.bfloat16)
+            self.assertEqual(mp_policy.reduce_dtype, torch.float32)
+
+    @is_fsdp_test
+    @require_fsdp
+    def test_fsdp2_policies_propagate_manual(self):
+        """Manual plan: per-module policy tokens land on that module's fully_shard call, others stay clean."""
+        self._skip_if_fsdp_disabled()
+        self._skip_if_fsdp_model_not_selected()
+        config_class, config_dict = self._get_tiny_config()
+        config = config_class.from_dict(config_dict)
+        set_seed(SEED)
+        model = AutoModelForCausalLM.from_config(config)
+
+        mlp = model.get_submodule("model.layers.0.mlp")
+        norm = model.get_submodule("model.norm")
+        with unittest.mock.patch("transformers.distributed.fsdp.fully_shard") as mock_shard:
+            apply_fully_shard_data_parallel(
+                model,
+                unittest.mock.MagicMock(),
+                fsdp_plan={
+                    "modules": {
+                        "model.layers.0.mlp": ["free_full_weight", "cpu_offload", "mixed_precision"],
+                        "model.norm": ["keep_full_weight"],
+                    }
+                },
+            )
+
+        mlp_call = next(c for c in mock_shard.call_args_list if c.args and c.args[0] is mlp)
+        norm_call = next(c for c in mock_shard.call_args_list if c.args and c.args[0] is norm)
+
+        self.assertIsInstance(mlp_call.kwargs["offload_policy"], CPUOffloadPolicy)
+        self.assertIsInstance(mlp_call.kwargs["mp_policy"], MixedPrecisionPolicy)
+        self.assertTrue(mlp_call.kwargs["reshard_after_forward"])
+
+        self.assertNotIn("offload_policy", norm_call.kwargs)
+        self.assertNotIn("mp_policy", norm_call.kwargs)
+        self.assertFalse(norm_call.kwargs["reshard_after_forward"])
