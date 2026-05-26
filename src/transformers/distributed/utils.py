@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import os
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from ..utils import is_torch_available, is_torch_greater_or_equal, logging
@@ -155,28 +156,45 @@ def distribute_model(model, distributed_config: DistributedConfig, device_mesh) 
 
 @torch.no_grad()
 def clip_grad_norm(parameters, max_norm: float, norm_type: float = 2.0):
-    """Mesh-aware grad-norm clip with O(1) extra memory per parameter."""
+    """Mesh-aware grad-norm clip with O(1) extra memory per parameter.
+
+    Per-rank partials (`|g_local|^p .sum()`) are accumulated into buckets keyed
+    by `(mesh, set-of-non-replicate-dim-indices)`, so the cross-rank reduction
+    is one collective per bucket rather than one per parameter. A typical
+    FSDP2+TP model has 2–4 distinct signatures across hundreds of params, so
+    this collapses O(N_params) NCCL launches into O(N_buckets).
+    """
     parameters = [p for p in parameters if p.grad is not None]
     if not parameters:
         return torch.tensor(0.0)
 
     norm_p = float(norm_type)
     device = parameters[0].grad.device
-    accum = torch.zeros((), dtype=torch.float32, device=device)
 
+    # Bucket key for plain (non-DTensor) grads
+    LOCAL_KEY = (None, ())
+    buckets: dict[tuple, torch.Tensor] = defaultdict(lambda: torch.zeros((), dtype=torch.float32, device=device))
+
+    # Bucket the params based on key=(mesh, placements) so we now we can reduce on these dims
     for p in parameters:
         g = p.grad
         if isinstance(g, DTensor):
-            partial = g.to_local().detach().to(torch.float32).abs().pow_(norm_p).sum()
-            mesh = g.device_mesh
-            for dim_idx, placement in enumerate(g.placements):
-                if placement.is_replicate():
-                    continue
-                group = mesh.get_group(dim_idx) if mesh.ndim > 1 else mesh.get_group()
-                torch.distributed.all_reduce(partial, op=torch.distributed.ReduceOp.SUM, group=group)
-            accum.add_(partial)
+            local = g.to_local()
+            reduce_dims = tuple(dim for dim, placement in enumerate(g.placements) if not placement.is_replicate())
+            key = (g.device_mesh, reduce_dims) if reduce_dims else LOCAL_KEY
         else:
-            accum.add_(g.detach().to(torch.float32).abs().pow_(norm_p).sum())
+            local = g
+            key = LOCAL_KEY
+        partial = local.detach().to(torch.float32).abs().pow_(norm_p).sum()
+        buckets[key].add_(partial)
+
+    accum = torch.zeros((), dtype=torch.float32, device=device)
+    for (mesh, reduce_dims), bucket_sum in buckets.items():
+        if mesh is not None:
+            for dim_idx in reduce_dims:
+                group = mesh.get_group(dim_idx) if mesh.ndim > 1 else mesh.get_group()
+                torch.distributed.all_reduce(bucket_sum, op=torch.distributed.ReduceOp.SUM, group=group)
+        accum.add_(bucket_sum)
 
     total_norm = accum.pow_(1.0 / norm_p)
     clip_coef = (max_norm / (total_norm + 1e-6)).clamp(max=1.0)
