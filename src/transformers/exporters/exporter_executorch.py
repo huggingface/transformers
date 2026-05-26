@@ -36,6 +36,7 @@ edge deployment. The export pipeline runs:
 from __future__ import annotations
 
 import math
+import operator
 from contextlib import ExitStack, contextmanager
 from typing import TYPE_CHECKING, Any
 
@@ -122,12 +123,12 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
         _core_aten_ops_exception_list=[
             torch.ops.aten._fft_c2c.default,
             torch.ops.aten._is_all_true.default,
-            torch.ops.aten.bernoulli.p,
             torch.ops.aten.bincount.default,
             torch.ops.aten.bucketize.Tensor,
             torch.ops.aten.cummax.default,
             torch.ops.aten.cummin.default,
             torch.ops.aten.polar.default,
+            torch.ops.aten.rand_like.default,
             torch.ops.aten.randint.low,
             torch.ops.aten.randn_like.default,
             torch.ops.aten.searchsorted.Tensor,
@@ -327,6 +328,26 @@ def _patch_dropout(_original):
     return patch
 
 
+def _patch_bernoulli(_original):
+    """Sample Bernoulli via ``rand_like`` + comparison.
+
+    ExecuTorch ships no out-variant kernel for ``aten::bernoulli`` (used by
+    SpeechT5's consistent dropout), so ``to_executorch`` fails with
+    ``Missing out variants: {'aten::bernoulli'}``. Rewrite the call into
+    ``(rand_like(input) < probs).to(input.dtype)`` — both ops have out variants.
+    """
+
+    def patch(input, *args, p=None, generator=None, out=None):
+        # Two API shapes: bernoulli(input) (elementwise probabilities) and
+        # bernoulli(input, p=...) (scalar probability, shape from input).
+        if p is None and len(args) == 1:
+            p = args[0]
+        probs = input if p is None else p
+        return (torch.rand_like(input) < probs).to(input.dtype)
+
+    return patch
+
+
 def _patch_expand(original):
     """Force a contiguous copy after ``expand``.
 
@@ -340,6 +361,15 @@ def _patch_expand(original):
         if len(sizes) == 1 and isinstance(sizes[0], (list, tuple, torch.Size)):
             sizes = tuple(sizes[0])
         return original(self, *sizes).clone(memory_format=torch.contiguous_format)
+
+    return patch
+
+
+def _patch_expand_as(original):
+    """Same contiguous-clone treatment as :func:`_patch_expand` but for ``expand_as``."""
+
+    def patch(self, other):
+        return original(self, other).clone(memory_format=torch.contiguous_format)
 
     return patch
 
@@ -359,7 +389,10 @@ if is_torch_available():
         (torch.nn.functional, "avg_pool2d", _patch_avg_pool2d),
         (torch.nn.functional, "scaled_dot_product_attention", _patch_scaled_dot_product_attention),
         (torch.nn.functional, "dropout", _patch_dropout),
+        (torch, "bernoulli", _patch_bernoulli),
+        (torch.Tensor, "bernoulli", _patch_bernoulli),
         (torch.Tensor, "expand", _patch_expand),
+        (torch.Tensor, "expand_as", _patch_expand_as),
     ]
 
 
@@ -560,10 +593,47 @@ def _force_contiguous_clone_memory_format(exported_program: ExportedProgram) -> 
                 node.kwargs = {**node.kwargs, "memory_format": torch.contiguous_format}
 
 
+def _rewrite_sym_pow_as_mul(exported_program: ExportedProgram) -> None:
+    """Replace ``operator.pow(sym_int, n)`` with a chain of ``executorch_prim.mul.Scalar``.
+
+    The emitter has no entry for ``operator.pow`` (no ``executorch_prim.pow``), so a
+    ``sym_size ** 2`` in model code (e.g. seamless_m4t's relative positional bias)
+    raises ``invalid target for call_function <built-in function pow>`` at to_executorch.
+    Rewrite small-integer exponents (n >= 1) as a multiplication chain — the
+    ``executorch_prim.mul.Scalar`` op accepts SymInt operands.
+    """
+    from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
+
+    mul_scalar = _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS.get(operator.mul)
+    if mul_scalar is None:
+        return
+
+    for module in exported_program.graph_module.modules():
+        if not isinstance(module, torch.fx.GraphModule):
+            continue
+        changed = False
+        for node in list(module.graph.nodes):
+            if node.op != "call_function" or node.target is not operator.pow:
+                continue
+            base, exp = node.args
+            if not isinstance(exp, int) or exp < 1:
+                continue
+            with module.graph.inserting_before(node):
+                running = base
+                for _ in range(exp - 1):
+                    running = module.graph.call_function(mul_scalar, (running, base))
+            node.replace_all_uses_with(running)
+            module.graph.erase_node(node)
+            changed = True
+        if changed:
+            module.recompile()
+
+
 _FX_PATCHES = [
     _bound_range_constraints,
     _populate_missing_placeholder_vals,
     _replace_python_sym_ops,
+    _rewrite_sym_pow_as_mul,
     _normalize_amax_dim,
     _force_contiguous_clone_memory_format,
 ]
