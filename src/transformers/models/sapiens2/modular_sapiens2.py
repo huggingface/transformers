@@ -269,12 +269,18 @@ def crop_and_resize(
     ).squeeze(0)
 
 
-def torchvision_gaussian_blur(heatmaps: torch.Tensor, kernel: int = 11) -> torch.Tensor:
+def gaussian_blur_preserve_max(heatmaps: torch.Tensor, kernel: int = 11) -> torch.Tensor:
     """Gaussian blur per-keypoint heatmap, preserving the original max value.
 
-    Matches cv2.GaussianBlur with sigma=0 (auto-sigma formula: 0.3*((k-1)*0.5-1)+0.8).
-    For kernel=11 (default): max per-value difference vs cv2 is ~1e-6 (float32 rounding noise).
-    Blurs all keypoints in a single batched torchvision call.
+    Matches cv2.GaussianBlur with sigma=0 which means that the sigma is automatically
+    computed from the kernel size.
+
+    Args:
+        heatmaps: Shape `(K, height, width)`.
+        kernel: Odd integer kernel size for the Gaussian blur. Must be greater than 1.
+
+    Returns:
+        `torch.Tensor`: Blurred heatmaps of the same shape as the input.
     """
     if kernel % 2 == 0 or kernel <= 1:
         raise ValueError("Kernel size must be an odd integer greater than 1.")
@@ -333,7 +339,7 @@ def post_dark_unbiased_data_processing(
     num_persons, num_keypoints, heatmap_height, heatmap_width = heatmaps.shape
     device = heatmaps.device
 
-    heatmaps = torchvision_gaussian_blur(
+    heatmaps = gaussian_blur_preserve_max(
         heatmaps.reshape(num_persons * num_keypoints, heatmap_height, heatmap_width), blur_kernel_size
     ).reshape(num_persons, num_keypoints, heatmap_height, heatmap_width)
     heatmaps = heatmaps.clamp(1e-3, 50.0).log()
