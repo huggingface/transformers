@@ -81,11 +81,6 @@ class HrmTextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    def test_flash_attn_2_fp32_ln(self):
-        if torch_device == "xpu":
-            self.skipTest("bitsandbytes 4-bit FlashAttention path is not supported on XPU for this model yet.")
-        return super().test_flash_attn_2_fp32_ln()
-
     def test_prefix_lm_forward(self):
         """`config.prefix_lm=True` with `token_type_ids` produces a different forward pass than
         the pure-causal default. Guards the PrefixLM mask path that the slow integration tests
