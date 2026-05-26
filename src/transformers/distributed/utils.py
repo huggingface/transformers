@@ -150,19 +150,37 @@ def distribute_model(model, distributed_config: DistributedConfig, device_mesh) 
 
 @torch.no_grad()
 def clip_grad_norm(parameters, max_norm: float, norm_type: float = 2.0):
-    """Grad-norm clip that works when params live on different DTensor meshes.
+    """Mesh-aware grad-norm clip with O(1) extra memory per parameter."""
+    parameters = [p for p in parameters if p.grad is not None]
+    if not parameters:
+        return torch.tensor(0.0)
 
-    ``torch.nn.utils.get_total_norm`` stacks per-grad norms; that fails when grads
-    live on different meshes (e.g. TP-wrapped params on the (fsdp, tp) mesh and
-    FSDP-only params on the (fsdp,) sub-mesh). We sidestep it by replicating each
-    DTensor grad to a plain local tensor, computing the norm over those, and
-    scaling the original DTensor grads in place — the placement of the original
-    grads doesn't matter for the per-element clip.
-    """
-    grads = [p.grad for p in parameters if p.grad is not None]
-    local_grads = [_replicate_dtensor(g).to_local() if isinstance(g, DTensor) else g for g in grads]
-    total_norm = torch.nn.utils.get_total_norm(local_grads, norm_type=norm_type)
-    torch.nn.utils.clip_grads_with_norm_(grads, max_norm=max_norm, total_norm=total_norm)
+    norm_p = float(norm_type)
+    device = parameters[0].grad.device
+    accum = torch.zeros((), dtype=torch.float32, device=device)
+
+    for p in parameters:
+        g = p.grad
+        if isinstance(g, DTensor):
+            partial = g.to_local().detach().to(torch.float32).abs().pow_(norm_p).sum()
+            mesh = g.device_mesh
+            for dim_idx, placement in enumerate(g.placements):
+                if placement.is_replicate():
+                    continue
+                group = mesh.get_group(dim_idx) if mesh.ndim > 1 else mesh.get_group()
+                torch.distributed.all_reduce(partial, op=torch.distributed.ReduceOp.SUM, group=group)
+            accum.add_(partial)
+        else:
+            accum.add_(g.detach().to(torch.float32).abs().pow_(norm_p).sum())
+
+    total_norm = accum.pow_(1.0 / norm_p)
+    clip_coef = (max_norm / (total_norm + 1e-6)).clamp(max=1.0)
+    for p in parameters:
+        g = p.grad
+        if isinstance(g, DTensor):
+            g._local_tensor.mul_(clip_coef)
+        else:
+            g.mul_(clip_coef)
     return total_norm
 
 

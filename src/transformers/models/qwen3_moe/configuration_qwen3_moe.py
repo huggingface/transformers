@@ -86,9 +86,14 @@ class Qwen3MoeConfig(PreTrainedConfig):
     # This allows EP to scale beyond num_kv_heads (not constrained by 4 for Qwen3-30B).
     base_model_ep_plan = {
         "layers.*.mlp.gate": "ep_router",
-        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
-        "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_experts_allreduce",
+        # `moe_experts_ep_allreduce` shards on the experts dim (dim 0) so each rank
+        # holds num_experts/ep_size experts at full hidden_in. The `grouped_gemm`
+        # entries that used to be here are intentionally dropped: the resolver in
+        # `apply_tensor_parallel` only iterates modules (not parameters), so plan
+        # keys naming `gate_up_proj` / `down_proj` (which are nn.Parameter, not
+        # nn.Module) were unreachable. Sharding is now handled by `MoEExpertsParallel`
+        # via its `shard_plan` on the parent experts module.
+        "layers.*.mlp.experts": "moe_experts_ep_allreduce",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

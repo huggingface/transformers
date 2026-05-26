@@ -56,6 +56,7 @@ from .configuration_utils import PreTrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .distributed.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
+from .distributed.utils import clip_grad_norm, maybe_disable_foreach_and_fused_for_mixed_dtensor_groups
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
@@ -465,6 +466,7 @@ class Trainer:
             or (args.fp16_full_eval or args.bf16_full_eval)
             or self.is_fsdp_xla_enabled
             or self.is_fsdp_enabled
+            or self.is_native_distributed
             or is_sagemaker_mp_enabled()
         ):
             self.place_model_on_device = False
@@ -665,7 +667,7 @@ class Trainer:
                     " `Trainer`. Make sure the lines `import torch_xla.core.xla_model as xm` and"
                     " `model.to(xm.xla_device())` is performed before the optimizer creation in your script."
                 )
-        if (self.is_fsdp_xla_enabled or self.is_fsdp_enabled) and (
+        if (self.is_fsdp_xla_enabled or self.is_fsdp_enabled or self.is_native_distributed) and (
             self.optimizer is not None or self.lr_scheduler is not None
         ):
             raise RuntimeError(
@@ -816,9 +818,25 @@ class Trainer:
                 self.gather_function, use_gather_object=self.args.eval_use_gather_object
             )
 
-        # deepspeed and accelerate flags covering both trainer args and accelerate launcher
-        self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
-        self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
+        # Model wrapped via `from_pretrained(distributed_config=...)` (native TP/FSDP2 path).
+        # When set, transformers owns distribution and accelerate's plugins (if any) are ignored.
+        self.is_native_distributed = getattr(self.model.config, "distributed_config", None) is not None
+
+        # deepspeed and accelerate flags covering both trainer args and accelerate launcher.
+        # Treated as exclusive with `is_native_distributed`: if transformers already manages
+        # distribution, the accelerate plugin (e.g. left over from `accelerate launch --use_fsdp`)
+        # is not the responsible party — skip its code paths to avoid operating on a model
+        # accelerate didn't wrap.
+        _ds = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
+        _fsdp = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
+        if self.is_native_distributed and (_ds or _fsdp):
+            logger.warning_once(
+                "`distributed_config` is set on the model AND accelerate has a "
+                f"{'deepspeed' if _ds else 'fsdp'}_plugin in state. Trusting `distributed_config` "
+                "(transformers-native) and ignoring the accelerate plugin."
+            )
+        self.is_deepspeed_enabled = _ds and not self.is_native_distributed
+        self.is_fsdp_enabled = _fsdp and not self.is_native_distributed
 
         # post accelerator creation setup
         if self.is_fsdp_enabled:
@@ -835,7 +853,7 @@ class Trainer:
         # `save_only_model` can't be used with DeepSpeed/FSDP along with `load_best_model_at_end`
         if (
             self.args.save_only_model
-            and (self.is_deepspeed_enabled or self.is_fsdp_enabled)
+            and (self.is_deepspeed_enabled or self.is_fsdp_enabled or self.is_native_distributed)
             and self.args.load_best_model_at_end
         ):
             wrapper = "DeepSpeed" if self.is_deepspeed_enabled else "FSDP"
@@ -1214,6 +1232,10 @@ class Trainer:
         if is_sagemaker_mp_enabled():
             self.optimizer = smp.DistributedOptimizer(self.optimizer)
 
+        # Adam fused/foreach rejects mixed Tensor/DTensor groups; the helper is a
+        # no-op when groups are uniform.
+        maybe_disable_foreach_and_fused_for_mixed_dtensor_groups(self.optimizer)
+
         return self.optimizer
 
     def create_scheduler(
@@ -1408,7 +1430,12 @@ class Trainer:
             # Load model checkpoint before accelerator.prepare() for regular models,
             # so that buffers and parameters are on the right device after prepare.
             # Deepspeed/FSDP models are loaded after prepare in _prepare_for_training.
-            if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
+            if (
+                not is_sagemaker_mp_enabled()
+                and not self.is_deepspeed_enabled
+                and not self.is_fsdp_enabled
+                and not self.is_native_distributed
+            ):
                 self._load_from_checkpoint(resume_from_checkpoint)
             state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
             if state.train_batch_size is not None and args.auto_find_batch_size:
@@ -1606,7 +1633,7 @@ class Trainer:
         # updating self.model_wrapped
         self.model_wrapped = model
 
-        if self.is_fsdp_enabled or self.is_fsdp_xla_enabled:
+        if self.is_fsdp_enabled or self.is_fsdp_xla_enabled or self.is_native_distributed:
             # breaking convention for FSDP model
             # TODO: check if this is really needed
             self.model = self.model_wrapped = model
@@ -1621,7 +1648,7 @@ class Trainer:
         # self.model_wrapped is DDP(Transformers Model), Deepspeed(Transformers Model),
         # FSDP(Transformers Model), Dynamo Optimized Module(Transformers Model) etc.
 
-        if self.is_fsdp_enabled:
+        if self.is_fsdp_enabled or self.is_native_distributed:
             # Fix `got mixed torch.Tensor and DTensor` error in model.generate() for FSDP2 with LoRA
             if hasattr(self.model, "generate"):
                 dist.fsdp.register_fsdp_forward_method(self.model, "generate")
@@ -2015,7 +2042,15 @@ class Trainer:
             and (self.model_accepts_loss_kwargs or self.compute_loss_func)
             and num_items_in_batch is not None
         ):
-            loss *= self.accelerator.num_processes if self.args.n_gpu <= 1 else self.args.n_gpu
+            # TP/EP-as-TP ranks see replicated batches — divide out the tp dim from
+            # whichever path is active (accelerate ParallelismConfig or DistributedConfig).
+            loss_scale = self.accelerator.num_processes
+            pc = getattr(self.accelerator, "parallelism_config", None)
+            if pc is not None and getattr(pc, "tp_size", 1) > 1:
+                loss_scale //= pc.tp_size
+            elif self.is_native_distributed and "tp" in (self.model.device_mesh.mesh_dim_names or ()):
+                loss_scale //= self.model.device_mesh["tp"].size()
+            loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
 
         return (loss, outputs) if return_outputs else loss
 
@@ -2444,7 +2479,7 @@ class Trainer:
         # frees the wrapped model and resets it back to the unwrapped base model
         release_memory(self.model_wrapped)
 
-        if self.is_fsdp_enabled:
+        if self.is_fsdp_enabled or self.is_native_distributed:
             # Remove FSDP wrapping from sub-models because self.model points to the wrapped model in FSDP case
             self.model = unwrap_model(self.model, recursive=True)
 
@@ -2495,6 +2530,9 @@ class Trainer:
         """Clip gradients to max_grad_norm. Returns the pre-clip gradient norm."""
         if is_sagemaker_mp_enabled() and self.args.fp16:
             return self.optimizer.clip_master_grads(self.args.max_grad_norm)
+        # Mesh-aware streaming clip — handles cross-mesh DTensor grads and plain tensors.
+        if self.is_native_distributed:
+            return clip_grad_norm(model.parameters(), self.args.max_grad_norm)
         return self.accelerator.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
 
     def _get_grad_norm(self, model, grad_norm=None):
@@ -3318,7 +3356,7 @@ class Trainer:
             else []
         )
 
-        if is_fsdp_ckpt and not self.is_fsdp_enabled:
+        if is_fsdp_ckpt and not (self.is_fsdp_enabled or self.is_native_distributed):
             raise ValueError(f"Checkpoint found at {resume_from_checkpoint} is only supported when using PyTorch FSDP")
 
         if not (
