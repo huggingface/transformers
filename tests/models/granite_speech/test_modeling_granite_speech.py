@@ -23,6 +23,7 @@ from transformers import (
     GraniteSpeechConfig,
     GraniteSpeechEncoderConfig,
     GraniteSpeechForConditionalGeneration,
+    GraniteSpeechModel,
 )
 from transformers.testing_utils import (
     cleanup,
@@ -49,6 +50,7 @@ if is_datasets_available():
 
 class GraniteSpeechModelTester(ALMModelTester):
     config_class = GraniteSpeechConfig
+    base_model_class = GraniteSpeechModel
     conditional_generation_class = GraniteSpeechForConditionalGeneration
     text_config_class = GraniteConfig
     audio_config_class = GraniteSpeechEncoderConfig
