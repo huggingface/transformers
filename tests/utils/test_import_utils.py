@@ -1,9 +1,7 @@
 import sys
 
 from transformers.testing_utils import run_test_using_subprocess
-from transformers.utils.import_utils import (
-    clear_import_cache,
-)
+from transformers.utils.import_utils import clear_import_cache
 
 
 @run_test_using_subprocess
