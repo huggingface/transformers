@@ -653,17 +653,18 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
                 [364.33920111, 97.92528764],
                 [373.25104943, 80.97749201],
                 [353.21072316, 83.38954486],
-            ]
+            ],
+            device=torch_device,
         )
         torch.testing.assert_close(keypoints[:3], expected_keypoints, rtol=1e-2, atol=1e-2)
 
         scores = person["scores"]
-        expected_scores = torch.tensor([1.0007433, 0.9987416, 1.0015154])
+        expected_scores = torch.tensor([1.0007433, 0.9987416, 1.0015154], device=torch_device)
         torch.testing.assert_close(scores[:3], expected_scores, rtol=1e-2, atol=1e-2)
 
         bbox = person["bbox"]
         # Padded, aspect-ratio-corrected xyxy box derived from center ± scale/2
-        expected_bbox = torch.tensor([234.04503, -54.76801, 601.65761, 435.38211])
+        expected_bbox = torch.tensor([234.04503, -54.76801, 601.65761, 435.38211], device=torch_device)
         torch.testing.assert_close(bbox, expected_bbox, rtol=1e-3, atol=1e-3)
 
         # Passing normalised boxes + target_sizes must produce identical results
@@ -705,11 +706,12 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         final_keypoints = final_person["keypoints"]
         expected_final_keypoints = torch.tensor(
             [[364.14644305, 97.99268751], [373.66756367, 81.19966519], [353.4574526, 83.647911]],
+            device=torch_device,
         )
         torch.testing.assert_close(final_keypoints[:3], expected_final_keypoints, rtol=1e-2, atol=1e-2)
 
         final_scores = final_person["scores"]
-        expected_final_scores = torch.tensor([1.0064079, 0.98746514, 0.99821794])
+        expected_final_scores = torch.tensor([1.0064079, 0.98746514, 0.99821794], device=torch_device)
         torch.testing.assert_close(final_scores[:3], expected_final_scores, rtol=1e-2, atol=1e-2)
 
         final_bbox = final_person["bbox"]
