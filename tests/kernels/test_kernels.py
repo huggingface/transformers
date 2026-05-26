@@ -39,6 +39,7 @@ from transformers.integrations.hub_kernels import (
     _HUB_KERNEL_MAPPING,
     _KERNEL_MODULE_MAPPING,
     _apply_converter_to_module,
+    _apply_weight_conversions,
     _make_converted_child_class,
     _strip_converter_prefix,
     infer_kernel_fusion_transforms,
@@ -643,7 +644,6 @@ class TestKernelFusions(TestCasePlus):
 
     def tearDown(self):
         import transformers.conversion_mapping as _cm
-        from transformers.integrations.hub_kernels import make_fused_module_class
 
         if _cm._checkpoint_conversion_mapping_cache is not None:
             _cm._checkpoint_conversion_mapping_cache.pop(self._MODEL_TYPE, None)
@@ -732,12 +732,6 @@ class TestKernelFusions(TestCasePlus):
 
 
 class TestFusedModuleWeightConversions(unittest.TestCase):
-    def _make_fused(self, *modules, names=None):
-        if names is None:
-            names = [type(m).__name__ for m in modules]
-        FusedCls = make_fused_module_class(tuple(names), "kernel")
-        return FusedCls(list(modules), fused_module_names=list(names))
-
     def test_weight_converter_concatenates_projections(self):
         class SeparateAttn(nn.Module):
             def __init__(self):
@@ -746,37 +740,32 @@ class TestFusedModuleWeightConversions(unittest.TestCase):
                 self.k_proj = nn.Linear(2, 2, bias=False)
                 self.v_proj = nn.Linear(2, 2, bias=False)
 
-        fused = self._make_fused(SeparateAttn(), names=["Attn"])
+        attn = SeparateAttn()
+        q_weight = attn.q_proj.weight.data.clone()
+        k_weight = attn.k_proj.weight.data.clone()
+        v_weight = attn.v_proj.weight.data.clone()
 
-        q_weight = torch.randn(2, 2)
-        k_weight = torch.randn(2, 2)
-        v_weight = torch.randn(2, 2)
-        fused.Attn.q_proj.weight.data.copy_(q_weight)
-        fused.Attn.k_proj.weight.data.copy_(k_weight)
-        fused.Attn.v_proj.weight.data.copy_(v_weight)
-
-        fused._apply_weight_conversions(
+        _apply_weight_conversions(
+            attn,
             [
                 WeightConverter(
-                    ["Attn.q_proj.weight", "Attn.k_proj.weight", "Attn.v_proj.weight"],
-                    "Attn.qkv_proj.weight",
+                    ["q_proj.weight", "k_proj.weight", "v_proj.weight"],
+                    "qkv_proj.weight",
                     operations=[Concatenate(dim=0)],
                 )
-            ]
+            ],
         )
 
-        state_dict = fused.state_dict()
-        self.assertIn("Attn.qkv_proj.weight", state_dict)
-        self.assertNotIn("Attn.q_proj.weight", state_dict)
-        self.assertNotIn("Attn.k_proj.weight", state_dict)
-        self.assertNotIn("Attn.v_proj.weight", state_dict)
-        self.assertIn("qkv_proj", fused.Attn._modules)
-        self.assertNotIn("q_proj", fused.Attn._modules)
-        self.assertNotIn("k_proj", fused.Attn._modules)
-        self.assertNotIn("v_proj", fused.Attn._modules)
-
-        expected_qkv = torch.cat([q_weight, k_weight, v_weight], dim=0)
-        torch.testing.assert_close(state_dict["Attn.qkv_proj.weight"], expected_qkv)
+        state_dict = attn.state_dict()
+        self.assertIn("qkv_proj.weight", state_dict)
+        self.assertNotIn("q_proj.weight", state_dict)
+        self.assertNotIn("k_proj.weight", state_dict)
+        self.assertNotIn("v_proj.weight", state_dict)
+        self.assertIn("qkv_proj", attn._modules)
+        self.assertNotIn("q_proj", attn._modules)
+        self.assertNotIn("k_proj", attn._modules)
+        self.assertNotIn("v_proj", attn._modules)
+        torch.testing.assert_close(state_dict["qkv_proj.weight"], torch.cat([q_weight, k_weight, v_weight], dim=0))
 
     def test_weight_converter_splits_fused_projection(self):
         class QKVAttn(nn.Module):
@@ -784,35 +773,31 @@ class TestFusedModuleWeightConversions(unittest.TestCase):
                 super().__init__()
                 self.qkv_proj = nn.Linear(2, 6, bias=False)
 
-        fused = self._make_fused(QKVAttn(), names=["QKV"])
+        attn = QKVAttn()
+        qkv_weight = attn.qkv_proj.weight.data.clone()
 
-        qkv_weight = torch.randn(6, 2)
-        fused.QKV.qkv_proj.weight.data.copy_(qkv_weight)
-
-        fused._apply_weight_conversions(
+        _apply_weight_conversions(
+            attn,
             [
                 WeightConverter(
-                    "QKV.qkv_proj.weight",
-                    ["QKV.q_proj.weight", "QKV.k_proj.weight", "QKV.v_proj.weight"],
-                    operations=[Chunk(dim=0)],
+                    "qkv_proj.weight", ["q_proj.weight", "k_proj.weight", "v_proj.weight"], operations=[Chunk(dim=0)]
                 )
-            ]
+            ],
         )
 
-        state_dict = fused.state_dict()
-        self.assertIn("QKV.q_proj.weight", state_dict)
-        self.assertIn("QKV.k_proj.weight", state_dict)
-        self.assertIn("QKV.v_proj.weight", state_dict)
-        self.assertNotIn("QKV.qkv_proj.weight", state_dict)
-        self.assertNotIn("qkv_proj", fused.QKV._modules)
-        self.assertIn("q_proj", fused.QKV._modules)
-        self.assertIn("k_proj", fused.QKV._modules)
-        self.assertIn("v_proj", fused.QKV._modules)
-
+        state_dict = attn.state_dict()
+        self.assertIn("q_proj.weight", state_dict)
+        self.assertIn("k_proj.weight", state_dict)
+        self.assertIn("v_proj.weight", state_dict)
+        self.assertNotIn("qkv_proj.weight", state_dict)
+        self.assertNotIn("qkv_proj", attn._modules)
+        self.assertIn("q_proj", attn._modules)
+        self.assertIn("k_proj", attn._modules)
+        self.assertIn("v_proj", attn._modules)
         expected_q, expected_k, expected_v = torch.chunk(qkv_weight, 3, dim=0)
-        torch.testing.assert_close(state_dict["QKV.q_proj.weight"], expected_q)
-        torch.testing.assert_close(state_dict["QKV.k_proj.weight"], expected_k)
-        torch.testing.assert_close(state_dict["QKV.v_proj.weight"], expected_v)
+        torch.testing.assert_close(state_dict["q_proj.weight"], expected_q)
+        torch.testing.assert_close(state_dict["k_proj.weight"], expected_k)
+        torch.testing.assert_close(state_dict["v_proj.weight"], expected_v)
 
     def test_weight_converter_split_is_idempotent(self):
         class QKVAttn(nn.Module):
@@ -823,18 +808,15 @@ class TestFusedModuleWeightConversions(unittest.TestCase):
         def make_mapping():
             return [
                 WeightConverter(
-                    "QKV.qkv_proj.weight",
-                    ["QKV.q_proj.weight", "QKV.k_proj.weight", "QKV.v_proj.weight"],
-                    operations=[Chunk(dim=0)],
+                    "qkv_proj.weight", ["q_proj.weight", "k_proj.weight", "v_proj.weight"], operations=[Chunk(dim=0)]
                 )
             ]
 
-        fused = self._make_fused(QKVAttn(), names=["QKV"])
-        fused._apply_weight_conversions(make_mapping())
-        keys_after_first = set(fused.state_dict().keys())
-
-        fused._apply_weight_conversions(make_mapping())
-        self.assertEqual(keys_after_first, set(fused.state_dict().keys()))
+        attn = QKVAttn()
+        _apply_weight_conversions(attn, make_mapping())
+        keys_after_first = set(attn.state_dict().keys())
+        _apply_weight_conversions(attn, make_mapping())
+        self.assertEqual(keys_after_first, set(attn.state_dict().keys()))
 
     def test_weight_converter_glob_merges_modulelist(self):
         class ExpertModule(nn.Module):
@@ -843,20 +825,19 @@ class TestFusedModuleWeightConversions(unittest.TestCase):
                 self.experts = nn.ModuleList([nn.Linear(2, 4, bias=False), nn.Linear(2, 4, bias=False)])
                 self.merged = nn.Module()
 
-        fused = self._make_fused(ExpertModule(), names=["M"])
+        mod = ExpertModule()
+        weight_0 = mod.experts[0].weight.data.clone()
+        weight_1 = mod.experts[1].weight.data.clone()
 
-        weight_0 = fused.M.experts[0].weight.data.clone()
-        weight_1 = fused.M.experts[1].weight.data.clone()
-
-        fused._apply_weight_conversions(
-            [WeightConverter("M.experts.*.weight", "M.merged.weight", operations=[MergeModulelist(dim=0)])]
+        _apply_weight_conversions(
+            mod, [WeightConverter("experts.*.weight", "merged.weight", operations=[MergeModulelist(dim=0)])]
         )
 
-        state_dict = fused.state_dict()
-        self.assertIn("M.merged.weight", state_dict)
-        self.assertNotIn("M.experts.0.weight", state_dict)
-        self.assertNotIn("M.experts.1.weight", state_dict)
-        torch.testing.assert_close(state_dict["M.merged.weight"], torch.stack([weight_0, weight_1], dim=0))
+        state_dict = mod.state_dict()
+        self.assertIn("merged.weight", state_dict)
+        self.assertNotIn("experts.0.weight", state_dict)
+        self.assertNotIn("experts.1.weight", state_dict)
+        torch.testing.assert_close(state_dict["merged.weight"], torch.stack([weight_0, weight_1], dim=0))
 
     def test_multiple_independent_converters(self):
         class QKVAttn(nn.Module):
@@ -870,50 +851,42 @@ class TestFusedModuleWeightConversions(unittest.TestCase):
                 self.gate_proj = nn.Linear(2, 4, bias=False)
                 self.up_proj = nn.Linear(2, 4, bias=False)
 
-        fused = self._make_fused(QKVAttn(), MLP(), names=["Attn", "MLP"])
+        attn = QKVAttn()
+        mlp = MLP()
+        qkv_weight = attn.qkv_proj.weight.data.clone()
+        gate_weight = mlp.gate_proj.weight.data.clone()
+        up_weight = mlp.up_proj.weight.data.clone()
 
-        qkv_weight = torch.randn(6, 2)
-        gate_weight = torch.randn(4, 2)
-        up_weight = torch.randn(4, 2)
-        fused.Attn.qkv_proj.weight.data.copy_(qkv_weight)
-        fused.MLP.gate_proj.weight.data.copy_(gate_weight)
-        fused.MLP.up_proj.weight.data.copy_(up_weight)
-
-        fused._apply_weight_conversions(
+        _apply_weight_conversions(
+            attn,
             [
                 WeightConverter(
-                    "Attn.qkv_proj.weight",
-                    ["Attn.q_proj.weight", "Attn.k_proj.weight", "Attn.v_proj.weight"],
-                    operations=[Chunk(dim=0)],
-                ),
+                    "qkv_proj.weight", ["q_proj.weight", "k_proj.weight", "v_proj.weight"], operations=[Chunk(dim=0)]
+                )
+            ],
+        )
+        _apply_weight_conversions(
+            mlp,
+            [
                 WeightConverter(
-                    ["MLP.gate_proj.weight", "MLP.up_proj.weight"],
-                    "MLP.gate_up_proj.weight",
-                    operations=[Concatenate(dim=0)],
-                ),
-            ]
+                    ["gate_proj.weight", "up_proj.weight"], "gate_up_proj.weight", operations=[Concatenate(dim=0)]
+                )
+            ],
         )
 
-        state_dict = fused.state_dict()
-
-        self.assertNotIn("Attn.qkv_proj.weight", state_dict)
-        self.assertIn("Attn.q_proj.weight", state_dict)
-        self.assertIn("Attn.k_proj.weight", state_dict)
-        self.assertIn("Attn.v_proj.weight", state_dict)
-        self.assertNotIn("qkv_proj", fused.Attn._modules)
-        self.assertIn("q_proj", fused.Attn._modules)
-        self.assertIn("k_proj", fused.Attn._modules)
-        self.assertIn("v_proj", fused.Attn._modules)
+        attn_sd = attn.state_dict()
+        self.assertNotIn("qkv_proj.weight", attn_sd)
+        self.assertIn("q_proj.weight", attn_sd)
+        self.assertIn("k_proj.weight", attn_sd)
+        self.assertIn("v_proj.weight", attn_sd)
         expected_q, expected_k, expected_v = torch.chunk(qkv_weight, 3, dim=0)
-        torch.testing.assert_close(state_dict["Attn.q_proj.weight"], expected_q)
+        torch.testing.assert_close(attn_sd["q_proj.weight"], expected_q)
 
-        self.assertNotIn("MLP.gate_proj.weight", state_dict)
-        self.assertNotIn("MLP.up_proj.weight", state_dict)
-        self.assertIn("MLP.gate_up_proj.weight", state_dict)
-        self.assertNotIn("gate_proj", fused.MLP._modules)
-        self.assertNotIn("up_proj", fused.MLP._modules)
-        self.assertIn("gate_up_proj", fused.MLP._modules)
-        torch.testing.assert_close(state_dict["MLP.gate_up_proj.weight"], torch.cat([gate_weight, up_weight], dim=0))
+        mlp_sd = mlp.state_dict()
+        self.assertNotIn("gate_proj.weight", mlp_sd)
+        self.assertNotIn("up_proj.weight", mlp_sd)
+        self.assertIn("gate_up_proj.weight", mlp_sd)
+        torch.testing.assert_close(mlp_sd["gate_up_proj.weight"], torch.cat([gate_weight, up_weight], dim=0))
 
     def test_no_match_is_noop(self):
         class SimpleModule(nn.Module):
@@ -921,14 +894,12 @@ class TestFusedModuleWeightConversions(unittest.TestCase):
                 super().__init__()
                 self.linear = nn.Linear(4, 4, bias=False)
 
-        fused = self._make_fused(SimpleModule(), names=["M"])
-        original_keys = set(fused.state_dict().keys())
-
-        fused._apply_weight_conversions(
-            [WeightConverter("M.non_existent.weight", "M.something.weight", operations=[Concatenate(dim=0)])]
+        mod = SimpleModule()
+        original_keys = set(mod.state_dict().keys())
+        _apply_weight_conversions(
+            mod, [WeightConverter("non_existent.weight", "something.weight", operations=[Concatenate(dim=0)])]
         )
-
-        self.assertEqual(original_keys, set(fused.state_dict().keys()))
+        self.assertEqual(original_keys, set(mod.state_dict().keys()))
 
 
 class TestConvertedChildClass(unittest.TestCase):
