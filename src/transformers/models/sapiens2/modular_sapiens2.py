@@ -732,7 +732,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         source_sizes: list[tuple] | None = None,
         target_sizes: list[tuple] | None = None,
         do_remove_padding: bool | None = None,
-    ) -> list[torch.Tensor]:
+    ) -> list[dict[str, torch.Tensor]]:
         """
         Converts the output of [`Sapiens2ForNormalEstimation`] into L2-normalized surface normal maps.
 
@@ -752,8 +752,9 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 Defaults to `True` when `source_sizes` is provided, `False` otherwise.
 
         Returns:
-            `list[torch.Tensor]` of length `batch_size`, each of shape `(3, height, width)`.
-            Values are L2-normalized unit vectors in `[-1, 1]` per channel (XYZ surface normals).
+            `list[dict[str, torch.Tensor]]` of length `batch_size`. Each dict has a `"normals"` key
+            mapping to a tensor of shape `(3, height, width)` with L2-normalized unit vectors in
+            `[-1, 1]` per channel (XYZ surface normals).
         """
         if do_remove_padding is None:
             do_remove_padding = source_sizes is not None
@@ -805,7 +806,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                     antialias=False,
                 )[0]
 
-            result.append(normal)
+            result.append({"normals": normal})
 
         return result
 

@@ -108,10 +108,11 @@ print("Normals shape:", outputs.normals.shape)  # [1, 3, 1024, 768]
 
 # Remove preprocessing padding, resize to original size, and L2-normalize to unit vectors in [-1, 1]
 original_size = (image.height, image.width)
-normal_maps = image_processor.post_process_normal_estimation(
+result = image_processor.post_process_normal_estimation(
     outputs, source_sizes=[original_size], target_sizes=[original_size]
-)[0]
-print("Normal map shape:", normal_maps.shape)   # [3, original_height, original_width]
+)
+normals = result[0]["normals"]
+print("Normals shape:", normals.shape)   # [3, original_height, original_width]
 ```
 
 ### Pointmap estimation

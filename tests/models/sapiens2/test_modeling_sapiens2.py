@@ -429,15 +429,16 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         # without target_sizes: spatial dims match normals, values are L2-normalized
         result = image_processor.post_process_normal_estimation(outputs)
         self.assertEqual(len(result), batch_size)
-        self.assertEqual(result[0].shape, torch.Size([num_labels, height, width]))
-        norms = result[0].norm(p=2, dim=0)
+        self.assertIn("normals", result[0])
+        self.assertEqual(result[0]["normals"].shape, torch.Size([num_labels, height, width]))
+        norms = result[0]["normals"].norm(p=2, dim=0)
         torch.testing.assert_close(norms, torch.ones_like(norms), rtol=1e-4, atol=1e-4)
 
         # with target_sizes: output is resized before normalization
         target_sizes = [(height * 2, width * 2)] * batch_size
         result = image_processor.post_process_normal_estimation(outputs, target_sizes=target_sizes)
         self.assertEqual(len(result), batch_size)
-        self.assertEqual(result[0].shape, torch.Size([num_labels, height * 2, width * 2]))
+        self.assertEqual(result[0]["normals"].shape, torch.Size([num_labels, height * 2, width * 2]))
 
         # mismatched batch size raises ValueError
         with self.assertRaises(ValueError):
@@ -760,13 +761,16 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
         result = image_processor.post_process_normal_estimation(outputs, source_sizes=[(image_height, image_width)])
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].shape, torch.Size([3, 432, 640]))
+        self.assertIn("normals", result[0])
+        self.assertEqual(result[0]["normals"].shape, torch.Size([3, 432, 640]))
 
         expected_postprocessed_normals = torch.tensor(
             [[-0.8266, -0.7899, -0.7512], [-0.8227, -0.7843, -0.7440], [-0.8098, -0.7721, -0.7318]],
             device=torch_device,
         )
-        torch.testing.assert_close(result[0][0, :3, :3], expected_postprocessed_normals, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(
+            result[0]["normals"][0, :3, :3], expected_postprocessed_normals, rtol=1e-2, atol=1e-2
+        )
 
     @slow
     def test_inference_pointmap_estimation(self):
