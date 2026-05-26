@@ -442,6 +442,7 @@ class ModelUtilsTest(TestCasePlus):
             fake_mesh = mock.Mock()
             fake_mesh.mesh_dim_names = ("fsdp",)
             fake_mesh.ndim = 1
+            fake_mesh.device_type = "cpu"
 
             def fake_apply_fsdp(model, fsdp_mesh, fsdp_plan):
                 call_order.append("distribute")
