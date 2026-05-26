@@ -110,7 +110,7 @@ def ensure_decode_fast_path_is_available(
         # XPU support is given through its kernel variation `kernels-community/flash-attn2`
         xpu_available = is_torch_xpu_available()
         fa_xpu = is_flash_attention_requested(config, version=2) and xpu_available
-        if fa_cuda or fa_xpu: # Block table is only supported on these
+        if fa_cuda or fa_xpu:  # Block table is only supported on these
             flash_attn_with_kvcache = lazy_import_paged_flash_attention(config._attn_implementation)[1]
             # Throw a warning only if the decode fast path was requested by the user
             if flash_attn_with_kvcache is None:
