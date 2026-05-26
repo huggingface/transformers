@@ -44,7 +44,7 @@ CONFIG_MAPPING_NAMES.update(
 
 # TODO: depecate and remove `gpt-sw3`, old model. And prohibit mapping the same config to different model types
 # Auto-classes rely a lot on these, and it is much easier when we have 1-1 mapping
-CONFIG_MAPPING_NAMES = OrderedDict(**{"rio2": "Rio2Config"}, **CONFIG_MAPPING_NAMES)
+CONFIG_MAPPING_NAMES = OrderedDict(**{"gpt-sw3": "GPT2Config"}, **CONFIG_MAPPING_NAMES)
 
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME.update(
     {
