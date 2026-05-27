@@ -198,6 +198,8 @@ class MellumModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
 
+# TODO(vasqu) fixup integration tests
+@unittest.skip(reason="Weights will be available later")
 @require_torch
 class MellumIntegrationTest(unittest.TestCase):
     checkpoint = "JetBrains/Mellum2-12B-A2.5B-Base"
