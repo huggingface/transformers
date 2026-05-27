@@ -62,6 +62,7 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     return None
 
 
+# TODO: move and refactor
 def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None) -> None:
     """Verifies that all rules in the TP plan were used to distribute the model, and that the expected_keys were all
     distributed. For each offense, logs a warning."""
@@ -80,7 +81,7 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None) -> 
 
     for key in generic_keys:
         param_name = key.rsplit(".", 1)[0] if "." in key else key
-        generic_param_name = re.sub(r"\d+", "*", param_name)
+        generic_param_name = replace_layer_number_by_wildcard(param_name)
 
         if generic_param_name in weight_plan:
             unused_rules.pop(generic_param_name, None)
@@ -226,6 +227,16 @@ class LayoutAwareTPMixin(TensorParallelMixin):
     desired_output_layout: tuple[Placement, ...]  # can be left empty if not needed
     return_plain_output: bool = True
 
+    def check_init(self):
+        for attr in ["assumed_input_layout", "desired_input_layout", "assumed_output_layout", "desired_output_layout"]:
+            # Check all layouts have been set
+            if not hasattr(self, attr):
+                raise AttributeError(f"Attribute {attr} is missing for {self.__class__.__name__}")
+            # Check all layouts are tuples of Placement and non-empty (safe for desired_output_layout, it's optional)
+            layout = getattr(self, attr)
+            if not isinstance(layout, tuple) or (len(layout) == 0 and attr != "desired_output_layout"):
+                raise ValueError(f"Attribute {attr} must be a non-empty tuple of Placement")
+
     def transform_inputs_pre_forward(
         self, module: torch.nn.Module, args: tuple, kwargs: dict, tp_mesh: DeviceMesh
     ) -> tuple[tuple, dict]:
@@ -267,10 +278,11 @@ class GatherParallel(LayoutAwareTPMixin):
     def __init__(self, dimension: int = 1, return_plain_output: bool = True):
         self.dimension = dimension
         self.assumed_input_layout = (Shard(dimension),)
-        self.desired_input_layouts = (Replicate(),)
+        self.desired_input_layout = (Replicate(),)
         self.assumed_output_layout = (Placement(),)  # will never be used
         self.desired_output_layout = ()
         self.return_plain_output = return_plain_output
+        self.check_init()
 
     def transform_output_post_forward(self, module: torch.nn.Module, output: Any, tp_mesh: DeviceMesh) -> Any:
         # this is overridden to do nothing as this class is only supposed to gather inputs
@@ -287,10 +299,11 @@ class GatherScatterSequenceParallel(LayoutAwareTPMixin):
     def __init__(self, dimension: int = 1, return_plain_output: bool = True):
         self.dimension = dimension
         self.assumed_input_layout = (Shard(dimension),)
-        self.desired_input_layouts = (Replicate(),)
+        self.desired_input_layout = (Replicate(),)
         self.assumed_output_layout = (Replicate(),)
         self.desired_output_layout = (Shard(dimension),)
         self.return_plain_output = return_plain_output
+        self.check_init()
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.dimension = }, {self.return_plain_output = })"
@@ -324,6 +337,7 @@ class ColwiseParallel(LayoutAwareTPMixin):
         self.desired_output_layout = assumed_output_layout if desired_output_layout is None else desired_output_layout
         self.return_plain_output = return_plain_output
         self.num_packed_weights = num_packed_weights
+        self.check_init()
 
     def shard_meta_params(self, module: torch.nn.Module, tp_mesh: DeviceMesh) -> torch.nn.Module:
         if isinstance(module, torch.nn.Linear):
@@ -340,7 +354,7 @@ class ColwiseParallel(LayoutAwareTPMixin):
         elif isinstance(module, torch.nn.Embedding):
             if self.num_packed_weights > 1:
                 raise ValueError(f"Weight packing is {self.num_packed_weights = } but it should be 1 for nn.Embedding")
-            placements = {key: (Shard(1),) for key in module.named_parameters()}
+            placements = {key: (Shard(1),) for key, _ in module.named_parameters()}
         else:
             raise NotImplementedError(
                 f"ColwiseParallel only supports nn.Linear and nn.Embedding, but got {module.__class__.__name__}"
@@ -382,6 +396,7 @@ class RowwiseParallel(LayoutAwareTPMixin):
         self.assumed_output_layout = (Partial("sum"),)
         self.desired_output_layout = desired_output_layout
         self.return_plain_output = return_plain_output
+        self.check_init()
 
     def shard_meta_params(self, module: torch.nn.Module, tp_mesh: DeviceMesh) -> torch.nn.Module:
         if isinstance(module, torch.nn.Linear):
@@ -417,10 +432,11 @@ class SequenceParallel(LayoutAwareTPMixin):
         self.assumed_output_layout = (Shard(sequence_dim),)
         self.desired_output_layout = (Shard(sequence_dim),)
         self.return_plain_output = return_plain_output
+        self.check_init()
 
     def shard_meta_params(self, module: torch.nn.Module, tp_mesh: DeviceMesh) -> torch.nn.Module:
         # For sequennce parallel, we replicate all params of the module across all ranks
-        placements = {key: Replicate() for key in module.named_parameters()}
+        placements = {key: (Replicate(), ) for key, _ in module.named_parameters()}
         return self.apply_placements_to_meta_params(module, tp_mesh, placements)
 
     def __repr__(self) -> str:
@@ -619,7 +635,7 @@ class ParallelInterface(GeneralInterface):
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
-def paralellize_model(model: torch.nn.Module, tp_mesh: DeviceMesh, tp_plan: dict[str, str] | None = None):
+def parallelize_model(model: torch.nn.Module, tp_mesh: DeviceMesh, tp_plan: dict[str, str] | None = None):
     """Applies parallelism (TP or SP) to a model by walking the model's submodules and trying to match them to a pattern
     in the tp_plan. If such a match is found, the submodule is made TP-aware by the ``make_tp_aware`` method of the
     matched TP style."""

@@ -4348,7 +4348,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if distributed_config is not None:
             # Tie weights before sharding so `apply_fully_shard_data_parallel` /
-            # `apply_tensor_parallel` see the shared-parameter graph and can route tied
+            # `parallelize_model` see the shared-parameter graph and can route tied
             # entries (e.g. `lm_head` -> `embed_tokens`) correctly. `_finalize_model_loading`
             # re-runs `tie_weights` after the checkpoint is loaded to handle missing-key edge cases.
             model.tie_weights()

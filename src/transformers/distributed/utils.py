@@ -25,7 +25,7 @@ from .sharding_utils import (
     get_fusion_metadata,
     unfuse_optimizer_state,
 )
-from .tensor_parallel import paralellize_model
+from .tensor_parallel import parallelize_model
 
 
 logger = logging.get_logger(__name__)
@@ -146,7 +146,7 @@ def distribute_model(model, distributed_config: DistributedConfig, device_mesh) 
     mesh_dim_names = device_mesh.mesh_dim_names or ()
     if "tp" in mesh_dim_names:
         tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
-        model = paralellize_model(model, tp_mesh, distributed_config.tp_plan)
+        model = parallelize_model(model, tp_mesh, distributed_config.tp_plan)
     if "fsdp" in mesh_dim_names:
         fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
         model = apply_fully_shard_data_parallel(model, fsdp_mesh, distributed_config.fsdp_plan)

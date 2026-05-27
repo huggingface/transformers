@@ -23,7 +23,7 @@ _import_structure = {
     "sharding_utils": [],
     "tensor_parallel": [
         "ALL_PARALLEL_STYLES",
-        "paralellize_model",
+        "parallelize_model",
         "verify_tp_plan",
     ],
     "utils": [],
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from .fsdp import is_fsdp_enabled, is_fsdp_managed_module
     from .tensor_parallel import (
         ALL_PARALLEL_STYLES,
-        paralellize_model,
+        parallelize_model,
         verify_tp_plan,
     )
 
