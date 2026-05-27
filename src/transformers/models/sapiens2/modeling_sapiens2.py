@@ -414,10 +414,8 @@ class Sapiens2Attention(nn.Module):
         self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.proj_bias)
         self.num_key_value_heads = config.num_key_value_heads_per_layer[layer_idx]
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        kv_dim = self.num_key_value_heads * self.head_dim
-
-        self.k_proj = nn.Linear(self.embed_dim, kv_dim, bias=config.key_bias)
-        self.v_proj = nn.Linear(self.embed_dim, kv_dim, bias=config.value_bias)
+        self.k_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim, bias=config.key_bias)
+        self.v_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim, bias=config.value_bias)
         self.q_norm = nn.RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
         self.k_norm = nn.RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
 
@@ -429,26 +427,18 @@ class Sapiens2Attention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
-        batch_size, patches, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, patches, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, patches, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         query_states = self.q_norm(query_states)
         key_states = self.k_norm(key_states)
-
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -459,10 +449,8 @@ class Sapiens2Attention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
-
-        attn_output = attn_output.reshape(batch_size, patches, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-
         return attn_output, attn_weights
 
 
