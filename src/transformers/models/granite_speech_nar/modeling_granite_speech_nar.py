@@ -70,6 +70,7 @@ class GraniteSpeechNarModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor | None = None
+    audio_embeds: torch.FloatTensor | None = None
     ctc_token_ids: list[torch.Tensor] | None = None
     text_lengths: list[int] | None = None
     audio_lengths: list[int] | None = None
@@ -94,6 +95,7 @@ class GraniteSpeechNarOutput(ModelOutput):
     loss: torch.Tensor | None = None
     preds: list[torch.Tensor] | None = None
     logits: list[torch.Tensor] | None = None
+    audio_embeds: torch.FloatTensor | None = None
     encoder_logits: torch.Tensor | None = None
     encoder_preds: list[torch.Tensor] | None = None
     encoder_loss: torch.Tensor | None = None
@@ -977,46 +979,53 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
 
     def forward(
         self,
-        input_features: torch.Tensor,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         label_lengths: torch.Tensor | None = None,
         output_encoder_logits: bool = False,
+        audio_embeds: torch.Tensor | None = None,
+        ctc_token_ids: list[torch.Tensor] | None = None,
         **kwargs,
     ) -> GraniteSpeechNarModelOutput:
-        encoder_labels = labels if self.config.encoder_ctc_loss_lambda else None
-        enc_out = self.encoder(
-            input_features=input_features,
-            attention_mask=attention_mask,
-            output_hidden_states=True,
-            labels=encoder_labels,
-            label_lengths=label_lengths if encoder_labels is not None else None,
-        )
-
         if attention_mask is None:
             attention_mask = torch.ones(input_features.shape[:-1], dtype=torch.bool, device=input_features.device)
 
+        encoder_loss = None
+        encoder_logits = None
+
+        if audio_embeds is None:
+            encoder_labels = labels if self.config.encoder_ctc_loss_lambda else None
+            enc_out = self.encoder(
+                input_features=input_features,
+                attention_mask=attention_mask,
+                output_hidden_states=True,
+                labels=encoder_labels,
+                label_lengths=label_lengths if encoder_labels is not None else None,
+            )
+
+            encoder_lengths = attention_mask.sum(dim=1)
+
+            pool_window = self.encoder.config.bpe_pooling_window
+            bpe_lengths = (-(encoder_lengths // -pool_window)).tolist()
+            ctc_token_ids = self._ctc_collapse_decode(enc_out.logits, bpe_lengths)
+
+            multilayer_features = torch.cat(
+                [enc_out.all_hidden_states[idx] for idx in self.config.encoder_layer_indices], dim=-1
+            )
+
+            encoder_loss = enc_out.loss
+            encoder_logits = enc_out.logits if output_encoder_logits else None
+            del enc_out
+
+            audio_embeds = self.projector(multilayer_features)
+            del multilayer_features
+            if self.config.scale_projected_embeddings:
+                embedding_multiplier = getattr(self.config.text_config, "embedding_multiplier", 1.0)
+                audio_embeds = audio_embeds / embedding_multiplier
+            audio_embeds = audio_embeds.to(self.language_model.embed_tokens.weight.dtype)
+
         encoder_lengths = attention_mask.sum(dim=1)
-
-        pool_window = self.encoder.config.bpe_pooling_window
-        bpe_lengths = (-(encoder_lengths // -pool_window)).tolist()
-        ctc_token_ids = self._ctc_collapse_decode(enc_out.logits, bpe_lengths)
-
-        multilayer_features = torch.cat(
-            [enc_out.all_hidden_states[idx] for idx in self.config.encoder_layer_indices], dim=-1
-        )
-
-        encoder_loss = enc_out.loss
-        encoder_logits = enc_out.logits if output_encoder_logits else None
-        del enc_out
-
-        audio_embeds = self.projector(multilayer_features)
-        del multilayer_features
-        if self.config.scale_projected_embeddings:
-            embedding_multiplier = getattr(self.config.text_config, "embedding_multiplier", 1.0)
-            audio_embeds = audio_embeds / embedding_multiplier
-        audio_embeds = audio_embeds.to(self.language_model.embed_tokens.weight.dtype)
-
         audio_lengths = (encoder_lengths // self.projector.config.downsample_rate).cpu().tolist()
 
         flat_embeds, flat_position_ids, text_lengths = self._build_flat_inputs(
@@ -1030,6 +1039,7 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
 
         return GraniteSpeechNarModelOutput(
             last_hidden_state=llm_out.last_hidden_state.squeeze(0),
+            audio_embeds=audio_embeds,
             ctc_token_ids=ctc_token_ids,
             text_lengths=text_lengths,
             audio_lengths=audio_lengths,
@@ -1059,11 +1069,13 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
     def forward(
         self,
         *,
-        input_features: torch.Tensor,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         label_lengths: torch.Tensor | None = None,
         output_encoder_logits: bool = False,
+        audio_embeds: torch.Tensor | None = None,
+        ctc_token_ids: list[torch.Tensor] | None = None,
         **kwargs,
     ) -> GraniteSpeechNarOutput:
         r"""
@@ -1079,6 +1091,12 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
             output_encoder_logits (`bool`, *optional*, defaults to `False`):
                 Whether to return encoder BPE logits. When False, the large logits
                 tensor is freed early to reduce peak memory.
+            audio_embeds (`torch.Tensor`, *optional*):
+                Pre-computed projected audio embeddings. When provided, encoder and
+                projector are skipped (used for multi-step editing).
+            ctc_token_ids (`list[torch.Tensor]`, *optional*):
+                Pre-computed CTC token predictions to use as text input. When provided
+                with `audio_embeds`, replaces encoder CTC predictions.
 
         Returns:
             [`GraniteSpeechNarOutput`]
@@ -1089,6 +1107,8 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
             labels=labels,
             label_lengths=label_lengths,
             output_encoder_logits=output_encoder_logits,
+            audio_embeds=audio_embeds,
+            ctc_token_ids=ctc_token_ids,
         )
 
         all_logits = self.lm_head(model_out.last_hidden_state)
@@ -1125,6 +1145,7 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
         return GraniteSpeechNarOutput(
             loss=loss,
             logits=logits_per_sample,
+            audio_embeds=model_out.audio_embeds,
             encoder_logits=model_out.encoder_logits,
             encoder_preds=model_out.ctc_token_ids,
             encoder_loss=encoder_loss,
@@ -1137,26 +1158,41 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         output_encoder_logits: bool = False,
+        num_editing_steps: int = 1,
     ) -> GraniteSpeechNarOutput:
-        """Single-pass non-autoregressive inference: forward + CTC collapse on LLM output.
+        """Non-autoregressive inference with iterative editing.
+
+        Each editing step collapses the LLM output via CTC and feeds it back
+        as input for refinement, reusing cached audio embeddings.
 
         Returns token ID tensors in `preds`. Use `GraniteSpeechNarProcessor.batch_decode()`
         to convert to strings.
         """
-        output = self.forward(
-            input_features=input_features,
-            attention_mask=attention_mask,
-            output_encoder_logits=output_encoder_logits,
-        )
+        audio_embeds = None
+        ctc_token_ids = None
+        encoder_preds = None
 
-        blank_id = self.config.blank_token_id
-        preds = [_ctc_greedy_decode(sample_logits, blank_id) for sample_logits in output.logits]
+        for step in range(num_editing_steps):
+            output = self.forward(
+                input_features=input_features,
+                attention_mask=attention_mask,
+                audio_embeds=audio_embeds,
+                ctc_token_ids=ctc_token_ids,
+                output_encoder_logits=(output_encoder_logits and step == 0),
+            )
+
+            blank_id = self.config.blank_token_id
+            ctc_token_ids = [_ctc_greedy_decode(sample_logits, blank_id) for sample_logits in output.logits]
+            audio_embeds = output.audio_embeds
+
+            if step == 0:
+                encoder_preds = output.encoder_preds
 
         return GraniteSpeechNarOutput(
-            preds=preds,
+            preds=ctc_token_ids,
             logits=output.logits,
             encoder_logits=output.encoder_logits,
-            encoder_preds=output.encoder_preds,
+            encoder_preds=encoder_preds,
         )
 
 

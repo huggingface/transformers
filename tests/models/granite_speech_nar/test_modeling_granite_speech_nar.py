@@ -258,6 +258,26 @@ class TestGraniteSpeechNarForCTC:
         assert len(output.preds) == 1
         assert isinstance(output.preds[0], torch.Tensor)
 
+    def test_generate_multi_step(self):
+        config = _make_small_config()
+        model = GraniteSpeechNarForCTC(config).eval()
+
+        features = torch.randn(2, 80, 160)
+        mask = torch.ones(2, 80, dtype=torch.bool)
+        mask[1, 60:] = False
+
+        out1 = model.generate(input_features=features, attention_mask=mask, num_editing_steps=1)
+        out2 = model.generate(input_features=features, attention_mask=mask, num_editing_steps=3)
+
+        assert out1.preds is not None
+        assert out2.preds is not None
+        assert len(out1.preds) == 2
+        assert len(out2.preds) == 2
+        # Multi-step should produce valid predictions (may or may not differ)
+        for pred in out2.preds:
+            assert isinstance(pred, torch.Tensor)
+            assert pred.ndim == 1
+
     def test_loss(self):
         config = _make_small_config()
         model = GraniteSpeechNarForCTC(config).train()
