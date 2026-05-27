@@ -41,21 +41,24 @@ class Bnb4bitQuantize(ConversionOps):
         """
         we need to store some parameters to create the quantized weight. For example, bnb requires 6 values that are stored in the checkpoint to recover the quantized weight. So we store them in a dict that it stored in hf_quantizer for now as we can't save it in the op since we create an op per tensor.
         """
-        value = list(input_dict.values())[0]
-        value = value[0]
+        result = {}
+        for param_name, value in input_dict.items():
+            if isinstance(value, list):
+                value = value[0]
 
-        # update param name to get the weights instead of the quantized stats
-        module, _ = get_module_from_name(model, full_layer_name)
+            # update param name to get the weights instead of the quantized stats
+            module, _ = get_module_from_name(model, param_name)
 
-        # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
-        # Since weights are saved in the correct "orientation", we skip transposing when loading.
-        if issubclass(module.source_cls, Conv1D):
-            value = value.T
+            # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
+            # Since weights are saved in the correct "orientation", we skip transposing when loading.
+            if issubclass(module.source_cls, Conv1D):
+                value = value.T
 
-        old_value = model.get_parameter_or_buffer(full_layer_name)
-        new_value = bnb.nn.Params4bit(value, requires_grad=False, **old_value.__dict__).to(value.device)
-        module._is_hf_initialized = True
-        return {full_layer_name: new_value}
+            old_value = model.get_parameter_or_buffer(param_name)
+            new_value = bnb.nn.Params4bit(value, requires_grad=False, **old_value.__dict__).to(value.device)
+            module._is_hf_initialized = True
+            result[param_name] = new_value
+        return result
 
 
 class Bnb4bitDeserialize(ConversionOps):
@@ -104,20 +107,22 @@ class Bnb8bitQuantize(ConversionOps):
         full_layer_name: str | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        value = list(input_dict.values())[0]
-        value = value[0] if isinstance(value, list) else value
+        result = {}
+        for param_name, value in input_dict.items():
+            value = value[0] if isinstance(value, list) else value
 
-        module, _ = get_module_from_name(model, full_layer_name)
+            module, _ = get_module_from_name(model, param_name)
 
-        # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
-        # Since weights are saved in the correct "orientation", we skip transposing when loading.
-        if issubclass(module.source_cls, Conv1D):
-            value = value.T
-        value_device = value.device
-        kwargs = model.get_parameter_or_buffer(full_layer_name).__dict__
-        kwargs.pop("SCB", None)
-        new_value = bnb.nn.Int8Params(value.to("cpu"), requires_grad=False, **kwargs).to(value_device)
-        return {full_layer_name: new_value}
+            # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
+            # Since weights are saved in the correct "orientation", we skip transposing when loading.
+            if issubclass(module.source_cls, Conv1D):
+                value = value.T
+            value_device = value.device
+            params_kwargs = model.get_parameter_or_buffer(param_name).__dict__
+            params_kwargs.pop("SCB", None)
+            new_value = bnb.nn.Int8Params(value.to("cpu"), requires_grad=False, **params_kwargs).to(value_device)
+            result[param_name] = new_value
+        return result
 
 
 class Bnb8bitDeserialize(ConversionOps):
