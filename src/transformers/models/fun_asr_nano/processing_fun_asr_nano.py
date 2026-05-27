@@ -18,7 +18,7 @@ import numpy as np
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
@@ -70,6 +70,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
             chat_template = self.default_chat_template
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template, **kwargs)
 
+    @auto_docstring
     def __call__(
         self,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
@@ -78,19 +79,6 @@ class FunAsrNanoProcessor(ProcessorMixin):
         return_tensors: str | None = None,
         **kwargs,
     ) -> BatchFeature:
-        """
-        Process text and audio inputs for the Fun-ASR-Nano model.
-
-        Args:
-            text: Text input(s). Should contain `<|AUDIO|>` placeholder tokens where audio is inserted.
-                Use `apply_chat_template` to generate proper text from conversation format.
-            audio: Raw audio waveform(s) as numpy arrays.
-            sampling_rate: Sampling rate of the audio (must be 16000).
-            return_tensors: Type of tensors to return ("pt", "np", "tf").
-
-        Returns:
-            BatchFeature with input_ids, attention_mask, input_features, and feature_lengths.
-        """
         if text is None:
             raise ValueError("You need to specify `text` input to process.")
 
