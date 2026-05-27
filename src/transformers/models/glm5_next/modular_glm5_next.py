@@ -261,7 +261,7 @@ class Glm5NextLinearAttention(nn.Module):
 
         linear_attn_config = config.linear_attn_config
         self.head_dim = linear_attn_config["head_dim"]
-        self.v_head_dim = linear_attn_config["v_head_dim"]
+        self.v_head_dim = linear_attn_config.get("v_head_dim", 128)
         self.num_heads = linear_attn_config["num_heads"]
         self.conv_kernel_size = linear_attn_config.get("short_conv_kernel_size", 4)
 
