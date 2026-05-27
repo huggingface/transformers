@@ -23,7 +23,8 @@ You may use code agents in drafting or to help you diagnose issues. We'd also as
 not to open any PRs or issues for the moment.
 
 PRs that appear to be fully agent-written will probably be closed without review, and we may block users who do this
-repeatedly or maliciously. 
+repeatedly or maliciously. We will also close PRs with purely AI-written descriptions. This is deliberately intended
+to create friction to discourage low-effort "slop" PRs. If a PR is too insignificant to be worth writing a description for, it's probably not worth our time to review!
 
 This is a rapidly-evolving situation that's causing significant shockwaves in the open-source community. As a result, 
 this policy is likely to be updated regularly in the near future. For more information, please read [`CONTRIBUTING.md`](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md).
