@@ -535,7 +535,7 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
 
-        attention_mask = self._prepare_attention_mask(
+        query, attention_mask = self._prepare_relative_position_bias(
             query=query,
             key=key,
             attention_mask=attention_mask,
@@ -545,9 +545,6 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-
-        if self.position_embeddings_type == "relative":
-            query = query + self.pos_bias_u[None, :, None, :]
 
         hidden_states, attn_weights = attention_interface(
             self,
@@ -625,9 +622,9 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
 
         return scores
 
-    def _prepare_attention_mask(self, query, key, attention_mask, relative_position_embeddings):
+    def _prepare_relative_position_bias(self, query, key, attention_mask, relative_position_embeddings):
         if self.position_embeddings_type != "relative":
-            return attention_mask
+            return query, attention_mask
 
         if relative_position_embeddings is None:
             raise ValueError(
@@ -641,8 +638,8 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
         proj_relative_position_embeddings = proj_relative_position_embeddings.transpose(1, 2)
         proj_relative_position_embeddings = proj_relative_position_embeddings.transpose(2, 3)
 
-        query = query.transpose(1, 2)
-        q_with_bias_v = (query + self.pos_bias_v).transpose(1, 2)
+        query_for_bias = query.transpose(1, 2)
+        q_with_bias_v = (query_for_bias + self.pos_bias_v).transpose(1, 2)
 
         relative_attention_scores = torch.matmul(q_with_bias_v, proj_relative_position_embeddings)
         relative_attention_scores_shape = relative_attention_scores.shape
@@ -655,7 +652,13 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
         relative_attention_scores = relative_attention_scores[:, :, :, : key.size(2)]
         relative_attention_scores = relative_attention_scores / math.sqrt(self.head_size)
 
-        return relative_attention_scores if attention_mask is None else relative_attention_scores + attention_mask
+        if attention_mask is not None:
+            relative_attention_scores = relative_attention_scores + attention_mask
+
+        # Add pos_bias_u to query for the content-based attention (matrix a+c)
+        query = query + self.pos_bias_u[None, :, None, :]
+
+        return query, relative_attention_scores
 
 
 class SeamlessM4TConformerEncoderLayer(GradientCheckpointingLayer):
