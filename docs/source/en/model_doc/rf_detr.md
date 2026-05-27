@@ -203,6 +203,13 @@ sv.plot_image(annotated_image)
 
 [[autodoc]] RfDetrDinov2Config
 
+## RfDetrImageProcessor
+
+[[autodoc]] RfDetrImageProcessor
+    - preprocess
+    - post_process_object_detection
+    - post_process_instance_segmentation
+
 ## RfDetrModel
 
 [[autodoc]] RfDetrModel
