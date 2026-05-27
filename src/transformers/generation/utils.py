@@ -2830,7 +2830,7 @@ class GenerationMixin(ContinuousMixin):
                 next_tokens = torch.argmax(next_token_scores, dim=-1)
 
             # finished sentences should have their next token be a padding token
-            if has_eos_stopping_criteria:
+            if has_eos_stopping_criteria and pad_token_id is not None:
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id.to(next_tokens.device) * (
                     1 - unfinished_sequences
                 )
