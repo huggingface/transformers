@@ -1417,6 +1417,38 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
         return candidate_ids, candidate_logits
 
 
+class MTPCandidateGenerator(CandidateGenerator):
+    requires_model_outputs: bool = True
+    # We always need to pass the hidden states from the main model
+    model_kwargs_overrides: dict[str, Any] = {"output_hidden_states": True}
+
+    def __init__(
+        self,
+        input_ids: torch.LongTensor,
+        assistant_model: "PreTrainedModel",
+        target_model_input_embeddings: nn.Embedding,
+        generation_config: "GenerationConfig",
+        model_kwargs: dict,
+        inputs_tensor: torch.Tensor | None = None,
+        logits_processor: Optional["LogitsProcessorList"] = None,
+        eos_token_id: int | list[int] | torch.Tensor | None = None,
+    ):
+        pass
+
+    def get_candidates(
+        self,
+        input_ids: torch.LongTensor,
+        *,
+        previous_hidden_state: torch.Tensor,
+        past_key_values: Cache,
+        first_token: torch.LongTensor,
+        position_offset: int,
+        logits_processor=None,
+        do_sample: bool = False,
+    ) -> tuple[torch.LongTensor, torch.Tensor]:
+        pass
+
+
 def _prepare_attention_mask(model_kwargs: dict[str, Any], new_length: int, is_encoder_decoder: bool) -> dict[str, Any]:
     """Expands or crops the model's mask for decoding purposes, to the defined length"""
 
