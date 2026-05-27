@@ -87,6 +87,42 @@ def _posterior_weighted_pool(hidden: torch.Tensor, importance: torch.Tensor, win
     return pooled
 
 
+def _ctc_greedy_decode(logits: torch.Tensor, blank_id: int) -> torch.Tensor:
+    """CTC greedy decode a single sequence: argmax -> unique_consecutive -> remove blank."""
+    pred = torch.unique_consecutive(logits.argmax(-1))
+    return pred[pred != blank_id]
+
+
+def _ctc_loss_from_flat_logits(
+    flat_logits: torch.Tensor,
+    lengths: list[int],
+    labels: torch.Tensor,
+    label_lengths: torch.Tensor,
+    blank_id: int,
+) -> torch.Tensor:
+    """Compute mean CTC loss from flat (concatenated) logits with per-sample lengths."""
+    log_probs = torch.log_softmax(flat_logits.float(), dim=-1)
+    log_probs_padded = log_probs.new_zeros(len(lengths), max(lengths), log_probs.shape[-1])
+    offset = 0
+    for i, length in enumerate(lengths):
+        log_probs_padded[i, :length] = log_probs[offset : offset + length]
+        offset += length
+
+    lengths_t = torch.tensor(lengths, device=flat_logits.device)
+    return (
+        F.ctc_loss(
+            log_probs_padded.transpose(0, 1),
+            labels,
+            lengths_t,
+            label_lengths,
+            blank=blank_id,
+            reduction="sum",
+            zero_infinity=True,
+        )
+        / lengths_t.sum()
+    )
+
+
 class GraniteSpeechNarQFormerCrossAttention(nn.Module):
     def __init__(self, config: GraniteSpeechNarProjectorConfig):
         super().__init__()
@@ -373,25 +409,7 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
             logits = self.out_bpe(torch.cat([pooled[i, :length] for i, length in enumerate(lengths_list)]))
 
             if labels is not None:
-                logits_padded = logits.new_zeros(len(lengths_list), max(lengths_list), logits.shape[-1])
-                offset = 0
-                for i, length in enumerate(lengths_list):
-                    logits_padded[i, :length] = logits[offset : offset + length]
-                    offset += length
-
-                log_probs = torch.log_softmax(logits_padded.float(), dim=-1)
-                loss = (
-                    F.ctc_loss(
-                        log_probs.transpose(0, 1),
-                        labels,
-                        lengths,
-                        label_lengths,
-                        blank=self.config.blank_token_id,
-                        reduction="sum",
-                        zero_infinity=True,
-                    )
-                    / lengths.sum()
-                )
+                loss = _ctc_loss_from_flat_logits(logits, lengths_list, labels, label_lengths, self.config.blank_token_id)
 
         return GraniteSpeechNarEncoderOutput(
             loss=loss,
@@ -447,9 +465,8 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
     ) -> list[torch.Tensor]:
         """GPU CTC greedy decode: argmax -> unique_consecutive -> remove blank."""
         blank_id = self.config.blank_token_id
-        preds_flat = bpe_logits_flat.argmax(dim=-1)
-        per_sample = preds_flat.split(bpe_lengths)
-        return [(collapsed := torch.unique_consecutive(seq))[collapsed != blank_id] for seq in per_sample]
+        per_sample = bpe_logits_flat.split(bpe_lengths)
+        return [_ctc_greedy_decode(seq_logits, blank_id) for seq_logits in per_sample]
 
     def _add_insertion_slots(self, token_ids: torch.Tensor) -> torch.Tensor:
         """Insert blank tokens between each CTC token as editing slots for the LLM."""
@@ -567,28 +584,7 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
 
         loss = None
         if labels is not None:
-            log_probs = torch.log_softmax(text_logits.float(), dim=-1)
-
-            log_probs_padded = log_probs.new_zeros(len(text_lengths), max(text_lengths), log_probs.shape[-1])
-            offset = 0
-            for i, tl in enumerate(text_lengths):
-                log_probs_padded[i, :tl] = log_probs[offset : offset + tl]
-                offset += tl
-
-            input_lengths = torch.tensor(text_lengths, device=text_logits.device)
-
-            loss = (
-                F.ctc_loss(
-                    log_probs_padded.transpose(0, 1),
-                    labels,
-                    input_lengths,
-                    label_lengths,
-                    blank=self.config.blank_token_id,
-                    reduction="sum",
-                    zero_infinity=True,
-                )
-                / input_lengths.sum()
-            )
+            loss = _ctc_loss_from_flat_logits(text_logits, text_lengths, labels, label_lengths, self.config.blank_token_id)
 
             if self.config.ce_loss_lambda > 0.0:
                 ce_targets = torch.cat([self._add_insertion_slots(ids) for ids in ctc_token_ids])
@@ -629,11 +625,7 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
         )
 
         blank_id = self.config.blank_token_id
-        preds = []
-        for sample_logits in output.logits:
-            pred = torch.unique_consecutive(sample_logits.argmax(-1))
-            pred = pred[pred != blank_id]
-            preds.append(pred)
+        preds = [_ctc_greedy_decode(sample_logits, blank_id) for sample_logits in output.logits]
 
         return GraniteSpeechNarOutput(
             preds=preds,

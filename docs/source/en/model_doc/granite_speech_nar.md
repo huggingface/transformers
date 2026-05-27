@@ -60,13 +60,13 @@ This model was contributed by [Avihu Dekel](https://huggingface.co/Avihu).
 [[autodoc]] GraniteSpeechNarModel
     - forward
 
-## GraniteSpeechNarLM
+## GraniteSpeechNarLanguageModel
 
-[[autodoc]] GraniteSpeechNarLM
+[[autodoc]] GraniteSpeechNarLanguageModel
     - forward
 
-## GraniteSpeechNarForASR
+## GraniteSpeechNarForCTC
 
-[[autodoc]] GraniteSpeechNarForASR
+[[autodoc]] GraniteSpeechNarForCTC
     - forward
-    - transcribe
+    - generate
