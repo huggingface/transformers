@@ -27,7 +27,12 @@ from torch.nn import functional as F
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import (
+    use_experts_implementation,
+    use_kernel_forward_from_hub,
+    use_kernel_func_from_hub,
+    use_kernelized_func,
+)
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import (
     GenericForSequenceClassification,
@@ -234,6 +239,7 @@ def _apply_rotary_emb(
     return torch.cat((first_, second_), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
@@ -586,8 +592,10 @@ def load_balancing_loss_func(
 @auto_docstring
 class GptOssForCausalLM(GptOssPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _tp_plan = {"lm_head": "colwise_allgather"}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)

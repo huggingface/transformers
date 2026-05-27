@@ -41,8 +41,8 @@ from ..auto import AutoModel
 from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithVisualIndicatorFeatures(BaseModelOutputWithPooling):
     r"""
     visual_indicator_features (`torch.FloatTensor` of shape `(batch_size, visual_indicator_size)`):
@@ -52,12 +52,12 @@ class BaseModelOutputWithVisualIndicatorFeatures(BaseModelOutputWithPooling):
     visual_indicator_features: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Ovis2ModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -73,12 +73,12 @@ class Ovis2ModelOutputWithPast(BaseModelOutputWithPast):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Ovis2 causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Ovis2CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -369,7 +369,7 @@ class Ovis2PreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Ovis2VisionAttention"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_cache_class = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -475,12 +475,6 @@ class Ovis2Model(Ovis2PreTrainedModel):
         self.vocab_size = config.vocab_size
         self.visual_indicator_token_ids = config.visual_indicator_token_ids
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring(
@@ -615,12 +609,6 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
         self.model = Ovis2Model(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head

@@ -68,6 +68,7 @@ if TYPE_CHECKING:
     from .codegen import *
     from .cohere import *
     from .cohere2 import *
+    from .cohere2_moe import *
     from .cohere2_vision import *
     from .cohere_asr import *
     from .colmodernvbert import *
@@ -93,6 +94,7 @@ if TYPE_CHECKING:
     from .decision_transformer import *
     from .deepseek_v2 import *
     from .deepseek_v3 import *
+    from .deepseek_v4 import *
     from .deepseek_vl import *
     from .deepseek_vl_hybrid import *
     from .deformable_detr import *
@@ -134,6 +136,7 @@ if TYPE_CHECKING:
     from .esm import *
     from .evolla import *
     from .exaone4 import *
+    from .exaone4_5 import *
     from .exaone_moe import *
     from .falcon import *
     from .falcon_h1 import *
@@ -154,6 +157,7 @@ if TYPE_CHECKING:
     from .gemma3 import *
     from .gemma3n import *
     from .gemma4 import *
+    from .gemma4_assistant import *
     from .git import *
     from .glm import *
     from .glm4 import *
@@ -166,6 +170,7 @@ if TYPE_CHECKING:
     from .glm_moe_dsa import *
     from .glm_ocr import *
     from .glmasr import *
+    from .glmga import *
     from .glpn import *
     from .got_ocr2 import *
     from .gpt2 import *
@@ -177,6 +182,7 @@ if TYPE_CHECKING:
     from .gpt_sw3 import *
     from .gptj import *
     from .granite import *
+    from .granite4_vision import *
     from .granite_speech import *
     from .granite_speech_plus import *
     from .granitemoe import *
@@ -194,6 +200,7 @@ if TYPE_CHECKING:
     from .hunyuan_v1_dense import *
     from .hunyuan_v1_moe import *
     from .hy_v3 import *
+    from .hyperclovax import *
     from .ibert import *
     from .idefics import *
     from .idefics2 import *
@@ -336,8 +343,13 @@ if TYPE_CHECKING:
     from .pp_doclayout_v3 import *
     from .pp_lcnet import *
     from .pp_lcnet_v3 import *
+    from .pp_lcnet_v4 import *
     from .pp_ocrv5_mobile_det import *
     from .pp_ocrv5_server_det import *
+    from .pp_ocrv6_medium_det import *
+    from .pp_ocrv6_small_det import *
+    from .pp_ocrv6_small_rec import *
+    from .pp_ocrv6_tiny_rec import *
     from .prompt_depth_anything import *
     from .prophetnet import *
     from .pvt import *
@@ -363,6 +375,7 @@ if TYPE_CHECKING:
     from .regnet import *
     from .rembert import *
     from .resnet import *
+    from .rf_detr import *
     from .roberta import *
     from .roberta_prelayernorm import *
     from .roc_bert import *

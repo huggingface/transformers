@@ -55,6 +55,7 @@ from . import __version__
 from .configuration_utils import PreTrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
+from .distributed.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
@@ -66,7 +67,6 @@ from .integrations.deepspeed import (
     is_deepspeed_available,
     propagate_args_to_deepspeed,
 )
-from .integrations.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
 from .integrations.liger import apply_liger_kernel
 from .integrations.neftune import activate_neftune, deactivate_neftune
 from .integrations.peft import MIN_PEFT_VERSION
@@ -447,13 +447,13 @@ class Trainer:
             elif len(devices) == 1:
                 self.is_model_parallel = self.args.device != torch.device(devices[0])
 
-        self.is_fsdp_xla_enabled = args.fsdp_config["xla"]
-        if len(args.fsdp) > 0:
+        self.is_fsdp_xla_enabled = args.fsdp and args.fsdp_config.get("xla", False)
+        if args.fsdp:
             if self.is_deepspeed_enabled:
                 raise ValueError(
                     "Using --fsdp xxx together with --deepspeed is not possible, deactivate one of those flags."
                 )
-            if not args.fsdp_config["xla"] and args.parallel_mode != ParallelMode.DISTRIBUTED:
+            if not self.is_fsdp_xla_enabled and args.parallel_mode != ParallelMode.DISTRIBUTED:
                 raise ValueError("Using fsdp only works in distributed training.")
 
         # Postpone switching model to cuda when MP, DeepSpeed, full bf16/fp16 eval, or FSDP
@@ -598,7 +598,7 @@ class Trainer:
         if getattr(self.model, "config", None) is not None:
             self.model.config.use_cache = self.args.use_cache
 
-        self.is_fsdp_xla_v2_enabled = args.fsdp_config.get("xla_fsdp_v2", False)
+        self.is_fsdp_xla_v2_enabled = args.fsdp and args.fsdp_config.get("xla_fsdp_v2", False)
         if self.is_fsdp_xla_v2_enabled:
             if not IS_XLA_FSDPV2_POST_2_2:
                 raise ValueError("FSDPv2 requires `torch_xla` 2.2 or higher.")
@@ -822,10 +822,7 @@ class Trainer:
 
         # post accelerator creation setup
         if self.is_fsdp_enabled:
-            fsdp_plugin = self.accelerator.state.fsdp_plugin
-            for param in ["limit_all_gathers", "activation_checkpointing"]:
-                setattr(fsdp_plugin, param, self.args.fsdp_config.get(param, getattr(fsdp_plugin, param)))
-            if fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
+            if self.accelerator.state.fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
                 raise ValueError(
                     "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
                     "can't be set to True simultaneously. Please use FSDP's activation_checkpointing logic "
@@ -2018,7 +2015,12 @@ class Trainer:
             and (self.model_accepts_loss_kwargs or self.compute_loss_func)
             and num_items_in_batch is not None
         ):
-            loss *= self.accelerator.num_processes if self.args.n_gpu <= 1 else self.args.n_gpu
+            # TP and EP-as-TP ranks see replicated batches; `num_processes` over-counts
+            # them by `tp_size`. Mirror the divisor used in `_get_num_items_in_batch`.
+            loss_scale = self.accelerator.num_processes
+            if (pc := getattr(self.accelerator, "parallelism_config", None)) is not None:
+                loss_scale //= pc.tp_size
+            loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
 
         return (loss, outputs) if return_outputs else loss
 
@@ -2394,9 +2396,10 @@ class Trainer:
     def get_tp_size(self) -> int:
         """Get the tensor parallel size from either the model or DeepSpeed config."""
 
-        # 1. Check model.tp_size first
-        if (model_tp := getattr(self.model, "_tp_size", None)) is not None:
-            return model_tp
+        # TODO: adapt it cleaner with distributed config once distributed api is stable
+        dc = getattr(getattr(self.model, "config", None), "distributed_config", None)
+        if dc is not None and dc.tp_size is not None:
+            return dc.tp_size
 
         # 2. Fall back to DeepSpeed config if enabled
         if self.is_deepspeed_enabled and (deepspeed_config := getattr(self.args, "hf_deepspeed_config", None)):
@@ -3736,8 +3739,10 @@ class Trainer:
     def _issue_warnings_after_load(self, load_result: Any) -> None:
         """Log warnings for missing or unexpected keys after loading a checkpoint."""
         if len(load_result.missing_keys) != 0:
-            if self.model._keys_to_ignore_on_save is not None and set(load_result.missing_keys) == set(
-                self.model._keys_to_ignore_on_save
+            if (
+                self.model._keys_to_ignore_on_save is not None
+                and len(self.model._keys_to_ignore_on_save) > 0
+                and set(load_result.missing_keys) == set(self.model._keys_to_ignore_on_save)
             ):
                 self.model.tie_weights()
             else:

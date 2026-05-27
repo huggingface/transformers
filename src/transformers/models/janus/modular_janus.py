@@ -213,12 +213,12 @@ class JanusPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Janus VQ-VAE mode model outputs.
     """
 )
+@dataclass
 class JanusVQVAEOutput(ModelOutput):
     r"""
     decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
@@ -750,12 +750,6 @@ class JanusModel(JanusPreTrainedModel):
         # Initialize weights and apply final processing.
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -852,12 +846,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing.
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.language_model.set_input_embeddings(value)
 
     def prepare_embeddings_for_image_generation(self, inputs: torch.Tensor) -> torch.Tensor:
         hidden_state = self.model.generation_embeddings(inputs)

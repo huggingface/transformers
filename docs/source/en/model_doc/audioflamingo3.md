@@ -19,7 +19,6 @@ rendered properly in your Markdown viewer.
 # Audio Flamingo 3
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -402,6 +401,11 @@ are forwarded, so you can tweak padding or tensor formats just like when calling
 ## AudioFlamingo3Encoder
 
 [[autodoc]] AudioFlamingo3Encoder
+    - forward
+
+## AudioFlamingo3Model
+
+[[autodoc]] AudioFlamingo3Model
     - forward
 
 ## AudioFlamingo3ForConditionalGeneration

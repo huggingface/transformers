@@ -59,6 +59,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
+from transformers.distributed import DistributedConfig
 from transformers.modeling_flash_attention_utils import is_flash_attn_available
 from transformers.models.mistral.modeling_mistral import MistralModel
 from transformers.testing_utils import (
@@ -85,6 +86,7 @@ from transformers.utils import (
     WEIGHTS_NAME,
 )
 from transformers.utils.import_utils import (
+    PACKAGE_DISTRIBUTION_MAPPING,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
@@ -430,6 +432,43 @@ class ModelUtilsTest(TestCasePlus):
         mock_world_size.assert_not_called()
         self.assertIn(torch.device("cpu"), total_byte_count)
         self.assertGreater(total_byte_count[torch.device("cpu")], 0)
+
+    def test_model_from_pretrained_fsdp_distributes_before_loading(self):
+        model = GPT2LMHeadModel(GPT2Config(n_layer=1, n_head=2, n_embd=8, n_positions=8, n_ctx=8, vocab_size=32))
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            call_order = []
+
+            fake_mesh = mock.Mock()
+            fake_mesh.mesh_dim_names = ("fsdp",)
+            fake_mesh.ndim = 1
+            fake_mesh.device_type = "cpu"
+
+            def fake_apply_fsdp(model, fsdp_mesh, fsdp_plan):
+                call_order.append("distribute")
+                self.assertIs(fsdp_mesh, fake_mesh)
+                self.assertIsNone(fsdp_plan)
+                return model
+
+            def fake_load_pretrained_model(model, state_dict, checkpoint_files, load_config, expected_keys=None):
+                call_order.append("load")
+                self.assertIs(load_config.device_mesh, fake_mesh)
+                return mock.Mock(), None
+
+            with (
+                patch("transformers.modeling_utils.init_device_mesh", return_value=fake_mesh),
+                patch("transformers.distributed.utils.apply_fully_shard_data_parallel", side_effect=fake_apply_fsdp),
+                patch.object(GPT2LMHeadModel, "_load_pretrained_model", side_effect=fake_load_pretrained_model),
+                patch.object(
+                    GPT2LMHeadModel,
+                    "_finalize_model_loading",
+                    side_effect=lambda model, load_config, loading_info: loading_info,
+                ),
+            ):
+                GPT2LMHeadModel.from_pretrained(tmp_dir, distributed_config=DistributedConfig(fsdp_size=2))
+
+        self.assertEqual(call_order, ["distribute", "load"])
 
     def test_hub_retry(self):
         @hub_retry(max_attempts=2)
@@ -2854,6 +2893,20 @@ class TestAttentionImplementation(unittest.TestCase):
                 "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
             )
         self.assertTrue("the package for FlashAttention2 doesn't seem to be installed." in str(cm.exception))
+
+    def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/45520.
+        # When flash_attn is importable but not present in PACKAGE_DISTRIBUTION_MAPPING
+        # (e.g. installed via a non-standard wheel), the availability checks must not raise
+        # a KeyError; they should simply return False.
+        stripped_map = {
+            k: v for k, v in PACKAGE_DISTRIBUTION_MAPPING.items() if k not in ("flash_attn", "flash_attn_interface")
+        }
+        with patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", stripped_map):
+            with patch("transformers.modeling_flash_attention_utils.PACKAGE_DISTRIBUTION_MAPPING", stripped_map):
+                self.assertFalse(is_flash_attn_2_available())
+                self.assertFalse(is_flash_attn_3_available())
+                self.assertFalse(is_flash_attn_4_available())
 
     def test_not_available_flash_with_config(self):
         if is_flash_attn_2_available():

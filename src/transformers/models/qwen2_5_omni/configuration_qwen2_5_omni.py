@@ -99,7 +99,12 @@ class Qwen2_5OmniAudioEncoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_audio_encoder"
-    attribute_map = {"num_hidden_layers": "encoder_layers"}
+    attribute_map = {
+        "num_hidden_layers": "encoder_layers",
+        "hidden_size": "d_model",
+        "num_attention_heads": "encoder_attention_heads",
+        "intermediate_size": "encoder_ffn_dim",
+    }
 
     num_mel_bins: int = 128
     encoder_layers: int = 32
@@ -152,16 +157,23 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     ignore_keys_at_rope_validation = {"mrope_section"}
 
     vocab_size: int = 152064
