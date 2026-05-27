@@ -382,7 +382,7 @@ class SusonoEngramModule(nn.Module):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# mHC: Manifold-Constrained Hyper-Connections (MHC-Lite)
+# mHC-Lite: Manifold-Constrained Hyper-Connections Lite (MHC-Lite)
 # Adapted from MHC-Lite for HuggingFace [B, S, D] format.
 # X tensor convention: [n, B, S, D] (n = num_streams).
 # Reference: MHC-Lite https://arxiv.org/abs/2601.05732

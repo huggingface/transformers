@@ -49,21 +49,21 @@ class SusonoConfig(PreTrainedConfig):
     - Manifold-Constrained Hyper-Connections (mHC) for multi-stream residuals
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 151936):
+        vocab_size (`int`, *optional*, defaults to 151680):
             Vocabulary size.
         hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 5632):
+        intermediate_size (`int`, *optional*, defaults to 5120):
             Dimension of dense MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 48):
+        num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of transformer layers.
-        num_attention_heads (`int`, *optional*, defaults to 16):
+        num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads per full-attention layer.
         num_key_value_heads (`int`, *optional*, defaults to 2):
             Number of key/value heads (GQA). Equals `num_attention_heads` for MHA.
         hidden_act (`str`, *optional*, defaults to `"silu"`):
             Activation function.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
+        max_position_embeddings (`int`, *optional*, defaults to 262144):
             Maximum sequence length.
         initializer_range (`float`, *optional*, defaults to 0.02):
             Std of truncated normal weight initializer.
@@ -90,7 +90,7 @@ class SusonoConfig(PreTrainedConfig):
             Value head dimension in linear attention.
         linear_num_key_heads (`int`, *optional*, defaults to 16):
             Number of key heads in linear attention.
-        linear_num_value_heads (`int`, *optional*, defaults to 32):
+        linear_num_value_heads (`int`, *optional*, defaults to 16):
             Number of value heads in linear attention.
         decoder_sparse_step (`int`, *optional*, defaults to 1):
             Frequency of MoE layers (every N layers).
@@ -98,17 +98,17 @@ class SusonoConfig(PreTrainedConfig):
             Intermediate size of each routed expert.
         shared_expert_intermediate_size (`int`, *optional*, defaults to 512):
             Intermediate size of the shared expert in each MoE block.
-        num_experts_per_tok (`int`, *optional*, defaults to 10):
+        num_experts_per_tok (`int`, *optional*, defaults to 4):
             Number of experts selected per token.
-        num_experts (`int`, *optional*, defaults to 512):
+        num_experts (`int`, *optional*, defaults to 96):
             Total number of routed experts.
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Normalize top-k routing probabilities to sum to 1.
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether to return router logits (needed for auxiliary loss).
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.002):
             Coefficient for MoE load-balancing auxiliary loss.
-        moe_shared_expert_gate_bias_init (`float`, *optional*, defaults to 0.0):
+        moe_shared_expert_gate_bias_init (`float`, *optional*, defaults to 2.0):
             Initial value for the shared expert gate bias. Positive values (e.g., 2.0)
             make the shared expert dominant at training start (sigmoid(2)≈0.88), helping
             expert balance. Default 0.0 preserves legacy behavior (sigmoid(0)=0.5).
@@ -184,14 +184,14 @@ class SusonoConfig(PreTrainedConfig):
     def __init__(
         self,
         # Base architecture parameters
-        vocab_size: Optional[int] = 151936,
+        vocab_size: Optional[int] = 151680,
         hidden_size: Optional[int] = 2048,
-        intermediate_size: Optional[int] = 5632,
-        num_hidden_layers: Optional[int] = 48,
-        num_attention_heads: Optional[int] = 16,
+        intermediate_size: Optional[int] = 5120,
+        num_hidden_layers: Optional[int] = 24,
+        num_attention_heads: Optional[int] = 8,
         num_key_value_heads: Optional[int] = 2,
         hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
+        max_position_embeddings: Optional[int] = 262144,
         initializer_range: Optional[float] = 0.02,
         rms_norm_eps: Optional[float] = 1e-6,
         use_cache: Optional[bool] = True,
@@ -200,29 +200,29 @@ class SusonoConfig(PreTrainedConfig):
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         head_dim: Optional[int] = 256,
-        # Linear attention (GatedDeltaNet) 
+        # Linear attention (GatedDeltaNet)
         linear_conv_kernel_dim: Optional[int] = 4,
         linear_key_head_dim: Optional[int] = 128,
         linear_value_head_dim: Optional[int] = 128,
         linear_num_key_heads: Optional[int] = 16,
-        linear_num_value_heads: Optional[int] = 32,
-        # MoE parameters 
+        linear_num_value_heads: Optional[int] = 16,
+        # MoE parameters
         decoder_sparse_step: Optional[int] = 1,
         moe_intermediate_size: Optional[int] = 512,
         shared_expert_intermediate_size: Optional[int] = 512,
-        num_experts_per_tok: Optional[int] = 10,
-        num_experts: Optional[int] = 512,
+        num_experts_per_tok: Optional[int] = 4,
+        num_experts: Optional[int] = 96,
         norm_topk_prob: Optional[bool] = True,
         output_router_logits: Optional[bool] = False,
-        router_aux_loss_coef: Optional[float] = 0.001,
-        moe_shared_expert_gate_bias_init: Optional[float] = 0.0,
+        router_aux_loss_coef: Optional[float] = 0.002,
+        moe_shared_expert_gate_bias_init: Optional[float] = 2.0,
         mlp_only_layers: Optional[List[int]] = None,
         layer_types: Optional[List[str]] = None,
         full_attention_interval: int = 4,
-        # Special tokens 
+        # Special tokens
         pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = None,
-        eos_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = 151643,
+        eos_token_id: Optional[int] = 151645,
         # Engram
         use_engram: bool = True,
         engram_max_ngram_size: int = 3,
@@ -263,7 +263,11 @@ class SusonoConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim
-        self.rope_parameters = rope_parameters
+        self.rope_parameters = rope_parameters if rope_parameters is not None else {
+            "rope_type": "default",
+            "rope_theta": 10000000,
+            "partial_rotary_factor": 0.25,
+        }
         kwargs.setdefault("partial_rotary_factor", 0.25)
 
         # Layer types
@@ -314,7 +318,7 @@ class SusonoConfig(PreTrainedConfig):
             engram_base_vocab_size if engram_base_vocab_size is not None else vocab_size
         )
 
-        # mHC
+        # mHC-Lite
         self.use_mhc = use_mhc
         self.mhc_num_streams = mhc_num_streams
         self.mhc_sinkhorn_iterations = mhc_sinkhorn_iterations
