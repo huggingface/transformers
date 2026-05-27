@@ -76,11 +76,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def _get_vocoder_config(config: SeamlessM4TConfig) -> SeamlessM4TConfig:
-    vocoder_config = copy.deepcopy(config)
-    vocoder_config._attn_implementation_internal = "eager"
-    return vocoder_config
-
 
 SEAMLESS_M4T_COMMON_CUSTOM_ARGS = r"""
     input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
@@ -2341,6 +2336,9 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
     main_input_name = "inputs_embeds"
     input_modalities = "audio"
     _no_split_modules = []
+    # TODO: This model has no attention layers but shares config with the parent model.
+    # Setting this avoids a validation error in PreTrainedModel.__init__ when config has _attn_implementation="sdpa".
+    _supports_sdpa = True
 
     def __init__(self, config):
         super().__init__(config)
@@ -3020,7 +3018,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
-        self.vocoder = SeamlessM4TCodeHifiGan(_get_vocoder_config(config))
+        self.vocoder = SeamlessM4TCodeHifiGan(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -3333,7 +3331,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
-        self.vocoder = SeamlessM4TCodeHifiGan(_get_vocoder_config(config))
+        self.vocoder = SeamlessM4TCodeHifiGan(config)
         self.post_init()
 
     def get_encoder(self):
@@ -3668,7 +3666,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
 
         # these models already call post_init in their initialization
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
-        self.vocoder = SeamlessM4TCodeHifiGan(_get_vocoder_config(config))
+        self.vocoder = SeamlessM4TCodeHifiGan(config)
 
         # Initialize weights and apply final processing
         self.post_init()

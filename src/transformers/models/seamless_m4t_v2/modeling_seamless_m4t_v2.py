@@ -76,13 +76,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t._get_vocoder_config with SeamlessM4T->SeamlessM4Tv2
-def _get_vocoder_config(config: SeamlessM4Tv2Config) -> SeamlessM4Tv2Config:
-    vocoder_config = copy.deepcopy(config)
-    vocoder_config._attn_implementation_internal = "eager"
-    return vocoder_config
-
-
 SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS = r"""
     input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
         Input audio features. This should be returned by the [`SeamlessM4TFeatureExtractor`] class or the
@@ -2554,6 +2547,9 @@ class SeamlessM4Tv2CodeHifiGan(PreTrainedModel):
     main_input_name = "inputs_embeds"
     input_modalities = "audio"
     _no_split_modules = []
+    # TODO: This model has no attention layers but shares config with the parent model.
+    # Setting this avoids a validation error in PreTrainedModel.__init__ when config has _attn_implementation="sdpa".
+    _supports_sdpa = True
 
     def __init__(self, config):
         super().__init__(config)
@@ -3250,7 +3246,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         self.t2u_model = SeamlessM4Tv2TextToUnitForConditionalGeneration(config)
-        self.vocoder = SeamlessM4Tv2CodeHifiGan(_get_vocoder_config(config))
+        self.vocoder = SeamlessM4Tv2CodeHifiGan(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -3600,7 +3596,7 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMix
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         self.t2u_model = SeamlessM4Tv2TextToUnitForConditionalGeneration(config)
-        self.vocoder = SeamlessM4Tv2CodeHifiGan(_get_vocoder_config(config))
+        self.vocoder = SeamlessM4Tv2CodeHifiGan(config)
         self.post_init()
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech.get_encoder
@@ -3971,7 +3967,7 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
 
         # these models already call post_init in their initialization
         self.t2u_model = SeamlessM4Tv2TextToUnitForConditionalGeneration(config)
-        self.vocoder = SeamlessM4Tv2CodeHifiGan(_get_vocoder_config(config))
+        self.vocoder = SeamlessM4Tv2CodeHifiGan(config)
 
         # Initialize weights and apply final processing
         self.post_init()
