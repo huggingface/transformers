@@ -15,11 +15,12 @@
 import unittest
 
 import numpy as np
+from parameterized import parameterized
 
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
@@ -64,7 +65,7 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         text = self.prepare_text_inputs(modalities=["video"])
         video_input = self.prepare_video_inputs()
-        inputs = processor(text=text, videos=video_input, return_tensors="pt")
+        inputs = processor(text=text, videos=video_input, do_sample_frames=False, return_tensors="pt")
 
         self.assertIn("pixel_values_videos", inputs)
         self.assertIn("input_ids", inputs)
@@ -135,6 +136,9 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_data: list[str],
     ):
         processor = self.get_processor()
+
+        if processor_name not in self.processor_class.get_attributes():
+            self.skipTest(f"{processor_name} attribute not present in {self.processor_class}")
 
         # some models have only Fast image processor
         if getattr(processor, processor_name).__class__.__name__.endswith("Fast"):
@@ -222,3 +226,106 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         continue_prompt = processor.apply_chat_template(batch_messages, continue_final_message=True, tokenize=False)
         for prompt in continue_prompt:
             self.assertTrue(prompt.endswith("It is the sound of"))  # no `eos` token at the end
+
+    def test_apply_chat_template_video_frame_sampling(self):
+        processor = self.get_processor()
+
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "video",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+                            ),
+                        },
+                        {"type": "text", "text": "What is shown in this video?"},
+                    ],
+                },
+            ]
+        ]
+
+        num_frames = 3
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={"num_frames": num_frames, "fps": None},
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), num_frames)
+
+        # Load with `fps` arg
+        fps = 10
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={"fps": fps, "num_frames": None},
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        # 3 frames are inferred from input video's length and FPS, so can be hardcoded
+        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 129472)
+
+        # When `do_sample_frames=False` no sampling is done and whole video is loaded, even if number of frames is passed
+        fps = 10
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            processor_kwargs={
+                "do_sample_frames": False,
+                "fps": fps,
+                "return_tensors": "pt",
+            },
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 1424192)
+
+        # Load without any arg should load the whole video
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 129472)
+
+        # Load video as a list of frames (i.e. images).
+        # NOTE: each frame should have same size because we assume they come from one video
+        messages[0][0]["content"][0] = {
+            "type": "video",
+            "url": [
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                )
+            ]
+            * 2,
+        }
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            do_sample_frames=False,
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 203392)
+
+    @unittest.skip("MiniCPM can't sample already decoded videos, have to turn off sampling!")
+    @parameterized.expand([(1, "pt")])
+    def test_apply_chat_template_decoded_video(self, batch_size: int, return_tensors: str):
+        pass

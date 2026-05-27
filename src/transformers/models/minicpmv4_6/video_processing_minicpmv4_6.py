@@ -398,8 +398,11 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             interleaved_frames.append([frame for t in zip(*all_frames) for frame in t])
 
         grid = best_grid if best_grid is not None else (0, 0)
-        grids = [[grid] * num_frames] * len(videos)  # expand by batch size per each video
-        return interleaved_frames, grids
+        num_patches = (grid[0] * grid[1]) + 1
+        # Expand by batch size per each video
+        num_patches = [[num_patches] * num_frames] * len(videos)
+        grids = [[grid] * num_frames] * len(videos)
+        return interleaved_frames, grids, num_patches
 
     def _preprocess(
         self,
@@ -483,7 +486,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         for shape, stacked_videos in grouped_videos.items():
             batch_size, num_frames = stacked_videos.shape[:2]
             if do_resize:
-                stacked_videos, grids = self.resize_and_split_patches(
+                stacked_videos, grids, num_patches = self.resize_and_split_patches(
                     videos=stacked_videos,
                     resample=resample,
                     slice_mode=slice_mode,
@@ -494,9 +497,10 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             else:
                 stacked_videos = [[video] for video in stacked_videos]
                 grids = [[(0, 0)] * num_frames] * len(stacked_videos)
+                num_patches = [[1] * num_frames] * batch_size
             resized_videos_grouped[shape] = stacked_videos
             videos_grids[shape] = grids
-            processed_num_patches_per_frame[shape] = [[num_frames] * num_frames] * batch_size
+            processed_num_patches_per_frame[shape] = num_patches
 
         # Regroup back and flatten list
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
