@@ -582,7 +582,7 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
             self.ctc_decoder = None
 
         self.audio_token_index = config.audio_token_index
-        self.use_low_frame_rate = config.adaptor_config.use_low_frame_rate
+        self.use_low_frame_rate = getattr(config.adaptor_config, "use_low_frame_rate", True)
 
         self.post_init()
 
