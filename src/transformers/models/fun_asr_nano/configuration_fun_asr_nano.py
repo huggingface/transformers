@@ -38,7 +38,6 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
         Number of timestamp prediction encoder blocks.
     dropout_rate (`float`, *optional*, defaults to 0.1):
         Dropout rate.
-    positional_dropout_rate (`float`, *optional*, defaults to 0.1):
         Positional encoding dropout rate.
     attention_dropout_rate (`float`, *optional*, defaults to 0.0):
         Attention dropout rate.
@@ -69,7 +68,6 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
     num_blocks: int = 50
     tp_blocks: int = 20
     dropout_rate: float = 0.1
-    positional_dropout_rate: float = 0.1
     attention_dropout_rate: float = 0.0
     kernel_size: int = 11
     sanm_shift: int = 0
