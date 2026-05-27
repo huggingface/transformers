@@ -32,7 +32,7 @@ from transformers.models.granite_speech_nar.configuration_granite_speech_nar imp
 )
 from transformers.models.granite_speech_nar.modeling_granite_speech_nar import (
     GraniteSpeechNarCTCEncoder,
-    GraniteSpeechNarForASR,
+    GraniteSpeechNarForCTC,
     GraniteSpeechNarOutput,
     GraniteSpeechNarProjector,
 )
@@ -54,7 +54,7 @@ def _make_small_config():
         output_dim=10,
         context_size=50,
         self_conditioning_layer=2,
-        bpe_output_dim=52,
+        bpe_output_dim=51,
         bpe_pooling_window=4,
     )
     projector_config = GraniteSpeechNarProjectorConfig(
@@ -121,7 +121,7 @@ class TestConfiguration:
         d = config.to_dict()
         restored = GraniteSpeechNarConfig(**d)
         assert restored.encoder_config.num_layers == 4
-        assert restored.encoder_config.bpe_output_dim == 52
+        assert restored.encoder_config.bpe_output_dim == 51
         assert restored.projector_config.num_layers == 1
         assert restored.encoder_layer_indices == [1, 2, 3, -1]
 
@@ -226,10 +226,10 @@ class TestProjector:
 # === Full model tests ===
 
 
-class TestGraniteSpeechNarForASR:
+class TestGraniteSpeechNarForCTC:
     def test_forward(self):
         config = _make_small_config()
-        model = GraniteSpeechNarForASR(config).eval()
+        model = GraniteSpeechNarForCTC(config).eval()
 
         B, T = 2, 100
         features = torch.randn(B, T, 160)
@@ -247,12 +247,12 @@ class TestGraniteSpeechNarForASR:
             assert logits.ndim == 2
             assert logits.shape[1] == 51
 
-    def test_transcribe(self):
+    def test_generate(self):
         config = _make_small_config()
-        model = GraniteSpeechNarForASR(config).eval()
+        model = GraniteSpeechNarForCTC(config).eval()
 
         features = torch.randn(1, 60, 160)
-        output = model.transcribe(input_features=features)
+        output = model.generate(input_features=features)
 
         assert output.preds is not None
         assert len(output.preds) == 1
@@ -260,7 +260,7 @@ class TestGraniteSpeechNarForASR:
 
     def test_loss(self):
         config = _make_small_config()
-        model = GraniteSpeechNarForASR(config).train()
+        model = GraniteSpeechNarForCTC(config).train()
 
         B, T = 2, 100
         features = torch.randn(B, T, 160)
@@ -284,7 +284,7 @@ class TestGraniteSpeechNarForASR:
     def test_loss_with_ce(self):
         config = _make_small_config()
         config.ce_loss_lambda = 0.5
-        model = GraniteSpeechNarForASR(config).train()
+        model = GraniteSpeechNarForCTC(config).train()
 
         features = torch.randn(1, 60, 160)
         labels = torch.randint(0, 51, (1, 4))
@@ -303,7 +303,7 @@ class TestGraniteSpeechNarForASR:
     def test_loss_with_encoder_ctc(self):
         config = _make_small_config()
         config.encoder_ctc_loss_lambda = 0.3
-        model = GraniteSpeechNarForASR(config).train()
+        model = GraniteSpeechNarForCTC(config).train()
 
         features = torch.randn(1, 60, 160)
         labels = torch.randint(0, 51, (1, 4))
@@ -321,7 +321,7 @@ class TestGraniteSpeechNarForASR:
 
     def test_no_loss_without_labels(self):
         config = _make_small_config()
-        model = GraniteSpeechNarForASR(config).eval()
+        model = GraniteSpeechNarForCTC(config).eval()
 
         features = torch.randn(1, 60, 160)
         with torch.no_grad():
@@ -331,7 +331,7 @@ class TestGraniteSpeechNarForASR:
 
     def test_output_encoder_logits_flag(self):
         config = _make_small_config()
-        model = GraniteSpeechNarForASR(config).eval()
+        model = GraniteSpeechNarForCTC(config).eval()
 
         features = torch.randn(1, 60, 160)
         with torch.no_grad():
@@ -355,8 +355,8 @@ class TestBidirectionalAttention:
     def test_last_token_affects_first(self):
         """Changing the last token must affect the first (bidirectional)."""
         config = _make_small_config()
-        model = GraniteSpeechNarForASR(config).eval()
-        granite_model = model.language_model.model
+        model = GraniteSpeechNarForCTC(config).eval()
+        granite_model = model.model.language_model
 
         embeds_a = torch.randn(1, 10, 128)
         embeds_b = embeds_a.clone()
@@ -371,8 +371,8 @@ class TestBidirectionalAttention:
 
     def test_is_causal_false_on_layers(self):
         config = _make_small_config()
-        model = GraniteSpeechNarForASR(config)
-        for i, layer in enumerate(model.language_model.model.layers):
+        model = GraniteSpeechNarForCTC(config)
+        for i, layer in enumerate(model.model.language_model.layers):
             assert layer.self_attn.is_causal is False, f"Layer {i} is_causal is not False"
 
 
@@ -403,7 +403,7 @@ class GraniteSpeechNarIntegrationTest(unittest.TestCase):
 
         waveforms = self._load_datasamples(1)
         inputs = processor(waveforms, device=torch_device)
-        output = model.transcribe(**inputs)
+        output = model.generate(**inputs)
         transcriptions = processor.batch_decode(output.preds)
 
         expected = "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
@@ -418,7 +418,7 @@ class GraniteSpeechNarIntegrationTest(unittest.TestCase):
 
         waveforms = self._load_datasamples(2)
         inputs = processor(waveforms, device=torch_device)
-        output = model.transcribe(**inputs)
+        output = model.generate(**inputs)
         transcriptions = processor.batch_decode(output.preds)
 
         expected = [

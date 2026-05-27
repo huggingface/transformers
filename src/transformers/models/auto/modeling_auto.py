@@ -217,7 +217,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("granite", "GraniteModel"),
         ("granite4_vision", "Granite4VisionModel"),
         ("granite_speech", "GraniteSpeechModel"),
-        ("granite_speech_nar", "GraniteSpeechNarForASR"),
+        ("granite_speech_nar", "GraniteSpeechNarForCTC"),
         ("granite_speech_plus", "GraniteSpeechPlusModel"),
         ("granitemoe", "GraniteMoeModel"),
         ("granitemoehybrid", "GraniteMoeHybridModel"),
@@ -1673,7 +1673,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
     [
         # Model for Connectionist temporal classification (CTC) mapping
         ("data2vec-audio", "Data2VecAudioForCTC"),
-        ("granite_speech_nar", "GraniteSpeechNarForASR"),
+        ("granite_speech_nar", "GraniteSpeechNarForCTC"),
         ("hubert", "HubertForCTC"),
         ("lasr_ctc", "LasrForCTC"),
         ("parakeet_ctc", "ParakeetForCTC"),

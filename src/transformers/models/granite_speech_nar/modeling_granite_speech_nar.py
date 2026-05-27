@@ -29,15 +29,14 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, find_packed_sequence_indices, packed_sequence_mask_function
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_granite_speech_nar import (
@@ -363,7 +362,7 @@ class GraniteSpeechNarProjector(nn.Module):
 @auto_docstring
 class GraniteSpeechNarPreTrainedModel(PreTrainedModel):
     config_class = GraniteSpeechNarConfig
-    base_model_prefix = "encoder"
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_flash_attn_2 = True
@@ -681,7 +680,7 @@ class GraniteSpeechNarRotaryEmbedding(nn.Module):
 
 
 @auto_docstring
-class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
+class GraniteSpeechNarLanguageModel(GraniteSpeechNarPreTrainedModel):
     """GraniteModel with bidirectional (non-causal) attention.
 
     Uses GraniteSpeechNarDecoderLayer which sets is_causal=False,
@@ -866,95 +865,11 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The bidirectional language model component of GraniteSpeechNar, used internally
-    to refine CTC predictions in a single non-autoregressive pass.
+    The GraniteSpeechNar base model consisting of a conformer encoder, QFormer projector,
+    and a bidirectional Granite language model backbone.
     """
 )
-class GraniteSpeechNarLM(GraniteSpeechNarPreTrainedModel, GenerationMixin):
-    """GraniteForCausalLM with a bidirectional (non-causal) backbone."""
-
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_allgather"}
-    _sp_plan = {"lm_head": "colwise_loss_parallel"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = GraniteSpeechNarModel(config)
-        self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
-        r"""
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, GraniteSpeechNarLM
-
-        >>> model = GraniteSpeechNarLM.from_pretrained("meta-granite_speech_nar/GraniteSpeechNar-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-granite_speech_nar/GraniteSpeechNar-2-7b-hf")
-
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
-        outputs: BaseModelOutputWithPast = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-        logits = logits / self.config.logits_scaling  # main diff with Llama
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@auto_docstring(
-    custom_intro="""
-    The GraniteSpeechNar model for non-autoregressive automatic speech recognition.
-    Consists of a conformer encoder with BPE CTC head, a QFormer-based projector,
-    and a bidirectional Granite LLM backbone that refines CTC predictions in a single pass.
-    """
-)
-class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
+class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
     def __init__(self, config: GraniteSpeechNarConfig):
         super().__init__(config)
 
@@ -964,7 +879,26 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
         text_config = config.text_config
         if hasattr(config, "_attn_implementation"):
             text_config._attn_implementation = config._attn_implementation
-        self.language_model = GraniteSpeechNarLM._from_config(text_config)
+        self.language_model = GraniteSpeechNarLanguageModel._from_config(text_config)
+
+        self.post_init()
+
+
+@auto_docstring(
+    custom_intro="""
+    The GraniteSpeechNar model for non-autoregressive CTC-based speech recognition.
+    Consists of a conformer encoder with BPE CTC head, a QFormer-based projector,
+    and a bidirectional Granite LLM backbone that refines CTC predictions in a single pass.
+    """
+)
+class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+
+    def __init__(self, config: GraniteSpeechNarConfig):
+        super().__init__(config)
+
+        self.model = GraniteSpeechNarModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
 
@@ -997,7 +931,7 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
         audio_lengths: list[int],
     ) -> tuple[torch.Tensor, torch.Tensor, list[int]]:
         """Build flat (pad-free) LLM input: [audio_0, text_0, audio_1, text_1, ...]"""
-        embed_tokens = self.language_model.model.embed_tokens
+        embed_tokens = self.model.language_model.embed_tokens
 
         embeds_list = []
         position_ids_list = []
@@ -1044,7 +978,7 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
             [`GraniteSpeechNarOutput`]
         """
         encoder_labels = labels if self.config.encoder_ctc_loss_lambda else None
-        enc_out = self.encoder(
+        enc_out = self.model.encoder(
             input_features=input_features,
             attention_mask=attention_mask,
             output_hidden_states=True,
@@ -1057,7 +991,7 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
 
         encoder_lengths = attention_mask.sum(dim=1)
 
-        pool_window = self.encoder.config.bpe_pooling_window
+        pool_window = self.model.encoder.config.bpe_pooling_window
         bpe_lengths = (-(encoder_lengths // -pool_window)).tolist()
         ctc_token_ids = self._ctc_collapse_decode(enc_out.logits, bpe_lengths)
 
@@ -1069,24 +1003,25 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
         encoder_logits = enc_out.logits if output_encoder_logits else None
         del enc_out
 
-        audio_embeds = self.projector(multilayer_features)
+        audio_embeds = self.model.projector(multilayer_features)
         del multilayer_features
         if self.config.scale_projected_embeddings:
             embedding_multiplier = getattr(self.config.text_config, "embedding_multiplier", 1.0)
             audio_embeds = audio_embeds / embedding_multiplier
-        audio_embeds = audio_embeds.to(self.language_model.model.embed_tokens.weight.dtype)
+        audio_embeds = audio_embeds.to(self.model.language_model.embed_tokens.weight.dtype)
 
-        audio_lengths = (encoder_lengths // self.projector.config.downsample_rate).cpu().tolist()
+        audio_lengths = (encoder_lengths // self.model.projector.config.downsample_rate).cpu().tolist()
 
         flat_embeds, flat_position_ids, text_lengths = self._build_flat_inputs(
             ctc_token_ids, audio_embeds, audio_lengths
         )
 
-        llm_out = self.language_model(
+        llm_out = self.model.language_model(
             inputs_embeds=flat_embeds,
             position_ids=flat_position_ids,
         )
-        all_logits = llm_out.logits.squeeze(0)
+        hidden_states = llm_out.last_hidden_state.squeeze(0)
+        all_logits = self.lm_head(hidden_states)
 
         segment_lengths = [l for a, t in zip(audio_lengths, text_lengths) for l in (a, t)]
         text_logits = torch.cat(list(all_logits.split(segment_lengths)[1::2]))
@@ -1138,7 +1073,7 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
         )
 
     @torch.inference_mode()
-    def transcribe(
+    def generate(
         self,
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
@@ -1171,9 +1106,9 @@ class GraniteSpeechNarForASR(GraniteSpeechNarPreTrainedModel):
 
 
 __all__ = [
-    "GraniteSpeechNarModel",
     "GraniteSpeechNarCTCEncoder",
-    "GraniteSpeechNarForASR",
-    "GraniteSpeechNarLM",
+    "GraniteSpeechNarForCTC",
+    "GraniteSpeechNarLanguageModel",
+    "GraniteSpeechNarModel",
     "GraniteSpeechNarPreTrainedModel",
 ]
