@@ -1796,8 +1796,10 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
 @auto_docstring(custom_intro="The base Gemma 4 language model with a language modeling head.")
 class Gemma4ForCausalLM(Gemma4PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _tp_plan = {"lm_head": "colwise_allgather"}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     config: Gemma4TextConfig
     base_model_prefix = "model"
 
@@ -2237,7 +2239,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
         llm_input_ids = None
         if inputs_embeds is None:
             llm_input_ids = input_ids.clone()
-            llm_input_ids[multimodal_mask] = self.config.text_config.pad_token_id
+            llm_input_ids = torch.where(multimodal_mask, self.config.text_config.pad_token_id, llm_input_ids)
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if per_layer_inputs is None and self.config.get_text_config().hidden_size_per_layer_input:
