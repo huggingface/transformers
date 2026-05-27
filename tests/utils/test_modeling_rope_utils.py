@@ -136,6 +136,34 @@ class RopeTest(unittest.TestCase):
             self.assertEqual(len(logs.output), 1)
             self.assertIn("implicit factor", logs.output[0])
 
+    def test_convert_rope_params_to_dict_with_list_ignore_keys(self):
+        # Regression test for #46121: `ignore_keys_at_rope_validation` becomes a list when loaded from a config.json
+        # (JSON has no set type). `convert_rope_params_to_dict` used to do `list | set` and crash with
+        # TypeError when `partial_rotary_factor` was also set.
+        config = LlamaConfig(partial_rotary_factor=0.25)
+        config.ignore_keys_at_rope_validation = ["mrope_section", "mrope_interleaved"]
+
+        config.convert_rope_params_to_dict(partial_rotary_factor=0.25)
+
+        self.assertIsInstance(config.ignore_keys_at_rope_validation, set)
+        self.assertEqual(
+            config.ignore_keys_at_rope_validation,
+            {"mrope_section", "mrope_interleaved", "partial_rotary_factor"},
+        )
+
+        # Round-trip through from_dict to mimic the JSON-deserialized path that triggered this in production.
+        cfg_dict = config.to_dict()
+        cfg_dict["ignore_keys_at_rope_validation"] = ["mrope_section", "mrope_interleaved"]
+        reloaded = LlamaConfig.from_dict(cfg_dict)
+        reloaded.convert_rope_params_to_dict(partial_rotary_factor=0.25)
+        self.assertIsInstance(reloaded.ignore_keys_at_rope_validation, set)
+
+        # Also accept None (the class-level attribute can be cleared on an instance).
+        config_none = LlamaConfig(partial_rotary_factor=0.25)
+        config_none.ignore_keys_at_rope_validation = None
+        config_none.convert_rope_params_to_dict(partial_rotary_factor=0.25)
+        self.assertEqual(config_none.ignore_keys_at_rope_validation, {"partial_rotary_factor"})
+
     def test_rope_validation_with_per_attention_type_nested_rope(self):
         """Mirrors `test_rope_validation` with `config.layer_types` set, so that
         `rope_parameters` takes the per-attention-type nested shape."""

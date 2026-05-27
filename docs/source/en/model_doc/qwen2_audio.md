@@ -251,6 +251,11 @@ response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_
 [[autodoc]] Qwen2AudioEncoder
     - forward
 
+## Qwen2AudioModel
+
+[[autodoc]] Qwen2AudioModel
+    - forward
+
 ## Qwen2AudioForConditionalGeneration
 
 [[autodoc]] Qwen2AudioForConditionalGeneration
