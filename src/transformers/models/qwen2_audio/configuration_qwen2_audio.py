@@ -98,6 +98,7 @@ class Qwen2AudioConfig(PreTrainedConfig):
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     audio_token_index: int = 151646
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
