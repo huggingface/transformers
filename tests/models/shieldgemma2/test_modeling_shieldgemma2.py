@@ -32,10 +32,8 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin
 from ...test_processing_common import url_to_local_path
-from ...vlm_tester import VLMModelTester
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
@@ -118,9 +116,10 @@ class ShieldGemma2ModelTester(VLMModelTester):
 
 
 @require_torch
-class ShieldGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
+class ShieldGemma2ModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = ShieldGemma2ModelTester
     all_model_classes = (ShieldGemma2ForImageClassification,) if is_torch_available() else ()
-    _is_composite = True
+    pipeline_model_mapping = {}
     additional_model_inputs = ["pixel_values", "attention_mask", "token_type_ids"]
 
     test_attention_outputs = False
@@ -129,32 +128,12 @@ class ShieldGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
         # ShieldGemma2 does not compute its own loss, so never inject labels
         return super()._prepare_for_class(inputs_dict, model_class, return_labels=False)
 
-    def setUp(self):
-        self.model_tester = ShieldGemma2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ShieldGemma2Config, has_text_modality=False)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
     def test_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.create_and_check_model(config, inputs_dict)
 
-    def test_attention_support_flags_match_underlying_model(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = ShieldGemma2ForImageClassification(config)
-
-        for support_flag in (
-            "_supports_flash_attn",
-            "_supports_sdpa",
-            "_supports_flex_attn",
-            "_supports_attention_backend",
-        ):
-            self.assertEqual(
-                getattr(ShieldGemma2ForImageClassification, support_flag), getattr(model.model, support_flag)
-            )
-
     def test_sdpa_can_dispatch_composite_models(self):
+        """Override: ShieldGemma2 has double-nesting (wrapper -> Gemma3ForConditionalGeneration -> Gemma3Model)."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = ShieldGemma2ForImageClassification(config)
 
@@ -181,6 +160,10 @@ class ShieldGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
                 loaded_model.model.model.vision_tower.config._attn_implementation,
                 expected_attn_implementation,
             )
+
+    @unittest.skip(reason="ShieldGemma2ForImageClassification does not support generation")
+    def test_generation_tester_mixin_inheritance(self):
+        pass
 
     @unittest.skip(reason="ShieldGemma2 image token masks are not supported by forced flash SDPA kernels")
     def test_sdpa_can_dispatch_on_flash(self):
