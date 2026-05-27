@@ -487,7 +487,7 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
         self.num_heads = config.speech_encoder_attention_heads
         self.position_embeddings_type = config.position_embeddings_type if use_position_embeddings else None
         self.is_causal = False
-        self.scaling = self.head_size**-0.5
+        self.scale = self.head_size**-0.5
 
         self.linear_q = nn.Linear(config.hidden_size, config.hidden_size)
         self.linear_k = nn.Linear(config.hidden_size, config.hidden_size)
@@ -553,7 +553,7 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
             value,
             attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
-            scaling=self.scaling,
+            scaling=self.scale,
             output_attentions=output_attentions,
         )
 
@@ -1049,7 +1049,7 @@ class SeamlessM4TAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim**-0.5
+        self.scale = self.head_dim**-0.5
         self.is_decoder = is_decoder
         self.is_causal = is_causal
         self.layer_idx = layer_idx
@@ -1127,7 +1127,7 @@ class SeamlessM4TAttention(nn.Module):
             value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scaling,
+            scaling=self.scale,
             output_attentions=output_attentions,
             **kwargs,
         )
