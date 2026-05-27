@@ -45,7 +45,7 @@ if is_torch_available():
         get_optimizer_state_dict,
         set_optimizer_state_dict,
     )
-    from torch.distributed.tensor import DTensor
+    from torch.distributed.tensor import DTensor, Partial, Replicate
 
     if is_torch_greater_or_equal("2.7"):
         from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
@@ -158,52 +158,48 @@ def distribute_model(model, distributed_config: DistributedConfig, device_mesh) 
 def clip_grad_norm(parameters, max_norm: float, norm_type: float = 2.0):
     """Mesh-aware grad-norm clip with O(1) extra memory per parameter.
 
-    Per-rank partials (`|g_local|^p .sum()`) are accumulated into buckets keyed
-    by `(mesh, set-of-non-replicate-dim-indices)`, so the cross-rank reduction
-    is one collective per bucket rather than one per parameter. A typical
-    FSDP2+TP model has 2–4 distinct signatures across hundreds of params, so
-    this collapses O(N_params) NCCL launches into O(N_buckets).
+    Each grad's local `|g|^p` sum is accumulated into a bucket keyed by its
+    *reduction* signature: every non-replicate placement is canonicalized to
+    `Partial()`, so grads that differ only in which tensor dim was sharded
+    (e.g. `Shard(0)` vs `Shard(1)` on the same mesh dim) share one bucket and
+    one collective. `full_tensor()` then issues exactly the right all-reduce(s)
+    per bucket. A typical FSDP2+TP model has 2–4 distinct signatures across
+    hundreds of params, so this collapses O(N_params) NCCL launches into
+    O(N_buckets).
     """
-    parameters = [p for p in parameters if p.grad is not None]
-    if not parameters:
+    grads = [p.grad for p in parameters if p.grad is not None]
+    if not grads:
         return torch.tensor(0.0)
 
     norm_p = float(norm_type)
-    device = parameters[0].grad.device
+    device = grads[0].device
 
-    # Bucket key for plain (non-DTensor) grads
-    LOCAL_KEY = (None, ())
-    buckets: dict[tuple, torch.Tensor] = defaultdict(lambda: torch.zeros((), dtype=torch.float32, device=device))
-
-    # Bucket the params based on key=(mesh, placements) so we now we can reduce on these dims
-    for p in parameters:
-        g = p.grad
+    # Phase 1 — bucket by reduction signature, not by raw placements. Two grads
+    # land in the same bucket iff they need the same all-reduces on the same mesh
+    # dims. Plain (non-DTensor) grads share key=None (no reduction needed).
+    norm_buckets = defaultdict(lambda: torch.zeros((), dtype=torch.float32, device=device))
+    for g in grads:
         if isinstance(g, DTensor):
             local = g.to_local()
-            reduce_dims = tuple(dim for dim, placement in enumerate(g.placements) if not placement.is_replicate())
-            key = (g.device_mesh, reduce_dims) if reduce_dims else LOCAL_KEY
+            reduce_placements = tuple(Replicate() if p.is_replicate() else Partial() for p in g.placements)
+            key = (g.device_mesh, reduce_placements)
         else:
-            local = g
-            key = LOCAL_KEY
-        partial = local.detach().to(torch.float32).abs().pow_(norm_p).sum()
-        buckets[key].add_(partial)
+            local, key = g, None
+        norm_buckets[key] += local.detach().float().abs().pow_(norm_p).sum()
 
-    accum = torch.zeros((), dtype=torch.float32, device=device)
-    for (mesh, reduce_dims), bucket_sum in buckets.items():
-        if mesh is not None:
-            for dim_idx in reduce_dims:
-                group = mesh.get_group(dim_idx) if mesh.ndim > 1 else mesh.get_group()
-                torch.distributed.all_reduce(bucket_sum, op=torch.distributed.ReduceOp.SUM, group=group)
-        accum.add_(bucket_sum)
+    # Phase 2 — one collective per bucket; the key already encodes the right placements.
+    total = torch.zeros((), dtype=torch.float32, device=device)
+    for key, bucket_sum in norm_buckets.items():
+        if key is not None:
+            mesh, reduce_placements = key
+            bucket_sum = DTensor.from_local(bucket_sum, mesh, reduce_placements).full_tensor()
+        total += bucket_sum
 
-    total_norm = accum.pow_(1.0 / norm_p)
+    # Phase 3 — global norm, then scale every grad's local shard in place.
+    total_norm = total.pow(1.0 / norm_p)
     clip_coef = (max_norm / (total_norm + 1e-6)).clamp(max=1.0)
-    for p in parameters:
-        g = p.grad
-        if isinstance(g, DTensor):
-            g._local_tensor.mul_(clip_coef)
-        else:
-            g.mul_(clip_coef)
+    for g in grads:
+        (g._local_tensor if isinstance(g, DTensor) else g).mul_(clip_coef)
     return total_norm
 
 
