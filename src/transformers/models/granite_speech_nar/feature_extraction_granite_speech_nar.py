@@ -42,6 +42,7 @@ class GraniteSpeechNarFeatureExtractor(FeatureExtractionMixin):
         win_length: int = 400,
         hop_length: int = 160,
         n_mels: int = 80,
+        frame_stacking: int = 2,
         **kwargs,
     ):
         requires_backends(self, ["torch", "torchaudio"])
@@ -51,6 +52,7 @@ class GraniteSpeechNarFeatureExtractor(FeatureExtractionMixin):
         self.win_length = win_length
         self.hop_length = hop_length
         self.n_mels = n_mels
+        self.frame_stacking = frame_stacking
         self.mel_filters = torchaudio.transforms.MelSpectrogram(
             sample_rate=sampling_rate,
             n_fft=n_fft,
@@ -59,16 +61,22 @@ class GraniteSpeechNarFeatureExtractor(FeatureExtractionMixin):
             n_mels=n_mels,
         )
 
+    def get_num_encoder_frames(self, num_raw_samples):
+        mel_frames = num_raw_samples // self.hop_length + 1
+        return -(-mel_frames // self.frame_stacking)
+
     def _extract_features(self, raw_audio: "torch.Tensor") -> "torch.Tensor":
         with torch.no_grad():
             mel_filters = self.mel_filters.to(raw_audio.device)
-            B, T = raw_audio.shape
-            l = 2 * (T // (2 * self.hop_length))
-            mel = mel_filters(raw_audio.float())[..., :l]
+            mel = mel_filters(raw_audio.float())
+            num_frames = mel.shape[-1]
+            remainder = num_frames % self.frame_stacking
+            if remainder != 0:
+                mel = torch.nn.functional.pad(mel, (0, self.frame_stacking - remainder))
             logmel = mel.transpose(-1, -2).clamp_min_(1e-10).log10_()
             mx = logmel.amax(dim=(-2, -1), keepdim=True)
             logmel = torch.maximum(logmel, mx - 8.0).div_(4).add_(1)
-            return logmel.reshape(B, -1, 2 * self.n_mels)
+            return logmel.reshape(logmel.shape[0], -1, self.frame_stacking * self.n_mels)
 
     def __call__(
         self,
@@ -84,7 +92,7 @@ class GraniteSpeechNarFeatureExtractor(FeatureExtractionMixin):
                 raise ValueError(f"Expected 1-D or 2-D tensor, got {audios.ndim}-D")
 
         raw_lengths = [a.shape[-1] for a in audios]
-        encoder_frame_counts = [l // (2 * self.hop_length) for l in raw_lengths]
+        encoder_frame_counts = [self.get_num_encoder_frames(l) for l in raw_lengths]
 
         raw_audio = torch.nn.utils.rnn.pad_sequence(
             [a.squeeze(0) if a.ndim > 1 else a for a in audios],

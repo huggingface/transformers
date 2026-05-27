@@ -26,7 +26,6 @@ if is_torch_available():
 class GraniteSpeechNarProcessor(ProcessorMixin):
     """Processor combining audio feature extraction and tokenizer for GraniteSpeechNar."""
 
-    feature_extractor_class = "GraniteSpeechNarFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, feature_extractor: GraniteSpeechNarFeatureExtractor, tokenizer=None, **kwargs):
