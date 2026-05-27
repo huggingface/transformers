@@ -87,11 +87,16 @@ class Cohere2MoeMLP(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
+        self.intermediate_size = config.intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
+        if intermediate_size is not None:
+            self.intermediate_size = intermediate_size
+            self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+            self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+            self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
@@ -297,7 +302,7 @@ class Cohere2MoeAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.force_rope = (
-            config.mlp_layer_types[layer_idx] == "dense" and config.prefix_dense_sliding_window_pattern == 1
+            self.layer_idx < config.first_k_dense_replace and config.prefix_dense_sliding_window_pattern == 1
         )
 
     def forward(
@@ -350,7 +355,7 @@ class Cohere2MoeDecoderLayer(GradientCheckpointingLayer):
         self.self_attn = Cohere2MoeAttention(config=config, layer_idx=layer_idx)
         self.mlp = (
             Cohere2MoeMLP(config, config.prefix_dense_intermediate_size)
-            if config.mlp_layer_types[layer_idx] == "dense"
+            if layer_idx < config.first_k_dense_replace
             else Cohere2MoeSparseMoeBlock(config)
         )
         self.input_layernorm = (

@@ -56,7 +56,11 @@ class Cohere2MoeLayerNorm(Cohere2LayerNorm):
 class Cohere2MoeMLP(Cohere2MLP):
     def __init__(self, config: Cohere2MoeConfig, intermediate_size=None):
         super().__init__(config)
-        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
+        if intermediate_size is not None:
+            self.intermediate_size = intermediate_size
+            self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+            self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+            self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
 
 class Cohere2MoeExperts(MixtralExperts):
@@ -127,7 +131,7 @@ class Cohere2MoeAttention(Cohere2Attention):
     def __init__(self, config: Cohere2MoeConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
         self.force_rope = (
-            config.mlp_layer_types[layer_idx] == "dense" and config.prefix_dense_sliding_window_pattern == 1
+            self.layer_idx < config.first_k_dense_replace and config.prefix_dense_sliding_window_pattern == 1
         )
 
     def forward(
@@ -183,7 +187,7 @@ class Cohere2MoeDecoderLayer(Cohere2DecoderLayer):
         )
         self.mlp = (
             Cohere2MoeMLP(config, config.prefix_dense_intermediate_size)
-            if config.mlp_layer_types[layer_idx] == "dense"
+            if layer_idx < config.first_k_dense_replace
             else Cohere2MoeSparseMoeBlock(config)
         )
 
