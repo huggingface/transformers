@@ -520,7 +520,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
     "Granite4VisionTextModel",  # Building part of bigger (tested) model.
     "GraniteSpeechNarModel",  # Building part of bigger (tested) model.
-    "GraniteSpeechNarLM",  # Building part of bigger (tested) model.
+    "GraniteSpeechNarLanguageModel",  # Building part of bigger (tested) model.
 ]
 
 

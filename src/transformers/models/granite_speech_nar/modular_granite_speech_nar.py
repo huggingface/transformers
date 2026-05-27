@@ -436,7 +436,9 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
             logits = self.out_bpe(torch.cat([pooled[i, :length] for i, length in enumerate(lengths_list)]))
 
             if labels is not None:
-                loss = _ctc_loss_from_flat_logits(logits, lengths_list, labels, label_lengths, self.config.blank_token_id)
+                loss = _ctc_loss_from_flat_logits(
+                    logits, lengths_list, labels, label_lengths, self.config.blank_token_id
+                )
 
         return GraniteSpeechNarEncoderOutput(
             loss=loss,
@@ -661,7 +663,9 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
         encoder_loss = model_out.encoder_loss
         ce_loss = None
         if labels is not None:
-            loss = _ctc_loss_from_flat_logits(text_logits, text_lengths, labels, label_lengths, self.config.blank_token_id)
+            loss = _ctc_loss_from_flat_logits(
+                text_logits, text_lengths, labels, label_lengths, self.config.blank_token_id
+            )
 
             if self.config.ce_loss_lambda > 0.0:
                 ce_targets = torch.cat([self.model._add_insertion_slots(ids) for ids in model_out.ctc_token_ids])
