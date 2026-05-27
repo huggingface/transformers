@@ -17,6 +17,7 @@ Processor class for Bark
 
 import json
 import os
+from pathlib import Path
 
 import numpy as np
 
@@ -145,18 +146,17 @@ class BarkProcessor(ProcessorMixin):
 
             embeddings_dict["repo_or_path"] = save_directory
 
+            embeddings_subdir = os.path.join(embeddings_dict["repo_or_path"], speaker_embeddings_directory)
             for prompt_key in self.available_voice_presets:
                 voice_preset = self._load_voice_preset(prompt_key)
 
                 tmp_dict = {}
                 for key in self.speaker_embeddings[prompt_key]:
-                    np.save(
-                        os.path.join(
-                            embeddings_dict["repo_or_path"], speaker_embeddings_directory, f"{prompt_key}_{key}"
-                        ),
-                        voice_preset[key],
-                        allow_pickle=False,
-                    )
+                    target_filepath = os.path.join(embeddings_subdir, f"{prompt_key}_{key}")
+                    # prompt_key is an untrusted dict key from speaker_embeddings_path.json; reject path traversal (CWE-22)
+                    if Path(target_filepath).resolve().parent != Path(embeddings_subdir).resolve():
+                        raise ValueError(f"Invalid voice preset name: {prompt_key!r}")
+                    np.save(target_filepath, voice_preset[key], allow_pickle=False)
                     tmp_dict[key] = os.path.join(speaker_embeddings_directory, f"{prompt_key}_{key}.npy")
 
                 embeddings_dict[prompt_key] = tmp_dict

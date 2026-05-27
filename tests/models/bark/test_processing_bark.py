@@ -114,6 +114,37 @@ class BarkProcessorTest(unittest.TestCase):
         # test loading voice preset from the hub
         inputs = processor(text=self.input_string, voice_preset=self.voice_preset)
 
+    def test_speaker_embeddings_saving_rejects_path_traversal(self):
+        # A malicious speaker_embeddings_path.json dict key must not be usable to escape the save directory
+        # and write attacker-controlled content to an arbitrary path (path traversal, CWE-22). The dict key
+        # is used verbatim as a `<name>_<inner>.npy` filename, so `save_pretrained` must reject names that
+        # are not plain filenames instead of silently writing outside the target directory.
+        tokenizer = self.get_tokenizer()
+        seq_len = 5
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            # Plant the per-prompt npy files the malicious "repo" claims to provide so that
+            # `_load_voice_preset` succeeds and we reach the vulnerable `np.save` call.
+            np.save(os.path.join(tmp_dir_name, "s.npy"), np.ones(seq_len))
+            np.save(os.path.join(tmp_dir_name, "c.npy"), np.ones((2, seq_len)))
+            np.save(os.path.join(tmp_dir_name, "f.npy"), np.ones((8, seq_len)))
+            speaker_embeddings = {
+                "repo_or_path": tmp_dir_name,
+                "../../PWNED": {
+                    "semantic_prompt": "s.npy",
+                    "coarse_prompt": "c.npy",
+                    "fine_prompt": "f.npy",
+                },
+            }
+            processor = BarkProcessor(tokenizer=tokenizer, speaker_embeddings=speaker_embeddings)
+
+            save_dir = os.path.join(tmp_dir_name, "save")
+            # Where the "../../PWNED" key would land if traversal succeeded:
+            # save/speaker_embeddings/../../PWNED_semantic_prompt.npy -> tmp_dir_name/PWNED_semantic_prompt.npy
+            canary = os.path.join(tmp_dir_name, "PWNED_semantic_prompt.npy")
+            with self.assertRaises(ValueError):
+                processor.save_pretrained(save_dir)
+            self.assertFalse(os.path.exists(canary))
+
     def test_tokenizer(self):
         tokenizer = self.get_tokenizer()
 
