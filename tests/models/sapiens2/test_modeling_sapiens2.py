@@ -33,7 +33,7 @@ if is_torch_available():
 
     from transformers import (
         Sapiens2Backbone,
-        Sapiens2ForMatting,
+        Sapiens2ForImageMatting,
         Sapiens2ForNormalEstimation,
         Sapiens2ForPointmapEstimation,
         Sapiens2ForPoseEstimation,
@@ -42,7 +42,7 @@ if is_torch_available():
     )
     from transformers.modeling_outputs import SemanticSegmenterOutput
     from transformers.models.sapiens2.modeling_sapiens2 import (
-        Sapiens2MattingOutput,
+        Sapiens2ImageMattingOutput,
         Sapiens2NormalEstimatorOutput,
         Sapiens2PointmapEstimatorOutput,
     )
@@ -216,7 +216,7 @@ class Sapiens2ModelTester:
             model(pixel_values, labels=torch.randn_like(result.normals))
 
     def create_and_check_for_matting(self, config, pixel_values, labels):
-        model = Sapiens2ForMatting(config)
+        model = Sapiens2ForImageMatting(config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -286,7 +286,7 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         (
             Sapiens2Model,
             Sapiens2Backbone,
-            Sapiens2ForMatting,
+            Sapiens2ForImageMatting,
             Sapiens2ForNormalEstimation,
             Sapiens2ForPointmapEstimation,
             Sapiens2ForPoseEstimation,
@@ -472,17 +472,17 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         with self.assertRaises(ValueError):
             image_processor.post_process_pointmap(outputs, target_sizes=[(100, 100)])
 
-    def test_post_process_matting(self):
+    def test_post_process_image_matting(self):
         image_processor = Sapiens2ImageProcessor()
         batch_size = 2
         height = width = 16
-        outputs = Sapiens2MattingOutput(
+        outputs = Sapiens2ImageMattingOutput(
             foregrounds=torch.rand(batch_size, 3, height, width),
             alphas=torch.rand(batch_size, 1, height, width),
         )
 
         # without target_sizes: spatial dims unchanged
-        result = image_processor.post_process_matting(outputs)
+        result = image_processor.post_process_image_matting(outputs)
         self.assertEqual(len(result), batch_size)
         self.assertEqual(result[0]["foreground"].shape, torch.Size([3, height, width]))
         self.assertEqual(result[0]["alpha"].shape, torch.Size([1, height, width]))
@@ -492,12 +492,12 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
         # with target_sizes: output is resized
         target_sizes = [(height * 2, width * 2)] * batch_size
-        result = image_processor.post_process_matting(outputs, target_sizes=target_sizes)
+        result = image_processor.post_process_image_matting(outputs, target_sizes=target_sizes)
         self.assertEqual(result[0]["foreground"].shape, torch.Size([3, height * 2, width * 2]))
 
         # mismatched batch size raises ValueError
         with self.assertRaises(ValueError):
-            image_processor.post_process_matting(outputs, target_sizes=[(100, 100)])
+            image_processor.post_process_image_matting(outputs, target_sizes=[(100, 100)])
 
     @slow
     def test_model_from_pretrained(self):
@@ -815,7 +815,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_matting(self):
         model = (
-            Sapiens2ForMatting.from_pretrained("facebook/sapiens2-matting-1b", revision=REVISION)
+            Sapiens2ForImageMatting.from_pretrained("facebook/sapiens2-matting-1b", revision=REVISION)
             .eval()
             .to(torch_device)
         )
@@ -828,7 +828,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        self.assertIsInstance(outputs, Sapiens2MattingOutput)
+        self.assertIsInstance(outputs, Sapiens2ImageMattingOutput)
         _, _, height, width = inputs["pixel_values"].shape
         self.assertEqual(outputs.foregrounds.shape, torch.Size([1, 3, height, width]))
         self.assertEqual(outputs.alphas.shape, torch.Size([1, 1, height, width]))
@@ -847,7 +847,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         )
 
         background = torch.tensor([177, 64, 0], device=torch_device).view(3, 1, 1)
-        result = image_processor.post_process_matting(
+        result = image_processor.post_process_image_matting(
             outputs, target_sizes=[(image_height, image_width)], backgrounds=background
         )
         self.assertEqual(len(result), 1)

@@ -39,7 +39,7 @@ from ...image_utils import (
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
 from .modeling_sapiens2 import (
-    Sapiens2MattingOutput,
+    Sapiens2ImageMattingOutput,
     Sapiens2NormalEstimatorOutput,
     Sapiens2PointmapEstimatorOutput,
     Sapiens2PoseEstimatorOutput,
@@ -517,10 +517,10 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             threshold (`float`, *optional*):
                 Score threshold. Keypoints with scores at or below this value are
                 filtered out from the result dictionaries.
-            source_sizes (`list[tuple[int, int]]` of length `batch_size`, *optional*):
+            source_sizes (`torch.Tensor` or `list[tuple[int, int]]` of length `batch_size`, *optional*):
                 Original `(height, width)` of each image in pixels. Required when `target_sizes` is
                 provided, as the source coordinate space for scaling keypoints and bounding boxes.
-            target_sizes (`list[tuple[int, int]]` of length `batch_size`, *optional*):
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]` of length `batch_size`, *optional*):
                 Desired output `(height, width)` coordinate space for each image. When provided
                 alongside `source_sizes`, keypoint coordinates and bounding boxes are scaled from
                 source to target space.
@@ -636,11 +636,11 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         Args:
             outputs (`Sapiens2NormalEstimatorOutput`):
                 Raw outputs of the model.
-            source_sizes (`list[tuple]` of length `batch_size`, *optional*):
+            source_sizes (`torch.Tensor` or `list[tuple[int, int]]` of length `batch_size`, *optional*):
                 Original `(height, width)` of each image before preprocessing. When provided,
                 the padding added during preprocessing is removed and predictions are resized back
                 to the original image size (unless `target_sizes` overrides the final size).
-            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]` of length `batch_size`, *optional*):
                 Requested final `(height, width)` for each prediction. When provided, used as the
                 resize target instead of `source_sizes`. Resized with bilinear interpolation after
                 L2 normalization.
@@ -725,11 +725,11 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         Args:
             outputs (`Sapiens2PointmapEstimatorOutput`):
                 Raw outputs of the model.
-            source_sizes (`list[tuple]` of length `batch_size`, *optional*):
+            source_sizes (`torch.Tensor` or `list[tuple[int, int]]` of length `batch_size`, *optional*):
                 Original `(height, width)` of each image before preprocessing. When provided,
                 the padding added during preprocessing is removed and predictions are resized back
                 to the original image size (unless `target_sizes` overrides the final size).
-            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]` of length `batch_size`, *optional*):
                 Requested final `(height, width)` for each prediction. Overrides `source_sizes`
                 as the resize target.
             do_remove_padding (`bool`, *optional*):
@@ -801,19 +801,19 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
 
         return result
 
-    def post_process_matting(
+    def post_process_image_matting(
         self,
-        outputs: Sapiens2MattingOutput,
+        outputs: Sapiens2ImageMattingOutput,
         target_sizes: TensorType | list[tuple[int, int]] | None = None,
         backgrounds: ImageInput | None = None,
     ) -> list[dict[str, torch.Tensor]]:
         """
-        Converts the output of [`Sapiens2ForMatting`] into alpha mattes and foreground maps.
+        Converts the output of [`Sapiens2ForImageMatting`] into alpha mattes and foreground maps.
 
         Args:
-            outputs (`Sapiens2MattingOutput`):
+            outputs (`Sapiens2ImageMattingOutput`):
                 Raw outputs of the model.
-            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]` of length `batch_size`, *optional*):
                 Requested final `(height, width)` for each prediction. Resized with bilinear
                 interpolation. If unset, predictions are returned at the model output resolution.
             backgrounds (`ImageInput`, *optional*):

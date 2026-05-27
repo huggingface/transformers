@@ -1099,7 +1099,7 @@ def _build_checkpoint_conversion_mapping():
                 r"scale_head.predictor.mlp.",
             ),
         ],
-        "Sapiens2ForMatting": [
+        "Sapiens2ForImageMatting": [
             WeightRenaming(r"^backbone\.", r"sapiens2."),
             WeightRenaming(
                 r"decode_head\.input_conv\.0\.(weight|bias)",

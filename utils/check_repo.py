@@ -469,7 +469,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Sapiens2ForPoseEstimation",  # no autoclass for pose estimation
     "Sapiens2ForNormalEstimation",  # no autoclass for normal estimation
     "Sapiens2ForPointmapEstimation",  # no autoclass for pointmap estimation
-    "Sapiens2ForMatting",  # no autoclass for matting
+    "Sapiens2ForImageMatting",  # no autoclass for matting
     "CLIPTextModel",
     "MetaClip2TextModel",
     "MetaClip2TextModelWithProjection",

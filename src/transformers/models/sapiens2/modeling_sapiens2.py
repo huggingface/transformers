@@ -128,34 +128,19 @@ class Sapiens2PointmapEstimatorOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@auto_docstring(
-    custom_intro="""
-    Class for outputs of matting models.
-    """
-)
 @dataclass
-class Sapiens2MattingOutput(ModelOutput):
+class Sapiens2ImageMattingOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Matting loss.
-    alphas (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`):
-        Alpha matte predictions in `[0, 1]` (sigmoid-activated).
     foregrounds (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
         Pre-multiplied RGB foreground predictions in `[0, 1]` (sigmoid-activated).
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage)
-        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
-        each layer plus the initial embedding outputs.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights after the attention softmax.
     """
 
     loss: torch.FloatTensor | None = None
     alphas: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+
     foregrounds: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class Sapiens2Embeddings(nn.Module):
@@ -1253,7 +1238,7 @@ class Sapiens2ForPointmapEstimation(Sapiens2PreTrainedModel):
     pre-multiplied RGB foreground and an alpha matte).
     """,
 )
-class Sapiens2ForMatting(Sapiens2PreTrainedModel):
+class Sapiens2ForImageMatting(Sapiens2PreTrainedModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
         self.sapiens2 = Sapiens2Model(config)
@@ -1267,7 +1252,7 @@ class Sapiens2ForMatting(Sapiens2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         labels: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Sapiens2MattingOutput:
+    ) -> Sapiens2ImageMattingOutput:
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, 4, height, width)`, *optional*):
             Ground-truth matting targets for computing the loss.
@@ -1289,7 +1274,7 @@ class Sapiens2ForMatting(Sapiens2PreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not yet supported")
 
-        return Sapiens2MattingOutput(
+        return Sapiens2ImageMattingOutput(
             loss=loss,
             alphas=alphas,
             foregrounds=foregrounds,
@@ -1303,7 +1288,7 @@ __all__ = [
     "Sapiens2ForPoseEstimation",
     "Sapiens2ForNormalEstimation",
     "Sapiens2ForPointmapEstimation",
-    "Sapiens2ForMatting",
+    "Sapiens2ForImageMatting",
     "Sapiens2Model",
     "Sapiens2PreTrainedModel",
     "Sapiens2Backbone",

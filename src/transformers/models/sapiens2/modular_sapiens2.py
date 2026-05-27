@@ -58,6 +58,7 @@ from ..dinov3_vit.modeling_dinov3_vit import (
 )
 from ..gemma2.modeling_gemma2 import eager_attention_forward
 from ..sam3.processing_sam3 import box_xywh_to_cxcywh, box_xywh_to_xyxy
+from ..vitmatte.modeling_vitmatte import ImageMattingOutput
 from ..vitpose.modeling_vitpose import flip_back
 
 
@@ -147,35 +148,27 @@ class Sapiens2PointmapEstimatorOutput(ModelOutput):
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
-
 @auto_docstring(
     custom_intro="""
-    Class for outputs of matting models.
+    Class for outputs of image matting models.
     """
 )
 @dataclass
-class Sapiens2MattingOutput(ModelOutput):
+class Sapiens2ImageMattingOutput(ImageMattingOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Matting loss.
+        Loss.
     alphas (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`):
-        Alpha matte predictions in `[0, 1]` (sigmoid-activated).
+        Estimated alpha values.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
+        (also called feature maps) of the model at the output of each stage.
     foregrounds (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
         Pre-multiplied RGB foreground predictions in `[0, 1]` (sigmoid-activated).
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage)
-        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
-        each layer plus the initial embedding outputs.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights after the attention softmax.
     """
 
-    loss: torch.FloatTensor | None = None
-    alphas: torch.FloatTensor | None = None
     foregrounds: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 def boxes_to_crop_params(
@@ -542,10 +535,10 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
             threshold (`float`, *optional*):
                 Score threshold. Keypoints with scores at or below this value are
                 filtered out from the result dictionaries.
-            source_sizes (`list[tuple[int, int]]` of length `batch_size`, *optional*):
+            source_sizes (`torch.Tensor` or `list[tuple[int, int]]` of length `batch_size`, *optional*):
                 Original `(height, width)` of each image in pixels. Required when `target_sizes` is
                 provided, as the source coordinate space for scaling keypoints and bounding boxes.
-            target_sizes (`list[tuple[int, int]]` of length `batch_size`, *optional*):
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]` of length `batch_size`, *optional*):
                 Desired output `(height, width)` coordinate space for each image. When provided
                 alongside `source_sizes`, keypoint coordinates and bounding boxes are scaled from
                 source to target space.
@@ -661,11 +654,11 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
         Args:
             outputs (`Sapiens2NormalEstimatorOutput`):
                 Raw outputs of the model.
-            source_sizes (`list[tuple]` of length `batch_size`, *optional*):
+            source_sizes (`torch.Tensor` or `list[tuple[int, int]]` of length `batch_size`, *optional*):
                 Original `(height, width)` of each image before preprocessing. When provided,
                 the padding added during preprocessing is removed and predictions are resized back
                 to the original image size (unless `target_sizes` overrides the final size).
-            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]` of length `batch_size`, *optional*):
                 Requested final `(height, width)` for each prediction. When provided, used as the
                 resize target instead of `source_sizes`. Resized with bilinear interpolation after
                 L2 normalization.
@@ -750,11 +743,11 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
         Args:
             outputs (`Sapiens2PointmapEstimatorOutput`):
                 Raw outputs of the model.
-            source_sizes (`list[tuple]` of length `batch_size`, *optional*):
+            source_sizes (`torch.Tensor` or `list[tuple[int, int]]` of length `batch_size`, *optional*):
                 Original `(height, width)` of each image before preprocessing. When provided,
                 the padding added during preprocessing is removed and predictions are resized back
                 to the original image size (unless `target_sizes` overrides the final size).
-            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]` of length `batch_size`, *optional*):
                 Requested final `(height, width)` for each prediction. Overrides `source_sizes`
                 as the resize target.
             do_remove_padding (`bool`, *optional*):
@@ -826,19 +819,19 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
 
         return result
 
-    def post_process_matting(
+    def post_process_image_matting(
         self,
-        outputs: Sapiens2MattingOutput,
+        outputs: Sapiens2ImageMattingOutput,
         target_sizes: TensorType | list[tuple[int, int]] | None = None,
         backgrounds: ImageInput | None = None,
     ) -> list[dict[str, torch.Tensor]]:
         """
-        Converts the output of [`Sapiens2ForMatting`] into alpha mattes and foreground maps.
+        Converts the output of [`Sapiens2ForImageMatting`] into alpha mattes and foreground maps.
 
         Args:
-            outputs (`Sapiens2MattingOutput`):
+            outputs (`Sapiens2ImageMattingOutput`):
                 Raw outputs of the model.
-            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]` of length `batch_size`, *optional*):
                 Requested final `(height, width)` for each prediction. Resized with bilinear
                 interpolation. If unset, predictions are returned at the model output resolution.
             backgrounds (`ImageInput`, *optional*):
@@ -1596,7 +1589,7 @@ class Sapiens2ForPointmapEstimation(Sapiens2PreTrainedModel):
     pre-multiplied RGB foreground and an alpha matte).
     """,
 )
-class Sapiens2ForMatting(Sapiens2PreTrainedModel):
+class Sapiens2ForImageMatting(Sapiens2PreTrainedModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
         self.sapiens2 = Sapiens2Model(config)
@@ -1610,7 +1603,7 @@ class Sapiens2ForMatting(Sapiens2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         labels: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Sapiens2MattingOutput:
+    ) -> Sapiens2ImageMattingOutput:
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, 4, height, width)`, *optional*):
             Ground-truth matting targets for computing the loss.
@@ -1632,7 +1625,7 @@ class Sapiens2ForMatting(Sapiens2PreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not yet supported")
 
-        return Sapiens2MattingOutput(
+        return Sapiens2ImageMattingOutput(
             loss=loss,
             alphas=alphas,
             foregrounds=foregrounds,
@@ -1647,7 +1640,7 @@ __all__ = [
     "Sapiens2ForPoseEstimation",
     "Sapiens2ForNormalEstimation",
     "Sapiens2ForPointmapEstimation",
-    "Sapiens2ForMatting",
+    "Sapiens2ForImageMatting",
     "Sapiens2Model",
     "Sapiens2PreTrainedModel",
     "Sapiens2Backbone",

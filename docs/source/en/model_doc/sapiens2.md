@@ -269,20 +269,20 @@ print("Segmentation map shape:", segmentation.shape)  # [original_height, origin
 
 ### Matting
 
-The example below shows how to run image matting with [`Sapiens2ForMatting`].
-Outputs are sigmoid-activated and already in `[0, 1]`; use `post_process_matting` to resize and split
+The example below shows how to run image matting with [`Sapiens2ForImageMatting`].
+Outputs are sigmoid-activated and already in `[0, 1]`; use `post_process_image_matting` to resize and split
 into `alphas`, `foregrounds`, and an optional `composite` image. The composite image shows
 the foreground overlaid over the background with the formula: `composite = foreground * (1 - alpha) * background`.
 
 ```python
 import torch
-from transformers import AutoImageProcessor, Sapiens2ForMatting
+from transformers import AutoImageProcessor, Sapiens2ForImageMatting
 from transformers.image_utils import load_image
 
 image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
 
 image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-matting-1b", revision="refs/pr/1")
-model = Sapiens2ForMatting.from_pretrained("facebook/sapiens2-matting-1b", device_map="auto", revision="refs/pr/1")
+model = Sapiens2ForImageMatting.from_pretrained("facebook/sapiens2-matting-1b", device_map="auto", revision="refs/pr/1")
 
 inputs = image_processor(image, return_tensors="pt").to(model.device)
 with torch.inference_mode():
@@ -294,7 +294,7 @@ original_size = (image.height, image.width)
 # Pass an optional background to composite the foreground over it.
 # A (3, 1, 1) tensor broadcasts as a uniform color; PIL images and numpy arrays are also accepted.
 background = torch.tensor([0, 177, 64], dtype=torch.uint8).view(3, 1, 1)  # chroma green in RGB
-result = image_processor.post_process_matting(
+result = image_processor.post_process_image_matting(
     outputs, target_sizes=[original_size], backgrounds=background
 )[0]
 print("Alpha shape:", result["alpha"].shape)        # [1, original_height, original_width]
@@ -310,7 +310,7 @@ print("Composite shape:", result["composite"].shape)    # [3, original_height, o
 
 [[autodoc]] Sapiens2ImageProcessor
     - preprocess
-    - post_process_matting
+    - post_process_image_matting
     - post_process_normal_estimation
     - post_process_pointmap
     - post_process_pose_estimation
@@ -326,9 +326,9 @@ print("Composite shape:", result["composite"].shape)    # [3, original_height, o
 [[autodoc]] Sapiens2Backbone
     - forward
 
-## Sapiens2ForMatting
+## Sapiens2ForImageMatting
 
-[[autodoc]] Sapiens2ForMatting
+[[autodoc]] Sapiens2ForImageMatting
     - forward
 
 ## Sapiens2ForNormalEstimation
