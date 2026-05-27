@@ -25,34 +25,6 @@ logger = logging.get_logger(__name__)
 
 
 class FunAsrNanoProcessor(ProcessorMixin):
-    r"""
-    Constructs a Fun-ASR-Nano processor which wraps a feature extractor and a tokenizer.
-
-    [`FunAsrNanoProcessor`] offers all the functionalities of [`FunAsrNanoFeatureExtractor`] and
-    a tokenizer (typically Qwen3). See [`~FunAsrNanoProcessor.__call__`] and [`~FunAsrNanoProcessor.decode`]
-    for more information.
-
-    Args:
-        feature_extractor (`FunAsrNanoFeatureExtractor`):
-            The feature extractor for audio preprocessing.
-        tokenizer (`PreTrainedTokenizer`):
-            The tokenizer for text encoding/decoding.
-        chat_template (`str`, *optional*):
-            Jinja template for formatting chat messages with audio placeholders.
-        audio_token (`str`, *optional*, defaults to `"<|AUDIO|>"`):
-            Token used as placeholder for audio features.
-
-    Example:
-
-    ```python
-    >>> from transformers import FunAsrNanoProcessor, FunAsrNanoFeatureExtractor, AutoTokenizer
-
-    >>> feature_extractor = FunAsrNanoFeatureExtractor()
-    >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-    >>> processor = FunAsrNanoProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
-    ```
-    """
-
     attributes = ["feature_extractor", "tokenizer"]
     feature_extractor_class = "FunAsrNanoFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
@@ -63,12 +35,15 @@ class FunAsrNanoProcessor(ProcessorMixin):
         tokenizer=None,
         chat_template=None,
         audio_token="<|AUDIO|>",
-        **kwargs,
     ):
+        r"""
+        audio_token (`str`, *optional*, defaults to `"<|AUDIO|>"`):
+            The token to use for audio tokens.
+        """
         self.audio_token = audio_token
         if chat_template is None:
             chat_template = self.default_chat_template
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template, **kwargs)
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     @auto_docstring
     def __call__(
