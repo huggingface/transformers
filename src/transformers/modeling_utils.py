@@ -4440,7 +4440,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
         expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
 
-        if logger.level >= logging.WARNING:
+        if logger.level <= logging.WARNING:
             verify_tp_plan(expected_keys, load_config.tp_plan)
 
         # This offload index if for params explicitly on the "disk" in the device_map
