@@ -37,3 +37,27 @@ def test_is_package_available_namespace_shadow_marked_unavailable():
         patch("transformers.utils.import_utils.importlib.import_module", return_value=fake_module),
     ):
         assert _is_package_available(pkg_name, return_version=True) == (False, "N/A")
+
+
+def test_is_package_available_versionless_install_marked_available():
+    pkg_name = "definitely_not_a_real_pkg_xyz"
+    fake_module = ModuleType(pkg_name)
+    fake_module.__file__ = "/path/to/site-packages/definitely_not_a_real_pkg_xyz/__init__.py"
+
+    with (
+        patch("transformers.utils.import_utils.importlib.util.find_spec", return_value=object()),
+        patch("transformers.utils.import_utils.importlib.import_module", return_value=fake_module),
+    ):
+        assert _is_package_available(pkg_name, return_version=True) == (True, "N/A")
+
+
+def test_is_package_available_frozen_install_marked_available():
+    pkg_name = "definitely_not_a_real_pkg_xyz"
+    fake_module = ModuleType(pkg_name)
+    fake_module.__version__ = "1.2.3"
+
+    with (
+        patch("transformers.utils.import_utils.importlib.util.find_spec", return_value=object()),
+        patch("transformers.utils.import_utils.importlib.import_module", return_value=fake_module),
+    ):
+        assert _is_package_available(pkg_name, return_version=True) == (True, "1.2.3")
