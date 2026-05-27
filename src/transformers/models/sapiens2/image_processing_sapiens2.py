@@ -76,11 +76,11 @@ def boxes_to_crop_params(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Compute crop center and scale from bboxes, applying padding and aspect ratio correction.
 
-    Accepts either a single box `(4,)` or a batch `(N, 4)` and returns center/scale with a matching
+    Accepts either a single box `(4,)` or multiple boxes `(num_boxes, 4)` and returns center/scale with a matching
     leading dimension.
 
     Args:
-        boxes (`torch.Tensor` of shape `(4,)` or `(N, 4)`): Bounding box in
+        boxes (`torch.Tensor` of shape `(4,)` or `(num_boxes, 4)`): Bounding box in
             (center-x, center-y, width, height) format, with values in absolute pixel coordinates.
         output_size (`tuple[int, int]`): Target output size as `(height, width)`, used to compute
             the aspect ratio for scale correction.
@@ -124,25 +124,23 @@ def crop_and_resize(
     Args:
         image (`torch.Tensor`): Input image tensor of shape `(C, H, W)` in float32.
         boxes (`torch.Tensor`): Bounding boxes in (center-x, center-y, width, height) format,
-            shape `(N, 4)`, with values in absolute pixel coordinates.
+            shape `(num_boxes, 4)`, with values in absolute pixel coordinates.
         output_size (`tuple[int, int]`): Target output size as `(height, width)`.
         padding (`float`, *optional*, defaults to `1.25`): Multiplicative factor applied to the
             bounding box dimensions before cropping, adding context around the region of interest.
 
     Returns:
-        `torch.Tensor`: Cropped and resized images of shape `(N, C, output_height, output_width)`.
+        `torch.Tensor`: Cropped and resized images of shape `(num_boxes, C, output_height, output_width)`.
     """
     output_height, output_width = output_size
     num_channels, input_height, input_width = image.shape
     center, scale = boxes_to_crop_params(boxes, output_size=output_size, padding=padding)
-    center_x = center[:, 0]
-    center_y = center[:, 1]
-    bbox_w = scale[:, 0]
-    bbox_h = scale[:, 1]
+    center_x, center_y = center.unbind(-1)
+    bbox_w, bbox_h = scale.unbind(-1)
 
-    scale_x = (output_width - 1) / bbox_w  # (N,)
-    scale_y = (output_height - 1) / bbox_h  # (N,)
-    is_bilinear = torch.minimum(scale_x, scale_y) < 1.0  # (N,)
+    scale_x = (output_width - 1) / bbox_w  # (num_boxes,)
+    scale_y = (output_height - 1) / bbox_h  # (num_boxes,)
+    is_bilinear = torch.minimum(scale_x, scale_y) < 1.0  # (num_boxes,)
 
     grid_y, grid_x = torch.meshgrid(
         torch.arange(output_height, dtype=torch.float32, device=image.device),
@@ -151,7 +149,7 @@ def crop_and_resize(
     )
     in_x = grid_x / scale_x[:, None, None] + center_x[:, None, None] - 0.5 * bbox_w[:, None, None]
     in_y = grid_y / scale_y[:, None, None] + center_y[:, None, None] - 0.5 * bbox_h[:, None, None]
-    # (N, H_out, W_out, 2)
+    # (num_boxes, output_height, output_width, 2)
     grids = torch.stack([2.0 * in_x / (input_width - 1) - 1.0, 2.0 * in_y / (input_height - 1) - 1.0], dim=-1)
 
     num_boxes = boxes.shape[0]
