@@ -303,6 +303,7 @@ class FunAsrNanoEncoder(PreTrainedModel):
         feature_lengths: torch.Tensor | None = None,
         output_hidden_states: bool = False,
         return_dict: bool = True,
+        **kwargs,
     ) -> BaseModelOutput | tuple:
         hidden_states = input_features
         batch_size, max_len, _ = hidden_states.shape
