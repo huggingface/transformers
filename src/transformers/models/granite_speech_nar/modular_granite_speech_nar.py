@@ -51,8 +51,29 @@ class GraniteSpeechNarEncoderOutput(ModelOutput):
 
 
 @dataclass
+class GraniteSpeechNarModelOutput(ModelOutput):
+    """Output of GraniteSpeechNarModel (backbone without lm_head).
+
+    Attributes:
+        last_hidden_state: Hidden states from the LLM backbone (flat, batch dim squeezed).
+        ctc_token_ids: List of CTC-collapsed encoder predictions per sample.
+        text_lengths: Per-sample text sequence lengths (after insertion slots).
+        audio_lengths: Per-sample projected audio lengths.
+        encoder_loss: Encoder BPE CTC loss (when encoder_ctc_loss_lambda > 0 and labels provided).
+        encoder_logits: Flat BPE CTC logits from the encoder (when output_encoder_logits=True).
+    """
+
+    last_hidden_state: torch.FloatTensor | None = None
+    ctc_token_ids: list[torch.Tensor] | None = None
+    text_lengths: list[int] | None = None
+    audio_lengths: list[int] | None = None
+    encoder_loss: torch.Tensor | None = None
+    encoder_logits: torch.Tensor | None = None
+
+
+@dataclass
 class GraniteSpeechNarOutput(ModelOutput):
-    """Output of the GraniteSpeechNarForASR model.
+    """Output of the GraniteSpeechNarForCTC model.
 
     Attributes:
         loss: Combined CTC + auxiliary losses (only when labels provided).
@@ -60,6 +81,8 @@ class GraniteSpeechNarOutput(ModelOutput):
         logits: List of per-sample logit tensors from the LLM head.
         encoder_logits: Flat BPE CTC logits from the encoder.
         encoder_preds: List of CTC-collapsed encoder predictions per sample.
+        encoder_loss: Encoder BPE CTC loss component (for logging).
+        ce_loss: Cross-entropy auxiliary loss component (for logging).
     """
 
     loss: torch.Tensor | None = None
@@ -67,6 +90,8 @@ class GraniteSpeechNarOutput(ModelOutput):
     logits: list[torch.Tensor] | None = None
     encoder_logits: torch.Tensor | None = None
     encoder_preds: list[torch.Tensor] | None = None
+    encoder_loss: torch.Tensor | None = None
+    ce_loss: torch.Tensor | None = None
 
 
 class GraniteSpeechNarConformerBlock(GraniteSpeechConformerBlock):
@@ -439,25 +464,6 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
 
         self.post_init()
 
-
-@auto_docstring(
-    custom_intro="""
-    The GraniteSpeechNar model for non-autoregressive CTC-based speech recognition.
-    Consists of a conformer encoder with BPE CTC head, a QFormer-based projector,
-    and a bidirectional Granite LLM backbone that refines CTC predictions in a single pass.
-    """
-)
-class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-
-    def __init__(self, config: GraniteSpeechNarConfig):
-        super().__init__(config)
-
-        self.model = GraniteSpeechNarModel(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-
-        self.post_init()
-
     def _ctc_collapse_decode(
         self,
         bpe_logits_flat: torch.Tensor,
@@ -486,7 +492,7 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
         audio_lengths: list[int],
     ) -> tuple[torch.Tensor, torch.Tensor, list[int]]:
         """Build flat (pad-free) LLM input: [audio_0, text_0, audio_1, text_1, ...]"""
-        embed_tokens = self.model.language_model.embed_tokens
+        embed_tokens = self.language_model.embed_tokens
 
         embeds_list = []
         position_ids_list = []
@@ -504,6 +510,87 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
         flat_embeds = torch.cat(embeds_list, dim=0).unsqueeze(0)
         flat_position_ids = torch.cat(position_ids_list, dim=0).unsqueeze(0)
         return flat_embeds, flat_position_ids, text_lengths
+
+    def forward(
+        self,
+        input_features: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        label_lengths: torch.Tensor | None = None,
+        output_encoder_logits: bool = False,
+        **kwargs,
+    ) -> GraniteSpeechNarModelOutput:
+        encoder_labels = labels if self.config.encoder_ctc_loss_lambda else None
+        enc_out = self.encoder(
+            input_features=input_features,
+            attention_mask=attention_mask,
+            output_hidden_states=True,
+            labels=encoder_labels,
+            label_lengths=label_lengths if encoder_labels is not None else None,
+        )
+
+        if attention_mask is None:
+            attention_mask = torch.ones(input_features.shape[:-1], dtype=torch.bool, device=input_features.device)
+
+        encoder_lengths = attention_mask.sum(dim=1)
+
+        pool_window = self.encoder.config.bpe_pooling_window
+        bpe_lengths = (-(encoder_lengths // -pool_window)).tolist()
+        ctc_token_ids = self._ctc_collapse_decode(enc_out.logits, bpe_lengths)
+
+        multilayer_features = torch.cat(
+            [enc_out.all_hidden_states[idx] for idx in self.config.encoder_layer_indices], dim=-1
+        )
+
+        encoder_loss = enc_out.loss
+        encoder_logits = enc_out.logits if output_encoder_logits else None
+        del enc_out
+
+        audio_embeds = self.projector(multilayer_features)
+        del multilayer_features
+        if self.config.scale_projected_embeddings:
+            embedding_multiplier = getattr(self.config.text_config, "embedding_multiplier", 1.0)
+            audio_embeds = audio_embeds / embedding_multiplier
+        audio_embeds = audio_embeds.to(self.language_model.embed_tokens.weight.dtype)
+
+        audio_lengths = (encoder_lengths // self.projector.config.downsample_rate).cpu().tolist()
+
+        flat_embeds, flat_position_ids, text_lengths = self._build_flat_inputs(
+            ctc_token_ids, audio_embeds, audio_lengths
+        )
+
+        llm_out = self.language_model(
+            inputs_embeds=flat_embeds,
+            position_ids=flat_position_ids,
+        )
+
+        return GraniteSpeechNarModelOutput(
+            last_hidden_state=llm_out.last_hidden_state.squeeze(0),
+            ctc_token_ids=ctc_token_ids,
+            text_lengths=text_lengths,
+            audio_lengths=audio_lengths,
+            encoder_loss=encoder_loss,
+            encoder_logits=encoder_logits,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
+    The GraniteSpeechNar model for non-autoregressive CTC-based speech recognition.
+    Consists of a conformer encoder with BPE CTC head, a QFormer-based projector,
+    and a bidirectional Granite LLM backbone that refines CTC predictions in a single pass.
+    """
+)
+class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+
+    def __init__(self, config: GraniteSpeechNarConfig):
+        super().__init__(config)
+
+        self.model = GraniteSpeechNarModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+
+        self.post_init()
 
     def forward(
         self,
@@ -532,62 +619,30 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
         Returns:
             [`GraniteSpeechNarOutput`]
         """
-        encoder_labels = labels if self.config.encoder_ctc_loss_lambda else None
-        enc_out = self.model.encoder(
+        model_out = self.model(
             input_features=input_features,
             attention_mask=attention_mask,
-            output_hidden_states=True,
-            labels=encoder_labels,
-            label_lengths=label_lengths if encoder_labels is not None else None,
+            labels=labels,
+            label_lengths=label_lengths,
+            output_encoder_logits=output_encoder_logits,
         )
 
-        if attention_mask is None:
-            attention_mask = torch.ones(input_features.shape[:-1], dtype=torch.bool, device=input_features.device)
+        all_logits = self.lm_head(model_out.last_hidden_state)
 
-        encoder_lengths = attention_mask.sum(dim=1)
-
-        pool_window = self.model.encoder.config.bpe_pooling_window
-        bpe_lengths = (-(encoder_lengths // -pool_window)).tolist()
-        ctc_token_ids = self._ctc_collapse_decode(enc_out.logits, bpe_lengths)
-
-        multilayer_features = torch.cat(
-            [enc_out.all_hidden_states[idx] for idx in self.config.encoder_layer_indices], dim=-1
-        )
-
-        encoder_loss = enc_out.loss
-        encoder_logits = enc_out.logits if output_encoder_logits else None
-        del enc_out
-
-        audio_embeds = self.model.projector(multilayer_features)
-        del multilayer_features
-        if self.config.scale_projected_embeddings:
-            embedding_multiplier = getattr(self.config.text_config, "embedding_multiplier", 1.0)
-            audio_embeds = audio_embeds / embedding_multiplier
-        audio_embeds = audio_embeds.to(self.model.language_model.embed_tokens.weight.dtype)
-
-        audio_lengths = (encoder_lengths // self.model.projector.config.downsample_rate).cpu().tolist()
-
-        flat_embeds, flat_position_ids, text_lengths = self._build_flat_inputs(
-            ctc_token_ids, audio_embeds, audio_lengths
-        )
-
-        llm_out = self.model.language_model(
-            inputs_embeds=flat_embeds,
-            position_ids=flat_position_ids,
-        )
-        hidden_states = llm_out.last_hidden_state.squeeze(0)
-        all_logits = self.lm_head(hidden_states)
-
+        audio_lengths = model_out.audio_lengths
+        text_lengths = model_out.text_lengths
         segment_lengths = [l for a, t in zip(audio_lengths, text_lengths) for l in (a, t)]
         text_logits = torch.cat(list(all_logits.split(segment_lengths)[1::2]))
         logits_per_sample = list(text_logits.split(text_lengths))
 
         loss = None
+        encoder_loss = model_out.encoder_loss
+        ce_loss = None
         if labels is not None:
             loss = _ctc_loss_from_flat_logits(text_logits, text_lengths, labels, label_lengths, self.config.blank_token_id)
 
             if self.config.ce_loss_lambda > 0.0:
-                ce_targets = torch.cat([self._add_insertion_slots(ids) for ids in ctc_token_ids])
+                ce_targets = torch.cat([self.model._add_insertion_slots(ids) for ids in model_out.ctc_token_ids])
                 ce_loss = F.cross_entropy(
                     text_logits,
                     ce_targets.long(),
@@ -602,8 +657,10 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
         return GraniteSpeechNarOutput(
             loss=loss,
             logits=logits_per_sample,
-            encoder_logits=encoder_logits,
-            encoder_preds=ctc_token_ids,
+            encoder_logits=model_out.encoder_logits,
+            encoder_preds=model_out.ctc_token_ids,
+            encoder_loss=encoder_loss,
+            ce_loss=ce_loss,
         )
 
     @torch.inference_mode()
