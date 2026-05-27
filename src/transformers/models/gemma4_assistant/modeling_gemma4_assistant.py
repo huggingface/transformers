@@ -110,7 +110,6 @@ class Gemma4AssistantPreTrainedModel(PreTrainedModel):
 class Gemma4AssistantForCausalLM(Gemma4AssistantPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: Gemma4AssistantConfig):
