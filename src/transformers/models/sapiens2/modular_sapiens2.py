@@ -20,9 +20,10 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 from torchvision.transforms.v2 import functional as tvF
 
+from transformers.image_processing_backends import TorchvisionBackend
+
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
@@ -37,9 +38,10 @@ from ...image_utils import (
 )
 from ...modeling_outputs import ModelOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
+from ..beit.image_processing_beit import BeitImageProcessor, BeitImageProcessorKwargs
 from ..beit.modeling_beit import BeitConvLayer
 from ..dinov3_vit.configuration_dinov3_vit import DINOv3ViTConfig
 from ..dinov3_vit.modeling_dinov3_vit import (
@@ -391,28 +393,17 @@ def post_dark_unbiased_data_processing(
     return keypoints - (hessian @ derivative).squeeze(-1)
 
 
-class Sapiens2ImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
-        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g.
-        ADE20k). The background label will be replaced by 255.
-    """
-
-    do_reduce_labels: bool
+class Sapiens2ImageProcessorKwargs(BeitImageProcessorKwargs, total=False):
+    pass
 
 
-class Sapiens2ImageProcessor(TorchvisionBackend):
-    # Note: original Sapiens2 uses cv2.INTER_AREA for downsampling and cv2.INTER_CUBIC for upsampling
+class Sapiens2ImageProcessor(BeitImageProcessor):
     valid_kwargs = Sapiens2ImageProcessorKwargs
+    # Note: original Sapiens2 uses cv2.INTER_AREA for downsampling and cv2.INTER_CUBIC for upsampling
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
     size = {"height": 1024, "width": 768}
-    do_resize = True
-    do_rescale = True
-    do_normalize = True
-    do_reduce_labels = False
     do_pad = False  # Set to True for normal, albedo, and pointmap estimation
 
     def __init__(self, **kwargs: Unpack[Sapiens2ImageProcessorKwargs]):
@@ -435,7 +426,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             (top_left_x, top_left_y, width, height). When provided, each person crop is
             affine-warped to the model input size instead of resizing the full image.
         """
-        return super().preprocess(images, segmentation_maps, boxes, **kwargs)
+        return TorchvisionBackend.preprocess(images, segmentation_maps, boxes, **kwargs)
 
     def _preprocess_image_like_inputs(
         self,
@@ -449,45 +440,17 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""
-        images = self._prepare_image_like_inputs(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        kwargs["boxes"] = boxes
+        return super()._preprocess_image_like_inputs(
+            self,
+            images=images,
+            segmentation_maps=segmentation_maps,
+            do_convert_rgb=do_convert_rgb,
+            input_data_format=input_data_format,
+            return_tensors=return_tensors,
+            device=device,
+            **kwargs,
         )
-        images_kwargs = kwargs.copy()
-        images_kwargs["do_reduce_labels"] = False
-        data = {}
-        data["pixel_values"] = self._preprocess(images, boxes=boxes, **images_kwargs)
-
-        if segmentation_maps is not None:
-            processed_segmentation_maps = self._prepare_image_like_inputs(
-                images=segmentation_maps,
-                expected_ndims=2,
-                do_convert_rgb=False,
-                input_data_format=ChannelDimension.FIRST,
-            )
-
-            segmentation_maps_kwargs = kwargs.copy()
-            segmentation_maps_kwargs.update({"do_normalize": False, "do_rescale": False})
-            processed_segmentation_maps = self._preprocess(
-                images=processed_segmentation_maps, **segmentation_maps_kwargs
-            )
-
-            processed_segmentation_maps = [
-                processed_segmentation_map.squeeze(0).to(torch.int64)
-                for processed_segmentation_map in processed_segmentation_maps
-            ]
-            data["labels"] = processed_segmentation_maps
-
-        return BatchFeature(data=data, tensor_type=return_tensors)
-
-    def reduce_label(self, labels: list["torch.Tensor"]) -> list["torch.Tensor"]:
-        """Reduce label values by 1, replacing 0 with 255."""
-        for index in range(len(labels)):
-            label = labels[index]
-            label = torch.where(label == 0, torch.tensor(255, dtype=label.dtype, device=label.device), label)
-            label = label - 1
-            label = torch.where(label == 254, torch.tensor(255, dtype=label.dtype, device=label.device), label)
-            labels[index] = label
-        return labels
 
     def _preprocess(
         self,
@@ -552,10 +515,10 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         outputs: Sapiens2PoseEstimatorOutput,
         boxes: list[list[list[float]]],
         outputs_flipped: Sapiens2PoseEstimatorOutput | None = None,
-        blur_kernel_size: int = 11,
+        kernel_size: int = 11,
         threshold: float | None = None,
-        source_sizes: list[tuple] | None = None,
-        target_sizes: list[tuple] | None = None,
+        source_sizes: TensorType | list[tuple[int, int]] | None = None,
+        target_sizes: TensorType | list[tuple[int, int]] | None = None,
     ) -> list[list[dict[str, torch.Tensor]]]:
         """
         Converts the output of [`Sapiens2ForPoseEstimation`] into keypoint predictions in image space.
@@ -574,7 +537,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 Outputs from running the model on horizontally flipped inputs. When provided, heatmaps
                 are averaged with `outputs` before keypoint extraction to improve accuracy:
                 `avg_heatmaps = (outputs.heatmaps + outputs_flipped.heatmaps) / 2`.
-            blur_kernel_size (`int`, *optional*, defaults to 11):
+            kernel_size (`int`, *optional*, defaults to 11):
                 Kernel size for the Gaussian blur used in UDP Dark Pose refinement.
             threshold (`float`, *optional*):
                 Score threshold. Keypoints with scores at or below this value are
@@ -597,6 +560,11 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             - `bbox` (`torch.FloatTensor` of shape `(4,)`): bounding box in absolute (x_min, y_min, x_max, y_max)
                format, in the same coordinate space as `keypoints`.
         """
+        if isinstance(source_sizes, torch.Tensor):
+            source_sizes = source_sizes.tolist()
+        if isinstance(target_sizes, torch.Tensor):
+            target_sizes = target_sizes.tolist()
+
         num_images = len(boxes)
 
         if target_sizes is not None and source_sizes is None:
@@ -626,7 +594,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         # (num_total_persons, num_keypoints, 2), (num_total_persons, num_keypoints)
         all_keypoints, all_scores = get_keypoint_predictions(heatmaps)
         all_keypoints = post_dark_unbiased_data_processing(
-            keypoints=all_keypoints, heatmaps=heatmaps, blur_kernel_size=blur_kernel_size
+            keypoints=all_keypoints, heatmaps=heatmaps, blur_kernel_size=kernel_size
         )
 
         # Remap coordinates from heatmap space to original image space
@@ -680,52 +648,11 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             person_offset += num_persons_in_image
         return result
 
-    def post_process_semantic_segmentation(
-        self, outputs: SemanticSegmenterOutput, target_sizes: list[tuple] | None = None
-    ) -> list[torch.Tensor]:
-        """
-        Converts the output of [`Sapiens2ForSemanticSegmentation`] into semantic segmentation maps.
-
-        Args:
-            outputs (`SemanticSegmenterOutput`):
-                Raw outputs of the model.
-            target_sizes (`list[tuple]` of length `batch_size`, *optional*):
-                List of tuples corresponding to the requested final size `(height, width)` of each prediction.
-                If unset, predictions will not be resized.
-
-        Returns:
-            `list[torch.Tensor]` of length `batch_size`, where each item is a semantic segmentation map of
-            shape `(height, width)` corresponding to the target size (if `target_sizes` is specified).
-            Each entry corresponds to a semantic class id.
-        """
-        logits = outputs.logits
-
-        if target_sizes is not None:
-            if len(logits) != len(target_sizes):
-                raise ValueError(
-                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
-                )
-
-            semantic_segmentation = []
-            for index in range(len(logits)):
-                resized_logits = F.interpolate(
-                    logits[index].unsqueeze(0),
-                    size=target_sizes[index],
-                    mode="bilinear",
-                    align_corners=False,
-                    antialias=False,
-                )
-                semantic_segmentation.append(resized_logits[0].argmax(dim=0))
-        else:
-            semantic_segmentation = list(logits.argmax(dim=1))
-
-        return semantic_segmentation
-
     def post_process_normal_estimation(
         self,
         outputs: Sapiens2NormalEstimatorOutput,
-        source_sizes: list[tuple] | None = None,
-        target_sizes: list[tuple] | None = None,
+        source_sizes: TensorType | list[tuple[int, int]] | None = None,
+        target_sizes: TensorType | list[tuple[int, int]] | None = None,
         do_remove_padding: bool | None = None,
     ) -> list[dict[str, torch.Tensor]]:
         """
@@ -751,6 +678,11 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             mapping to a tensor of shape `(3, height, width)` with L2-normalized unit vectors in
             `[-1, 1]` per channel (XYZ surface normals).
         """
+        if isinstance(source_sizes, torch.Tensor):
+            source_sizes = source_sizes.tolist()
+        if isinstance(target_sizes, torch.Tensor):
+            target_sizes = target_sizes.tolist()
+
         if do_remove_padding is None:
             do_remove_padding = source_sizes is not None
 
@@ -808,8 +740,8 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
     def post_process_pointmap(
         self,
         outputs: Sapiens2PointmapEstimatorOutput,
-        source_sizes: list[tuple] | None = None,
-        target_sizes: list[tuple] | None = None,
+        source_sizes: TensorType | list[tuple[int, int]] | None = None,
+        target_sizes: TensorType | list[tuple[int, int]] | None = None,
         do_remove_padding: bool | None = None,
     ) -> list[dict[str, torch.Tensor]]:
         """
@@ -834,6 +766,11 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             mapping to a tensor of shape `(3, height, width)` with per-pixel 3D XYZ coordinates in
             canonical camera space, optionally divided by `outputs.scales` to convert to metric coordinates.
         """
+        if isinstance(source_sizes, torch.Tensor):
+            source_sizes = source_sizes.tolist()
+        if isinstance(target_sizes, torch.Tensor):
+            target_sizes = target_sizes.tolist()
+
         if do_remove_padding is None:
             do_remove_padding = source_sizes is not None
 
@@ -892,7 +829,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
     def post_process_matting(
         self,
         outputs: Sapiens2MattingOutput,
-        target_sizes: list[tuple] | None = None,
+        target_sizes: TensorType | list[tuple[int, int]] | None = None,
         backgrounds: ImageInput | None = None,
     ) -> list[dict[str, torch.Tensor]]:
         """
@@ -918,6 +855,9 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             - `"composite"` (`torch.Tensor` of shape `(3, height, width)` or `None`): foreground composited
               over `backgrounds` as a uint8 tensor in `[0, 255]`; `None` when `backgrounds` is not provided.
         """
+        if isinstance(target_sizes, torch.Tensor):
+            target_sizes = target_sizes.tolist()
+
         matting = torch.cat([outputs.foregrounds, outputs.alphas], dim=1)  # (B, 4, H, W)
 
         if target_sizes is not None:
