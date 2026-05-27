@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-04-23 and added to Hugging Face Transformers on 2026-05-25.*
+*This model was released on 2026-04-23 and added to Hugging Face Transformers on 2026-05-27.*
 
 
 # Sapiens2
@@ -56,16 +56,15 @@ The example below shows how to obtain image features with [`Sapiens2Model`].
 
 ```python
 import torch
-from transformers import Sapiens2ImageProcessor, Sapiens2Model
+from transformers import AutoImageProcessor, AutoModel
 from transformers.image_utils import load_image
 
-url = "http://images.cocodataset.org/val2017/000000004016.jpg"
-image = load_image(url)
+image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
 
-image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision="refs/pr/1")
-model = Sapiens2Model.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision="refs/pr/1")
+image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision="refs/pr/1")
+model = AutoModel.from_pretrained("facebook/sapiens2-pretrain-0.4b", device_map="auto", revision="refs/pr/1")
 
-inputs = image_processor(images=image, return_tensors="pt")
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 with torch.inference_mode():
     outputs = model(**inputs)
 
@@ -90,16 +89,15 @@ The output normals are raw (unnormalized); use `post_process_normal_estimation` 
 
 ```python
 import torch
-from transformers import Sapiens2ImageProcessor, Sapiens2ForNormalEstimation
+from transformers import AutoImageProcessor, Sapiens2ForNormalEstimation
 from transformers.image_utils import load_image
 
-url = "http://images.cocodataset.org/val2017/000000004016.jpg"
-image = load_image(url)
+image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
 
-image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-normal-0.4b", revision="refs/pr/1")
-model = Sapiens2ForNormalEstimation.from_pretrained("facebook/sapiens2-normal-0.4b", revision="refs/pr/1")
+image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-normal-0.4b", revision="refs/pr/1")
+model = Sapiens2ForNormalEstimation.from_pretrained("facebook/sapiens2-normal-0.4b", device_map="auto", revision="refs/pr/1")
 
-inputs = image_processor(image, return_tensors="pt")
+inputs = image_processor(image, return_tensors="pt").to(model.device)
 with torch.inference_mode():
     outputs = model(**inputs)
 
@@ -113,6 +111,16 @@ result = image_processor.post_process_normal_estimation(
 )
 normals = result[0]["normals"]
 print("Normals shape:", normals.shape)   # [3, original_height, original_width]
+
+# Convert L2-normalized normals in [-1, 1] to RGB in [0, 255]
+normals_rgb = ((normals + 1.0) / 2.0 * 255.0).clamp(0, 255).to(torch.uint8)
+
+# Apply background removal using the segmentation model output.
+# `segmentation` is the output of `post_process_semantic_segmentation` — a (H, W) tensor
+# of per-pixel class IDs, where class 0 is background.
+background_mask = segmentation == 0
+normals_rgb[:, background_mask] = 0
+print("Normals RGB shape:", normals_rgb.shape)   # [3, original_height, original_width]
 ```
 
 ### Pointmap estimation
@@ -122,16 +130,15 @@ Use `post_process_pointmap` to remove preprocessing padding, resize to the origi
 
 ```python
 import torch
-from transformers import Sapiens2ImageProcessor, Sapiens2ForPointmapEstimation
+from transformers import AutoImageProcessor, Sapiens2ForPointmapEstimation
 from transformers.image_utils import load_image
 
-url = "http://images.cocodataset.org/val2017/000000004016.jpg"
-image = load_image(url)
+image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
 
-image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-pointmap-0.4b", revision="refs/pr/1")
-model = Sapiens2ForPointmapEstimation.from_pretrained("facebook/sapiens2-pointmap-0.4b", revision="refs/pr/1")
+image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pointmap-0.4b", revision="refs/pr/1")
+model = Sapiens2ForPointmapEstimation.from_pretrained("facebook/sapiens2-pointmap-0.4b", device_map="auto", revision="refs/pr/1")
 
-inputs = image_processor(image, return_tensors="pt")
+inputs = image_processor(image, return_tensors="pt").to(model.device)
 with torch.inference_mode():
     outputs = model(**inputs)
 
@@ -145,6 +152,26 @@ result = image_processor.post_process_pointmap(
 )
 pointmap = result[0]["pointmap"]
 print("Pointmap shape:", pointmap.shape)  # [3, original_height, original_width]
+
+# Visualize the pointmap as an RGB image using inverse-depth and the turbo colormap.
+import matplotlib.pyplot as plt
+
+# `segmentation` is the output of `post_process_semantic_segmentation` — a (H, W) tensor
+# of per-pixel class IDs, where class 0 is background.
+foreground_mask = segmentation != 0
+depth = pointmap[2]  # Z channel: depth in camera space, shape (H, W)
+pointmap_rgb = torch.zeros(3, *depth.shape, dtype=torch.uint8)
+foreground_depth = depth[foreground_mask]
+if foreground_depth.numel() > 0:
+    depth_low, depth_high = torch.quantile(foreground_depth, torch.tensor([0.01, 0.99]))
+    inverse_depth = 1.0 / foreground_depth.clamp(min=1e-6)
+    inverse_depth_low = 1.0 / depth_high.clamp(min=1e-6)
+    inverse_depth_high = 1.0 / depth_low.clamp(min=1e-6)
+    inverse_depth_normalized = ((inverse_depth - inverse_depth_low) / (inverse_depth_high - inverse_depth_low + 1e-8)).clamp(0, 1)
+    turbo = plt.get_cmap("turbo")
+    foreground_colors = torch.from_numpy(turbo(inverse_depth_normalized.cpu().numpy())[..., :3] * 255).to(torch.uint8)  # (N, 3)
+    pointmap_rgb[:, foreground_mask] = foreground_colors.T
+print("Pointmap RGB shape:", pointmap_rgb.shape)  # [3, original_height, original_width]
 ```
 
 ### Pose estimation
@@ -155,18 +182,17 @@ image-space keypoint coordinates. It requires `opencv-python` (`pip install open
 
 ```python
 import torch
-from transformers import Sapiens2ImageProcessor, Sapiens2ForPoseEstimation
+from transformers import AutoImageProcessor, Sapiens2ForPoseEstimation
 from transformers.image_utils import load_image
 
-url = "http://images.cocodataset.org/val2017/000000004016.jpg"
-image = load_image(url)
+image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
 
-image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-pose-0.4b", revision="refs/pr/1")
-model = Sapiens2ForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", revision="refs/pr/1")
+image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pose-0.4b", revision="refs/pr/1")
+model = Sapiens2ForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", device_map="auto", revision="refs/pr/1")
 
 # Provide bounding boxes in COCO format (x, y, width, height) for each person
 boxes = [[[270.8, 0.6, 294.1, 379.5]]]
-inputs = image_processor(image, boxes=boxes, return_tensors="pt")
+inputs = image_processor(image, boxes=boxes, return_tensors="pt").to(model.device)
 with torch.inference_mode():
     outputs = model(**inputs)
 
@@ -189,20 +215,19 @@ back to the original orientation before returning them, so you can average both 
 
 ```python
 import torch
-from transformers import Sapiens2ImageProcessor, Sapiens2ForPoseEstimation
+from transformers import AutoImageProcessor, Sapiens2ForPoseEstimation
 from transformers.image_utils import load_image
 
-url = "http://images.cocodataset.org/val2017/000000004016.jpg"
-image = load_image(url)
+image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
 
-image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-pose-0.4b", revision="refs/pr/1")
-model = Sapiens2ForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", revision="refs/pr/1")
+image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pose-0.4b", revision="refs/pr/1")
+model = Sapiens2ForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", device_map="auto", revision="refs/pr/1")
 
 boxes = [[[270.8, 0.6, 294.1, 379.5]]]
-inputs = image_processor(image, boxes=boxes, return_tensors="pt")
+inputs = image_processor(image, boxes=boxes, return_tensors="pt").to(model.device)
 pixel_values = inputs["pixel_values"]
 
-flip_pairs = torch.tensor(model.config.flip_pairs)
+flip_pairs = torch.tensor(model.config.flip_pairs, device=model.device)
 
 with torch.inference_mode():
     outputs = model(pixel_values)
@@ -219,16 +244,15 @@ The example below shows how to perform body-part segmentation with [`Sapiens2For
 
 ```python
 import torch
-from transformers import Sapiens2ImageProcessor, Sapiens2ForSemanticSegmentation
+from transformers import AutoImageProcessor, AutoModelForSemanticSegmentation
 from transformers.image_utils import load_image
 
-url = "http://images.cocodataset.org/val2017/000000004016.jpg"
-image = load_image(url)
+image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
 
-image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-seg-0.4b", revision="refs/pr/1")
-model = Sapiens2ForSemanticSegmentation.from_pretrained("facebook/sapiens2-seg-0.4b", revision="refs/pr/1")
+image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-seg-0.4b", revision="refs/pr/1")
+model = AutoModelForSemanticSegmentation.from_pretrained("facebook/sapiens2-seg-0.4b", device_map="auto", revision="refs/pr/1")
 
-inputs = image_processor(image, return_tensors="pt")
+inputs = image_processor(image, return_tensors="pt").to(model.device)
 with torch.inference_mode():
     outputs = model(**inputs)
 
@@ -252,16 +276,15 @@ the foreground overlaid over the background with the formula: `composite = foreg
 
 ```python
 import torch
-from transformers import Sapiens2ImageProcessor, Sapiens2ForMatting
+from transformers import AutoImageProcessor, Sapiens2ForMatting
 from transformers.image_utils import load_image
 
-url = "http://images.cocodataset.org/val2017/000000004016.jpg"
-image = load_image(url)
+image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
 
-image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-matting-1b", revision="refs/pr/1")
-model = Sapiens2ForMatting.from_pretrained("facebook/sapiens2-matting-1b", revision="refs/pr/1")
+image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-matting-1b", revision="refs/pr/1")
+model = Sapiens2ForMatting.from_pretrained("facebook/sapiens2-matting-1b", device_map="auto", revision="refs/pr/1")
 
-inputs = image_processor(image, return_tensors="pt")
+inputs = image_processor(image, return_tensors="pt").to(model.device)
 with torch.inference_mode():
     outputs = model(**inputs)
 
@@ -287,11 +310,11 @@ print("Composite shape:", result["composite"].shape)    # [3, original_height, o
 
 [[autodoc]] Sapiens2ImageProcessor
     - preprocess
-    - post_process_pose_estimation
-    - post_process_semantic_segmentation
+    - post_process_matting
     - post_process_normal_estimation
     - post_process_pointmap
-    - post_process_matting
+    - post_process_pose_estimation
+    - post_process_semantic_segmentation
 
 ## Sapiens2Model
 
