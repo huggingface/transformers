@@ -4188,6 +4188,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if distributed_config is not None:
             device_mesh = init_device_mesh(distributed_config)
+            # When using any distributed setup, we simply set the device_map here to the current rank so that we correctly
+            # load the params on the right device
+            if device_mesh.device_type == "cpu":
+                device_map = {"": torch.device("cpu")}
+            else:
+                device_map = {"": torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))}
         else:
             # Accelerate path
             if device_map == "auto" and int(os.environ.get("WORLD_SIZE", "0")):
@@ -4341,11 +4347,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
         if distributed_config is not None:
+            # Tie weights before sharding so `apply_fully_shard_data_parallel` /
+            # `apply_tensor_parallel` see the shared-parameter graph and can route tied
+            # entries (e.g. `lm_head` -> `embed_tokens`) correctly. `_finalize_model_loading`
+            # re-runs `tie_weights` after the checkpoint is loaded to handle missing-key edge cases.
+            model.tie_weights()
             model = distribute_model(model, distributed_config, device_mesh)
-        else:
-            # Accelerate path: auto device mapping
-            if device_map is not None:
-                device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
+        elif device_map is not None:
+            # Expand device_map if it was passed as a `str`, i.e. `device_map="auto"`
+            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
 
         # Finalize model weight initialization
         active_tp_plan = (
@@ -4907,7 +4917,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         later as they will be tied (overwritten) anyway.
         This is very important as most embeddings are tied, and they are huge params (vocabularies are often 256k), so
         running inits on them is very costly."""
-        for tied_param in self.all_tied_weights_keys.keys():
+        for tied_param in getattr(self, "all_tied_weights_keys", {}).keys():
             param = self.get_parameter(tied_param)
             setattr(param, "_is_hf_initialized", True)
 

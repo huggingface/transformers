@@ -44,7 +44,7 @@ class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class ParakeetProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer, blank_token="<blank>"):
-        """
+        r"""
         blank_token (`str`, *optional*, defaults to `"<blank>"`):
             Blank token for TDT decoding.
         """
