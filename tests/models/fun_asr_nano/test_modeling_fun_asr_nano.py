@@ -30,7 +30,7 @@ if is_torch_available():
 
 class FunAsrNanoModelTester(ALMModelTester):
     config_class = FunAsrNanoConfig
-    conditional_generation_class = FunAsrNanoForConditionalGeneration if is_torch_available() else None
+    conditional_generation_class = FunAsrNanoForConditionalGeneration
     text_config_class = None  # will use auto
     audio_config_class = FunAsrNanoEncoderConfig
     audio_config_key = "audio_encoder_config"
