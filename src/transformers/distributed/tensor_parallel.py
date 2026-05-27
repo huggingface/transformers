@@ -145,6 +145,15 @@ def _swap_dtensor_params_for_local(module):
             module.register_parameter(name, param)
 
 # Below are all the TP styles that are supported by the transformers library
+def matches_desired_layout(dtensor: DTensor, desired_layout: tuple[Placement, ...]) -> bool:
+    """Checks if two placements are equivalent, including the case of a desired Shard with dim < 0."""
+    for p, dp in zip(dtensor.placements, desired_layout, strict=True):
+        if isinstance(dp, Shard) and dp.dim < 0:
+            dp = Shard(dp.dim + dtensor.ndim)
+        if p != dp:
+            return False
+    return True
+
 class TensorParallelMixin:
     """Base class for transformers TP styles, which turn a module into a TP-aware module through the "make_tp_aware"
     method, which does the following:
@@ -211,24 +220,11 @@ class LayoutAwareTPMixin(TensorParallelMixin):
     where the pre-forward and post-forward transformations are necessary to ensure the input and output are in the
     correct layouts."""
 
-    assumed_input_layout: tuple[Placement, ...] = ()
-    desired_input_layout: tuple[Placement, ...] = ()
-    assumed_output_layout: tuple[Placement, ...] = ()
-    desired_output_layout: tuple[Placement, ...] = ()  # can be left empty if not needed
+    assumed_input_layout: tuple[Placement, ...]
+    desired_input_layout: tuple[Placement, ...]
+    assumed_output_layout: tuple[Placement, ...]
+    desired_output_layout: tuple[Placement, ...]  # can be left empty if not needed
     return_plain_output: bool = True
-
-    def __post_init__(self) -> None:
-        """Checks the mixin was properly initialized. This is done as a post-init so that each subclass can have their
-        own __init__ signature."""
-        errors = []
-        if not isinstance(self.assumed_input_layout, tuple) or len(self.assumed_input_layout) == 0:
-            errors.append(f"{self.assumed_input_layout = }")
-        if not isinstance(self.desired_input_layout, tuple) or len(self.desired_input_layout) == 0:
-            errors.append(f"{self.desired_input_layout = }")
-        if not isinstance(self.assumed_output_layout, tuple) or len(self.assumed_output_layout) == 0:
-            errors.append(f"{self.assumed_output_layout = }")
-        if errors:
-            raise ValueError(f"These mandatory layouts should be non-empty tuples: {', '.join(errors)}")
 
     def transform_inputs_pre_forward(
         self, module: torch.nn.Module, args: tuple, kwargs: dict, tp_mesh: DeviceMesh
@@ -237,7 +233,7 @@ class LayoutAwareTPMixin(TensorParallelMixin):
         x = args[0]
         if not isinstance(x, DTensor):
             x = DTensor.from_local(x, tp_mesh, self.assumed_input_layout, run_check=False)
-        if x.placements != self.desired_input_layout:
+        if not matches_desired_layout(x, self.desired_input_layout):
             x = x.redistribute(placements=self.desired_input_layout, async_op=True)
         return (x,) + args[1:], kwargs
 
@@ -253,14 +249,14 @@ class LayoutAwareTPMixin(TensorParallelMixin):
         if self.desired_output_layout:
             if not isinstance(output, DTensor):
                 output = DTensor.from_local(output, tp_mesh, self.assumed_output_layout, run_check=False)
-            if output.placements != self.desired_output_layout:
+            if not matches_desired_layout(output, self.desired_output_layout):
                 output = output.redistribute(placements=self.desired_output_layout, async_op=True)
 
         # If we are returning a plain tensor, we need to convert the output to a plain tensor
         if self.return_plain_output and isinstance(output, DTensor):
-            return output.to_local()
-        if not self.return_plain_output and not isinstance(output, DTensor):
-            return DTensor.from_local(output, tp_mesh, self.assumed_output_layout, run_check=False)
+            output = output.to_local()
+        elif not self.return_plain_output and not isinstance(output, DTensor):
+            output = DTensor.from_local(output, tp_mesh, self.assumed_output_layout, run_check=False)
         return output
 
 
@@ -371,8 +367,8 @@ class RowwiseParallel(LayoutAwareTPMixin):
 
     def __init__(
         self,
-        assumed_input_layout: tuple[Placement, ...] | None = None,
-        desired_output_layout: tuple[Placement, ...] | None = None,
+        assumed_input_layout: tuple[Placement, ...] = (Shard(-1),),
+        desired_output_layout: tuple[Placement, ...] = (Replicate(),),
         return_plain_output: bool = True,
     ) -> None:
         """Initializes the RowwiseParallel style with:
@@ -381,10 +377,10 @@ class RowwiseParallel(LayoutAwareTPMixin):
         - desired_output_layout: the layout imposed on the output. Defaults to `Replicate()`.
         - return_plain_output: If True, the output is a plain tensor instead of a DTensor.
         """
-        self.assumed_input_layout = (Shard(-1),) if assumed_input_layout is None else assumed_input_layout
+        self.assumed_input_layout = assumed_input_layout
         self.desired_input_layout = (Placement(),)  # placeholder for the __post_init__ check, will be set later
-        self.assumed_output_layout = (Partial(-1),)
-        self.desired_output_layout = (Replicate(),) if desired_output_layout is None else desired_output_layout
+        self.assumed_output_layout = (Partial("sum"),)
+        self.desired_output_layout = desired_output_layout
         self.return_plain_output = return_plain_output
 
     def shard_meta_params(self, module: torch.nn.Module, tp_mesh: DeviceMesh) -> torch.nn.Module:
