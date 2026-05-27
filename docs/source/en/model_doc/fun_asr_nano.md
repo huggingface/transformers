@@ -73,6 +73,14 @@ print(text)
 
 [[autodoc]] FunAsrNanoEncoderConfig
 
+## FunAsrNanoAdaptorConfig
+
+[[autodoc]] FunAsrNanoAdaptorConfig
+
+## FunAsrNanoCtcConfig
+
+[[autodoc]] FunAsrNanoCtcConfig
+
 ## FunAsrNanoFeatureExtractor
 
 [[autodoc]] FunAsrNanoFeatureExtractor
