@@ -1353,12 +1353,6 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     def get_vision_position_ids(
         self,
         start_position: int,
@@ -1805,8 +1799,10 @@ def load_balancing_loss_func(
 @auto_docstring
 class Qwen3_5MoeForCausalLM(Qwen3_5MoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _tp_plan = {"lm_head": "colwise_allgather"}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     config: Qwen3_5MoeTextConfig
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
 
@@ -1912,7 +1908,9 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMi
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Qwen3_5MoeConfig
-    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _tp_plan = {"lm_head": "colwise_allgather"}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -1920,12 +1918,6 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMi
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     @auto_docstring
     def get_video_features(

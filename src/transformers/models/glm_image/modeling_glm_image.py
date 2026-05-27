@@ -924,12 +924,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     def get_vision_position_ids(
         self,
         start_position: int,

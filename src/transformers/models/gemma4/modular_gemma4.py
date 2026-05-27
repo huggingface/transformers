@@ -1203,7 +1203,12 @@ class Gemma4TextScaledWordEmbedding(Gemma3TextScaledWordEmbedding):
 
 
 class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
-    _no_split_modules = ["Gemma4TextDecoderLayer", "Gemma4VisionEncoderLayer", "Gemma4AudioLayer"]
+    _no_split_modules = [
+        "Gemma4TextDecoderLayer",
+        "Gemma4VisionEncoderLayer",
+        "Gemma4VisionPatchEmbedder",
+        "Gemma4AudioLayer",
+    ]
     input_modalities = ("image", "text", "video", "audio")
     _can_record_outputs = None  # override
 
@@ -1409,6 +1414,9 @@ class Gemma4TextModel(Gemma3TextModel):
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if input_ids is not None and per_layer_inputs is not None:
+            raise ValueError("You cannot specify per_layer_inputs if input_ids is provided")
 
         if input_ids is not None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -1766,9 +1774,9 @@ def token_type_ids_mask_function(
     return inner_mask
 
 
-def get_block_sequence_ids_for_mask(
-    mm_token_type_ids: torch.Tensor, device: torch.device | None = None
-) -> torch.Tensor:
+def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: torch.device) -> torch.Tensor:
+    mm_token_type_ids = mm_token_type_ids.to(device)
+
     is_vision = (mm_token_type_ids == 1) | (mm_token_type_ids == 2)
     is_prev_vision = torch.roll(is_vision, shifts=1, dims=-1)
     is_prev_vision[..., 0] = False
@@ -1936,6 +1944,9 @@ class Gemma4Model(Gemma3nModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if input_ids is not None and per_layer_inputs is not None:
+            raise ValueError("You cannot specify per_layer_inputs if input_ids is provided")
+
         image_mask, video_mask, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds)
         multimodal_mask = image_mask | video_mask | audio_mask
 
@@ -1943,7 +1954,7 @@ class Gemma4Model(Gemma3nModel):
         llm_input_ids = None
         if inputs_embeds is None:
             llm_input_ids = input_ids.clone()
-            llm_input_ids[multimodal_mask] = self.config.text_config.pad_token_id
+            llm_input_ids = torch.where(multimodal_mask, self.config.text_config.pad_token_id, llm_input_ids)
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if per_layer_inputs is None and self.config.get_text_config().hidden_size_per_layer_input:
@@ -1998,7 +2009,7 @@ class Gemma4Model(Gemma3nModel):
             # Strip padding tokens: only keep real (non-padding) audio soft tokens.
             # audio_mask_from_encoder is True for valid positions, False for padding tokens.
             # This mirrors the vision encoder's padding stripping (see Gemma4VisionEncoder.forward).
-            audio_features = audio_features[audio_mask_from_encoder]
+            audio_features = audio_features[audio_mask_from_encoder.to(audio_features.device)]
 
             n_audio_tokens = audio_mask.sum()
             audio_mask = audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
@@ -2032,7 +2043,9 @@ class Gemma4Model(Gemma3nModel):
             if self.config.get_text_config().use_bidirectional_attention == "vision":
                 block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
                 if mm_token_type_ids is not None:
-                    block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids)
+                    block_sequence_ids = get_block_sequence_ids_for_mask(
+                        mm_token_type_ids, device=inputs_embeds.device
+                    )
 
                 mask_kwargs["block_sequence_ids"] = block_sequence_ids
 
@@ -2219,7 +2232,7 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
         if getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision":
             block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
             if mm_token_type_ids is not None:
-                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids)
+                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
 
             mask_kwargs["block_sequence_ids"] = block_sequence_ids
 
@@ -2266,6 +2279,10 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
         else:
             # Don't pass to not apply bidirectional mask on top
             model_inputs["mm_token_type_ids"] = None
+
+        # If `per_layer_inputs` was provided along with `inputs_embeds` for first forward, drop it for subsequent forwards
+        if not is_first_iteration:
+            _ = model_inputs.pop("per_layer_inputs", None)
 
         return model_inputs
 
