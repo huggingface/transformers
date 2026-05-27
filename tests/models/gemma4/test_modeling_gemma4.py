@@ -141,6 +141,21 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
+ 
+    def test_all_bidirectional_attention_uses_bidirectional_mask(self):
+        self.model_tester.use_bidirectional_attention = "all"
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config._attn_implementation = "eager"
+
+        model = Gemma4TextModel(config).to(torch_device)
+        model.eval()
+
+        input_ids = inputs_dict["input_ids"][:1]
+        with torch.no_grad():
+            out = model(input_ids=input_ids, output_attentions=True)
+
+        for attention in out.attentions:
+            self.assertTrue((attention[..., :4, :4] != 0).all().item())
 
     def test_model_training(self):
         pass
