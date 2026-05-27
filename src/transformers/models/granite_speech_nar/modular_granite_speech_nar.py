@@ -628,6 +628,8 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
         )
 
         all_logits = self.lm_head(model_out.last_hidden_state)
+        if hasattr(self.config.text_config, "logits_scaling"):
+            all_logits = all_logits / self.config.text_config.logits_scaling
 
         audio_lengths = model_out.audio_lengths
         text_lengths = model_out.text_lengths
