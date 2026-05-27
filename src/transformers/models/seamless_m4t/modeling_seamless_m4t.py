@@ -76,7 +76,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-
 SEAMLESS_M4T_COMMON_CUSTOM_ARGS = r"""
     input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
         Input audio features. This should be returned by the [`SeamlessM4TFeatureExtractor`] class or the
