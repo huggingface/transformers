@@ -128,9 +128,9 @@ class HyperCLOVAXVisionV2Processor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        # HyperCLOVAX Vision V2 does not use second_per_grid_ts (no temporal RoPE) or mm_token_type_ids
+        # HyperCLOVAX Vision V2 does not use second_per_grid_ts (no temporal RoPE)
         names = super().model_input_names
-        return [n for n in names if n not in ("second_per_grid_ts", "mm_token_type_ids")]
+        return [n for n in names if n not in ("second_per_grid_ts")]
 
     def _process_videos(self, videos: VideoInput, **kwargs):
         processed_data, video_replacements = super()._process_videos(videos, **kwargs)

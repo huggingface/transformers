@@ -28,9 +28,6 @@ HyperCLOVAX Vision V2 is a multimodal vision-language model developed by NAVER. 
 
 You can find the original HyperCLOVAX-SEED-Think-32B checkpoint on the [naver-hyperclovax/HyperCLOVAX-SEED-Think-32B](https://huggingface.co/naver-hyperclovax/HyperCLOVAX-SEED-Think-32B) page.
 
-> [!TIP]
-> The `model_type` in the released checkpoint's `config.json` is `"vlm"`, while the Transformers implementation registers this model as `"hyperclovax_vision_v2"`. Due to this mismatch, loading via `AutoModel` or `AutoModelForCausalLM` is not supported. Use the model class directly as shown in the examples below.
-
 The example below demonstrates how to generate text based on an image with [`HyperCLOVAXVisionV2ForConditionalGeneration`].
 
 <hfoptions id="usage">
@@ -237,21 +234,6 @@ processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/Hype
         return_dict=True,
         return_tensors="pt",
     ).to(model.device)
-    ```
-
-- For text-only inference with the HyperCLOVAX language model backbone, use [`HyperCLOVAXForCausalLM`]:
-
-    ```python
-    from transformers import HyperCLOVAXForCausalLM, AutoTokenizer
-
-    tokenizer = AutoTokenizer.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
-    model = HyperCLOVAXForCausalLM.from_pretrained(
-        "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
-        device_map="auto",
-    )
-    inputs = tokenizer("HyperCLOVAX is", return_tensors="pt").to(model.device)
-    output = model.generate(**inputs, max_new_tokens=50)
-    print(tokenizer.decode(output[0], skip_special_tokens=True))
     ```
 
 ## HyperCLOVAXVisionV2Config

@@ -28,15 +28,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @strict
 class HyperCLOVAXVisionV2Config(PreTrainedConfig):
     r"""
-    text_config (`dict` or [`HyperCLOVAXConfig`], *optional*):
-        Configuration for the LLM backbone. Defaults to [`HyperCLOVAXConfig`].
-    vision_config (`dict` or config, *optional*):
-        Configuration for the vision encoder. Defaults to [`Qwen2_5_VLVisionConfig`].
-    image_token_id (`int`, *optional*, defaults to 128060):
-        Token ID used as a placeholder for image patches in the input sequence.
-    video_token_id (`int`, *optional*, defaults to 128061):
-        Token ID used as a placeholder for video patches in the input sequence.
-
     ```python
     >>> from transformers import HyperCLOVAXVisionV2Config, HyperCLOVAXVisionV2ForConditionalGeneration
 

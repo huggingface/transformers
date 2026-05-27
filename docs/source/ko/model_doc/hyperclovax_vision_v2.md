@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-05-11.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2026-05-26.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -29,22 +28,19 @@ HyperCLOVAX Vision V2는 NAVER가 개발한 비전-언어 멀티모달 모델입
 
 원본 HyperCLOVAX-SEED-Think-32B 체크포인트는 [naver-hyperclovax/HyperCLOVAX-SEED-Think-32B](https://huggingface.co/naver-hyperclovax/HyperCLOVAX-SEED-Think-32B) 페이지에서 확인할 수 있습니다.
 
-> [!팁]
-> 릴리스된 체크포인트의 `config.json`에 있는 `model_type`은 `"vlm"`인 반면, Transformers 구현에서는 이 모델을 `"hyperclovax_vision_v2"`로 등록합니다. 이 불일치로 인해 `AutoModel` 또는 `AutoModelForCausalLM`을 통한 로딩은 지원되지 않습니다. 아래 예시와 같이 모델 클래스를 직접 사용하세요.
-
-아래 예시는 [`HCXVisionV2ForConditionalGeneration`]을 사용하여 이미지를 기반으로 텍스트를 생성하는 방법을 보여줍니다.
+아래 예시는 [`HyperCLOVAXVisionV2ForConditionalGeneration`]을 사용하여 이미지를 기반으로 텍스트를 생성하는 방법을 보여줍니다.
 
 <hfoptions id="usage">
 <hfoption id="이미지 입력">
 
 ```python
-from transformers import HCXVisionV2ForConditionalGeneration, HCXVisionV2Processor
+from transformers import HyperCLOVAXVisionV2ForConditionalGeneration, HyperCLOVAXVisionV2Processor
 
-model = HCXVisionV2ForConditionalGeneration.from_pretrained(
+model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
     device_map="auto",
 )
-processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 
 messages = [
     {
@@ -85,13 +81,13 @@ print(output_text)
 <hfoption id="비디오 입력">
 
 ```python
-from transformers import HCXVisionV2ForConditionalGeneration, HCXVisionV2Processor
+from transformers import HyperCLOVAXVisionV2ForConditionalGeneration, HyperCLOVAXVisionV2Processor
 
-model = HCXVisionV2ForConditionalGeneration.from_pretrained(
+model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
     device_map="auto",
 )
-processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 
 messages = [
     {
@@ -142,15 +138,15 @@ print(output_text)
 아래 예시는 [bitsandbytes](../quantization/bitsandbytes)를 사용하여 모델을 4-bit로 로드합니다.
 
 ```python
-from transformers import BitsAndBytesConfig, HCXVisionV2ForConditionalGeneration, HCXVisionV2Processor
+from transformers import BitsAndBytesConfig, HyperCLOVAXVisionV2ForConditionalGeneration, HyperCLOVAXVisionV2Processor
 
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
-model = HCXVisionV2ForConditionalGeneration.from_pretrained(
+model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
     device_map="auto",
     quantization_config=quantization_config,
 )
-processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+processor = HyperCLOVAXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 ```
 
 ## 노트 [[notes]]
@@ -240,45 +236,30 @@ processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-
     ).to(model.device)
     ```
 
-- HyperCLOVAX 언어 모델 백본만을 사용한 텍스트 전용 추론에는 [`HyperCLOVAXForCausalLM`]을 사용하세요:
+## HyperCLOVAXVisionV2Config
 
-    ```python
-    from transformers import HyperCLOVAXForCausalLM, AutoTokenizer
+[[autodoc]] HyperCLOVAXVisionV2Config
 
-    tokenizer = AutoTokenizer.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
-    model = HyperCLOVAXForCausalLM.from_pretrained(
-        "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
-        device_map="auto",
-    )
-    inputs = tokenizer("HyperCLOVAX는", return_tensors="pt").to(model.device)
-    output = model.generate(**inputs, max_new_tokens=50)
-    print(tokenizer.decode(output[0], skip_special_tokens=True))
-    ```
+## HyperCLOVAXVisionV2Processor
 
-## HCXVisionV2Config
-
-[[autodoc]] HCXVisionV2Config
-
-## HCXVisionV2Processor
-
-[[autodoc]] HCXVisionV2Processor
+[[autodoc]] HyperCLOVAXVisionV2Processor
     - __call__
 
-## HCXVisionV2Model
+## HyperCLOVAXVisionV2Model
 
-[[autodoc]] HCXVisionV2Model
+[[autodoc]] HyperCLOVAXVisionV2Model
     - forward
     - get_image_features
     - get_video_features
 
-## HCXVisionV2ForConditionalGeneration
+## HyperCLOVAXVisionV2ForConditionalGeneration
 
-[[autodoc]] HCXVisionV2ForConditionalGeneration
+[[autodoc]] HyperCLOVAXVisionV2ForConditionalGeneration
     - forward
     - get_image_features
     - get_video_features
 
-## HCXVisionV2ForSequenceClassification
+## HyperCLOVAXVisionV2ForSequenceClassification
 
-[[autodoc]] HCXVisionV2ForSequenceClassification
+[[autodoc]] HyperCLOVAXVisionV2ForSequenceClassification
     - forward

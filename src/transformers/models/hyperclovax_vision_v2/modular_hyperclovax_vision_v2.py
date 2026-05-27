@@ -41,15 +41,6 @@ logger = logging.get_logger(__name__)
 @strict
 class HyperCLOVAXVisionV2Config(PreTrainedConfig):
     r"""
-    text_config (`dict` or [`HyperCLOVAXConfig`], *optional*):
-        Configuration for the LLM backbone. Defaults to [`HyperCLOVAXConfig`].
-    vision_config (`dict` or config, *optional*):
-        Configuration for the vision encoder. Defaults to [`Qwen2_5_VLVisionConfig`].
-    image_token_id (`int`, *optional*, defaults to 128060):
-        Token ID used as a placeholder for image patches in the input sequence.
-    video_token_id (`int`, *optional*, defaults to 128061):
-        Token ID used as a placeholder for video patches in the input sequence.
-
     ```python
     >>> from transformers import HyperCLOVAXVisionV2Config, HyperCLOVAXVisionV2ForConditionalGeneration
 
@@ -101,9 +92,9 @@ class HyperCLOVAXVisionV2Config(PreTrainedConfig):
 class HyperCLOVAXVisionV2Processor(Exaone4_5_Processor):
     @property
     def model_input_names(self):
-        # HyperCLOVAX Vision V2 does not use second_per_grid_ts (no temporal RoPE) or mm_token_type_ids
+        # HyperCLOVAX Vision V2 does not use second_per_grid_ts (no temporal RoPE)
         names = super().model_input_names
-        return [n for n in names if n not in ("second_per_grid_ts", "mm_token_type_ids")]
+        return [n for n in names if n not in ("second_per_grid_ts")]
 
 
 @auto_docstring
