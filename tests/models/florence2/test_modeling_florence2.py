@@ -461,12 +461,22 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         predictions = model.generate(**inputs, do_sample=False, max_new_tokens=100)
 
-        EXPECTED_PREDICTION_IDS = [[2, 0, 133, 2274, 924, 10, 909, 512, 1428, 159, 10, 2014, 9321, 19, 6764, 3413, 4, 96, 5, 39299, 6, 89, 16, 10, 1275, 912, 1203, 2828, 15, 5, 526, 9, 5, 921, 6, 8, 11, 5, 3618, 6, 89, 32, 1104, 19638, 6, 3980, 6, 8, 10, 699, 2440, 6360, 4, 2]]  # fmt: skip
+        EXPECTED_PREDICTION_IDS = Expectations(
+            {
+                (None, None): [[2, 0, 133, 2274, 924, 10, 909, 512, 1428, 159, 10, 2014, 9321, 19, 6764, 3413, 4, 96, 5, 39299, 6, 89, 16, 10, 1275, 912, 1203, 2828, 15, 5, 526, 9, 5, 921, 6, 8, 11, 5, 3618, 6, 89, 32, 1104, 19638, 6, 3980, 6, 8, 10, 699, 2440, 6360, 4, 2]],
+                ("xpu", 5): [[2, 0, 133, 2274, 924, 10, 909, 512, 1428, 159, 10, 2014, 9321, 19, 6764, 3413, 4, 96, 5, 39299, 6, 89, 16, 10, 1275, 912, 1203, 2828, 15, 5, 526, 9, 5, 921, 6, 8, 11, 5, 3618, 6, 89, 32, 3980, 6, 82, 3051, 15, 5, 2767, 22609, 6, 8, 41, 9599, 19, 766, 6904, 4, 2]],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(predictions.tolist(), EXPECTED_PREDICTION_IDS)
 
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0]
 
-        EXPECTED_GENERATED_TEXT = "The image shows a black car driving down a street lined with tall buildings. In the foreground, there is a red stop sign sitting on the side of the road, and in the background, there are white statues, trees, and a clear blue sky."  # fmt: skip
+        EXPECTED_GENERATED_TEXT = Expectations(
+            {
+                (None, None): "The image shows a black car driving down a street lined with tall buildings. In the foreground, there is a red stop sign sitting on the side of the road, and in the background, there are white statues, trees, and a clear blue sky.",
+                ("xpu", 5): "The image shows a black car driving down a street lined with tall buildings. In the foreground, there is a red stop sign sitting on the side of the road, and in the background, there are trees, people walking on the footpath, and an arch with name boards.",
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(generated_text, EXPECTED_GENERATED_TEXT)
 
     @require_deterministic_for_xpu
@@ -581,22 +591,12 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         predictions = model.generate(**inputs, max_new_tokens=100)
 
-        EXPECTED_PREDICTION_IDS = Expectations(
-            {
-                (None, None): [[2, 0, 0, 0, 50548, 50646, 50551, 50644, 50554, 50644, 50562, 50637, 50565, 50637, 50570, 50633, 50573, 50633, 50578, 50629, 50582, 50627, 50587, 50625, 50592, 50623, 50597, 50621, 50603, 50619, 50609, 50616, 50615, 50614, 50622, 50612, 50629, 50610, 50639, 50608, 50651, 50606, 50667, 50604, 50695, 50602, 50750, 50602, 50778, 50604, 50793, 50606, 50805, 50608, 50812, 50610, 50818, 50612, 50825, 50614, 50831, 50616, 50837, 50619, 50844, 50621, 50848, 50623, 50854, 50627, 50857, 50631, 50861, 50637, 50864, 50644, 50867, 50650, 50870, 50656, 50873, 50662, 50875, 50668, 50878, 50673, 50879, 50679, 50883, 50685, 50886, 50691, 50889, 50698, 50892, 50704, 50898, 50712, 50903, 50714, 2]],
-                ("xpu", 5): [[2, 0, 0, 0, 50548, 50646, 50551, 50644, 50554, 50644, 50562, 50637, 50565, 50637, 50570, 50633, 50573, 50633, 50578, 50629, 50582, 50627, 50587, 50625, 50592, 50623, 50597, 50621, 50603, 50619, 50609, 50616, 50615, 50614, 50622, 50612, 50629, 50610, 50640, 50608, 50653, 50606, 50668, 50604, 50697, 50602, 50750, 50602, 50778, 50604, 50793, 50606, 50805, 50608, 50812, 50610, 50818, 50612, 50825, 50614, 50831, 50616, 50837, 50619, 50844, 50621, 50848, 50623, 50854, 50627, 50857, 50631, 50861, 50637, 50864, 50644, 50867, 50650, 50870, 50656, 50873, 50662, 50875, 50668, 50878, 50673, 50879, 50679, 50883, 50685, 50886, 50691, 50889, 50698, 50892, 50704, 50898, 50712, 50903, 50714, 2]],
-            }
-        ).get_expectation()  # fmt: skip
+        EXPECTED_PREDICTION_IDS = [[2, 0, 0, 0, 50548, 50646, 50551, 50644, 50554, 50644, 50562, 50637, 50565, 50637, 50570, 50633, 50573, 50633, 50578, 50629, 50582, 50627, 50587, 50625, 50592, 50623, 50597, 50621, 50603, 50619, 50609, 50616, 50615, 50614, 50622, 50612, 50629, 50610, 50639, 50608, 50651, 50606, 50667, 50604, 50695, 50602, 50750, 50602, 50778, 50604, 50793, 50606, 50805, 50608, 50812, 50610, 50818, 50612, 50825, 50614, 50831, 50616, 50837, 50619, 50844, 50621, 50848, 50623, 50854, 50627, 50857, 50631, 50861, 50637, 50864, 50644, 50867, 50650, 50870, 50656, 50873, 50662, 50875, 50668, 50878, 50673, 50879, 50679, 50883, 50685, 50886, 50691, 50889, 50698, 50892, 50704, 50898, 50712, 50903, 50714, 2]]  # fmt: skip
         self.assertEqual(predictions.tolist(), EXPECTED_PREDICTION_IDS)
 
         generated_text = processor.batch_decode(predictions, skip_special_tokens=False)[0]
 
-        EXPECTED_GENERATED_TEXT = Expectations(
-            {
-                (None, None): "</s><s><s><s><loc_279><loc_377><loc_282><loc_375><loc_285><loc_375><loc_293><loc_368><loc_296><loc_368><loc_301><loc_364><loc_304><loc_364><loc_309><loc_360><loc_313><loc_358><loc_318><loc_356><loc_323><loc_354><loc_328><loc_352><loc_334><loc_350><loc_340><loc_347><loc_346><loc_345><loc_353><loc_343><loc_360><loc_341><loc_370><loc_339><loc_382><loc_337><loc_398><loc_335><loc_426><loc_333><loc_481><loc_333><loc_509><loc_335><loc_524><loc_337><loc_536><loc_339><loc_543><loc_341><loc_549><loc_343><loc_556><loc_345><loc_562><loc_347><loc_568><loc_350><loc_575><loc_352><loc_579><loc_354><loc_585><loc_358><loc_588><loc_362><loc_592><loc_368><loc_595><loc_375><loc_598><loc_381><loc_601><loc_387><loc_604><loc_393><loc_606><loc_399><loc_609><loc_404><loc_610><loc_410><loc_614><loc_416><loc_617><loc_422><loc_620><loc_429><loc_623><loc_435><loc_629><loc_443><loc_634><loc_445></s>",
-                ("xpu", 5): "</s><s><s><s><loc_279><loc_377><loc_282><loc_375><loc_285><loc_375><loc_293><loc_368><loc_296><loc_368><loc_301><loc_364><loc_304><loc_364><loc_309><loc_360><loc_313><loc_358><loc_318><loc_356><loc_323><loc_354><loc_328><loc_352><loc_334><loc_350><loc_340><loc_347><loc_346><loc_345><loc_353><loc_343><loc_360><loc_341><loc_371><loc_339><loc_384><loc_337><loc_399><loc_335><loc_428><loc_333><loc_481><loc_333><loc_509><loc_335><loc_524><loc_337><loc_536><loc_339><loc_543><loc_341><loc_549><loc_343><loc_556><loc_345><loc_562><loc_347><loc_568><loc_350><loc_575><loc_352><loc_579><loc_354><loc_585><loc_358><loc_588><loc_362><loc_592><loc_368><loc_595><loc_375><loc_598><loc_381><loc_601><loc_387><loc_604><loc_393><loc_606><loc_399><loc_609><loc_404><loc_610><loc_410><loc_614><loc_416><loc_617><loc_422><loc_620><loc_429><loc_623><loc_435><loc_629><loc_443><loc_634><loc_445></s>",
-            }
-        ).get_expectation()  # fmt: skip
+        EXPECTED_GENERATED_TEXT = "</s><s><s><s><loc_279><loc_377><loc_282><loc_375><loc_285><loc_375><loc_293><loc_368><loc_296><loc_368><loc_301><loc_364><loc_304><loc_364><loc_309><loc_360><loc_313><loc_358><loc_318><loc_356><loc_323><loc_354><loc_328><loc_352><loc_334><loc_350><loc_340><loc_347><loc_346><loc_345><loc_353><loc_343><loc_360><loc_341><loc_370><loc_339><loc_382><loc_337><loc_398><loc_335><loc_426><loc_333><loc_481><loc_333><loc_509><loc_335><loc_524><loc_337><loc_536><loc_339><loc_543><loc_341><loc_549><loc_343><loc_556><loc_345><loc_562><loc_347><loc_568><loc_350><loc_575><loc_352><loc_579><loc_354><loc_585><loc_358><loc_588><loc_362><loc_592><loc_368><loc_595><loc_375><loc_598><loc_381><loc_601><loc_387><loc_604><loc_393><loc_606><loc_399><loc_609><loc_404><loc_610><loc_410><loc_614><loc_416><loc_617><loc_422><loc_620><loc_429><loc_623><loc_435><loc_629><loc_443><loc_634><loc_445></s>"  # fmt: skip
         self.assertEqual(generated_text, EXPECTED_GENERATED_TEXT)
 
         parsed_answer = processor.post_process_generation(
@@ -604,12 +604,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
             task="<REFERRING_EXPRESSION_SEGMENTATION>",
             image_size=(self.image2.width, self.image2.height),
         )
-        EXPECTED_PARSED_ANSWER = Expectations(
-            {
-                (None, None): {'<REFERRING_EXPRESSION_SEGMENTATION>': {'polygons': [[[178, 181, 180, 180, 182, 180, 187, 176, 189, 176, 192, 174, 194, 174, 198, 173, 200, 172, 203, 171, 207, 170, 210, 169, 214, 168, 217, 166, 221, 165, 226, 164, 230, 163, 237, 162, 244, 162, 255, 161, 272, 160, 308, 160, 326, 161, 335, 162, 343, 162, 347, 163, 351, 164, 356, 165, 360, 166, 363, 168, 368, 169, 370, 170, 374, 172, 376, 174, 379, 176, 381, 180, 383, 183, 384, 186, 386, 188, 388, 191, 390, 194, 390, 197, 393, 199, 395, 202, 397, 206, 399, 209, 402, 212, 406, 213]]], 'labels': ['']}},
-                ("xpu", 5): {'<REFERRING_EXPRESSION_SEGMENTATION>': {'polygons': [[[178, 181, 180, 180, 182, 180, 187, 176, 189, 176, 192, 174, 194, 174, 198, 173, 200, 172, 203, 171, 207, 170, 210, 169, 214, 168, 217, 166, 221, 165, 226, 164, 230, 163, 237, 162, 246, 162, 255, 161, 274, 160, 308, 160, 326, 161, 335, 162, 343, 162, 347, 163, 351, 164, 356, 165, 360, 166, 363, 168, 368, 169, 370, 170, 374, 172, 376, 174, 379, 176, 381, 180, 383, 183, 384, 186, 386, 188, 388, 191, 390, 194, 390, 197, 393, 199, 395, 202, 397, 206, 399, 209, 402, 212, 406, 213]]], 'labels': ['']}},
-            }
-        ).get_expectation()  # fmt: skip
+        EXPECTED_PARSED_ANSWER = {'<REFERRING_EXPRESSION_SEGMENTATION>': {'polygons': [[[178, 181, 180, 180, 182, 180, 187, 176, 189, 176, 192, 174, 194, 174, 198, 173, 200, 172, 203, 171, 207, 170, 210, 169, 214, 168, 217, 166, 221, 165, 226, 164, 230, 163, 237, 162, 244, 162, 255, 161, 272, 160, 308, 160, 326, 161, 335, 162, 343, 162, 347, 163, 351, 164, 356, 165, 360, 166, 363, 168, 368, 169, 370, 170, 374, 172, 376, 174, 379, 176, 381, 180, 383, 183, 384, 186, 386, 188, 388, 191, 390, 194, 390, 197, 393, 199, 395, 202, 397, 206, 399, 209, 402, 212, 406, 213]]], 'labels': ['']}}  # fmt: skip
         self.assertEqual(parsed_answer, EXPECTED_PARSED_ANSWER)
 
     def test_large_model_batching_inference_sdpa(self):
