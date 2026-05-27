@@ -71,6 +71,7 @@ from .integrations.liger import apply_liger_kernel
 from .integrations.neftune import activate_neftune, deactivate_neftune
 from .integrations.peft import MIN_PEFT_VERSION
 from .integrations.tpu import save_tpu_checkpoint, tpu_spmd_dataloader, wrap_model_xla_fsdp
+from .loss.loss_utils import LOSS_MAPPING, ForCausalLMLoss
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
 from .models.auto.modeling_auto import (
@@ -507,6 +508,13 @@ class Trainer:
         default_label_names = find_labels(model_to_inspect.__class__)
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.can_return_loss = can_return_loss(model_to_inspect.__class__)
+
+        # Causal LM losses shift labels internally (predictions at position i target label[i+1]), so position 0 of
+        # each row is never a prediction target. The valid-prediction count used by `num_items_in_batch` must therefore
+        # be taken over `labels[..., 1:]`, not the full label tensor. Inspect the actual loss function via
+        # LOSS_MAPPING so model-specific loss_types that route to ForCausalLMLoss (e.g. CsmForConditionalGeneration)
+        # are caught too.
+        self._loss_shifts_labels = LOSS_MAPPING.get(getattr(model_to_inspect, "loss_type", None)) is ForCausalLMLoss
 
         if self.args.label_smoothing_factor != 0:
             if getattr(self.model.config, "problem_type", None) == "multi_label_classification":
@@ -2138,7 +2146,17 @@ class Trainer:
         if count_num_items_in_batch:
             # For now we don't support object detection
             try:
-                num_items_in_batch = sum((batch["labels"].ne(-100)).sum() for batch in batch_samples)
+                # Causal LM losses shift labels; count over `labels[..., 1:]` to avoid over-counting position 0.
+                # If the collator already provides `shift_labels` (e.g. padding-free collators), use it as-is.
+                labels_for_count = [
+                    batch["shift_labels"]
+                    if "shift_labels" in batch
+                    else batch["labels"][..., 1:]
+                    if self._loss_shifts_labels
+                    else batch["labels"]
+                    for batch in batch_samples
+                ]
+                num_items_in_batch = sum(labels.ne(-100).sum() for labels in labels_for_count)
             except (TypeError, AttributeError):
                 pass
 
