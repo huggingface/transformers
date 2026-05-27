@@ -365,15 +365,6 @@ def _patch_expand(original):
     return patch
 
 
-def _patch_expand_as(original):
-    """Same contiguous-clone treatment as :func:`_patch_expand` but for ``expand_as``."""
-
-    def patch(self, other):
-        return original(self, other).clone(memory_format=torch.contiguous_format)
-
-    return patch
-
-
 # (object, attribute, factory) triples installed by patch_torch_ops.
 _TORCH_PATCHES = []
 if is_torch_available():
@@ -392,7 +383,6 @@ if is_torch_available():
         (torch, "bernoulli", _patch_bernoulli),
         (torch.Tensor, "bernoulli", _patch_bernoulli),
         (torch.Tensor, "expand", _patch_expand),
-        (torch.Tensor, "expand_as", _patch_expand_as),
     ]
 
 
@@ -819,7 +809,9 @@ def _patch_sym_ops_allowlist():
     """
     from executorch.exir.passes.executorch_prim_ops_registry import _EXECUTORCH_SYM_OPS
 
-    extra = {op for op in (torch.sym_ite, torch.sym_not, torch.sym_int, torch.sym_sum) if op is not None}
+    extra = {
+        op for op in (torch.sym_ite, torch.sym_not, torch.sym_int, torch.sym_sum, torch.sym_float) if op is not None
+    }
     added = extra - _EXECUTORCH_SYM_OPS
     _EXECUTORCH_SYM_OPS.update(added)
     try:
