@@ -24,6 +24,31 @@ from ..auto import CONFIG_MAPPING
 @strict
 class FunAsrNanoEncoderConfig(PreTrainedConfig):
     r"""
+    input_size (`int`, *optional*, defaults to 560):
+        Input feature dimension (after LFR: 80 mel bins * 7 frames = 560).
+    output_size (`int`, *optional*, defaults to 512):
+        Hidden size of the encoder layers.
+    attention_heads (`int`, *optional*, defaults to 4):
+        Number of attention heads in each SANM layer.
+    linear_units (`int`, *optional*, defaults to 2048):
+        Dimension of the feedforward layer.
+    num_blocks (`int`, *optional*, defaults to 50):
+        Number of main encoder blocks.
+    tp_blocks (`int`, *optional*, defaults to 20):
+        Number of timestamp prediction encoder blocks.
+    dropout_rate (`float`, *optional*, defaults to 0.1):
+        Dropout rate.
+    positional_dropout_rate (`float`, *optional*, defaults to 0.1):
+        Positional encoding dropout rate.
+    attention_dropout_rate (`float`, *optional*, defaults to 0.0):
+        Attention dropout rate.
+    kernel_size (`int`, *optional*, defaults to 11):
+        Kernel size for the FSMN convolution.
+    sanm_shift (`int`, *optional*, defaults to 0):
+        Shift for asymmetric padding in FSMN.
+    initializer_range (`float`, *optional*, defaults to 0.02):
+        Standard deviation for weight initialization.
+
     Example:
 
     ```python
@@ -87,6 +112,19 @@ class FunAsrNanoCtcConfig(PreTrainedConfig):
 @strict
 class FunAsrNanoConfig(PreTrainedConfig):
     r"""
+    audio_encoder_config (`dict` or `FunAsrNanoEncoderConfig`, *optional*):
+        Configuration for the audio encoder.
+    adaptor_config (`dict` or `FunAsrNanoAdaptorConfig`, *optional*):
+        Configuration for the audio adaptor.
+    text_config (`dict` or `PreTrainedConfig`, *optional*):
+        Configuration for the language model (Qwen3).
+    ctc_config (`dict` or `FunAsrNanoCtcConfig`, *optional*):
+        Configuration for the CTC decoder.
+    audio_token_index (`int`, *optional*, defaults to 151646):
+        Token ID used as placeholder for audio features.
+    initializer_range (`float`, *optional*, defaults to 0.02):
+        Standard deviation for weight initialization.
+
     Example:
 
     ```python
