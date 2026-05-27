@@ -69,19 +69,19 @@ def box_xywh_to_cxcywh(x):
     return torch.stack(b, dim=-1)
 
 
-def cxcywh_to_crop_params(
-    bbox_cxcywh: torch.Tensor,
+def boxes_to_crop_params(
+    boxes: torch.Tensor,
     output_size: tuple[int, int],
     padding: float = 1.25,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Compute crop center and scale from a cxcywh bbox, applying padding and aspect ratio correction.
+    """Compute crop center and scale from bboxes, applying padding and aspect ratio correction.
 
     Accepts either a single box `(4,)` or a batch `(N, 4)` and returns center/scale with a matching
     leading dimension.
 
     Args:
-        bbox_cxcywh (`torch.Tensor` of shape `(4,)` or `(N, 4)`): Bounding box in
-            COCO (center-x, center-y, width, height) format, with values in pixel coordinates.
+        boxes (`torch.Tensor` of shape `(4,)` or `(N, 4)`): Bounding box in
+            (center-x, center-y, width, height) format, with values in absolute pixel coordinates.
         output_size (`tuple[int, int]`): Target output size as `(height, width)`, used to compute
             the aspect ratio for scale correction.
         padding (`float`, *optional*, defaults to `1.25`): Multiplicative factor applied to the
@@ -93,7 +93,7 @@ def cxcywh_to_crop_params(
         with (width, height) in input-image pixels representing the dimensions of the padded,
         aspect-ratio-corrected crop window.
     """
-    center_x, center_y, width, height = bbox_cxcywh.unbind(-1)
+    center_x, center_y, width, height = boxes.unbind(-1)
     center = torch.stack([center_x, center_y], dim=-1)
     scaled_width = width * padding
     scaled_height = height * padding
@@ -109,7 +109,7 @@ def cxcywh_to_crop_params(
 
 def crop_and_resize(
     image: torch.Tensor,
-    bboxes_cxcywh: torch.Tensor,
+    boxes: torch.Tensor,
     output_size: tuple[int, int],
     padding: float = 1.25,
 ) -> torch.Tensor:
@@ -123,8 +123,8 @@ def crop_and_resize(
 
     Args:
         image (`torch.Tensor`): Input image tensor of shape `(C, H, W)` in float32.
-        bboxes_cxcywh (`torch.Tensor`): Bounding boxes in (center-x, center-y, width, height) format,
-            shape `(N, 4)`, with values in pixel coordinates.
+        boxes (`torch.Tensor`): Bounding boxes in (center-x, center-y, width, height) format,
+            shape `(N, 4)`, with values in absolute pixel coordinates.
         output_size (`tuple[int, int]`): Target output size as `(height, width)`.
         padding (`float`, *optional*, defaults to `1.25`): Multiplicative factor applied to the
             bounding box dimensions before cropping, adding context around the region of interest.
@@ -134,7 +134,7 @@ def crop_and_resize(
     """
     output_height, output_width = output_size
     num_channels, input_height, input_width = image.shape
-    center, scale = cxcywh_to_crop_params(bboxes_cxcywh, output_size=output_size, padding=padding)
+    center, scale = boxes_to_crop_params(boxes, output_size=output_size, padding=padding)
     center_x = center[:, 0]
     center_y = center[:, 1]
     bbox_w = scale[:, 0]
@@ -154,7 +154,7 @@ def crop_and_resize(
     # (N, H_out, W_out, 2)
     grids = torch.stack([2.0 * in_x / (input_width - 1) - 1.0, 2.0 * in_y / (input_height - 1) - 1.0], dim=-1)
 
-    num_boxes = bboxes_cxcywh.shape[0]
+    num_boxes = boxes.shape[0]
     output = torch.empty(num_boxes, num_channels, output_height, output_width, device=image.device, dtype=image.dtype)
 
     # Apply grid sampling separately for upscaling and downscaling to use the appropriate interpolation mode
@@ -400,8 +400,8 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             crops = []
             for image, image_boxes in zip(images, boxes):
                 image = tvF.to_dtype_image(image, dtype=torch.float32, scale=False)
-                bboxes_cxcywh = box_xywh_to_cxcywh(torch.tensor(image_boxes, dtype=torch.float32, device=image.device))
-                crops.extend(crop_and_resize(image, bboxes_cxcywh=bboxes_cxcywh, output_size=output_size))
+                boxes_cxcywh = box_xywh_to_cxcywh(torch.tensor(image_boxes, dtype=torch.float32, device=image.device))
+                crops.extend(crop_and_resize(image, boxes=boxes_cxcywh, output_size=output_size))
             images = crops
             do_resize = False  # crop_and_resize already produces the target size
 
@@ -518,7 +518,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
 
         # Remap coordinates from heatmap space to original image space
         boxes_cxcywh = box_xywh_to_cxcywh(boxes_xywh)
-        centers, scales = cxcywh_to_crop_params(boxes_cxcywh, output_size=(self.size["height"], self.size["width"]))
+        centers, scales = boxes_to_crop_params(boxes_cxcywh, output_size=(self.size["height"], self.size["width"]))
         heatmap_size = torch.tensor([heatmap_width - 1, heatmap_height - 1], dtype=torch.float32, device=device)
         all_keypoints = (
             all_keypoints / heatmap_size * scales[:, None, :] + centers[:, None, :] - 0.5 * scales[:, None, :]
