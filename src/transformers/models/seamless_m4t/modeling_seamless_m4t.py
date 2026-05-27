@@ -535,7 +535,7 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
 
-        query, attention_mask = self._prepare_relative_position_bias(
+        query, attention_mask = self._apply_relative_position_encoding(
             query=query,
             key=key,
             attention_mask=attention_mask,
@@ -582,47 +582,11 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
 
         return hidden_states
 
-    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerSelfAttention._apply_relative_embeddings
-    def _apply_relative_embeddings(self, query, key, relative_position_embeddings):
-        # 1. project positional embeddings
-        # => (batch, head, 2*time1-1, d_k)
-        proj_relative_position_embeddings = self.linear_pos(relative_position_embeddings)
-        proj_relative_position_embeddings = proj_relative_position_embeddings.view(
-            relative_position_embeddings.size(0), -1, self.num_heads, self.head_size
-        )
-        proj_relative_position_embeddings = proj_relative_position_embeddings.transpose(1, 2)
-        proj_relative_position_embeddings = proj_relative_position_embeddings.transpose(2, 3)
-
-        # 2. Add bias to query
-        # => (batch, head, time1, d_k)
-        query = query.transpose(1, 2)
-        q_with_bias_u = (query + self.pos_bias_u).transpose(1, 2)
-        q_with_bias_v = (query + self.pos_bias_v).transpose(1, 2)
-
-        # 3. attention score: first compute matrix a and matrix c
-        # as described in https://huggingface.co/papers/1901.02860 Section 3.3
-        # => (batch, head, time1, time2)
-        scores_ac = torch.matmul(q_with_bias_u, key.transpose(-2, -1))
-
-        # 4. then compute matrix b and matrix d
-        # => (batch, head, time1, 2*time1-1)
-        scores_bd = torch.matmul(q_with_bias_v, proj_relative_position_embeddings)
-
-        # 5. shift matrix b and matrix d
-        zero_pad = torch.zeros((*scores_bd.size()[:3], 1), device=scores_bd.device, dtype=scores_bd.dtype)
-        scores_bd_padded = torch.cat([zero_pad, scores_bd], dim=-1)
-        scores_bd_padded_shape = scores_bd.size()[:2] + (scores_bd.shape[3] + 1, scores_bd.shape[2])
-        scores_bd_padded = scores_bd_padded.view(*scores_bd_padded_shape)
-        scores_bd = scores_bd_padded[:, :, 1:].view_as(scores_bd)
-        scores_bd = scores_bd[:, :, :, : scores_bd.size(-1) // 2 + 1]
-
-        # 6. sum matrices
-        # => (batch, head, time1, time2)
-        scores = (scores_ac + scores_bd) / math.sqrt(self.head_size)
-
-        return scores
-
-    def _prepare_relative_position_bias(self, query, key, attention_mask, relative_position_embeddings):
+    def _apply_relative_position_encoding(self, query, key, attention_mask, relative_position_embeddings):
+        """Compute relative position bias (matrix b+d) as described in
+        https://huggingface.co/papers/1901.02860, and modify query
+        with pos_bias_u for content-based attention (matrix a+c).
+        """
         if self.position_embeddings_type != "relative":
             return query, attention_mask
 
@@ -631,6 +595,7 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
                 "`relative_position_embeddings` has to be defined when `self.position_embeddings_type == 'relative'`"
             )
 
+        # 1. project positional embeddings
         proj_relative_position_embeddings = self.linear_pos(relative_position_embeddings)
         proj_relative_position_embeddings = proj_relative_position_embeddings.view(
             relative_position_embeddings.size(0), -1, self.num_heads, self.head_size
@@ -638,10 +603,12 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
         proj_relative_position_embeddings = proj_relative_position_embeddings.transpose(1, 2)
         proj_relative_position_embeddings = proj_relative_position_embeddings.transpose(2, 3)
 
+        # 2. compute matrix b and matrix d
         query_for_bias = query.transpose(1, 2)
         q_with_bias_v = (query_for_bias + self.pos_bias_v).transpose(1, 2)
-
         relative_attention_scores = torch.matmul(q_with_bias_v, proj_relative_position_embeddings)
+
+        # 3. shift (skew) to get proper relative position indexing
         relative_attention_scores_shape = relative_attention_scores.shape
         relative_attention_scores = nn.functional.pad(relative_attention_scores, (1, 0)).view(
             *relative_attention_scores_shape[:2],
@@ -650,12 +617,13 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
         )
         relative_attention_scores = relative_attention_scores[:, :, 1:].view(relative_attention_scores_shape)
         relative_attention_scores = relative_attention_scores[:, :, :, : key.size(2)]
-        relative_attention_scores = relative_attention_scores / math.sqrt(self.head_size)
 
+        # 4. scale and combine with attention mask
+        relative_attention_scores = relative_attention_scores / math.sqrt(self.head_size)
         if attention_mask is not None:
             relative_attention_scores = relative_attention_scores + attention_mask
 
-        # Add pos_bias_u to query for the content-based attention (matrix a+c)
+        # 5. add pos_bias_u to query for the content-based attention (matrix a+c)
         query = query + self.pos_bias_u[None, :, None, :]
 
         return query, relative_attention_scores
