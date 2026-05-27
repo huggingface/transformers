@@ -245,14 +245,14 @@ class LayoutAwareTPMixin(TensorParallelMixin):
         """Checks the mixin was properly initialized. This is done as a post-init so that each subclass can have their
         own __init__ signature."""
         errors = []
-        if not self.default_input_layout:
+        if not isinstance(self.default_input_layout, tuple) or len(self.default_input_layout) == 0:
             errors.append(f"{self.default_input_layout = }")
-        if not self.desired_input_layout:
+        if not isinstance(self.desired_input_layout, tuple) or len(self.desired_input_layout) == 0:
             errors.append(f"{self.desired_input_layout = }")
-        if not self.default_output_layout:
+        if not isinstance(self.default_output_layout, tuple) or len(self.default_output_layout) == 0:
             errors.append(f"{self.default_output_layout = }")
         if errors:
-            raise ValueError(f"These mandatory layouts cannot be empty: {', '.join(errors)}")
+            raise ValueError(f"These mandatory layouts should be non-empty tuples: {', '.join(errors)}")
 
     def transform_inputs_pre_forward(
         self, module: torch.nn.Module, args: tuple, kwargs: dict, tp_mesh: DeviceMesh
@@ -603,15 +603,17 @@ class ParallelInterface(GeneralInterface):
         {
             # Column-parallel
             "colwise": ColwiseParallel(),
-            "colwise_allgather": ColwiseParallel(desired_output_layout=Replicate()),
-            "colwise_loss_parallel": ColwiseParallel(default_input_layout=Shard(1), return_plain_output=False),
+            "colwise_allgather": ColwiseParallel(desired_output_layout=(Replicate(),)),
+            "colwise_loss_parallel": ColwiseParallel(default_input_layout=(Shard(1),), return_plain_output=False),
             "packed_colwise": ColwiseParallel(num_packed_weights=2),
             # Row-parallel
             "rowwise_allreduce": RowwiseParallel(),
-            "rowwise_reduce_scatter": RowwiseParallel(desired_output_layout=Shard(1)),
+            "rowwise_reduce_scatter": RowwiseParallel(desired_output_layout=(Shard(1),)),
             # Vocab / embedding (rowwise sharding on vocab dim)
-            "vocab_allreduce": RowwiseParallel(default_input_layout=Replicate()),
-            "vocab_reduce_scatter": RowwiseParallel(default_input_layout=Replicate(), desired_output_layout=Shard(1)),
+            "vocab_allreduce": RowwiseParallel(default_input_layout=(Replicate(),)),
+            "vocab_reduce_scatter": RowwiseParallel(
+                default_input_layout=(Replicate(),), desired_output_layout=(Shard(1),)
+            ),
             # Activation / norm (sequence-parallel passthrough)
             # use_local_output=True: torch defaults to False here, but downstream modeling
             # code expects plain tensors, not DTensors.

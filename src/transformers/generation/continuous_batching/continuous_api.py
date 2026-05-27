@@ -515,7 +515,7 @@ class ContinuousBatchingManager:
         self.fatal_error: Exception | None = None
 
         # Infer if this process is the driver of its own TP group
-        self.distributed_helper = DistributedHelper(device_mesh=getattr(self.model, "_device_mesh", None))
+        self.distributed_helper = DistributedHelper(device_mesh=getattr(self.model, "device_mesh", None))
         self.is_tp_driver = self.distributed_helper.is_tp_driver
         # If TP is on, check if NCCL graph mixing is disabled (helps with performance)
         if continuous_batching_config.disable_nccl_graph_mixing:
