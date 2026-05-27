@@ -1458,7 +1458,12 @@ class Gemma4PreTrainedModel(PreTrainedModel):
     config: Gemma4Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Gemma4TextDecoderLayer", "Gemma4VisionEncoderLayer", "Gemma4AudioLayer"]
+    _no_split_modules = [
+        "Gemma4TextDecoderLayer",
+        "Gemma4VisionEncoderLayer",
+        "Gemma4VisionPatchEmbedder",
+        "Gemma4AudioLayer",
+    ]
     _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -2080,9 +2085,9 @@ class Gemma4MultimodalEmbedder(nn.Module):
         return self.embedding_projection(embs_normed)
 
 
-def get_block_sequence_ids_for_mask(
-    mm_token_type_ids: torch.Tensor, device: torch.device | None = None
-) -> torch.Tensor:
+def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: torch.device) -> torch.Tensor:
+    mm_token_type_ids = mm_token_type_ids.to(device)
+
     is_vision = (mm_token_type_ids == 1) | (mm_token_type_ids == 2)
     is_prev_vision = torch.roll(is_vision, shifts=1, dims=-1)
     is_prev_vision[..., 0] = False
@@ -2294,7 +2299,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
             # Strip padding tokens: only keep real (non-padding) audio soft tokens.
             # audio_mask_from_encoder is True for valid positions, False for padding tokens.
             # This mirrors the vision encoder's padding stripping (see Gemma4VisionEncoder.forward).
-            audio_features = audio_features[audio_mask_from_encoder]
+            audio_features = audio_features[audio_mask_from_encoder.to(audio_features.device)]
 
             n_audio_tokens = audio_mask.sum()
             audio_mask = audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
@@ -2328,7 +2333,9 @@ class Gemma4Model(Gemma4PreTrainedModel):
             if self.config.get_text_config().use_bidirectional_attention == "vision":
                 block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
                 if mm_token_type_ids is not None:
-                    block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids)
+                    block_sequence_ids = get_block_sequence_ids_for_mask(
+                        mm_token_type_ids, device=inputs_embeds.device
+                    )
 
                 mask_kwargs["block_sequence_ids"] = block_sequence_ids
 
@@ -2603,7 +2610,7 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
         if getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision":
             block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
             if mm_token_type_ids is not None:
-                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids)
+                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
 
             mask_kwargs["block_sequence_ids"] = block_sequence_ids
 
