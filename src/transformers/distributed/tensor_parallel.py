@@ -95,22 +95,12 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None) -> 
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
 
 
-
-
+# These functions are used to swap between DTensor and plain tensors
 def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tensor) -> torch.Tensor:
-    """Stitch a local grad back onto the original DTensor parameter.
-
-    During forward we replace the DTensor param with a detached plain-tensor
-    leaf (see ``_swap_dtensor_params_for_local``) because ``grouped_mm`` / fused
-    ops don't accept DTensor inputs. That swap breaks the autograd link between
-    the local leaf's grad and the DTensor param's ``.grad``, so this tensor hook
-    runs on the leaf and copies/accumulates the grad onto the original DTensor.
-
-    NOTE: An autograd-aware ``param.to_local()`` swap would let backward stitch
-    the grad automatically, but DTensor's backward path then redistributes the
-    resulting grad — and that redistribute does not currently support
-    ``_StridedShard`` placements (used by ``MoEExpertsParallel`` / ``PackedColwiseParallel``).
-    """
+    """Stitch a local grad back onto the original DTensor parameter. This is needed when the forward swaps DTensors for
+    plain tensors to accomodate for some kernels, which breaks the autograd link between the local leaf's .grad and the
+    DTensor param's .grad. NOTE: this is only needed because we are not using the autograd-aware .to_local() swap, which
+    is not compatible with _StridedShard placements, which are used by MoEExpertsParallel and PackedColwiseParallel."""
     tensor_meta = original_param._spec.tensor_meta
     detached_grad = local_grad.detach()
     grad_dtensor = DTensor.from_local(
@@ -134,16 +124,8 @@ def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tens
 
 @contextlib.contextmanager
 def _swap_dtensor_params_for_local(module):
-    """Temporarily replace DTensor params with local-shard ``Parameter``s for forward.
-
-    ``grouped_mm`` / fused kernels don't accept DTensor inputs, so each DTensor
-    param is swapped for a detached local ``Parameter``. A tensor hook
-    (``_accumulate_local_param_grad``) on the local leaf copies the backward
-    grad back onto the original DTensor.
-
-    The original DTensor params are restored on exit (even on exception) so
-    save_pretrained / state-dict still see sharded params.
-    """
+    """Temporarily replace DTensor params with local-shard ``Parameter``s for forward. This  isneeded for some kernels
+    like grouped_mm or fused kernels that don't accept DTensor inputs. The original DTensor are restored on exit."""
     shadows = {}
     for name, param in list(module.named_parameters(recurse=False)):
         if not isinstance(param, DTensor):
@@ -162,13 +144,7 @@ def _swap_dtensor_params_for_local(module):
                 delattr(module, name)
             module.register_parameter(name, param)
 
-
-# =============================================================================
-# High-Level API Functions
-# =============================================================================
-
-
-
+# Below are all the TP styles that are supported by the transformers library
 class TensorParallelMixin:
     """Base class for transformers TP styles, which turn a module into a TP-aware module through the "make_tp_aware"
     method, which does the following:
@@ -235,9 +211,9 @@ class LayoutAwareTPMixin(TensorParallelMixin):
     where the pre-forward and post-forward transformations are necessary to ensure the input and output are in the
     correct layouts."""
 
-    default_input_layout: tuple[Placement, ...] = ()
+    assumed_input_layout: tuple[Placement, ...] = ()
     desired_input_layout: tuple[Placement, ...] = ()
-    default_output_layout: tuple[Placement, ...] = ()
+    assumed_output_layout: tuple[Placement, ...] = ()
     desired_output_layout: tuple[Placement, ...] = ()  # can be left empty if not needed
     return_plain_output: bool = True
 
@@ -245,12 +221,12 @@ class LayoutAwareTPMixin(TensorParallelMixin):
         """Checks the mixin was properly initialized. This is done as a post-init so that each subclass can have their
         own __init__ signature."""
         errors = []
-        if not isinstance(self.default_input_layout, tuple) or len(self.default_input_layout) == 0:
-            errors.append(f"{self.default_input_layout = }")
+        if not isinstance(self.assumed_input_layout, tuple) or len(self.assumed_input_layout) == 0:
+            errors.append(f"{self.assumed_input_layout = }")
         if not isinstance(self.desired_input_layout, tuple) or len(self.desired_input_layout) == 0:
             errors.append(f"{self.desired_input_layout = }")
-        if not isinstance(self.default_output_layout, tuple) or len(self.default_output_layout) == 0:
-            errors.append(f"{self.default_output_layout = }")
+        if not isinstance(self.assumed_output_layout, tuple) or len(self.assumed_output_layout) == 0:
+            errors.append(f"{self.assumed_output_layout = }")
         if errors:
             raise ValueError(f"These mandatory layouts should be non-empty tuples: {', '.join(errors)}")
 
@@ -260,7 +236,7 @@ class LayoutAwareTPMixin(TensorParallelMixin):
         """Ensures the input is a DTensor with the desired input layout."""
         x = args[0]
         if not isinstance(x, DTensor):
-            x = DTensor.from_local(x, tp_mesh, self.default_input_layout, run_check=False)
+            x = DTensor.from_local(x, tp_mesh, self.assumed_input_layout, run_check=False)
         if x.placements != self.desired_input_layout:
             x = x.redistribute(placements=self.desired_input_layout, async_op=True)
         return (x,) + args[1:], kwargs
@@ -276,7 +252,7 @@ class LayoutAwareTPMixin(TensorParallelMixin):
         # If there is a desired output layout, always make sure it is respected
         if self.desired_output_layout:
             if not isinstance(output, DTensor):
-                output = DTensor.from_local(output, tp_mesh, self.default_output_layout, run_check=False)
+                output = DTensor.from_local(output, tp_mesh, self.assumed_output_layout, run_check=False)
             if output.placements != self.desired_output_layout:
                 output = output.redistribute(placements=self.desired_output_layout, async_op=True)
 
@@ -284,7 +260,7 @@ class LayoutAwareTPMixin(TensorParallelMixin):
         if self.return_plain_output and isinstance(output, DTensor):
             return output.to_local()
         if not self.return_plain_output and not isinstance(output, DTensor):
-            return DTensor.from_local(output, tp_mesh, self.default_output_layout, run_check=False)
+            return DTensor.from_local(output, tp_mesh, self.assumed_output_layout, run_check=False)
         return output
 
 
@@ -294,9 +270,9 @@ class GatherParallel(LayoutAwareTPMixin):
 
     def __init__(self, dimension: int = 1, return_plain_output: bool = True):
         self.dimension = dimension
-        self.default_input_layout = (Shard(dimension),)
+        self.assumed_input_layout = (Shard(dimension),)
         self.desired_input_layouts = (Replicate(),)
-        self.default_output_layout = (Placement(),)  # will never be used
+        self.assumed_output_layout = (Placement(),)  # will never be used
         self.desired_output_layout = ()
         self.return_plain_output = return_plain_output
 
@@ -314,9 +290,9 @@ class GatherScatterSequenceParallel(LayoutAwareTPMixin):
 
     def __init__(self, dimension: int = 1, return_plain_output: bool = True):
         self.dimension = dimension
-        self.default_input_layout = (Shard(dimension),)
+        self.assumed_input_layout = (Shard(dimension),)
         self.desired_input_layouts = (Replicate(),)
-        self.default_output_layout = (Replicate(),)
+        self.assumed_output_layout = (Replicate(),)
         self.desired_output_layout = (Shard(dimension),)
         self.return_plain_output = return_plain_output
 
@@ -329,27 +305,27 @@ class ColwiseParallel(LayoutAwareTPMixin):
 
     def __init__(
         self,
-        default_input_layout: tuple[Placement, ...] | None = None,
+        assumed_input_layout: tuple[Placement, ...] | None = None,
         desired_output_layout: tuple[Placement, ...] | None = None,
         return_plain_output: bool = True,
         num_packed_weights: int = 1,
     ) -> None:
         """Initializes the ColwiseParallel style with:
-        - default_input_layout: if the input tensor is a plain tensor it is converted to a DTensor with this layout.
+        - assumed_input_layout: if the input tensor is a plain tensor it is converted to a DTensor with this layout.
             Defaults to `Replicate()`.
         - desired_output_layout: the layout imposed on the output. Defaults to `Shard(-1)`.
         - return_plain_output: If True, the output is a plain tensor instead of a DTensor.
         - num_packed_weights: the number of weights packed in the parameter, eg. 2 for a fused gate_up_projection,
             3 for a fused qkv_projection, ... Defaults to 1 (no packed weights)
         """
-        self.default_input_layout = (Replicate(),) if default_input_layout is None else default_input_layout
+        self.assumed_input_layout = (Replicate(),) if assumed_input_layout is None else assumed_input_layout
         self.desired_input_layout = (Replicate(),)
         if num_packed_weights > 1:
-            default_output_layout = (_StridedShard(dim=-1, split_factor=num_packed_weights),)
+            assumed_output_layout = (_StridedShard(dim=-1, split_factor=num_packed_weights),)
         else:
-            default_output_layout = (Shard(-1),)
-        self.default_output_layout = default_output_layout
-        self.desired_output_layout = default_output_layout if desired_output_layout is None else desired_output_layout
+            assumed_output_layout = (Shard(-1),)
+        self.assumed_output_layout = assumed_output_layout
+        self.desired_output_layout = assumed_output_layout if desired_output_layout is None else desired_output_layout
         self.return_plain_output = return_plain_output
         self.num_packed_weights = num_packed_weights
 
@@ -385,7 +361,7 @@ class ColwiseParallel(LayoutAwareTPMixin):
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}({self.default_input_layout = }, {self.desired_output_layout = }, "
+            f"{self.__class__.__name__}({self.assumed_input_layout = }, {self.desired_output_layout = }, "
             f"{self.return_plain_output = }, {self.num_packed_weights = })"
         )
 
@@ -395,19 +371,19 @@ class RowwiseParallel(LayoutAwareTPMixin):
 
     def __init__(
         self,
-        default_input_layout: tuple[Placement, ...] | None = None,
+        assumed_input_layout: tuple[Placement, ...] | None = None,
         desired_output_layout: tuple[Placement, ...] | None = None,
         return_plain_output: bool = True,
     ) -> None:
         """Initializes the RowwiseParallel style with:
-        - default_input_layout: if the input tensor is a plain tensor it is converted to a DTensor with this layout.
+        - assumed_input_layout: if the input tensor is a plain tensor it is converted to a DTensor with this layout.
             Defaults to `Shard(-1)`.
         - desired_output_layout: the layout imposed on the output. Defaults to `Replicate()`.
         - return_plain_output: If True, the output is a plain tensor instead of a DTensor.
         """
-        self.default_input_layout = (Shard(-1),) if default_input_layout is None else default_input_layout
+        self.assumed_input_layout = (Shard(-1),) if assumed_input_layout is None else assumed_input_layout
         self.desired_input_layout = (Placement(),)  # placeholder for the __post_init__ check, will be set later
-        self.default_output_layout = (Partial(-1),)
+        self.assumed_output_layout = (Partial(-1),)
         self.desired_output_layout = (Replicate(),) if desired_output_layout is None else desired_output_layout
         self.return_plain_output = return_plain_output
 
@@ -429,7 +405,7 @@ class RowwiseParallel(LayoutAwareTPMixin):
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}({self.default_input_layout = }, {self.desired_output_layout = }, "
+            f"{self.__class__.__name__}({self.assumed_input_layout = }, {self.desired_output_layout = }, "
             f"{self.return_plain_output = })"
         )
 
@@ -440,9 +416,9 @@ class SequenceParallel(LayoutAwareTPMixin):
 
     def __init__(self, sequence_dim: int = 1, return_plain_output: bool = True):
         self.sequence_dim = sequence_dim
-        self.default_input_layout = (Shard(sequence_dim),)
+        self.assumed_input_layout = (Shard(sequence_dim),)
         self.desired_input_layout = (Shard(sequence_dim),)
-        self.default_output_layout = (Shard(sequence_dim),)
+        self.assumed_output_layout = (Shard(sequence_dim),)
         self.desired_output_layout = (Shard(sequence_dim),)
         self.return_plain_output = return_plain_output
 
@@ -604,15 +580,15 @@ class ParallelInterface(GeneralInterface):
             # Column-parallel
             "colwise": ColwiseParallel(),
             "colwise_allgather": ColwiseParallel(desired_output_layout=(Replicate(),)),
-            "colwise_loss_parallel": ColwiseParallel(default_input_layout=(Shard(1),), return_plain_output=False),
+            "colwise_loss_parallel": ColwiseParallel(assumed_input_layout=(Shard(1),), return_plain_output=False),
             "packed_colwise": ColwiseParallel(num_packed_weights=2),
             # Row-parallel
             "rowwise_allreduce": RowwiseParallel(),
             "rowwise_reduce_scatter": RowwiseParallel(desired_output_layout=(Shard(1),)),
             # Vocab / embedding (rowwise sharding on vocab dim)
-            "vocab_allreduce": RowwiseParallel(default_input_layout=(Replicate(),)),
+            "vocab_allreduce": RowwiseParallel(assumed_input_layout=(Replicate(),)),
             "vocab_reduce_scatter": RowwiseParallel(
-                default_input_layout=(Replicate(),), desired_output_layout=(Shard(1),)
+                assumed_input_layout=(Replicate(),), desired_output_layout=(Shard(1),)
             ),
             # Activation / norm (sequence-parallel passthrough)
             # use_local_output=True: torch defaults to False here, but downstream modeling
