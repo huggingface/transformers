@@ -44,6 +44,9 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_sapiens2 import Sapiens2Config
 
 
+# General docstring
+
+
 @auto_docstring(
     custom_intro="""
     Class for outputs of pose estimation models.
@@ -53,16 +56,13 @@ from .configuration_sapiens2 import Sapiens2Config
 class Sapiens2PoseEstimatorOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Keypoint loss computed between the predicted heatmaps and the ground-truth heatmaps.
+        Pose estimation loss.
     heatmaps (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`):
         Heatmaps as predicted by the model.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage)
-        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
-        each layer plus the initial embedding outputs.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights after the attention softmax.
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
+        (also called feature maps) of the model at the output of each stage.
     """
 
     loss: torch.FloatTensor | None = None
@@ -128,9 +128,22 @@ class Sapiens2PointmapEstimatorOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of image matting models.
+    """
+)
 @dataclass
 class Sapiens2ImageMattingOutput(ModelOutput):
     r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Loss.
+    alphas (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`):
+        Estimated alpha values.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
+        (also called feature maps) of the model at the output of each stage.
     foregrounds (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
         Pre-multiplied RGB foreground predictions in `[0, 1]` (sigmoid-activated).
     """
