@@ -394,6 +394,7 @@ class GlmOcrVisionAttention(nn.Module):
         self.q_norm = GlmOcrRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = GlmOcrRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,

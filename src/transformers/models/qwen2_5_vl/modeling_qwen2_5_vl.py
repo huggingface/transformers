@@ -223,6 +223,7 @@ class Qwen2_5_VLVisionAttention(nn.Module):
         self.attention_dropout = 0.0
         self.is_causal = False
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,

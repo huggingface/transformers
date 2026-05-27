@@ -365,6 +365,7 @@ class VisionAttention(nn.Module):
         self.attention_dropout = 0.0
         self.is_causal = False
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -443,6 +444,7 @@ class Qwen2VLVisionBlock(GradientCheckpointingLayer):
         self.attn = VisionAttention(config=config)
         self.mlp = VisionMlp(dim=config.embed_dim, hidden_dim=mlp_hidden_dim, hidden_act=config.hidden_act)
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
