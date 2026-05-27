@@ -137,5 +137,50 @@ class FunAsrNanoIntegrationTest(unittest.TestCase):
         self.assertLess(total_params, 900_000_000)
 
 
+
+    @require_torch_gpu
+    def test_generate_chinese(self):
+        """Test Chinese transcription with real audio."""
+        from transformers import AutoProcessor
+
+        processor = AutoProcessor.from_pretrained(self.model_id)
+        model = FunAsrNanoForConditionalGeneration.from_pretrained(
+            self.model_id, torch_dtype=torch.bfloat16, device_map="auto"
+        )
+
+        # Use example audio from the model repo
+        from huggingface_hub import hf_hub_download
+        audio_path = hf_hub_download("FunAudioLLM/Fun-ASR-Nano-2512", "example/zh.mp3")
+
+        inputs = processor(audio_path, return_tensors="pt").to(model.device)
+        generated_ids = model.generate(**inputs, max_new_tokens=100)
+        text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        # Should contain the expected Chinese transcription
+        self.assertIn("开", text)
+        self.assertIn("时间", text)
+        self.assertGreater(len(text), 5)
+
+    @require_torch_gpu
+    def test_generate_english(self):
+        """Test English transcription with real audio."""
+        from transformers import AutoProcessor
+
+        processor = AutoProcessor.from_pretrained(self.model_id)
+        model = FunAsrNanoForConditionalGeneration.from_pretrained(
+            self.model_id, torch_dtype=torch.bfloat16, device_map="auto"
+        )
+
+        from huggingface_hub import hf_hub_download
+        audio_path = hf_hub_download("FunAudioLLM/Fun-ASR-Nano-2512", "example/en.mp3")
+
+        inputs = processor(audio_path, return_tensors="pt").to(model.device)
+        generated_ids = model.generate(**inputs, max_new_tokens=100)
+        text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        # Should contain English words from the expected transcription
+        self.assertIn("the", text.lower())
+        self.assertGreater(len(text), 10)
+
 if __name__ == "__main__":
     unittest.main()
