@@ -79,6 +79,10 @@ class FunAsrNanoProcessor(ProcessorMixin):
         return_tensors: str | None = None,
         **kwargs,
     ) -> BatchFeature:
+        r"""
+        sampling_rate (`int`, *optional*):
+            Sampling rate of the input audio. Must be 16000 for Fun-ASR-Nano.
+        """
         if text is None:
             raise ValueError("You need to specify `text` input to process.")
 
