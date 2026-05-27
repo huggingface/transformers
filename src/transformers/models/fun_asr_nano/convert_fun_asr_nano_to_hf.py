@@ -104,7 +104,6 @@ def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> Fun
         num_blocks=enc_conf.get("num_blocks", 50),
         tp_blocks=enc_conf.get("tp_blocks", 20),
         dropout_rate=enc_conf.get("dropout_rate", 0.1),
-        positional_dropout_rate=enc_conf.get("positional_dropout_rate", 0.1),
         attention_dropout_rate=enc_conf.get("attention_dropout_rate", 0.0),
         kernel_size=enc_conf.get("kernel_size", 11),
         sanm_shift=enc_conf.get("sanm_shfit", 0),
