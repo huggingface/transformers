@@ -350,47 +350,44 @@ def post_dark_unbiased_data_processing(
     heatmaps = gaussian_blur_preserve_max(
         heatmaps.reshape(num_persons * num_keypoints, heatmap_height, heatmap_width), blur_kernel_size
     ).reshape(num_persons, num_keypoints, heatmap_height, heatmap_width)
-    heatmaps = heatmaps.clamp(1e-3, 50.0).log()
+    heatmaps = heatmaps.clamp(1e-3, 50.0).log()  # Clamp values based on original Sapiens2 implementation
 
     heatmaps_padded = F.pad(heatmaps, (1, 1, 1, 1), mode="replicate")
     heatmaps_flattened = heatmaps_padded.flatten()
 
-    keypoint_stride = (heatmap_height + 2) * (heatmap_width + 2)
+    padded_height = heatmap_height + 2
+    padded_width = heatmap_width + 2
+    keypoint_stride = padded_height * padded_width
     person_stride = num_keypoints * keypoint_stride
 
-    index = keypoints[:, :, 0].long() + 1 + (keypoints[:, :, 1].long() + 1) * (heatmap_width + 2)
+    index = keypoints[:, :, 0].long() + 1 + (keypoints[:, :, 1].long() + 1) * padded_width
     index = index + keypoint_stride * torch.arange(num_keypoints, device=device, dtype=torch.long)[None, :]
     index = index + person_stride * torch.arange(num_persons, device=device, dtype=torch.long)[:, None]
     index = index.unsqueeze(-1)  # (num_persons, num_keypoints, 1)
 
-    value_center = heatmaps_flattened[index]
-    value_right = heatmaps_flattened[index + 1]
-    value_below = heatmaps_flattened[index + heatmap_width + 2]
-    value_right_below = heatmaps_flattened[index + heatmap_width + 3]
-    value_left_above = heatmaps_flattened[index - heatmap_width - 3]
-    value_left = heatmaps_flattened[index - 1]
-    value_above = heatmaps_flattened[index - heatmap_width - 2]
+    position_to_index_offset = {
+        (0, 0): 0,
+        (0, 1): 1,
+        (0, -1): -1,
+        (1, 0): padded_width,
+        (-1, 0): -padded_width,
+        (1, 1): padded_width + 1,
+        (-1, -1): -(padded_width + 1),
+    }
+    # Dict mapping from (dx, dy) offsets to the corresponding values in the heatmap
+    h = {(dx, dy): heatmaps_flattened[index + offset] for (dx, dy), offset in position_to_index_offset.items()}
 
-    gradient_x = 0.5 * (value_right - value_left)
-    gradient_y = 0.5 * (value_below - value_above)
+    gradient_x = 0.5 * (h[0, 1] - h[0, -1])
+    gradient_y = 0.5 * (h[1, 0] - h[-1, 0])
     derivative = torch.cat([gradient_x, gradient_y], dim=-1).reshape(num_persons, num_keypoints, 2, 1)
 
-    hessian_xx = value_right - 2 * value_center + value_left
-    hessian_yy = value_below - 2 * value_center + value_above
-    hessian_xy = 0.5 * (
-        value_right_below
-        - value_right
-        - value_below
-        + value_center
-        + value_center
-        - value_left
-        - value_above
-        + value_left_above
-    )
+    hessian_xx = h[0, 1] - 2 * h[0, 0] + h[0, -1]
+    hessian_yy = h[1, 0] - 2 * h[0, 0] + h[-1, 0]
+    hessian_xy = 0.5 * (h[1, 1] - h[0, 1] - h[1, 0] + h[0, 0] + h[0, 0] - h[0, -1] - h[-1, 0] + h[-1, -1])
     hessian = torch.cat([hessian_xx, hessian_xy, hessian_xy, hessian_yy], dim=-1).reshape(
         num_persons, num_keypoints, 2, 2
     )
-    hessian = torch.linalg.inv(hessian + torch.finfo(torch.float32).eps * torch.eye(2, device=device))
+    hessian = torch.linalg.inv(hessian + torch.finfo(hessian.dtype).eps * torch.eye(2, device=device))
     return keypoints - (hessian @ derivative).squeeze(-1)
 
 
