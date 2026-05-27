@@ -10,6 +10,7 @@ distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, e
 implied. See the License for the specific language governing permissions and limitations under the
 License.
 -->
+*This model was released on 2025-09-15 and added to Hugging Face Transformers on 2026-05-28.*
 
 # Fun-ASR-Nano
 
@@ -17,7 +18,7 @@ License.
 
 Fun-ASR-Nano is an 800M-parameter end-to-end speech recognition model developed by Alibaba DAMO Academy's FunAudioLLM team. It achieves state-of-the-art performance on Chinese, English, and Japanese ASR benchmarks while being significantly smaller than comparable models.
 
-The model was proposed in [Fun-ASR: An Industrial-Grade Speech Recognition System](https://arxiv.org/abs/2509.12508).
+The model was proposed in [Fun-ASR: An Industrial-Grade Speech Recognition System](https://huggingface.co/papers/2509.12508).
 
 ### Architecture
 
