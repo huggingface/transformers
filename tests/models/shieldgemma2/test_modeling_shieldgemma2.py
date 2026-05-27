@@ -15,10 +15,6 @@
 
 import tempfile
 import unittest
-from io import BytesIO
-
-import requests
-from PIL import Image
 
 from transformers import (
     BitsAndBytesConfig,
@@ -27,6 +23,7 @@ from transformers import (
     SiglipVisionConfig,
     is_torch_available,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -36,131 +33,86 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin
+from ...test_processing_common import url_to_local_path
+from ...vlm_tester import VLMModelTester
 
 
 if is_torch_available():
     import torch
 
-    from transformers import ShieldGemma2ForImageClassification, ShieldGemma2Processor
+    from transformers import (
+        Gemma3ForConditionalGeneration,
+        Gemma3Model,
+        ShieldGemma2ForImageClassification,
+        ShieldGemma2Processor,
+    )
 
 
-class ShieldGemma2ModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        seq_length=8,
-        vocab_size=99,
-        hidden_size=32,
-        intermediate_size=64,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        head_dim=8,
-        max_position_embeddings=64,
-        sliding_window=8,
-        image_size=8,
-        patch_size=4,
-        num_channels=3,
-        mm_tokens_per_image=4,
-        image_token_index=0,
-        pad_token_id=1,
-        eos_token_id=2,
-        bos_token_id=3,
-        yes_token_index=4,
-        no_token_index=5,
-        is_training=False,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
-        self.max_position_embeddings = max_position_embeddings
-        self.sliding_window = sliding_window
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.mm_tokens_per_image = mm_tokens_per_image
-        self.image_token_index = image_token_index
-        self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
-        self.bos_token_id = bos_token_id
-        self.yes_token_index = yes_token_index
-        self.no_token_index = no_token_index
-        self.is_training = is_training
+class ShieldGemma2ModelTester(VLMModelTester):
+    config_class = ShieldGemma2Config
+    text_config_class = Gemma3TextConfig
+    vision_config_class = SiglipVisionConfig
+
+    if is_torch_available():
+        base_model_class = Gemma3Model
+        conditional_generation_class = Gemma3ForConditionalGeneration
+
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("batch_size", 7)
+        kwargs.setdefault("seq_length", 8)
+        kwargs.setdefault("vocab_size", 99)
+        kwargs.setdefault("hidden_size", 32)
+        kwargs.setdefault("intermediate_size", 64)
+        kwargs.setdefault("num_hidden_layers", 2)
+        kwargs.setdefault("num_attention_heads", 4)
+        kwargs.setdefault("num_key_value_heads", 2)
+        kwargs.setdefault("head_dim", 8)
+        kwargs.setdefault("max_position_embeddings", 64)
+        kwargs.setdefault("sliding_window", 8)
+        kwargs.setdefault("layer_types", ["sliding_attention", "full_attention"])
+        kwargs.setdefault("image_size", 8)
+        kwargs.setdefault("patch_size", 4)
+        kwargs.setdefault("num_channels", 3)
+        kwargs.setdefault("mm_tokens_per_image", 4)
+        kwargs.setdefault("num_image_tokens", kwargs["mm_tokens_per_image"])
+        kwargs.setdefault("image_token_index", 0)
+        kwargs.setdefault("image_token_id", kwargs["image_token_index"])
+        kwargs.setdefault("tie_word_embeddings", True)
+        kwargs.setdefault("pad_token_id", 1)
+        kwargs.setdefault("eos_token_id", 2)
+        kwargs.setdefault("bos_token_id", 3)
+        kwargs.setdefault("yes_token_index", 4)
+        kwargs.setdefault("no_token_index", 5)
+        super().__init__(parent, **kwargs)
+
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {
+            self.image_token_index,
+            self.yes_token_index,
+            self.no_token_index,
+        }
 
     def get_config(self):
-        text_config = Gemma3TextConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-            head_dim=self.head_dim,
-            max_position_embeddings=self.max_position_embeddings,
-            sliding_window=self.sliding_window,
-            layer_types=["sliding_attention", "full_attention"],
-            pad_token_id=self.pad_token_id,
-            eos_token_id=self.eos_token_id,
-            bos_token_id=self.bos_token_id,
-        )
-        vision_config = SiglipVisionConfig(
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            num_hidden_layers=1,
-            num_attention_heads=self.num_attention_heads,
-            image_size=self.image_size,
-            patch_size=self.patch_size,
-            num_channels=self.num_channels,
-        )
-        config = ShieldGemma2Config(
-            text_config=text_config,
-            vision_config=vision_config,
-            mm_tokens_per_image=self.mm_tokens_per_image,
-            image_token_index=self.image_token_index,
-        )
+        config = super().get_config()
         config.yes_token_index = self.yes_token_index
         config.no_token_index = self.no_token_index
         return config
 
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 6) + 6
-        input_ids[:, : self.mm_tokens_per_image] = self.image_token_index
-        attention_mask = torch.ones_like(input_ids).to(torch_device)
+    def create_attention_mask(self, input_ids):
+        return input_ids.ne(self.pad_token_id).to(torch_device)
+
+    def get_additional_inputs(self, config, input_ids, modality_inputs):
         token_type_ids = torch.zeros_like(input_ids)
-        token_type_ids[:, : self.mm_tokens_per_image] = 1
-        return config, input_ids, pixel_values, attention_mask, token_type_ids
+        token_type_ids[input_ids == config.image_token_id] = 1
+        return {"token_type_ids": token_type_ids}
 
-    def prepare_config_and_inputs_for_common(self):
-        config, input_ids, pixel_values, attention_mask, token_type_ids = self.prepare_config_and_inputs()
-        inputs_dict = {
-            "input_ids": input_ids,
-            "pixel_values": pixel_values,
-            "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
-        }
-        return config, inputs_dict
-
-    def create_and_check_model(self, config, input_ids, pixel_values, attention_mask, token_type_ids):
+    def create_and_check_model(self, config, inputs_dict):
         model = ShieldGemma2ForImageClassification(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-        )
+        result = model(**inputs_dict)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, 2))
         self.parent.assertEqual(result.probabilities.shape, (self.batch_size, 2))
 
@@ -173,6 +125,10 @@ class ShieldGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_attention_outputs = False
 
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        # ShieldGemma2 does not compute its own loss, so never inject labels
+        return super()._prepare_for_class(inputs_dict, model_class, return_labels=False)
+
     def setUp(self):
         self.model_tester = ShieldGemma2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ShieldGemma2Config, has_text_modality=False)
@@ -181,8 +137,8 @@ class ShieldGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.create_and_check_model(config, inputs_dict)
 
     def test_attention_support_flags_match_underlying_model(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -238,25 +194,11 @@ class ShieldGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="ShieldGemma2ForImageClassification does not support return_dict=False")
-    def test_model_outputs_equivalence(self):
-        pass
-
     @unittest.skip(reason="ShieldGemma2ForImageClassification does not compute a training loss")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="ShieldGemma2ForImageClassification does not compute a training loss")
-    def test_training_gradient_checkpointing(self):
-        pass
 
-    @unittest.skip(reason="ShieldGemma2ForImageClassification does not compute a training loss")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="ShieldGemma2ForImageClassification does not compute a training loss")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
 
     @unittest.skip(reason="ShieldGemma2ForImageClassification does not compute a classification loss")
     def test_problem_types(self):
@@ -282,9 +224,7 @@ class ShieldGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_resize_embeddings_untied_with_deepspeed_multi_gpu(self):
         pass
 
-    @unittest.skip(reason="ShieldGemma2ForImageClassification does not use feed-forward chunking")
-    def test_feed_forward_chunking(self):
-        pass
+
 
 
 @slow
@@ -297,35 +237,15 @@ class ShieldGemma2IntegrationTest(unittest.TestCase):
         model_id = "google/shieldgemma-2-4b-it"
 
         processor = ShieldGemma2Processor.from_pretrained(model_id, padding_side="left")
-        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
-        response = requests.get(url)
-        image = Image.open(BytesIO(response.content))
-
-        model = ShieldGemma2ForImageClassification.from_pretrained(
-            model_id,
-            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-            # The full-size SigLIP tower materializes multi-GB attention scores with eager attention.
-            attn_implementation={"": "eager", "text_config": "eager", "vision_config": "sdpa"},
+        image = load_image(
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
+            )
         )
 
-        inputs = processor(images=[image], return_tensors="pt").to(torch_device)
-        output = model(**inputs)
-        self.assertEqual(len(output.probabilities), 3)
-        for element in output.probabilities:
-            self.assertEqual(len(element), 2)
-
-    def test_model_sdpa(self):
-        model_id = "google/shieldgemma-2-4b-it"
-
-        processor = ShieldGemma2Processor.from_pretrained(model_id, padding_side="left")
-        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
-        response = requests.get(url)
-        image = Image.open(BytesIO(response.content))
-
         model = ShieldGemma2ForImageClassification.from_pretrained(
             model_id,
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-            attn_implementation="sdpa",
         )
 
         inputs = processor(images=[image], return_tensors="pt").to(torch_device)

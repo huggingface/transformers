@@ -21,6 +21,7 @@ from ...modeling_outputs import ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
+    can_return_tuple,
     logging,
 )
 from ..auto import AutoModelForImageTextToText
@@ -69,6 +70,7 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
         self.model.get_decoder().set_output_embeddings(new_embeddings)
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
