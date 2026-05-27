@@ -50,6 +50,33 @@ def _patch_no_accelerator():
         yield
 
 
+@unittest.skipIf(not is_torch_available(), "test requires PyTorch")
+class FineGrainedFP8WeightConversionTest(unittest.TestCase):
+    def test_dequantize_weight_conversion_handles_anchored_weight_sources(self):
+        from transformers.core_model_loading import WeightConverter
+        from transformers.integrations.finegrained_fp8 import Fp8Dequantize
+
+        config = FineGrainedFP8Config(dequantize=True)
+        quantizer = FineGrainedFP8HfQuantizer(config)
+        quantizer.pre_quantized = True
+        converter = WeightConverter(
+            source_patterns=["mlp.experts.*.w2.weight$", "mlp.experts.*.w2.bias"],
+            target_patterns="mlp.experts.*.down_proj.weight",
+            operations=[Fp8Dequantize(quantizer)],
+        )
+
+        updated = quantizer.update_weight_conversions([converter])
+        converted = next(
+            conv
+            for conv in updated
+            if isinstance(conv, WeightConverter) and conv.target_patterns == ["mlp.experts.*.down_proj.weight"]
+        )
+
+        self.assertIn("mlp.experts.*.w2.weight$", converted.source_patterns)
+        self.assertIn("mlp.experts.*.w2.weight_scale_inv$", converted.source_patterns)
+        self.assertIn("mlp.experts.*.w2.bias", converted.source_patterns)
+
+
 @require_torch_accelerator
 class FineGrainedFP8ConfigTest(unittest.TestCase):
     def test_to_dict(self):
