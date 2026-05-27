@@ -54,7 +54,6 @@ processor = FunAsrNanoProcessor.from_pretrained("FunAudioLLM/Fun-ASR-Nano-2512-h
 audio, sr = librosa.load("audio.wav", sr=16000)
 
 # Prepare inputs
-inputs = processor.build_chat_input(audio, language="中文", hotwords=["开放时间"])
 
 # Generate
 with torch.no_grad():
@@ -90,7 +89,6 @@ print(text)
 
 [[autodoc]] FunAsrNanoProcessor
     - __call__
-    - build_chat_input
 
 ## FunAsrNanoEncoder
 
