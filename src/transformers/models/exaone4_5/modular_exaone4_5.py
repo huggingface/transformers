@@ -55,6 +55,7 @@ class Exaone4_5_VisionConfig(Qwen2_5_VLVisionConfig):
     model_type = "exaone4_5_vision"
     base_config_key = "vision_config"
     num_key_value_heads: int = 8
+    tokens_per_second = AttributeError()
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")

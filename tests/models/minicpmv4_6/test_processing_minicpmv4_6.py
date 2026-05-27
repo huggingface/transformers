@@ -325,6 +325,26 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
         self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 203392)
 
+    @require_torch
+    def test_apply_chat_template_tool_calls_no_content(self):
+        # MiniCPM needs different format for tools as per saved jinja template
+
+        processor = self.get_processor()
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "What is the weather?"}],
+            },
+            {
+                "role": "assistant",
+                "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": {}}}],
+            },
+        ]
+
+        # Regression test for #45290: tokenize=True used to raise KeyError when "content" was missing
+        result = processor.apply_chat_template(messages, tokenize=True)
+        self.assertIsInstance(result, torch.Tensor)
+
     @unittest.skip("MiniCPM can't sample already decoded videos, have to turn off sampling!")
     @parameterized.expand([(1, "pt")])
     def test_apply_chat_template_decoded_video(self, batch_size: int, return_tensors: str):
