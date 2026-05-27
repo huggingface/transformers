@@ -557,7 +557,7 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
             output_attentions=output_attentions,
         )
 
-        hidden_states = hidden_states.reshape(batch_size, -1, self.num_heads * self.head_size)
+        hidden_states = hidden_states.reshape(batch_size, sequence_length, -1)
         hidden_states = self.linear_out(hidden_states)
 
         return hidden_states, attn_weights

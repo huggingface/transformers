@@ -475,7 +475,7 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
         )
 
         # => (batch, time1, hidden_size)
-        attn_output = attn_output.reshape(batch_size, -1, self.num_heads * self.head_size)
+        attn_output = attn_output.reshape(batch_size, sequence_length, -1)
         attn_output = self.linear_out(attn_output)
 
         if not output_attentions:
