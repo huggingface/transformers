@@ -197,6 +197,8 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
     _no_split_modules = [
         "InstructBlipVideoQFormerEmbeddings",
         "InstructBlipVideoAttention",
+        "InstructBlipVideoEncoderLayer",
+        "InstructBlipVideoQFormerLayer",
         "InstructBlipVideoQFormerMultiHeadAttention",
         "InstructBlipVideoQFormerSelfOutput",
     ]

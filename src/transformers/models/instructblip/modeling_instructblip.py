@@ -337,6 +337,8 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
     _no_split_modules = [
         "InstructBlipQFormerEmbeddings",
         "InstructBlipAttention",
+        "InstructBlipEncoderLayer",
+        "InstructBlipQFormerLayer",
         "InstructBlipQFormerMultiHeadAttention",
         "InstructBlipQFormerSelfOutput",
     ]
