@@ -141,7 +141,7 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
- 
+
     def test_all_bidirectional_attention_uses_bidirectional_mask(self):
         self.model_tester.use_bidirectional_attention = "all"
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
