@@ -198,8 +198,6 @@ class ShieldGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-
-
     @unittest.skip(reason="ShieldGemma2ForImageClassification does not compute a classification loss")
     def test_problem_types(self):
         pass
@@ -223,8 +221,6 @@ class ShieldGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="DeepSpeed ZeRO-3 does not support this nested AutoModel.from_config test setup")
     def test_resize_embeddings_untied_with_deepspeed_multi_gpu(self):
         pass
-
-
 
 
 @slow
