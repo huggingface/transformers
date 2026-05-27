@@ -1845,7 +1845,6 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=encoder_attention_mask,
-                encoder_hidden_states=encoder_hidden_states,
             )
 
         # embed positions
