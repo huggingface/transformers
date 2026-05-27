@@ -16,9 +16,11 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING
 
 
+@auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
 @strict
 class FunAsrNanoEncoderConfig(PreTrainedConfig):
     r"""
@@ -204,6 +206,7 @@ class FunAsrNanoCtcConfig(PreTrainedConfig):
         self.dropout_rate = dropout_rate
 
 
+@auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
 @strict
 class FunAsrNanoConfig(PreTrainedConfig):
     r"""
