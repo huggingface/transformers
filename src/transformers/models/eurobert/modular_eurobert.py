@@ -141,9 +141,7 @@ class EuroBertModel(LlamaModel):
 @auto_docstring
 class EuroBertForMaskedLM(EuroBertPreTrainedModel):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_allgather"}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
-    _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: EuroBertConfig):

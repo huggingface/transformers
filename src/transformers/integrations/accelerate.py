@@ -26,7 +26,6 @@ from typing import TYPE_CHECKING
 from safetensors import safe_open
 from safetensors.torch import save_file
 
-from ..distributed.fsdp import is_fsdp_enabled
 from ..utils import (
     is_accelerate_available,
     is_torch_available,
@@ -35,6 +34,7 @@ from ..utils import (
 )
 from ..utils.quantization_config import QuantizationMethod
 from .deepspeed import is_deepspeed_zero3_enabled
+from .fsdp import is_fsdp_enabled
 
 
 if is_torch_available():

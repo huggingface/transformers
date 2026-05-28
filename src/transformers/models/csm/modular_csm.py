@@ -274,7 +274,6 @@ class CsmCodebooksHead(nn.Module):
 class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
     _tied_weights_keys = None
     _tp_plan = None
-    _sp_plan = None
     _pp_plan = None
 
     def __init__(self, config):

@@ -133,12 +133,6 @@ class GlmImageTextConfig(Glm4vTextConfig):
     >>> configuration = model.config
     ```"""
 
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
-    }
-
     vocab_size: int = 168064
     max_position_embeddings: int = 131072
     vision_vocab_size: int = 16512

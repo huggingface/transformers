@@ -423,9 +423,7 @@ class BitNetModel(BitNetPreTrainedModel):
 class BitNetForCausalLM(BitNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = None
-    _sp_plan = None
     _pp_plan = None
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)
