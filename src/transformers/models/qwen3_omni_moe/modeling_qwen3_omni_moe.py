@@ -3023,6 +3023,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
     _tied_weights_keys = {"codec_head": "model.codec_embedding.weight"}
     _tp_plan = {"codec_head": "colwise_gather_output"}
     _pp_plan = {"codec_head": (["hidden_states"], ["logits"])}
+    _cp_plan = {"model.layers.*.self_attn": "context_parallel_ulysses"}
     config_class = Qwen3OmniMoeTalkerConfig
     base_model_prefix = "talker"
     _no_split_modules = ["Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration"]
