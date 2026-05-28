@@ -673,6 +673,7 @@ class FunnelPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         classname = module.__class__.__name__
         if classname.find("Linear") != -1:
             if getattr(module, "weight", None) is not None:

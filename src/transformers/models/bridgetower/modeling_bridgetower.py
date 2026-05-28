@@ -889,6 +889,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
         std = self.config.initializer_factor
         if isinstance(module, BridgeTowerVisionTransformer):
             proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5)
