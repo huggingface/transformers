@@ -202,3 +202,52 @@ class OfflineModeTests(unittest.TestCase):
                 "transformers.utils.hub.snapshot_download", side_effect=LocalEntryNotFoundError("no snapshot found")
             ):
                 self.assertEqual(list_repo_templates(RANDOM_BERT, local_files_only=False), [])
+
+
+class TestGetCheckpointShardFilesPathTraversal(unittest.TestCase):
+    """Regression tests for path-traversal in get_checkpoint_shard_files.
+
+    A malicious index.json could carry ``weight_map`` entries with
+    ``..`` components or absolute paths that would escape the model
+    directory.  See https://github.com/huggingface/transformers/issues/46097
+    """
+
+    def _make_index(self, tmp_path, shard_name):
+        import json as _json
+        model_dir = tmp_path / "model"
+        model_dir.mkdir()
+        index = {"metadata": {"total_size": 1}, "weight_map": {"weight": shard_name}}
+        index_file = model_dir / "model.safetensors.index.json"
+        index_file.write_text(_json.dumps(index))
+        return str(model_dir), str(index_file)
+
+    def test_path_traversal_dotdot_raises(self):
+        import tempfile, pathlib
+        from transformers.utils.hub import get_checkpoint_shard_files
+        with tempfile.TemporaryDirectory() as tmp:
+            model_dir, index_file = self._make_index(pathlib.Path(tmp), "../../etc/passwd")
+            with self.assertRaises(ValueError):
+                get_checkpoint_shard_files(model_dir, index_file)
+
+    def test_absolute_path_raises(self):
+        import tempfile, pathlib
+        from transformers.utils.hub import get_checkpoint_shard_files
+        with tempfile.TemporaryDirectory() as tmp:
+            model_dir, index_file = self._make_index(pathlib.Path(tmp), "/etc/passwd")
+            with self.assertRaises(ValueError):
+                get_checkpoint_shard_files(model_dir, index_file)
+
+    def test_valid_shard_filename_accepted(self):
+        import tempfile, pathlib, json as _json
+        from transformers.utils.hub import get_checkpoint_shard_files
+        with tempfile.TemporaryDirectory() as tmp:
+            d = pathlib.Path(tmp) / "model"
+            d.mkdir()
+            shard = "model-00001-of-00001.safetensors"
+            (d / shard).write_bytes(b"")
+            idx = {"metadata": {"total_size": 1}, "weight_map": {"w": shard}}
+            f = d / "model.safetensors.index.json"
+            f.write_text(_json.dumps(idx))
+            files, _ = get_checkpoint_shard_files(str(d), str(f))
+            self.assertEqual(len(files), 1)
+            self.assertTrue(files[0].startswith(str(d)))
