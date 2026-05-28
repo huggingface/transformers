@@ -685,6 +685,7 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize weights"""
+        super()._init_weights(module)
         if isinstance(module, PatchTSMixerPositionalEncoding):
             # initialize positional encoding
             if self.config.positional_encoding_type == "random":

@@ -1173,6 +1173,7 @@ class SEWDPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, SEWDPositionalConvEmbedding):
             init.normal_(
                 module.conv.weight,
