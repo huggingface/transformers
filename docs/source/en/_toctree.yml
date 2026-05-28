@@ -127,6 +127,8 @@
       title: Tensor parallelism
     - local: expert_parallelism
       title: Expert parallelism
+    - local: context_parallelism
+      title: Context parallelism
     - local: kv_cache
       title: Cache strategies
     - local: cache_explanation

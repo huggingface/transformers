@@ -594,6 +594,7 @@ class GptOssForCausalLM(GptOssPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _cp_plan = {"model.layers.*.self_attn": "context_parallel_ulysses"}
 
     def __init__(self, config):
         super().__init__(config)

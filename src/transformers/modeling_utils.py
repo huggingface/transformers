@@ -4331,6 +4331,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 adapter_kwargs=adapter_kwargs,
             )
 
+        if (
+            distributed_config is not None
+            and getattr(distributed_config, "enable_context_parallel", False)
+            and distributed_config.cp_world_size > 1
+        ):
+            from .integrations.context_parallel import apply_context_parallel
+
+            apply_context_parallel(
+                model,
+                cp_world_size=distributed_config.cp_world_size,
+                cp_strategy=distributed_config.cp_strategy,
+            )
+
         if output_loading_info:
             return model, loading_info.to_dict()
         return model

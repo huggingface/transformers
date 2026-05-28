@@ -26,6 +26,9 @@ class DistributedConfig:
     """
 
     enable_expert_parallel: bool = False
+    enable_context_parallel: bool = False
+    cp_world_size: int = 1
+    cp_strategy: str = "ulysses"
     # TODO: add tp_plan, pp_plan, device_mesh etc..
 
     @classmethod

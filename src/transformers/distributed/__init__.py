@@ -19,12 +19,18 @@ from ..utils import _LazyModule
 
 _import_structure = {
     "configuration_utils": ["DistributedConfig"],
+    "context_parallel": ["CPGroup", "build_cp_group_from_default", "ulysses_attention"],
 }
 
 
 if TYPE_CHECKING:
     from .configuration_utils import (
         DistributedConfig,
+    )
+    from .context_parallel import (
+        CPGroup,
+        build_cp_group_from_default,
+        ulysses_attention,
     )
 
 else:
