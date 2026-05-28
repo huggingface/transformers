@@ -255,6 +255,7 @@ if TYPE_CHECKING:
     from .mbart50 import *
     from .megatron_bert import *
     from .megatron_gpt2 import *
+    from .mellum import *
     from .metaclip_2 import *
     from .mgp_str import *
     from .mimi import *
