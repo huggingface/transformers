@@ -1315,21 +1315,18 @@ class Sapiens2Encoder(DINOv3ViTEncoder):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
         self.layer = nn.ModuleList([Sapiens2Layer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
-        self.post_init()
 
 
 class Sapiens2Model(DINOv3ViTModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
         self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.post_init()
 
 
 class Sapiens2Backbone(DINOv3ViTBackbone):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
         self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.post_init()
 
 
 @auto_docstring(checkpoint="facebook/sapiens2-seg-0.4b")
