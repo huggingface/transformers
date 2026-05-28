@@ -115,10 +115,8 @@ class BarkProcessorTest(unittest.TestCase):
         inputs = processor(text=self.input_string, voice_preset=self.voice_preset)
 
     def test_speaker_embeddings_saving_rejects_path_traversal(self):
-        # A malicious speaker_embeddings_path.json dict key must not be usable to escape the save directory
-        # and write attacker-controlled content to an arbitrary path (path traversal, CWE-22). The dict key
-        # is used verbatim as a `<name>_<inner>.npy` filename, so `save_pretrained` must reject names that
-        # are not plain filenames instead of silently writing outside the target directory.
+        # A malicious speaker_embeddings_path.json dict key must not be usable to escape the save
+        # directory and write attacker-controlled content to an arbitrary path (path traversal, CWE-22).
         tokenizer = self.get_tokenizer()
         seq_len = 5
         with tempfile.TemporaryDirectory() as tmp_dir_name:
@@ -129,21 +127,59 @@ class BarkProcessorTest(unittest.TestCase):
             np.save(os.path.join(tmp_dir_name, "f.npy"), np.ones((8, seq_len)))
             speaker_embeddings = {
                 "repo_or_path": tmp_dir_name,
-                "../../PWNED": {
-                    "semantic_prompt": "s.npy",
-                    "coarse_prompt": "c.npy",
-                    "fine_prompt": "f.npy",
-                },
+                "../../PWNED": {"semantic_prompt": "s.npy", "coarse_prompt": "c.npy", "fine_prompt": "f.npy"},
             }
             processor = BarkProcessor(tokenizer=tokenizer, speaker_embeddings=speaker_embeddings)
 
             save_dir = os.path.join(tmp_dir_name, "save")
-            # Where the "../../PWNED" key would land if traversal succeeded:
-            # save/speaker_embeddings/../../PWNED_semantic_prompt.npy -> tmp_dir_name/PWNED_semantic_prompt.npy
+            # Where the "../../PWNED" key would land if traversal succeeded.
             canary = os.path.join(tmp_dir_name, "PWNED_semantic_prompt.npy")
             with self.assertRaises(ValueError):
                 processor.save_pretrained(save_dir)
             self.assertFalse(os.path.exists(canary))
+
+    def test_speaker_embeddings_saving_allows_subdirectories(self):
+        # Voice presets are legitimately stored in subdirectories (e.g. the `v2/...` presets in
+        # ylacombe/bark-large), so saving a nested key must be allowed - the guard rejects escapes only.
+        tokenizer = self.get_tokenizer()
+        seq_len = 5
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            np.save(os.path.join(tmp_dir_name, "s.npy"), np.ones(seq_len))
+            np.save(os.path.join(tmp_dir_name, "c.npy"), np.ones((2, seq_len)))
+            np.save(os.path.join(tmp_dir_name, "f.npy"), np.ones((8, seq_len)))
+            speaker_embeddings = {
+                "repo_or_path": tmp_dir_name,
+                "v2/en_speaker_0": {"semantic_prompt": "s.npy", "coarse_prompt": "c.npy", "fine_prompt": "f.npy"},
+            }
+            processor = BarkProcessor(tokenizer=tokenizer, speaker_embeddings=speaker_embeddings)
+
+            save_dir = os.path.join(tmp_dir_name, "save")
+            processor.save_pretrained(save_dir)
+            self.assertTrue(
+                os.path.exists(os.path.join(save_dir, "speaker_embeddings", "v2", "en_speaker_0_semantic_prompt.npy"))
+            )
+
+    def test_load_voice_preset_rejects_path_traversal(self):
+        # The per-prompt paths in speaker_embeddings_path.json are also untrusted and are joined onto
+        # repo_or_path before being read, so a "../x" value must be rejected before the file is loaded.
+        tokenizer = self.get_tokenizer()
+        seq_len = 5
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            repo_dir = os.path.join(tmp_dir_name, "repo")
+            os.makedirs(repo_dir)
+            # A readable .npy outside the repo dir that the traversal would otherwise reach.
+            np.save(os.path.join(tmp_dir_name, "PWNED.npy"), np.ones(seq_len))
+            speaker_embeddings = {
+                "repo_or_path": repo_dir,
+                "evil": {
+                    "semantic_prompt": "../PWNED.npy",
+                    "coarse_prompt": "../PWNED.npy",
+                    "fine_prompt": "../PWNED.npy",
+                },
+            }
+            processor = BarkProcessor(tokenizer=tokenizer, speaker_embeddings=speaker_embeddings)
+            with self.assertRaises(ValueError):
+                processor._load_voice_preset("evil")
 
     def test_tokenizer(self):
         tokenizer = self.get_tokenizer()
