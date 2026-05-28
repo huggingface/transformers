@@ -12,16 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
 import os
 import shutil
 import sys
-import unittest
-import importlib
 from pathlib import Path
 
 from transformers.dynamic_module_utils import get_class_in_module
-from transformers.utils import HF_MODULES_CACHE
 from transformers.testing_utils import TestCasePlus
+from transformers.utils import HF_MODULES_CACHE
 
 
 class DynamicImportRegressionTest(TestCasePlus):
@@ -32,22 +31,22 @@ class DynamicImportRegressionTest(TestCasePlus):
         self.san_org = "test_regression_org"
         self.repo = "test_repo"
         self.hash = "v1"
-        
+
         # Manually populate the cache with a module that uses relative imports.
         # This mirrors the state of a 'Worker B' in a parallel pytest-xdist run.
         self.base_path = Path(HF_MODULES_CACHE) / "transformers_modules" / self.san_org / self.repo / self.hash
         if self.base_path.exists():
             shutil.rmtree(Path(HF_MODULES_CACHE) / "transformers_modules" / self.san_org)
-        
+
         os.makedirs(self.base_path, exist_ok=True)
-        
+
         # Create __init__.py files for the package structure
         curr = Path(HF_MODULES_CACHE) / "transformers_modules"
         for part in [self.san_org, self.repo, self.hash]:
             curr = curr / part
             os.makedirs(curr, exist_ok=True)
             (curr / "__init__.py").touch()
-            
+
         # Create a utility file for relative import
         with open(self.base_path / "utils.py", "w", encoding="utf-8") as f:
             f.write("def get_val(): return 42\n")
@@ -67,7 +66,7 @@ class DynamicImportRegressionTest(TestCasePlus):
     def test_get_class_in_module_with_relative_import(self):
         """
         Verifies that get_class_in_module can successfully load a module with relative imports
-        in a fresh process environment. This test passes if the environment is correctly 
+        in a fresh process environment. This test passes if the environment is correctly
         initialized by either the library or the test configuration (conftest.py).
         """
         # Clear existing modules to force a fresh import
@@ -75,11 +74,11 @@ class DynamicImportRegressionTest(TestCasePlus):
             if mod.startswith(f"transformers_modules.{self.san_org}"):
                 del sys.modules[mod]
         importlib.invalidate_caches()
-        
+
         # The path relative to HF_MODULES_CACHE
         rel_module_path = f"transformers_modules/{self.san_org}/{self.repo}/{self.hash}/{self.module_name}.py"
-        
-        # This call will fail with ModuleNotFoundError if the HF_MODULES_CACHE 
+
+        # This call will fail with ModuleNotFoundError if the HF_MODULES_CACHE
         # is not present in sys.path.
         try:
             cls = get_class_in_module(self.class_name, rel_module_path)
