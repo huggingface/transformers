@@ -665,6 +665,7 @@ class Ernie4_5_VLMoeVisionBlock(GradientCheckpointingLayer):
             hidden_act=config.hidden_act,
         )
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     @auto_docstring
     def forward(
         self,

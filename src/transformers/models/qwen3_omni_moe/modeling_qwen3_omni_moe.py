@@ -1077,6 +1077,7 @@ class Qwen3OmniMoeVisionBlock(GradientCheckpointingLayer):
         self.attn = Qwen3OmniMoeVisionAttention(config=config)
         self.mlp = Qwen3OmniMoeVisionMLP(config=config)
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     @auto_docstring
     def forward(
         self,
@@ -1794,6 +1795,7 @@ class Qwen3OmniMoeThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     r"""
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
     rope_deltas: torch.LongTensor | None = None

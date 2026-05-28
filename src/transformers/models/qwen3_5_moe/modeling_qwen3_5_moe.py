@@ -1082,6 +1082,7 @@ class Qwen3_5MoeVisionBlock(GradientCheckpointingLayer):
         self.attn = Qwen3_5MoeVisionAttention(config=config)
         self.mlp = Qwen3_5MoeVisionMLP(config=config)
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     @auto_docstring
     def forward(
         self,

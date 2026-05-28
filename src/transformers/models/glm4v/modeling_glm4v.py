@@ -362,6 +362,7 @@ class Glm4vVisionBlock(GradientCheckpointingLayer):
         self.attn = Glm4vVisionAttention(config)
         self.mlp = Glm4VisionMlp(config, bias=False)
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     @auto_docstring
     def forward(
         self,

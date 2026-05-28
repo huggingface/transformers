@@ -474,6 +474,7 @@ class GlmOcrVisionBlock(GradientCheckpointingLayer):
         self.attn = GlmOcrVisionAttention(config)
         self.mlp = GlmOcrVisionMlp(config, bias=config.attention_bias)
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     @auto_docstring
     def forward(
         self,

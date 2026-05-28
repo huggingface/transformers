@@ -291,6 +291,7 @@ class Exaone4_5_VisionBlock(GradientCheckpointingLayer):
         self.attn = Exaone4_5_VisionAttention(config=config)
         self.mlp = Exaone4_5_MLP(config, bias=True)
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     @auto_docstring
     def forward(
         self,

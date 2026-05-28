@@ -520,6 +520,7 @@ class Qwen2_5OmniThinkerCausalLMOutputWithPast(CausalLMOutputWithPast):
     r"""
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
     rope_deltas: torch.LongTensor | None = None
@@ -2087,6 +2088,7 @@ class Qwen2_5OmniTalkerCausalLMOutputWithPast(CausalLMOutputWithPast):
     r"""
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     thinker_reply_part (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Hidden states from the thinker model that are used as input for the talker model. These represent the encoded
         response that the talker model will use to generate speech tokens.
