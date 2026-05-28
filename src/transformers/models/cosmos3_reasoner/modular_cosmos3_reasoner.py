@@ -26,7 +26,7 @@ from ..qwen3_vl.modeling_qwen3_vl import (
 
 @auto_docstring(checkpoint="nvidia/Cosmos3-Nano")
 @strict
-class Cosmos3Config(Qwen3VLConfig):
+class Cosmos3ReasonerConfig(Qwen3VLConfig):
     r"""
     Configuration for the [Cosmos3](https://huggingface.co/nvidia/Cosmos3-Nano) Reasoner tower.
 
@@ -61,13 +61,13 @@ _COSMOS3_DROPPED_UNIFIED_CHECKPOINT_KEYS = [
 ]
 
 
-class Cosmos3PreTrainedModel(Qwen3VLPreTrainedModel):
+class Cosmos3ReasonerPreTrainedModel(Qwen3VLPreTrainedModel):
     # Unified Cosmos3 checkpoint also carries the Generator tower, sound/action towers,
     # and cross-modal adapters; those parameters are dropped when loading the Reasoner.
     _keys_to_ignore_on_load_unexpected = _COSMOS3_DROPPED_UNIFIED_CHECKPOINT_KEYS
 
 
-class Cosmos3Model(Qwen3VLModel):
+class Cosmos3ReasonerModel(Qwen3VLModel):
     pass
 
 
@@ -76,7 +76,7 @@ class Cosmos3ReasonerForConditionalGeneration(Qwen3VLForConditionalGeneration):
 
 
 __all__ = [
-    "Cosmos3Config",
-    "Cosmos3Model",
+    "Cosmos3ReasonerConfig",
+    "Cosmos3ReasonerModel",
     "Cosmos3ReasonerForConditionalGeneration",
 ]

@@ -36,7 +36,6 @@ from transformers import AutoProcessor, Cosmos3ReasonerForConditionalGeneration
 
 model = Cosmos3ReasonerForConditionalGeneration.from_pretrained(
     "nvidia/Cosmos3-Nano",
-    dtype=torch.float16,
 )
 processor = AutoProcessor.from_pretrained("nvidia/Cosmos3-Nano")
 
@@ -67,13 +66,13 @@ output = processor.batch_decode(
 print(output[0])
 ```
 
-## Cosmos3Config
+## Cosmos3ReasonerConfig
 
-[[autodoc]] Cosmos3Config
+[[autodoc]] Cosmos3ReasonerConfig
 
-## Cosmos3Model
+## Cosmos3ReasonerModel
 
-[[autodoc]] Cosmos3Model
+[[autodoc]] Cosmos3ReasonerModel
     - forward
     - get_video_features
     - get_image_features

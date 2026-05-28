@@ -27,7 +27,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
 @strict
-class Cosmos3VisionConfig(PreTrainedConfig):
+class Cosmos3ReasonerVisionConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 3584):
         The output hidden size of the vision model.
@@ -57,18 +57,18 @@ class Cosmos3VisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
 @strict
-class Cosmos3TextConfig(PreTrainedConfig):
+class Cosmos3ReasonerTextConfig(PreTrainedConfig):
     r"""
     Example:
 
     ```python
-    >>> from transformers import Cosmos3TextModel, Cosmos3TextConfig
+    >>> from transformers import Cosmos3ReasonerTextModel, Cosmos3ReasonerTextConfig
 
-    >>> # Initializing a Cosmos3 style configuration
-    >>> configuration = Cosmos3TextConfig()
+    >>> # Initializing a Cosmos3Reasoner style configuration
+    >>> configuration = Cosmos3ReasonerTextConfig()
 
     >>> # Initializing a model from the Qwen3-VL-7B style configuration
-    >>> model = Cosmos3TextModel(configuration)
+    >>> model = Cosmos3ReasonerTextModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -105,10 +105,10 @@ class Cosmos3TextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="nvidia/Cosmos3-Nano")
 @strict
-class Cosmos3Config(PreTrainedConfig):
+class Cosmos3ReasonerConfig(PreTrainedConfig):
 
     model_type = "cosmos3_omni"
-    sub_configs = {"vision_config": Cosmos3VisionConfig, "text_config": Cosmos3TextConfig}
+    sub_configs = {"vision_config": Cosmos3ReasonerVisionConfig, "text_config": Cosmos3ReasonerTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -133,4 +133,4 @@ class Cosmos3Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Cosmos3Config"]
+__all__ = ["Cosmos3ReasonerConfig"]

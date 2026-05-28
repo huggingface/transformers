@@ -48,10 +48,14 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_bilinear_indices_and_weights, get_vision_cu_seqlens, get_vision_position_ids
-from .configuration_cosmos3_reasoner import Cosmos3Config, Cosmos3TextConfig, Cosmos3VisionConfig
+from .configuration_cosmos3_reasoner import (
+    Cosmos3ReasonerConfig,
+    Cosmos3ReasonerTextConfig,
+    Cosmos3ReasonerVisionConfig,
+)
 
 
-class Cosmos3VisionRotaryEmbedding(nn.Module):
+class Cosmos3ReasonerVisionRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
@@ -66,10 +70,10 @@ class Cosmos3VisionRotaryEmbedding(nn.Module):
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class Cosmos3TextRMSNorm(nn.Module):
+class Cosmos3ReasonerTextRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
-        Cosmos3TextRMSNorm is equivalent to T5LayerNorm
+        Cosmos3ReasonerTextRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -157,10 +161,10 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
-class Cosmos3TextAttention(nn.Module):
+class Cosmos3ReasonerTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Cosmos3TextConfig, layer_idx: int):
+    def __init__(self, config: Cosmos3ReasonerTextConfig, layer_idx: int):
         super().__init__()
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
@@ -183,8 +187,10 @@ class Cosmos3TextAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_norm = Cosmos3TextRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
-        self.k_norm = Cosmos3TextRMSNorm(
+        self.q_norm = Cosmos3ReasonerTextRMSNorm(
+            self.head_dim, eps=config.rms_norm_eps
+        )  # unlike olmo, only on the head dim!
+        self.k_norm = Cosmos3ReasonerTextRMSNorm(
             self.head_dim, eps=config.rms_norm_eps
         )  # thus post q_norm does not need reshape
 
@@ -229,7 +235,7 @@ class Cosmos3TextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Cosmos3TextMLP(nn.Module):
+class Cosmos3ReasonerTextMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -245,16 +251,16 @@ class Cosmos3TextMLP(nn.Module):
         return down_proj
 
 
-class Cosmos3TextDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Cosmos3TextConfig, layer_idx: int):
+class Cosmos3ReasonerTextDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Cosmos3ReasonerTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = Cosmos3TextAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = Cosmos3ReasonerTextAttention(config=config, layer_idx=layer_idx)
 
-        self.mlp = Cosmos3TextMLP(config)
-        self.input_layernorm = Cosmos3TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Cosmos3TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = Cosmos3ReasonerTextMLP(config)
+        self.input_layernorm = Cosmos3ReasonerTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Cosmos3ReasonerTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -312,12 +318,12 @@ _COSMOS3_DROPPED_UNIFIED_CHECKPOINT_KEYS = [
 
 
 @auto_docstring
-class Cosmos3PreTrainedModel(PreTrainedModel):
-    config: Cosmos3Config
+class Cosmos3ReasonerPreTrainedModel(PreTrainedModel):
+    config: Cosmos3ReasonerConfig
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Cosmos3TextDecoderLayer", "Cosmos3VisionBlock"]
+    _no_split_modules = ["Cosmos3ReasonerTextDecoderLayer", "Cosmos3ReasonerVisionBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -325,8 +331,8 @@ class Cosmos3PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": Cosmos3TextDecoderLayer,
-        "attentions": Cosmos3TextAttention,
+        "hidden_states": Cosmos3ReasonerTextDecoderLayer,
+        "attentions": Cosmos3ReasonerTextAttention,
     }
     # Unified Cosmos3 checkpoint also carries the Generator tower, sound/action towers,
     # and cross-modal adapters; those parameters are dropped when loading the Reasoner.
@@ -334,7 +340,7 @@ class Cosmos3PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, Cosmos3VisionRotaryEmbedding):
+        if isinstance(module, Cosmos3ReasonerVisionRotaryEmbedding):
             inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
             init.copy_(module.inv_freq, inv_freq)
 
@@ -350,7 +356,7 @@ class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     deepstack_features: list[torch.FloatTensor] | None = None
 
 
-class Cosmos3VisionMLP(nn.Module):
+class Cosmos3ReasonerVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -363,7 +369,7 @@ class Cosmos3VisionMLP(nn.Module):
         return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
 
 
-class Cosmos3VisionPatchEmbed(nn.Module):
+class Cosmos3ReasonerVisionPatchEmbed(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         self.patch_size = config.patch_size
@@ -383,8 +389,8 @@ class Cosmos3VisionPatchEmbed(nn.Module):
         return hidden_states
 
 
-class Cosmos3VisionPatchMerger(nn.Module):
-    def __init__(self, config: Cosmos3VisionConfig, use_postshuffle_norm=False) -> None:
+class Cosmos3ReasonerVisionPatchMerger(nn.Module):
+    def __init__(self, config: Cosmos3ReasonerVisionConfig, use_postshuffle_norm=False) -> None:
         super().__init__()
         self.hidden_size = config.hidden_size * (config.spatial_merge_size**2)
         self.use_postshuffle_norm = use_postshuffle_norm
@@ -413,8 +419,8 @@ def apply_rotary_pos_emb_vision(
     return q_embed, k_embed
 
 
-class Cosmos3VisionAttention(nn.Module):
-    def __init__(self, config: Cosmos3VisionConfig) -> None:
+class Cosmos3ReasonerVisionAttention(nn.Module):
+    def __init__(self, config: Cosmos3ReasonerVisionConfig) -> None:
         super().__init__()
         self.dim = config.hidden_size
         self.num_heads = config.num_heads
@@ -496,13 +502,13 @@ class Cosmos3VisionAttention(nn.Module):
         return attn_output
 
 
-class Cosmos3VisionBlock(GradientCheckpointingLayer):
+class Cosmos3ReasonerVisionBlock(GradientCheckpointingLayer):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-6)
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=1e-6)
-        self.attn = Cosmos3VisionAttention(config=config)
-        self.mlp = Cosmos3VisionMLP(config=config)
+        self.attn = Cosmos3ReasonerVisionAttention(config=config)
+        self.mlp = Cosmos3ReasonerVisionMLP(config=config)
 
     @auto_docstring
     def forward(
@@ -530,10 +536,10 @@ class Cosmos3VisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Cosmos3TextRotaryEmbedding(nn.Module):
+class Cosmos3ReasonerTextRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: Cosmos3TextConfig, device=None):
+    def __init__(self, config: Cosmos3ReasonerTextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -553,7 +559,7 @@ class Cosmos3TextRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Cosmos3TextConfig | None = None,
+        config: Cosmos3ReasonerTextConfig | None = None,
         device: Optional["torch.device"] = None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
@@ -584,7 +590,7 @@ class Cosmos3TextRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        # In contrast to other models, Cosmos3 has different position ids for the grids
+        # In contrast to other models, Cosmos3Reasoner has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
         if position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
@@ -627,7 +633,7 @@ class Cosmos3TextRotaryEmbedding(nn.Module):
     """
 )
 @dataclass
-class Cosmos3ModelOutputWithPast(ModelOutput):
+class Cosmos3ReasonerModelOutputWithPast(ModelOutput):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
@@ -645,13 +651,13 @@ class Cosmos3ModelOutputWithPast(ModelOutput):
     rope_deltas: torch.LongTensor | None = None
 
 
-class Cosmos3VisionModel(Cosmos3PreTrainedModel):
-    config: Cosmos3VisionConfig
+class Cosmos3ReasonerVisionModel(Cosmos3ReasonerPreTrainedModel):
+    config: Cosmos3ReasonerVisionConfig
     input_modalities = ("image", "video")
-    _no_split_modules = ["Cosmos3VisionBlock"]
+    _no_split_modules = ["Cosmos3ReasonerVisionBlock"]
     _can_record_outputs = {
-        "hidden_states": Cosmos3VisionBlock,
-        "attentions": Cosmos3VisionAttention,
+        "hidden_states": Cosmos3ReasonerVisionBlock,
+        "attentions": Cosmos3ReasonerVisionAttention,
     }
 
     def __init__(self, config, *inputs, **kwargs) -> None:
@@ -660,7 +666,7 @@ class Cosmos3VisionModel(Cosmos3PreTrainedModel):
         self.patch_size = config.patch_size
         self.spatial_merge_unit = self.spatial_merge_size * self.spatial_merge_size
 
-        self.patch_embed = Cosmos3VisionPatchEmbed(
+        self.patch_embed = Cosmos3ReasonerVisionPatchEmbed(
             config=config,
         )
 
@@ -668,10 +674,10 @@ class Cosmos3VisionModel(Cosmos3PreTrainedModel):
         self.num_grid_per_side = int(config.num_position_embeddings**0.5)
 
         head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = Cosmos3VisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = Cosmos3ReasonerVisionRotaryEmbedding(head_dim // 2)
 
-        self.blocks = nn.ModuleList([Cosmos3VisionBlock(config) for _ in range(config.depth)])
-        self.merger = Cosmos3VisionPatchMerger(
+        self.blocks = nn.ModuleList([Cosmos3ReasonerVisionBlock(config) for _ in range(config.depth)])
+        self.merger = Cosmos3ReasonerVisionPatchMerger(
             config=config,
             use_postshuffle_norm=False,
         )
@@ -679,7 +685,7 @@ class Cosmos3VisionModel(Cosmos3PreTrainedModel):
         self.deepstack_visual_indexes = config.deepstack_visual_indexes
         self.deepstack_merger_list = nn.ModuleList(
             [
-                Cosmos3VisionPatchMerger(
+                Cosmos3ReasonerVisionPatchMerger(
                     config=config,
                     use_postshuffle_norm=True,
                 )
@@ -774,26 +780,26 @@ class Cosmos3VisionModel(Cosmos3PreTrainedModel):
 
 @auto_docstring(
     custom_intro=(
-        "Text part of Cosmos3, "
+        "Text part of Cosmos3Reasoner, "
         "not a pure text-only model, as DeepStack integrates visual features into the early hidden states."
     )
 )
-class Cosmos3TextModel(Cosmos3PreTrainedModel):
-    config: Cosmos3TextConfig
+class Cosmos3ReasonerTextModel(Cosmos3ReasonerPreTrainedModel):
+    config: Cosmos3ReasonerTextConfig
     input_modalities = ("text",)
-    _no_split_modules = ["Cosmos3TextDecoderLayer"]
+    _no_split_modules = ["Cosmos3ReasonerTextDecoderLayer"]
 
-    def __init__(self, config: Cosmos3TextConfig):
+    def __init__(self, config: Cosmos3ReasonerTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [Cosmos3TextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Cosmos3ReasonerTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = Cosmos3TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Cosmos3TextRotaryEmbedding(config=config)
+        self.norm = Cosmos3ReasonerTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = Cosmos3ReasonerTextRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -899,17 +905,17 @@ class Cosmos3TextModel(Cosmos3PreTrainedModel):
 
 
 @auto_docstring
-class Cosmos3Model(Cosmos3PreTrainedModel):
+class Cosmos3ReasonerModel(Cosmos3ReasonerPreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
-    config: Cosmos3Config
-    _no_split_modules = ["Cosmos3TextDecoderLayer", "Cosmos3VisionBlock"]
+    config: Cosmos3ReasonerConfig
+    _no_split_modules = ["Cosmos3ReasonerTextDecoderLayer", "Cosmos3ReasonerVisionBlock"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.visual = Cosmos3VisionModel._from_config(config.vision_config)
-        self.language_model = Cosmos3TextModel._from_config(config.text_config)
+        self.visual = Cosmos3ReasonerVisionModel._from_config(config.vision_config)
+        self.language_model = Cosmos3ReasonerTextModel._from_config(config.text_config)
         self.rope_deltas = None  # cache rope_deltas here
 
         # Initialize weights and apply final processing
@@ -1215,7 +1221,7 @@ class Cosmos3Model(Cosmos3PreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Cosmos3ModelOutputWithPast:
+    ) -> tuple | Cosmos3ReasonerModelOutputWithPast:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
@@ -1301,7 +1307,7 @@ class Cosmos3Model(Cosmos3PreTrainedModel):
             **kwargs,
         )
 
-        return Cosmos3ModelOutputWithPast(
+        return Cosmos3ReasonerModelOutputWithPast(
             **outputs,
             rope_deltas=self.rope_deltas,
         )
@@ -1309,11 +1315,11 @@ class Cosmos3Model(Cosmos3PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Base class for Cosmos3 causal language model (or autoregressive) outputs.
+    Base class for Cosmos3Reasoner causal language model (or autoregressive) outputs.
     """
 )
 @dataclass
-class Cosmos3CausalLMOutputWithPast(ModelOutput):
+class Cosmos3ReasonerCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -1336,15 +1342,15 @@ class Cosmos3CausalLMOutputWithPast(ModelOutput):
     rope_deltas: torch.LongTensor | None = None
 
 
-class Cosmos3ReasonerForConditionalGeneration(Cosmos3PreTrainedModel, GenerationMixin):
+class Cosmos3ReasonerForConditionalGeneration(Cosmos3ReasonerPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
-    config: Cosmos3Config
+    config: Cosmos3ReasonerConfig
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = Cosmos3Model(config)
+        self.model = Cosmos3ReasonerModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
@@ -1395,7 +1401,7 @@ class Cosmos3ReasonerForConditionalGeneration(Cosmos3PreTrainedModel, Generation
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Cosmos3CausalLMOutputWithPast:
+    ) -> tuple | Cosmos3ReasonerCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1467,7 +1473,7 @@ class Cosmos3ReasonerForConditionalGeneration(Cosmos3PreTrainedModel, Generation
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
 
-        return Cosmos3CausalLMOutputWithPast(
+        return Cosmos3ReasonerCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -1700,4 +1706,4 @@ class Cosmos3ReasonerForConditionalGeneration(Cosmos3PreTrainedModel, Generation
         return input_ids, model_kwargs
 
 
-__all__ = ["Cosmos3Model", "Cosmos3ReasonerForConditionalGeneration"]
+__all__ = ["Cosmos3ReasonerModel", "Cosmos3ReasonerForConditionalGeneration"]
