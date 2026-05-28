@@ -346,7 +346,7 @@ def load_and_register_attn_kernel(
 
     # Load the kernel from hub
     try:
-        kernel = get_kernel(repo_id, revision=rev, allow_all_kernels=True)
+        kernel = get_kernel(repo_id, revision=rev, allow_all_kernels=allow_all_kernels)
     except Exception as e:
         raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.")
     # correctly wrap the kernel
@@ -376,7 +376,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
             repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
             revision = _HUB_KERNEL_MAPPING[kernel_name].get("revision", None)
             version = _HUB_KERNEL_MAPPING[kernel_name].get("version", None)
-            kernel = get_kernel(repo_id, revision=revision, version=version, allow_all_kernels=True)
+            kernel = get_kernel(repo_id, revision=revision, version=version, allow_all_kernels=ALLOW_ALL_KERNELS)
             mapping[kernel_name] = kernel
         except FileNotFoundError as e:
             mapping[kernel_name] = None
