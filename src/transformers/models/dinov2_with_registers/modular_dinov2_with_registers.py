@@ -18,20 +18,21 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ....transformers.models.dinov2.modeling_dinov2 import (
+from ... import initialization as init
+from ...backbone_utils import BackboneConfigMixin, filter_output_hidden_states
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling, ImageClassifierOutput
+from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
+from ...utils.generic import can_return_tuple
+from ..dinov2.modeling_dinov2 import (
     Dinov2Backbone,
-    Dinov2Encoder,
     Dinov2ForImageClassification,
     Dinov2Model,
     Dinov2PatchEmbeddings,
     Dinov2PreTrainedModel,
 )
-from ... import initialization as init
-from ...backbone_utils import BackboneConfigMixin
-from ...configuration_utils import PreTrainedConfig
-from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
 
 
 logger = logging.get_logger(__name__)
@@ -106,9 +107,7 @@ class Dinov2WithRegistersPatchEmbeddings(Dinov2PatchEmbeddings):
 
 
 class Dinov2WithRegistersEmbeddings(nn.Module):
-    """
-    Construct the CLS token, mask token, register tokens, position and patch embeddings.
-    """
+    """Construct the CLS token, mask token, register tokens, position and patch embeddings."""
 
     def __init__(self, config: Dinov2WithRegistersConfig) -> None:
         super().__init__()
@@ -124,57 +123,39 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images. This implementation supports torch.jit tracing while maintaining backwards compatibility
-        with the original implementation.
-
-        Adapted from:
-        - https://github.com/facebookresearch/dino/blob/main/vision_transformer.py
-        - https://github.com/facebookresearch/dinov2/blob/main/dinov2/models/vision_transformer.py
-        """
         num_patches = embeddings.shape[1] - 1
         num_positions = self.position_embeddings.shape[1] - 1
 
-        # Skip interpolation for matching dimensions (unless tracing)
         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
             return self.position_embeddings
 
-        # Handle class token and patch embeddings separately
         class_pos_embed = self.position_embeddings[:, 0]
         patch_pos_embed = self.position_embeddings[:, 1:]
         dim = embeddings.shape[-1]
 
-        # Calculate new dimensions
         height = height // self.config.patch_size
         width = width // self.config.patch_size
 
-        # Reshape for interpolation
         sqrt_num_positions = torch_int(num_positions**0.5)
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
-        # Store original dtype for restoration after interpolation
         target_dtype = patch_pos_embed.dtype
 
-        # Interpolate at float32 precision
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed.to(dtype=torch.float32),
-            size=(torch_int(height), torch_int(width)),  # Explicit size instead of scale_factor
+            size=(torch_int(height), torch_int(width)),
             mode="bicubic",
             align_corners=False,
             antialias=True,
         ).to(dtype=target_dtype)
 
-        # Validate output dimensions if not tracing
         if not torch.jit.is_tracing():
             if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
                 raise ValueError("Width or height does not match with the interpolated position embeddings")
 
-        # Reshape back to original format
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
 
-        # Combine class and patch embeddings
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
@@ -187,14 +168,11 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
                 bool_masked_pos.unsqueeze(-1), self.mask_token.to(embeddings.dtype).unsqueeze(0), embeddings
             )
 
-        # add the [CLS] token to the embedded patch tokens
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
-        # add positional encoding to each token
         embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
 
-        # add register tokens
         embeddings = torch.cat(
             (embeddings[:, :1], self.register_tokens.expand(embeddings.shape[0], -1, -1), embeddings[:, 1:]), dim=1
         )
@@ -205,27 +183,18 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
 
 
 class Dinov2WithRegistersPreTrainedModel(Dinov2PreTrainedModel):
+    base_model_prefix = "dinov2_with_registers"
+
     @torch.no_grad()
-    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, Dinov2WithRegistersEmbeddings):
+    def _init_weights(self, module) -> None:
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, Dinov2WithRegistersEmbeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.mask_token)
             init.zeros_(module.register_tokens)
         elif isinstance(module, Dinov2WithRegistersLayerScale):  # noqa: F821
             init.constant_(module.lambda1, self.config.layerscale_value)
-
-
-class Dinov2WithRegistersEncoder(Dinov2Encoder):
-    pass
 
 
 class Dinov2WithRegistersModel(Dinov2Model):
@@ -237,6 +206,7 @@ class Dinov2WithRegistersForImageClassification(Dinov2ForImageClassification):
         self,
         pixel_values: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
         r"""
@@ -245,9 +215,10 @@ class Dinov2WithRegistersForImageClassification(Dinov2ForImageClassification):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-
-        outputs: BaseModelOutputWithPooling = self.dinov2_with_registers(pixel_values, **kwargs)
-        sequence_output = outputs.last_hidden_state  # batch_size, sequence_length, hidden_size
+        outputs: BaseModelOutputWithPooling = self.dinov2_with_registers(
+            pixel_values, attention_mask=attention_mask, **kwargs
+        )
+        sequence_output = outputs.last_hidden_state
 
         cls_token = sequence_output[:, 0]
         # cls and register tokens should not be included in patch tokens variable
@@ -269,25 +240,13 @@ class Dinov2WithRegistersForImageClassification(Dinov2ForImageClassification):
 
 
 class Dinov2WithRegistersBackbone(Dinov2Backbone):
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.num_register_tokens = config.num_register_tokens
-        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
-        self.embeddings = Dinov2WithRegistersEmbeddings(config)
-        self.encoder = Dinov2WithRegistersEncoder(config)
-
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> Dinov2WithRegistersPatchEmbeddings:
-        return self.embeddings.patch_embeddings
-
+    @can_return_tuple
+    @filter_output_hidden_states
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
         r"""
@@ -316,19 +275,20 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
+        kwargs["output_hidden_states"] = True
 
-        embedding_output = self.embeddings(pixel_values)
-        output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
-        hidden_states = output.hidden_states
+        outputs: BaseModelOutputWithPooling = self.dinov2_with_registers(
+            pixel_values, attention_mask=attention_mask, **kwargs
+        )
+        hidden_states = outputs.hidden_states
 
         feature_maps = []
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
                 if self.config.apply_layernorm:
-                    hidden_state = self.layernorm(hidden_state)
+                    hidden_state = self.dinov2_with_registers.layernorm(hidden_state)
                 if self.config.reshape_hidden_states:
-                    hidden_state = hidden_state[:, 1 + self.num_register_tokens :]
+                    hidden_state = hidden_state[:, 1 + self.config.num_register_tokens :]
                     # this was actually a bug in the original implementation that we copied here,
                     # cause normally the order is height, width
                     batch_size, _, height, width = pixel_values.shape
@@ -340,7 +300,7 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
         return BackboneOutput(
             feature_maps=tuple(feature_maps),
             hidden_states=hidden_states,
-            attentions=output.attentions,
+            attentions=outputs.attentions,
         )
 
 

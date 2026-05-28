@@ -18,9 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import collections.abc
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 import numpy as np
@@ -55,20 +54,18 @@ class VideomtPatchEmbeddings(nn.Module):
     Transformer.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: VideomtConfig):
         super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
+        image_size = config.image_size
+        patch_size = config.patch_size
+        image_size = image_size if isinstance(image_size, Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, Iterable) else (patch_size, patch_size)
 
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_patches = num_patches
-
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+        self.num_channels = config.num_channels
+        self.projection = nn.Conv2d(config.num_channels, config.hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         num_channels = pixel_values.shape[1]
@@ -84,9 +81,7 @@ class VideomtPatchEmbeddings(nn.Module):
 
 
 class VideomtEmbeddings(nn.Module):
-    """
-    Construct the CLS token, mask token, position and patch embeddings.
-    """
+    """Construct the CLS token, mask token, position and patch embeddings."""
 
     def __init__(self, config: VideomtConfig) -> None:
         super().__init__()
@@ -294,14 +289,11 @@ class VideomtLayer(GradientCheckpointingLayer):
 
     def __init__(self, config: VideomtConfig) -> None:
         super().__init__()
-
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = VideomtAttention(config)
         self.layer_scale1 = VideomtLayerScale(config)
         self.drop_path = VideomtDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
         if config.use_swiglu_ffn:
             self.mlp = VideomtSwiGLUFFN(config)
         else:
