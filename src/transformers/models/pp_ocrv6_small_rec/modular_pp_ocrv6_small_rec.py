@@ -95,6 +95,8 @@ class PPOCRV6SmallRecImageProcessor(PPOCRV5ServerRecImageProcessor):
 
         for shape, stacked_images in grouped_images.items():
             if do_resize:
+                if stacked_images.dtype == torch.uint8 and (do_rescale or do_normalize):
+                    stacked_images = stacked_images.to(torch.float32)
                 # [Key Change] Use antialias=False to align with cv2.resize
                 stacked_images = self.resize(
                     image=stacked_images, size=target_size, resample=resample, antialias=False
