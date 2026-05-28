@@ -785,17 +785,11 @@ class Sapiens2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Backbone layers
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
         elif isinstance(module, nn.ConvTranspose2d):
             init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, Sapiens2RMSNorm):
-            init.ones_(module.weight)
         elif isinstance(module, Sapiens2Embeddings):
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.config.num_register_tokens > 0:
@@ -811,12 +805,8 @@ class Sapiens2PreTrainedModel(PreTrainedModel):
             for m in module.modules():
                 if isinstance(m, nn.Conv2d):
                     init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
-                    if m.bias is not None:
-                        init.zeros_(m.bias)
                 elif isinstance(m, nn.Linear):
                     init.kaiming_normal_(m.weight, mode="fan_in", nonlinearity="linear")
-                    if m.bias is not None:
-                        init.zeros_(m.bias)
 
 
 class Sapiens2Encoder(Sapiens2PreTrainedModel):

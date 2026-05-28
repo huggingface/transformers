@@ -37,7 +37,7 @@ from ...image_utils import (
     make_list_of_images,
 )
 from ...modeling_outputs import ModelOutput, SemanticSegmenterOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
@@ -1287,17 +1287,11 @@ class Sapiens2PreTrainedModel(DINOv3ViTPreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module) -> None:
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Backbone layers
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
         elif isinstance(module, nn.ConvTranspose2d):
             init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, Sapiens2RMSNorm):
-            init.ones_(module.weight)
         elif isinstance(module, Sapiens2Embeddings):
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.config.num_register_tokens > 0:
@@ -1313,12 +1307,8 @@ class Sapiens2PreTrainedModel(DINOv3ViTPreTrainedModel):
             for m in module.modules():
                 if isinstance(m, nn.Conv2d):
                     init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
-                    if m.bias is not None:
-                        init.zeros_(m.bias)
                 elif isinstance(m, nn.Linear):
                     init.kaiming_normal_(m.weight, mode="fan_in", nonlinearity="linear")
-                    if m.bias is not None:
-                        init.zeros_(m.bias)
 
 
 class Sapiens2Encoder(DINOv3ViTEncoder):
