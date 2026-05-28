@@ -397,6 +397,12 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
     def test_eager_matches_sdpa_inference(self, *args):
         self.skipTest("The generic SDPA equivalence helper does not handle SeamlessM4Tv2's dynamic modality switch.")
 
+    @unittest.skip(
+        reason="Conformer speech encoder uses relative positional embeddings producing dense attention biases incompatible with flash attention"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "facebook/seamless-m4t-v2-large"
