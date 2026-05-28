@@ -4082,7 +4082,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         kernel_config = kwargs.pop("kernel_config", None)
         key_mapping = kwargs.pop("key_mapping", None)
 
-        if distributed_config is not None and tp_plan is None:
+        if (
+            distributed_config is not None
+            and tp_plan is None
+            and getattr(distributed_config, "enable_expert_parallel", False)
+        ):
+            # Expert parallelism rides on the TP path (each rank still loads only its expert shards).
+            # Context parallelism does not shard weights, so it does NOT activate the TP path here.
             tp_plan = "auto"
 
         # Not used anymore -- remove them from the kwargs
@@ -4334,15 +4340,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if (
             distributed_config is not None
             and getattr(distributed_config, "enable_context_parallel", False)
-            and distributed_config.cp_world_size > 1
+            and getattr(distributed_config, "cp_world_size", 1) > 1
         ):
-            from .integrations.context_parallel import apply_context_parallel
-
-            apply_context_parallel(
-                model,
-                cp_world_size=distributed_config.cp_world_size,
-                cp_strategy=distributed_config.cp_strategy,
+            from .integrations.context_parallel import (
+                distribute_context_parallel,
+                initialize_context_parallelism,
             )
+
+            cp_group, _ = initialize_context_parallelism(distributed_config)
+            if cp_group is not None:
+                model = distribute_context_parallel(model, cp_group, distributed_config)
 
         if output_loading_info:
             return model, loading_info.to_dict()

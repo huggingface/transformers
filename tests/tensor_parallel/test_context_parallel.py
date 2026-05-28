@@ -208,24 +208,16 @@ class TestContextParallelUlysses(TestCasePlus):
 
 @require_torch_gpu
 class TestContextParallelApply(TestCasePlus):
-    """Smoke test: ``apply_context_parallel`` registers the impl + stashes
-    cp_group on attention modules, even with a tiny random-init model.
+    """Smoke tests for the public init/distribute API and the one-call wrapper.
+
+    No distributed init is needed for these — they exercise the model-walking,
+    plan validation, and ``tp_plan="auto"`` gating logic that runs on every
+    rank regardless of CP world size.
     """
 
-    def test_register_impl(self):
-        from transformers.integrations.context_parallel import _register_cp_attention_impl
-        from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
-
-        _register_cp_attention_impl()
-        self.assertIn("context_parallel_ulysses", ALL_ATTENTION_FUNCTIONS.valid_keys())
-
-    def test_apply_no_dist_world1(self):
-        """`apply_context_parallel` with `cp_world_size=1` is a no-op
-        (CP off; just registers the impl). It must not require an
-        initialised process group.
-        """
+    @staticmethod
+    def _make_tiny_qwen3moe():
         from transformers import Qwen3MoeConfig, Qwen3MoeForCausalLM
-        from transformers.integrations.context_parallel import apply_context_parallel
 
         cfg = Qwen3MoeConfig(
             vocab_size=128,
@@ -239,7 +231,96 @@ class TestContextParallelApply(TestCasePlus):
             num_experts_per_tok=2,
             moe_intermediate_size=64,
         )
-        model = Qwen3MoeForCausalLM(cfg)
+        return Qwen3MoeForCausalLM(cfg)
+
+    def test_register_impl(self):
+        from transformers.integrations.context_parallel import _register_cp_attention_impl
+        from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+
+        _register_cp_attention_impl()
+        self.assertIn("context_parallel_ulysses", ALL_ATTENTION_FUNCTIONS.valid_keys())
+
+    def test_initialize_no_dist_cp_size_1(self):
+        """``initialize_context_parallelism`` returns ``(None, 1)`` when CP is
+        either disabled or sized 1 — no distributed init required."""
+        from transformers.distributed import DistributedConfig
+        from transformers.integrations.context_parallel import initialize_context_parallelism
+
+        cp_group, cp_size = initialize_context_parallelism(None)
+        self.assertIsNone(cp_group)
+        self.assertEqual(cp_size, 1)
+
+        cp_group, cp_size = initialize_context_parallelism(
+            DistributedConfig(enable_context_parallel=False, cp_world_size=2)
+        )
+        self.assertIsNone(cp_group)
+        self.assertEqual(cp_size, 1)
+
+        cp_group, cp_size = initialize_context_parallelism(
+            DistributedConfig(enable_context_parallel=True, cp_world_size=1)
+        )
+        self.assertIsNone(cp_group)
+        self.assertEqual(cp_size, 1)
+
+    def test_initialize_ep_only_does_not_activate_cp(self):
+        """A DistributedConfig that only sets ``enable_expert_parallel`` must not
+        trigger CP init (regression test for the EP↔CP wiring)."""
+        from transformers.distributed import DistributedConfig
+        from transformers.integrations.context_parallel import initialize_context_parallelism
+
+        cp_group, cp_size = initialize_context_parallelism(
+            DistributedConfig(enable_expert_parallel=True, cp_world_size=4)
+        )
+        self.assertIsNone(cp_group)
+        self.assertEqual(cp_size, 1)
+
+    def test_distribute_walks_cp_plan(self):
+        """``distribute_context_parallel`` with a fake non-``None`` group must
+        find and tag every attention module declared in ``_cp_plan``."""
+        # Mock group — we never call collectives in this unit test. Use a
+        # mock that responds to `.size()` so the bookkeeping log line works.
+        from unittest.mock import MagicMock
+
+        from transformers.integrations.context_parallel import distribute_context_parallel
+
+        fake_group = MagicMock(name="fake_cp_group")
+        fake_group.size.return_value = 2
+        model = self._make_tiny_qwen3moe()
+        distribute_context_parallel(model, fake_group)
+        attn_tagged = [
+            name
+            for name, m in model.named_modules()
+            if name.endswith(".self_attn") and getattr(m, "_cp_group", None) is fake_group
+        ]
+        self.assertEqual(len(attn_tagged), 2)  # 2 layers × 1 self_attn each
+        self.assertIs(model._cp_group, fake_group)  # top-level bookkeeping
+        self.assertEqual(model.config._attn_implementation, "context_parallel_ulysses")
+
+    def test_distribute_rejects_unknown_strategy(self):
+        """A ``_cp_plan`` whose value isn't in ``ALL_ATTENTION_FUNCTIONS`` must error."""
+        from transformers.integrations.context_parallel import distribute_context_parallel
+
+        model = self._make_tiny_qwen3moe()
+        from unittest.mock import MagicMock
+
+        fake_group = MagicMock(name="fake_cp_group")
+        fake_group.size.return_value = 2
+        # Monkey-patch the class-level plan to point at an unregistered strategy.
+        original = type(model)._cp_plan
+        type(model)._cp_plan = {"model.layers.*.self_attn": "context_parallel_bogus"}
+        try:
+            with self.assertRaises(ValueError):
+                distribute_context_parallel(model, fake_group)
+        finally:
+            type(model)._cp_plan = original
+
+    def test_apply_no_dist_world1(self):
+        """``apply_context_parallel(cp_world_size=1)`` is a graceful no-op."""
+        from transformers.integrations.context_parallel import apply_context_parallel
+
+        model = self._make_tiny_qwen3moe()
         apply_context_parallel(model, cp_world_size=1)
-        n = sum(1 for n, _ in model.named_modules() if hasattr(_, "_cp_group"))
-        self.assertEqual(n, 2)  # 2 layers × 1 self_attn each
+        tagged = [m for _, m in model.named_modules() if hasattr(m, "_cp_group")]
+        # With cp_world_size=1 the distribute step is skipped — no _cp_group set,
+        # no attn_implementation flip. CP is genuinely off.
+        self.assertEqual(len(tagged), 0)
