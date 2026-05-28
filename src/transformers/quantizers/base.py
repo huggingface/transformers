@@ -64,8 +64,6 @@ def get_keys_to_not_convert(model) -> list:
         if name.endswith(("audio_tower", "embed_audio")):
             modules_to_not_convert.add(name)
 
-
-    
     modules_to_not_convert = list({k.removesuffix(".weight") for k in modules_to_not_convert})
 
     return list(modules_to_not_convert)
