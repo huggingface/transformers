@@ -59,10 +59,9 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         allocated_memory = torch.xpu.memory_allocated(device)
     elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
         device = torch.device("mps")
-        # MPS memory reporting (PyTorch 2.0+)
-        total_memory = torch.mps.driver_allocated_memory()
-        allocated_memory = total_memory - getattr(torch.mps, "recommended_max_memory")()
-        reserved_memory = 0  # MPS does not track reserved separately
+        total_memory = torch.mps.recommended_max_memory()
+        allocated_memory = torch.mps.current_allocated_memory()
+        reserved_memory = torch.mps.driver_allocated_memory()
     else:
         device = torch.device("cpu")
         if is_psutil_available():
