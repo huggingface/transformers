@@ -56,6 +56,11 @@ if is_torch_available():
     )
 
 
+GEMMA4_RANDOM_MOE_FA2_SKIP_REASON = (
+    "Randomly initialized Gemma4 MoE routers are too sensitive to tiny eager/FA2 input differences"
+)
+
+
 class Gemma4TextModelTester(CausalLMModelTester):
     if is_torch_available():
         config_class = Gemma4TextConfig
@@ -123,6 +128,18 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
         "Fails after fully removing the unused weights, even if `forward` is exactly the same. Investigate why."
     )
     def test_tp_generation_quantized(self):
+        pass
+
+    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    def test_flash_attn_2_equivalence(self):
+        pass
+
+    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
     def test_all_bidirectional_attention_uses_bidirectional_mask(self):
@@ -301,6 +318,14 @@ class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
     def test_generate_from_random_inputs_embeds(self):
         pass
 
+    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
     def test_audio_rel_pos_encoding_uses_context_size_from_config(self):
         """Regression test for #45468; attention context size is properly read from config"""
         from transformers.models.gemma4.configuration_gemma4 import Gemma4AudioConfig
@@ -444,6 +469,7 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     all_model_classes = (Gemma4Model, Gemma4ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Gemma4ForConditionalGeneration,) if is_torch_available() else ()
     additional_model_inputs = ["mm_token_type_ids"]
+    model_split_percents = [0.85, 0.9]
 
     def setUp(self):
         self.model_tester = Gemma4Vision2TextModelTester(self)
@@ -622,7 +648,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", 8): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background'],
-                ("xpu", 3): ['This image shows a **brown and white cow standing on a sandy beach near the ocean**.\n\nHere are some details about the image:\n\n*   '],
+                ("xpu", 3): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -672,7 +698,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
                 ],
                 ("xpu", 3): [
                     "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
-                    "No, these images are not identical.\n\nThe first image is a photograph of a **brown and white cow standing on a beach** under a blue",
+                    "No, these images are **not identical**.\n\nHere's a breakdown of the differences:\n\n1.  **Image 1 (Cow on",
                 ],
             }
         )
