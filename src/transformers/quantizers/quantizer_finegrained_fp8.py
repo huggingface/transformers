@@ -193,14 +193,18 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             if not isinstance(conv, WeightConverter):
                 updated.append(conv)
                 continue
-            weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
+            # Use the originals: `WeightTransform.__init__` may have auto-anchored
+            # `conv.source_patterns` with `$` (when the model-supplied target ends
+            # with `$`, e.g. V4's MoE merge), which would defeat `endswith(".weight")`.
+            originals = conv._original_source_patterns
+            weight_sources = [p for p in originals if p.endswith(".weight")]
             if not weight_sources:
                 updated.append(conv)
                 continue
 
             anchored_weight = [p + "$" for p in weight_sources]
             scale_sources = [p[: -len(".weight")] + ".weight_scale_inv$" for p in weight_sources]
-            other = [p for p in conv.source_patterns if not p.endswith(".weight")]
+            other = [p for p in originals if not p.endswith(".weight")]
             target = conv._original_target_patterns
 
             if dequantize:
@@ -208,17 +212,22 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 updated.append(
                     WeightConverter(
                         source_patterns=anchored_weight + scale_sources + other,
-                        target_patterns=target,
+                        target_patterns=list(target),
                         operations=[Fp8Dequantize(self)] + list(conv.operations),
                     )
                 )
             else:
                 # Scales stay as separate `<target>_scale_inv` params; mirror the merge ops.
-                scale_target = target + "_scale_inv" if isinstance(target, str) else [t + "_scale_inv" for t in target]
+                # `_original_target_patterns` may carry a trailing `$` (anchor) — splice
+                # `_scale_inv` in front of it so the anchor still terminates the pattern.
+                def _scale_target(t: str) -> str:
+                    return t[:-1] + "_scale_inv$" if t.endswith("$") else t + "_scale_inv"
+
+                scale_target = [_scale_target(t) for t in target]
                 updated.append(
                     WeightConverter(
                         source_patterns=anchored_weight + other,
-                        target_patterns=target,
+                        target_patterns=list(target),
                         operations=list(conv.operations),
                     )
                 )
