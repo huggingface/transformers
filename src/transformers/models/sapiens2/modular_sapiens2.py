@@ -1040,6 +1040,11 @@ class Sapiens2Config(DINOv3ViTConfig):
         `num_attention_heads // 2` for all other layers.
     semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
         Label index ignored when computing the segmentation loss.
+    flip_pairs (`list[list[int]]`, *optional*):
+        Pairs of keypoint indices that are mirrored horizontally (e.g., left ear ↔ right ear).
+        Each pair is a two-element list `[left_index, right_index]`. Used for test-time
+        horizontal flip augmentation in pose estimation: pass these pairs to the second
+        forward call so the model flips heatmaps back before returning them.
     head_config (`Sapiens2HeadConfig`, *optional*):
         Configuration for the decode head. See [`Sapiens2HeadConfig`] for the available options.
     """
@@ -1060,6 +1065,7 @@ class Sapiens2Config(DINOv3ViTConfig):
     use_qk_norm: bool = True
     num_key_value_heads_per_layer: list[int] | None = None
     semantic_loss_ignore_index: int = 255
+    flip_pairs: list[list[int]] | None = None
     head_config: Sapiens2HeadConfig | dict | None = None
 
     def __post_init__(self, **kwargs):

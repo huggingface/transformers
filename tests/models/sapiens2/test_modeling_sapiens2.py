@@ -128,6 +128,7 @@ class Sapiens2ModelTester:
             out_indices=[0, 1],
             reshape_hidden_states=True,
             num_labels=4,
+            flip_pairs=[[1, 2], [3, 4]],
             # Head config sized to satisfy all model conversion patterns in test_reverse_loading_mapping
             head_config=Sapiens2HeadConfig(
                 upsample_out_channels=[8, 4, 4, 4],
