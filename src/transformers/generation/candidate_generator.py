@@ -21,10 +21,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from ..cache_utils import DynamicLayer
 from ..pytorch_utils import prune_linear_layer
 from ..utils import ModelOutput, is_sklearn_available
 from .configuration_utils import GenerationConfig
 from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor, SuppressTokensLogitsProcessor
+from .mtp import MtpLayerStack
 
 
 if is_sklearn_available():
@@ -1417,36 +1419,68 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
         return candidate_ids, candidate_logits
 
 
-class MTPCandidateGenerator(CandidateGenerator):
+class MTPCandidateGenerator(AssistedCandidateGenerator):
     requires_model_outputs: bool = True
     # We always need to pass the hidden states from the main model
     model_kwargs_overrides: dict[str, Any] = {"output_hidden_states": True}
 
     def __init__(
         self,
-        input_ids: torch.LongTensor,
-        assistant_model: "PreTrainedModel",
-        target_model_input_embeddings: nn.Embedding,
+        main_model: "PreTrainedModel",
         generation_config: "GenerationConfig",
-        model_kwargs: dict,
-        inputs_tensor: torch.Tensor | None = None,
+        model_kwargs: dict[str, Any],
         logits_processor: Optional["LogitsProcessorList"] = None,
-        eos_token_id: int | list[int] | torch.Tensor | None = None,
     ):
-        pass
+        # Heuristic: use the device of the last layer of the main model for the MTP layers
+        self.device = next(x.device for x in main_model.base_model.layers[-1].parameters())
+        self.mtp_model = MtpLayerStack.from_pretrained(main_model).to(self.device)
+
+        # Artificially add the MTP layers to the cache
+        if (cache := model_kwargs.get("past_key_values")) is not None:
+            cache.layers.extend([DynamicLayer() for _ in range(self.num_mtp_layers)])
+        else:
+            raise ValueError("No cache yet")
 
     def get_candidates(
         self,
         input_ids: torch.LongTensor,
-        *,
-        previous_hidden_state: torch.Tensor,
-        past_key_values: Cache,
-        first_token: torch.LongTensor,
-        position_offset: int,
-        logits_processor=None,
-        do_sample: bool = False,
-    ) -> tuple[torch.LongTensor, torch.Tensor]:
-        pass
+        model_kwargs: dict[str, Any],
+        model_outputs: ModelOutput,
+        is_first_iteration: bool,
+        n_last_matches: int,
+        **kwargs,
+    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+        # This is a trick to skip the first loop of the main model's `_assisted_decoding` method. Since we need the
+        # main model's outputs here to get the candidates, we skip the first loop to allow the main model to get the outputs
+        # (this is because usually `get_candidates` is called first in the main `_assisted_decoding` loop)
+        if is_first_iteration:
+            return input_ids, None
+
+        # Make sure we correctly collected all the main model outputs we needed
+        if model_outputs is None or not hasattr(model_outputs, "hidden_states"):
+            raise ValueError("`model_outputs` cannot be None, and they need to contain `hiden_states`")
+
+        last_hidden_states: torch.Tensor = model_outputs.hidden_states[-1]
+
+        # The input_ids/position_ids/attention_mask are the full sequence here. Slice to get only the ones that were last
+        # processed by the main model, + the last final token
+        mtp_input_ids = input_ids[:, -n_last_matches - 1].to(self.device)
+        mtp_position_ids = model_kwargs["position_ids"][:, -n_last_matches - 1].to(self.device)
+        mtp_attention_mask = model_kwargs["attention_mask"][:, -n_last_matches - 1].to(self.device)
+        # The hidden states have seq_len equal to the last main model's forward pass on all the candidates. We need the
+        # last hidden states of only the last validated tokens
+        last_hidden_states = last_hidden_states[:, : n_last_matches + 1].to(self.device)
+
+        candidate_ids, candidate_logits = self.mtp_model(
+            input_ids=mtp_input_ids,
+            last_hidden_states=last_hidden_states,
+            attention_mask=mtp_attention_mask,
+            position_ids=mtp_position_ids,
+            past_key_values=model_kwargs["past_key_values"],
+            **kwargs,
+        )
+
+        return candidate_ids, candidate_logits
 
 
 def _prepare_attention_mask(model_kwargs: dict[str, Any], new_length: int, is_encoder_decoder: bool) -> dict[str, Any]:

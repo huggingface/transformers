@@ -25,10 +25,14 @@ from ..cache_utils import Cache
 from ..core_model_loading import convert_and_load_state_dict_in_model
 from ..masking_utils import create_causal_mask
 from ..modeling_utils import LoadStateDictConfig, PreTrainedModel, _get_resolved_checkpoint_files
+from ..utils import logging
+from ..utils.loading_report import log_state_dict_report
 
 
 if TYPE_CHECKING:
     from ..configuration_utils import PreTrainedConfig
+
+logger = logging.get_logger(__name__)
 
 
 class MTPSharedHead(nn.Module):
@@ -107,7 +111,7 @@ class MtpLayerStack(PreTrainedModel):
     def forward(
         self,
         input_ids: torch.Tensor,
-        last_hidden_state: torch.Tensor,
+        last_hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,
         position_ids: torch.Tensor | None,
         past_key_values: Cache | None,
@@ -136,9 +140,9 @@ class MtpLayerStack(PreTrainedModel):
                 position_ids=mtp_position_ids,
             )
 
-            last_hidden_state, logits = mtp_layer(
+            last_hidden_states, logits = mtp_layer(
                 inputs_embeds,
-                last_hidden_state,
+                last_hidden_states,
                 position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
                 position_ids=mtp_position_ids,
@@ -170,7 +174,6 @@ class MtpLayerStack(PreTrainedModel):
         cls,
         pretrained_model_name_or_path: str,
         main_model: PreTrainedModel,
-        num_mtp_layers: int | None = None,
         **kwargs,
     ) -> MtpLayerStack:
         # Heuristic: the main model should have the mtp layer patterns under `_keys_to_ignore_on_load_unexpected` to avoid
@@ -180,6 +183,8 @@ class MtpLayerStack(PreTrainedModel):
             raise ValueError(f"{main_model.__class__.__name__} does not seem to register any known MTP layer patterns")
         mtp_regex = re.compile("|".join(rf"({pattern})" for pattern in mtp_patterns))
 
+        # Get the number of layers in the checkpoint
+        num_mtp_layers = main_model.config.get_text_config().num_nextn_predict_layers
         # Since we need to share some modules, let's not instantiate on meta device
         mtp_model = cls(main_model, num_mtp_layers)
 
@@ -223,5 +228,13 @@ class MtpLayerStack(PreTrainedModel):
         # finally close all opened file pointers
         for k in all_pointer:
             k.__exit__(None, None, None)
+
+        log_state_dict_report(
+            model=mtp_model,
+            pretrained_model_name_or_path=pretrained_model_name_or_path,
+            ignore_mismatched_sizes=False,
+            loading_info=loading_info,
+            logger=logger,
+        )
 
         return mtp_model
