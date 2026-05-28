@@ -60,6 +60,8 @@ class MellumConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise_allreduce",
     }
+
+    # Per-layer MLP entries are filled in by `_update_sp_plan` (dense vs sparse).
     base_model_sp_plan = {
         "embed_tokens": "vocab_reduce_scatter",
         "layers.*.input_layernorm": "activation",
@@ -71,11 +73,6 @@ class MellumConfig(PreTrainedConfig):
         "layers.*.self_attn.q_norm": "activation_seq_dim_2",
         "layers.*.self_attn.k_norm": "activation_seq_dim_2",
         "layers.*.post_attention_layernorm": "activation",
-        "layers.*.mlp": "module_allgather_split",
-        "layers.*.mlp.experts": "moe_experts_allreduce",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_reduce_scatter",
         "norm": "activation",
     }
     # Expert-only EP plan: only shards MoE experts, not attention.
@@ -140,10 +137,33 @@ class MellumConfig(PreTrainedConfig):
                 "sliding_attention": {"rope_type": "default", "rope_theta": 10000.0},
             }
 
+        self._update_sp_plan()
+
         super().__post_init__(
             **kwargs,
             ignore_keys_at_rope_validation={"sliding_attention", "full_attention"},
         )
+
+    def _update_sp_plan(self):
+        """Set per-layer SP entries depending on whether the MLP is dense or sparse."""
+        self.base_model_sp_plan = self.base_model_sp_plan.copy()
+        for i, mlp_type in enumerate(self.mlp_layer_types):
+            if mlp_type == "dense":
+                self.base_model_sp_plan.update(
+                    {
+                        f"layers.{i}.mlp": "module_allgather",
+                        f"layers.{i}.mlp.gate_proj": "colwise",
+                        f"layers.{i}.mlp.up_proj": "colwise",
+                        f"layers.{i}.mlp.down_proj": "rowwise_reduce_scatter",
+                    }
+                )
+            else:
+                self.base_model_sp_plan.update(
+                    {
+                        f"layers.{i}.mlp": "module_allgather_split",
+                        f"layers.{i}.mlp.experts": "moe_experts_allreduce",
+                    }
+                )
 
     def convert_rope_params_to_dict(self, **kwargs):
         # No need to handle BC for new models, because they have no old-format `rope_scaling`
