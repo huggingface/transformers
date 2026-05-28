@@ -25,7 +25,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
+@auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
 @strict
 class DeepseekOcr2SamVisionConfig(PreTrainedConfig):
     r"""
@@ -73,7 +73,7 @@ class DeepseekOcr2SamVisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
+@auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
 @strict
 class DeepseekOcr2VisionEncoderConfig(PreTrainedConfig):
     r"""
@@ -166,7 +166,7 @@ class DeepseekOcr2VisionEncoderConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
+@auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
 @strict
 class DeepseekOcr2VisionConfig(PreTrainedConfig):
     r"""
@@ -200,7 +200,7 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
+@auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
 @strict
 class DeepseekOcr2TextConfig(PreTrainedConfig):
     r"""
@@ -315,7 +315,7 @@ class DeepseekOcr2TextConfig(PreTrainedConfig):
             )
 
 
-@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
+@auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
 @strict
 class DeepseekOcr2Config(PreTrainedConfig):
     r"""

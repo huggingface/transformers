@@ -490,7 +490,7 @@ class DeepseekOcr2ImageProcessorPil(GotOcr2ImageProcessorPil):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
+@auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
 @strict
 class DeepseekOcr2SamVisionConfig(SamVisionConfig):
     r"""
@@ -519,7 +519,7 @@ class DeepseekOcr2SamVisionConfig(SamVisionConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
+@auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
 @strict
 class DeepseekOcr2VisionEncoderConfig(Qwen2Config):
     r"""
@@ -535,7 +535,7 @@ class DeepseekOcr2VisionEncoderConfig(Qwen2Config):
     base_config_key = "encoder_config"
 
 
-@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
+@auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
 @strict
 class DeepseekOcr2VisionConfig(PreTrainedConfig):
     r"""
@@ -569,7 +569,7 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
+@auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
 @strict
 class DeepseekOcr2TextConfig(DeepseekV2Config):
     r"""
@@ -617,7 +617,7 @@ class DeepseekOcr2TextConfig(DeepseekV2Config):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
+@auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
 @strict
 class DeepseekOcr2Config(PreTrainedConfig):
     r"""

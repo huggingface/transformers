@@ -39,9 +39,9 @@ This model was contributed by [thisisiron](https://huggingface.co/thisisiron).
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
 model = AutoModelForImageTextToText.from_pretrained(
-    "thisisiron/DeepSeek-OCR-2-hf", device_map="auto"
+    "deepseek-community/DeepSeek-OCR-2", device_map="auto"
 )
-processor = AutoProcessor.from_pretrained("thisisiron/DeepSeek-OCR-2-hf")
+processor = AutoProcessor.from_pretrained("deepseek-community/DeepSeek-OCR-2")
 
 image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
 inputs = processor(images=image, text="<image>\nFree OCR.", return_tensors="pt").to(model.device)

@@ -151,7 +151,7 @@ class DeepseekOcr2ModelTest(VLMModelTest, unittest.TestCase):
 
 @require_torch
 class DeepseekOcr2IntegrationTest(unittest.TestCase):
-    model_id = "thisisiron/DeepSeek-OCR-2-hf"
+    model_id = "deepseek-community/DeepSeek-OCR-2"
 
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(self.model_id)

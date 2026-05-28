@@ -37,7 +37,7 @@ class DeepseekOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class.from_pretrained("thisisiron/DeepSeek-OCR-2-hf")
+        tokenizer = tokenizer_class.from_pretrained("deepseek-community/DeepSeek-OCR-2")
         return tokenizer
 
     @classmethod
