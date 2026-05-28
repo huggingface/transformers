@@ -137,7 +137,7 @@ class MtpLayerStack(PreTrainedModel):
         drafted_tokens = []
         for mtp_layer in self.layers:
             # We need to recompute those every layer since they change
-            inputs_embeds = self.embed_tokens(mtp_input_ids)
+            inputs_embeds = self.embed_tokens(mtp_input_ids).to(last_hidden_states.device)
             position_embeddings = self.rotary_emb(inputs_embeds, position_ids=mtp_position_ids)
             causal_mask = create_causal_mask(
                 config=self.config,
@@ -161,7 +161,7 @@ class MtpLayerStack(PreTrainedModel):
             # Append the drafted logits
             drafted_logits.append(logits)
             # For now, assume greedy decoding
-            next_mtp_token = logits.argmax(dim=-1)
+            next_mtp_token = logits.argmax(dim=-1, keepdim=True).to(mtp_input_ids.device)
             drafted_tokens.append(next_mtp_token)
 
             # Roll by 1 and append for next layer
@@ -177,7 +177,7 @@ class MtpLayerStack(PreTrainedModel):
         return candidate_ids, candidate_logits
 
     @classmethod
-    def from_pretrained(cls, main_model: PreTrainedModel, **kwargs) -> MtpLayerStack:
+    def from_pretrained(cls, main_model: PreTrainedModel, device_map=None, **kwargs) -> MtpLayerStack:
         pretrained_model_name_or_path = main_model.config.name_or_path
         # Heuristic: the main model should have the mtp layer patterns under `_keys_to_ignore_on_load_unexpected` to avoid
         # loading them by default, so use it to later load the correct keys from the checkpoints
@@ -218,13 +218,21 @@ class MtpLayerStack(PreTrainedModel):
                     renamed = re.sub(
                         r"model\.layers\.(\d+)\.", lambda m: f"layers.{int(m.group(1)) - num_hidden_layers}.", k
                     )
+                    if not (
+                        "eh_proj" in renamed
+                        or "enorm" in renamed
+                        or "shared_head" in renamed
+                        or "embed_tokens" in renamed
+                        or "hnorm" in renamed
+                    ):
+                        renamed = re.sub(r"\.\d+\.", lambda m: f"{m.group(0)}mtp_block.", renamed)
                     mtp_state_dict[renamed] = file_pointer.get_slice(k)  # don't materialize yet
 
         # Load the weights
         loading_info, _ = convert_and_load_state_dict_in_model(
             model=mtp_model,
             state_dict=mtp_state_dict,
-            load_config=LoadStateDictConfig(weight_mapping=main_model._weight_conversions),
+            load_config=LoadStateDictConfig(weight_mapping=main_model._weight_conversions, device_map=device_map),
             tp_plan=None,
         )
 

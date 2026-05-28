@@ -1433,7 +1433,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
     ):
         # Heuristic: use the device of the last layer of the main model for the MTP layers
         self.device = next(x.device for x in main_model.base_model.layers[-1].parameters())
-        self.mtp_model = MtpLayerStack.from_pretrained(main_model).to(self.device)
+        self.mtp_model = MtpLayerStack.from_pretrained(main_model, device_map={"": self.device})
 
         self.num_mtp_layers = len(self.mtp_model.layers)
         # Artificially add the MTP layers to the cache
@@ -1441,6 +1441,8 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
             cache.layers.extend([DynamicLayer() for _ in range(self.num_mtp_layers)])
         else:
             raise ValueError("No cache yet")
+
+        self.is_main_model_prefill = True
 
     def get_candidates(
         self,
@@ -1465,12 +1467,13 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
 
         # The input_ids/position_ids/attention_mask are the full sequence here. Slice to get only the ones that were last
         # processed by the main model, + the last final token
-        mtp_input_ids = input_ids[:, -n_last_matches - 1].to(self.device)
-        mtp_position_ids = model_kwargs["position_ids"][:, -n_last_matches - 1].to(self.device)
-        mtp_attention_mask = model_kwargs["attention_mask"][:, -n_last_matches - 1].to(self.device)
+        num_last_main_model_toks = n_last_matches if not self.is_main_model_prefill else input_ids.shape[1] - 1
+        mtp_input_ids = input_ids[:, -num_last_main_model_toks - 1 :]
+        mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_toks - 1 :].to(self.device)
+        mtp_attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_toks - 1 :].to(self.device)
         # The hidden states have seq_len equal to the last main model's forward pass on all the candidates. We need the
         # last hidden states of only the last validated tokens
-        last_hidden_states = last_hidden_states[:, : n_last_matches + 1].to(self.device)
+        last_hidden_states = last_hidden_states[:, :num_last_main_model_toks].to(self.device)
 
         candidate_ids, candidate_logits = self.mtp_model(
             input_ids=mtp_input_ids,
@@ -1481,7 +1484,13 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
             **kwargs,
         )
 
+        # Once we arrive here the first time, it's no longer the case
+        self.is_main_model_prefill = False
+
         return candidate_ids, candidate_logits
+
+    def update_candidate_strategy(self, *args, **kwargs):
+        return
 
 
 def _prepare_attention_mask(model_kwargs: dict[str, Any], new_length: int, is_encoder_decoder: bool) -> dict[str, Any]:
