@@ -109,6 +109,7 @@ _TOOL_CALL_FALLBACKS = {
         "etc": "</tool_call>",
         "schema": {
             "defaults": {},
+            "start_anchor": "<|im_start|>assistant\n",
             "fields": {
                 "tool_calls": {
                     "open": "<tool_call>",
@@ -164,6 +165,11 @@ def get_tool_call_config(processor, model: "PreTrainedModel") -> dict | None:
             "defaults": {},
             "fields": {"tool_calls": response_template["fields"]["tool_calls"]},
         }
+        # Carry the parent template's anchor through so the sub-schema loads (anchor is required).
+        for anchor_key in ("start_anchor", "start_anchor_pattern"):
+            if anchor_key in response_template:
+                schema[anchor_key] = response_template[anchor_key]
+                break
     # Legacy response_schema path (still supported for old tokenizers).
     elif stc and etc and response_schema:
         schema = response_schema["properties"]["tool_calls"]
