@@ -401,16 +401,15 @@ class ContinuousBatchProcessor:
             state_to_fork.num_children = 0
             new_request_ids = [f"{state_to_fork.request_id}__child#{i}" for i in range(num_children)]
             # If there are not enough free blocks, some children are created as new pending requests rather than forked
-            max_num_forks = self.cache.compute_max_num_forks(state_to_fork.request_id)
-            children_forked = min(num_children, max_num_forks)
-            children_scheduled = num_children - children_forked
-            for _ in range(children_scheduled):
+            num_to_fork = min(num_children, self.cache.compute_max_num_forks(state_to_fork.request_id))
+            num_to_schedule = num_children - num_to_fork
+            for _ in range(num_to_schedule):
                 new_request_id = new_request_ids.pop()
                 child_state = state_to_fork.create_equivalent_initial_request()
                 child_state.request_id = new_request_id
                 self.scheduler.add_waiting_request(child_state)
             # Early stop if no forks can be done
-            if children_forked == 0:
+            if num_to_fork == 0:
                 continue
             # Create the new request and add them to the scheduler
             for new_request_id in new_request_ids:

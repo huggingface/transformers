@@ -506,23 +506,21 @@ class PagedAttentionCache:
 
     def compute_max_num_forks(self, source_request_id: str) -> int:
         """Computes the maximum number of children requests that can be forked from the source request."""
-        # Compute the number of blocks needed per fork
+        # Count, across all groups, the new blocks each fork would have to allocate (i.e. non-shareable blocks)
         blocks_needed_per_fork = 0
         for cm in self.group_cache_managers:
             block_ids = cm.block_table[source_request_id]
-            will_be_shared = 0
+            shareable_blocks = 0
             if cm.uses_block_sharing:
                 for block_id in block_ids:
-                    if self._block_manager._id_to_block[block_id].is_complete:
-                        will_be_shared += 1
-                    else:
+                    if not self._block_manager._id_to_block[block_id].is_complete:
                         break
-            blocks_needed_per_fork += len(block_ids) - will_be_shared
-        # Infer, out of the requested number of children, how many can actually be created using a fork
+                    shareable_blocks += 1
+            blocks_needed_per_fork += len(block_ids) - shareable_blocks
+        # If every block can be shared, no new allocations are needed and any number of forks is possible
         if blocks_needed_per_fork == 0:
-            return 2 ** 31  # absurdly large number, virtually infinite number of forks
-        max_num_forks = self.get_num_free_blocks() // blocks_needed_per_fork
-        return max_num_forks
+            return 2**31  # absurdly large number, virtually infinite number of forks
+        return self.get_num_free_blocks() // blocks_needed_per_fork
 
     def fork_request(self, source_request_id: str, destination_request_ids: list[str]) -> tuple[list[int], list[int]]:
         """Fork the cache of a request (state) into the one of a list of requests with the given (dst_request_ids)."""
