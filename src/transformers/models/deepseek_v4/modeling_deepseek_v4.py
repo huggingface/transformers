@@ -1437,10 +1437,11 @@ class DeepseekV4ForCausalLM(DeepseekV4PreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, DeepseekV4ForCausalLM
+        >>> from transformers import AutoTokenizer, DeepseekV4ForCausalLM, FineGrainedFP8Config
 
-        >>> model = DeepseekV4ForCausalLM.from_pretrained("mistralai/DeepseekV4-8x7B-v0.1")
-        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/DeepseekV4-8x7B-v0.1")
+        >>> quantization_config = FineGrainedFP8Config(dequantize=True)
+        >>> model = DeepseekV4ForCausalLM.from_pretrained("deepseek-ai/DeepSeek-V4-Flash", quantization_config=quantization_config)
+        >>> tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V4-Flash")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
