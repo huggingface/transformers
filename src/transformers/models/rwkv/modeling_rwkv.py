@@ -368,6 +368,7 @@ class RwkvPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
+        super()._init_weights(module)
         if isinstance(module, RwkvSelfAttention):
             layer_id = module.layer_id
             num_hidden_layers = module.config.num_hidden_layers
