@@ -133,6 +133,10 @@ class MtpLayerStack(PreTrainedModel):
         mtp_position_ids = position_ids[:, 1:]
         mtp_attention_mask = attention_mask[:, 1:]
 
+        # We create this dummy cache simply to create the masks correctly, since they rely on the sizes of layer 0 of
+        # the cache. Note that it does not create any copy of data, it simply keep a ref to internal tensors
+        dummy_cache_for_masking = Cache(layers=past_key_values.layers[self.config.num_hidden_layers:])
+
         drafted_logits = []
         drafted_tokens = []
         for mtp_layer in self.layers:
@@ -143,7 +147,7 @@ class MtpLayerStack(PreTrainedModel):
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=mtp_attention_mask,
-                past_key_values=past_key_values,
+                past_key_values=dummy_cache_for_masking,
                 position_ids=mtp_position_ids,
             )
 
@@ -161,7 +165,7 @@ class MtpLayerStack(PreTrainedModel):
             # Append the drafted logits
             drafted_logits.append(logits)
             # For now, assume greedy decoding
-            next_mtp_token = logits.argmax(dim=-1, keepdim=True).to(mtp_input_ids.device)
+            next_mtp_token = logits.argmax(dim=-1).to(mtp_input_ids.device)
             drafted_tokens.append(next_mtp_token)
 
             # Roll by 1 and append for next layer
