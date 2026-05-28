@@ -17,7 +17,11 @@ from huggingface_hub.dataclasses import strict
 
 from ...utils import auto_docstring
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig
-from ..qwen3_vl.modeling_qwen3_vl import Qwen3VLForConditionalGeneration, Qwen3VLModel
+from ..qwen3_vl.modeling_qwen3_vl import (
+    Qwen3VLForConditionalGeneration,
+    Qwen3VLModel,
+    Qwen3VLPreTrainedModel,
+)
 
 
 @auto_docstring(checkpoint="nvidia/Cosmos3-Nano")
@@ -57,21 +61,18 @@ _COSMOS3_DROPPED_UNIFIED_CHECKPOINT_KEYS = [
 ]
 
 
-class Cosmos3Model(Qwen3VLModel):
-    config: Cosmos3Config
+class Cosmos3PreTrainedModel(Qwen3VLPreTrainedModel):
+    # Unified Cosmos3 checkpoint also carries the Generator tower, sound/action towers,
+    # and cross-modal adapters; those parameters are dropped when loading the Reasoner.
+    _keys_to_ignore_on_load_unexpected = _COSMOS3_DROPPED_UNIFIED_CHECKPOINT_KEYS
 
-    # Base-model loading from a unified Cosmos3 checkpoint drops the Generator tower,
-    # cross-modal adapters, and the causal-LM head.
-    _keys_to_ignore_on_load_unexpected = _COSMOS3_DROPPED_UNIFIED_CHECKPOINT_KEYS + [r"^lm_head\.weight$"]
+
+class Cosmos3Model(Qwen3VLModel):
+    pass
 
 
 class Cosmos3ForConditionalGeneration(Qwen3VLForConditionalGeneration):
-    config: Cosmos3Config
-
-    # The unified Cosmos3 checkpoint stores both the Reasoner tower (loaded here) and the
-    # Generator tower / cross-modal adapters (dropped). These patterns silence the
-    # "unexpected keys" warning for parameters that belong to the dropped components.
-    _keys_to_ignore_on_load_unexpected = _COSMOS3_DROPPED_UNIFIED_CHECKPOINT_KEYS
+    pass
 
 
 __all__ = [

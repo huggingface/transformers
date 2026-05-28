@@ -37,8 +37,6 @@ from transformers import AutoProcessor, Cosmos3ForConditionalGeneration
 model = Cosmos3ForConditionalGeneration.from_pretrained(
     "nvidia/Cosmos3-Nano",
     dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa",
 )
 processor = AutoProcessor.from_pretrained("nvidia/Cosmos3-Nano")
 
