@@ -184,6 +184,7 @@ if TYPE_CHECKING:
     from .granite4_vision import *
     from .granite_speech import *
     from .granite_speech_plus import *
+    from .granite_swa import *
     from .granitemoe import *
     from .granitemoehybrid import *
     from .granitemoeshared import *
