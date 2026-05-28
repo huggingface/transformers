@@ -998,18 +998,30 @@ def _build_checkpoint_conversion_mapping():
         ],
         "Sapiens2ForSemanticSegmentation": [
             WeightRenaming(r"^backbone\.", r"sapiens2."),
-            WeightRenaming(r"decode_head\.deconv_layers\.0\.weight", r"decode_head.deconv_layers.0.conv.weight"),
-            WeightRenaming(r"decode_head\.deconv_layers\.3\.weight", r"decode_head.deconv_layers.1.conv.weight"),
-            WeightRenaming(r"decode_head\.deconv_layers\.6\.weight", r"decode_head.deconv_layers.2.conv.weight"),
-            WeightRenaming(r"decode_head\.deconv_layers\.9\.weight", r"decode_head.deconv_layers.3.conv.weight"),
+            WeightRenaming(
+                r"decode_head\.deconv_layers\.0\.weight", r"decode_head.deconv_layers.0.convolution.weight"
+            ),
+            WeightRenaming(
+                r"decode_head\.deconv_layers\.3\.weight", r"decode_head.deconv_layers.1.convolution.weight"
+            ),
+            WeightRenaming(
+                r"decode_head\.deconv_layers\.6\.weight", r"decode_head.deconv_layers.2.convolution.weight"
+            ),
+            WeightRenaming(
+                r"decode_head\.deconv_layers\.9\.weight", r"decode_head.deconv_layers.3.convolution.weight"
+            ),
             WeightRenaming(r"decode_head\.conv_layers\.0\.(weight|bias)", r"decode_head.conv_layers.0.convolution.\1"),
             WeightRenaming(r"decode_head\.conv_layers\.3\.(weight|bias)", r"decode_head.conv_layers.1.convolution.\1"),
             WeightRenaming(r"decode_head\.conv_seg\.", r"decode_head.predictor."),
         ],
         "Sapiens2ForPoseEstimation": [
             WeightRenaming(r"^backbone\.", r"sapiens2."),
-            WeightRenaming(r"decode_head\.deconv_layers\.0\.weight", r"decode_head.deconv_layers.0.conv.weight"),
-            WeightRenaming(r"decode_head\.deconv_layers\.3\.weight", r"decode_head.deconv_layers.1.conv.weight"),
+            WeightRenaming(
+                r"decode_head\.deconv_layers\.0\.weight", r"decode_head.deconv_layers.0.convolution.weight"
+            ),
+            WeightRenaming(
+                r"decode_head\.deconv_layers\.3\.weight", r"decode_head.deconv_layers.1.convolution.weight"
+            ),
             WeightRenaming(r"decode_head\.conv_layers\.0\.(weight|bias)", r"decode_head.conv_layers.0.convolution.\1"),
             WeightRenaming(r"decode_head\.conv_layers\.3\.(weight|bias)", r"decode_head.conv_layers.1.convolution.\1"),
             WeightRenaming(r"decode_head\.conv_layers\.6\.(weight|bias)", r"decode_head.conv_layers.2.convolution.\1"),

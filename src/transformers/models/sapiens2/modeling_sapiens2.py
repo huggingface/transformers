@@ -589,28 +589,6 @@ class Sapiens2Layer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Sapiens2ConvTransposeLayer(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int = 4,
-        stride: int = 2,
-        padding: int = 1,
-        bias: bool = False,
-        activation: str = "silu",
-    ):
-        super().__init__()
-        self.conv = nn.ConvTranspose2d(
-            in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias
-        )
-        self.norm = nn.InstanceNorm2d(out_channels)
-        self.activation = ACT2FN[activation]
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.activation(self.norm(self.conv(hidden_states)))
-
-
 class Sapiens2PixelShuffleLayer(nn.Module):
     def __init__(
         self,
@@ -635,6 +613,10 @@ class Sapiens2PixelShuffleLayer(nn.Module):
 
 
 class Sapiens2ConvLayer(nn.Module):
+    """
+    A basic wrapper for Convolution-BatchNorm-Activation, typically used for head components.
+    """
+
     def __init__(
         self,
         in_channels: int,
@@ -642,29 +624,46 @@ class Sapiens2ConvLayer(nn.Module):
         kernel_size: int | tuple[int, int] = 1,
         stride: int = 1,
         padding: int | tuple[int, int] | str = 0,
-        bias: bool = True,
-        dilation: int | tuple[int, int] = 1,
         groups: int = 1,
         activation: str = "silu",
+        bias: bool = True,
+        convolution_transpose: bool = False,
     ):
         super().__init__()
-        self.convolution = nn.Conv2d(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding=padding,
-            dilation=dilation,
-            groups=groups,
-            bias=bias,
-        )
-        self.normalization = nn.InstanceNorm2d(out_channels)
-        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
+        if convolution_transpose:
+            self.convolution = nn.ConvTranspose2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+            )
+        else:
+            self.convolution = nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                groups=groups,
+                bias=bias,
+            )
+        self.norm = nn.InstanceNorm2d(out_channels)
+        self.act_fn = nn.Identity() if activation is None else ACT2FN[activation]
+        if convolution_transpose:
+            self.convolution = nn.ConvTranspose2d(
+                in_channels,
+                out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                bias=bias,
+                groups=groups,
+            )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.convolution(hidden_states)
-        hidden_states = self.normalization(hidden_states)
-        hidden_states = self.activation(hidden_states)
+        hidden_states = self.norm(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
         return hidden_states
 
 
@@ -673,7 +672,9 @@ class Sapiens2SegmentationHead(nn.Module):
         super().__init__()
         upsample_in_channels = [config.hidden_size] + config.head_upsample_out_channels[:-1]
         self.deconv_layers = nn.ModuleList(
-            Sapiens2ConvTransposeLayer(in_ch, out_ch, kernel_size=ks)
+            Sapiens2ConvLayer(
+                in_ch, out_ch, kernel_size=ks, stride=2, padding=1, bias=False, convolution_transpose=True
+            )
             for in_ch, out_ch, ks in zip(
                 upsample_in_channels, config.head_upsample_out_channels, config.head_upsample_kernel_sizes
             )

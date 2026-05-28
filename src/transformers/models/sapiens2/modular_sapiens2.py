@@ -42,7 +42,6 @@ from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
 from ..beit.image_processing_beit import BeitImageProcessor, BeitImageProcessorKwargs
-from ..beit.modeling_beit import BeitConvLayer
 from ..dinov3_vit.configuration_dinov3_vit import DINOv3ViTConfig
 from ..dinov3_vit.modeling_dinov3_vit import (
     DINOv3ViTAttention,
@@ -58,6 +57,7 @@ from ..dinov3_vit.modeling_dinov3_vit import (
 )
 from ..gemma2.modeling_gemma2 import eager_attention_forward
 from ..llama.modeling_llama import LlamaRMSNorm
+from ..pp_ocrv5_server_det.modeling_pp_ocrv5_server_det import PPOCRV5ServerDetConvBatchnormLayer
 from ..sam3.processing_sam3 import box_xywh_to_cxcywh, box_xywh_to_xyxy
 from ..vitmatte.modeling_vitmatte import ImageMattingOutput
 from ..vitpose.modeling_vitpose import VitPoseEstimatorOutput, flip_back
@@ -1104,28 +1104,6 @@ class Sapiens2Layer(DINOv3ViTLayer):
         self.layer_scale2 = nn.Identity()
 
 
-class Sapiens2ConvTransposeLayer(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int = 4,
-        stride: int = 2,
-        padding: int = 1,
-        bias: bool = False,
-        activation: str = "silu",
-    ):
-        super().__init__()
-        self.conv = nn.ConvTranspose2d(
-            in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias
-        )
-        self.norm = nn.InstanceNorm2d(out_channels)
-        self.activation = ACT2FN[activation]
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.activation(self.norm(self.conv(hidden_states)))
-
-
 class Sapiens2PixelShuffleLayer(nn.Module):
     def __init__(
         self,
@@ -1149,7 +1127,7 @@ class Sapiens2PixelShuffleLayer(nn.Module):
         return self.activation(self.norm(self.pixel_shuffle(self.conv(hidden_states))))
 
 
-class Sapiens2ConvLayer(BeitConvLayer):
+class Sapiens2ConvLayer(PPOCRV5ServerDetConvBatchnormLayer):
     def __init__(
         self,
         in_channels: int,
@@ -1157,23 +1135,33 @@ class Sapiens2ConvLayer(BeitConvLayer):
         kernel_size: int | tuple[int, int] = 1,
         stride: int = 1,
         padding: int | tuple[int, int] | str = 0,
-        bias: bool = True,
-        dilation: int | tuple[int, int] = 1,
         groups: int = 1,
         activation: str = "silu",
+        bias: bool = True,
+        convolution_transpose: bool = False,
     ):
         super().__init__(
-            in_channels,
-            out_channels,
+            in_channels=in_channels,
+            out_channels=out_channels,
             kernel_size=kernel_size,
             stride=stride,
             padding=padding,
-            bias=bias,
-            dilation=dilation,
             groups=groups,
             activation=activation,
+            bias=bias,
+            convolution_transpose=convolution_transpose,
         )
-        self.normalization = nn.InstanceNorm2d(out_channels)
+        if convolution_transpose:
+            self.convolution = nn.ConvTranspose2d(
+                in_channels,
+                out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                bias=bias,
+                groups=groups,
+            )
+        self.norm = nn.InstanceNorm2d(out_channels)
 
 
 class Sapiens2SegmentationHead(nn.Module):
@@ -1181,7 +1169,9 @@ class Sapiens2SegmentationHead(nn.Module):
         super().__init__()
         upsample_in_channels = [config.hidden_size] + config.head_upsample_out_channels[:-1]
         self.deconv_layers = nn.ModuleList(
-            Sapiens2ConvTransposeLayer(in_ch, out_ch, kernel_size=ks)
+            Sapiens2ConvLayer(
+                in_ch, out_ch, kernel_size=ks, stride=2, padding=1, bias=False, convolution_transpose=True
+            )
             for in_ch, out_ch, ks in zip(
                 upsample_in_channels, config.head_upsample_out_channels, config.head_upsample_kernel_sizes
             )
