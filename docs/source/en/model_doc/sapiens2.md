@@ -126,7 +126,7 @@ print("Normals RGB shape:", normals_rgb.shape)   # [3, original_height, original
 ### Pointmap estimation
 
 The example below shows how to estimate per-pixel 3D coordinates with [`Sapiens2ForPointmapEstimation`].
-Use `post_process_pointmap` to remove preprocessing padding, resize to the original image size, and apply the predicted focal-length scale.
+Use `post_process_pointmap_estimation` to remove preprocessing padding, resize to the original image size, and apply the predicted focal-length scale.
 
 ```python
 import torch
@@ -147,7 +147,7 @@ print("Pointmaps shape:", outputs.pointmaps.shape)  # [1, 3, 1024, 768]
 
 # Remove preprocessing padding, resize to original size, and apply focal-length scale
 original_size = (image.height, image.width)
-result = image_processor.post_process_pointmap(
+result = image_processor.post_process_pointmap_estimation(
     outputs, source_sizes=[original_size], target_sizes=[original_size]
 )
 pointmap = result[0]["pointmap"]
@@ -312,7 +312,7 @@ print("Composite shape:", result["composite"].shape)    # [3, original_height, o
     - preprocess
     - post_process_image_matting
     - post_process_normal_estimation
-    - post_process_pointmap
+    - post_process_pointmap_estimation
     - post_process_pose_estimation
     - post_process_semantic_segmentation
 

@@ -383,7 +383,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[torch.Tensor],
         do_resize: bool,
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
@@ -399,7 +399,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         do_pad: bool = False,
         boxes: list[list[list[float]]] | None = None,
         **kwargs,
-    ) -> list["torch.Tensor"]:
+    ) -> list[torch.Tensor]:
         """Custom preprocessing for Sapiens2."""
         if boxes is not None:
             output_size = (size["height"], size["width"])
@@ -653,66 +653,13 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             mapping to a tensor of shape `(3, height, width)` with L2-normalized unit vectors in
             `[-1, 1]` per channel (XYZ surface normals).
         """
-        if isinstance(source_sizes, torch.Tensor):
-            source_sizes = source_sizes.tolist()
-        if isinstance(target_sizes, torch.Tensor):
-            target_sizes = target_sizes.tolist()
+        normals = F.normalize(outputs.normals, p=2, dim=1, eps=1e-8)
+        results = self._post_process_maps(
+            maps=normals, source_sizes=source_sizes, target_sizes=target_sizes, do_remove_padding=do_remove_padding
+        )
+        return [{"normals": result} for result in results]
 
-        if do_remove_padding is None:
-            do_remove_padding = source_sizes is not None
-
-        if do_remove_padding and source_sizes is None:
-            raise ValueError("`source_sizes` must be provided when `do_remove_padding=True`.")
-
-        normals = outputs.normals
-
-        if source_sizes is not None and len(normals) != len(source_sizes):
-            raise ValueError("Make sure that you pass in as many source sizes as the batch dimension of the normals")
-        if target_sizes is not None and len(normals) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the normals")
-
-        result = []
-        model_height = self.size["height"]
-        model_width = self.size["width"]
-
-        normals = F.normalize(normals, p=2, dim=1, eps=1e-8)
-
-        for index in range(len(normals)):
-            normal = normals[index]
-
-            if do_remove_padding:
-                original_height, original_width = source_sizes[index]
-                new_height, new_width = get_image_size_for_max_height_width(
-                    (original_height, original_width), model_height, model_width
-                )
-                pad_top = (model_height - new_height) // 2 if new_height < model_height else 0
-                pad_left = (model_width - new_width) // 2 if new_width < model_width else 0
-                normal = normal[
-                    :,
-                    pad_top : pad_top + min(new_height, model_height),
-                    pad_left : pad_left + min(new_width, model_width),
-                ]
-
-            final_size = (
-                target_sizes[index]
-                if target_sizes is not None
-                else (source_sizes[index] if source_sizes is not None else None)
-            )
-
-            if final_size is not None:
-                normal = F.interpolate(
-                    normal.unsqueeze(0),
-                    size=final_size,
-                    mode="bilinear",
-                    align_corners=False,
-                    antialias=False,
-                )[0]
-
-            result.append({"normals": normal})
-
-        return result
-
-    def post_process_pointmap(
+    def post_process_pointmap_estimation(
         self,
         outputs: Sapiens2PointmapEstimatorOutput,
         source_sizes: TensorType | list[tuple[int, int]] | None = None,
@@ -741,65 +688,13 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             mapping to a tensor of shape `(3, height, width)` with per-pixel 3D XYZ coordinates in
             canonical camera space, optionally divided by `outputs.scales` to convert to metric coordinates.
         """
-        if isinstance(source_sizes, torch.Tensor):
-            source_sizes = source_sizes.tolist()
-        if isinstance(target_sizes, torch.Tensor):
-            target_sizes = target_sizes.tolist()
-
-        if do_remove_padding is None:
-            do_remove_padding = source_sizes is not None
-
-        if do_remove_padding and source_sizes is None:
-            raise ValueError("`source_sizes` must be provided when `do_remove_padding=True`.")
-
         pointmaps = outputs.pointmaps
-
-        if source_sizes is not None and len(pointmaps) != len(source_sizes):
-            raise ValueError("Make sure that you pass in as many source sizes as the batch dimension of the pointmap")
-        if target_sizes is not None and len(pointmaps) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the pointmap")
-
-        result = []
-        model_height = self.size["height"]
-        model_width = self.size["width"]
-
-        for index in range(len(pointmaps)):
-            pointmap = pointmaps[index]
-
-            if outputs.scales is not None:
-                pointmap = pointmap / outputs.scales[index]
-
-            if do_remove_padding:
-                original_height, original_width = source_sizes[index]
-                new_height, new_width = get_image_size_for_max_height_width(
-                    (original_height, original_width), model_height, model_width
-                )
-                pad_top = (model_height - new_height) // 2 if new_height < model_height else 0
-                pad_left = (model_width - new_width) // 2 if new_width < model_width else 0
-                pointmap = pointmap[
-                    :,
-                    pad_top : pad_top + min(new_height, model_height),
-                    pad_left : pad_left + min(new_width, model_width),
-                ]
-
-            final_size = (
-                target_sizes[index]
-                if target_sizes is not None
-                else (source_sizes[index] if source_sizes is not None else None)
-            )
-
-            if final_size is not None:
-                pointmap = F.interpolate(
-                    pointmap.unsqueeze(0),
-                    size=final_size,
-                    mode="bilinear",
-                    align_corners=False,
-                    antialias=False,
-                )[0]
-
-            result.append({"pointmap": pointmap})
-
-        return result
+        if outputs.scales is not None:
+            pointmaps = pointmaps / outputs.scales[:, :, None, None]
+        results = self._post_process_maps(
+            maps=pointmaps, source_sizes=source_sizes, target_sizes=target_sizes, do_remove_padding=do_remove_padding
+        )
+        return [{"pointmap": result} for result in results]
 
     def post_process_image_matting(
         self,
@@ -833,61 +728,196 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         if isinstance(target_sizes, torch.Tensor):
             target_sizes = target_sizes.tolist()
 
-        matting = torch.cat([outputs.foregrounds, outputs.alphas], dim=1)  # (B, 4, H, W)
+        batch_size = outputs.foregrounds.shape[0]
+        device = outputs.foregrounds.device
+        dtype = outputs.foregrounds.dtype
 
         if target_sizes is not None:
-            if len(matting) != len(target_sizes):
+            if batch_size != len(target_sizes):
                 raise ValueError(
                     "Make sure that you pass in as many target sizes as the batch dimension of the matting output"
                 )
+        all_target_sizes_equal = target_sizes is None or all(
+            tuple(size) == tuple(target_sizes[0]) for size in target_sizes
+        )
 
-        background_tensors = None
+        background_tensors = []
         if backgrounds is not None:
             background_list = make_list_of_images(backgrounds)
-            if len(background_list) != 1 and len(background_list) != len(matting):
+            if len(background_list) != 1 and len(background_list) != batch_size:
                 raise ValueError(
                     "Make sure that you pass in as many backgrounds as the batch dimension of the matting output"
                 )
-            device = matting.device
-            dtype = matting.dtype
             background_tensors = [
                 tvF.to_dtype_image(tvF.to_image(background_image), dtype=dtype, scale=True).to(device)
                 for background_image in background_list
             ]
+        all_background_sizes_equal = not background_tensors or all(
+            background.shape[-2:] == background_tensors[0].shape[-2:] for background in background_tensors
+        )
+
+        matting = torch.cat([outputs.foregrounds, outputs.alphas], dim=1)  # (batch_size, 4, height, width)
+
+        if target_sizes is not None and all_target_sizes_equal:
+            target_size = tuple(target_sizes[0])
+            matting = F.interpolate(
+                matting,
+                size=target_size,
+                mode="bilinear",
+                align_corners=False,
+                antialias=False,
+            )
+            matting = matting.clamp(0.0, 1.0)
 
         result = []
-        for index in range(len(matting)):
-            matting_item = matting[index]
-
-            if target_sizes is not None:
-                matting_item = F.interpolate(
-                    matting_item.unsqueeze(0),
-                    size=target_sizes[index],
-                    mode="bilinear",
-                    align_corners=False,
-                    antialias=False,
-                )[0]
-
-            matting_item = matting_item.clamp(0.0, 1.0)
-            foreground = matting_item[:3]
-            alpha = matting_item[3:]
-            composite = None
-
-            if background_tensors is not None:
-                background = background_tensors[0] if len(background_tensors) == 1 else background_tensors[index]
-                if background.shape[-2:] != matting_item.shape[-2:]:
+        if all_target_sizes_equal and all_background_sizes_equal:
+            # Fast path
+            foregrounds = matting[:, :3]
+            alphas = matting[:, 3:]
+            composites = [None] * batch_size
+            if background_tensors:
+                background = torch.stack(background_tensors)
+                if background.shape[-2:] != matting.shape[-2:]:
                     background = F.interpolate(
-                        background.unsqueeze(0),
-                        size=matting_item.shape[-2:],
+                        background,
+                        size=matting.shape[-2:],
+                        mode="bilinear",
+                        align_corners=False,
+                        antialias=False,
+                    )
+                composites = (foregrounds + (1 - alphas) * background).clamp(0.0, 1.0)
+                composites = tvF.to_dtype_image(composites, dtype=torch.uint8, scale=True)
+
+            for foreground, alpha, composite in zip(foregrounds, alphas, composites):
+                result.append(
+                    {
+                        "foreground": foreground,
+                        "alpha": alpha,
+                        "composite": composite,
+                    }
+                )
+
+        else:
+            # Slow path
+            for index in range(len(matting)):
+                matting_item = matting[index]
+
+                if target_sizes and not all_target_sizes_equal:
+                    matting_item = F.interpolate(
+                        matting_item.unsqueeze(0),
+                        size=target_sizes[index],
                         mode="bilinear",
                         align_corners=False,
                         antialias=False,
                     )[0]
-                composite = tvF.to_dtype_image(
-                    (foreground + (1 - alpha) * background).clamp(0.0, 1.0), dtype=torch.uint8, scale=True
+                    matting_item = matting_item.clamp(0.0, 1.0)
+
+                foreground = matting_item[:3]
+                alpha = matting_item[3:]
+                composite = None
+
+                if background_tensors:
+                    background = background_tensors[0] if len(background_tensors) == 1 else background_tensors[index]
+                    if background.shape[-2:] != matting_item.shape[-2:]:
+                        background = F.interpolate(
+                            background.unsqueeze(0),
+                            size=matting_item.shape[-2:],
+                            mode="bilinear",
+                            align_corners=False,
+                            antialias=False,
+                        )[0]
+                    composite = (foreground + (1 - alpha) * background).clamp(0.0, 1.0)
+                    composite = tvF.to_dtype_image(composite, dtype=torch.uint8, scale=True)
+
+                result.append({"foreground": foreground, "alpha": alpha, "composite": composite})
+
+        return result
+
+    def _post_process_maps(
+        self,
+        maps: torch.Tensor,
+        source_sizes: TensorType | list[tuple[int, int]] | None,
+        target_sizes: TensorType | list[tuple[int, int]] | None,
+        do_remove_padding: bool | None,
+    ) -> list[torch.Tensor]:
+        if isinstance(source_sizes, torch.Tensor):
+            source_sizes = source_sizes.tolist()
+        if isinstance(target_sizes, torch.Tensor):
+            target_sizes = target_sizes.tolist()
+        if do_remove_padding is None:
+            do_remove_padding = source_sizes is not None
+        if do_remove_padding and source_sizes is None:
+            raise ValueError("`source_sizes` must be provided when `do_remove_padding=True`.")
+
+        if source_sizes is not None and len(maps) != len(source_sizes):
+            raise ValueError("Make sure that you pass in as many source sizes as the batch dimension of the outputs")
+        if target_sizes is not None and len(maps) != len(target_sizes):
+            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the outputs")
+
+        model_height = self.size["height"]
+        model_width = self.size["width"]
+
+        crops = []
+        if do_remove_padding:
+            for original_height, original_width in source_sizes:
+                new_height, new_width = get_image_size_for_max_height_width(
+                    (original_height, original_width), model_height, model_width
+                )
+                pad_top = (model_height - new_height) // 2 if new_height < model_height else 0
+                pad_left = (model_width - new_width) // 2 if new_width < model_width else 0
+                crops.append(
+                    (
+                        pad_top,
+                        pad_left,
+                        pad_top + min(new_height, model_height),
+                        pad_left + min(new_width, model_width),
+                    )
+                )
+        all_crops_equal = not crops or all(crop == crops[0] for crop in crops)
+
+        final_sizes = []
+        if target_sizes is not None:
+            final_sizes = [tuple(size) for size in target_sizes]
+        elif source_sizes is not None:
+            final_sizes = [tuple(size) for size in source_sizes]
+        all_final_sizes_equal = not final_sizes or all(size == final_sizes[0] for size in final_sizes)
+
+        result = []
+        if all_crops_equal and all_final_sizes_equal:
+            # Fast path
+            if do_remove_padding:
+                top, left, bottom, right = crops[0]
+                maps = maps[:, :, top:bottom, left:right]
+
+            if final_sizes:
+                maps = F.interpolate(
+                    maps,
+                    size=final_sizes[0],
+                    mode="bilinear",
+                    align_corners=False,
+                    antialias=False,
                 )
 
-            result.append({"foreground": foreground, "alpha": alpha, "composite": composite})
+            result = list(maps)
+        else:
+            # Slow path
+            for index in range(len(maps)):
+                map_item = maps[index]
+
+                if do_remove_padding:
+                    top, left, bottom, right = crops[index]
+                    map_item = map_item[:, top:bottom, left:right]
+
+                if final_sizes:
+                    map_item = F.interpolate(
+                        map_item.unsqueeze(0),
+                        size=final_sizes[index],
+                        mode="bilinear",
+                        align_corners=False,
+                        antialias=False,
+                    )[0]
+
+                result.append(map_item)
 
         return result
 

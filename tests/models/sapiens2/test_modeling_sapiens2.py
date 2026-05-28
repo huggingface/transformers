@@ -686,7 +686,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         expected_pointmap = torch.tensor(EXPECTED_POINTMAP.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.pointmaps[0, 0, :3, :3], expected_pointmap, rtol=1e-2, atol=1e-2)
 
-        result = image_processor.post_process_pointmap(outputs, source_sizes=[(image_height, image_width)])
+        result = image_processor.post_process_pointmap_estimation(outputs, source_sizes=[(image_height, image_width)])
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["pointmap"].shape, torch.Size([3, image_height, image_width]))
 

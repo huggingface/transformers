@@ -216,7 +216,7 @@ class Sapiens2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             image_processor.post_process_normal_estimation(outputs, target_sizes=[(100, 100)])
 
-    def test_post_process_pointmap(self):
+    def test_post_process_pointmap_estimation(self):
         image_processor = Sapiens2ImageProcessor()
         batch_size = 2
         num_labels = 3
@@ -224,13 +224,13 @@ class Sapiens2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         outputs = Sapiens2PointmapEstimatorOutput(pointmaps=torch.randn(batch_size, num_labels, height, width))
 
         # without target_sizes: spatial dims match pointmap
-        result = image_processor.post_process_pointmap(outputs)
+        result = image_processor.post_process_pointmap_estimation(outputs)
         self.assertEqual(len(result), batch_size)
         self.assertEqual(result[0]["pointmap"].shape, torch.Size([num_labels, height, width]))
 
         # with target_sizes: output is resized to requested size
         target_sizes = [(height * 2, width * 2)] * batch_size
-        result = image_processor.post_process_pointmap(outputs, target_sizes=target_sizes)
+        result = image_processor.post_process_pointmap_estimation(outputs, target_sizes=target_sizes)
         self.assertEqual(len(result), batch_size)
         self.assertEqual(result[0]["pointmap"].shape, torch.Size([num_labels, height * 2, width * 2]))
 
@@ -239,13 +239,13 @@ class Sapiens2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         outputs_with_scale = Sapiens2PointmapEstimatorOutput(
             pointmaps=torch.ones(batch_size, num_labels, height, width), scales=scale
         )
-        result = image_processor.post_process_pointmap(outputs_with_scale)
+        result = image_processor.post_process_pointmap_estimation(outputs_with_scale)
         torch.testing.assert_close(result[0]["pointmap"], torch.full((num_labels, height, width), 0.5))
         torch.testing.assert_close(result[1]["pointmap"], torch.full((num_labels, height, width), 2.0))
 
         # mismatched batch size raises ValueError
         with self.assertRaises(ValueError):
-            image_processor.post_process_pointmap(outputs, target_sizes=[(100, 100)])
+            image_processor.post_process_pointmap_estimation(outputs, target_sizes=[(100, 100)])
 
     def test_post_process_image_matting(self):
         image_processor = Sapiens2ImageProcessor()
