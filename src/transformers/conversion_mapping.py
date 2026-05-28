@@ -997,7 +997,7 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "Sapiens2ForSemanticSegmentation": [
-            WeightRenaming(r"^backbone\.", r"sapiens2."),
+            WeightRenaming(r"^backbone\.", r"model."),
             WeightRenaming(
                 r"decode_head\.deconv_layers\.0\.weight", r"decode_head.upsample_layers.0.convolution.weight"
             ),
@@ -1015,7 +1015,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"decode_head\.conv_seg\.", r"decode_head.predictor."),
         ],
         "Sapiens2ForPoseEstimation": [
-            WeightRenaming(r"^backbone\.", r"sapiens2."),
+            WeightRenaming(r"^backbone\.", r"model."),
             WeightRenaming(
                 r"decode_head\.deconv_layers\.0\.weight", r"decode_head.upsample_layers.0.convolution.weight"
             ),
@@ -1028,7 +1028,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"decode_head\.conv_pose\.", r"decode_head.predictor."),
         ],
         "Sapiens2ForNormalEstimation": [
-            WeightRenaming(r"^backbone\.", r"sapiens2."),
+            WeightRenaming(r"^backbone\.", r"model."),
             WeightRenaming(
                 r"decode_head\.input_conv\.0\.(weight|bias)",
                 r"decode_head.input_conv.convolution.\1",
@@ -1056,7 +1056,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"decode_head\.conv_normal\.", r"decode_head.predictor."),
         ],
         "Sapiens2ForPointmapEstimation": [
-            WeightRenaming(r"^backbone\.", r"sapiens2."),
+            WeightRenaming(r"^backbone\.", r"model."),
             WeightRenaming(
                 r"decode_head\.input_conv\.0\.(weight|bias)",
                 r"decode_head.input_conv.convolution.\1",
@@ -1111,7 +1111,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"decode_head\.scale_final_layer\.5\.", r"scale_head.predictor.proj."),
         ],
         "Sapiens2ForImageMatting": [
-            WeightRenaming(r"^backbone\.", r"sapiens2."),
+            WeightRenaming(r"^backbone\.", r"model."),
             WeightRenaming(
                 r"decode_head\.input_conv\.0\.(weight|bias)",
                 r"decode_head.input_conv.convolution.\1",

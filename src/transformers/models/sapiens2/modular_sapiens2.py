@@ -1280,7 +1280,9 @@ class Sapiens2PointmapScaleHead(nn.Module):
 
 
 class Sapiens2PreTrainedModel(DINOv3ViTPreTrainedModel):
-    base_model_prefix = "sapiens2"
+    base_model_prefix = "model"
+
+    # Ignore periods as we use inv_freq instead which is automatically calculated from the config.
     _keys_to_ignore_on_load_unexpected = [r"periods"]
 
     @torch.no_grad()
@@ -1345,7 +1347,7 @@ class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.sapiens2 = Sapiens2Model(config)
+        self.model = Sapiens2Model(config)
         self.decode_head = Sapiens2Head(config)
         self.post_init()
 
@@ -1366,7 +1368,7 @@ class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
-        outputs = self.sapiens2(pixel_values, **kwargs)
+        outputs = self.model(pixel_values, **kwargs)
 
         batch_size, _, height, width = pixel_values.shape
         patch_height = height // self.config.patch_size
@@ -1399,7 +1401,7 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.sapiens2 = Sapiens2Model(config)
+        self.model = Sapiens2Model(config)
         self.decode_head = Sapiens2Head(config)
         self.post_init()
 
@@ -1430,7 +1432,7 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
         labels (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`, *optional*):
             Heatmap ground truth for computing the loss.
         """
-        outputs = self.sapiens2(pixel_values, **kwargs)
+        outputs = self.model(pixel_values, **kwargs)
 
         batch_size, _, height, width = pixel_values.shape
         patch_height = height // self.config.patch_size
@@ -1465,7 +1467,7 @@ class Sapiens2ForNormalEstimation(Sapiens2PreTrainedModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.sapiens2 = Sapiens2Model(config)
+        self.model = Sapiens2Model(config)
         self.decode_head = Sapiens2Head(config)
         self.post_init()
 
@@ -1481,7 +1483,7 @@ class Sapiens2ForNormalEstimation(Sapiens2PreTrainedModel):
         labels (`torch.FloatTensor` of shape `(batch_size, num_labels, height, width)`, *optional*):
             Ground-truth surface normal maps for computing the loss.
         """
-        outputs = self.sapiens2(pixel_values, **kwargs)
+        outputs = self.model(pixel_values, **kwargs)
 
         batch_size, _, height, width = pixel_values.shape
         patch_height = height // self.config.patch_size
@@ -1514,7 +1516,7 @@ class Sapiens2ForNormalEstimation(Sapiens2PreTrainedModel):
 class Sapiens2ForPointmapEstimation(Sapiens2PreTrainedModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
-        self.sapiens2 = Sapiens2Model(config)
+        self.model = Sapiens2Model(config)
         self.decode_head = Sapiens2Head(config)
         self.scale_head = (
             Sapiens2PointmapScaleHead(config) if config.head_scale_conv_out_channels is not None else nn.Identity()
@@ -1533,7 +1535,7 @@ class Sapiens2ForPointmapEstimation(Sapiens2PreTrainedModel):
         labels (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`, *optional*):
             Ground-truth pointmap for computing the loss.
         """
-        outputs = self.sapiens2(pixel_values, **kwargs)
+        outputs = self.model(pixel_values, **kwargs)
 
         batch_size, _, height, width = pixel_values.shape
         patch_height = height // self.config.patch_size
@@ -1568,7 +1570,7 @@ class Sapiens2ForPointmapEstimation(Sapiens2PreTrainedModel):
 class Sapiens2ForImageMatting(Sapiens2PreTrainedModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
-        self.sapiens2 = Sapiens2Model(config)
+        self.model = Sapiens2Model(config)
         self.decode_head = Sapiens2Head(config)  # config.num_labels = 4
         self.post_init()
 
@@ -1584,7 +1586,7 @@ class Sapiens2ForImageMatting(Sapiens2PreTrainedModel):
         labels (`torch.FloatTensor` of shape `(batch_size, 4, height, width)`, *optional*):
             Ground-truth matting targets for computing the loss.
         """
-        outputs = self.sapiens2(pixel_values, **kwargs)
+        outputs = self.model(pixel_values, **kwargs)
 
         batch_size, _, height, width = pixel_values.shape
         patch_height = height // self.config.patch_size
