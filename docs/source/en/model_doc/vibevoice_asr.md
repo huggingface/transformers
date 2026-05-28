@@ -452,6 +452,11 @@ print(transcription)
     - apply_transcription_request
     - decode
 
+## VibeVoiceAsrModel
+
+[[autodoc]] VibeVoiceAsrModel
+    - forward
+
 ## VibeVoiceAsrForConditionalGeneration
 
 [[autodoc]] VibeVoiceAsrForConditionalGeneration
