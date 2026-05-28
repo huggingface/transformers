@@ -408,23 +408,26 @@ def deepgemm_bf16_experts_forward(
         total_padded_rows,
     ) = _dispatch_routed_input(hidden_states, top_k_index, top_k_weights, self.num_experts, use_psum_layout)
 
+    w_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
+    w_down = to_local(self.down_proj)
+    up_bias = to_local(self.gate_up_proj_bias if self.has_gate else self.up_proj_bias) if self.has_bias else None
+    down_bias = to_local(self.down_proj_bias) if self.has_bias else None
+
     # Up projection.
-    w_up = self.gate_up_proj if self.has_gate else self.up_proj
     up_out_dim = w_up.shape[-1] if self.is_transposed else w_up.shape[1]
     act = _pad_for_deepgemm(sorted_hidden, sorted_to_padded, total_padded_rows)
     proj_out = torch.empty(total_padded_rows, up_out_dim, device=device, dtype=hidden_states.dtype)
     grouped_bf16_matmul(act, w_up, proj_out, grouped_layout, use_psum_layout=use_psum_layout)
     if self.has_bias:
-        up_bias = self.gate_up_proj_bias if self.has_gate else self.up_proj_bias
         proj_out.index_add_(0, sorted_to_padded, up_bias[expert_ids_g])
 
     proj_out = self._apply_gate(proj_out) if self.has_gate else self.act_fn(proj_out)
 
     # Down projection.
     out = torch.empty(total_padded_rows, hidden_dim, device=device, dtype=hidden_states.dtype)
-    grouped_bf16_matmul(proj_out, self.down_proj, out, grouped_layout, use_psum_layout=use_psum_layout)
+    grouped_bf16_matmul(proj_out, w_down, out, grouped_layout, use_psum_layout=use_psum_layout)
     if self.has_bias:
-        out.index_add_(0, sorted_to_padded, self.down_proj_bias[expert_ids_g])
+        out.index_add_(0, sorted_to_padded, down_bias[expert_ids_g])
 
     return _combine_routed_output(
         out,
@@ -455,10 +458,12 @@ def deepgemm_fp8_fp4_experts_forward(
     num_top_k = top_k_index.size(-1)
     num_tokens, hidden_dim = hidden_states.size(0), hidden_states.size(-1)
 
-    w_up = self.gate_up_proj if self.has_gate else self.up_proj
-    ws_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
-    cast_kwargs = _select_fp8_cast_kwargs(w_up, ws_up, getattr(self, "block_size", None), device)
+    w_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
+    ws_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
+    w_down = to_local(self.down_proj)
+    ws_down = to_local(self.down_proj_scale_inv)
 
+    cast_kwargs = _select_fp8_cast_kwargs(w_up, ws_up, getattr(self, "block_size", None), device)
     use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
     (
         sorted_hidden,
@@ -492,7 +497,7 @@ def deepgemm_fp8_fp4_experts_forward(
     out = torch.empty(total_padded_rows, hidden_dim, device=device, dtype=torch.bfloat16)
     deepgemm.grouped_fp8_fp4_matmul(
         (proj_fp8, _coerce_sf_for_kernel(proj_scales, expected_mn=total_padded_rows)),
-        (self.down_proj, _coerce_sf_for_kernel(self.down_proj_scale_inv, expected_mn=self.down_proj.size(-2))),
+        (w_down, _coerce_sf_for_kernel(ws_down, expected_mn=w_down.size(-2))),
         out,
         grouped_layout,
         recipe=sf_recipe,

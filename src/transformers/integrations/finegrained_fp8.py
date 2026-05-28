@@ -154,6 +154,7 @@ def finegrained_fp8_linear(
     Triton has no FP4 path — caller must guard FP4 weights before reaching here.
     """
     finegrained_fp8 = _load_finegrained_fp8_kernel()
+
     if activation_scale is not None:
         scale = activation_scale.to(torch.float32)
         qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
@@ -161,7 +162,17 @@ def finegrained_fp8_linear(
         gran_k = block_size[1] if block_size is not None else input.shape[-1]
         qinput, scale = finegrained_fp8.act_quant(input, gran_k)
 
-    output = finegrained_fp8.matmul(qinput, weight, scale, weight_scale_inv, block_size, output_dtype)
+    # Triton's autotuner can't key on `float8_e8m0fnu` (UE8M0 SFs) — always cast
+    # to fp32 at the kernel boundary. No-op for fp32 SFs; cheap for UE8M0 since
+    # scales are 1/gran_k the size of the weight.
+    output = finegrained_fp8.matmul(
+        qinput,
+        weight,
+        scale,
+        weight_scale_inv.float(),
+        block_size,
+        output_dtype,
+    )
 
     if bias is not None:
         output.add_(bias)
@@ -397,11 +408,16 @@ def fp8_batched_mm_experts_forward(
     # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
     expert_ids.clamp_(0, self.num_experts - 1)
 
+    w_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
+    ws_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
+    w_down = to_local(self.down_proj)
+    ws_down = to_local(self.down_proj_scale_inv)
+
     # --- Up projection per expert (FP8 batched) ---
     proj_out = finegrained_fp8.batched_matmul(
         selected_hidden_states,
-        self.gate_up_proj if self.has_gate else self.up_proj,
-        self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv,
+        w_up,
+        ws_up.float(),
         block_size=self.block_size,
         expert_ids=expert_ids,
     )  # (S, 2 * intermediate_dim) or (S, intermediate_dim) depending on gating
@@ -417,8 +433,8 @@ def fp8_batched_mm_experts_forward(
     # --- Down projection per expert (FP8 batched) ---
     proj_out = finegrained_fp8.batched_matmul(
         proj_out,
-        self.down_proj,
-        self.down_proj_scale_inv,
+        w_down,
+        ws_down.float(),
         block_size=self.block_size,
         expert_ids=expert_ids,
     )  # (S, hidden_dim)
@@ -492,7 +508,7 @@ def fp8_grouped_mm_experts_forward(
     proj_out = finegrained_fp8.grouped_matmul(
         selected_hidden_states_g,
         w_up,
-        ws_up,
+        ws_up.float(),
         tokens_per_expert=tokens_per_expert,
         block_size=self.block_size,
         offsets=offsets,
@@ -510,7 +526,7 @@ def fp8_grouped_mm_experts_forward(
     proj_out = finegrained_fp8.grouped_matmul(
         proj_out,
         w_down,
-        ws_down,
+        ws_down.float(),
         tokens_per_expert=tokens_per_expert,
         block_size=self.block_size,
         offsets=offsets,
