@@ -12,12 +12,14 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from collections.abc import Callable
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...generation import GenerationMixin
-from ...modeling_utils import PreTrainedModel
 from ...utils import can_return_tuple, logging
 from .configuration_granite_swa import GraniteSWAConfig
 
@@ -103,6 +105,61 @@ class GraniteSWAAttention(nn.Module):
         # Learnable per-head attention sink
         self.sinks = nn.Parameter(torch.zeros(self.num_heads))
 
+    def _eager_attention_forward(
+        self,
+        query_states: torch.Tensor,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Eager attention that computes and returns LSE for sink scaling."""
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
+
+        if attention_mask is not None:
+            attn_weights = attn_weights + attention_mask
+
+        lse = torch.logsumexp(attn_weights, dim=-1)  # (B, H, S_q)
+
+        attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = F.dropout(attn_weights, p=self.attention_dropout if self.training else 0.0, training=self.training)
+        attn_output = torch.matmul(attn_weights, value_states)
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        return attn_output, lse
+
+    def _flash_attention_3_forward(
+        self,
+        query_states: torch.Tensor,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Flash Attention 3 with native LSE return for sink scaling."""
+        from flash_attn_interface import _flash_attn_forward
+
+        # FA3 expects (B, S, H, D)
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+
+        window_size_left = -1
+        window_size_right = -1
+        if self.sliding_window is not None:
+            window_size_left = self.sliding_window - 1
+            window_size_right = 0
+
+        result = _flash_attn_forward(
+            query_states, key_states, value_states,
+            softmax_scale=self.scaling,
+            causal=True,
+            window_size_left=window_size_left,
+            window_size_right=window_size_right,
+        )
+        attn_output, lse = result[0], result[1]
+        # attn_output: (B, S, H, D), lse: (B, H, S)
+        return attn_output, lse
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -124,31 +181,31 @@ class GraniteSWAAttention(nn.Module):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        # Eager attention with LSE computation
-        key_states_expanded = repeat_kv(key_states, self.num_key_value_groups)
-        value_states_expanded = repeat_kv(value_states, self.num_key_value_groups)
+        # Attention dispatch: FA3 (with native LSE) or eager fallback
+        attn_impl = getattr(self.config, "_attn_implementation", "eager")
 
-        attn_weights = torch.matmul(query_states, key_states_expanded.transpose(2, 3)) * self.scaling
-
-        if attention_mask is not None:
-            attn_weights = attn_weights + attention_mask
-
-        # Compute LSE for sink scaling
-        lse = torch.logsumexp(attn_weights, dim=-1)  # (B, H, S_q)
-
-        attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = F.dropout(attn_weights, p=self.attention_dropout if self.training else 0.0, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states_expanded)
+        if attn_impl == "flash_attention_3":
+            attn_output, lse = self._flash_attention_3_forward(query_states, key_states, value_states)
+        else:
+            attn_output, lse = self._eager_attention_forward(query_states, key_states, value_states, attention_mask)
 
         # Apply sink scaling: sink_scale = sigmoid(lse - sinks)
         sink_scale = torch.sigmoid(
             (lse - self.sinks.view(1, -1, 1)).to(torch.float32)
         ).to(attn_output.dtype)
-        # attn_output: (B, H, S, D), sink_scale: (B, H, S)
-        attn_output = attn_output * sink_scale.unsqueeze(-1)
 
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, q_len, -1)
+        if attn_impl == "flash_attention_3":
+            # FA3 output: (B, S, H, D), sink_scale: (B, H, S)
+            sink_scale_expanded = sink_scale.transpose(1, 2).unsqueeze(-1)  # (B, S, H, 1)
+            attn_output = attn_output * sink_scale_expanded
+            attn_output = attn_output.reshape(bsz, q_len, -1)
+        else:
+            # Eager output: (B, S, H*D) after transpose+reshape, sink_scale: (B, H, S)
+            attn_output = attn_output.view(bsz, q_len, self.num_heads, self.head_dim)
+            sink_scale_expanded = sink_scale.transpose(1, 2).unsqueeze(-1)  # (B, S, H, 1)
+            attn_output = attn_output * sink_scale_expanded
+            attn_output = attn_output.reshape(bsz, q_len, -1)
+
         attn_output = self.o_proj(attn_output)
         return attn_output, None
 
@@ -199,6 +256,8 @@ class GraniteSWAPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["GraniteSWADecoderLayer"]
     _supports_cache_class = True
     _supports_sdpa = False
+    _supports_flash_attn = True
+    _compatible_flash_implementations = ["flash_attention_3"]
 
     def _init_weights(self, module):
         pass
