@@ -337,13 +337,22 @@ class PeAudioVideoPreTrainedModel(PreTrainedModel):
             init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`PeAudioVideoEncoder`].
     """
 )
+@dataclass
 class PeAudioVideoEncoderOutput(BaseModelOutputWithPooling):
+    r"""
+    audio_model_output (`BaseModelOutputWithPooling`, *optional*):
+        Output of the audio encoder, containing the last hidden state, pooled output, and optional hidden states
+        and attentions. See [`~modeling_outputs.BaseModelOutputWithPooling`] for details.
+    video_model_output (`BaseModelOutputWithPooling`, *optional*):
+        Output of the video encoder, containing the last hidden state, pooled output, and optional hidden states
+        and attentions. See [`~modeling_outputs.BaseModelOutputWithPooling`] for details.
+    """
+
     audio_model_output: BaseModelOutputWithPooling | None = None
     video_model_output: BaseModelOutputWithPooling | None = None
 
@@ -421,13 +430,66 @@ class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`PeAudioVideoModel`] when using text, audio, and/or video.
     """
 )
+@dataclass
 class PeAudioVideoOutput(ModelOutput):
+    r"""
+    audio_embeds (`torch.FloatTensor`, *optional*):
+        Audio modality embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
+    video_embeds (`torch.FloatTensor`, *optional*):
+        Video modality embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
+    audio_video_embeds (`torch.FloatTensor`, *optional*):
+        Joint audio-video embeddings produced by a fusion module. Shape `(batch_size, sequence_length, hidden_size)`.
+    text_audio_embeds (`torch.FloatTensor`, *optional*):
+        Joint text-audio embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
+    text_video_embeds (`torch.FloatTensor`, *optional*):
+        Joint text-video embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
+    text_audio_video_embeds (`torch.FloatTensor`, *optional*):
+        Joint text-audio-video embeddings combining all three modalities. Shape `(batch_size, sequence_length, hidden_size)`.
+    audio_plus_text_embeds (`torch.FloatTensor`, *optional*):
+        Combined audio and text embeddings (e.g., concatenation or additive fusion). Shape `(batch_size, sequence_length, hidden_size)`.
+    video_plus_text_embeds (`torch.FloatTensor`, *optional*):
+        Combined video and text embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
+    text_outputs (`MaskedLMOutput`, *optional*):
+        Model outputs for the text encoder. Includes hidden states, attentions, and optionally loss.
+    audio_outputs (`BaseModelOutputWithPooling`, *optional*):
+        Model outputs for the audio encoder, including last hidden state and pooled output.
+    video_outputs (`BaseModelOutputWithPooling`, *optional*):
+        Model outputs for the video encoder, including last hidden state and pooled output.
+    audio_video_outputs (`BaseModelOutputWithPooling`, *optional*):
+        Model outputs for the joint audio-video encoder.
+    logits_audio_text (`torch.FloatTensor`, *optional*):
+        Similarity logits between audio and text embeddings. Shape `(batch_size, batch_size)`.
+    logits_video_text (`torch.FloatTensor`, *optional*):
+        Similarity logits between video and text embeddings. Shape `(batch_size, batch_size)`.
+    logits_audio_video (`torch.FloatTensor`, *optional*):
+        Similarity logits between audio and video embeddings. Shape `(batch_size, batch_size)`.
+    logits_audio_video_text (`torch.FloatTensor`, *optional*):
+        Similarity logits across audio, video, and text modalities.
+    logits_audio_plus_text_video (`torch.FloatTensor`, *optional*):
+        Similarity logits between fused (audio + text) embeddings and video embeddings.
+    logits_video_plus_text_audio (`torch.FloatTensor`, *optional*):
+        Similarity logits between fused (video + text) embeddings and audio embeddings.
+    audio_text_loss (`torch.FloatTensor`, *optional*):
+        Contrastive loss computed between audio and text representations.
+    video_text_loss (`torch.FloatTensor`, *optional*):
+        Contrastive loss computed between video and text representations.
+    audio_video_loss (`torch.FloatTensor`, *optional*):
+        Contrastive loss computed between audio and video representations.
+    audio_video_text_loss (`torch.FloatTensor`, *optional*):
+        Joint loss over audio, video, and text modalities.
+    audio_plus_text_video_loss (`torch.FloatTensor`, *optional*):
+        Loss between fused (audio + text) representations and video.
+    video_plus_text_audio_loss (`torch.FloatTensor`, *optional*):
+        Loss between fused (video + text) representations and audio.
+    loss (`torch.FloatTensor`, *optional*):
+        Combined loss for all modality-wise losses.
+    """
+
     # embeddings
     audio_embeds: torch.FloatTensor | None = None
     video_embeds: torch.FloatTensor | None = None
@@ -526,6 +588,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=True,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -581,6 +644,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=True,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -603,6 +667,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=True,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -623,7 +688,10 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         **kwargs,
     ) -> PeAudioVideoOutput:
         if sum([input_ids is not None, pixel_values_videos is not None, input_values is not None]) < 2:
-            raise ValueError("At least two of input_ids, pixel_values_videos, or input_values must be provided")
+            raise ValueError(
+                "At least two of input_ids, pixel_values_videos, or input_values must be provided. "
+                "For encoding individual modalities, get_*_embeds methods are available."
+            )
 
         if pixel_values_videos is None:
             outputs = self.audio_model(

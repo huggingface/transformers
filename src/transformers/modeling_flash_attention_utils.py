@@ -31,6 +31,7 @@ from .utils import (
     is_torch_xpu_available,
     logging,
 )
+from .utils.generic import split_attention_implementation
 from .utils.import_utils import PACKAGE_DISTRIBUTION_MAPPING, is_tracing
 
 
@@ -74,8 +75,10 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
     2: {
         "flash_attn_version": 2,
         "general_availability_check": is_flash_attn_2_available,
-        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn") is not None
-        and "flash-attn" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]],
+        "pkg_availability_check": lambda *args, **kwargs: (
+            importlib.util.find_spec("flash_attn") is not None
+            and "flash-attn" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])]
+        ),
         "supported_devices": (
             (is_torch_cuda_available, "cuda"),
             (is_torch_mlu_available, "mlu"),
@@ -93,16 +96,21 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
     3: {
         "flash_attn_version": 3,
         "general_availability_check": is_flash_attn_3_available,
-        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn_interface") is not None
-        and "flash-attn-3" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn_interface"]],
+        "pkg_availability_check": lambda *args, **kwargs: (
+            importlib.util.find_spec("flash_attn_interface") is not None
+            and "flash-attn-3"
+            in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn_interface", [])]
+        ),
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 8,  # Ampere
     },
     4: {
         "flash_attn_version": 4,
         "general_availability_check": is_flash_attn_4_available,
-        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn") is not None
-        and "flash-attn-4" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]],
+        "pkg_availability_check": lambda *args, **kwargs: (
+            importlib.util.find_spec("flash_attn") is not None
+            and "flash-attn-4" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])]
+        ),
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 9,  # Hopper
     },
@@ -147,8 +155,7 @@ def _lazy_imports(
 
     pad_input, unpad_input = _pad_input, _unpad_input
 
-    is_paged = implementation.startswith("paged|")
-    implementation = implementation.split("|")[1] if is_paged else implementation
+    is_paged, implementation = split_attention_implementation(implementation)
 
     if (implementation == "flash_attention_2" and is_fa2) or (
         implementation is None and is_fa2 and not is_fa3 and not is_fa4

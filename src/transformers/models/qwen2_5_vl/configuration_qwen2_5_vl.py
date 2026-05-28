@@ -45,7 +45,7 @@ class Qwen2_5_VLVisionConfig(PreTrainedConfig):
         Indices of layers with full attention
     """
 
-    model_type = "qwen2_5_vl"
+    model_type = "qwen2_5_vl_vision"
     base_config_key = "vision_config"
 
     depth: int = 32
@@ -91,15 +91,21 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
     }
     ignore_keys_at_rope_validation = {"mrope_section"}
 
@@ -206,4 +212,4 @@ class Qwen2_5_VLConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Qwen2_5_VLConfig", "Qwen2_5_VLTextConfig"]
+__all__ = ["Qwen2_5_VLConfig", "Qwen2_5_VLVisionConfig", "Qwen2_5_VLTextConfig"]

@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 # VipLlava
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -55,6 +54,7 @@ The attributes can be obtained from model config, as `model.config.vision_config
 ```python
 from transformers import AutoProcessor
 
+
 processor = AutoProcessor.from_pretrained("llava-hf/vip-llava-7b-hf")
 
 conversation = [
@@ -82,7 +82,7 @@ text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=
 
 # Note that the template simply formats your prompt, you still have to tokenize it and obtain pixel values for your images
 print(text_prompt)
->>> "###Human: <image>\nWhat’s shown in this image?###Assistant: This image shows a red stop sign.###Human: Describe the image in more details.###Assistant:"
+"###Human: <image>\nWhat’s shown in this image?###Assistant: This image shows a red stop sign.###Human: Describe the image in more details.###Assistant:"
 ```
 
 - If you want to construct a chat prompt yourself, below is a list of prompt formats accepted by VipLLaVa checkpoints:

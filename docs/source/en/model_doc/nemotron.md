@@ -16,7 +16,6 @@ specific language governing permissions and limitations under the License.
 # Nemotron
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -57,17 +56,14 @@ Minitron models are for research and development only.
 The following code provides an example of how to load the Minitron-4B model and use it to perform text generation.
 
 ```python
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from accelerate import Accelerator
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 # Load the tokenizer and model
 model_path = 'nvidia/Minitron-4B-Base'
 tokenizer  = AutoTokenizer.from_pretrained(model_path)
 
-device = Accelerator().device
-dtype  = torch.bfloat16
-model  = AutoModelForCausalLM.from_pretrained(model_path, dtype=dtype, device_map=device)
+model  = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto")
 
 # Prepare the input text
 prompt = 'Complete the paragraph: our solar system is'

@@ -38,8 +38,8 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_altclip import AltCLIPConfig, AltCLIPTextConfig, AltCLIPVisionConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class AltCLIPOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):

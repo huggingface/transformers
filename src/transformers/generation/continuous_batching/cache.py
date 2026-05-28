@@ -20,8 +20,9 @@ import torch
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig
 from ...utils.generic import is_flash_attention_requested
-from ...utils.metrics import attach_tracer, traced
 from .cache_manager import BlockManager, CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
+from .distributed import DistributedHelper
+from .initialization import resolve_max_memory_percent
 from .requests import RequestState, RequestStatus, get_device_and_memory_breakdown, logger
 
 
@@ -58,7 +59,6 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]]
     return layer_groups, group_types
 
 
-@attach_tracer()
 class PagedAttentionCache:
     """
     Manages the cache for a paged attention mechanism, inspired by VLLM's hybrid allocator. The cache relies on making
@@ -121,8 +121,9 @@ class PagedAttentionCache:
         config: PreTrainedConfig,
         continuous_batching_config: ContinuousBatchingConfig,
         device: torch.device | str,
+        distributed_helper: DistributedHelper,
+        tp_plan: dict[str, Any],
         dtype: torch.dtype = torch.float16,
-        tp_size: int | None = None,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
@@ -131,8 +132,9 @@ class PagedAttentionCache:
             config: Model configuration
             continuous_batching_config: Continuous batching configuration containing cache parameters
             device: Device for the cache tensors
+            distributed_helper: TP-aware helper. Used to dispatch attention heads and ensure coherent cache size
+            tp_plan: Tensor parallelism plan
             dtype: Data type of the cache
-            tp_size: Tensor parallelism size
         """
         self.config = config
         self.dtype = dtype
@@ -162,14 +164,23 @@ class PagedAttentionCache:
                 self.layer_index_to_group_indices[layer] = (i, j)
                 self.sliding_windows[layer] = sliding_window
 
-        # Handle TP (or dont)
-        if tp_size is not None and tp_size > 1:
+        # Check if the KV heads are part of the TP plan. If they are not, the cache does not need plan for TP.
+        # TODO: this is fragile. If your model fails to TP properly because of this, please open an issue.
+        kv_is_tp = True
+        for key in ["layers.*.self_attn.k_proj", "layers.*.self_attn.v_proj"]:
+            if not (key in tp_plan or "model." + key in tp_plan):
+                kv_is_tp = False
+                break
+
+        # If the KV heads are TP'ed, each KV head is dispatched to a different GPU, so the effective number of KV heads
+        # per GPU is simply divided by the TP size
+        tp_size = distributed_helper.tp_size
+        if tp_size > 1 and kv_is_tp:
             if self.num_key_value_heads % tp_size != 0:
                 raise ValueError(
                     f"Number of key value heads {self.num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
                 )
-            # If the model is using tensor parallelism, we need to adjust the number of heads accordingly.
-            # self.num_key_value_heads //= tp_size # TODO: why is this commented out?
+            self.num_key_value_heads //= tp_size
 
         # Infer number of blocks and max batch tokens
         page_size = self.head_dim * self.num_key_value_heads
@@ -182,21 +193,42 @@ class PagedAttentionCache:
         else:
             num_attention_masks = 1
 
+        # Peak activations coefficients (for number of blocks and number of batch tokens)
+        q_bytes_per_token = config.num_attention_heads * self.head_dim
+        lm_head_peak = (
+            0,  # number of blocks does not affect the LM head peak activation
+            config.hidden_size + 2 * config.vocab_size,  # hidden states + logits
+        )
+        attention_peak = (
+            2 * page_size,  # old K and V, read from cache (in the worst case scenario: whole cache is read)
+            config.hidden_size + q_bytes_per_token + 2 * page_size,  # hidden state + Q + new K and V
+        )
+
         memory_handler = PagedAttentionMemoryHandler(
-            block_size=self.block_size,
+            continuous_batching_config=continuous_batching_config,
             page_size=page_size,
             num_groups=self.num_groups,
             group_size=group_size,
-            peak_activation_per_token=(config.hidden_size + config.vocab_size),
+            activation_peaks=[lm_head_peak, attention_peak],
             num_attention_masks=num_attention_masks,
-            continuous_batching_config=continuous_batching_config,
         )
+
+        # If somehow the max memory percent is not yet resolved, resolve it conservatively
+        if continuous_batching_config.max_memory_percent is None:
+            resolve_max_memory_percent(cb_config=continuous_batching_config, has_logit_processors=True)
+
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
             num_blocks=continuous_batching_config.num_blocks,
             max_batch_tokens=continuous_batching_config.max_batch_tokens,
             max_memory_percent=continuous_batching_config.max_memory_percent,
             cache_dtype=self.dtype,
         )
+
+        # For TP, align num_blocks and max_batch_tokens to the minimal value across the TP group
+        if tp_size > 1:
+            sync = torch.tensor([num_blocks, max_batch_tokens], device=self.device, dtype=torch.int64)
+            distributed_helper.tp_all_reduce_min(sync)
+            num_blocks, max_batch_tokens = int(sync[0].item()), int(sync[1].item())
 
         # Add the inferred attributes to the class
         self.num_blocks = num_blocks
@@ -207,15 +239,10 @@ class PagedAttentionCache:
             f"{self.max_batch_tokens = } {num_attention_masks = }"
         )
 
-        # If max_blocks_per_request is not set, the default value is 16 max blocks. With default block size of 256, this
-        # means a max sequence length of 4096 tokens for the fast decode path.
+        # If max_blocks_per_request is not set, initialize it to the non-zero fallback value
         max_blocks_per_request = continuous_batching_config.max_blocks_per_request
         if max_blocks_per_request is None:
-            max_blocks_per_request = 0
-            # logger.info( TODO: uncomment when we have good defaults
-            #     f"max_blocks_per_request was not set, using {max_blocks_per_request}. This means max sequence "
-            #     f"length for the decode fast path is {max_blocks_per_request * self.block_size}."
-            # )
+            max_blocks_per_request = continuous_batching_config.fallback_max_blocks_per_request
         self.max_blocks_per_request = max_blocks_per_request
 
         # Initialize the cache
@@ -259,7 +286,7 @@ class PagedAttentionCache:
 
         # We only use prefix sharing if the whole model has only full attention layers and block sharing is allowed
         self.use_prefix_sharing = self.allow_block_sharing and group_types == ["full_attention"]
-        self._block_manager = BlockManager(num_blocks, self.block_size)
+        self._block_manager = BlockManager(num_blocks, self.block_size, tp_on=tp_size > 1)
         self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
 
         # For block table support, we lazy init the name of the block table key
@@ -283,7 +310,6 @@ class PagedAttentionCache:
             needed_blocks += min(blocks_left, num_requested_blocks) * self.num_sliding_attention_groups
         return needed_blocks <= self.get_num_free_blocks()
 
-    @traced
     def allocate_blocks(self, n_blocks: int, request_id: str, allocated_blocks: int) -> int | None:
         """Allocate cache blocks across all layer groups for a given request. Actual allocation is done by the cache
         managers, and this method only returns the maximum number of blocks actually allocated across all managers."""
@@ -299,7 +325,6 @@ class PagedAttentionCache:
             max_allocated = max(max_allocated, num_allocated_blocks)
         return max_allocated
 
-    @traced
     def free_blocks(self, request_id: str) -> None:
         """Free all allocated cache blocks for a given request across all layer groups. Actual deallocation is done
         by the cache managers."""
@@ -310,23 +335,25 @@ class PagedAttentionCache:
         """Get the current number of unallocated blocks available for new requests."""
         return self._block_manager.num_free_blocks
 
-    @traced
     def extend_read_and_write_indices(
         self,
         request_id: str,
         past_length: int,
         query_length: int,
-        read_index: list[list[int]],
+        read_index: list[list[int]] | None,
         write_index: list[list[int]],
     ) -> None:
         """Retrieve physical cache indices for reading KV states in the cache across all layer groups. This method
         coordinates with all cache managers to build the complete set of read indices needed for attention computation.
+        When read_index is None, the batch has no cache reads and we only compute the write indices.
         """
-        for cm, read_indices, write_indices in zip(self.group_cache_managers, read_index, write_index):
-            indices = cm.get_read_indices(request_id, past_length, query_length)
-            read_indices.extend(indices)
-            indices = cm.get_write_indices(request_id, past_length, query_length)
-            write_indices.extend(indices)
+        # Write indices are always computed
+        for cm, write_indices in zip(self.group_cache_managers, write_index):
+            write_indices.extend(cm.get_write_indices(request_id, past_length, query_length))
+        # Read indices are only computed if there are cache indices
+        if read_index is not None:
+            for cm, read_indices in zip(self.group_cache_managers, read_index):
+                read_indices.extend(cm.get_read_indices(request_id, past_length, query_length))
 
     def fill_block_table(
         self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
@@ -334,7 +361,6 @@ class PagedAttentionCache:
         for i, cm in enumerate(self.group_cache_managers):
             cm.fill_block_table(request_id, past_length, query_length, block_table[i])
 
-    @traced
     def get_seqlens_k(self, past_length: int, query_length: int) -> dict[str, int]:
         """Retrieve the key sequence length for the given request_id across all layer types. Returns a dictionary of
         layer types to their corresponding key sequence lengths."""
@@ -346,7 +372,6 @@ class PagedAttentionCache:
         # NOTE: when we add more attention types / different sliding windows, we can go back to looping over CMs
         return seqlens_k
 
-    @traced
     def update(
         self,
         key_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_kv, head_dim]
@@ -355,25 +380,33 @@ class PagedAttentionCache:
         read_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_kv + past_length]
         write_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_q]
     ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [seqlen_kv + past_length, num_kv_heads, head_dim]
-        """Update the cache with new key-value states for a specific layer. This method writes new KV states to the
-        appropriate cache locations. The behavior differs based on the layer's attention type:
+        """Update the cache with new key-value states for a specific layer, and retrieves the relevant KV states from
+        the cache for attention computation. The behavior differs based on the layer's attention type:
 
         - Full attention: New KV states are written to cache, then complete sequence is read from cache
         - Sliding window: Old KV is read from cache along with extra spaces for the new KV, then new KV is written to
             cache. This is because new KV might overwrite the old KV, so we need to read the old KV first.
 
+        When the layer's read index is empty, the batch has no cache reads (all requests are non-chunked prefills): we
+        only write to the cache and return the input KV states directly, skipping the index_select read-back.
+
         Returns the complete KV states (cached + new) for attention computation.
         """
-        # Retrieve the layer read and write indices
+        # Retrieve the layer write index and the relevant cache tensors
         group_idx, layer_idx_in_group = self.layer_index_to_group_indices[layer_idx]
         layer_read_index = read_index[group_idx]
         layer_write_index = write_index[group_idx]
-        # Select the correct cache
         k_cache = self.key_cache[layer_idx_in_group]
         v_cache = self.value_cache[layer_idx_in_group]
         # Transpose the key and value states to match the cache shape, after which shape is [seqlen_kv, num_kv_heads, head_dim]
         key_states = key_states.transpose(1, 2).squeeze(0)
         value_states = value_states.transpose(1, 2).squeeze(0)
+
+        # Case: write-only, no cache read. The input KV states already contain everything the attention needs.
+        if layer_read_index.numel() == 0:
+            k_cache.index_copy_(0, layer_write_index, key_states)
+            v_cache.index_copy_(0, layer_write_index, value_states)
+            return key_states, value_states
 
         # Case: full attention
         sliding_window = self.sliding_windows[layer_idx]
@@ -509,27 +542,30 @@ class PagedAttentionMemoryHandler:
 
     _activation_dtype = torch.bfloat16
     _input_dtype = torch.int32
-    _upper_bound_max_batch_tokens = 256
+    _upper_bound_max_batch_tokens = 1024
     _upper_bound_num_blocks = 4096
 
     def __init__(
         self,
-        block_size: int,
+        continuous_batching_config: ContinuousBatchingConfig,
         page_size: int,
         num_groups: int,
         group_size: int,
-        peak_activation_per_token: int,
+        activation_peaks: list[tuple[int, int]],
         num_attention_masks: int,
-        continuous_batching_config: ContinuousBatchingConfig,
     ) -> None:
-        """Initialize the memory handler."""
-        self.block_size = block_size
+        """Initialize the memory handler. `activation_peaks` is a list of `(Δcn, Δcm)` pairs giving the activation memory
+        contributions proportional to N (pages) and M (batch tokens) for each peak. Memory must satisfy the constraint
+        at every peak, so we solve each polynomial independently and take the most restrictive result."""
+        self.block_size = continuous_batching_config.block_size
         self.page_size = page_size
         self.num_groups = num_groups
         self.group_size = group_size
-        self.peak_activation_per_token = peak_activation_per_token
+        self.activation_peaks = activation_peaks
         self.num_attention_masks = num_attention_masks
-        self.max_blocks_per_request = continuous_batching_config.max_blocks_per_request or 0
+        self.max_blocks_per_request = continuous_batching_config.max_blocks_per_request
+        if self.max_blocks_per_request is None:
+            self.max_blocks_per_request = continuous_batching_config.fallback_max_blocks_per_request
         # This is the number of output rows for the output_ids tensor
         self.num_output_rows = 2 if continuous_batching_config.return_logprobs else 1
         # This account for the set of 2 IOs if async batching is used
@@ -545,23 +581,29 @@ class PagedAttentionMemoryHandler:
 
     # Formatting is disabled because of comment indentation, which improves readability.
     # fmt: off
-    def _equation_coefficients(self, cache_dtype: torch.dtype) -> tuple[int, int, int, int]:
-        """Returns (coeff_n, coeff_m, coeff_nm, coeff_mm) for the memory polynomial. Each addend is annotated with
-        the tensor it corresponds to in `ContinuousBatchingIOs._setup_static_tensors`.
+    def _equation_coefficients(
+        self, peak: tuple[int, int], cache_dtype: torch.dtype
+    ) -> tuple[int, int, int, int]:
+        """Returns `(coeff_n, coeff_m, coeff_nm, coeff_mm)` for the memory polynomial of a single activation peak.
+        `peak = (Δcn, Δcm)` is the peak-specific activation contribution; the rest of the coefficients are shared
+        across peaks. Each addend is annotated with the tensor it corresponds to in
+        `ContinuousBatchingIOs._setup_static_tensors` (or the forward pass, for activation terms).
         """
         i = self._input_dtype.itemsize       # int32
         a = self._activation_dtype.itemsize  # bfloat16
         c = cache_dtype.itemsize
         k = self.io_multiplier               # 1 sync, 2 async (IO tensors only)
+        delta_n, delta_m = peak
 
         # -- N terms: cost per cache page --------------------------------------------------
         coeff_n = (
             2 * self.group_size * self.page_size * c   # kv_cache: 2 * group_size * [N, page_size] * cache_dtype
             + k * self.num_groups * 8                  # read_index: [num_groups, N + M]  (N part only, int64)
+            + delta_n * a                              # activation peak: N-proportional part
         )
         # -- M terms: cost per batch token -------------------------------------------------
         coeff_m = (
-            self.peak_activation_per_token * a         # activation peak (largest hidden state per token)
+            delta_m * a                                # activation peak: M-proportional part
             + k * 7 * i                                # bulk_input: [7, M] int32, packed as 7 rows
             + k * self.num_output_rows * i             # output_ids: [num_output_rows, M] int32
             + k * self.num_groups                      # block_table: [bt_groups, M, max_blocks_per_req] int32
@@ -569,9 +611,9 @@ class PagedAttentionMemoryHandler:
             + k * self.num_groups * 8                  # write_index: [num_groups, M] int64
             + k * self.num_groups * 8                  # read_index: [num_groups, N + M] (M part only, int64)
         )
-        # -- N·M terms: cost per (page × batch token) -------------------------------------
+        # -- N·M terms: cost per (page × batch token) --------------------------------------
         coeff_nm = k * self.num_attention_masks * a    # attention_mask: [1, 1, M, N + M] (N·M part only)
-        # -- M² terms: cost per (batch token squared) -------------------------------------
+        # -- M² terms: cost per (batch token squared) --------------------------------------
         coeff_mm = k * self.num_attention_masks * a    # attention_mask: [1, 1, M, N + M] (M² part only)
 
         return coeff_n, coeff_m, coeff_nm, coeff_mm
@@ -590,55 +632,80 @@ class PagedAttentionMemoryHandler:
             raise ValueError(f"No positive solution (root = {root})")
         return root
 
-    def infer_num_blocks_and_max_batch_tokens(
+    def _solve_for_peak(
         self,
-        num_blocks: int | None = None,
-        max_batch_tokens: int | None = None,
-        max_memory_percent: float = 0.8,  # FIXME: it seems we overcommit memory, was changed from 0.9 which caused OOMs in our benchmarking CI
-        cache_dtype: torch.dtype = torch.float16,
+        peak: tuple[int, int],
+        available: int,
+        num_blocks: int | None,
+        max_batch_tokens: int | None,
+        cache_dtype: torch.dtype,
     ) -> tuple[int, int]:
-        """Solve for the missing variable(s) in the memory polynomial (see ``_equation_coefficients``). When both
-        are unknown, assumes M = m·N (m = 0.01, i.e. one batch fills ~1 % of the cache) and solves the resulting
-        quadratic in N.
-        """
-        available = self.get_available_memory(max_memory_percent)
-        coeff_n, coeff_m, coeff_nm, coeff_mm = self._equation_coefficients(cache_dtype)
-        logger.info(f"Cache memory: {available}")
+        """Solve for `(num_blocks, max_batch_tokens)` against one activation peak's memory polynomial. Clamps to upper
+        bounds. Either input may be None; whichever is None is solved for."""
+        cn, cm, cnm, cmm = self._equation_coefficients(peak, cache_dtype)
 
         if num_blocks is None and max_batch_tokens is None:
             # Substitute M = m·N → (coeff_nm·m + coeff_mm·m²)·N² + (coeff_n + coeff_m·m)·N − avail = 0
             m = 0.01
-            num_pages = self._solve_quadratic(
-                coeff_nm * m + coeff_mm * m**2,
-                coeff_n + coeff_m * m,
-                -available,
-            )
-            num_blocks = min(floor(num_pages) // self.block_size, self._upper_bound_num_blocks)
-            max_batch_tokens = min(int(num_pages * m), self._upper_bound_max_batch_tokens)
+            num_pages = self._solve_quadratic(cnm * m + cmm * m**2, cn + cm * m, -available)
+            max_batch_tokens = int(num_pages * m)
+            if max_batch_tokens > self._upper_bound_max_batch_tokens:
+                max_batch_tokens = self._upper_bound_max_batch_tokens
+                # If max_batch_tokens is clamped, we recompute num_blocks below to get a higher value
+                num_blocks = None
+            else:
+                num_blocks = min(floor(num_pages) // self.block_size, self._upper_bound_num_blocks)
 
-        elif num_blocks is None:
+        if num_blocks is None:
             # M given → linear in N: (coeff_n + coeff_nm·M)·N = avail − coeff_m·M − coeff_mm·M²
             M = max_batch_tokens
-            num_pages = floor((available - coeff_m * M - coeff_mm * M**2) / (coeff_n + coeff_nm * M))
+            num_pages = floor((available - cm * M - cmm * M**2) / (cn + cnm * M))
             num_blocks = min(num_pages // self.block_size, self._upper_bound_num_blocks)
-
         elif max_batch_tokens is None:
             # N given → quadratic in M: coeff_mm·M² + (coeff_m + coeff_nm·N)·M + (coeff_n·N − avail) = 0
             N = num_blocks * self.block_size
-            M = self._solve_quadratic(coeff_mm, coeff_m + coeff_nm * N, coeff_n * N - available)
+            M = self._solve_quadratic(cmm, cm + cnm * N, cn * N - available)
             max_batch_tokens = min(floor(M), self._upper_bound_max_batch_tokens)
 
+        return num_blocks, max_batch_tokens
+
+    def infer_num_blocks_and_max_batch_tokens(
+        self,
+        num_blocks: int | None = None,
+        max_batch_tokens: int | None = None,
+        max_memory_percent: float = 0.9,
+        cache_dtype: torch.dtype = torch.float16,
+    ) -> tuple[int, int]:
+        """Solve for the missing variable(s) in the memory polynomial (see ``_equation_coefficients``). There is one
+        polynomial per activation peak; we solve each independently and take the most restrictive (smallest) result.
+        When both `N` and `M` are unknown, assumes `M = m·N` (m = 0.01, i.e. one batch fills ~1 % of the cache) and
+        solves the resulting quadratic in N.
+        """
+        available = self.get_available_memory(max_memory_percent)
+        logger.info(f"Cache memory: {available}")
+        # Solve each peak independently, then take the element-wise min (tightest constraint wins)
+        acc_num_blocks = float("inf")
+        acc_max_batch_tokens = float("inf")
+        for peak in self.activation_peaks:
+            n_blocks, m_batch_tokens = self._solve_for_peak(peak, available, num_blocks, max_batch_tokens, cache_dtype)
+            acc_num_blocks = min(acc_num_blocks, n_blocks)
+            acc_max_batch_tokens = min(acc_max_batch_tokens, m_batch_tokens)
+        # Now update the value (cannot update in loop, it would overwrite the user-passed values)
+        num_blocks, max_batch_tokens = acc_num_blocks, acc_max_batch_tokens
         # Validate
-        memory_footprint = self.compute_memory_footprint(
-            max_batch_tokens=max_batch_tokens, num_blocks=num_blocks, cache_dtype=cache_dtype
-        )
+        memory_footprint = self.compute_memory_footprint(num_blocks, max_batch_tokens, cache_dtype)
         if memory_footprint > available:
             raise MemoryError(f"Memory footprint {memory_footprint} is more than available memory {available}")
         return num_blocks, max_batch_tokens
 
     def compute_memory_footprint(self, num_blocks: int, max_batch_tokens: int, cache_dtype: torch.dtype) -> int:
-        """Evaluate the memory polynomial at concrete (N, M) values."""
+        """Evaluate the memory polynomial at concrete (N, M) values, taking the max across activation peaks."""
         N = num_blocks * self.block_size
         M = max_batch_tokens
-        cn, cm, cnm, cmm = self._equation_coefficients(cache_dtype)
-        return cn * N + cm * M + cnm * N * M + cmm * M * M
+
+        max_memory_footprint = 0
+        for peak in self.activation_peaks:
+            cn, cm, cnm, cmm = self._equation_coefficients(peak, cache_dtype)
+            memory_footprint = cn * N + cm * M + cnm * N * M + cmm * M * M
+            max_memory_footprint = max(max_memory_footprint, memory_footprint)
+        return max_memory_footprint

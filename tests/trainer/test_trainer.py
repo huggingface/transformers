@@ -140,6 +140,47 @@ class TrainerMixedPrecisionTest(TestCasePlus, TrainerIntegrationCommon):
 
 
 # ---------------------------------------------------------------------------
+# DDP kwargs forwarding tests
+# ---------------------------------------------------------------------------
+
+
+@require_torch
+class TrainerDDPKwargsTest(TestCasePlus):
+    """The `ddp_*` TrainingArguments fields must reach DistributedDataParallelKwargs."""
+
+    def _get_ddp_kwargs(self, **training_args_overrides):
+        """Build a Trainer, run _build_accelerator_args, return the DDP kwargs dict."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(output_dir=tmp_dir, max_steps=1, **training_args_overrides)
+            trainer = Trainer(model=RegressionModel(), args=args, train_dataset=RegressionDataset())
+            accelerator_args = trainer._build_accelerator_args()
+            (handler,) = accelerator_args["kwargs_handlers"]
+            return handler
+
+    def test_ddp_static_graph_true_reaches_accelerator(self):
+        """ddp_static_graph=True is forwarded as static_graph=True to DistributedDataParallelKwargs."""
+        handler = self._get_ddp_kwargs(ddp_static_graph=True)
+        self.assertTrue(handler.static_graph)
+
+    def test_ddp_static_graph_false_reaches_accelerator(self):
+        """ddp_static_graph=False is forwarded as static_graph=False."""
+        handler = self._get_ddp_kwargs(ddp_static_graph=False)
+        self.assertFalse(handler.static_graph)
+
+    def test_ddp_static_graph_none_preserves_default(self):
+        """ddp_static_graph=None (default) must NOT override DistributedDataParallelKwargs' own default (False).
+
+        Regression guard: the conditional in _build_accelerator_args must keep static_graph out of ddp_kwargs
+        when the flag is unset, otherwise clusters not configured for it would silently switch behavior.
+        """
+        handler = self._get_ddp_kwargs()  # ddp_static_graph unset
+        # DistributedDataParallelKwargs default is False. If our conditional is broken and we always injected
+        # the attribute, this would still be False only by coincidence. Cross-check with ddp_static_graph=True
+        # (above) that the kwarg IS plumbed when set — together these tests pin both directions.
+        self.assertFalse(handler.static_graph)
+
+
+# ---------------------------------------------------------------------------
 # Gradient accumulation tests
 # ---------------------------------------------------------------------------
 
@@ -271,6 +312,71 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             loss_tolerance=0.001,
             compute_loss_func=partial(compute_loss, vocab_size=vocab_size),
         )
+
+    def test_num_items_in_batch_causal_lm(self):
+        """
+        For a causal LM, `_get_num_items_in_batch` must count over `labels[..., 1:]` because
+        ForCausalLMLoss shifts labels (position 0 is never a prediction target). When the
+        batch already exposes `shift_labels`, that tensor must be used as-is.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = AutoModelForCausalLM.from_pretrained(self._ga_model_name, dtype=torch.float32)
+            trainer = Trainer(
+                model=model,
+                args=TrainingArguments(output_dir=tmp_dir, per_device_train_batch_size=2),
+                train_dataset=self._ga_dataset,
+                data_collator=self._ga_data_collator,
+            )
+            self.assertTrue(trainer._loss_shifts_labels)
+
+            # batch[0]: 5 valid label positions, 3 padding (-100) → 5 - 1 = 4 after the shift.
+            # batch[1]: 8 valid label positions, 0 padding         → 8 - 1 = 7 after the shift.
+            # Trainer must not count position 0 of each row → expected total = 4 + 7 = 11.
+            batch_samples = [
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, -100, -100, -100]])},
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]])},
+            ]
+            num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(int(num_items), 11)
+
+            # If the collator already pre-shifts labels (`shift_labels` present), use it as-is and
+            # do NOT slice again. Each row here has 4 valid positions → expected total = 8.
+            batch_samples = [
+                {
+                    "labels": torch.tensor([[1, 2, 3, 4, 5]]),
+                    "shift_labels": torch.tensor([[2, 3, 4, 5, -100]]),
+                },
+                {
+                    "labels": torch.tensor([[1, 2, 3, 4, 5]]),
+                    "shift_labels": torch.tensor([[2, 3, 4, 5, -100]]),
+                },
+            ]
+            num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(int(num_items), 8)
+
+    def test_num_items_in_batch_non_causal_lm(self):
+        """For non-causal-LM losses, `_get_num_items_in_batch` must count the full label tensor."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = LlamaConfig(
+                vocab_size=64, hidden_size=16, intermediate_size=32, num_hidden_layers=2, num_attention_heads=2
+            )
+            # ForTokenClassification → LOSS_MAPPING entry is not ForCausalLMLoss → no shift.
+            from transformers import LlamaForTokenClassification
+
+            model = LlamaForTokenClassification(config)
+            trainer = Trainer(
+                model=model,
+                args=TrainingArguments(output_dir=tmp_dir, per_device_train_batch_size=2),
+            )
+            self.assertFalse(trainer._loss_shifts_labels)
+
+            # 5 valid + 8 valid = 13 (no shift).
+            batch_samples = [
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, -100, -100, -100]])},
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]])},
+            ]
+            num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(int(num_items), 13)
 
     @require_torch_multi_accelerator
     def test_num_batches_in_training_with_gradient_accumulation(self):

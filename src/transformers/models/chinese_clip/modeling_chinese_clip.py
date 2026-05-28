@@ -39,8 +39,8 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_chinese_clip import ChineseCLIPConfig, ChineseCLIPTextConfig, ChineseCLIPVisionConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class ChineseCLIPOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):

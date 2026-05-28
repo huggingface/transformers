@@ -56,6 +56,7 @@ deps = {
     "rjieba": "rjieba",
     "rouge-score": "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff": "ruff==0.14.10",
+    "transformers-mlinter": "transformers-mlinter==0.1.1",
     "ty": "ty==0.0.20",
     "sacrebleu": "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses": "sacremoses",
@@ -88,7 +89,4 @@ deps = {
     "libcst": "libcst",
     "rich": "rich",
     "ray[tune]": "ray[tune]>=2.7.0",
-    "opentelemetry-api": "opentelemetry-api",
-    "opentelemetry-exporter-otlp": "opentelemetry-exporter-otlp",
-    "opentelemetry-sdk": "opentelemetry-sdk",
 }
