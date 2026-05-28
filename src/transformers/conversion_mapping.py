@@ -923,6 +923,11 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"transformer.enc_out_class_embed", r"enc_out_class_embed"),
             WeightRenaming(r"transformer.enc_out_bbox_embed", r"enc_out_bbox_embed"),
             WeightRenaming(r"refpoint_embed\.weight", r"reference_point_embed.weight"),
+            # RfDetrDinov2Backbone attention rename (legacy upstream uses split self-attention layout)
+            WeightRenaming("attention.attention.query", "attention.q_proj"),
+            WeightRenaming("attention.attention.key", "attention.k_proj"),
+            WeightRenaming("attention.attention.value", "attention.v_proj"),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
             # RfDetrAttention
             WeightRenaming(r"self_attn.out_proj", r"self_attn.o_proj"),
             WeightConverter(
