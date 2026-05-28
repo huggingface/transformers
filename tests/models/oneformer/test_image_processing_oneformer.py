@@ -368,6 +368,47 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             self.assertEqual(image_processor.metadata, metadata)
 
+    def test_load_metadata_rejects_path_traversal(self):
+        # `class_info_file` comes from the (untrusted) image processor config and is documented to live
+        # inside `repo_path`. A value that escapes it via `..` or an absolute path would let a malicious
+        # config read an arbitrary local file (path traversal, CWE-22), so it must be rejected.
+        class_info = {"0": {"isthing": 0, "name": "foo"}}
+        for image_processing_class in self.image_processing_classes.values():
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                repo_path = os.path.join(tmpdirname, "repo")
+                os.makedirs(repo_path)
+                # A readable json file that lives OUTSIDE repo_path and would be reached by traversal.
+                with open(os.path.join(tmpdirname, "secret.json"), "w") as f:
+                    json.dump(class_info, f)
+
+                config_dict = self.image_processor_dict
+                config_dict["repo_path"] = repo_path
+                config_dict["class_info_file"] = "../secret.json"
+                with self.assertRaises(ValueError):
+                    image_processing_class(**config_dict)
+
+    def test_can_load_metadata_from_subdirectory(self):
+        # Metadata stored in a subdirectory of `repo_path` is legitimate and must still load: the
+        # traversal guard rejects escapes only, not nested paths.
+        class_info = {
+            "0": {"isthing": 0, "name": "foo"},
+            "1": {"isthing": 1, "name": "bar"},
+        }
+        metadata = prepare_metadata(class_info)
+        for image_processing_class in self.image_processing_classes.values():
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                subdir = os.path.join(tmpdirname, "sub")
+                os.makedirs(subdir)
+                with open(os.path.join(subdir, "metadata.json"), "w") as f:
+                    json.dump(class_info, f)
+
+                config_dict = self.image_processor_dict
+                config_dict["repo_path"] = tmpdirname
+                config_dict["class_info_file"] = os.path.join("sub", "metadata.json")
+                image_processor = image_processing_class(**config_dict)
+
+            self.assertEqual(image_processor.metadata, metadata)
+
     def test_backends_equivalence(self):
         """Override base class test to also compare segmentation labels."""
         if len(self.image_processing_classes) < 2:

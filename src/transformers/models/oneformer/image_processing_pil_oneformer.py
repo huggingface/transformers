@@ -15,6 +15,7 @@
 
 import json
 import os
+from pathlib import Path
 
 import numpy as np
 
@@ -222,7 +223,13 @@ def convert_segmentation_to_rle(segmentation):
 
 # Adapted from transformers.models.oneformer.image_processing_oneformer.load_metadata
 def load_metadata(repo_id, class_info_file):
-    fname = os.path.join("" if repo_id is None else repo_id, class_info_file)
+    base_dir = "" if repo_id is None else repo_id
+    fname = os.path.join(base_dir, class_info_file)
+    # `class_info_file` comes from the (untrusted) image processor config and is documented to live
+    # inside `repo_id`. Reject values that escape it via `..` or an absolute path so a malicious config
+    # cannot read arbitrary local files (path traversal, CWE-22). Files in subdirectories are allowed.
+    if not Path(fname).resolve().is_relative_to(Path(base_dir).resolve()):
+        raise ValueError(f"Invalid class_info_file: {class_info_file!r}")
 
     if not os.path.exists(fname) or not os.path.isfile(fname):
         if repo_id is None:
