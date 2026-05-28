@@ -188,17 +188,9 @@ class Molmo2GQAAttention(nn.Module):
         key_states = self.k_proj(key_value_states)
         value_states = self.v_proj(key_value_states)
 
-        query_states = query_states.view(batch_size, -1, self.num_heads, self.head_dim)
-        key_states = key_states.view(batch_size, -1, self.num_key_value_heads, self.head_dim)
-        value_states = value_states.view(batch_size, -1, self.num_key_value_heads, self.head_dim)
-
-        if self.num_heads != self.num_key_value_heads:
-            key_states = key_states.repeat_interleave(
-                self.num_key_value_groups, dim=2, output_size=self.num_heads
-            )
-            value_states = value_states.repeat_interleave(
-                self.num_key_value_groups, dim=2, output_size=self.num_heads
-            )
+        query_states = query_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         target_dtype = query_states.dtype
         if getattr(self.config, "float32_attention", False):
@@ -207,37 +199,20 @@ class Molmo2GQAAttention(nn.Module):
             if self.config._attn_implementation == "sdpa" and not torch.is_autocast_enabled():
                 value_states = value_states.float()
 
-        dropout = 0.0 if not self.training else self.attention_dropout
-        attn_weights = None
-        if self.config._attn_implementation == "eager":
-            attn_weights = torch.einsum("...qhd,...khd->...hqk", query_states * self.scaling, key_states)
-            attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-            attn_weights = F.dropout(attn_weights, p=dropout, training=self.training)
-            attn_output = torch.einsum("...hqk,...khd->...qhd", attn_weights.to(value_states.dtype), value_states)
-        elif self.config._attn_implementation == "sdpa":
-            attn_output = F.scaled_dot_product_attention(
-                query_states.transpose(1, 2).contiguous(),
-                key_states.transpose(1, 2).contiguous(),
-                value_states.transpose(1, 2).contiguous(),
-                attn_mask=attention_mask,
-                is_causal=False,
-                dropout_p=dropout,
-            ).transpose(1, 2)
-        else:
-            attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-                self.config._attn_implementation, eager_attention_forward
-            )
-            attn_output, attn_weights = attention_interface(
-                self,
-                query_states.transpose(1, 2),
-                key_states.transpose(1, 2),
-                value_states.transpose(1, 2),
-                attention_mask,
-                is_causal=self.is_causal,
-                scaling=self.scaling,
-                dropout=dropout,
-            )
-            attn_output = attn_output.transpose(1, 2)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            is_causal=self.is_causal,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.attention_dropout,
+        )
 
         attn_output = attn_output.to(target_dtype)
         attn_output = attn_output.reshape(batch_size, -1, self.num_heads * self.head_dim).contiguous()
