@@ -125,36 +125,33 @@ class Gemma4TextConfig(PreTrainedConfig):
     model_type = "gemma4_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        # q/k use allgather because gemma4 has q_norm/k_norm with full-sized weights
-        # that can't match sharded q/k outputs.
-        "layers.*.self_attn.q_proj": "colwise_allgather",
-        "layers.*.self_attn.k_proj": "colwise_allgather",
-        "layers.*.self_attn.v_proj": "colwise_allgather",
-        "layers.*.self_attn.o_proj": "vocab_allreduce",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.experts.gate_up_proj": "packed_colwise",
+        "layers.*.experts.down_proj": "rowwise",
+        "layers.*.experts": "moe_tp_experts",
     }
     base_model_ep_plan = {
         # EP plan for google/gemma-4-26B-A4B-it: do not tp in attention (num_global_key_value_heads=2 too small to partition)
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.down_proj": "rowwise",
         "layers.*.router": "ep_router",
         "layers.*.experts.gate_up_proj": "grouped_gemm",
         "layers.*.experts.down_proj": "grouped_gemm",
-        "layers.*.experts": "moe_experts_allreduce",
+        "layers.*.experts": "moe_tp_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
-    }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
     }
 
     vocab_size: int = 262_144
@@ -194,6 +191,7 @@ class Gemma4TextConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if self.use_bidirectional_attention == "all":
+            self.is_causal = False
             self.sliding_window = (self.sliding_window // 2) + 1  # due to fa we set exclusive bounds
 
         if self.layer_types is None:
@@ -244,10 +242,12 @@ class Gemma4VisionConfig(PreTrainedConfig):
         "encoder.layers.*.self_attn.q_proj": "colwise",
         "encoder.layers.*.self_attn.k_proj": "colwise",
         "encoder.layers.*.self_attn.v_proj": "colwise",
-        "encoder.layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "encoder.layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "encoder.layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "encoder.layers.*.self_attn.o_proj": "rowwise",
         "encoder.layers.*.mlp.gate_proj": "colwise",
         "encoder.layers.*.mlp.up_proj": "colwise",
-        "encoder.layers.*.mlp.down_proj": "rowwise_allreduce",
+        "encoder.layers.*.mlp.down_proj": "rowwise",
     }
     default_theta = 100.0
 

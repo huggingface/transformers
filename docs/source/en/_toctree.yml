@@ -1252,6 +1252,8 @@
         title: glm4v
       - local: model_doc/glm4v_moe
         title: glm4v_moe
+      - local: model_doc/glmga
+        title: Glmga
       - local: model_doc/glm_ocr
         title: GlmOcr
       - local: model_doc/got_ocr2

@@ -171,6 +171,7 @@ if TYPE_CHECKING:
     from .glm_moe_dsa import *
     from .glm_ocr import *
     from .glmasr import *
+    from .glmga import *
     from .glpn import *
     from .got_ocr2 import *
     from .gpt2 import *

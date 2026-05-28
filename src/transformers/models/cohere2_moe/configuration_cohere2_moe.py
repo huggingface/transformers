@@ -41,8 +41,8 @@ class Cohere2MoeConfig(PreTrainedConfig):
         Expert selection function of router.
     layer_types (`list`, *optional*):
         Attention pattern for each layer.
-    first_k_dense_replace (`int`, *optional*, defaults to 0):
-        Number of dense layers before MoE layers.
+    mlp_layer_types (`list`, *optional*):
+        MLP (Moe vs Dense) pattern for each layer.
     prefix_dense_sliding_window_pattern (`int`, *optional*, defaults to 1):
         Sliding window pattern for the prefix dense layers.
     norm_topk_prob (`bool`, *optional*, defaults to `True`):
@@ -113,7 +113,7 @@ class Cohere2MoeConfig(PreTrainedConfig):
     shared_expert_combination_strategy: str = "average"
     expert_selection_fn: str = "softmax"
     layer_types: list[str] | None = None
-    first_k_dense_replace: int = 0
+    mlp_layer_types: list | None = None
     prefix_dense_sliding_window_pattern: int = 1
     norm_topk_prob: bool = True
     prefix_dense_intermediate_size: int | None = None
@@ -128,25 +128,27 @@ class Cohere2MoeConfig(PreTrainedConfig):
         self.standardize_rope_params()
         self.validate_rope()
 
+        # Some configs may use `first_k_dense_replace` instead of `layer_types`/`mlp_layer_types`
+        first_k_dense_replace = kwargs.pop("first_k_dense_replace", 0)
+
         if self.layer_types is None:
             # The first k dense layers (MLP instead of MoE) do not use the same sliding window pattern as the MoE layers
             prefix_layers = [
                 "sliding_attention" if ((i + 1) % self.prefix_dense_sliding_window_pattern) != 0 else "full_attention"
-                for i in range(self.first_k_dense_replace)
+                for i in range(first_k_dense_replace)
             ]
             rest_layers = [
                 "sliding_attention" if ((i + 1) % self.sliding_window_pattern) != 0 else "full_attention"
-                for i in range(self.num_hidden_layers - self.first_k_dense_replace)
+                for i in range(self.num_hidden_layers - first_k_dense_replace)
             ]
             self.layer_types = prefix_layers + rest_layers
 
         self.validate_layer_type()
 
-        if len(self.layer_types) != self.num_hidden_layers:
-            raise ValueError(
-                f"The length of layer_types ({len(self.layer_types)}) does not match "
-                f"num_hidden_layers ({self.num_hidden_layers})"
-            )
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = [
+                "dense" if i < first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
+            ]
 
         super().__post_init__(**kwargs)
 

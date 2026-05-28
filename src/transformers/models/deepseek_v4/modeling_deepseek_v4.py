@@ -1183,6 +1183,9 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
     _keep_in_fp32_modules_strict = [
         "attn_hc",
         "ffn_hc",
+        "hc_head",
+        "sinks",
+        "position_bias",
         "e_score_correction_bias",
         "q_a_norm",
         "kv_norm",
@@ -1395,10 +1398,8 @@ def load_balancing_loss_func(
 @auto_docstring
 class DeepseekV4ForCausalLM(DeepseekV4PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_allgather"}
-    _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)
