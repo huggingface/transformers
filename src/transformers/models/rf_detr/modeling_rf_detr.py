@@ -77,14 +77,12 @@ class RfDetrDinov2Embeddings(nn.Module):
     def __init__(self, config: RfDetrDinov2Config) -> None:
         super().__init__()
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        if config.use_mask_token:
-            self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
+        self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
         self.patch_embeddings = RfDetrDinov2PatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
-        self.use_mask_token = config.use_mask_token
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -447,8 +445,7 @@ class RfDetrDinov2PreTrainedModel(PreTrainedModel):
         if isinstance(module, RfDetrDinov2Embeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
-            if self.config.use_mask_token:
-                init.zeros_(module.mask_token)
+            init.zeros_(module.mask_token)
         elif isinstance(module, RfDetrDinov2LayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
 
@@ -459,16 +456,24 @@ class RfDetrDinov2Encoder(RfDetrDinov2PreTrainedModel):
         self.layer = nn.ModuleList([RfDetrDinov2Layer(config, i) for i in range(config.num_hidden_layers)])
         self.post_init()
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
-    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
         for layer_module in self.layer:
-            hidden_states = layer_module(hidden_states)
+            hidden_states = layer_module(hidden_states, attention_mask, **kwargs)
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
+@auto_docstring(
+    custom_intro="""
+    RfDetrDinov2 backbone, to be used with frameworks like DETR and MaskFormer.
+    """
+)
 class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
-    def __init__(self, config: RfDetrDinov2Config):
+    def __init__(self, config):
         super().__init__(config)
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = RfDetrDinov2Embeddings(config)
@@ -476,38 +481,11 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_init()
 
-    def get_input_embeddings(self) -> RfDetrDinov2PatchEmbeddings:  # noqa: F821
+    def get_input_embeddings(self) -> RfDetrDinov2PatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    def window_unpartition(self, hidden_state: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        """
-        Reassembles windowed patch tokens into their original 2D patch layout (image-level grid structure)
-        before converting backbone hidden states into spatial feature maps.
-        """
-        num_windows = self.config.num_windows
-        patch_size = self.config.patch_size
-        num_h_patches = height // patch_size
-        num_w_patches = width // patch_size
-        hidden_batch_size, seq_len, channels = hidden_state.shape
-        num_windows_squared = num_windows**2
-        num_h_patches_per_window = num_h_patches // num_windows
-        num_w_patches_per_window = num_w_patches // num_windows
-
-        # Reshape the hidden states into the original sequence length
-        hidden_state = hidden_state.reshape(
-            hidden_batch_size // num_windows_squared, num_windows_squared * seq_len, channels
-        )
-        hidden_state = hidden_state.view(
-            hidden_batch_size // num_windows_squared,
-            num_windows,
-            num_windows,
-            num_h_patches_per_window,
-            num_w_patches_per_window,
-            channels,
-        )
-        hidden_state = hidden_state.transpose(2, 3)
-        return hidden_state
-
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @can_return_tuple
     @filter_output_hidden_states
     @auto_docstring
@@ -540,12 +518,15 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        # Like Dinov2, we need to output the hidden states to extract the layers for the stages
-        kwargs["output_hidden_states"] = True
-
         embedding_output = self.embeddings(pixel_values)
-        output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
-        hidden_states = output.hidden_states
+        # Iterate the layer ModuleList directly to collect per-stage hidden_states inline
+        # for window-aware feature_maps. @capture_outputs handles injection into the
+        # returned BackboneOutput.
+        hidden_state = embedding_output
+        hidden_states = (hidden_state,)
+        for layer in self.encoder.layer:
+            hidden_state = layer(hidden_state, **kwargs)
+            hidden_states = hidden_states + (hidden_state,)
 
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
@@ -569,11 +550,36 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
 
                 feature_maps += (hidden_state,)
 
-        return BackboneOutput(
-            feature_maps=tuple(feature_maps),
-            hidden_states=hidden_states,
-            attentions=output.attentions,
+        return BackboneOutput(feature_maps=tuple(feature_maps))
+
+    def window_unpartition(self, hidden_state: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        Reassembles windowed patch tokens into their original 2D patch layout (image-level grid structure)
+        before converting backbone hidden states into spatial feature maps.
+        """
+        num_windows = self.config.num_windows
+        patch_size = self.config.patch_size
+        num_h_patches = height // patch_size
+        num_w_patches = width // patch_size
+        hidden_batch_size, seq_len, channels = hidden_state.shape
+        num_windows_squared = num_windows**2
+        num_h_patches_per_window = num_h_patches // num_windows
+        num_w_patches_per_window = num_w_patches // num_windows
+
+        # Reshape the hidden states into the original sequence length
+        hidden_state = hidden_state.reshape(
+            hidden_batch_size // num_windows_squared, num_windows_squared * seq_len, channels
         )
+        hidden_state = hidden_state.view(
+            hidden_batch_size // num_windows_squared,
+            num_windows,
+            num_windows,
+            num_h_patches_per_window,
+            num_w_patches_per_window,
+            channels,
+        )
+        hidden_state = hidden_state.transpose(2, 3)
+        return hidden_state
 
 
 class RfDetrLayerNorm(nn.LayerNorm):
