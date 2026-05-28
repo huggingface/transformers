@@ -141,7 +141,7 @@ from transformers import AutoModelForCausalLM, KernelConfig
 
 kernel_config = KernelConfig(
     kernel_mapping={
-        "RMSNorm": "kernels-community/liger_kernels:LigerRMSNorm",
+        "RMSNorm": "kernels-community/liger-kernels:LigerRMSNorm",
     }
 )
 model = AutoModelForCausalLM.from_pretrained(
@@ -161,7 +161,7 @@ from transformers import KernelConfig
 kernel_config = KernelConfig(
     kernel_mapping={
         "RMSNorm": {
-            "cuda": "kernels-community/liger_kernels:LigerRMSNorm",
+            "cuda": "kernels-community/liger-kernels:LigerRMSNorm",
             "rocm": "kernels-community/rocm-kernels:RocmRMSNorm",
             "metal": "kernels-community/metal-kernels:MetalRMSNorm",
             "xpu": "kernels-community/xpu-kernels:XpuRMSNorm"
