@@ -71,6 +71,7 @@ from .integrations.liger import apply_liger_kernel
 from .integrations.neftune import activate_neftune, deactivate_neftune
 from .integrations.peft import MIN_PEFT_VERSION
 from .integrations.tpu import save_tpu_checkpoint, tpu_spmd_dataloader, wrap_model_xla_fsdp
+from .loss.loss_utils import LOSS_MAPPING, ForCausalLMLoss
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
 from .models.auto.modeling_auto import (
@@ -447,13 +448,13 @@ class Trainer:
             elif len(devices) == 1:
                 self.is_model_parallel = self.args.device != torch.device(devices[0])
 
-        self.is_fsdp_xla_enabled = args.fsdp_config["xla"]
-        if len(args.fsdp) > 0:
+        self.is_fsdp_xla_enabled = args.fsdp and args.fsdp_config.get("xla", False)
+        if args.fsdp:
             if self.is_deepspeed_enabled:
                 raise ValueError(
                     "Using --fsdp xxx together with --deepspeed is not possible, deactivate one of those flags."
                 )
-            if not args.fsdp_config["xla"] and args.parallel_mode != ParallelMode.DISTRIBUTED:
+            if not self.is_fsdp_xla_enabled and args.parallel_mode != ParallelMode.DISTRIBUTED:
                 raise ValueError("Using fsdp only works in distributed training.")
 
         # Postpone switching model to cuda when MP, DeepSpeed, full bf16/fp16 eval, or FSDP
@@ -507,6 +508,13 @@ class Trainer:
         default_label_names = find_labels(model_to_inspect.__class__)
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.can_return_loss = can_return_loss(model_to_inspect.__class__)
+
+        # Causal LM losses shift labels internally (predictions at position i target label[i+1]), so position 0 of
+        # each row is never a prediction target. The valid-prediction count used by `num_items_in_batch` must therefore
+        # be taken over `labels[..., 1:]`, not the full label tensor. Inspect the actual loss function via
+        # LOSS_MAPPING so model-specific loss_types that route to ForCausalLMLoss (e.g. CsmForConditionalGeneration)
+        # are caught too.
+        self._loss_shifts_labels = LOSS_MAPPING.get(getattr(model_to_inspect, "loss_type", None)) is ForCausalLMLoss
 
         if self.args.label_smoothing_factor != 0:
             if getattr(self.model.config, "problem_type", None) == "multi_label_classification":
@@ -598,7 +606,7 @@ class Trainer:
         if getattr(self.model, "config", None) is not None:
             self.model.config.use_cache = self.args.use_cache
 
-        self.is_fsdp_xla_v2_enabled = args.fsdp_config.get("xla_fsdp_v2", False)
+        self.is_fsdp_xla_v2_enabled = args.fsdp and args.fsdp_config.get("xla_fsdp_v2", False)
         if self.is_fsdp_xla_v2_enabled:
             if not IS_XLA_FSDPV2_POST_2_2:
                 raise ValueError("FSDPv2 requires `torch_xla` 2.2 or higher.")
@@ -822,10 +830,7 @@ class Trainer:
 
         # post accelerator creation setup
         if self.is_fsdp_enabled:
-            fsdp_plugin = self.accelerator.state.fsdp_plugin
-            for param in ["limit_all_gathers", "activation_checkpointing"]:
-                setattr(fsdp_plugin, param, self.args.fsdp_config.get(param, getattr(fsdp_plugin, param)))
-            if fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
+            if self.accelerator.state.fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
                 raise ValueError(
                     "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
                     "can't be set to True simultaneously. Please use FSDP's activation_checkpointing logic "
@@ -2018,7 +2023,12 @@ class Trainer:
             and (self.model_accepts_loss_kwargs or self.compute_loss_func)
             and num_items_in_batch is not None
         ):
-            loss *= self.accelerator.num_processes if self.args.n_gpu <= 1 else self.args.n_gpu
+            # TP and EP-as-TP ranks see replicated batches; `num_processes` over-counts
+            # them by `tp_size`. Mirror the divisor used in `_get_num_items_in_batch`.
+            loss_scale = self.accelerator.num_processes
+            if (pc := getattr(self.accelerator, "parallelism_config", None)) is not None:
+                loss_scale //= pc.tp_size
+            loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
 
         return (loss, outputs) if return_outputs else loss
 
@@ -2136,7 +2146,17 @@ class Trainer:
         if count_num_items_in_batch:
             # For now we don't support object detection
             try:
-                num_items_in_batch = sum((batch["labels"].ne(-100)).sum() for batch in batch_samples)
+                # Causal LM losses shift labels; count over `labels[..., 1:]` to avoid over-counting position 0.
+                # If the collator already provides `shift_labels` (e.g. padding-free collators), use it as-is.
+                labels_for_count = [
+                    batch["shift_labels"]
+                    if "shift_labels" in batch
+                    else batch["labels"][..., 1:]
+                    if self._loss_shifts_labels
+                    else batch["labels"]
+                    for batch in batch_samples
+                ]
+                num_items_in_batch = sum(labels.ne(-100).sum() for labels in labels_for_count)
             except (TypeError, AttributeError):
                 pass
 

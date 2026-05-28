@@ -1057,6 +1057,9 @@ class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
     _keep_in_fp32_modules_strict = [
         "attn_hc",
         "ffn_hc",
+        "hc_head",
+        "sinks",
+        "position_bias",
         "e_score_correction_bias",
         "q_a_norm",
         "kv_norm",
