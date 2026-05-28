@@ -38,6 +38,17 @@ def convert_config(config_dict: dict) -> dict:
         for mla_field in ("kv_lora_rank", "q_lora_rank"):
             if mla_field in text_config and text_config[mla_field] is None:
                 del text_config[mla_field]
+        for dead_key in (
+            "auto_map",
+            "architectures",
+            "lm_head",
+            "rm_head",
+            "qk_nope_head_dim",
+            "qk_rope_head_dim",
+            "use_mla",
+            "v_head_dim",
+        ):
+            text_config.pop(dead_key, None)
         first_k = text_config.pop("first_k_dense_replace", 0)
         n_layers = text_config.get("num_hidden_layers", 28)
         text_config["mlp_layer_types"] = ["dense"] * first_k + ["sparse"] * (n_layers - first_k)
@@ -68,6 +79,45 @@ def convert_config(config_dict: dict) -> dict:
         }
 
     config_dict.pop("projector_config", None)
+
+    # Strip top-level junk inherited from the original custom-code config
+    # (everything `DeepseekOcr2Config` does not declare as a field).
+    for dead_key in (
+        # Original-repo specific
+        "auto_map",
+        "candidate_resolutions",
+        "global_view_pos",
+        "tile_tag",
+        # text_config duplicates leaked to top-level
+        "bos_token_id",
+        "eos_token_id",
+        "hidden_size",
+        "intermediate_size",
+        "max_position_embeddings",
+        "moe_intermediate_size",
+        "n_group",
+        "n_routed_experts",
+        "n_shared_experts",
+        "num_attention_heads",
+        "num_experts_per_tok",
+        "num_hidden_layers",
+        "num_key_value_heads",
+        "topk_group",
+        "topk_method",
+        "vocab_size",
+        # Replaced by `text_config["mlp_layer_types"]`
+        "first_k_dense_replace",
+        # Non-standard / MLA leftovers (port uses standard MHA)
+        "lm_head",
+        "rm_head",
+        "kv_lora_rank",
+        "q_lora_rank",
+        "qk_nope_head_dim",
+        "qk_rope_head_dim",
+        "use_mla",
+        "v_head_dim",
+    ):
+        config_dict.pop(dead_key, None)
 
     config_dict["vision_config"] = vision_config
     config_dict["model_type"] = "deepseek_ocr2"

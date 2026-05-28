@@ -545,6 +545,7 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
         Configuration for the DeepSeek-OCR-2 vision encoder. Defaults to `DeepseekOcr2VisionEncoderConfig()`.
     """
 
+    model_type = "deepseek_ocr2_vision"
     base_config_key = "vision_config"
     sub_configs = {
         "sam_config": DeepseekOcr2SamVisionConfig,
