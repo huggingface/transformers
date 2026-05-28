@@ -89,6 +89,9 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     head_scale_conv_kernel_sizes (`list[int]`, *optional*):
         Kernel size for each scale conv layer. Auto-filled with `[1, ...]` when
         `head_scale_conv_out_channels` is set but this is `None`.
+    head_scale_final_input_size (`int`, *optional*):
+        Flattened feature size passed into the scale MLP.
+        When `None` (default), it is automatically inferred.
     head_scale_final_hidden_sizes (`list[int]`, *optional*):
         Hidden-layer sizes for the MLP that maps flattened scale features to the scalar scale output.
         When `None` (default), no scale branch is built.
@@ -136,6 +139,7 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     head_use_pixel_shuffle: bool | None = None
     head_scale_conv_out_channels: list[int] | None = None
     head_scale_conv_kernel_sizes: list[int] | None = None
+    head_scale_final_input_size: int | None = None
     head_scale_final_hidden_sizes: list[int] | None = None
 
     def __post_init__(self, **kwargs):
@@ -152,6 +156,21 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
             self.head_conv_kernel_sizes = [1] * len(self.head_conv_out_channels)
         if self.head_scale_conv_out_channels is not None and self.head_scale_conv_kernel_sizes is None:
             self.head_scale_conv_kernel_sizes = [1] * len(self.head_scale_conv_out_channels)
+        if (
+            self.head_scale_final_input_size is None
+            and self.head_scale_conv_out_channels is not None
+            and self.head_scale_conv_kernel_sizes is not None
+        ):
+            image_size = self.image_size
+            image_h, image_w = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
+            patch_size = self.patch_size if isinstance(self.patch_size, int) else self.patch_size[0]
+            h = image_h // patch_size
+            w = image_w // patch_size
+            for kernel_size in self.head_scale_conv_kernel_sizes:
+                padding = (kernel_size - 1) // 2
+                h = (h + 2 * padding - kernel_size) // 2 + 1
+                w = (w + 2 * padding - kernel_size) // 2 + 1
+            self.head_scale_final_input_size = h * w * self.head_scale_conv_out_channels[-1]
         self.stage_names = ["stem"] + [f"stage{i}" for i in range(1, self.num_hidden_layers + 1)]
         self.set_output_features_output_indices(
             out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)

@@ -742,17 +742,6 @@ class Sapiens2PointmapFinalLayer(nn.Module):
 class Sapiens2PointmapScaleHead(nn.Module):
     def __init__(self, config: Sapiens2Config):
         super().__init__()
-        image_size = config.image_size
-        image_h, image_w = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
-        patch_size = config.patch_size if isinstance(config.patch_size, int) else config.patch_size[0]
-        h = image_h // patch_size
-        w = image_w // patch_size
-        for kernel_size in config.head_scale_conv_kernel_sizes:
-            padding = (kernel_size - 1) // 2
-            h = (h + 2 * padding - kernel_size) // 2 + 1
-            w = (w + 2 * padding - kernel_size) // 2 + 1
-        flat_size = h * w * config.head_scale_conv_out_channels[-1]
-
         self.conv_layers = nn.ModuleList()
         scale_in_channels = [config.hidden_size] + config.head_scale_conv_out_channels[:-1]
         for in_ch, out_ch, kernel_size in zip(
@@ -764,7 +753,7 @@ class Sapiens2PointmapScaleHead(nn.Module):
                 Sapiens2ConvLayer(in_ch, out_ch, kernel_size=kernel_size, stride=2, padding=(kernel_size - 1) // 2)
             )
         self.predictor = Sapiens2PointmapFinalLayer(
-            flat_size, config.head_scale_final_hidden_sizes, activation=config.hidden_act
+            config.head_scale_final_input_size, config.head_scale_final_hidden_sizes, activation=config.hidden_act
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
