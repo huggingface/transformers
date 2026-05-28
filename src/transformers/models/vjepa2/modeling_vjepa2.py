@@ -862,6 +862,7 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
 
         init_std = self.config.initializer_range
         if isinstance(module, VJEPA2AttentivePooler):
