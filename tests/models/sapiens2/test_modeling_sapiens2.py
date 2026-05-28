@@ -264,12 +264,16 @@ class Sapiens2ModelTester:
 
     def prepare_config_and_inputs_for_pointmap_estimation(self):
         config = self.get_config()
+        config.head_use_pixel_shuffle = True
         pixel_values = floats_tensor([self.batch_size, self.num_channels, config.image_size, config.image_size])
         labels = None
         return config, pixel_values, labels
 
     def prepare_config_and_inputs_for_common(self):
         config = self.get_config()
+        # Use pixel-shuffle so all model classes (including Normal/Pointmap/Matting) instantiate
+        # decode_head.input_conv, satisfying the conversion patterns checked by test_reverse_loading_mapping.
+        config.head_use_pixel_shuffle = True
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict

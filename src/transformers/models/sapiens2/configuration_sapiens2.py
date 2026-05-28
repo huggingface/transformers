@@ -80,6 +80,9 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
         Kernel size for each refinement conv layer. Auto-filled with `[1, ...]` when
         `head_conv_out_channels` is set but this is `None`.
         Must have the same length as `head_conv_out_channels`.
+    head_use_pixel_shuffle (`bool`, *optional*):
+        Whether the decode head uses pixel-shuffle upsampling instead of transposed convolutions.
+        When `None` (default), the head uses transposed convolutions.
     head_scale_conv_out_channels (`list[int]`, *optional*):
         Output channel counts for the stride-2 conv layers used to predict the focal-length scale.
         When `None` (default), no scale branch is built.
@@ -130,6 +133,7 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     head_upsample_kernel_sizes: list[int] | None = None
     head_conv_out_channels: list[int] | None = None
     head_conv_kernel_sizes: list[int] | None = None
+    head_use_pixel_shuffle: bool | None = None
     head_scale_conv_out_channels: list[int] | None = None
     head_scale_conv_kernel_sizes: list[int] | None = None
     head_scale_final_hidden_sizes: list[int] | None = None

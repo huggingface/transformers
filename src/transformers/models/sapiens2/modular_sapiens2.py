@@ -960,6 +960,9 @@ class Sapiens2Config(DINOv3ViTConfig):
         Kernel size for each refinement conv layer. Auto-filled with `[1, ...]` when
         `head_conv_out_channels` is set but this is `None`.
         Must have the same length as `head_conv_out_channels`.
+    head_use_pixel_shuffle (`bool`, *optional*):
+        Whether the decode head uses pixel-shuffle upsampling instead of transposed convolutions.
+        When `None` (default), the head uses transposed convolutions.
     head_scale_conv_out_channels (`list[int]`, *optional*):
         Output channel counts for the stride-2 conv layers used to predict the focal-length scale.
         When `None` (default), no scale branch is built.
@@ -990,6 +993,7 @@ class Sapiens2Config(DINOv3ViTConfig):
     head_upsample_kernel_sizes: list[int] | None = None
     head_conv_out_channels: list[int] | None = None
     head_conv_kernel_sizes: list[int] | None = None
+    head_use_pixel_shuffle: bool | None = None
     head_scale_conv_out_channels: list[int] | None = None
     head_scale_conv_kernel_sizes: list[int] | None = None
     head_scale_final_hidden_sizes: list[int] | None = None
@@ -1154,55 +1158,39 @@ class Sapiens2ConvLayer(PPOCRV5ServerDetConvBatchnormLayer):
         return hidden_states
 
 
-class Sapiens2SegmentationHead(nn.Module):
+class Sapiens2Head(nn.Module):
     def __init__(self, config: Sapiens2Config):
         super().__init__()
-        upsample_in_channels = [config.hidden_size] + config.head_upsample_out_channels[:-1]
-        self.deconv_layers = nn.ModuleList(
-            Sapiens2ConvLayer(
-                in_ch, out_ch, kernel_size=ks, stride=2, padding=1, bias=False, convolution_transpose=True
-            )
-            for in_ch, out_ch, ks in zip(
-                upsample_in_channels, config.head_upsample_out_channels, config.head_upsample_kernel_sizes
-            )
+        self.input_conv = (
+            Sapiens2ConvLayer(config.hidden_size, config.hidden_size, kernel_size=3, padding=1)
+            if config.head_use_pixel_shuffle
+            else nn.Identity()
         )
-        conv_in_channels = [config.head_upsample_out_channels[-1]] + config.head_conv_out_channels[:-1]
-        self.conv_layers = nn.ModuleList(
-            Sapiens2ConvLayer(in_ch, out_ch, kernel_size=ks)
-            for in_ch, out_ch, ks in zip(
-                conv_in_channels, config.head_conv_out_channels, config.head_conv_kernel_sizes
-            )
-        )
-        predictor_in = (
-            config.head_conv_out_channels[-1]
-            if config.head_conv_out_channels
-            else config.head_upsample_out_channels[-1]
-        )
-        self.predictor = nn.Conv2d(predictor_in, config.num_labels, kernel_size=1)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        for layer in self.deconv_layers:
-            hidden_states = layer(hidden_states)
-        for layer in self.conv_layers:
-            hidden_states = layer(hidden_states)
-        return self.predictor(hidden_states)
-
-
-class Sapiens2PointmapHead(nn.Module):
-    def __init__(self, config: Sapiens2Config):
-        super().__init__()
-        self.input_conv = Sapiens2ConvLayer(config.hidden_size, config.hidden_size, kernel_size=3, padding=1)
         upsample_in_channels = [config.hidden_size] + config.head_upsample_out_channels[:-1]
         self.upsample_layers = nn.ModuleList(
-            Sapiens2ConvLayer(in_ch, out_ch, kernel_size=ks, padding=(ks - 1) // 2, pixel_shuffle=True)
-            for in_ch, out_ch, ks in zip(
+            Sapiens2ConvLayer(
+                in_ch,
+                out_ch,
+                kernel_size=kernel_size,
+                stride=1 if config.head_use_pixel_shuffle else 2,
+                padding=(kernel_size - 1) // 2 if config.head_use_pixel_shuffle else 1,
+                bias=bool(config.head_use_pixel_shuffle),
+                pixel_shuffle=bool(config.head_use_pixel_shuffle),
+                convolution_transpose=not config.head_use_pixel_shuffle,
+            )
+            for in_ch, out_ch, kernel_size in zip(
                 upsample_in_channels, config.head_upsample_out_channels, config.head_upsample_kernel_sizes
             )
         )
         conv_in_channels = [config.head_upsample_out_channels[-1]] + config.head_conv_out_channels[:-1]
         self.conv_layers = nn.ModuleList(
-            Sapiens2ConvLayer(in_ch, out_ch, kernel_size=ks, padding=(ks - 1) // 2)
-            for in_ch, out_ch, ks in zip(
+            Sapiens2ConvLayer(
+                in_ch,
+                out_ch,
+                kernel_size=kernel_size,
+                padding=(kernel_size - 1) // 2 if config.head_use_pixel_shuffle else 0,
+            )
+            for in_ch, out_ch, kernel_size in zip(
                 conv_in_channels, config.head_conv_out_channels, config.head_conv_kernel_sizes
             )
         )
@@ -1210,13 +1198,15 @@ class Sapiens2PointmapHead(nn.Module):
             config.head_conv_out_channels[-1]
             if config.head_conv_out_channels
             else config.head_upsample_out_channels[-1]
+            if config.head_upsample_out_channels
+            else config.hidden_size
         )
         self.predictor = nn.Conv2d(predictor_in, config.num_labels, kernel_size=1)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.input_conv(hidden_states)
-        for block in self.upsample_layers:
-            hidden_states = block(hidden_states)
+        for layer in self.upsample_layers:
+            hidden_states = layer(hidden_states)
         for layer in self.conv_layers:
             hidden_states = layer(hidden_states)
         return self.predictor(hidden_states)
@@ -1245,20 +1235,22 @@ class Sapiens2PointmapScaleHead(nn.Module):
         patch_size = config.patch_size if isinstance(config.patch_size, int) else config.patch_size[0]
         h = image_h // patch_size
         w = image_w // patch_size
-        for ks in config.head_scale_conv_kernel_sizes:
-            padding = (ks - 1) // 2
-            h = (h + 2 * padding - ks) // 2 + 1
-            w = (w + 2 * padding - ks) // 2 + 1
+        for kernel_size in config.head_scale_conv_kernel_sizes:
+            padding = (kernel_size - 1) // 2
+            h = (h + 2 * padding - kernel_size) // 2 + 1
+            w = (w + 2 * padding - kernel_size) // 2 + 1
         flat_size = h * w * config.head_scale_conv_out_channels[-1]
 
         self.conv_layers = nn.ModuleList()
         scale_in_channels = [config.hidden_size] + config.head_scale_conv_out_channels[:-1]
-        for in_ch, out_ch, ks in zip(
+        for in_ch, out_ch, kernel_size in zip(
             scale_in_channels,
             config.head_scale_conv_out_channels,
             config.head_scale_conv_kernel_sizes,
         ):
-            self.conv_layers.append(Sapiens2ConvLayer(in_ch, out_ch, kernel_size=ks, stride=2, padding=(ks - 1) // 2))
+            self.conv_layers.append(
+                Sapiens2ConvLayer(in_ch, out_ch, kernel_size=kernel_size, stride=2, padding=(kernel_size - 1) // 2)
+            )
         self.predictor = Sapiens2PointmapFinalLayer(flat_size, config.head_scale_final_hidden_sizes)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -1295,10 +1287,7 @@ class Sapiens2PreTrainedModel(DINOv3ViTPreTrainedModel):
         elif isinstance(module, Sapiens2RopePositionEmbedding):
             inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
             init.copy_(module.inv_freq, inv_freq)
-        elif isinstance(
-            module,
-            (Sapiens2SegmentationHead, Sapiens2PointmapHead, Sapiens2PointmapScaleHead),
-        ):
+        elif isinstance(module, (Sapiens2Head, Sapiens2PointmapScaleHead)):
             for m in module.modules():
                 if isinstance(m, nn.Conv2d):
                     init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
@@ -1337,7 +1326,7 @@ class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.sapiens2 = Sapiens2Model(config)
-        self.decode_head = Sapiens2SegmentationHead(config)
+        self.decode_head = Sapiens2Head(config)
         self.post_init()
 
     @can_return_tuple
@@ -1391,7 +1380,7 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.sapiens2 = Sapiens2Model(config)
-        self.decode_head = Sapiens2SegmentationHead(config)
+        self.decode_head = Sapiens2Head(config)
         self.post_init()
 
     @can_return_tuple
@@ -1457,7 +1446,7 @@ class Sapiens2ForNormalEstimation(Sapiens2PreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.sapiens2 = Sapiens2Model(config)
-        self.decode_head = Sapiens2PointmapHead(config)
+        self.decode_head = Sapiens2Head(config)
         self.post_init()
 
     @can_return_tuple
@@ -1506,7 +1495,7 @@ class Sapiens2ForPointmapEstimation(Sapiens2PreTrainedModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
         self.sapiens2 = Sapiens2Model(config)
-        self.decode_head = Sapiens2PointmapHead(config)
+        self.decode_head = Sapiens2Head(config)
         self.scale_head = (
             Sapiens2PointmapScaleHead(config) if config.head_scale_conv_out_channels is not None else nn.Identity()
         )
@@ -1560,7 +1549,7 @@ class Sapiens2ForImageMatting(Sapiens2PreTrainedModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
         self.sapiens2 = Sapiens2Model(config)
-        self.decode_head = Sapiens2PointmapHead(config)  # config.num_labels = 4
+        self.decode_head = Sapiens2Head(config)  # config.num_labels = 4
         self.post_init()
 
     @can_return_tuple

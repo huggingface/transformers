@@ -999,16 +999,16 @@ def _build_checkpoint_conversion_mapping():
         "Sapiens2ForSemanticSegmentation": [
             WeightRenaming(r"^backbone\.", r"sapiens2."),
             WeightRenaming(
-                r"decode_head\.deconv_layers\.0\.weight", r"decode_head.deconv_layers.0.convolution.weight"
+                r"decode_head\.deconv_layers\.0\.weight", r"decode_head.upsample_layers.0.convolution.weight"
             ),
             WeightRenaming(
-                r"decode_head\.deconv_layers\.3\.weight", r"decode_head.deconv_layers.1.convolution.weight"
+                r"decode_head\.deconv_layers\.3\.weight", r"decode_head.upsample_layers.1.convolution.weight"
             ),
             WeightRenaming(
-                r"decode_head\.deconv_layers\.6\.weight", r"decode_head.deconv_layers.2.convolution.weight"
+                r"decode_head\.deconv_layers\.6\.weight", r"decode_head.upsample_layers.2.convolution.weight"
             ),
             WeightRenaming(
-                r"decode_head\.deconv_layers\.9\.weight", r"decode_head.deconv_layers.3.convolution.weight"
+                r"decode_head\.deconv_layers\.9\.weight", r"decode_head.upsample_layers.3.convolution.weight"
             ),
             WeightRenaming(r"decode_head\.conv_layers\.0\.(weight|bias)", r"decode_head.conv_layers.0.convolution.\1"),
             WeightRenaming(r"decode_head\.conv_layers\.3\.(weight|bias)", r"decode_head.conv_layers.1.convolution.\1"),
@@ -1017,10 +1017,10 @@ def _build_checkpoint_conversion_mapping():
         "Sapiens2ForPoseEstimation": [
             WeightRenaming(r"^backbone\.", r"sapiens2."),
             WeightRenaming(
-                r"decode_head\.deconv_layers\.0\.weight", r"decode_head.deconv_layers.0.convolution.weight"
+                r"decode_head\.deconv_layers\.0\.weight", r"decode_head.upsample_layers.0.convolution.weight"
             ),
             WeightRenaming(
-                r"decode_head\.deconv_layers\.3\.weight", r"decode_head.deconv_layers.1.convolution.weight"
+                r"decode_head\.deconv_layers\.3\.weight", r"decode_head.upsample_layers.1.convolution.weight"
             ),
             WeightRenaming(r"decode_head\.conv_layers\.0\.(weight|bias)", r"decode_head.conv_layers.0.convolution.\1"),
             WeightRenaming(r"decode_head\.conv_layers\.3\.(weight|bias)", r"decode_head.conv_layers.1.convolution.\1"),
