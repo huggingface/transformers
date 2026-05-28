@@ -16,7 +16,7 @@
 import unittest
 from functools import cached_property
 
-from transformers import Sapiens2Config
+from transformers import Sapiens2Config, Sapiens2HeadConfig
 from transformers.testing_utils import Expectations, require_cv2, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available
 
@@ -129,13 +129,15 @@ class Sapiens2ModelTester:
             reshape_hidden_states=True,
             num_labels=4,
             # Head config sized to satisfy all model conversion patterns in test_reverse_loading_mapping
-            head_upsample_out_channels=[8, 4, 4, 4],
-            head_upsample_kernel_sizes=[4, 4, 4, 4],
-            head_conv_out_channels=[4, 4, 4],
-            head_conv_kernel_sizes=[1, 1, 1],
-            head_scale_conv_out_channels=[8, 4, 4],
-            head_scale_conv_kernel_sizes=[1, 1, 1],
-            head_scale_final_hidden_sizes=[8, 4],
+            head_config=Sapiens2HeadConfig(
+                upsample_out_channels=[8, 4, 4, 4],
+                upsample_kernel_sizes=[4, 4, 4, 4],
+                conv_out_channels=[4, 4, 4],
+                conv_kernel_sizes=[1, 1, 1],
+                scale_conv_out_channels=[8, 4, 4],
+                scale_conv_kernel_sizes=[1, 1, 1],
+                scale_final_hidden_sizes=[8, 4],
+            ),
         )
 
     def create_and_check_backbone(self, config, pixel_values, labels):
@@ -176,7 +178,7 @@ class Sapiens2ModelTester:
         # patch_height = image_size // patch_size = 30 // 2 = 15
         # 4 deconv layers with stride=2: 15 * 2^4 = 240
         patch_height = self.image_size // self.patch_size
-        expected_h = patch_height * (2 ** len(config.head_upsample_out_channels))
+        expected_h = patch_height * (2 ** len(config.head_config.upsample_out_channels))
         self.parent.assertEqual(
             result.logits.shape,
             (self.batch_size, config.num_labels, expected_h, expected_h),
@@ -189,7 +191,7 @@ class Sapiens2ModelTester:
         with torch.no_grad():
             result = model(pixel_values)
         patch_height = self.image_size // self.patch_size
-        expected_h = patch_height * (2 ** len(config.head_upsample_out_channels))
+        expected_h = patch_height * (2 ** len(config.head_config.upsample_out_channels))
         self.parent.assertEqual(
             result.heatmaps.shape,
             (self.batch_size, config.num_labels, expected_h, expected_h),
@@ -203,7 +205,7 @@ class Sapiens2ModelTester:
             result = model(pixel_values)
         # PixelShuffle: Conv2d(padding=(ks-1)//2) then shuffle(2) — size per layer: (h + 2p - ks + 1) * 2
         expected_h = config.image_size // self.patch_size
-        for ks in config.head_upsample_kernel_sizes:
+        for ks in config.head_config.upsample_kernel_sizes:
             padding = (ks - 1) // 2
             expected_h = (expected_h + 2 * padding - ks + 1) * 2
         self.parent.assertEqual(
@@ -221,7 +223,7 @@ class Sapiens2ModelTester:
         with torch.no_grad():
             result = model(pixel_values)
         expected_h = config.image_size // self.patch_size
-        for ks in config.head_upsample_kernel_sizes:
+        for ks in config.head_config.upsample_kernel_sizes:
             padding = (ks - 1) // 2
             expected_h = (expected_h + 2 * padding - ks + 1) * 2
         self.parent.assertEqual(result.foregrounds.shape, (self.batch_size, 3, expected_h, expected_h))
@@ -243,7 +245,7 @@ class Sapiens2ModelTester:
             result = model(pixel_values)
         # PixelShuffle: Conv2d(padding=(ks-1)//2) then shuffle(2) — size per layer: (h + 2p - ks + 1) * 2
         expected_h = config.image_size // self.patch_size
-        for ks in config.head_upsample_kernel_sizes:
+        for ks in config.head_config.upsample_kernel_sizes:
             padding = (ks - 1) // 2
             expected_h = (expected_h + 2 * padding - ks + 1) * 2
         self.parent.assertEqual(
@@ -263,7 +265,7 @@ class Sapiens2ModelTester:
 
     def prepare_config_and_inputs_for_pointmap_estimation(self):
         config = self.get_config()
-        config.head_use_pixel_shuffle = True
+        config.head_config.use_pixel_shuffle = True
         pixel_values = floats_tensor([self.batch_size, self.num_channels, config.image_size, config.image_size])
         labels = None
         return config, pixel_values, labels
@@ -272,7 +274,7 @@ class Sapiens2ModelTester:
         config = self.get_config()
         # Use pixel-shuffle so all model classes (including Normal/Pointmap/Matting) instantiate
         # decode_head.input_conv, satisfying the conversion patterns checked by test_reverse_loading_mapping.
-        config.head_use_pixel_shuffle = True
+        config.head_config.use_pixel_shuffle = True
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict

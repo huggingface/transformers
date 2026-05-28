@@ -23,6 +23,76 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@strict
+class Sapiens2HeadConfig(PreTrainedConfig):
+    r"""
+    Configuration for the Sapiens2 decode head.
+
+    Args:
+        transformers_version (`str | None`, *optional*): <fill_docstring>
+        architectures (`list[str] | None`, *optional*): <fill_docstring>
+        output_hidden_states (`bool | None`, *optional*, defaults to `False`): <fill_docstring>
+        return_dict (`bool | None`, *optional*, defaults to `True`): <fill_docstring>
+        dtype (`Union`, *optional*): <fill_docstring>
+        chunk_size_feed_forward (`int`, *optional*, defaults to 0): <fill_docstring>
+        is_encoder_decoder (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        id2label (`dict[int, str] | dict[str, str] | None`, *optional*): <fill_docstring>
+        label2id (`dict[str, int] | dict[str, str] | None`, *optional*): <fill_docstring>
+        problem_type (`Optional`, *optional*): <fill_docstring>
+        upsample_out_channels (`list[int]`, *optional*):
+            Output channel counts for each upsample block.
+            The first block takes `hidden_size` channels as input; subsequent blocks use the previous output.
+        upsample_kernel_sizes (`list[int]`, *optional*):
+            Kernel size for each upsample block. Auto-filled with `[4, ...]` when
+            `upsample_out_channels` is set but this is `None`.
+            Must have the same length as `upsample_out_channels`.
+        conv_out_channels (`list[int]`, *optional*):
+            Output channel counts for the refinement conv layers that follow the upsample blocks.
+        conv_kernel_sizes (`list[int]`, *optional*):
+            Kernel size for each refinement conv layer. Auto-filled with `[1, ...]` when
+            `conv_out_channels` is set but this is `None`.
+            Must have the same length as `conv_out_channels`.
+        use_pixel_shuffle (`bool`, *optional*):
+            Whether the decode head uses pixel-shuffle upsampling instead of transposed convolutions.
+            When `None` (default), the head uses transposed convolutions.
+        scale_conv_out_channels (`list[int]`, *optional*):
+            Output channel counts for the stride-2 conv layers used to predict the focal-length scale.
+            When `None` (default), no scale branch is built.
+        scale_conv_kernel_sizes (`list[int]`, *optional*):
+            Kernel size for each scale conv layer. Auto-filled with `[1, ...]` when
+            `scale_conv_out_channels` is set but this is `None`.
+        scale_final_input_size (`int`, *optional*):
+            Flattened feature size passed into the scale MLP.
+            When `None` (default), it is automatically inferred from `image_size` and `patch_size`
+            in the parent [`Sapiens2Config`].
+        scale_final_hidden_sizes (`list[int]`, *optional*):
+            Hidden-layer sizes for the MLP that maps flattened scale features to the scalar scale output.
+            When `None` (default), no scale branch is built.
+    """
+
+    model_type = "sapiens2_head"
+    base_config_key = "head_config"
+
+    upsample_out_channels: list[int] | None = None
+    upsample_kernel_sizes: list[int] | None = None
+    conv_out_channels: list[int] | None = None
+    conv_kernel_sizes: list[int] | None = None
+    use_pixel_shuffle: bool | None = None
+    scale_conv_out_channels: list[int] | None = None
+    scale_conv_kernel_sizes: list[int] | None = None
+    scale_final_input_size: int | None = None
+    scale_final_hidden_sizes: list[int] | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.upsample_out_channels is not None and self.upsample_kernel_sizes is None:
+            self.upsample_kernel_sizes = [4] * len(self.upsample_out_channels)
+        if self.conv_out_channels is not None and self.conv_kernel_sizes is None:
+            self.conv_kernel_sizes = [1] * len(self.conv_out_channels)
+        if self.scale_conv_out_channels is not None and self.scale_conv_kernel_sizes is None:
+            self.scale_conv_kernel_sizes = [1] * len(self.scale_conv_out_channels)
+        super().__post_init__(**kwargs)
+
+
 @auto_docstring(checkpoint="facebook/sapiens2-pretrain-0.4b")
 @strict
 class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
@@ -67,34 +137,8 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
         `num_attention_heads // 2` for all other layers.
     semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
         Label index ignored when computing the segmentation loss.
-    head_upsample_out_channels (`list[int]`, *optional*):
-        Output channel counts for each upsample block in the decode head.
-        The first block takes `hidden_size` channels as input; subsequent blocks use the previous output.
-    head_upsample_kernel_sizes (`list[int]`, *optional*):
-        Kernel size for each upsample block. Auto-filled with `[4, ...]` when
-        `head_upsample_out_channels` is set but this is `None`.
-        Must have the same length as `head_upsample_out_channels`.
-    head_conv_out_channels (`list[int]`, *optional*):
-        Output channel counts for the refinement conv layers that follow the upsample blocks.
-    head_conv_kernel_sizes (`list[int]`, *optional*):
-        Kernel size for each refinement conv layer. Auto-filled with `[1, ...]` when
-        `head_conv_out_channels` is set but this is `None`.
-        Must have the same length as `head_conv_out_channels`.
-    head_use_pixel_shuffle (`bool`, *optional*):
-        Whether the decode head uses pixel-shuffle upsampling instead of transposed convolutions.
-        When `None` (default), the head uses transposed convolutions.
-    head_scale_conv_out_channels (`list[int]`, *optional*):
-        Output channel counts for the stride-2 conv layers used to predict the focal-length scale.
-        When `None` (default), no scale branch is built.
-    head_scale_conv_kernel_sizes (`list[int]`, *optional*):
-        Kernel size for each scale conv layer. Auto-filled with `[1, ...]` when
-        `head_scale_conv_out_channels` is set but this is `None`.
-    head_scale_final_input_size (`int`, *optional*):
-        Flattened feature size passed into the scale MLP.
-        When `None` (default), it is automatically inferred.
-    head_scale_final_hidden_sizes (`list[int]`, *optional*):
-        Hidden-layer sizes for the MLP that maps flattened scale features to the scalar scale output.
-        When `None` (default), no scale branch is built.
+    head_config (`Sapiens2HeadConfig`, *optional*):
+        Configuration for the decode head. See [`Sapiens2HeadConfig`] for the available options.
     """
 
     model_type = "sapiens2"
@@ -128,19 +172,12 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     _out_indices: list[int] | None = None
     apply_layernorm: bool = True
     reshape_hidden_states: bool = True
+    sub_configs = {"head_config": Sapiens2HeadConfig}
     use_mask_token: bool = False
     use_qk_norm: bool = True
     num_key_value_heads_per_layer: list[int] | None = None
     semantic_loss_ignore_index: int = 255
-    head_upsample_out_channels: list[int] | None = None
-    head_upsample_kernel_sizes: list[int] | None = None
-    head_conv_out_channels: list[int] | None = None
-    head_conv_kernel_sizes: list[int] | None = None
-    head_use_pixel_shuffle: bool | None = None
-    head_scale_conv_out_channels: list[int] | None = None
-    head_scale_conv_kernel_sizes: list[int] | None = None
-    head_scale_final_input_size: int | None = None
-    head_scale_final_hidden_sizes: list[int] | None = None
+    head_config: Sapiens2HeadConfig | dict | None = None
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads_per_layer is None:
@@ -150,27 +187,24 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
                 else self.num_attention_heads // 2
                 for i in range(self.num_hidden_layers)
             ]
-        if self.head_upsample_out_channels is not None and self.head_upsample_kernel_sizes is None:
-            self.head_upsample_kernel_sizes = [4] * len(self.head_upsample_out_channels)
-        if self.head_conv_out_channels is not None and self.head_conv_kernel_sizes is None:
-            self.head_conv_kernel_sizes = [1] * len(self.head_conv_out_channels)
-        if self.head_scale_conv_out_channels is not None and self.head_scale_conv_kernel_sizes is None:
-            self.head_scale_conv_kernel_sizes = [1] * len(self.head_scale_conv_out_channels)
+        if isinstance(self.head_config, dict):
+            self.head_config = Sapiens2HeadConfig(**self.head_config)
         if (
-            self.head_scale_final_input_size is None
-            and self.head_scale_conv_out_channels is not None
-            and self.head_scale_conv_kernel_sizes is not None
+            self.head_config is not None
+            and self.head_config.scale_final_input_size is None
+            and self.head_config.scale_conv_out_channels is not None
+            and self.head_config.scale_conv_kernel_sizes is not None
         ):
             image_size = self.image_size
             image_h, image_w = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
             patch_size = self.patch_size if isinstance(self.patch_size, int) else self.patch_size[0]
             h = image_h // patch_size
             w = image_w // patch_size
-            for kernel_size in self.head_scale_conv_kernel_sizes:
+            for kernel_size in self.head_config.scale_conv_kernel_sizes:
                 padding = (kernel_size - 1) // 2
                 h = (h + 2 * padding - kernel_size) // 2 + 1
                 w = (w + 2 * padding - kernel_size) // 2 + 1
-            self.head_scale_final_input_size = h * w * self.head_scale_conv_out_channels[-1]
+            self.head_config.scale_final_input_size = h * w * self.head_config.scale_conv_out_channels[-1]
         self.stage_names = ["stem"] + [f"stage{i}" for i in range(1, self.num_hidden_layers + 1)]
         self.set_output_features_output_indices(
             out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
@@ -178,4 +212,4 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Sapiens2Config"]
+__all__ = ["Sapiens2Config", "Sapiens2HeadConfig"]
