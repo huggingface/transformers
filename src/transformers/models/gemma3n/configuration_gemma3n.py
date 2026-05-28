@@ -78,21 +78,25 @@ class Gemma3nTextConfig(PreTrainedConfig):
     model_type = "gemma3n_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.v_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_proj": "colwise_allgather",
+        "layers.*.self_attn.k_proj": "colwise_allgather",
+        "layers.*.self_attn.v_proj": "colwise_allgather",
+        "layers.*.self_attn.o_proj": "vocab_allreduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
     }
+    base_model_sp_plan = None
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
     }
 
     vocab_size: int = 262_400
@@ -117,6 +121,7 @@ class Gemma3nTextConfig(PreTrainedConfig):
     sliding_window: int = 512
     layer_types: list[str] | None = None
     final_logit_softcapping: float = 30.0
+
     default_theta = {"global": 1_000_000.0, "local": 10_000.0}
     vocab_size_per_layer_input: int = 262_144
     hidden_size_per_layer_input: int = 256
