@@ -54,7 +54,8 @@ class DeepGEMM:
     """Curated entry points exposed by `kernels-community/deep-gemm`."""
 
     fp8_fp4_matmul: Callable
-    grouped_fp8_fp4_matmul: Callable
+    grouped_fp8_fp4_matmul_nt: Callable
+    grouped_fp8_fp4_matmul_nn: Callable
     grouped_bf16_matmul_nt: Callable
     grouped_bf16_matmul_nn: Callable
     per_token_cast_to_fp8: Callable
@@ -103,7 +104,8 @@ def _load_deepgemm_kernel() -> DeepGEMM:
         )
 
     fp8_fp4_matmul = getattr(kernel, "fp8_fp4_gemm_nt", None)
-    grouped_fp8_fp4_matmul = getattr(kernel, "m_grouped_fp8_fp4_gemm_nt_contiguous", None)
+    grouped_fp8_fp4_matmul_nt = getattr(kernel, "m_grouped_fp8_fp4_gemm_nt_contiguous", None)
+    grouped_fp8_fp4_matmul_nn = getattr(kernel, "m_grouped_fp8_fp4_gemm_nn_contiguous", None)
     grouped_bf16_matmul_nt = getattr(kernel, "m_grouped_bf16_gemm_nt_contiguous", None)
     grouped_bf16_matmul_nn = getattr(kernel, "m_grouped_bf16_gemm_nn_contiguous", None)
     per_token_cast_to_fp8 = resolve_internal_import(kernel, chained_path="utils.per_token_cast_to_fp8")
@@ -119,7 +121,8 @@ def _load_deepgemm_kernel() -> DeepGEMM:
         name
         for name, attr in [
             ("fp8_fp4_gemm_nt", fp8_fp4_matmul),
-            ("m_grouped_fp8_fp4_gemm_nt_contiguous", grouped_fp8_fp4_matmul),
+            ("m_grouped_fp8_fp4_gemm_nt_contiguous", grouped_fp8_fp4_matmul_nt),
+            ("m_grouped_fp8_fp4_gemm_nn_contiguous", grouped_fp8_fp4_matmul_nn),
             ("m_grouped_bf16_gemm_nt_contiguous", grouped_bf16_matmul_nt),
             ("m_grouped_bf16_gemm_nn_contiguous", grouped_bf16_matmul_nn),
             ("utils.per_token_cast_to_fp8", per_token_cast_to_fp8),
@@ -137,7 +140,8 @@ def _load_deepgemm_kernel() -> DeepGEMM:
         )
     return DeepGEMM(
         fp8_fp4_matmul=fp8_fp4_matmul,
-        grouped_fp8_fp4_matmul=grouped_fp8_fp4_matmul,
+        grouped_fp8_fp4_matmul_nt=grouped_fp8_fp4_matmul_nt,
+        grouped_fp8_fp4_matmul_nn=grouped_fp8_fp4_matmul_nn,
         grouped_bf16_matmul_nt=grouped_bf16_matmul_nt,
         grouped_bf16_matmul_nn=grouped_bf16_matmul_nn,
         per_token_cast_to_fp8=per_token_cast_to_fp8,
@@ -361,6 +365,7 @@ def deepgemm_fp8_fp4_linear(
     weight: torch.Tensor,
     weight_scale_inv: torch.Tensor,
     bias: torch.Tensor | None = None,
+    block_size: tuple[int, int] | None = None,
     output_dtype: torch.dtype = torch.bfloat16,
     activation_scale: torch.Tensor | None = None,
 ) -> torch.Tensor:
@@ -373,7 +378,7 @@ def deepgemm_fp8_fp4_linear(
         raise NotImplementedError("Static activation quantization is not supported on the DeepGEMM path.")
 
     deepgemm = _load_deepgemm_kernel()
-    cast_kwargs = _select_fp8_cast_kwargs(weight, weight_scale_inv, block_size=(128, 128), device=input.device)
+    cast_kwargs = _select_fp8_cast_kwargs(weight, weight_scale_inv, block_size=block_size, device=input.device)
 
     input_2d = input.view(-1, input.shape[-1])
     qinput_2d, scale_2d = deepgemm.per_token_cast_to_fp8(input_2d, **cast_kwargs)
@@ -469,6 +474,10 @@ def deepgemm_fp8_fp4_experts_forward(
         )
 
     deepgemm = _load_deepgemm_kernel()
+    grouped_fp8_fp4_matmul = (
+        deepgemm.grouped_fp8_fp4_matmul_nn if self.is_transposed else deepgemm.grouped_fp8_fp4_matmul_nt
+    )
+
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens, hidden_dim = hidden_states.size(0), hidden_states.size(-1)
@@ -497,7 +506,7 @@ def deepgemm_fp8_fp4_experts_forward(
     act_fp8 = _pad_for_deepgemm(act_fp8, sorted_to_padded, total_padded_rows)
     act_scales = _pad_for_deepgemm(act_scales, sorted_to_padded, total_padded_rows)
     proj_out = torch.empty(total_padded_rows, w_up.shape[1], device=device, dtype=torch.bfloat16)
-    deepgemm.grouped_fp8_fp4_matmul(
+    grouped_fp8_fp4_matmul(
         (act_fp8, _coerce_sf_for_kernel(act_scales, expected_mn=total_padded_rows)),
         (w_up, _coerce_sf_for_kernel(ws_up, expected_mn=w_up.size(-2))),
         proj_out,
@@ -510,7 +519,7 @@ def deepgemm_fp8_fp4_experts_forward(
     # Down projection.
     proj_fp8, proj_scales = deepgemm.per_token_cast_to_fp8(proj_out, **cast_kwargs)
     out = torch.empty(total_padded_rows, hidden_dim, device=device, dtype=torch.bfloat16)
-    deepgemm.grouped_fp8_fp4_matmul(
+    grouped_fp8_fp4_matmul(
         (proj_fp8, _coerce_sf_for_kernel(proj_scales, expected_mn=total_padded_rows)),
         (w_down, _coerce_sf_for_kernel(ws_down, expected_mn=w_down.size(-2))),
         out,
@@ -617,10 +626,11 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
         )
 
     deepgemm = _load_deepgemm_kernel()
-    num_tokens, hidden_dim = hidden_states.size(0), hidden_states.size(-1)
+
     num_top_k = top_k_index.size(-1)
     num_experts = self.gate_up_proj.size(0)
     intermediate_hidden = self.gate_up_proj.size(1) // 2
+    num_tokens, hidden_dim = hidden_states.size(0), hidden_states.size(-1)
 
     # First-forward one-shot: pack UE8M0 SFs and interleave the L1/L2 weights for UTCCP.
     # The kernel asserts `sf.dtype == torch.int` so the raw loader-side scale_inv (UE8M0)

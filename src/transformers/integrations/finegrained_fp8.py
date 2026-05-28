@@ -225,6 +225,7 @@ def fp8_linear(
                 input,
                 weight,
                 weight_scale_inv,
+                block_size=block_size,
                 output_dtype=output_dtype,
                 activation_scale=activation_scale,
                 bias=bias,
@@ -966,13 +967,17 @@ class Fp8Dequantize(ConversionOps):
         # ``weight`` target). Also handles the no-scale case (e.g. RMSNorm weights that
         # match ``weight$`` but ship no ``weight_scale_inv`` alongside).
         if "weight$" in input_dict:
+            # The downstream renamer in `core_model_loading._convert_one_module` uses the
+            # output dict's *key*, not its content, to derive prefix/suffix; if `full_layer_name`
+            # is unset (direct invocation / tests) fall back to the legacy converter's target.
+            target_key = full_layer_name if full_layer_name is not None else "weight"
             quantized = input_dict["weight$"]
             quantized = quantized[0] if isinstance(quantized, list) else quantized
             if "weight_scale_inv" in input_dict:
                 scales = input_dict["weight_scale_inv"]
                 scales = scales[0] if isinstance(scales, list) else scales
-                return {full_layer_name: self._dequantize_one(quantized, scales, output_dtype=output_dtype)}
-            return {full_layer_name: quantized}
+                return {target_key: self._dequantize_one(quantized, scales, output_dtype=output_dtype)}
+            return {target_key: quantized}
 
         # Generic chain path: dequantize every weight pattern that has a sibling scale.
         result: dict[str, list[torch.Tensor] | torch.Tensor] = {}
