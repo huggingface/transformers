@@ -19,8 +19,10 @@ from transformers import AutoTokenizer
 from transformers.utils.chat_parsing import ResponseParser, parse_response
 
 
+
 cohere_template = {
     "defaults": {"role": "assistant"},
+    "start_anchor": "<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>",
     "fields": {
         "content": {
             "open": "<|START_RESPONSE|>",
@@ -45,6 +47,7 @@ cohere_template = {
 
 ernie_template = {
     "defaults": {"role": "assistant"},
+    "start_anchor": "Assistant:",
     "fields": {
         "thinking": {
             "open_pattern": r"(?:^|<think>\s*)",
@@ -69,6 +72,7 @@ ernie_template = {
 
 gpt_oss_template = {
     "defaults": {"role": "assistant"},
+    "start_anchor": "<|start|>assistant",
     "fields": {
         "thinking": {
             "open": "<|channel|>analysis<|message|>",
@@ -93,6 +97,7 @@ gpt_oss_template = {
 
 smollm_template = {
     "defaults": {"role": "assistant"},
+    "start_anchor": "<|im_start|>assistant\n",
     "fields": {
         "thinking": {"open": "<think>", "close": "</think>", "content": "text"},
         "tool_calls": {
@@ -112,6 +117,7 @@ smollm_template = {
 
 qwen3_template = {
     "defaults": {"role": "assistant"},
+    "start_anchor": "<|im_start|>assistant\n",
     "fields": {
         "thinking": {"open": "<think>", "close": "</think>", "content": "text"},
         "tool_calls": {
@@ -131,6 +137,7 @@ qwen3_template = {
 
 gemma4_template = {
     "defaults": {"role": "assistant"},
+    "start_anchor": "<|turn>model\n",
     "fields": {
         "thinking": {
             "open": "<|channel>thought\n",
@@ -487,6 +494,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
     def test_optional_false_raises_when_missing(self):
         template_spec = {
             "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
             "fields": {
                 "content": {
                     "open": "<response>",
@@ -503,6 +511,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
     def test_int_content_parser(self):
         template_spec = {
             "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
             "fields": {
                 "count": {
                     "open": "<n>",
@@ -516,6 +525,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
     def test_kv_lines_parser(self):
         template_spec = {
             "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
             "fields": {
                 "metadata": {
                     "open": "<meta>",
@@ -532,6 +542,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
     def test_unknown_content_parser_rejected(self):
         bad_template = {
             "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
             "fields": {"x": {"open": "[", "close": "]", "content": "not-a-real-parser"}},
         }
         with self.assertRaises(ValueError) as cm:
@@ -541,6 +552,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
     def test_two_implicit_fields_rejected(self):
         bad_template = {
             "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
             "fields": {
                 "a": {"content": "text"},
                 "b": {"content": "text"},
@@ -552,6 +564,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
     def test_transform_string_interpolation_rejected(self):
         bad_template = {
             "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
             "fields": {
                 "tool": {
                     "open": "<tool>",
@@ -570,6 +583,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
     def test_named_groups_without_transform_rejected(self):
         bad_template = {
             "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
             "fields": {
                 "tool": {
                     "open_pattern": r"<tool name=(?P<name>\w+)>",
@@ -588,6 +602,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
         """A list of literals matches any one of them, like an alternation."""
         template_spec = {
             "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
             "fields": {
                 "x": {
                     "open": ["<a>", "<bb>"],
@@ -609,6 +624,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
         feeding 32 plain bytes should leave at most 15 unflushed."""
         template_spec = {
             "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
             "fields": {
                 "content": {"close": ["<turn|>", "<|tool_response>", "<eos>"], "content": "text"},
             },
@@ -628,6 +644,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
         edge match could still grow with more input — we must defer to be safe."""
         template_spec = {
             "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
             "fields": {
                 "x": {"open": "<x>", "close": ["END", "ENDX"], "content": "text"},
             },
@@ -648,6 +665,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
         for bad_open in ([], [""], [1, 2], {"foo": "bar"}):
             spec = {
                 "defaults": {"role": "assistant"},
+                "start_anchor": "<|assistant|>",
                 "fields": {"x": {"open": bad_open, "close": "</x>", "content": "text"}},
             }
             with self.assertRaises(ValueError):
@@ -657,6 +675,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
         """The magic `"eos"` literal maps to end-of-stream and is only valid on its own."""
         spec = {
             "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
             "fields": {"content": {"close": ["eos", "<turn|>"], "content": "text"}},
         }
         with self.assertRaises(ValueError):
@@ -850,6 +869,7 @@ class ResponseEventStreamTest(unittest.TestCase):
         dirty chunks concatenate to the raw region body before parsing."""
         spec = {
             "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
             "fields": {
                 "thinking": {"open": "<t>", "close": "</t>", "content": "text"},
                 "score": {"open": "<n>", "close": "</n>", "content": "int"},
@@ -916,16 +936,6 @@ class ResponseEventStreamTest(unittest.TestCase):
         self.assertEqual(final_events, [])
 
 
-# ChatML-style anchor used by Qwen / SmolLM templates: assistant header is
-# everything from `<|im_start|>` through `assistant\n`. Right-truncating past
-# this leaves only the message body, so prefix material (`<|im_start|>`,
-# role label) doesn't pollute downstream parsing.
-_CHATML_ANCHOR = "<|im_start|>assistant\n"
-
-qwen3_template_with_anchor = {**qwen3_template, "start_anchor": _CHATML_ANCHOR}
-smollm_template_with_anchor = {**smollm_template, "start_anchor": _CHATML_ANCHOR}
-
-
 class PrefixAndTruncationTest(unittest.TestCase):
     def test_prefix_lands_inside_explicit_region(self):
         """A Qwen-style template emits `<|im_start|>assistant\\n<think>\\n` as the
@@ -936,7 +946,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
             "<|im_start|>assistant\n<think>\n"
         )
         generated = "Let me think...</think>"
-        stream = ResponseParser(qwen3_template_with_anchor, prefix=prompt)
+        stream = ResponseParser(qwen3_template, prefix=prompt)
         # The region_open for `thinking` surfaces via initial_events; the
         # caller replays it before feeding model output.
         self.assertEqual(
@@ -963,7 +973,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
             "<|im_start|>user\nFollowup<|im_end|>\n"
             "<|im_start|>assistant\n<think>\n"
         )
-        stream = ResponseParser(qwen3_template_with_anchor, prefix=prompt)
+        stream = ResponseParser(qwen3_template, prefix=prompt)
         # We landed inside `thinking` (from the LAST assistant turn's `<think>\n`),
         # not in some earlier-turn artifact.
         opens = [e for e in stream.initial_events if e["type"] == "region_open"]
@@ -973,22 +983,22 @@ class PrefixAndTruncationTest(unittest.TestCase):
         stream.finalize()
         self.assertEqual(stream._output, {"role": "assistant", "thinking": "done"})
 
-    def test_prefix_no_anchor_in_spec_keeps_full_prefix(self):
-        """With no `start_anchor` in the spec, the prefix is processed verbatim.
-        Useful when the caller has already pre-cut the prefix."""
-        prompt = "<think>\n"
-        stream = ResponseParser(qwen3_template, prefix=prompt)  # no anchor
-        opens = [e for e in stream.initial_events if e["type"] == "region_open"]
-        self.assertEqual([e["field"] for e in opens], ["thinking"])
-        stream.feed("hi</think>")
-        stream.finalize()
-        self.assertEqual(stream._output, {"role": "assistant", "thinking": "hi"})
+    def test_template_without_anchor_rejected_at_load(self):
+        """A template missing both `start_anchor` and `start_anchor_pattern` is
+        rejected at load time. Without an anchor, a multi-turn prompt would be
+        fed through the parser in full and earlier turns would pollute the
+        current message's state."""
+        anchorless = {k: v for k, v in qwen3_template.items() if k != "start_anchor"}
+        with self.assertRaises(ValueError) as cm:
+            ResponseParser(anchorless)
+        msg = str(cm.exception)
+        self.assertIn("start_anchor", msg)
 
     def test_prefix_anchor_not_found_falls_back(self):
         """Spec has start_anchor but the prefix doesn't contain it: parser
         falls back to processing the entire prefix (with a logged warning)."""
         prompt = "<think>\n"  # no <|im_start|>assistant\n
-        stream = ResponseParser(qwen3_template_with_anchor, prefix=prompt)
+        stream = ResponseParser(qwen3_template, prefix=prompt)
         opens = [e for e in stream.initial_events if e["type"] == "region_open"]
         self.assertEqual([e["field"] for e in opens], ["thinking"])
         stream.feed("hi</think>")
@@ -1008,7 +1018,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
             # inside `thinking`. Restrict to qwen3 / smollm shape for clarity.
             if name not in ("qwen3", "smollm"):
                 continue
-            tmpl_with_anchor = {**tmpl_dict, "start_anchor": _CHATML_ANCHOR}
+            tmpl_with_anchor = {**tmpl_dict, "start_anchor": "<|im_start|>assistant\n"}
             # Expected: feed (prefix + gen) without prefix kwarg, but auto-truncate
             # via parse_response should match feeding gen with prefix kwarg.
             via_prefix = parse_response(gen_text, tmpl_with_anchor, prefix=prompt)
@@ -1052,7 +1062,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
         region must surface via initial_events so consumers don't miss it —
         `_opened` will already be True by the time feed runs."""
         prompt = "<|im_start|>assistant\nSure, here is "
-        stream = ResponseParser(smollm_template_with_anchor, prefix=prompt)
+        stream = ResponseParser(smollm_template, prefix=prompt)
         opens = [e for e in stream.initial_events if e["type"] == "region_open"]
         self.assertEqual([e["field"] for e in opens], ["content"])
         events = stream.feed("the answer<|im_end|>")
@@ -1065,7 +1075,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
         the match; initial_events is empty (no region opened within the
         prefix yet) and the open fires from `feed()`."""
         prefix = "<|im_start|>assistant\n<thi"  # incomplete `<think>`
-        stream = ResponseParser(qwen3_template_with_anchor, prefix=prefix)
+        stream = ResponseParser(qwen3_template, prefix=prefix)
         self.assertEqual(stream.initial_events, [])
         events = stream.feed("nk>real body</think>")
         types = [e["type"] for e in events]
@@ -1077,7 +1087,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
         """The tokenizer-level helper accepts token IDs as prefix (decoded
         internally), matching how `response` is handled."""
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
-        tokenizer.response_template = qwen3_template_with_anchor
+        tokenizer.response_template = qwen3_template
         prefix_text = "<|im_start|>assistant\n<think>\n"
         prefix_ids = tokenizer(prefix_text).input_ids
         from_str = tokenizer.parse_response("hi</think>", prefix=prefix_text)
@@ -1088,7 +1098,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
         """`tokenizer.get_response_parser(prefix=...)` returns a stream that
         is already in the right initial state."""
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        tokenizer.response_template = qwen3_template_with_anchor
+        tokenizer.response_template = qwen3_template
         prefix = "<|im_start|>assistant\n<think>\n"
         stream = tokenizer.get_response_parser(prefix=prefix)
         opens = [e for e in stream.initial_events if e["type"] == "region_open"]

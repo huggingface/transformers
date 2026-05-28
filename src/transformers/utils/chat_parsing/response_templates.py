@@ -50,8 +50,6 @@ class ResponseTemplate:
         by the model. This is because chat templates often include early parts of the message such as <start_of_turn>
         or <think> tokens in the prefill. Therefore, we take the whole chat as input, but truncate to the start
         of the most recent assistant message, which can include tokens from the template as well as the output."""
-        if self.start_anchor_re is None:
-            return text
         last_end: int | None = None
         for m in self.start_anchor_re.finditer(text):
             last_end = m.end()
@@ -207,6 +205,10 @@ def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
     start_anchor_re, start_anchor_lits, _ = _compile_anchor(
         "response_template", spec, "start_anchor", "start_anchor_pattern"
     )
+    if start_anchor_re is None:
+        raise ValueError(
+            "response_template must define 'start_anchor' or 'start_anchor_pattern'."
+        )
     return ResponseTemplate(
         defaults=dict(defaults),
         fields=fields,

@@ -166,6 +166,7 @@ And here's the template that parses it. Don't be intimidated - a lot of it is fa
 ```python
 {
     "defaults": {"role": "assistant"},
+    "start_anchor": "<|im_start|>assistant\n",
     "fields": {
         "thinking": {"open": "<think>", "close": "</think>", "content": "text"},
         "tool_calls": {
@@ -189,17 +190,16 @@ output dict. Fields also include information for parsing the text inside their d
 `content` is stored in the space after the other regions, but before the end of the sequence. In our template, we
 represent this as an **implicit / leftover** field that picks up any text not claimed by another region.
 
-In addition to `fields`, the template supports two optional top-level keys:
+In addition to `fields`, the template supports two top-level keys:
 
-- `defaults` — A dict of values pre-populated in the output (e.g. `{"role": "assistant"}`). Keys here are always
-  retained in the parsed output, even if no field wrote to them; other keys are dropped when their field captured
-  nothing.
-- `start_anchor` (str) / `start_anchor_pattern` (str regex) — Marks where the current assistant message begins
-  inside a chat prompt. When you pass `prefix=` to `parse_response` or `get_response_parser`, the parser
-  right-truncates the prefix past the **last** occurrence of this anchor before processing it, so earlier
-  turns in a multi-turn conversation don't pollute the current message's state. For ChatML-style models this
-  is typically `"<|im_start|>assistant\n"`. If a template has no anchor, the whole prefix is processed
-  verbatim (which still works for single-turn prompts).
+- `defaults` (optional) — A dict of values pre-populated in the output (e.g. `{"role": "assistant"}`). Keys here are
+  always retained in the parsed output, even if no field wrote to them; other keys are dropped when their field
+  captured nothing.
+- `start_anchor` (str) / `start_anchor_pattern` (str regex) — Marks where the current assistant message
+  begins inside a chat prompt. When you pass `prefix=` to `parse_response` or `get_response_parser`, the parser
+  right-truncates the prefix past the **last** occurrence of this anchor before processing it, so earlier turns in
+  a multi-turn conversation don't pollute the current message's state. For ChatML-style models this is typically
+  `"<|im_start|>assistant\n"`. Exactly one of `start_anchor` or `start_anchor_pattern` must be set.
 
 As with chat templates, response templates are stored as tokenizer attributes and saved with the tokenizer. Unlike
 chat templates, we save them inside `tokenizer_config.json` and not as a separate file, because their format fits
