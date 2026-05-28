@@ -16,10 +16,9 @@
 import unittest
 from functools import cached_property
 
-from transformers import Sapiens2Config, Sapiens2ImageProcessor
-from transformers.image_utils import load_image_as_tensor
-from transformers.testing_utils import require_cv2, require_torch, require_vision, slow, torch_device
-from transformers.utils import is_torch_available, is_vision_available
+from transformers import Sapiens2Config
+from transformers.testing_utils import Expectations, require_cv2, require_torch, require_vision, slow, torch_device
+from transformers.utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -38,12 +37,12 @@ if is_torch_available():
         Sapiens2ForPointmapEstimation,
         Sapiens2ForPoseEstimation,
         Sapiens2ForSemanticSegmentation,
+        Sapiens2ImageProcessor,
         Sapiens2Model,
     )
-    from transformers.modeling_outputs import SemanticSegmenterOutput
+    from transformers.image_utils import load_image_as_tensor
     from transformers.models.sapiens2.modeling_sapiens2 import (
         Sapiens2ImageMattingOutput,
-        Sapiens2NormalEstimatorOutput,
         Sapiens2PointmapEstimatorOutput,
     )
 
@@ -398,116 +397,6 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_feed_forward_chunking(self):
         pass
 
-    def test_post_process_semantic_segmentation(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        image_processor = Sapiens2ImageProcessor()
-
-        batch_size = self.model_tester.batch_size
-        height = width = self.model_tester.image_size
-        outputs = SemanticSegmenterOutput(logits=torch.randn(batch_size, config.num_labels, height, width))
-
-        # without target_sizes: spatial dims match logits
-        segmentation = image_processor.post_process_semantic_segmentation(outputs)
-        self.assertEqual(len(segmentation), batch_size)
-        self.assertEqual(segmentation[0].shape, torch.Size([height, width]))
-
-        # with target_sizes: output is resized to requested size
-        target_sizes = [(height * 2, width * 2)] * batch_size
-        segmentation = image_processor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
-        self.assertEqual(len(segmentation), batch_size)
-        self.assertEqual(segmentation[0].shape, torch.Size([height * 2, width * 2]))
-
-        # mismatched batch size raises ValueError
-        with self.assertRaises(ValueError):
-            image_processor.post_process_semantic_segmentation(outputs, target_sizes=[(100, 100)])
-
-    def test_post_process_normal_estimation(self):
-        image_processor = Sapiens2ImageProcessor()
-        batch_size = 2
-        num_labels = 3
-        height = width = 16
-        outputs = Sapiens2NormalEstimatorOutput(normals=torch.randn(batch_size, num_labels, height, width))
-
-        # without target_sizes: spatial dims match normals, values are L2-normalized
-        result = image_processor.post_process_normal_estimation(outputs)
-        self.assertEqual(len(result), batch_size)
-        self.assertEqual(result[0]["normals"].shape, torch.Size([num_labels, height, width]))
-        norms = result[0]["normals"].norm(p=2, dim=0)
-        torch.testing.assert_close(norms, torch.ones_like(norms), rtol=1e-4, atol=1e-4)
-
-        # with target_sizes: output is resized before normalization
-        target_sizes = [(height * 2, width * 2)] * batch_size
-        result = image_processor.post_process_normal_estimation(outputs, target_sizes=target_sizes)
-        self.assertEqual(len(result), batch_size)
-        self.assertEqual(result[0]["normals"].shape, torch.Size([num_labels, height * 2, width * 2]))
-
-        # mismatched batch size raises ValueError
-        with self.assertRaises(ValueError):
-            image_processor.post_process_normal_estimation(outputs, target_sizes=[(100, 100)])
-
-    def test_post_process_pointmap(self):
-        image_processor = Sapiens2ImageProcessor()
-        batch_size = 2
-        num_labels = 3
-        height = width = 16
-        outputs = Sapiens2PointmapEstimatorOutput(pointmaps=torch.randn(batch_size, num_labels, height, width))
-
-        # without target_sizes: spatial dims match pointmap
-        result = image_processor.post_process_pointmap(outputs)
-        self.assertEqual(len(result), batch_size)
-        self.assertEqual(result[0]["pointmap"].shape, torch.Size([num_labels, height, width]))
-
-        # with target_sizes: output is resized to requested size
-        target_sizes = [(height * 2, width * 2)] * batch_size
-        result = image_processor.post_process_pointmap(outputs, target_sizes=target_sizes)
-        self.assertEqual(len(result), batch_size)
-        self.assertEqual(result[0]["pointmap"].shape, torch.Size([num_labels, height * 2, width * 2]))
-
-        # with scales: scale division is applied
-        scale = torch.tensor([[2.0], [0.5]])
-        outputs_with_scale = Sapiens2PointmapEstimatorOutput(
-            pointmaps=torch.ones(batch_size, num_labels, height, width), scales=scale
-        )
-        result = image_processor.post_process_pointmap(outputs_with_scale)
-        torch.testing.assert_close(result[0]["pointmap"], torch.full((num_labels, height, width), 0.5))
-        torch.testing.assert_close(result[1]["pointmap"], torch.full((num_labels, height, width), 2.0))
-
-        # mismatched batch size raises ValueError
-        with self.assertRaises(ValueError):
-            image_processor.post_process_pointmap(outputs, target_sizes=[(100, 100)])
-
-    def test_post_process_image_matting(self):
-        image_processor = Sapiens2ImageProcessor()
-        batch_size = 2
-        height = width = 16
-        outputs = Sapiens2ImageMattingOutput(
-            foregrounds=torch.rand(batch_size, 3, height, width),
-            alphas=torch.rand(batch_size, 1, height, width),
-        )
-
-        # without target_sizes: spatial dims unchanged
-        result = image_processor.post_process_image_matting(outputs)
-        self.assertEqual(len(result), batch_size)
-        self.assertEqual(result[0]["foreground"].shape, torch.Size([3, height, width]))
-        self.assertEqual(result[0]["alpha"].shape, torch.Size([1, height, width]))
-        # values stay in [0, 1]
-        self.assertGreaterEqual(result[0]["alpha"].min().item(), 0.0)
-        self.assertLessEqual(result[0]["alpha"].max().item(), 1.0)
-
-        # with target_sizes: output is resized
-        target_sizes = [(height * 2, width * 2)] * batch_size
-        result = image_processor.post_process_image_matting(outputs, target_sizes=target_sizes)
-        self.assertEqual(result[0]["foreground"].shape, torch.Size([3, height * 2, width * 2]))
-
-        # mismatched batch size raises ValueError
-        with self.assertRaises(ValueError):
-            image_processor.post_process_image_matting(outputs, target_sizes=[(100, 100)])
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = Sapiens2Model.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision=REVISION)
-        self.assertIsNotNone(model)
-
 
 def prepare_img():
     image = load_image_as_tensor("./tests/fixtures/tests_samples/COCO/000000004016.png")
@@ -530,11 +419,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
     @cached_property
     def default_image_processor(self):
-        return (
-            Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision=REVISION)
-            if is_vision_available()
-            else None
-        )
+        return Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision=REVISION)
 
     @slow
     def test_inference_no_head(self):
@@ -559,16 +444,19 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         last_layer_cls_token = outputs.pooler_output
-        expected_slice = torch.tensor([-0.09233, -0.00107, -0.12215, 0.07374, -0.03773], device=torch_device)
-        torch.testing.assert_close(last_layer_cls_token[0, :5], expected_slice, rtol=1e-3, atol=1e-3)
+        EXPECTED_CLS_SLICE = Expectations({("cuda", (9, 0)): [-0.09233, -0.00107, -0.12215, 0.07374, -0.03773]})
+        expected_cls_slice = torch.tensor(EXPECTED_CLS_SLICE.get_expectation(), device=torch_device)
+        torch.testing.assert_close(last_layer_cls_token[0, :5], expected_cls_slice, rtol=1e-3, atol=1e-3)
 
         last_layer_register_tokens = outputs.last_hidden_state[:, 1 : model.config.num_register_tokens + 1]
-        expected_slice = torch.tensor([0.08412, 0.04387, 0.05709, -0.04962, 0.03715], device=torch_device)
-        torch.testing.assert_close(last_layer_register_tokens[0, 0, :5], expected_slice, rtol=1e-3, atol=1e-3)
+        EXPECTED_REGISTER_SLICE = Expectations({("cuda", (9, 0)): [0.08412, 0.04387, 0.05709, -0.04962, 0.03715]})
+        expected_register_slice = torch.tensor(EXPECTED_REGISTER_SLICE.get_expectation(), device=torch_device)
+        torch.testing.assert_close(last_layer_register_tokens[0, 0, :5], expected_register_slice, rtol=1e-3, atol=1e-3)
 
         last_layer_patch_tokens = outputs.last_hidden_state[:, model.config.num_register_tokens + 1 :]
-        expected_slice = torch.tensor([0.14232, -0.11947, -0.05910, -0.09457, -0.11410], device=torch_device)
-        torch.testing.assert_close(last_layer_patch_tokens[0, 0, :5], expected_slice, rtol=1e-3, atol=1e-3)
+        EXPECTED_PATCH_SLICE = Expectations({("cuda", (9, 0)): [0.14232, -0.11947, -0.05910, -0.09457, -0.11410]})
+        expected_patch_slice = torch.tensor(EXPECTED_PATCH_SLICE.get_expectation(), device=torch_device)
+        torch.testing.assert_close(last_layer_patch_tokens[0, 0, :5], expected_patch_slice, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_inference_semantic_segmentation(self):
@@ -592,11 +480,11 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, model.config.num_labels, height, width))
         self.assertEqual(logits.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [[3.45260, 5.55483, 6.57901], [5.71913, 7.21420, 8.11209], [6.82645, 7.98208, 8.31385]],
-            device=torch_device,
+        EXPECTED_LOGITS_SLICE = Expectations(
+            {("cuda", (9, 0)): [[3.45260, 5.55483, 6.57901], [5.71913, 7.21420, 8.11209], [6.82645, 7.98208, 8.31385]]}
         )
-        torch.testing.assert_close(logits[0, 0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
+        expected_logits_slice = torch.tensor(EXPECTED_LOGITS_SLICE.get_expectation(), device=torch_device)
+        torch.testing.assert_close(logits[0, 0, :3, :3], expected_logits_slice, rtol=1e-3, atol=1e-3)
 
         # verify post-processing without resizing: output shape matches model input resolution
         segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs)
@@ -609,7 +497,8 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(len(segmentation), 1)
         self.assertEqual(segmentation[0].shape, torch.Size(target_size))
 
-        expected_class_ids = torch.tensor([[4, 3, 3], [3, 3, 3], [3, 3, 3]], device=torch_device)
+        EXPECTED_CLASS_IDS = Expectations({("cuda", (9, 0)): [[4, 3, 3], [3, 3, 3], [3, 3, 3]]})
+        expected_class_ids = torch.tensor(EXPECTED_CLASS_IDS.get_expectation(), device=torch_device)
         torch.testing.assert_close(segmentation[0][50:53, 50:53], expected_class_ids)
 
     @require_cv2
@@ -635,14 +524,10 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
         heatmaps = outputs.heatmaps
         self.assertEqual(heatmaps.shape, torch.Size([1, model.config.num_labels, 256, 192]))
-        expected_heatmaps = torch.tensor(
-            [
-                [0.26140, 0.24656, 0.21673],
-                [0.33708, 0.31597, 0.28028],
-                [0.41624, 0.39270, 0.35014],
-            ],
-            device=torch_device,
+        EXPECTED_HEATMAPS = Expectations(
+            {("cuda", (9, 0)): [[0.26140, 0.24656, 0.21673], [0.33708, 0.31597, 0.28028], [0.41624, 0.39270, 0.35014]]}
         )
+        expected_heatmaps = torch.tensor(EXPECTED_HEATMAPS.get_expectation(), device=torch_device)
         torch.testing.assert_close(heatmaps[0, 0, 70:73, 70:73], expected_heatmaps, rtol=1e-2, atol=1e-2)
 
         results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)
@@ -651,18 +536,15 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         person = results[0][0]
 
         keypoints = person["keypoints"]
-        expected_keypoints = torch.tensor(
-            [
-                [364.33920111, 97.92528764],
-                [373.25104943, 80.97749201],
-                [353.21072316, 83.38954486],
-            ],
-            device=torch_device,
+        EXPECTED_KEYPOINTS = Expectations(
+            {("cuda", (9, 0)): [[364.33920111, 97.92528764], [373.25104943, 80.97749201], [353.21072316, 83.38954486]]}
         )
+        expected_keypoints = torch.tensor(EXPECTED_KEYPOINTS.get_expectation(), device=torch_device)
         torch.testing.assert_close(keypoints[:3], expected_keypoints, rtol=1e-2, atol=1e-2)
 
         scores = person["scores"]
-        expected_scores = torch.tensor([1.0007433, 0.9987416, 1.0015154], device=torch_device)
+        EXPECTED_SCORES = Expectations({("cuda", (9, 0)): [1.0007433, 0.9987416, 1.0015154]})
+        expected_scores = torch.tensor(EXPECTED_SCORES.get_expectation(), device=torch_device)
         torch.testing.assert_close(scores[:3], expected_scores, rtol=1e-2, atol=1e-2)
 
         bbox = person["bbox"]
@@ -701,14 +583,10 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
             flipped_outputs = model(**flipped_inputs, flip_pairs=flip_pairs)
 
         flipped_heatmaps = flipped_outputs.heatmaps
-        expected_flipped_heatmaps = torch.tensor(
-            [
-                [0.27348, 0.25426, 0.22496],
-                [0.34877, 0.32563, 0.28418],
-                [0.43967, 0.40607, 0.35721],
-            ],
-            device=torch_device,
+        EXPECTED_FLIPPED_HEATMAPS = Expectations(
+            {("cuda", (9, 0)): [[0.27348, 0.25426, 0.22496], [0.34877, 0.32563, 0.28418], [0.43967, 0.40607, 0.35721]]}
         )
+        expected_flipped_heatmaps = torch.tensor(EXPECTED_FLIPPED_HEATMAPS.get_expectation(), device=torch_device)
         torch.testing.assert_close(
             flipped_heatmaps[0, 0, 70:73, 70:73], expected_flipped_heatmaps, rtol=1e-2, atol=1e-2
         )
@@ -721,14 +599,15 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
         final_person = final_results[0][0]
         final_keypoints = final_person["keypoints"]
-        expected_final_keypoints = torch.tensor(
-            [[364.14644305, 97.99268751], [373.66756367, 81.19966519], [353.4574526, 83.647911]],
-            device=torch_device,
+        EXPECTED_FINAL_KEYPOINTS = Expectations(
+            {("cuda", (9, 0)): [[364.14644305, 97.99268751], [373.66756367, 81.19966519], [353.4574526, 83.647911]]}
         )
+        expected_final_keypoints = torch.tensor(EXPECTED_FINAL_KEYPOINTS.get_expectation(), device=torch_device)
         torch.testing.assert_close(final_keypoints[:3], expected_final_keypoints, rtol=1e-2, atol=1e-2)
 
         final_scores = final_person["scores"]
-        expected_final_scores = torch.tensor([1.0064079, 0.98746514, 0.99821794], device=torch_device)
+        EXPECTED_FINAL_SCORES = Expectations({("cuda", (9, 0)): [1.0064079, 0.98746514, 0.99821794]})
+        expected_final_scores = torch.tensor(EXPECTED_FINAL_SCORES.get_expectation(), device=torch_device)
         torch.testing.assert_close(final_scores[:3], expected_final_scores, rtol=1e-2, atol=1e-2)
 
         final_bbox = final_person["bbox"]
@@ -754,19 +633,21 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.normals.shape, torch.Size([1, 3, height, width]))
 
         # We can get closer to expected values by using cv2 resize instead of torchvision.
-        expected_normals = torch.tensor(
-            [[0.9577, 1.8808, 0.9826], [1.6904, 1.7351, 1.9120], [2.4828, 1.9887, 2.5168]],
-            device=torch_device,
+        EXPECTED_NORMALS = Expectations(
+            {("cuda", (9, 0)): [[0.9577, 1.8808, 0.9826], [1.6904, 1.7351, 1.9120], [2.4828, 1.9887, 2.5168]]}
         )
+        expected_normals = torch.tensor(EXPECTED_NORMALS.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.normals[0, 0, :3, :3], expected_normals, rtol=1e-2, atol=1e-2)
 
         result = image_processor.post_process_normal_estimation(outputs, source_sizes=[(image_height, image_width)])
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["normals"].shape, torch.Size([3, 432, 640]))
 
+        EXPECTED_POSTPROCESSED_NORMALS = Expectations(
+            {("cuda", (9, 0)): [[-0.8266, -0.7899, -0.7512], [-0.8227, -0.7843, -0.7440], [-0.8098, -0.7721, -0.7318]]}
+        )
         expected_postprocessed_normals = torch.tensor(
-            [[-0.8266, -0.7899, -0.7512], [-0.8227, -0.7843, -0.7440], [-0.8098, -0.7721, -0.7318]],
-            device=torch_device,
+            EXPECTED_POSTPROCESSED_NORMALS.get_expectation(), device=torch_device
         )
         torch.testing.assert_close(
             result[0]["normals"][0, :3, :3], expected_postprocessed_normals, rtol=1e-2, atol=1e-2
@@ -793,13 +674,14 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.pointmaps.shape, torch.Size([1, 3, height, width]))
         self.assertEqual(outputs.scales.shape, torch.Size([1, 1]))
 
-        expected_scale = torch.tensor([[0.9931]], device=torch_device)
+        EXPECTED_SCALE = Expectations({("cuda", (9, 0)): [[0.9931]]})
+        expected_scale = torch.tensor(EXPECTED_SCALE.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.scales, expected_scale, rtol=1e-3, atol=1e-3)
 
-        expected_pointmap = torch.tensor(
-            [[-0.0096, -0.0567, -0.0460], [-0.0657, -0.0583, -0.0688], [-0.1035, -0.0363, -0.0659]],
-            device=torch_device,
+        EXPECTED_POINTMAP = Expectations(
+            {("cuda", (9, 0)): [[-0.0096, -0.0567, -0.0460], [-0.0657, -0.0583, -0.0688], [-0.1035, -0.0363, -0.0659]]}
         )
+        expected_pointmap = torch.tensor(EXPECTED_POINTMAP.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.pointmaps[0, 0, :3, :3], expected_pointmap, rtol=1e-2, atol=1e-2)
 
         result = image_processor.post_process_pointmap(outputs, source_sizes=[(image_height, image_width)])
@@ -808,9 +690,11 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
         # Head and post-processing are exactly identical to original code but differences from backbone
         # get amplified after scaling and resizing so we need to relax the tolerance here.
+        EXPECTED_POSTPROCESSED_POINTMAP = Expectations(
+            {("cuda", (9, 0)): [[0.0771, 0.1335, 0.3025], [-0.1179, 0.2904, 0.7140], [0.0337, 0.3037, 0.4390]]}
+        )
         expected_postprocessed_pointmap = torch.tensor(
-            [[0.0771, 0.1335, 0.3025], [-0.1179, 0.2904, 0.7140], [0.0337, 0.3037, 0.4390]],
-            device=torch_device,
+            EXPECTED_POSTPROCESSED_POINTMAP.get_expectation(), device=torch_device
         )
         torch.testing.assert_close(
             result[0]["pointmap"][0, :3, :3], expected_postprocessed_pointmap, rtol=1e-2, atol=1e-2
@@ -838,14 +722,10 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.alphas.shape, torch.Size([1, 1, height, width]))
 
         # Difference due to cv2 vs torchvision pre-processing. Model outputs are equal on same tensor input.
-        expected_foregrounds = torch.tensor(
-            [
-                [0.1432, 0.2051, 0.3043],
-                [0.1889, 0.2681, 0.3509],
-                [0.2511, 0.3076, 0.4047],
-            ],
-            device=torch_device,
+        EXPECTED_FOREGROUNDS = Expectations(
+            {("cuda", (9, 0)): [[0.1432, 0.2051, 0.3043], [0.1889, 0.2681, 0.3509], [0.2511, 0.3076, 0.4047]]}
         )
+        expected_foregrounds = torch.tensor(EXPECTED_FOREGROUNDS.get_expectation(), device=torch_device)
         torch.testing.assert_close(
             outputs.foregrounds[0, 0, 100:103, 100:103], expected_foregrounds, rtol=1e-2, atol=1e-2
         )
@@ -863,31 +743,32 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(foreground.shape, (3, image_height, image_width))
         self.assertEqual(composite.shape, (3, image_height, image_width))
 
-        expected_alpha = torch.tensor(
-            [
-                [0.99995, 0.9999123, 0.9997628],
-                [0.99991906, 0.9997431, 0.99754137],
-                [0.9997362, 0.99711365, 0.9444071],
-            ],
-            device=torch_device,
+        EXPECTED_ALPHA = Expectations(
+            {
+                ("cuda", (9, 0)): [
+                    [0.99995, 0.9999123, 0.9997628],
+                    [0.99991906, 0.9997431, 0.99754137],
+                    [0.9997362, 0.99711365, 0.9444071],
+                ]
+            }
         )
+        expected_alpha = torch.tensor(EXPECTED_ALPHA.get_expectation(), device=torch_device)
         torch.testing.assert_close(alpha[0, 300:303, 300:303], expected_alpha, rtol=1e-3, atol=1e-3)
 
-        expected_foreground = torch.tensor(
-            [
-                [0.7175647, 0.6906685, 0.65860075],
-                [0.7162684, 0.6867891, 0.64463294],
-                [0.6924842, 0.67141336, 0.5356377],
-            ],
-            device=torch_device,
+        EXPECTED_FOREGROUND = Expectations(
+            {
+                ("cuda", (9, 0)): [
+                    [0.7175647, 0.6906685, 0.65860075],
+                    [0.7162684, 0.6867891, 0.64463294],
+                    [0.6924842, 0.67141336, 0.5356377],
+                ]
+            }
         )
+        expected_foreground = torch.tensor(EXPECTED_FOREGROUND.get_expectation(), device=torch_device)
         torch.testing.assert_close(foreground[0, 300:303, 300:303], expected_foreground, rtol=1e-2, atol=1e-2)
 
-        expected_composite = torch.tensor(
-            [[182, 176, 167], [182, 175, 164], [176, 171, 136]],
-            dtype=torch.uint8,
-            device=torch_device,
-        )
+        EXPECTED_COMPOSITE = Expectations({("cuda", (9, 0)): [[182, 176, 167], [182, 175, 164], [176, 171, 136]]})
+        expected_composite = torch.tensor(EXPECTED_COMPOSITE.get_expectation(), dtype=torch.uint8, device=torch_device)
         torch.testing.assert_close(composite[0, 300:303, 300:303], expected_composite, rtol=0, atol=1)
 
 

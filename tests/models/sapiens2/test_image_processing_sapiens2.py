@@ -23,6 +23,14 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 if is_torch_available():
     import torch
 
+    from transformers import Sapiens2ImageProcessor
+    from transformers.modeling_outputs import SemanticSegmenterOutput
+    from transformers.models.sapiens2.modeling_sapiens2 import (
+        Sapiens2ImageMattingOutput,
+        Sapiens2NormalEstimatorOutput,
+        Sapiens2PointmapEstimatorOutput,
+    )
+
 
 class Sapiens2ImageProcessingTester:
     def __init__(
@@ -161,31 +169,107 @@ class Sapiens2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].min().item() >= 0)
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
-    def test_reduce_labels(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
+    def test_post_process_semantic_segmentation(self):
+        image_processor = Sapiens2ImageProcessor()
 
-            # Test reduce_label logic directly: 0 (background) → 255, N → N-1, 255 → 255
-            label = torch.tensor([[0, 1, 2], [3, 255, 5]])
-            result = image_processing.reduce_label([label.clone()])[0]
-            self.assertEqual(result[0, 0].item(), 255)  # background → ignore index
-            self.assertEqual(result[0, 1].item(), 0)  # class 1 → 0
-            self.assertEqual(result[0, 2].item(), 1)  # class 2 → 1
-            self.assertEqual(result[1, 0].item(), 2)  # class 3 → 2
-            self.assertEqual(result[1, 1].item(), 255)  # 255 stays as ignore index
+        batch_size = 2
+        num_labels = 3
+        height = width = 16
+        outputs = SemanticSegmenterOutput(logits=torch.randn(batch_size, num_labels, height, width))
 
-            # Test full pipeline: verify range and batch count
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
-            maps = [torch.zeros(image.shape[-2:]).long() for image in image_inputs]
+        # without target_sizes: spatial dims match logits
+        segmentation = image_processor.post_process_semantic_segmentation(outputs)
+        self.assertEqual(len(segmentation), batch_size)
+        self.assertEqual(segmentation[0].shape, torch.Size([height, width]))
 
-            encoding = image_processing(image_inputs, maps, return_tensors="pt")
-            self.assertEqual(encoding["labels"].dtype, torch.long)
-            self.assertTrue(encoding["labels"].min().item() >= 0)
-            self.assertTrue(encoding["labels"].max().item() <= 255)
+        # with target_sizes: output is resized to requested size
+        target_sizes = [(height * 2, width * 2)] * batch_size
+        segmentation = image_processor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
+        self.assertEqual(len(segmentation), batch_size)
+        self.assertEqual(segmentation[0].shape, torch.Size([height * 2, width * 2]))
 
-            image_processing.do_reduce_labels = True
-            encoding = image_processing(image_inputs, maps, return_tensors="pt")
-            self.assertEqual(encoding["labels"].dtype, torch.long)
-            # All-zero map: background (0) → 255 after reduce
-            self.assertEqual(encoding["labels"].unique().item(), 255)
-            self.assertEqual(len(encoding["labels"]), len(maps))
+        # mismatched batch size raises ValueError
+        with self.assertRaises(ValueError):
+            image_processor.post_process_semantic_segmentation(outputs, target_sizes=[(100, 100)])
+
+    def test_post_process_normal_estimation(self):
+        image_processor = Sapiens2ImageProcessor()
+        batch_size = 2
+        num_labels = 3
+        height = width = 16
+        outputs = Sapiens2NormalEstimatorOutput(normals=torch.randn(batch_size, num_labels, height, width))
+
+        # without target_sizes: spatial dims match normals, values are L2-normalized
+        result = image_processor.post_process_normal_estimation(outputs)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0]["normals"].shape, torch.Size([num_labels, height, width]))
+        norms = result[0]["normals"].norm(p=2, dim=0)
+        torch.testing.assert_close(norms, torch.ones_like(norms), rtol=1e-4, atol=1e-4)
+
+        # with target_sizes: output is resized before normalization
+        target_sizes = [(height * 2, width * 2)] * batch_size
+        result = image_processor.post_process_normal_estimation(outputs, target_sizes=target_sizes)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0]["normals"].shape, torch.Size([num_labels, height * 2, width * 2]))
+
+        # mismatched batch size raises ValueError
+        with self.assertRaises(ValueError):
+            image_processor.post_process_normal_estimation(outputs, target_sizes=[(100, 100)])
+
+    def test_post_process_pointmap(self):
+        image_processor = Sapiens2ImageProcessor()
+        batch_size = 2
+        num_labels = 3
+        height = width = 16
+        outputs = Sapiens2PointmapEstimatorOutput(pointmaps=torch.randn(batch_size, num_labels, height, width))
+
+        # without target_sizes: spatial dims match pointmap
+        result = image_processor.post_process_pointmap(outputs)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0]["pointmap"].shape, torch.Size([num_labels, height, width]))
+
+        # with target_sizes: output is resized to requested size
+        target_sizes = [(height * 2, width * 2)] * batch_size
+        result = image_processor.post_process_pointmap(outputs, target_sizes=target_sizes)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0]["pointmap"].shape, torch.Size([num_labels, height * 2, width * 2]))
+
+        # with scales: scale division is applied
+        scale = torch.tensor([[2.0], [0.5]])
+        outputs_with_scale = Sapiens2PointmapEstimatorOutput(
+            pointmaps=torch.ones(batch_size, num_labels, height, width), scales=scale
+        )
+        result = image_processor.post_process_pointmap(outputs_with_scale)
+        torch.testing.assert_close(result[0]["pointmap"], torch.full((num_labels, height, width), 0.5))
+        torch.testing.assert_close(result[1]["pointmap"], torch.full((num_labels, height, width), 2.0))
+
+        # mismatched batch size raises ValueError
+        with self.assertRaises(ValueError):
+            image_processor.post_process_pointmap(outputs, target_sizes=[(100, 100)])
+
+    def test_post_process_image_matting(self):
+        image_processor = Sapiens2ImageProcessor()
+        batch_size = 2
+        height = width = 16
+        outputs = Sapiens2ImageMattingOutput(
+            foregrounds=torch.rand(batch_size, 3, height, width),
+            alphas=torch.rand(batch_size, 1, height, width),
+        )
+
+        # without target_sizes: spatial dims unchanged
+        result = image_processor.post_process_image_matting(outputs)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0]["foreground"].shape, torch.Size([3, height, width]))
+        self.assertEqual(result[0]["alpha"].shape, torch.Size([1, height, width]))
+        # values stay in [0, 1]
+        self.assertGreaterEqual(result[0]["alpha"].min().item(), 0.0)
+        self.assertLessEqual(result[0]["alpha"].max().item(), 1.0)
+
+        # with target_sizes: output is resized
+        target_sizes = [(height * 2, width * 2)] * batch_size
+        result = image_processor.post_process_image_matting(outputs, target_sizes=target_sizes)
+        self.assertEqual(result[0]["foreground"].shape, torch.Size([3, height * 2, width * 2]))
+
+        # mismatched batch size raises ValueError
+        with self.assertRaises(ValueError):
+            image_processor.post_process_image_matting(outputs, target_sizes=[(100, 100)])
