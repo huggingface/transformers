@@ -57,6 +57,7 @@ from ..dinov3_vit.modeling_dinov3_vit import (
     apply_rotary_pos_emb,
 )
 from ..gemma2.modeling_gemma2 import eager_attention_forward
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..sam3.processing_sam3 import box_xywh_to_cxcywh, box_xywh_to_xyxy
 from ..vitmatte.modeling_vitmatte import ImageMattingOutput
 from ..vitpose.modeling_vitpose import VitPoseEstimatorOutput, flip_back
@@ -1036,6 +1037,10 @@ class Sapiens2RopePositionEmbedding(DINOv3ViTRopePositionEmbedding):
         self.num_patches_w = image_w // patch_size
 
 
+class Sapiens2RMSNorm(LlamaRMSNorm):
+    pass
+
+
 class Sapiens2Attention(DINOv3ViTAttention):
     def __init__(self, config: Sapiens2Config, layer_idx: int):
         super().__init__(config)
@@ -1045,8 +1050,12 @@ class Sapiens2Attention(DINOv3ViTAttention):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.k_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim, bias=config.key_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim, bias=config.value_bias)
-        self.q_norm = nn.RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
-        self.k_norm = nn.RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
+        self.q_norm = (
+            Sapiens2RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
+        )
+        self.k_norm = (
+            Sapiens2RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
+        )
 
     def forward(
         self,
@@ -1090,8 +1099,8 @@ class Sapiens2Layer(DINOv3ViTLayer):
     def __init__(self, config: Sapiens2Config, layer_idx: int):
         super().__init__(config)
         self.attention = Sapiens2Attention(config, layer_idx=layer_idx)
-        self.norm1 = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.norm2 = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm1 = Sapiens2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm2 = Sapiens2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layer_scale2 = nn.Identity()
 
 
@@ -1293,10 +1302,7 @@ class Sapiens2PreTrainedModel(DINOv3ViTPreTrainedModel):
             init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, nn.RMSNorm):
+        elif isinstance(module, Sapiens2RMSNorm):
             init.ones_(module.weight)
         elif isinstance(module, Sapiens2Embeddings):
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
@@ -1334,14 +1340,14 @@ class Sapiens2Encoder(DINOv3ViTEncoder):
 class Sapiens2Model(DINOv3ViTModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
-        self.norm = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_init()
 
 
 class Sapiens2Backbone(DINOv3ViTBackbone):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
-        self.norm = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_init()
 
 

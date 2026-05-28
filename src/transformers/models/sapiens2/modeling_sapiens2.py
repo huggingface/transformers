@@ -27,6 +27,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
@@ -306,6 +307,27 @@ class Sapiens2RopePositionEmbedding(nn.Module):
         return cos.to(dtype=dtype), sin.to(dtype=dtype)
 
 
+@use_kernel_forward_from_hub("RMSNorm")
+class Sapiens2RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        Sapiens2RMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -416,8 +438,12 @@ class Sapiens2Attention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.k_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim, bias=config.key_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim, bias=config.value_bias)
-        self.q_norm = nn.RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
-        self.k_norm = nn.RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
+        self.q_norm = (
+            Sapiens2RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
+        )
+        self.k_norm = (
+            Sapiens2RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
+        )
 
     def forward(
         self,
@@ -522,11 +548,11 @@ class Sapiens2Layer(GradientCheckpointingLayer):
 
     def __init__(self, config: Sapiens2Config, layer_idx: int):
         super().__init__()
-        self.norm1 = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm1 = Sapiens2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = Sapiens2Attention(config, layer_idx=layer_idx)
         self.layer_scale1 = Sapiens2LayerScale(config)
         self.drop_path = Sapiens2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-        self.norm2 = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm2 = Sapiens2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         if config.use_gated_mlp:
             self.mlp = Sapiens2GatedMLP(config)
@@ -783,10 +809,7 @@ class Sapiens2PreTrainedModel(PreTrainedModel):
             init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, nn.RMSNorm):
+        elif isinstance(module, Sapiens2RMSNorm):
             init.ones_(module.weight)
         elif isinstance(module, Sapiens2Embeddings):
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
@@ -842,7 +865,7 @@ class Sapiens2Model(Sapiens2PreTrainedModel):
         self.embeddings = Sapiens2Embeddings(config)
         self.rope_embeddings = Sapiens2RopePositionEmbedding(config)
         self.model = Sapiens2Encoder(config)
-        self.norm = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
@@ -905,7 +928,7 @@ class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
         self.embeddings = Sapiens2Embeddings(config)
         self.rope_embeddings = Sapiens2RopePositionEmbedding(config)
         self.model = Sapiens2Encoder(config)
-        self.norm = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
