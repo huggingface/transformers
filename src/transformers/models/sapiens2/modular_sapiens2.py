@@ -23,7 +23,6 @@ from torchvision.transforms.v2 import functional as tvF
 from transformers.image_processing_backends import TorchvisionBackend
 
 from ... import initialization as init
-from ...activations import ACT2FN
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
@@ -1104,29 +1103,6 @@ class Sapiens2Layer(DINOv3ViTLayer):
         self.layer_scale2 = nn.Identity()
 
 
-class Sapiens2PixelShuffleLayer(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int = 3,
-        scale_factor: int = 2,
-        padding: int = 1,
-        bias: bool = True,
-        activation: str = "silu",
-    ):
-        super().__init__()
-        self.conv = nn.Conv2d(
-            in_channels, out_channels * scale_factor**2, kernel_size=kernel_size, padding=padding, bias=bias
-        )
-        self.pixel_shuffle = nn.PixelShuffle(scale_factor)
-        self.norm = nn.InstanceNorm2d(out_channels)
-        self.activation = ACT2FN[activation]
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.activation(self.norm(self.pixel_shuffle(self.conv(hidden_states))))
-
-
 class Sapiens2ConvLayer(PPOCRV5ServerDetConvBatchnormLayer):
     def __init__(
         self,
@@ -1139,7 +1115,13 @@ class Sapiens2ConvLayer(PPOCRV5ServerDetConvBatchnormLayer):
         activation: str = "silu",
         bias: bool = True,
         convolution_transpose: bool = False,
+        pixel_shuffle: bool = False,
+        scale_factor: int = 2,
     ):
+        orig_out_channels = out_channels
+        if pixel_shuffle:
+            out_channels = out_channels * scale_factor**2
+
         super().__init__(
             in_channels=in_channels,
             out_channels=out_channels,
@@ -1161,7 +1143,15 @@ class Sapiens2ConvLayer(PPOCRV5ServerDetConvBatchnormLayer):
                 bias=bias,
                 groups=groups,
             )
-        self.norm = nn.InstanceNorm2d(out_channels)
+        self.norm = nn.InstanceNorm2d(orig_out_channels)
+        self.pixel_shuffle = nn.PixelShuffle(scale_factor) if pixel_shuffle else nn.Identity()
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.convolution(hidden_states)
+        hidden_states = self.pixel_shuffle(hidden_states)
+        hidden_states = self.norm(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        return hidden_states
 
 
 class Sapiens2SegmentationHead(nn.Module):
@@ -1204,7 +1194,7 @@ class Sapiens2PointmapHead(nn.Module):
         self.input_conv = Sapiens2ConvLayer(config.hidden_size, config.hidden_size, kernel_size=3, padding=1)
         upsample_in_channels = [config.hidden_size] + config.head_upsample_out_channels[:-1]
         self.upsample_layers = nn.ModuleList(
-            Sapiens2PixelShuffleLayer(in_ch, out_ch, kernel_size=ks, padding=(ks - 1) // 2)
+            Sapiens2ConvLayer(in_ch, out_ch, kernel_size=ks, padding=(ks - 1) // 2, pixel_shuffle=True)
             for in_ch, out_ch, ks in zip(
                 upsample_in_channels, config.head_upsample_out_channels, config.head_upsample_kernel_sizes
             )

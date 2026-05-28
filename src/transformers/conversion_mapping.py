@@ -1035,11 +1035,11 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(
                 r"decode_head\.upsample_blocks\.(\d+)\.0\.weight",
-                r"decode_head.upsample_layers.\1.conv.weight",
+                r"decode_head.upsample_layers.\1.convolution.weight",
             ),
             WeightRenaming(
                 r"decode_head\.upsample_blocks\.(\d+)\.0\.bias",
-                r"decode_head.upsample_layers.\1.conv.bias",
+                r"decode_head.upsample_layers.\1.convolution.bias",
             ),
             WeightRenaming(
                 r"decode_head\.conv_layers\.0\.(weight|bias)",
@@ -1063,11 +1063,11 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(
                 r"decode_head\.upsample_blocks\.(\d+)\.0\.weight",
-                r"decode_head.upsample_layers.\1.conv.weight",
+                r"decode_head.upsample_layers.\1.convolution.weight",
             ),
             WeightRenaming(
                 r"decode_head\.upsample_blocks\.(\d+)\.0\.bias",
-                r"decode_head.upsample_layers.\1.conv.bias",
+                r"decode_head.upsample_layers.\1.convolution.bias",
             ),
             WeightRenaming(
                 r"decode_head\.conv_layers\.0\.(weight|bias)",
@@ -1119,11 +1119,11 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(
                 r"decode_head\.upsample_blocks\.(\d+)\.0\.weight",
-                r"decode_head.upsample_layers.\1.conv.weight",
+                r"decode_head.upsample_layers.\1.convolution.weight",
             ),
             WeightRenaming(
                 r"decode_head\.upsample_blocks\.(\d+)\.0\.bias",
-                r"decode_head.upsample_layers.\1.conv.bias",
+                r"decode_head.upsample_layers.\1.convolution.bias",
             ),
             WeightRenaming(
                 r"decode_head\.conv_layers\.0\.(weight|bias)",
