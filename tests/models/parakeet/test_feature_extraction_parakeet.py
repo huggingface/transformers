@@ -236,9 +236,7 @@ class ParakeetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         self.assertEqual(inputs_cpu.attention_mask.shape, inputs_cuda.attention_mask.shape)
 
         # Numerical parity (allow small floating point differences from GPU)
-        torch.testing.assert_close(
-            inputs_cpu.input_features, inputs_cuda.input_features.cpu(), atol=1e-4, rtol=1e-4
-        )
+        torch.testing.assert_close(inputs_cpu.input_features, inputs_cuda.input_features.cpu(), atol=1e-4, rtol=1e-4)
         self.assertTrue((inputs_cpu.attention_mask == inputs_cuda.attention_mask.cpu()).all())
 
     @require_torch_accelerator
@@ -261,8 +259,5 @@ class ParakeetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         self.assertEqual(inputs_cpu.input_features.shape, inputs_cuda.input_features.shape)
 
         # Numerical parity
-        torch.testing.assert_close(
-            inputs_cpu.input_features, inputs_cuda.input_features.cpu(), atol=1e-4, rtol=1e-4
-        )
+        torch.testing.assert_close(inputs_cpu.input_features, inputs_cuda.input_features.cpu(), atol=1e-4, rtol=1e-4)
         self.assertTrue((inputs_cpu.attention_mask == inputs_cuda.attention_mask.cpu()).all())
-

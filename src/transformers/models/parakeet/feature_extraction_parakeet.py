@@ -258,18 +258,14 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
 
         # preemphasis
         if self.preemphasis is not None:
-            timemask = torch.arange(input_features.shape[1], device=device).unsqueeze(
-                0
-            ) < audio_lengths.unsqueeze(1)
+            timemask = torch.arange(input_features.shape[1], device=device).unsqueeze(0) < audio_lengths.unsqueeze(1)
             input_features = torch.cat(
                 [input_features[:, :1], input_features[:, 1:] - self.preemphasis * input_features[:, :-1]], dim=1
             )
             input_features = input_features.masked_fill(~timemask, 0.0)
 
         input_features = self._torch_extract_fbank_features(input_features, device)
-        features_lengths = torch.floor_divide(
-            audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length
-        )
+        features_lengths = torch.floor_divide(audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length)
         attention_mask = torch.arange(input_features.shape[1], device=device)[None, :] < features_lengths[:, None]
 
         # normalize mel features, ignoring padding
