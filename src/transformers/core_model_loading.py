@@ -83,6 +83,12 @@ def build_glob_alternation(
 class ConversionOps:
     """Base class for weight conversion operations."""
 
+    # Opt-in: set True on subclasses whose `reverse_op` has been audited to round-trip
+    # cleanly (forward(reverse(x)) == x within numerical tolerance). Default False keeps
+    # the save path conservative — unaudited ops bail rather than silently corrupt a
+    # checkpoint. The bail lives in `WeightConverter.reverse_transform`.
+    supports_round_trip: bool = False
+
     def __repr__(self):
         if hasattr(self, "dim"):
             return f"{self.__class__.__name__}(dim={self.dim})"
@@ -107,12 +113,16 @@ class _IdentityOp(ConversionOps):
     saved as-is without any conversion.
     """
 
+    supports_round_trip = True
+
     def convert(self, input_dict: dict[str, Any], **kwargs) -> dict[str, Any]:
         return input_dict
 
 
 class Chunk(ConversionOps):
     """Split a tensor along `dim` into equally sized chunks."""
+
+    supports_round_trip = True
 
     def __init__(self, dim: int = 0):
         self.dim = dim
@@ -141,6 +151,8 @@ class Chunk(ConversionOps):
 
 class Concatenate(ConversionOps):
     """Concatenate tensors along `dim`."""
+
+    supports_round_trip = True
 
     def __init__(self, dim: int = 0):
         self.dim = dim
@@ -189,6 +201,8 @@ class MergeModulelist(ConversionOps):
 
     """
 
+    supports_round_trip = True
+
     def __init__(self, dim: int = 0):
         self.dim = dim
 
@@ -230,6 +244,8 @@ class MergeModulelist(ConversionOps):
 class SplitModulelist(ConversionOps):
     """Inverse of `MergeModulelist` using explicit split sizes per group."""
 
+    supports_round_trip = True
+
     def __init__(self, dim: int = 0):
         self.dim = dim
 
@@ -270,6 +286,8 @@ class Transpose(ConversionOps):
     """
     Transposes the given tensor along dim0 and dim1.
     """
+
+    supports_round_trip = True
 
     def __init__(self, dim0: int = 0, dim1: int = 1, check_dims: bool = False):
         self.dim0 = dim0
@@ -319,6 +337,8 @@ class Transpose(ConversionOps):
 class Conv3dToLinear(ConversionOps):
     """Conv3d weights → flattened Linear layout."""
 
+    supports_round_trip = True
+
     def __init__(self, in_channels: int, kernel_size: tuple[int, int, int]):
         self.in_channels = in_channels
         self.kernel_size = kernel_size
@@ -358,6 +378,8 @@ class Conv3dToLinear(ConversionOps):
 
 class LinearToConv3d(ConversionOps):
     """Flattened Linear weights → Conv3d layout."""
+
+    supports_round_trip = True
 
     def __init__(self, in_channels: int, kernel_size: tuple[int, int, int]):
         self.in_channels = in_channels
@@ -435,6 +457,8 @@ class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
     The final fusions are defined by the amount of original module lists.
     """
 
+    supports_round_trip = True
+
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
         self.concat_dim = concat_dim
@@ -496,6 +520,8 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
     The splits are equal and are defined by the amount of original module lists.
     The final decoupled module lists are defined by the amount of keys.
     """
+
+    supports_round_trip = True
 
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
@@ -929,6 +955,34 @@ class WeightConverter(WeightTransform):
                 )
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
+
+    def reverse_transform(self) -> WeightTransform:
+        # Append `(?=\.|$)` to each reversed source so the match has to end on a
+        # dot-token boundary. Stops `mlp.experts.gate_up_proj` from substring-matching
+        # the FP8 scale sibling `mlp.experts.gate_up_proj_scale_inv` on save.
+
+        # `quantization_operation` is the on-the-fly quantize op attached by
+        # `convert_and_load_state_dict_in_model` when the checkpoint wasn't pre-quantized.
+        # We only allow reversing if the op has been opted in via `supports_round_trip`
+        # (audited reverse_op pair, e.g. Fp8Quantize ↔ Fp8Dequantize). Unaudited ops
+        # bail with a clear error rather than silently writing a half-converted checkpoint.
+        if self.quantization_operation is not None and not self.quantization_operation.supports_round_trip:
+            raise ValueError(
+                f"{type(self.quantization_operation).__name__} is not opted into round-trip save "
+                "(set `supports_round_trip = True` on the op once its reverse_op is audited)."
+            )
+
+        def _bounded(p: str) -> str:
+            return p if p.endswith(("$", r"(?=\.|$)")) else p + r"(?=\.|$)"
+
+        reverse = WeightConverter(
+            source_patterns=[_bounded(p) for p in self._original_target_patterns],
+            target_patterns=self._original_source_patterns,
+            operations=[op.reverse_op for op in self.operations[::-1]],
+        )
+        reverse.scope_prefix = self.scope_prefix
+        reverse.base_model_prefix = self.base_model_prefix
+        return reverse
 
     def convert(
         self,

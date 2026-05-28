@@ -412,9 +412,10 @@ class DeepseekV4HCACompressor(nn.Module):
         if chunk_kv.shape[1] > 0:  # there were at least self.compress_rate tokens
             n_windows = chunk_kv.shape[1] // self.compress_rate
             chunk_kv = chunk_kv.view(batch, n_windows, self.compress_rate, -1)
-            chunk_gate = chunk_gate.view(batch, n_windows, self.compress_rate, -1) + self.position_bias.to(
-                chunk_gate.dtype
-            )
+            # Reference keeps the gate in fp32 from here through the softmax (Compressor.forward
+            # in DeepSeek-V4-Flash/inference/model.py upcasts x to fp32 at entry). bf16 + fp32
+            # broadcasts to fp32; we deliberately don't down-cast so new_gate stays fp32 too.
+            chunk_gate = chunk_gate.view(batch, n_windows, self.compress_rate, -1) + self.position_bias
             compressed = self.kv_norm(
                 (chunk_kv * chunk_gate.softmax(dim=2, dtype=torch.float32).to(chunk_kv.dtype)).sum(dim=2)
             )
@@ -515,7 +516,8 @@ class DeepseekV4Indexer(nn.Module):
             n_windows = chunk_kv.shape[1] // self.compress_rate
             ratio = self.compress_rate
             chunk_kv = chunk_kv.view(batch, n_windows, ratio, -1)
-            chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias.to(chunk_gate.dtype)
+            # bf16 + fp32 broadcasts to fp32; keep it fp32 through the softmax (matches reference).
+            chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias
 
             # Same Ca / Cb overlap layout as the outer CSA compressor, at index_head_dim.
             new_kv = chunk_kv.new_zeros((batch, n_windows, 2 * ratio, self.head_dim))
@@ -633,7 +635,8 @@ class DeepseekV4CSACompressor(nn.Module):
             n_windows = chunk_kv.shape[1] // self.compress_rate
             ratio = self.compress_rate
             chunk_kv = chunk_kv.view(batch, n_windows, ratio, -1)
-            chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias.to(chunk_gate.dtype)
+            # bf16 + fp32 broadcasts to fp32; keep it fp32 through the softmax (matches reference).
+            chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias
 
             # Lay out the two series in [B, n_win, 2*ratio, head_dim]: Cb
             # (`[..., head_dim:]`) goes in the second half (current window),

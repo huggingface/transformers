@@ -867,6 +867,8 @@ class Fp8Quantize(ConversionOps):
     A quantization operation that creates two tensors, weight and scale out of a weight.
     """
 
+    supports_round_trip = True
+
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
@@ -947,6 +949,8 @@ class Fp8Dequantize(ConversionOps):
         original *weight* key. Scale entries are dropped from the output so the
         remaining ops only see weights.
     """
+
+    supports_round_trip = True
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer

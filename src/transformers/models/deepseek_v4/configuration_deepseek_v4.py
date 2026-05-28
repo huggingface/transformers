@@ -310,9 +310,14 @@ class DeepseekV4Config(PreTrainedConfig):
                 **yarn,
                 "rope_theta": self.compress_rope_theta,
                 "partial_rotary_factor": self.partial_rotary_factor,
-                "attention_factor": 1.0,
             }
             compress.setdefault("rope_type", "default")
+            # `attention_factor=1.0` only does something under yarn (it suppresses
+            # `_compute_yarn_parameters`'s `0.1·log(factor)+1` mscale). Adding it on
+            # rope_type=default produces an "Unrecognized key" warning for no benefit —
+            # happens on re-constructions where yarn params have already been consumed.
+            if compress["rope_type"] == "yarn":
+                compress.setdefault("attention_factor", 1.0)
             self.rope_parameters = {"main": main, "compress": compress}
 
 
