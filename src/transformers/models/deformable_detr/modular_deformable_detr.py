@@ -695,6 +695,7 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         std = self.config.init_std
 
         if isinstance(module, DeformableDetrLearnedPositionEmbedding):

@@ -77,6 +77,7 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if hasattr(self.config, "initializer_factor"):
             init_factor = self.config.initializer_factor
             init_range = self.config.initializer_range
