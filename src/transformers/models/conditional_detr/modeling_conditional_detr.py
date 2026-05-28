@@ -1056,7 +1056,6 @@ class ConditionalDetrPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
         std = self.config.init_std
         xavier_std = self.config.init_xavier_std
 

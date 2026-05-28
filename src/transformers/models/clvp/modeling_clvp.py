@@ -771,7 +771,6 @@ class ClvpPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
-        super()._init_weights(module)
         factor = self.config.initializer_factor
         if isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=factor * 0.02)

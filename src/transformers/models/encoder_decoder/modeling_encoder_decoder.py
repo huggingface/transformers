@@ -164,7 +164,6 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
         if module in self.encoder.modules():
             self.encoder._init_weights(module)
         elif module in self.decoder.modules():
