@@ -59,7 +59,6 @@ if is_executorch_available():
     from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
     from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
     from executorch.exir.capture._config import EdgeCompileConfig, ExecutorchBackendConfig
-    from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
     from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
 
 if TYPE_CHECKING:
@@ -289,14 +288,26 @@ def _patch_scaled_dot_product_attention(original):
     - enable_gqa=True
     - D_q != D_v (asymmetric head dims, e.g. MLA attention)
     - attn_mask is float (ExecuTorch CUDA SDPA only accepts bool masks)
+    - any input shape contains unbacked SymInts (CPU path) — SDPA's internal
+      dispatch branches on shapes (e.g. ``Eq(query_len, 1)`` for the decode
+      fast-path) and trips ``GuardOnDataDependentSymNode`` on unbacked dims
+      (idefics2, sam3).
     """
 
+    def has_unbacked_shape(t):
+        if t is None:
+            return False
+        return any(isinstance(s, torch.SymInt) and not s.node.expr.is_number for s in t.shape)
+
     def patch(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, **kwargs):
-        needs_eager_attention = query.device.type == "cuda" and (
-            kwargs.get("enable_gqa", False)
-            or query.shape[-1] != value.shape[-1]
-            or (attn_mask is not None and attn_mask.is_floating_point())
-        )
+        needs_eager_attention = (
+            query.device.type == "cuda"
+            and (
+                kwargs.get("enable_gqa", False)
+                or query.shape[-1] != value.shape[-1]
+                or (attn_mask is not None and attn_mask.is_floating_point())
+            )
+        ) or any(has_unbacked_shape(t) for t in (query, key, value, attn_mask))
         if needs_eager_attention:
             scale_factor = scale if scale is not None else math.sqrt(query.shape[-1]) ** -1
             if key.shape[1] != query.shape[1]:
@@ -525,13 +536,6 @@ def _normalize_amax_dim(exported_program: ExportedProgram) -> None:
                 node.args = tuple(new_args)
 
 
-_SYM_OP_REPLACEMENTS = {
-    target: _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS[target]
-    for target in (torch.sym_float, torch.sym_max, torch.sym_min, math.ceil, math.trunc, round)
-    if target in _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
-}
-
-
 def _replace_python_sym_ops(exported_program: ExportedProgram) -> None:
     """Replace Python sym ops (``torch.sym_min``, ``math.ceil``, ...) with their
     ExecuTorch backend equivalents.
@@ -546,13 +550,20 @@ def _replace_python_sym_ops(exported_program: ExportedProgram) -> None:
     ``mul`` / etc. are also used for tensor-tensor ops, where the ``Scalar``
     overload fails at runtime with ``Cannot cast NotImplemented to number``.
     """
+    from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
+
+    replacements = {
+        target: _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS[target]
+        for target in (torch.sym_float, torch.sym_max, torch.sym_min, math.ceil, math.trunc, round)
+        if target in _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
+    }
     for module in exported_program.graph_module.modules():
         if not isinstance(module, torch.fx.GraphModule):
             continue
         changed = False
         for node in module.graph.nodes:
-            if node.op == "call_function" and node.target in _SYM_OP_REPLACEMENTS:
-                node.target = _SYM_OP_REPLACEMENTS[node.target]
+            if node.op == "call_function" and node.target in replacements:
+                node.target = replacements[node.target]
                 changed = True
         if changed:
             module.recompile()
@@ -752,6 +763,38 @@ def _patch_check_tensor_args_dtype(original):
     return patch
 
 
+def _patch_dim_order_from_stride(_original):
+    """Replacement for ``executorch.exir.tensor.dim_order_from_stride``.
+
+    The upstream version compares strides with ``guard_size_oblivious`` to sort
+    them. When the strides are unbacked SymInts (e.g. ``splinter`` slicing on a
+    data-dependent index), the comparison raises ``GuardOnDataDependentSymNode``
+    deep inside ``spec_prop_pass``. Use ``guard_or_true`` / ``guard_or_false``
+    so the sort still produces *a* dim order when the comparison is unbacked —
+    the exact order on unbacked dims doesn't affect correctness, just memory layout.
+    """
+    from torch.fx.experimental.symbolic_shapes import guard_or_false, guard_or_true
+
+    def patch(stride):
+        for s in stride:
+            if guard_or_false(s == 0):
+                raise ValueError("0 in strides is not supported for ExecuTorch.")
+
+        class K:
+            __slots__ = ("stride",)
+
+            def __init__(self, stride):
+                self.stride = stride
+
+            def __lt__(self, other):
+                return guard_or_true(self.stride < other.stride)
+
+        sorted_dims = [i[0] for i in sorted(enumerate(stride), key=lambda x: K(x[1]), reverse=True)]
+        return tuple(sorted_dims)
+
+    return patch
+
+
 def _patch_update_placeholder_tensor_specs(_original):
     """Replacement for ``SpecPropPass.update_placeholder_tensor_specs``.
 
@@ -809,9 +852,7 @@ def _patch_sym_ops_allowlist():
     """
     from executorch.exir.passes.executorch_prim_ops_registry import _EXECUTORCH_SYM_OPS
 
-    extra = {
-        op for op in (torch.sym_ite, torch.sym_not, torch.sym_int, torch.sym_sum, torch.sym_float) if op is not None
-    }
+    extra = {torch.sym_ite, torch.sym_not, torch.sym_int, torch.sym_sum, torch.sym_float}
     added = extra - _EXECUTORCH_SYM_OPS
     _EXECUTORCH_SYM_OPS.update(added)
     try:
@@ -827,7 +868,11 @@ def _executorch_patches() -> list[Any]:
     """
     from executorch.backends.xnnpack.operators.node_visitor import _node_visitor_dict
     from executorch.exir import sym_util
+    from executorch.exir import tensor as et_tensor
+    from executorch.exir import tensor_layout as et_tensor_layout
+    from executorch.exir.emit import _emitter as et_emitter
     from executorch.exir.passes import prune_empty_tensors_pass, spec_prop_pass, sym_shape_eval_pass
+    from executorch.exir.passes import replace_view_copy_with_view_pass as et_view_pass
     from executorch.exir.verification import verifier
 
     return [
@@ -858,6 +903,13 @@ def _executorch_patches() -> list[Any]:
         # Allow complex64 / complex128 through the edge dtype validator — used by
         # FFT in fnet and complex rotary embeddings in deepseek_v2.
         patch_attr(verifier, "_check_tensor_args_matching_op_allowed_dtype", _patch_check_tensor_args_dtype),
+        # Tolerate unbacked SymInt strides when sorting for dim_order (splinter).
+        # ``dim_order_from_stride`` is imported by name in several modules; patch
+        # every binding so the soft-guard version is hit regardless of call site.
+        patch_attr(et_tensor, "dim_order_from_stride", _patch_dim_order_from_stride),
+        patch_attr(et_tensor_layout, "dim_order_from_stride", _patch_dim_order_from_stride),
+        patch_attr(et_emitter, "dim_order_from_stride", _patch_dim_order_from_stride),
+        patch_attr(et_view_pass, "dim_order_from_stride", _patch_dim_order_from_stride),
         _patch_sym_ops_allowlist(),
     ]
 
