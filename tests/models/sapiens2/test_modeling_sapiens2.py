@@ -136,7 +136,7 @@ class Sapiens2ModelTester:
             head_conv_kernel_sizes=[1, 1, 1],
             head_scale_conv_out_channels=[8, 4, 4],
             head_scale_conv_kernel_sizes=[1, 1, 1],
-            head_scale_final_hidden_sizes=[8],
+            head_scale_final_hidden_sizes=[8, 4],
         )
 
     def create_and_check_backbone(self, config, pixel_values, labels):

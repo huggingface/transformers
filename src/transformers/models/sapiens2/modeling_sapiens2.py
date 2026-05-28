@@ -22,7 +22,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
-from torch import nn
+from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -705,19 +705,38 @@ class Sapiens2Head(nn.Module):
         return self.predictor(hidden_states)
 
 
-class Sapiens2PointmapFinalLayer(nn.Module):
-    def __init__(self, in_size: int, hidden_sizes: list[int]):
+class Sapiens2PointmapFinalLayerBlock(nn.Module):
+    def __init__(self, in_dim: int, out_dim: int, activation: nn.Module) -> None:
         super().__init__()
-        layers = [nn.Flatten()]
-        in_channels = [in_size] + hidden_sizes[:-1]
-        for in_ch, out_ch in zip(in_channels, hidden_sizes):
-            layers.append(nn.Linear(in_ch, out_ch))
-            layers.append(nn.SiLU())
-        layers.append(nn.Linear(hidden_sizes[-1], 1))
-        self.mlp = nn.Sequential(*layers)
+        self.layers = [nn.Linear(in_dim, out_dim), activation]
+        # Maintain submodule indexing as if part of a Sequential block
+        for i, layer in enumerate(self.layers):
+            self.add_module(str(i), layer)
+
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = input
+        for layer in self.layers:
+            hidden_state = layer(hidden_state)
+        return hidden_state
+
+
+class Sapiens2PointmapFinalLayer(nn.Module):
+    def __init__(self, in_dim: int, hidden_sizes: tuple[int, int], out_dim: int = 1, activation: str = "silu"):
+        super().__init__()
+        self.flatten = nn.Flatten()
+        self.block1 = Sapiens2PointmapFinalLayerBlock(
+            in_dim=in_dim, out_dim=hidden_sizes[0], activation=ACT2FN[activation]
+        )
+        self.block2 = Sapiens2PointmapFinalLayerBlock(
+            in_dim=hidden_sizes[0], out_dim=hidden_sizes[1], activation=ACT2FN[activation]
+        )
+        self.proj = nn.Linear(hidden_sizes[1], out_dim)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.mlp(hidden_states)
+        hidden_states = self.flatten(hidden_states)
+        hidden_states = self.block1(hidden_states)
+        hidden_states = self.block2(hidden_states)
+        return self.proj(hidden_states)
 
 
 class Sapiens2PointmapScaleHead(nn.Module):
@@ -744,7 +763,9 @@ class Sapiens2PointmapScaleHead(nn.Module):
             self.conv_layers.append(
                 Sapiens2ConvLayer(in_ch, out_ch, kernel_size=kernel_size, stride=2, padding=(kernel_size - 1) // 2)
             )
-        self.predictor = Sapiens2PointmapFinalLayer(flat_size, config.head_scale_final_hidden_sizes)
+        self.predictor = Sapiens2PointmapFinalLayer(
+            flat_size, config.head_scale_final_hidden_sizes, activation=config.hidden_act
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for layer in self.conv_layers:

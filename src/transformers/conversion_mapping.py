@@ -1106,10 +1106,9 @@ def _build_checkpoint_conversion_mapping():
                 r"decode_head\.scale_conv_layers\.6\.bias",
                 r"scale_head.conv_layers.2.convolution.bias",
             ),
-            WeightRenaming(
-                r"decode_head\.scale_final_layer\.",
-                r"scale_head.predictor.mlp.",
-            ),
+            WeightRenaming(r"decode_head\.scale_final_layer\.1\.", r"scale_head.predictor.block1.0."),
+            WeightRenaming(r"decode_head\.scale_final_layer\.3\.", r"scale_head.predictor.block2.0."),
+            WeightRenaming(r"decode_head\.scale_final_layer\.5\.", r"scale_head.predictor.proj."),
         ],
         "Sapiens2ForImageMatting": [
             WeightRenaming(r"^backbone\.", r"sapiens2."),
