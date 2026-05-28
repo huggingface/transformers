@@ -23,10 +23,12 @@ import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from concurrent.futures import Future
+from dataclasses import dataclass
 from queue import Queue
 from typing import TYPE_CHECKING
 
 from transformers.utils import logging
+from transformers.utils.chat_parsing import ResponseParser
 
 
 if TYPE_CHECKING:
@@ -89,11 +91,8 @@ class CBWorkerDeadError(RuntimeError):
     """
 
 
-# Fallback tool-call configs for model_types whose tokenizer doesn't declare its own. Keys are
-# tuples of exact model_type strings (matched against model.config.model_type). Models not listed
-# here get no tool-call parsing.
-_TOOL_CALL_FALLBACKS = {
-    # Pre-3.5 Qwen family: <tool_call>{"name": ..., "arguments": {...}}</tool_call>
+# Fallback response_template per model_type for tokenizers that don't ship one.
+_RESPONSE_TEMPLATE_FALLBACKS = {
     (
         "qwen2",
         "qwen2_moe",
@@ -105,256 +104,199 @@ _TOOL_CALL_FALLBACKS = {
         "qwen3_vl",
         "qwen3_vl_moe",
     ): {
-        "stc": "<tool_call>",
-        "etc": "</tool_call>",
-        "schema": {
-            "defaults": {},
-            "fields": {
-                "tool_calls": {
-                    "open": "<tool_call>",
-                    "close": "</tool_call>",
-                    "repeats": True,
-                    "content": "json",
-                },
+        "defaults": {"role": "assistant"},
+        "start_anchor": "<|im_start|>assistant\n",
+        "fields": {
+            "thinking": {
+                "open": "<think>",
+                "close": "</think>",
+                "content": "text",
+            },
+            "tool_calls": {
+                "open": "<tool_call>",
+                "close": "</tool_call>",
+                "repeats": True,
+                "content": "json",
+                "transform": {"type": "function", "function": "{content}"},
+            },
+            "content": {
+                "close": ["<|im_end|>", "<|endoftext|>", "<|eot_id|>"],
+                "content": "text",
             },
         },
     },
-    # Qwen 3.5 family wraps tool calls in <tool_call>...</tool_call> (single-token delimiters,
-    # so the streamer filters them out cleanly) around an inner
-    # <function=NAME><parameter=KEY>VALUE</parameter></function> markup that holds the call data.
-    ("qwen3_5", "qwen3_5_moe"): {
-        "stc": "<tool_call>",
-        "etc": "</tool_call>",
-        "schema": {
-            "x-regex-iterator": r"<function=(?P<name>[^>\n]+)>(?P<arguments>.*?)</function>",
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string"},
-                    "arguments": {
-                        "type": "object",
-                        "x-regex-key-value": r"<parameter=(?P<key>[^>\n]+)>\s*(?P<value>.*?)\s*</parameter>",
-                    },
+    ("gemma4",): {
+        "defaults": {"role": "assistant"},
+        "fields": {
+            "thinking": {
+                "open": "<|channel>thought\n",
+                "close": "<channel|>",
+                "content": "text",
+            },
+            "tool_calls": {
+                "open_pattern": r"<\|tool_call>call:(?P<name>\w+)",
+                "close": "<tool_call|>",
+                "repeats": True,
+                "content": "json",
+                "content_args": {
+                    "unquoted_keys": True,
+                    "string_delims": [['<|"|>', '<|"|>']],
                 },
+                "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
+            },
+            "content": {
+                "close": ["<turn|>", "<|tool_response>", "<eos>"],
+                "content": "text",
             },
         },
     },
 }
 
 
-def get_tool_call_config(processor, model: "PreTrainedModel") -> dict | None:
-    """Return tool call config for the model, or ``None`` if tool calls are not supported.
+@dataclass
+class ToolCall:
+    """A parsed tool call surfaced through the stream queue when the parser
+    closes a `tool_calls` region. ``arguments`` is always a JSON string."""
 
-    Returns a dict with:
-        - ``schema`` (`dict`): Schema to pass to ``tokenizer.parse_response(block, schema)``.
-        - ``stc_id`` (`int`): Token ID of the start-of-tool-call delimiter.
-        - ``etc_id`` (`int`): Token ID of the end-of-tool-call delimiter.
+    name: str
+    arguments: str
+
+
+def get_response_template(processor, model: "PreTrainedModel") -> dict | None:
+    """Return the response template (new declarative format) for this model.
+
+    Resolution order:
+        1. ``tokenizer.response_template`` if set on the tokenizer.
+        2. Fallback in :data:`_RESPONSE_TEMPLATE_FALLBACKS` matched by ``model.config.model_type``.
+        3. ``None`` (no parsing performed; raw text is streamed through).
     """
     tokenizer = getattr(processor, "tokenizer", processor)
-    stc = getattr(tokenizer, "stc_token", None)
-    etc = getattr(tokenizer, "etc_token", None)
-    response_template = getattr(tokenizer, "response_template", None)
-    response_schema = getattr(tokenizer, "response_schema", None)
-
-    schema: dict | None = None
-    # Prefer the new-style response_template (e.g. Gemma 4).
-    if stc and etc and response_template and "tool_calls" in response_template.get("fields", {}):
-        schema = {
-            "defaults": {},
-            "fields": {"tool_calls": response_template["fields"]["tool_calls"]},
-        }
-    # Legacy response_schema path (still supported for old tokenizers).
-    elif stc and etc and response_schema:
-        schema = response_schema["properties"]["tool_calls"]
-    else:
-        # Fallback: known model families without full tokenizer config. Matched by exact
-        # model_type against the tuple keys of _TOOL_CALL_FALLBACKS.
-        model_type = model.config.model_type
-        fallback = next((v for types, v in _TOOL_CALL_FALLBACKS.items() if model_type in types), None)
-        if fallback is None:
-            return None
-        stc, etc, schema = fallback["stc"], fallback["etc"], fallback["schema"]
-
-    stc_id = tokenizer.convert_tokens_to_ids(stc)
-    etc_id = tokenizer.convert_tokens_to_ids(etc)
-    return {"schema": schema, "stc_id": stc_id, "etc_id": etc_id}
+    tmpl = getattr(tokenizer, "response_template", None)
+    if tmpl is not None:
+        return tmpl
+    model_type = model.config.model_type
+    return next((v for types, v in _RESPONSE_TEMPLATE_FALLBACKS.items() if model_type in types), None)
 
 
-def _normalize_tool_call(tool_call: dict) -> dict:
-    """Normalize a parsed tool call to ``{"name": str, "arguments": str}``.
+def build_response_parser(
+    processor,
+    model: "PreTrainedModel",
+    input_ids,
+) -> "ResponseParser | None":
+    """Build a streaming :class:`ResponseParser` for the current generation.
 
-    Different models return different structures from ``parse_response``:
-    - Gemma: ``{"function": {"name": ..., "arguments": {...}}}`` (nested, arguments as dict)
-    - Qwen:  ``{"name": ..., "arguments": {...}}`` (flat, arguments as dict)
+    Returns ``None`` when no template is available for the model (then text
+    streams through unparsed).
 
-    The OpenAI API expects ``arguments`` as a JSON **string**, so we ``json.dumps`` it.
+    `input_ids` is decoded and passed to the parser as `prefix=` so templates
+    that declare a `start_anchor` get prefill-aware parsing (e.g. for a future
+    prefilled `<think>\\n` opener). Templates without `start_anchor` fail
+    closed and ignore the prefix — safe for chat templates where the anchor
+    isn't at the actual generation point (e.g. Gemma 4 tool-result followups).
     """
-    function = tool_call.get("function", tool_call)
-    arguments = function.get("arguments", {})
-    return {
-        "name": function["name"],
-        "arguments": json.dumps(arguments) if not isinstance(arguments, str) else arguments,
-    }
-
-
-def parse_tool_calls(processor, generated_ids, schema: dict) -> list[dict] | None:
-    """Parse tool calls from generated token IDs using ``tokenizer.parse_response``.
-
-    Args:
-        processor: The processor or tokenizer.
-        generated_ids: Token IDs from generation. Passed directly to ``parse_response``
-            which decodes them internally, preserving special tokens that
-            ``skip_special_tokens=True`` would strip (e.g. Gemma's ``<|tool_call>``).
-        schema: The tool call schema (from ``response_schema`` or ``_TOOL_CALL_FALLBACKS``).
-
-    Returns a list of ``{"name": str, "arguments": str}`` dicts, or ``None`` if none found.
-    """
-    parsed = processor.parse_response(generated_ids, schema)
-    # The new response_template path returns a dict like {"tool_calls": [...]}; unwrap.
-    if isinstance(parsed, dict) and "tool_calls" in parsed:
-        parsed = parsed["tool_calls"]
-    if not parsed:
+    template = get_response_template(processor, model)
+    if template is None:
         return None
-    if not isinstance(parsed, list):
-        parsed = [parsed]
-    tool_calls = [_normalize_tool_call(tool_call) for tool_call in parsed]
-    return tool_calls if tool_calls else None
-
-
-# Default start/end tokens + schema. The opening token is optional so prefilled
-# ``<think>`` prompts still match.
-_DEFAULT_THINKING_TOKENS = {
-    "start": ["<think>"],
-    "end": "</think>",
-    "schema": {
-        "type": "object",
-        "properties": {
-            "thinking": {"type": "string"},
-            "content": {"type": "string"},
-        },
-        # Trailing ``(?:<\|...\|>)?\Z`` absorbs EOS markers (``<|im_end|>``,
-        # ``<|endoftext|>``, ``<|eot_id|>``) that would otherwise be captured by the
-        # content group, since ``parse_response`` decodes with ``skip_special_tokens=False``.
-        "x-regex": r"(?:<think>)?(?P<thinking>.*?)</think>(?P<content>.*?)(?:<\|[^|<>\s]+\|>)?\Z",
-    },
-}
-# Streaming-side token IDs for families whose ``response_schema`` uses non-default
-# start/end tokens. Post-hoc parsing uses the schema; this only feeds the
-# streamer's token-level detector.
-_THINKING_TOKENS = {
-    # Gemma 4's response_schema regex anchors on the literal ``<|channel>thought\n``,
-    # consuming the newline before the thinking capture begins. Include ``\n`` in the
-    # streamer's start sequence so it's suppressed the same way.
-    "gemma4": {"start": ["<|channel>", "thought", "\n"], "end": "<channel|>"},
-}
-
-
-def get_reasoning_config(processor, model: "PreTrainedModel", input_ids=None) -> dict | None:
-    """Return reasoning config for the model, or ``None`` if not supported.
-
-    The config drives both streaming detection (token IDs) and post-hoc parsing
-    (response schema). Returns a dict with:
-        - ``start_ids`` (`list[int]`): Token ID sequence that opens a thinking block.
-        - ``end_id`` (`int`): Token ID that closes the block.
-        - ``schema`` (`dict`): Response schema with ``thinking`` / ``content``
-          properties for :func:`parse_reasoning`.
-        - ``start_in_thinking`` (`bool`, only when ``input_ids`` is given): Whether
-          the rendered prompt already opened an unclosed thinking block (prefilled
-          by the template), so the model's output begins inside the block.
-    """
     tokenizer = getattr(processor, "tokenizer", processor)
-    model_type = model.config.model_type.lower()
-    thinking_tokens = next(
-        (v for k, v in _THINKING_TOKENS.items() if k == model_type),
-        _DEFAULT_THINKING_TOKENS,
-    )
-    start_ids = [tokenizer.convert_tokens_to_ids(t) for t in thinking_tokens["start"]]
-    end_id = tokenizer.convert_tokens_to_ids(thinking_tokens["end"])
-    if any(tid in (None, tokenizer.unk_token_id) for tid in start_ids) or end_id in (None, tokenizer.unk_token_id):
-        return None
-    # Custom-token families (e.g. Gemma 4) provide their schema via the tokenizer;
-    # default ``<think>`` falls back to the schema baked into ``_DEFAULT_THINKING_TOKENS``.
-    schema = getattr(tokenizer, "response_schema", None)
-    if not (schema and "thinking" in schema["properties"]):
-        schema = _DEFAULT_THINKING_TOKENS["schema"]
-    config: dict = {"start_ids": start_ids, "end_id": end_id, "schema": schema}
-    if input_ids is not None:
-        config["start_in_thinking"] = _starts_in_thinking(input_ids, start_ids)
-    return config
+    return ResponseParser(template, prefix=_decode_prefix(tokenizer, input_ids))
 
 
-def parse_reasoning(processor, generated_ids, content: str, reasoning_config: dict) -> tuple[str, str | None]:
-    """Split generated output into ``(content, reasoning_content)`` via ``parse_response``.
+def _normalize_tool_call(value: dict) -> ToolCall:
+    """Convert one parsed ``tool_calls`` entry into a :class:`ToolCall`.
 
-    If the schema's regex matches (closing marker present), use it. For prompts
-    that prefill the opener (QwQ-32B, DeepSeek-R1) the entire output is reasoning
-    until ``</think>`` arrives — when that's truncated, fall back to treating
-    all decoded text as reasoning. Returns ``(content, None)`` otherwise.
+    Every template in this codebase shapes a tool call as
+    ``{"type": "function", "function": {"name": ..., "arguments": ...}}`` —
+    the parser already extracted ``name`` and ``arguments`` for us. The only
+    work left is re-serializing ``arguments`` to a JSON string, since the
+    field uses ``"content": "json"`` so the parser hands us a parsed dict
+    while the OpenAI API expects a string.
     """
-    parsed = processor.parse_response(generated_ids, reasoning_config["schema"])
-    if parsed:
-        reasoning = parsed.get("thinking", "")
-        if reasoning:
-            return parsed.get("content", ""), reasoning
-    # Prefilled opener (QwQ-32B, DeepSeek-R1) truncated before ``</think>`` —
-    # no anchor for the schema regex; treat all output as reasoning.
-    if reasoning_config.get("start_in_thinking"):
-        return "", content
-    return content, None
+    fn = value["function"]
+    args = fn["arguments"]
+    if not isinstance(args, str):
+        args = json.dumps(args)
+    return ToolCall(name=fn["name"], arguments=args)
 
 
-def _starts_in_thinking(input_ids, start_ids: list[int]) -> bool:
-    """True if the rendered prompt ends with an unclosed thinking block.
+def _decode_prefix(tokenizer, input_ids) -> str:
+    """Decode ``input_ids`` to the chat prompt string the parser expects as ``prefix=``.
 
-    Some reasoning-model chat templates prefill the thinking opener as the final
-    prompt tokens (e.g. DeepSeek-R1, QwQ-32B emit ``<think>\\n`` at the end when
-    ``add_generation_prompt=True``). In those cases the model resumes *inside*
-    the block, so its output contains only ``...reasoning</think>answer`` with
-    no opening tag — the streamer must start with ``_inside_thinking=True``.
-
-    The prefill always lands at the tail of the prompt (optionally followed by a
-    single whitespace token like ``\\n``), so we only inspect the last few tokens.
-    """
+    Serve always handles one request at a time, but the upstream shape varies:
+    ``apply_chat_template(return_tensors="pt")`` hands us a 2D ``[1, N]`` tensor
+    while continuous batching hands us a flat ``list[int]``. Both forms hold a
+    single sequence; this helper unwraps it before decoding."""
     if hasattr(input_ids, "tolist"):
         input_ids = input_ids.tolist()
     if input_ids and isinstance(input_ids[0], list):
-        if len(input_ids) != 1:
-            return False
         input_ids = input_ids[0]
-    n = len(start_ids)
-    # Match start_ids at the tail, allowing up to one trailing token (e.g. "\n").
-    for trailing in (0, 1):
-        if len(input_ids) >= n + trailing:
-            end = len(input_ids) - trailing
-            if input_ids[end - n : end] == start_ids:
-                return True
-    return False
+    return tokenizer.decode(input_ids)
 
 
-def _advance_thinking_state(streamer, token_id: int) -> bool:
-    """Mutate ``streamer``'s thinking state; return ``True`` if ``token_id`` is a start or end token.
+def parse_assistant_message(
+    processor,
+    model: "PreTrainedModel",
+    generated_ids,
+    input_ids,
+    cleaned_content: str = "",
+) -> tuple[str, str | None, list[ToolCall] | None]:
+    """Parse a full assistant message into ``(content, reasoning, tool_calls)``.
 
-    Shared between :class:`DirectStreamer` and :class:`CBStreamer` — both track the
-    same four attributes (``_thinking_start_ids``, ``_thinking_end_id``,
-    ``_inside_thinking``, ``_thinking_prefix``) and need identical edge handling.
+    Uses :meth:`tokenizer.parse_response` with the resolved response template
+    (see :func:`get_response_template`). When no template is available, returns
+    ``(cleaned_content, None, None)`` — i.e., surface the raw model decode.
+
+    ``cleaned_content`` is the ``skip_special_tokens=True`` decode of
+    ``generated_ids``. The parser itself runs on the raw decode (keeping
+    special tokens so it can match delimiters like Gemma 4's ``<|tool_call>``);
+    ``cleaned_content`` is only used on the no-template path."""
+    template = get_response_template(processor, model)
+    if template is None:
+        return cleaned_content, None, None
+    tokenizer = getattr(processor, "tokenizer", processor)
+    parsed = tokenizer.parse_response(generated_ids, template, prefix=_decode_prefix(tokenizer, input_ids))
+    # Absent ``content`` key means the model emitted only tool calls / thinking;
+    # surface that as an empty string rather than swapping in the raw decode.
+    content = parsed.get("content", "")
+    reasoning = parsed.get("thinking")
+    raw = parsed.get("tool_calls") or []
+    tool_calls = [_normalize_tool_call(v) for v in raw] or None
+    return content, reasoning, tool_calls
+
+
+def response_events_to_chunks(events: list[dict]) -> list:
+    """Translate :class:`ResponseParser` events into stream-queue items.
+
+    Output items are one of:
+      - ``str``                 — plain content delta (also raw text when no parser is active)
+      - :class:`ReasoningText`  — reasoning / thinking delta
+      - :class:`ToolCall`       — completed tool call on region close
+
+    Other events (``region_open``, raw dirty chunks of structured fields like
+    ``json`` tool calls, ``region_close`` for non-tool fields) carry no
+    user-visible payload and are dropped.
     """
-    if streamer._thinking_start_ids is None:
-        return False
-    if streamer._inside_thinking:
-        if token_id == streamer._thinking_end_id:
-            streamer._inside_thinking = False
-            return True
-        return False
-    expected = streamer._thinking_start_ids[len(streamer._thinking_prefix)]
-    if token_id != expected:
-        streamer._thinking_prefix = []
-        return False
-    streamer._thinking_prefix.append(token_id)
-    if len(streamer._thinking_prefix) == len(streamer._thinking_start_ids):
-        streamer._inside_thinking = True
-        streamer._thinking_prefix = []
-    return True
+    out: list = []
+    for ev in events:
+        kind = ev["type"]
+        field = ev.get("field")
+        if kind == "region_chunk":
+            if ev.get("dirty"):
+                # Structured fields (json/xml-inline) stream raw bytes; the
+                # parsed value lands in `region_close`.
+                continue
+            text = ev.get("text") or ""
+            if not text:
+                continue
+            if field == "thinking":
+                out.append(ReasoningText(text))
+            elif field == "content":
+                out.append(text)
+            # Unknown fields are ignored — handlers can extend this if needed.
+        elif kind == "region_close" and field == "tool_calls":
+            tc = _normalize_tool_call(ev.get("value"))
+            if tc is not None:
+                out.append(tc)
+    return out
 
 
 class DownloadAggregator:
@@ -485,41 +427,36 @@ class DirectStreamer:
         tokenizer: "tokenizers.Tokenizer",
         loop: asyncio.AbstractEventLoop,
         queue: asyncio.Queue,
-        skip_special_tokens: bool = True,
-        tool_config: dict | None = None,
-        reasoning_config: dict | None = None,
+        response_parser: "ResponseParser | None" = None,
     ):
         """
         Args:
             tokenizer: The Rust tokenizer (``tokenizer._tokenizer``).
             loop (`asyncio.AbstractEventLoop`): The event loop to push decoded text to.
             queue (`asyncio.Queue`): The queue that receives decoded text chunks.
-            skip_special_tokens (`bool`, *optional*, defaults to `True`):
-                Whether to strip special tokens during decoding.
-            tool_config (`dict`, *optional*): Tool call config from ``get_tool_call_config``.
-                When set, tokens between stc/etc delimiters (inclusive) are suppressed
-                from the queue so tool call markup is never streamed to the client.
-            reasoning_config (`dict`, *optional*): Thinking config from ``get_reasoning_config``.
-                When set, tokens between start/end delimiters are wrapped as
-                :class:`ReasoningText` so handlers route them to ``reasoning_content``.
+            response_parser (`ResponseParser`, *optional*): When provided, every
+                decoded chunk is fed through this parser; the resulting events
+                are translated into typed queue items (plain ``str`` for content,
+                :class:`ReasoningText` for thinking, :class:`ToolCall` on tool
+                call close). Without a parser, raw decoded text is streamed.
         """
         from tokenizers.decoders import DecodeStream
 
         self._tokenizer = tokenizer
         self._loop = loop
         self._queue = queue
-        self._decode_stream = DecodeStream([], skip_special_tokens)
-        self._stc_id = tool_config["stc_id"] if tool_config else None
-        self._etc_id = tool_config["etc_id"] if tool_config else None
-        self._inside_tool_call = False
-        self._thinking_start_ids = reasoning_config["start_ids"] if reasoning_config else None
-        self._thinking_end_id = reasoning_config["end_id"] if reasoning_config else None
-        self._inside_thinking = bool(reasoning_config and reasoning_config.get("start_in_thinking"))
-        self._thinking_prefix: list[int] = []
+        skip_special_tokens = response_parser is None
+        self._decode_stream = DecodeStream([], skip_special_tokens=skip_special_tokens)
+        self._parser = response_parser
         self._first = True
         self._cancelled = threading.Event()
         self.total_tokens = 0
-        self.generated_token_ids: list[int] = []
+        if self._parser is not None:
+            for item in response_events_to_chunks(self._parser.initial_events):
+                self._loop.call_soon_threadsafe(self._queue.put_nowait, item)
+
+    def _enqueue(self, item) -> None:
+        self._loop.call_soon_threadsafe(self._queue.put_nowait, item)
 
     def put(self, value: "torch.Tensor") -> None:
         """Called by ``model.generate()`` after each decode step with new token(s)."""
@@ -531,25 +468,28 @@ class DirectStreamer:
             return
         for token_id in value.tolist():
             self.total_tokens += 1
-            self.generated_token_ids.append(token_id)
-
-            if token_id == self._stc_id:
-                self._inside_tool_call = True
-            elif token_id == self._etc_id:
-                self._inside_tool_call = False
-
-            is_start_or_end_token = _advance_thinking_state(self, token_id)
-
             text = self._decode_stream.step(self._tokenizer, token_id)
-            if text is None or self._inside_tool_call or token_id == self._etc_id or is_start_or_end_token:
+            if text is None:
                 continue
-            if self._inside_thinking:
-                text = ReasoningText(text)
-            self._loop.call_soon_threadsafe(self._queue.put_nowait, text)
+            if self._parser is None:
+                self._enqueue(text)
+            else:
+                for item in response_events_to_chunks(self._parser.feed(text)):
+                    self._enqueue(item)
 
     def end(self) -> None:
-        """Called by ``model.generate()`` when generation is complete."""
-        self._loop.call_soon_threadsafe(self._queue.put_nowait, None)
+        """Flush any final parser events, then push the EOS sentinel."""
+        if self._parser is not None:
+            try:
+                _msg, final_events = self._parser.finalize()
+            except (ValueError, RuntimeError) as e:
+                # Generation stopped mid-region (likely max_new_tokens hit
+                # inside a structured field like a tool call).
+                logger.warning(f"ResponseParser.finalize() failed; dropping final tail events: {e}")
+                final_events = []
+            for item in response_events_to_chunks(final_events):
+                self._enqueue(item)
+        self._enqueue(None)
 
     def cancel(self) -> None:
         """Signal cancellation. The next ``put()`` call will raise and abort ``model.generate()``."""
@@ -572,8 +512,7 @@ class CBStreamer:
         tokenizer: "tokenizers.Tokenizer",
         loop: asyncio.AbstractEventLoop,
         queue: asyncio.Queue,
-        tool_config: dict | None = None,
-        reasoning_config: dict | None = None,
+        response_parser: "ResponseParser | None" = None,
     ):
         """
         Args:
@@ -582,8 +521,7 @@ class CBStreamer:
             tokenizer: The Rust tokenizer (``tokenizer._tokenizer``).
             loop (`asyncio.AbstractEventLoop`): The event loop to push decoded text to.
             queue (`asyncio.Queue`): The queue that receives decoded text chunks.
-            tool_config (`dict`, *optional*): Tool call config (see ``DirectStreamer``).
-            reasoning_config (`dict`, *optional*): Thinking config (see ``DirectStreamer``).
+            response_parser (`ResponseParser`, *optional*): See :class:`DirectStreamer`.
         """
         from tokenizers.decoders import DecodeStream
 
@@ -592,17 +530,15 @@ class CBStreamer:
         self._loop = loop
         self._queue = queue
         self._tokenizer = tokenizer
-        self._decode_stream = DecodeStream([], True)
-        self._stc_id = tool_config["stc_id"] if tool_config else None
-        self._etc_id = tool_config["etc_id"] if tool_config else None
-        self._inside_tool_call = False
-        self._thinking_start_ids = reasoning_config["start_ids"] if reasoning_config else None
-        self._thinking_end_id = reasoning_config["end_id"] if reasoning_config else None
-        self._inside_thinking = bool(reasoning_config and reasoning_config.get("start_in_thinking"))
-        self._thinking_prefix: list[int] = []
+        # See note in DirectStreamer: keep special tokens when a parser is active.
+        skip_special_tokens = response_parser is None
+        self._decode_stream = DecodeStream([], skip_special_tokens=skip_special_tokens)
+        self._parser = response_parser
         self._prev_len = 0
         self.total_tokens = 0
-        self.generated_token_ids: list[int] = []
+        if self._parser is not None:
+            for item in response_events_to_chunks(self._parser.initial_events):
+                self._queue.put_nowait(item)
 
     def put(self, output: "GenerationOutput") -> None:
         """Decode new tokens from a CB ``GenerationOutput`` and push text to the queue."""
@@ -610,24 +546,27 @@ class CBStreamer:
         self._prev_len = len(output.generated_tokens)
         for token_id in new_tokens:
             self.total_tokens += 1
-            self.generated_token_ids.append(token_id)
-
-            if token_id == self._stc_id:
-                self._inside_tool_call = True
-            elif token_id == self._etc_id:
-                self._inside_tool_call = False
-
-            is_start_or_end_token = _advance_thinking_state(self, token_id)
-
             text = self._decode_stream.step(self._tokenizer, token_id)
-            if text is None or self._inside_tool_call or token_id == self._etc_id or is_start_or_end_token:
+            if text is None:
                 continue
-            if self._inside_thinking:
-                text = ReasoningText(text)
-            self._queue.put_nowait(text)
+            if self._parser is None:
+                self._queue.put_nowait(text)
+            else:
+                for item in response_events_to_chunks(self._parser.feed(text)):
+                    self._queue.put_nowait(item)
 
     def end(self) -> None:
-        """Signal end of stream."""
+        """Flush any final parser events, then push the EOS sentinel."""
+        if self._parser is not None:
+            try:
+                _msg, final_events = self._parser.finalize()
+            except (ValueError, RuntimeError) as e:
+                # Generation stopped mid-region (likely max_new_tokens hit
+                # inside a structured field like a tool call).
+                logger.warning(f"ResponseParser.finalize() failed; dropping final tail events: {e}")
+                final_events = []
+            for item in response_events_to_chunks(final_events):
+                self._queue.put_nowait(item)
         self._queue.put_nowait(None)
 
     def cancel(self) -> None:
@@ -710,8 +649,7 @@ class BaseGenerateManager(ABC):
         inputs: dict,
         gen_config: "GenerationConfig",
         request_id: str,
-        tool_config: dict | None = None,
-        reasoning_config: dict | None = None,
+        response_parser: "ResponseParser | None" = None,
     ) -> tuple[asyncio.Queue, "DirectStreamer | CBStreamer"]:
         """Start streaming generation.
 
@@ -721,15 +659,15 @@ class BaseGenerateManager(ABC):
             inputs (`dict`): Tokenized inputs (tensors for sequential, lists for CB).
             gen_config (`GenerationConfig`): Generation parameters.
             request_id (`str`): Unique request identifier.
-            tool_config (`dict`, *optional*): Tool call config from ``get_tool_call_config``.
-                When set, tool call tokens (between stc/etc) are suppressed from output.
-            reasoning_config (`dict`, *optional*): Thinking config from ``get_reasoning_config``.
-                When set, thinking tokens are wrapped as :class:`ReasoningText`.
+            response_parser (`ResponseParser`, *optional*): When provided, decoded
+                text is fed through this parser and typed items (``str`` for content,
+                :class:`ReasoningText`, :class:`ToolCall`) are pushed onto the queue
+                instead of raw text.
 
         Returns:
             `tuple[asyncio.Queue, DirectStreamer | CBStreamer]`: A ``(queue, streamer)`` pair
-            where *queue* yields ``str | _StreamError | None`` and *streamer* exposes
-            ``.total_tokens`` and ``.cancel()``.
+            where *queue* yields ``str | ReasoningText | ToolCall | _StreamError | None``
+            and *streamer* exposes ``.total_tokens`` and ``.cancel()``.
         """
 
     @abstractmethod
@@ -772,17 +710,14 @@ class GenerateManager(BaseGenerateManager):
         inputs: dict,
         gen_config: "GenerationConfig",
         request_id: str,
-        tool_config: dict | None = None,
-        reasoning_config: dict | None = None,
+        response_parser: "ResponseParser | None" = None,
     ) -> tuple[asyncio.Queue, DirectStreamer]:
         """Start streaming generation via ``model.generate()`` on the inference thread."""
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
         # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
         rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer  # type: ignore[union-attr]
-        streamer = DirectStreamer(
-            rust_tokenizer, loop, queue, tool_config=tool_config, reasoning_config=reasoning_config
-        )
+        streamer = DirectStreamer(rust_tokenizer, loop, queue, response_parser=response_parser)
         gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
         if hasattr(model, "has_talker"):
             gen_kwargs["generation_mode"] = "text"
@@ -888,8 +823,7 @@ class CBGenerateManager(BaseGenerateManager):
         inputs: dict,
         gen_config: "GenerationConfig",
         request_id: str,
-        tool_config: dict | None = None,
-        reasoning_config: dict | None = None,
+        response_parser: "ResponseParser | None" = None,
     ) -> tuple[asyncio.Queue, CBStreamer]:
         """Start streaming CB generation. Registers a per-request output handler."""
         cb = self._cb
@@ -916,8 +850,7 @@ class CBGenerateManager(BaseGenerateManager):
             rust_tokenizer,
             loop,
             text_queue,
-            tool_config=tool_config,
-            reasoning_config=reasoning_config,
+            response_parser=response_parser,
         )
 
         # Register a direct callback: the dispatcher calls this on the event loop with each GenerationOutput.
@@ -1121,10 +1054,8 @@ class BaseHandler:
             logger.warning_once(f"Ignoring unsupported fields in the request: {unused}")
 
     @staticmethod
-    def chunk_to_sse(chunk: "str | pydantic.BaseModel") -> str:
-        """Format a pydantic model or string as an SSE ``data:`` line."""
-        if isinstance(chunk, str):
-            return chunk if chunk.startswith("data: ") else f"data: {chunk}\n\n"
+    def chunk_to_sse(chunk: "pydantic.BaseModel") -> str:
+        """Format a pydantic model as an SSE ``data:`` line."""
         return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
     def _resolve_model(self, body: dict) -> tuple[str, "PreTrainedModel", "ProcessorMixin | PreTrainedTokenizerFast"]:
@@ -1223,9 +1154,8 @@ class BaseHandler:
                 tool_calls = []
                 for tc in message["tool_calls"]:
                     tc = copy.deepcopy(tc)
-                    fn = tc.get("function") or tc
-                    if isinstance(fn["arguments"], str):
-                        fn["arguments"] = json.loads(fn["arguments"])
+                    if isinstance(tc["function"]["arguments"], str):
+                        tc["function"]["arguments"] = json.loads(tc["function"]["arguments"])
                     tool_calls.append(tc)
                 parsed["tool_calls"] = tool_calls
             if "tool_call_id" in message:

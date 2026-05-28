@@ -169,7 +169,7 @@ class TranscriptionHandler:
         tokenizer = audio_processor.tokenizer if hasattr(audio_processor, "tokenizer") else audio_processor
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
-        streamer = DirectStreamer(tokenizer._tokenizer, loop, queue, skip_special_tokens=True)
+        streamer = DirectStreamer(tokenizer._tokenizer, loop, queue)
         gen_kwargs = {**audio_inputs, "streamer": streamer}
 
         def _run():

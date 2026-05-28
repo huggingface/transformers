@@ -46,12 +46,20 @@ class ResponseTemplate:
     start_anchor_lits: list[str] | None = None
 
     def truncate_past_last_anchor(self, text: str, *, log_if_missing: bool = True) -> str:
-        """When parsing responses, we can't just parse the tokens generated
-        by the model. This is because chat templates often include early parts of the message such as <start_of_turn>
-        or <think> tokens in the prefill. Therefore, we take the whole chat as input, but truncate to the start
-        of the most recent assistant message, which can include tokens from the template as well as the output."""
+        """Return the slice of `text` after the last `start_anchor` match.
+
+        Prefix processing is opt-in: callers must declare a `start_anchor` (or
+        `start_anchor_pattern`) so the parser knows exactly where the current
+        assistant turn begins. Without it, processing the full prefix would
+        scoop up prior turns and write them into the parser's output dict — so
+        we fail closed and return an empty string instead.
+
+        Empty string is also returned when an anchor is declared but absent
+        from the prefix (logged once as it likely indicates a template/caller
+        bug). The caller's `_consume_prefix` short-circuits on the empty
+        string, leaving the parser in its fresh state."""
         if self.start_anchor_re is None:
-            return text
+            return ""
         last_end: int | None = None
         for m in self.start_anchor_re.finditer(text):
             last_end = m.end()
@@ -60,9 +68,9 @@ class ResponseTemplate:
                 kind = "start_anchor" if self.start_anchor_lits is not None else "start_anchor_pattern"
                 logger.warning_once(
                     f"response_template defines {kind} but the anchor was not found "
-                    "in the prefix; the parser will process the entire prefix instead."
+                    "in the prefix; the prefix will be ignored."
                 )
-            return text
+            return ""
         return text[last_end:]
 
 

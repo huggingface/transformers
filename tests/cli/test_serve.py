@@ -33,12 +33,14 @@ from transformers.cli.serving.response import ResponseHandler, compute_usage
 from transformers.cli.serving.server import build_server
 from transformers.cli.serving.transcription import TranscriptionHandler
 from transformers.cli.serving.utils import (
-    _TOOL_CALL_FALLBACKS,
+    _RESPONSE_TEMPLATE_FALLBACKS,
     BaseHandler,
     GenerationState,
     Modality,
-    get_tool_call_config,
-    parse_tool_calls,
+    ToolCall,
+    get_response_template,
+    parse_assistant_message,
+    response_events_to_chunks,
 )
 from transformers.testing_utils import (
     require_librosa,
@@ -49,7 +51,7 @@ from transformers.testing_utils import (
     require_vision,
     slow,
 )
-from transformers.utils.chat_parsing import parse_response
+from transformers.utils.chat_parsing import ResponseParser
 from transformers.utils.import_utils import is_serve_available
 
 
@@ -530,14 +532,6 @@ class TestChunkSSE(unittest.TestCase):
         sse = handler._build_chunk_sse(request_id="req1", finish_reason="stop", model="m")
         parsed = json.loads(sse[len("data: ") :].strip())
         self.assertEqual(parsed["choices"][0]["finish_reason"], "stop")
-
-    def test_chunk_to_sse_string_passthrough(self):
-        result = BaseHandler.chunk_to_sse("data: already formatted\n\n")
-        self.assertEqual(result, "data: already formatted\n\n")
-
-    def test_chunk_to_sse_wraps_plain_string(self):
-        result = BaseHandler.chunk_to_sse("hello")
-        self.assertEqual(result, "data: hello\n\n")
 
 
 @require_serve
@@ -1788,45 +1782,109 @@ class TestMultimodalLM(unittest.TestCase):
 
 
 class TestToolCallUnit(unittest.TestCase):
-    """Unit tests for tool call parsing utilities (no server needed)."""
+    """Unit tests for response-template resolution and tool-call parsing
+    (no server needed). Parsing logic itself is covered by
+    `tests/utils/test_chat_parsing.py`; here we only check the serve-layer wiring.
+    """
 
-    def test_get_tool_call_config_fallback(self):
-        """Fallback config is returned for known model families (Qwen)."""
+    def test_get_response_template_fallback(self):
+        """Fallback template is returned for known model families (Qwen)."""
         model = MagicMock()
         model.config.model_type = "qwen2"
-        processor = MagicMock(spec=["convert_tokens_to_ids"])
-        processor.convert_tokens_to_ids.return_value = 151657
-        config = get_tool_call_config(processor, model)
-        self.assertIsNotNone(config)
-        self.assertEqual(config["stc_id"], 151657)
-        self.assertEqual(config["etc_id"], 151657)
+        # Tokenizer without `response_template` set -> falls back to the table.
+        processor = MagicMock(spec=["tokenizer"])
+        processor.tokenizer = MagicMock(spec=[])
+        template = get_response_template(processor, model)
+        self.assertIsNotNone(template)
+        self.assertIn("tool_calls", template["fields"])
 
-    def test_get_tool_call_config_unsupported(self):
-        """None is returned for models without tool call support."""
+    def test_get_response_template_unsupported(self):
+        """None is returned for models with no template and no fallback."""
         model = MagicMock()
         model.config.model_type = "llama"
-        processor = MagicMock(spec=[])
-        self.assertIsNone(get_tool_call_config(processor, model))
+        processor = MagicMock(spec=["tokenizer"])
+        processor.tokenizer = MagicMock(spec=[])
+        self.assertIsNone(get_response_template(processor, model))
 
-    def test_parse_tool_calls_from_text(self):
+    def test_parse_assistant_message_tool_call(self):
+        """parse_assistant_message extracts a single tool call from raw text."""
         text = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>'
+        # Build a fake processor whose tokenizer applies the Qwen fallback template.
+        template = next(v for k, v in _RESPONSE_TEMPLATE_FALLBACKS.items() if "qwen2" in k)
+        tokenizer = MagicMock()
+        tokenizer.response_template = None
+        tokenizer.parse_response.return_value = {
+            "role": "assistant",
+            "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": {"city": "Paris"}}}],
+        }
         processor = MagicMock()
-        processor.parse_response = parse_response
-        schema = next(v["schema"] for k, v in _TOOL_CALL_FALLBACKS.items() if "qwen2" in k)
-        calls = parse_tool_calls(processor, text, schema)
-        self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0]["name"], "get_weather")
-
-    def test_parse_multiple_tool_calls_from_text(self):
-        text = (
-            '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>\n'
-            '<tool_call>\n{"name": "get_weather", "arguments": {"city": "London"}}\n</tool_call>'
+        processor.tokenizer = tokenizer
+        model = MagicMock()
+        model.config.model_type = "qwen2"
+        content, reasoning, tool_calls = parse_assistant_message(
+            processor, model, generated_ids=text, input_ids=[1, 2, 3], cleaned_content=""
         )
+        self.assertIsNone(reasoning)
+        self.assertEqual(len(tool_calls), 1)
+        self.assertEqual(tool_calls[0].name, "get_weather")
+        self.assertEqual(json.loads(tool_calls[0].arguments), {"city": "Paris"})
+        # The tokenizer.parse_response stub should have received the Qwen template.
+        tokenizer.parse_response.assert_called_once()
+        called_template = tokenizer.parse_response.call_args.args[1]
+        self.assertIs(called_template, template)
+
+    def test_parse_assistant_message_multiple_tool_calls(self):
+        tokenizer = MagicMock()
+        tokenizer.response_template = None
+        tokenizer.parse_response.return_value = {
+            "role": "assistant",
+            "tool_calls": [
+                {"type": "function", "function": {"name": "get_weather", "arguments": {"city": "Paris"}}},
+                {"type": "function", "function": {"name": "get_weather", "arguments": {"city": "London"}}},
+            ],
+        }
         processor = MagicMock()
-        processor.parse_response = parse_response
-        schema = next(v["schema"] for k, v in _TOOL_CALL_FALLBACKS.items() if "qwen2" in k)
-        calls = parse_tool_calls(processor, text, schema)
-        self.assertEqual(len(calls), 2)
+        processor.tokenizer = tokenizer
+        model = MagicMock()
+        model.config.model_type = "qwen2"
+        _content, _reasoning, tool_calls = parse_assistant_message(
+            processor, model, generated_ids="ignored", input_ids=[1, 2, 3], cleaned_content=""
+        )
+        self.assertEqual(len(tool_calls), 2)
+        self.assertIsInstance(tool_calls[0], ToolCall)
+
+    def test_tool_calls_streamed_incrementally(self):
+        """Each tool call surfaces as a queue item the moment its close
+        delimiter is fed -- not buffered until the whole generation finishes.
+
+        Pins the streaming-vs-bundled contract: clients depending on early
+        dispatch (e.g. running tool calls in parallel as they arrive) rely on
+        every closed `<tool_call>...</tool_call>` materializing immediately.
+        """
+        template = next(v for k, v in _RESPONSE_TEMPLATE_FALLBACKS.items() if "qwen2" in k)
+        parser = ResponseParser(template)
+
+        # 1. A partial tool call (before close) yields no ToolCall.
+        partial_items = response_events_to_chunks(parser.feed('<tool_call>\n{"name": "get_weather"'))
+        self.assertEqual([it for it in partial_items if isinstance(it, ToolCall)], [])
+
+        # 2. Closing the first tool call surfaces it immediately, in this same feed batch.
+        close_first = response_events_to_chunks(parser.feed(', "arguments": {"city": "Paris"}}\n</tool_call>'))
+        first_calls = [it for it in close_first if isinstance(it, ToolCall)]
+        self.assertEqual(len(first_calls), 1, "first tool call was not emitted on close")
+        self.assertEqual(first_calls[0].name, "get_weather")
+        self.assertEqual(json.loads(first_calls[0].arguments), {"city": "Paris"})
+
+        # 3. The second tool call lands in a separate, later feed batch — proving
+        #    delivery is incremental and not buffered to a single end-of-stream burst.
+        between = response_events_to_chunks(parser.feed("\n"))
+        self.assertEqual([it for it in between if isinstance(it, ToolCall)], [])
+        close_second = response_events_to_chunks(
+            parser.feed('<tool_call>\n{"name": "get_weather", "arguments": {"city": "London"}}\n</tool_call>')
+        )
+        second_calls = [it for it in close_second if isinstance(it, ToolCall)]
+        self.assertEqual(len(second_calls), 1, "second tool call was not emitted on close")
+        self.assertEqual(json.loads(second_calls[0].arguments), {"city": "London"})
 
 
 class TestCBWorkerDeadServerIntegration(unittest.TestCase):
@@ -2430,7 +2488,11 @@ class _TestReasoningBase:
     # ----- parser equivalence -----
 
     def test_chat_streaming_matches_non_streaming(self):
-        """Streaming and non-streaming chat completions yield the same content + reasoning at T=0."""
+        """Streaming and non-streaming chat completions yield the same content + reasoning at T=0.
+
+        Non-streaming strips leading/trailing whitespace (via the template's text parser);
+        streaming chunks come through verbatim. Compare on stripped content.
+        """
         msgs = [{"role": "user", "content": self.USER_PROMPT}]
         kwargs = {"model": self.MODEL, "max_tokens": self.MAX_TOKENS, "temperature": 0.0}
 
@@ -2439,11 +2501,15 @@ class _TestReasoningBase:
         stream_content = "".join(c.choices[0].delta.content or "" for c in chunks)
         stream_reasoning = "".join(self._reasoning_field(c.choices[0].delta) or "" for c in chunks)
 
-        self.assertEqual(stream_content, ns_msg.content or "")
-        self.assertEqual(stream_reasoning, self._reasoning_field(ns_msg) or "")
+        self.assertEqual(stream_content.strip(), (ns_msg.content or "").strip())
+        self.assertEqual(stream_reasoning.strip(), (self._reasoning_field(ns_msg) or "").strip())
 
     def test_response_streaming_matches_non_streaming(self):
-        """Streaming and non-streaming Responses API yield the same content + reasoning at T=0."""
+        """Streaming and non-streaming Responses API yield the same content + reasoning at T=0.
+
+        Non-streaming strips leading/trailing whitespace (via the template's text parser);
+        streaming chunks come through verbatim. Compare on stripped content.
+        """
         kwargs = {
             "model": self.MODEL,
             "input": self.USER_PROMPT,
@@ -2461,8 +2527,8 @@ class _TestReasoningBase:
         stream_content = "".join(e.delta for e in events if e.type == "response.output_text.delta")
         stream_reasoning = "".join(e.delta for e in events if e.type == "response.reasoning_text.delta")
 
-        self.assertEqual(stream_content, ns_content)
-        self.assertEqual(stream_reasoning, ns_reasoning)
+        self.assertEqual(stream_content.strip(), ns_content.strip())
+        self.assertEqual(stream_reasoning.strip(), ns_reasoning.strip())
 
 
 @slow

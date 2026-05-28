@@ -973,25 +973,27 @@ class PrefixAndTruncationTest(unittest.TestCase):
         stream.finalize()
         self.assertEqual(stream._output, {"role": "assistant", "thinking": "done"})
 
-    def test_prefix_no_anchor_in_spec_keeps_full_prefix(self):
-        """With no `start_anchor` in the spec, the prefix is processed verbatim.
-        Useful when the caller has already pre-cut the prefix."""
+    def test_prefix_no_anchor_in_spec_is_ignored(self):
+        """With no `start_anchor` in the spec, the prefix is ignored entirely
+        — the parser stays in its fresh state. Prefix processing is opt-in
+        precisely so that templates without a clean turn boundary don't leak
+        prior-turn content into the current generation's output."""
         prompt = "<think>\n"
         stream = ResponseParser(qwen3_template, prefix=prompt)  # no anchor
-        opens = [e for e in stream.initial_events if e["type"] == "region_open"]
-        self.assertEqual([e["field"] for e in opens], ["thinking"])
-        stream.feed("hi</think>")
+        self.assertEqual(stream.initial_events, [])
+        # Without prefill state, the open marker has to arrive via feed().
+        stream.feed("<think>hi</think>")
         stream.finalize()
         self.assertEqual(stream._output, {"role": "assistant", "thinking": "hi"})
 
-    def test_prefix_anchor_not_found_falls_back(self):
-        """Spec has start_anchor but the prefix doesn't contain it: parser
-        falls back to processing the entire prefix (with a logged warning)."""
+    def test_prefix_anchor_not_found_is_ignored(self):
+        """Spec has start_anchor but the prefix doesn't contain it: the
+        prefix is ignored (with a warning), matching the no-anchor case so
+        the parser fails closed instead of mis-parsing the whole prefix."""
         prompt = "<think>\n"  # no <|im_start|>assistant\n
         stream = ResponseParser(qwen3_template_with_anchor, prefix=prompt)
-        opens = [e for e in stream.initial_events if e["type"] == "region_open"]
-        self.assertEqual([e["field"] for e in opens], ["thinking"])
-        stream.feed("hi</think>")
+        self.assertEqual(stream.initial_events, [])
+        stream.feed("<think>hi</think>")
         stream.finalize()
         self.assertEqual(stream._output, {"role": "assistant", "thinking": "hi"})
 
