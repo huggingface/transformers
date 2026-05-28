@@ -416,7 +416,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         self.assertEqual(
-            "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
+            "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
             decoded_text,
         )
 
