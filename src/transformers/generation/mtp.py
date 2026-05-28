@@ -88,23 +88,30 @@ class MtpLayer(nn.Module):
 
 
 class MtpLayerStack(PreTrainedModel):
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_flash_attn = True
+
     def __init__(self, main_model: PreTrainedModel, num_mtp_layers: int):
         super().__init__(main_model.config.get_text_config())
         self.num_mtp_layers = num_mtp_layers
         # Infer the type of the layers based on the main model
         layer_cls = type(main_model.base_model.layers[0])
+        norm_cls = next(
+            type(module) for name, module in main_model.base_model.layers[0].named_modules() if "norm" in name
+        )
 
         # Instantiate new mtp layers
         self.layers = nn.ModuleList(
             [
-                MtpLayer(self.config, layer_cls(self.config, self.config.num_hidden_layers + k))
+                MtpLayer(self.config, layer_cls, norm_cls, self.config.num_hidden_layers + k)
                 for k in range(num_mtp_layers)
             ]
         )
         # Get the embedding layer of the main model
         self.embed_tokens = main_model.get_input_embeddings()
         # Get the rotary of main model
-        self.rotary_emb = main_model.rotary_emb
+        self.rotary_emb = main_model.base_model.rotary_emb
 
         self.post_init()
 
@@ -234,3 +241,13 @@ class MtpLayerStack(PreTrainedModel):
         )
 
         return mtp_model
+
+    @classmethod
+    def _can_set_attn_implementation(cls) -> bool:
+        # Assume we always can
+        return True
+
+    @classmethod
+    def _can_set_experts_implementation(cls) -> bool:
+        # Assume we always can
+        return True

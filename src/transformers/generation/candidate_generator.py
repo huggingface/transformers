@@ -1435,6 +1435,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         self.device = next(x.device for x in main_model.base_model.layers[-1].parameters())
         self.mtp_model = MtpLayerStack.from_pretrained(main_model).to(self.device)
 
+        self.num_mtp_layers = len(self.mtp_model.layers)
         # Artificially add the MTP layers to the cache
         if (cache := model_kwargs.get("past_key_values")) is not None:
             cache.layers.extend([DynamicLayer() for _ in range(self.num_mtp_layers)])
