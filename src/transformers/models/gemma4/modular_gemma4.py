@@ -558,15 +558,24 @@ class Gemma4VisionPatchEmbedder(nn.Module):
         self.position_embedding_table = nn.Parameter(torch.ones(2, self.position_embedding_size, self.hidden_size))
 
     def _position_embeddings(self, pixel_position_ids: torch.Tensor, padding_positions: torch.Tensor) -> torch.Tensor:
-        """Prepare patch positions map for matmul with positon embedding table."""
-        # Expanding and permute patch positions to (batch_size, num_patches, 2, position_embedding_size) for matmul.
+        """Compute 2-D patch position embeddings via embedding lookup.
+
+        ``pixel_position_ids`` has shape ``(batch, num_patches, 2)`` where the
+        last dimension holds (x, y) indices into ``position_embedding_table``
+        (shape ``(2, position_embedding_size, hidden_size)``).  The result is the
+        sum of the x- and y-embeddings for each patch.
+        """
+        # Clamp only the lower bound: negative values encode padding and must be
+        # mapped to a valid index before lookup (padding embeddings are zeroed
+        # out unconditionally below).  Valid positions are always in-range by
+        # construction, so no upper-bound clamping is needed.
         clamped_positions = pixel_position_ids.clamp(min=0)
-        one_hot = F.one_hot(clamped_positions, num_classes=self.position_embedding_size)
-        one_hot = one_hot.permute(0, 2, 1, 3).to(self.position_embedding_table)
-        # Compute positional embeddings and sum across x and y.
-        position_embeddings = one_hot @ self.position_embedding_table
-        position_embeddings = position_embeddings.sum(dim=1)
-        # Zero out embeddings for any padding patches.
+        # position_embedding_table: (2, position_embedding_size, hidden_size)
+        # clamped_positions[..., 0]: (batch, num_patches) — x indices
+        # clamped_positions[..., 1]: (batch, num_patches) — y indices
+        x_emb = F.embedding(clamped_positions[..., 0], self.position_embedding_table[0])
+        y_emb = F.embedding(clamped_positions[..., 1], self.position_embedding_table[1])
+        position_embeddings = x_emb + y_emb
         position_embeddings = torch.where(padding_positions.unsqueeze(-1), 0.0, position_embeddings)
         return position_embeddings
 
