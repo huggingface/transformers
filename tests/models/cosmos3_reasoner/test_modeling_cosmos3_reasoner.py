@@ -136,9 +136,7 @@ class Cosmos3ConversionMappingTest(unittest.TestCase):
         self.assertEqual(rename_source_key(legacy_key, renamings, [])[0], legacy_key)
 
     def test_checkpoint_conversion_mapping_is_available_by_cosmos3_class_name(self):
-        self.assert_checkpoint_conversion_mapping_targets_new_checkpoint_namespaces(
-            "Cosmos3ForConditionalGeneration"
-        )
+        self.assert_checkpoint_conversion_mapping_targets_new_checkpoint_namespaces("Cosmos3ForConditionalGeneration")
         self.assert_checkpoint_conversion_mapping_targets_new_checkpoint_namespaces("Cosmos3Model")
 
 
