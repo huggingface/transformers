@@ -20,7 +20,6 @@ import torch
 
 from ...utils import is_psutil_available, is_torch_xpu_available
 from ...utils.logging import logging
-from ...utils.metrics import traced
 
 
 if is_psutil_available():
@@ -234,7 +233,6 @@ class RequestState:
         return len(self.generated_tokens)
 
     # TODO: this logic seems one token off, check it out
-    @traced
     def update_and_check_completion(self, token_id: int, logprob: float | None) -> bool:
         """Update the request with a newly generated token (and optional log probability of the token) and check for
         completion. Returns True if the request is now complete, False otherwise."""

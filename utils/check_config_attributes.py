@@ -105,6 +105,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],
     "HiggsAudioV2Config": ["audio_bos_token", "audio_stream_bos_id", "audio_stream_eos_id"],
     "HiggsAudioV2TokenizerConfig": ["downsample_factor"],
+    "Cohere2MoeConfig": ["rope_scaling", "sliding_window_pattern"],
     "CsmConfig": ["tie_codebooks_embeddings"],
     "DeepseekV2Config": ["norm_topk_prob"],
     "DeepseekV4Config": [
@@ -192,6 +193,7 @@ SPECIAL_CASES_TO_ALLOW = {
     # Internally uses Got Ocr2 so no need to use in the modeling code as we remap in auto instead
     "PPChart2TableConfig": True,
     "PPChart2TableVisionConfig": True,
+    "GlmgaConfig": ["vision_config"],
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
