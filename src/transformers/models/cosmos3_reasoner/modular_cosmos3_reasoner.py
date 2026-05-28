@@ -71,12 +71,12 @@ class Cosmos3Model(Qwen3VLModel):
     pass
 
 
-class Cosmos3ForConditionalGeneration(Qwen3VLForConditionalGeneration):
+class Cosmos3ReasonerForConditionalGeneration(Qwen3VLForConditionalGeneration):
     pass
 
 
 __all__ = [
     "Cosmos3Config",
-    "Cosmos3ForConditionalGeneration",
     "Cosmos3Model",
+    "Cosmos3ReasonerForConditionalGeneration",
 ]

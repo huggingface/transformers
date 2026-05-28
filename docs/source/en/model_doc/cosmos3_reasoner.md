@@ -25,16 +25,16 @@ rendered properly in your Markdown viewer.
 
 [Cosmos3](https://huggingface.co/nvidia/Cosmos3-Nano) is a mixture-of-transformers (MoT) Vision Foundation Model from NVIDIA, composed of a *Reasoner* tower and a *Generator* tower. The two towers share the same input embedding and visual encoder but use disjoint MoT experts for understanding vs. generation, plus cross-modal adapters (`proj_out`, `audio_proj_out`, `action_proj_out`, etc.) that connect the language model to image / audio / action heads.
 
-The transformers integration loads **only the Reasoner tower** from a unified Cosmos3 checkpoint. The Reasoner is architecturally identical to [Qwen3-VL](./qwen3_vl) — `Cosmos3ForConditionalGeneration` is a thin subclass of `Qwen3VLForConditionalGeneration`.
+The transformers integration loads **only the Reasoner tower** from a unified Cosmos3 checkpoint. The Reasoner is architecturally identical to [Qwen3-VL](./qwen3_vl) — `Cosmos3ReasonerForConditionalGeneration` is a thin subclass of `Qwen3VLForConditionalGeneration`.
 
 
 ## Usage
 
 ```python
 import torch
-from transformers import AutoProcessor, Cosmos3ForConditionalGeneration
+from transformers import AutoProcessor, Cosmos3ReasonerForConditionalGeneration
 
-model = Cosmos3ForConditionalGeneration.from_pretrained(
+model = Cosmos3ReasonerForConditionalGeneration.from_pretrained(
     "nvidia/Cosmos3-Nano",
     dtype=torch.float16,
 )
@@ -78,9 +78,9 @@ print(output[0])
     - get_video_features
     - get_image_features
 
-## Cosmos3ForConditionalGeneration
+## Cosmos3ReasonerForConditionalGeneration
 
-[[autodoc]] Cosmos3ForConditionalGeneration
+[[autodoc]] Cosmos3ReasonerForConditionalGeneration
     - forward
     - get_video_features
     - get_image_features

@@ -54,7 +54,7 @@ class Cosmos3Model(Qwen3VLModel):
     _keys_to_ignore_on_load_unexpected = _COSMOS3_DROPPED_UNIFIED_CHECKPOINT_KEYS + [r"^lm_head\.weight$"]
 
 
-class Cosmos3ForConditionalGeneration(Qwen3VLForConditionalGeneration):
+class Cosmos3ReasonerForConditionalGeneration(Qwen3VLForConditionalGeneration):
     config: Cosmos3Config
 
     # The unified Cosmos3 checkpoint stores both the Reasoner tower (loaded here) and the
@@ -64,6 +64,6 @@ class Cosmos3ForConditionalGeneration(Qwen3VLForConditionalGeneration):
 
 
 __all__ = [
-    "Cosmos3ForConditionalGeneration",
     "Cosmos3Model",
+    "Cosmos3ReasonerForConditionalGeneration",
 ]
