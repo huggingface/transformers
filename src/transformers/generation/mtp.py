@@ -170,12 +170,8 @@ class MtpLayerStack(PreTrainedModel):
         return candidate_ids, candidate_logits
 
     @classmethod
-    def from_pretrained(
-        cls,
-        pretrained_model_name_or_path: str,
-        main_model: PreTrainedModel,
-        **kwargs,
-    ) -> MtpLayerStack:
+    def from_pretrained(cls, main_model: PreTrainedModel, **kwargs) -> MtpLayerStack:
+        pretrained_model_name_or_path = main_model.config.name_or_path
         # Heuristic: the main model should have the mtp layer patterns under `_keys_to_ignore_on_load_unexpected` to avoid
         # loading them by default, so use it to later load the correct keys from the checkpoints
         mtp_patterns = main_model._keys_to_ignore_on_load_unexpected.copy()
