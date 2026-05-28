@@ -2763,6 +2763,13 @@ class GenerationMixin(ContinuousMixin):
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
 
+        # `pad_token_id` is created on `inputs_tensor.device` in `_prepare_special_tokens`. For multimodal models
+        # (e.g. BLIP-2, LLaVA) sharded across devices via `device_map="auto"`, `inputs_tensor` (e.g. `pixel_values`
+        # on the vision encoder) and `input_ids` (on the language model) can live on different devices, so we need to
+        # realign `pad_token_id` with `input_ids` to avoid cross-device ops below.
+        if pad_token_id is not None:
+            pad_token_id = pad_token_id.to(input_ids.device)
+
         model_forward = (
             self.get_compiled_call(generation_config.compile_config)
             if self._valid_auto_compile_criteria(model_kwargs, generation_config)
@@ -2830,10 +2837,8 @@ class GenerationMixin(ContinuousMixin):
                 next_tokens = torch.argmax(next_token_scores, dim=-1)
 
             # finished sentences should have their next token be a padding token
-            if has_eos_stopping_criteria and pad_token_id is not None:
-                next_tokens = next_tokens * unfinished_sequences + pad_token_id.to(next_tokens.device) * (
-                    1 - unfinished_sequences
-                )
+            if has_eos_stopping_criteria:
+                next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
