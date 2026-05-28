@@ -746,7 +746,9 @@ class AutoTokenizer:
                 tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
         # deepseek-r1 distills use model_type="llama" and tokenizer_class="LlamaTokenizer" but need TokenizersBackend. Hub really needs to be updated
-        _config_name_or_path = (getattr(config, "_name_or_path", None) or "").lower()
+        _config_name_or_path = (
+            name.lower() if isinstance((name := getattr(config, "_name_or_path", None)), str) else ""
+        )
         if (
             tokenizer_auto_map is None
             and TokenizersBackend is not None
