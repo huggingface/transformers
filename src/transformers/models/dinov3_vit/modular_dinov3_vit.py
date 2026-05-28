@@ -390,7 +390,6 @@ class DINOv3ViTEncoder(DINOv3ViTPreTrainedModel):
     def __init__(self, config: DINOv3ViTConfig):
         super().__init__(config)
         self.layer = nn.ModuleList([DINOv3ViTLayer(config) for _ in range(config.num_hidden_layers)])
-        # Initialize weights and apply final processing
         self.post_init()
 
     @merge_with_config_defaults
@@ -403,7 +402,6 @@ class DINOv3ViTEncoder(DINOv3ViTPreTrainedModel):
     ) -> BaseModelOutput:
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states, position_embeddings=position_embeddings, **kwargs)
-
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
@@ -415,14 +413,14 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         self.rope_embeddings = DINOv3ViTRopePositionEmbedding(config)
         self.model = DINOv3ViTEncoder(config)
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @can_return_tuple
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -435,40 +433,34 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
             pre-training.
         """
-
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         position_embeddings = self.rope_embeddings(pixel_values)
 
-        output = self.model(hidden_states, position_embeddings, **kwargs)
-        sequence_output = self.norm(output.last_hidden_state)
-        pooled_output = sequence_output[:, 0, :]
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
-            hidden_states=output.hidden_states,
-            attentions=output.attentions,
+        encoder_outputs: BaseModelOutput = self.model(
+            hidden_states, position_embeddings=position_embeddings, **kwargs
         )
+        sequence_output = self.norm(encoder_outputs.last_hidden_state)
+        pooled_output = sequence_output[:, 0, :]
+        return BaseModelOutputWithPooling(last_hidden_state=sequence_output, pooler_output=pooled_output)
 
 
 @auto_docstring
 class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-
         self.embeddings = DINOv3ViTEmbeddings(config)
         self.rope_embeddings = DINOv3ViTRopePositionEmbedding(config)
         self.model = DINOv3ViTEncoder(config)
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.gradient_checkpointing = False
-
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @can_return_tuple
     @filter_output_hidden_states
     @auto_docstring
@@ -478,12 +470,14 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> DINOv3ViTBackboneOutput:
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
-        hidden_states = self.embeddings(pixel_values)
+        hidden_state = self.embeddings(pixel_values)
         position_embeddings = self.rope_embeddings(pixel_values)
-
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
-        output = self.model(hidden_states, position_embeddings, **kwargs)
-        stage_hidden_states = output.hidden_states
+        # Iterate the layer ModuleList directly to collect per-stage hidden_states inline
+        # for feature_maps; @capture_outputs handles injection into the returned BackboneOutput.
+        stage_hidden_states = (hidden_state,)
+        for layer in self.model.layer:
+            hidden_state = layer(hidden_state, position_embeddings=position_embeddings, **kwargs)
+            stage_hidden_states = stage_hidden_states + (hidden_state,)
 
         batch_size, _, image_height, image_width = pixel_values.shape
         patch_size = self.config.patch_size
@@ -521,8 +515,6 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
         output = DINOv3ViTBackboneOutput(
             feature_maps=tuple(feature_maps),
             cls_tokens=tuple(cls_tokens) if return_class_token else None,
-            hidden_states=output.hidden_states,
-            attentions=output.attentions,
         )
         output.last_hidden_state = sequence_output
 

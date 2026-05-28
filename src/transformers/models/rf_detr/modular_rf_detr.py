@@ -22,7 +22,12 @@ from torch import Tensor, nn
 from torchvision.transforms.v2 import functional as tvF
 
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneConfigMixin, BackboneMixin, consolidate_backbone_kwargs_to_config, filter_output_hidden_states
+from ...backbone_utils import (
+    BackboneConfigMixin,
+    BackboneMixin,
+    consolidate_backbone_kwargs_to_config,
+    filter_output_hidden_states,
+)
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import (
@@ -57,7 +62,9 @@ from ..detr.image_processing_detr import (
 )
 from ..dinov2.configuration_dinov2 import Dinov2Config
 from ..dinov2.modeling_dinov2 import (
+    Dinov2Backbone,
     Dinov2Embeddings,
+    Dinov2Encoder,
     Dinov2Layer,
     Dinov2PreTrainedModel,
 )
@@ -713,32 +720,13 @@ class RfDetrDinov2PreTrainedModel(Dinov2PreTrainedModel):
     pass
 
 
-class RfDetrDinov2Encoder(RfDetrDinov2PreTrainedModel):
+class RfDetrDinov2Encoder(Dinov2Encoder):
     def __init__(self, config: RfDetrDinov2Config):
         super().__init__(config)
         self.layer = nn.ModuleList([RfDetrDinov2Layer(config, i) for i in range(config.num_hidden_layers)])
-        self.post_init()
-
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
-    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
-        for layer_module in self.layer:
-            hidden_states = layer_module(hidden_states)
-        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
-    def __init__(self, config: RfDetrDinov2Config):
-        super().__init__(config)
-        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
-        self.embeddings = RfDetrDinov2Embeddings(config)
-        self.encoder = RfDetrDinov2Encoder(config)
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.post_init()
-
-    def get_input_embeddings(self) -> RfDetrDinov2PatchEmbeddings:  # noqa: F821
-        return self.embeddings.patch_embeddings
-
+class RfDetrDinov2Backbone(Dinov2Backbone):
     def window_unpartition(self, hidden_state: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         Reassembles windowed patch tokens into their original 2D patch layout (image-level grid structure)
@@ -768,6 +756,8 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
         hidden_state = hidden_state.transpose(2, 3)
         return hidden_state
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @can_return_tuple
     @filter_output_hidden_states
     @auto_docstring
@@ -800,12 +790,15 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        # Like Dinov2, we need to output the hidden states to extract the layers for the stages
-        kwargs["output_hidden_states"] = True
-
         embedding_output = self.embeddings(pixel_values)
-        output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
-        hidden_states = output.hidden_states
+        # Iterate the layer ModuleList directly to collect per-stage hidden_states inline
+        # for window-aware feature_maps. @capture_outputs handles injection into the
+        # returned BackboneOutput.
+        hidden_state = embedding_output
+        hidden_states = (hidden_state,)
+        for layer in self.encoder.layer:
+            hidden_state = layer(hidden_state, **kwargs)
+            hidden_states = hidden_states + (hidden_state,)
 
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
@@ -829,11 +822,7 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
 
                 feature_maps += (hidden_state,)
 
-        return BackboneOutput(
-            feature_maps=tuple(feature_maps),
-            hidden_states=hidden_states,
-            attentions=output.attentions,
-        )
+        return BackboneOutput(feature_maps=tuple(feature_maps))
 
 
 class RfDetrLayerNorm(LwDetrLayerNorm):

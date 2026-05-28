@@ -30,7 +30,7 @@ from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling, ImageClassifierOutput
+from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_int
@@ -359,6 +359,23 @@ class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
             init.constant_(module.lambda1, self.config.layerscale_value)
 
 
+class Dinov2WithRegistersEncoder(Dinov2WithRegistersPreTrainedModel):
+    def __init__(self, config: Dinov2WithRegistersConfig):
+        super().__init__(config)
+        self.layer = nn.ModuleList([Dinov2WithRegistersLayer(config) for _ in range(config.num_hidden_layers)])
+        self.post_init()
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states, attention_mask, **kwargs)
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
 @auto_docstring
 class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
     def __init__(self, config: Dinov2WithRegistersConfig):
@@ -374,6 +391,7 @@ class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
         self.layers = nn.ModuleList([Dinov2WithRegistersLayer(config) for _ in range(config.num_hidden_layers)])
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pooler = None
+        self.encoder = Dinov2WithRegistersEncoder(config)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -398,10 +416,8 @@ class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
             inputs_embeds=embedding_output,
             attention_mask=attention_mask,
         )
-        hidden_states = embedding_output
-        for layer in self.layers:
-            hidden_states = layer(hidden_states, attention_mask, **kwargs)
-        sequence_output = self.layernorm(hidden_states)
+        encoder_outputs: BaseModelOutput = self.encoder(embedding_output, attention_mask=attention_mask, **kwargs)
+        sequence_output = self.layernorm(encoder_outputs.last_hidden_state)
         pooled_output = sequence_output[:, 0, :]
         return BaseModelOutputWithPooling(last_hidden_state=sequence_output, pooler_output=pooled_output)
 
@@ -475,12 +491,16 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
     def __init__(self, config):
         super().__init__(config)
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
-        self.dinov2_with_registers = Dinov2WithRegistersModel(config)
+        self.embeddings = Dinov2WithRegistersEmbeddings(config)
+        self.encoder = Dinov2WithRegistersEncoder(config)
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_init()
 
     def get_input_embeddings(self) -> Dinov2WithRegistersPatchEmbeddings:
-        return self.dinov2_with_registers.embeddings.patch_embeddings
+        return self.embeddings.patch_embeddings
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @can_return_tuple
     @filter_output_hidden_states
     @auto_docstring
@@ -516,18 +536,20 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        kwargs["output_hidden_states"] = True
-
-        outputs: BaseModelOutputWithPooling = self.dinov2_with_registers(
-            pixel_values, attention_mask=attention_mask, **kwargs
-        )
-        hidden_states = outputs.hidden_states
+        embedding_output = self.embeddings(pixel_values)
+        # Iterate layers directly to collect per-stage hidden_states inline for feature_maps;
+        # @capture_outputs handles injection into the returned BackboneOutput.
+        hidden_state = embedding_output
+        hidden_states = (hidden_state,)
+        for layer in self.encoder.layer:
+            hidden_state = layer(hidden_state, attention_mask, **kwargs)
+            hidden_states = hidden_states + (hidden_state,)
 
         feature_maps = []
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
                 if self.config.apply_layernorm:
-                    hidden_state = self.dinov2_with_registers.layernorm(hidden_state)
+                    hidden_state = self.layernorm(hidden_state)
                 if self.config.reshape_hidden_states:
                     hidden_state = hidden_state[:, 1 + self.config.num_register_tokens :]
                     # this was actually a bug in the original implementation that we copied here,
@@ -538,11 +560,7 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps.append(hidden_state)
 
-        return BackboneOutput(
-            feature_maps=tuple(feature_maps),
-            hidden_states=hidden_states,
-            attentions=outputs.attentions,
-        )
+        return BackboneOutput(feature_maps=tuple(feature_maps))
 
 
 __all__ = [
