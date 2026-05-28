@@ -201,7 +201,7 @@ class ChineseCLIPPreTrainedModel(CLIPPreTrainedModel):
         "ChineseCLIPVisionEmbeddings",
         "ChineseCLIPTextEmbeddings",
         "ChineseCLIPTextLayer",
-        "ChineseCLIPVisionAttention",
+        "ChineseCLIPVisionLayer",
     ]
     _can_record_outputs = {
         "hidden_states": ChineseCLIPVisionLayer,

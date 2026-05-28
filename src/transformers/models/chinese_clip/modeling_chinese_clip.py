@@ -521,7 +521,7 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
         "ChineseCLIPVisionEmbeddings",
         "ChineseCLIPTextEmbeddings",
         "ChineseCLIPTextLayer",
-        "ChineseCLIPVisionAttention",
+        "ChineseCLIPVisionLayer",
     ]
 
     supports_gradient_checkpointing = True
