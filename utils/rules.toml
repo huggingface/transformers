@@ -305,43 +305,7 @@ diff = '''
 [rules.TRF018]
 description = "_init_weights overrides should call super()._init_weights(module)."
 default_enabled = true
-allowlist_models = [
-    "siglip",
-    "siglip2",
-    "slanet",
-    "speecht5",
-    "swiftformer",
-    "swin2sr",
-    "swinv2",
-    "switch_transformers",
-    "t5",
-    "table_transformer",
-    "timesformer",
-    "timm_backbone",
-    "timm_wrapper",
-    "tvp",
-    "udop",
-    "umt5",
-    "unispeech",
-    "unispeech_sat",
-    "uvdoc",
-    "videomt",
-    "visual_bert",
-    "vitdet",
-    "vitmatte",
-    "vitpose",
-    "vitpose_backbone",
-    "vits",
-    "vjepa2",
-    "voxtral_realtime",
-    "wav2vec2",
-    "wav2vec2_bert",
-    "wav2vec2_conformer",
-    "wavlm",
-    "x_clip",
-    "xlm",
-    "xlstm",
-]
+allowlist_models = []
 
 [rules.TRF018.explanation]
 what_it_does = "Checks that every PreTrainedModel subclass that overrides `_init_weights(self, module, ...)` chains the call up via `super()._init_weights(...)`. If a model intentionally fully overrides initialization, suppress with `# trf-ignore: TRF018` on the line above the method."
