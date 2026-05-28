@@ -400,7 +400,7 @@ class GptOssModel(MixtralModel):
 
 
 class GptOssForCausalLM(MixtralForCausalLM):
-    pass
+    _cp_plan = {"model.layers.*.self_attn": "context_parallel_ulysses"}
 
 
 class GptOssForSequenceClassification(MixtralForSequenceClassification):

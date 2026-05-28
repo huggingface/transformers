@@ -95,6 +95,8 @@ class Qwen3MoeModel(MixtralModel):
 
 
 class Qwen3MoeForCausalLM(MixtralForCausalLM):
+    _cp_plan = {"model.layers.*.self_attn": "context_parallel_ulysses"}
+
     def __init__(self, config):
         super().__init__(config)
         self.model = Qwen3MoeModel(config)
