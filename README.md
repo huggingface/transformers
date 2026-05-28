@@ -78,7 +78,7 @@ simple, customizable, and efficient.
 
 There are over 1M+ Transformers [model checkpoints](https://huggingface.co/models?library=transformers&sort=trending) on the [Hugging Face Hub](https://huggingface.co/models) you can use.
 
-Explore the [Hub](https://huggingface.co/) today to find a model and use Transformers to help you get started right away.
+Explore the Hugging Face Hub to discover pretrained models for NLP, computer vision, audio, and multimodal AI tasks, and quickly integrate them into your applications with Transformers.
 
 ## Installation
 
