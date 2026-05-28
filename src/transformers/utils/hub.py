@@ -871,6 +871,28 @@ def get_checkpoint_shard_files(
 
     # First, let's deal with local folder.
     if os.path.isdir(pretrained_model_name_or_path):
+        # Validate shard filenames before joining with the model directory.
+        # A malicious or hand-crafted index.json could carry path-traversal
+        # sequences (e.g. "../../etc/passwd") or absolute paths that would
+        # escape the model directory and expose arbitrary files on the host.
+        # Guard against that by rejecting any filename that:
+        #   - is an absolute path, or
+        #   - contains a ".." component after normalisation.
+        # See https://github.com/huggingface/transformers/issues/46097
+        base_dir = os.path.realpath(pretrained_model_name_or_path)
+        for shard_filename in shard_filenames:
+            if os.path.isabs(shard_filename):
+                raise ValueError(
+                    f"Shard filename '{shard_filename}' in the checkpoint index is an absolute path. "
+                    "Loading checkpoints with absolute shard paths is not supported for security reasons."
+                )
+            resolved = os.path.realpath(os.path.join(base_dir, subfolder, shard_filename))
+            if not resolved.startswith(base_dir + os.sep) and resolved != base_dir:
+                raise ValueError(
+                    f"Shard filename '{shard_filename}' in the checkpoint index resolves outside the "
+                    f"model directory '{pretrained_model_name_or_path}'. This may be a path-traversal "
+                    "attempt; refusing to load."
+                )
         shard_filenames = [os.path.join(pretrained_model_name_or_path, subfolder, f) for f in shard_filenames]
         return shard_filenames, sharded_metadata
 
