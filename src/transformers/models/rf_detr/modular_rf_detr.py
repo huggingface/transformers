@@ -22,7 +22,7 @@ from torch import Tensor, nn
 from torchvision.transforms.v2 import functional as tvF
 
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneConfigMixin, consolidate_backbone_kwargs_to_config
+from ...backbone_utils import BackboneConfigMixin, BackboneMixin, consolidate_backbone_kwargs_to_config, filter_output_hidden_states
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import (
@@ -45,7 +45,8 @@ from ...utils import (
     logging,
     torch_int,
 )
-from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple
+from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP
 from ..convnext.modeling_convnext import ConvNextLayer
 from ..detr.image_processing_detr import (
@@ -56,9 +57,7 @@ from ..detr.image_processing_detr import (
 )
 from ..dinov2.configuration_dinov2 import Dinov2Config
 from ..dinov2.modeling_dinov2 import (
-    Dinov2Backbone,
     Dinov2Embeddings,
-    Dinov2Encoder,
     Dinov2Layer,
     Dinov2PreTrainedModel,
 )
@@ -677,6 +676,8 @@ class RfDetrDinov2Layer(Dinov2Layer):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
 
@@ -685,7 +686,7 @@ class RfDetrDinov2Layer(Dinov2Layer):
             hidden_states = self.window_unpartition_before_attention(hidden_states)
 
         hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output = self.attention(hidden_states_norm)
+        self_attention_output, _ = self.attention(hidden_states_norm, attention_mask=attention_mask, **kwargs)
 
         # And reverse the operation after the attention
         if self.global_attention:
@@ -712,13 +713,32 @@ class RfDetrDinov2PreTrainedModel(Dinov2PreTrainedModel):
     pass
 
 
-class RfDetrDinov2Encoder(Dinov2Encoder):
+class RfDetrDinov2Encoder(RfDetrDinov2PreTrainedModel):
     def __init__(self, config: RfDetrDinov2Config):
         super().__init__(config)
         self.layer = nn.ModuleList([RfDetrDinov2Layer(config, i) for i in range(config.num_hidden_layers)])
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states)
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-class RfDetrDinov2Backbone(Dinov2Backbone):
+class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
+    def __init__(self, config: RfDetrDinov2Config):
+        super().__init__(config)
+        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
+        self.embeddings = RfDetrDinov2Embeddings(config)
+        self.encoder = RfDetrDinov2Encoder(config)
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_init()
+
+    def get_input_embeddings(self) -> RfDetrDinov2PatchEmbeddings:  # noqa: F821
+        return self.embeddings.patch_embeddings
+
     def window_unpartition(self, hidden_state: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         Reassembles windowed patch tokens into their original 2D patch layout (image-level grid structure)
@@ -748,6 +768,9 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
         hidden_state = hidden_state.transpose(2, 3)
         return hidden_state
 
+    @can_return_tuple
+    @filter_output_hidden_states
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
