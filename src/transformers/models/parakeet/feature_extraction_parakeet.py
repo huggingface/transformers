@@ -40,8 +40,9 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
-    This class extracts mel-filter bank features from raw speech using a custom numpy implementation of the `Short Time
-    Fourier Transform` which should match pytorch's `torch.stft` equivalent.
+    This class extracts mel-filter bank features from raw speech using PyTorch's `torch.stft`. When `device` is set
+    to a CUDA device, the entire preprocessing pipeline (preemphasis, STFT, mel spectrogram, normalization) can run
+    on GPU for faster feature extraction.
 
     Args:
         feature_size (`int`, *optional*, defaults to 80):
@@ -95,6 +96,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
             sr=sampling_rate, n_fft=n_fft, n_mels=feature_size, fmin=0.0, fmax=sampling_rate / 2, norm="slaney"
         )
         self.mel_filters = torch.from_numpy(mel_filters).to(torch.float32)
+        self._mel_filters_cache = {}
 
     def _torch_extract_fbank_features(self, waveform, device="cpu"):
         # spectrogram
@@ -115,7 +117,10 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         magnitudes = magnitudes.pow(2)
 
         # log mel spectrogram
-        mel_filters = self.mel_filters.to(device)
+        device_key = torch.device(device)
+        if device_key not in self._mel_filters_cache:
+            self._mel_filters_cache[device_key] = self.mel_filters.to(device_key)
+        mel_filters = self._mel_filters_cache[device_key]
         mel_spec = mel_filters @ magnitudes
         mel_spec = torch.log(mel_spec + LOG_ZERO_GUARD_VALUE)
 
@@ -247,11 +252,15 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         )
         input_features = padded_inputs.input_features.squeeze(-1)
 
+        # Move to target device for GPU-accelerated preprocessing
+        input_features = input_features.to(device)
+        audio_lengths = padded_inputs.audio_lengths.to(device)
+
         # preemphasis
         if self.preemphasis is not None:
-            timemask = torch.arange(input_features.shape[1], device=input_features.device).unsqueeze(
+            timemask = torch.arange(input_features.shape[1], device=device).unsqueeze(
                 0
-            ) < padded_inputs.audio_lengths.unsqueeze(1)
+            ) < audio_lengths.unsqueeze(1)
             input_features = torch.cat(
                 [input_features[:, :1], input_features[:, 1:] - self.preemphasis * input_features[:, :-1]], dim=1
             )
@@ -259,7 +268,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
 
         input_features = self._torch_extract_fbank_features(input_features, device)
         features_lengths = torch.floor_divide(
-            padded_inputs.audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length
+            audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length
         )
         attention_mask = torch.arange(input_features.shape[1], device=device)[None, :] < features_lengths[:, None]
 
@@ -280,6 +289,18 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
             },
             tensor_type=return_tensors,
         )
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # Exclude CUDA tensors/cache from pickling to prevent serialization/multiprocessing errors
+        if "_mel_filters_cache" in state:
+            state["_mel_filters_cache"] = {}
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        if "_mel_filters_cache" not in self.__dict__:
+            self._mel_filters_cache = {}
 
 
 __all__ = ["ParakeetFeatureExtractor"]

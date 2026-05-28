@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 
 from transformers import ParakeetFeatureExtractor
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_torch, require_torch_accelerator
 from transformers.utils import is_datasets_available, is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
@@ -195,3 +195,74 @@ class ParakeetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
 
         self.assertEqual(inputs.attention_mask.shape, (5, 2941))
         self.assertTrue(inputs.attention_mask.sum(dim=-1).tolist(), [585, 481, 1248, 990, 2940])
+
+    @require_torch
+    def test_device_argument_robustness(self):
+        """Test that device= accepts various formats: str, torch.device, with index."""
+        feature_extractor = ParakeetFeatureExtractor()
+        audio = np.random.randn(16000).astype(np.float32)
+
+        # Test string "cpu"
+        result_str = feature_extractor(audio, sampling_rate=16000, return_tensors="pt", device="cpu")
+        self.assertEqual(result_str.input_features.device.type, "cpu")
+
+        # Test torch.device("cpu")
+        result_device = feature_extractor(audio, sampling_rate=16000, return_tensors="pt", device=torch.device("cpu"))
+        self.assertEqual(result_device.input_features.device.type, "cpu")
+
+        # Verify both produce identical results
+        torch.testing.assert_close(result_str.input_features, result_device.input_features, atol=0, rtol=0)
+        torch.testing.assert_close(result_str.attention_mask, result_device.attention_mask, atol=0, rtol=0)
+
+    @require_torch_accelerator
+    @require_torch
+    def test_torch_integration_cuda(self):
+        """Test that GPU preprocessing produces results matching CPU within tolerance."""
+        input_speech = self._load_datasamples(1)
+        feature_extractor = ParakeetFeatureExtractor()
+
+        # CPU baseline
+        inputs_cpu = feature_extractor(input_speech, return_tensors="pt", device="cpu")
+
+        # GPU path
+        inputs_cuda = feature_extractor(input_speech, return_tensors="pt", device="cuda")
+
+        # Output should remain on GPU
+        self.assertEqual(inputs_cuda.input_features.device.type, "cuda")
+        self.assertEqual(inputs_cuda.attention_mask.device.type, "cuda")
+
+        # Shapes must match
+        self.assertEqual(inputs_cpu.input_features.shape, inputs_cuda.input_features.shape)
+        self.assertEqual(inputs_cpu.attention_mask.shape, inputs_cuda.attention_mask.shape)
+
+        # Numerical parity (allow small floating point differences from GPU)
+        torch.testing.assert_close(
+            inputs_cpu.input_features, inputs_cuda.input_features.cpu(), atol=1e-4, rtol=1e-4
+        )
+        self.assertTrue((inputs_cpu.attention_mask == inputs_cuda.attention_mask.cpu()).all())
+
+    @require_torch_accelerator
+    @require_torch
+    def test_torch_integration_batch_cuda(self):
+        """Test batched GPU preprocessing produces results matching CPU within tolerance."""
+        input_speech = self._load_datasamples(5)
+        feature_extractor = ParakeetFeatureExtractor()
+
+        # CPU baseline
+        inputs_cpu = feature_extractor(input_speech, return_tensors="pt", device="cpu")
+
+        # GPU path
+        inputs_cuda = feature_extractor(input_speech, return_tensors="pt", device="cuda")
+
+        # Output should remain on GPU
+        self.assertEqual(inputs_cuda.input_features.device.type, "cuda")
+
+        # Shapes must match
+        self.assertEqual(inputs_cpu.input_features.shape, inputs_cuda.input_features.shape)
+
+        # Numerical parity
+        torch.testing.assert_close(
+            inputs_cpu.input_features, inputs_cuda.input_features.cpu(), atol=1e-4, rtol=1e-4
+        )
+        self.assertTrue((inputs_cpu.attention_mask == inputs_cuda.attention_mask.cpu()).all())
+
