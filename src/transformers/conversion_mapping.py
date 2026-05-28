@@ -175,6 +175,18 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("intermediate.dense", "mlp.fc1"),
             WeightRenaming("output.dense", "mlp.fc2"),
         ],
+        "Dinov2Model": [
+            WeightRenaming(r"encoder\.layer\.", "layers."),
+            WeightRenaming("attention.attention.query", "attention.q_proj"),
+            WeightRenaming("attention.attention.key", "attention.k_proj"),
+            WeightRenaming("attention.attention.value", "attention.v_proj"),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+        ],
+        "Dinov2Backbone": [
+            WeightRenaming(r"^embeddings\.", "dinov2.embeddings."),
+            WeightRenaming(r"^encoder\.", "dinov2.encoder."),
+            WeightRenaming(r"^layernorm\.", "dinov2.layernorm."),
+        ],
         "ViTMSNForImageClassification": [
             WeightRenaming(r"^encoder\.", "vit.encoder."),
         ],
