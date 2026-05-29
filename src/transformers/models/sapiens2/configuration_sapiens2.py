@@ -23,51 +23,39 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring
 @strict
 class Sapiens2HeadConfig(PreTrainedConfig):
     r"""
-    Configuration for the Sapiens2 decode head.
-
-    Args:
-        transformers_version (`str | None`, *optional*): <fill_docstring>
-        architectures (`list[str] | None`, *optional*): <fill_docstring>
-        output_hidden_states (`bool | None`, *optional*, defaults to `False`): <fill_docstring>
-        return_dict (`bool | None`, *optional*, defaults to `True`): <fill_docstring>
-        dtype (`Union`, *optional*): <fill_docstring>
-        chunk_size_feed_forward (`int`, *optional*, defaults to 0): <fill_docstring>
-        is_encoder_decoder (`bool`, *optional*, defaults to `False`): <fill_docstring>
-        id2label (`dict[int, str] | dict[str, str] | None`, *optional*): <fill_docstring>
-        label2id (`dict[str, int] | dict[str, str] | None`, *optional*): <fill_docstring>
-        problem_type (`Optional`, *optional*): <fill_docstring>
-        upsample_out_channels (`list[int]`, *optional*):
-            Output channel counts for each upsample block.
-            The first block takes `hidden_size` channels as input; subsequent blocks use the previous output.
-        upsample_kernel_sizes (`list[int]`, *optional*):
-            Kernel size for each upsample block. Auto-filled with `[4, ...]` when
-            `upsample_out_channels` is set but this is `None`.
-            Must have the same length as `upsample_out_channels`.
-        conv_out_channels (`list[int]`, *optional*):
-            Output channel counts for the refinement conv layers that follow the upsample blocks.
-        conv_kernel_sizes (`list[int]`, *optional*):
-            Kernel size for each refinement conv layer. Auto-filled with `[1, ...]` when
-            `conv_out_channels` is set but this is `None`.
-            Must have the same length as `conv_out_channels`.
-        use_pixel_shuffle (`bool`, *optional*):
-            Whether the decode head uses pixel-shuffle upsampling instead of transposed convolutions.
-            When `None` (default), the head uses transposed convolutions.
-        scale_conv_out_channels (`list[int]`, *optional*):
-            Output channel counts for the stride-2 conv layers used to predict the focal-length scale.
-            When `None` (default), no scale branch is built.
-        scale_conv_kernel_sizes (`list[int]`, *optional*):
-            Kernel size for each scale conv layer. Auto-filled with `[1, ...]` when
-            `scale_conv_out_channels` is set but this is `None`.
-        scale_final_input_size (`int`, *optional*):
-            Flattened feature size passed into the scale MLP.
-            When `None` (default), it is automatically inferred from `image_size` and `patch_size`
-            in the parent [`Sapiens2Config`].
-        scale_final_hidden_sizes (`list[int]`, *optional*):
-            Hidden-layer sizes for the MLP that maps flattened scale features to the scalar scale output.
-            When `None` (default), no scale branch is built.
+    upsample_out_channels (`list[int]`, *optional*):
+        Output channel counts for each upsample block.
+        The first block takes `hidden_size` channels as input; subsequent blocks use the previous output.
+    upsample_kernel_sizes (`list[int]`, *optional*):
+        Kernel size for each upsample block. Auto-filled with `[4, ...]` when
+        `upsample_out_channels` is set but this is `None`.
+        Must have the same length as `upsample_out_channels`.
+    use_pixel_shuffle (`bool`, *optional*):
+        Whether the upsample head uses pixel-shuffle upsampling instead of transposed convolutions.
+        When `None` (default), the head uses transposed convolutions.
+    conv_out_channels (`list[int]`, *optional*):
+        Output channel counts for the refinement conv layers that follow the upsample blocks.
+    conv_kernel_sizes (`list[int]`, *optional*):
+        Kernel size for each refinement conv layer. Auto-filled with `[1, ...]` when
+        `conv_out_channels` is set but this is `None`.
+        Must have the same length as `conv_out_channels`.
+    scale_conv_out_channels (`list[int]`, *optional*):
+        Output channel counts for the stride-2 conv layers used to predict the focal-length scale.
+        When `None` (default), no scale branch is built.
+    scale_conv_kernel_sizes (`list[int]`, *optional*):
+        Kernel size for each scale conv layer. Auto-filled with `[1, ...]` when
+        `scale_conv_out_channels` is set but this is `None`.
+    scale_final_input_size (`int`, *optional*):
+        Flattened feature size passed into the scale MLP.
+        When `None` (default), it is automatically inferred from `image_size` and `patch_size`
+        in the parent [`Sapiens2Config`].
+    scale_final_hidden_sizes (`list[int]`, *optional*):
+        Hidden-layer sizes for the MLP that maps flattened scale features to the scalar scale output.
+        When `None` (default), no scale branch is built.
     """
 
     model_type = "sapiens2_head"
@@ -75,9 +63,9 @@ class Sapiens2HeadConfig(PreTrainedConfig):
 
     upsample_out_channels: list[int] | None = None
     upsample_kernel_sizes: list[int] | None = None
+    use_pixel_shuffle: bool | None = None
     conv_out_channels: list[int] | None = None
     conv_kernel_sizes: list[int] | None = None
-    use_pixel_shuffle: bool | None = None
     scale_conv_out_channels: list[int] | None = None
     scale_conv_kernel_sizes: list[int] | None = None
     scale_final_input_size: int | None = None
