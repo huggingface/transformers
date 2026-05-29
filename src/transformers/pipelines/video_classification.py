@@ -72,7 +72,7 @@ class VideoClassificationPipeline(Pipeline):
         if self.video_processor is None and self.image_processor is not None:
             logger.warning_once(
                 "Using `image_processor` for video classification is deprecated and will be removed in a future "
-                "version. Please use a model that has a `video_processor`."
+                "version. Please add a `video_processor` to this model (open a PR if you don't own it)."
             )
 
     def _sanitize_parameters(self, top_k=None, num_frames=None, frame_sampling_rate=None, function_to_apply=None):
