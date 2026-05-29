@@ -221,7 +221,7 @@ diff = '''
 [rules.TRF014]
 description = "`trust_remote_code` should never be used in native model integrations."
 default_enabled = true
-allowlist_models = ["auto"]
+allowlist_models = []
 
 [rules.TRF014.explanation]
 what_it_does = "Checks whether `trust_remote_code` is passed or used in code (e.g. as kwarg) within native model integration files."
