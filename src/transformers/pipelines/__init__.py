@@ -556,8 +556,6 @@ def _resolve_video_processor(
     hub_kwargs,
     model_kwargs,
 ):
-    """Resolve and optionally load the video processor for video-capable pipelines."""
-
     def load(video_processor):
         video_processor = _infer_pipeline_component(
             video_processor,
@@ -567,7 +565,7 @@ def _resolve_video_processor(
             "Please provide a BaseVideoProcessor class or a path/identifier to a pretrained video processor.",
         )
 
-        if not isinstance(video_processor, (str, tuple)):
+        if not isinstance(video_processor, str):
             return video_processor
 
         return AutoVideoProcessor.from_pretrained(video_processor, _from_pipeline=task, **hub_kwargs, **model_kwargs)
@@ -676,6 +674,7 @@ def pipeline(
     tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None,
     feature_extractor: str | FeatureExtractionMixin | None = None,
     image_processor: str | BaseImageProcessor | None = None,
+    video_processor: str | BaseVideoProcessor | None = None,
     processor: str | ProcessorMixin | None = None,
     revision: str | None = None,
     use_fast: bool = True,
@@ -1046,7 +1045,7 @@ def pipeline(
 
     load_tokenizer = getattr(pipeline_class, "_load_tokenizer")
     load_image_processor = getattr(pipeline_class, "_load_image_processor")
-    load_video_processor = getattr(pipeline_class, "_load_video_processor", None)
+    load_video_processor = getattr(pipeline_class, "_load_video_processor")
     load_feature_extractor = getattr(pipeline_class, "_load_feature_extractor")
     load_processor = getattr(pipeline_class, "_load_processor")
 
@@ -1091,7 +1090,7 @@ def pipeline(
         model_kwargs=model_kwargs,
     )
     video_processor = _resolve_video_processor(
-        video_processor=kwargs.pop("video_processor", None),
+        video_processor=video_processor,
         load_video_processor=load_video_processor,
         model_name=model_name,
         config=config,
