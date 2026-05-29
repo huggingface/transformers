@@ -127,6 +127,7 @@ _RESPONSE_TEMPLATE_FALLBACKS = {
     },
     ("gemma4",): {
         "defaults": {"role": "assistant"},
+        "start_anchor": ["<|turn>model\n", "<tool_response|>"],
         "fields": {
             "thinking": {
                 "open": "<|channel>thought\n",
