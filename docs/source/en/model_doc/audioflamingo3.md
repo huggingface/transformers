@@ -15,8 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was published in HF papers on 2025-07-10 and contributed to Hugging Face Transformers on 2025-11-12.*
 
-*
-
 # Audio Flamingo 3
 
 <div class="flex flex-wrap space-x-1">

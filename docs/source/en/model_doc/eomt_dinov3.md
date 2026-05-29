@@ -10,8 +10,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was published in HF papers on 2025-03-24 and contributed to Hugging Face Transformers on 2026-02-02.*
 
-*
-
 # EoMT-DINOv3
 
 <div class="flex flex-wrap space-x-1">

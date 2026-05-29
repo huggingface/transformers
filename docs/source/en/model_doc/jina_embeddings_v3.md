@@ -10,8 +10,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was published in HF papers on 2024-09-16 and contributed to Hugging Face Transformers on 2026-03-19.*
 
-*
-
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white" >
