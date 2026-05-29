@@ -24,10 +24,10 @@ logger = logging.get_logger(__name__)
 @dataclass
 class ResponseTemplateField:
     name: str
-    open_re: re.Pattern | None
+    open_re: Any
     open_lits: list[str] | None
     open_lit_can_extend: bool
-    close_re: re.Pattern | None
+    close_re: Any
     close_lits: list[str] | None
     close_lit_can_extend: bool
     content: str
@@ -42,8 +42,8 @@ class ResponseTemplateField:
 class ResponseTemplate:
     defaults: dict
     fields: dict[str, ResponseTemplateField]
+    start_anchor_re: Any
     implicit: str | None = None
-    start_anchor_re: re.Pattern | None = None
     start_anchor_lits: list[str] | None = None
 
     def truncate_past_last_anchor(self, text: str, *, log_if_missing: bool = True) -> str:
@@ -67,7 +67,7 @@ class ResponseTemplate:
 
 def _compile_anchor(
     scope: str, field: dict, lit_key: str, pat_key: str
-) -> tuple[re.Pattern | None, list[str] | None, bool]:
+) -> tuple[Any, list[str] | None, bool]:
     """The start and end anchors for a region can be either regexes, a single literal string, or a list of
     literal strings (an "any of these" alternation). Although all forms get compiled to a regex for matching,
     we keep the literal strings around too - when present, the parser can emit regions more quickly, since it

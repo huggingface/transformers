@@ -58,7 +58,7 @@ def _json(text: str, args: dict) -> Any:
     for open_d, close_d in string_delims:
         pattern = re.escape(open_d) + r"(.*?)" + re.escape(close_d)
 
-        def _capture(m: re.Match) -> str:
+        def _capture(m: Any) -> str:
             captured.append(m.group(1))
             return f"{_LAX_OPEN}{len(captured) - 1}{_LAX_CLOSE}"
 

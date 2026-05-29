@@ -10,8 +10,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import regex as re
-
 from .content_parsers import STREAMABLE_PARSERS, process_field
 from .response_templates import ResponseTemplate, ResponseTemplateField, load_response_template
 
@@ -178,7 +176,7 @@ class ResponseParser:
 
     def _scan(
         self, watch: list[tuple[str, ResponseTemplateField]], eos: bool
-    ) -> tuple[tuple[str, ResponseTemplateField, re.Match] | None, int]:
+    ) -> tuple[tuple[str, ResponseTemplateField, Any] | None, int]:
         """Single pass over the watched delimiters, using the `regex` module's
         partial matching to decide -- per delimiter -- whether it can be committed
         now or must be held. Returns `(best, hold_start)`:
@@ -202,7 +200,7 @@ class ResponseParser:
         no-op for `hold_start`.)
         """
         best_key: tuple | None = None
-        best: tuple[str, ResponseTemplateField, re.Match] | None = None
+        best: tuple[str, ResponseTemplateField, Any] | None = None
         hold_start = len(self._buffer)
         for kind, fld in watch:
             pattern = fld.open_re if kind == "open" else fld.close_re
@@ -226,7 +224,7 @@ class ResponseParser:
             best = None
         return best, hold_start
 
-    def _can_grow(self, kind: str, fld: ResponseTemplateField, m: re.Match) -> bool:
+    def _can_grow(self, kind: str, fld: ResponseTemplateField, m: Any) -> bool:
         r"""Whether a *complete* match ending at the current buffer edge could still
         change as more input arrives -- in which case we defer rather than commit. A
         match ending before the edge has already seen its terminating byte and is
@@ -260,7 +258,7 @@ class ResponseParser:
         dirty = fld.content not in STREAMABLE_PARSERS
         events.append({"type": "region_chunk", "field": self._current, "text": text, "dirty": dirty})
 
-    def _open_explicit(self, events: list[dict], fld: ResponseTemplateField, m: re.Match) -> None:
+    def _open_explicit(self, events: list[dict], fld: ResponseTemplateField, m: Any) -> None:
         self._current = fld.name
         self._captures = {k: v for k, v in m.groupdict().items() if v is not None}
         self._body = ""
