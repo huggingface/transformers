@@ -852,12 +852,15 @@ class ProcessorMixin(PushToHubMixin):
             return text, []
 
         # Use named regex so we can extract groups later and replace
+        # TODO @raushan: vllm encodes text and mm-data separately causing errors when a placeholder
+        # has no associated mm-data. Thus we can check if there are any `replacements` and skip otherwise
+        # Plan: update all models and contrib to vllm, they might benefit largely from `replacement_offsets`
         token_groups = []
-        if image_token := getattr(self, "image_token", None):
+        if len(images_replacements) > 0 and (image_token := getattr(self, "image_token", None)) is not None:
             token_groups.append(f"(?P<image>{re.escape(image_token)})")
-        if video_token := getattr(self, "video_token", None):
+        if len(videos_replacements) > 0 and (video_token := getattr(self, "video_token", None)) is not None:
             token_groups.append(f"(?P<video>{re.escape(video_token)})")
-        if audio_token := getattr(self, "audio_token", None):
+        if len(audio_replacements) > 0 and (audio_token := getattr(self, "audio_token", None)) is not None:
             token_groups.append(f"(?P<audio>{re.escape(audio_token)})")
 
         regex_special_mm_tokens = "|".join(token_groups) or r"(?!)"
@@ -1146,6 +1149,9 @@ class ProcessorMixin(PushToHubMixin):
                 else:
                     os.makedirs(chat_template_dir, exist_ok=True)
                     template_filepath = os.path.join(chat_template_dir, f"{template_name}.jinja")
+                    # template_name is an untrusted dict key; reject path traversal (CWE-22)
+                    if Path(template_filepath).resolve().parent != Path(chat_template_dir).resolve():
+                        raise ValueError(f"Invalid chat template name: {template_name!r}")
                     with open(template_filepath, "w", encoding="utf-8") as f:
                         f.write(template)
                     logger.info(f"chat template saved in {template_filepath}")

@@ -43,12 +43,6 @@ class VaultGemmaConfig(Gemma2Config):
     >>> configuration = model.config
     ```"""
 
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
-    }
-
     use_bidirectional_attention = AttributeError()
 
 
