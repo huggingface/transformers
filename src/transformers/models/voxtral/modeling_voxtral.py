@@ -360,12 +360,12 @@ class VoxtralMultiModalProjector(nn.Module):
         return hidden_states
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Voxtral outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class VoxtralModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     audio_hidden_states (`torch.FloatTensor`, *optional*):

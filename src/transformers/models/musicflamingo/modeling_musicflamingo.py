@@ -376,12 +376,12 @@ class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
         return window_indices.unsqueeze(1) * max_post_length * audio_embed_frame_step + frame_offsets
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for MusicFlamingo causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class MusicFlamingoCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

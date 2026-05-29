@@ -107,12 +107,12 @@ class GraniteSpeechPlusPreTrainedModel(PreTrainedModel):
             init.copy_(module.attention_dists, attention_dists)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Granite Speech outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class GraniteSpeechPlusModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     audio_hidden_states (`torch.FloatTensor`, *optional*):

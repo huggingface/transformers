@@ -42,12 +42,12 @@ from .configuration_granite_speech import GraniteSpeechConfig, GraniteSpeechEnco
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Granite Speech outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class GraniteSpeechModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     audio_hidden_states (`torch.FloatTensor`, *optional*):

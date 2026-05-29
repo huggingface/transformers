@@ -62,7 +62,6 @@ class Qwen2AudioModelOutputWithPast(BaseModelOutputWithPast):
     labels: torch.LongTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Qwen2Audio causal language model (or autoregressive) outputs.
