@@ -339,6 +339,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("maskformer-swin", "MaskFormerSwinConfig"),
         ("mbart", "MBartConfig"),
         ("megatron-bert", "MegatronBertConfig"),
+        ("mellum", "MellumConfig"),
         ("metaclip_2", "MetaClip2Config"),
         ("metaclip_2_text_model", "MetaClip2TextConfig"),
         ("metaclip_2_vision_model", "MetaClip2VisionConfig"),
