@@ -25,7 +25,7 @@ from ..cache_utils import Cache
 from ..conversion_mapping import get_model_conversion_mapping
 from ..core_model_loading import WeightRenaming, convert_and_load_state_dict_in_model
 from ..masking_utils import create_causal_mask
-from ..modeling_utils import LoadStateDictConfig, PreTrainedModel, _get_resolved_checkpoint_files
+from ..modeling_utils import LoadStateDictConfig, PreTrainedModel, _get_resolved_checkpoint_files, local_torch_dtype
 from ..utils import logging
 from ..utils.loading_report import log_state_dict_report
 
@@ -214,8 +214,9 @@ class MtpLayerStack(PreTrainedModel):
 
         # Get the number of layers in the checkpoint
         num_mtp_layers = main_model.config.get_text_config().num_nextn_predict_layers
-        # Since we need to share some modules, let's not instantiate on meta device
-        mtp_model = cls(main_model, num_mtp_layers)
+        # Since we need to share some modules, let's not instantiate on meta device, but we still need the dtype context
+        with local_torch_dtype(main_model.config.dtype, cls.__name__):
+            mtp_model = cls(main_model, num_mtp_layers)
 
         # Now, let's scan the index to obtain the mtp-specific files and weights
         checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
