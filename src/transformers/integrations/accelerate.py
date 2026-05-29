@@ -26,7 +26,6 @@ from typing import TYPE_CHECKING
 from safetensors import safe_open
 from safetensors.torch import save_file
 
-from ..distributed.fsdp import is_fsdp_enabled
 from ..utils import (
     is_accelerate_available,
     is_torch_available,
@@ -35,6 +34,7 @@ from ..utils import (
 )
 from ..utils.quantization_config import QuantizationMethod
 from .deepspeed import is_deepspeed_zero3_enabled
+from .fsdp import is_fsdp_enabled
 
 
 if is_torch_available():
@@ -469,7 +469,9 @@ def accelerate_disk_offload(
 
         # Update the weight names according to the `weight_mapping`
         weight_renaming_map = {
-            rename_source_key(k, renamings, [], prefix=model.base_model_prefix, meta_state_dict=meta_state_dict)[0]: k
+            rename_source_key(
+                k, renamings, [], base_model_prefix=model.base_model_prefix, meta_state_dict=meta_state_dict
+            )[0]: k
             for k in weight_map
         }
 
