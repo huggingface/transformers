@@ -1044,11 +1044,12 @@ class PrefixAndTruncationTest(unittest.TestCase):
         stream.finalize()
         self.assertEqual(stream._output, {"role": "assistant", "thinking": "hi"})
 
-    def test_round_trip_equivalence_prefix_vs_concat(self):
-        """The load-bearing property: `prefix=p` + chunked `feed(g)` produces
-        the same dict as `parse_response(p + g)` and as
-        `parse_response(g, prefix=p)`. Auto-truncation makes "one long array"
-        equivalent to the explicit two-input form."""
+    def test_round_trip_equivalence_prefix_streaming_vs_oneshot(self):
+        """The load-bearing property: `prefix=p` + chunked `feed(g)` produces the
+        same dict as the one-shot `parse_response(g, prefix=p)`, regardless of how
+        `g` is chunked. (Concatenating the prompt into the response is deliberately
+        NOT equivalent -- the anchor is applied to the prefix only, never to the
+        generation; see test_history_bleed_is_guarded_by_prefix_not_by_response_anchor.)"""
         prompt = "<|im_start|>system\nA<|im_end|>\n<|im_start|>user\nB<|im_end|>\n<|im_start|>assistant\n<think>\n"
         for name, tmpl_dict, gen_text in _STREAMING_FIXTURES:
             if "thinking" not in gen_text and "<think>" not in gen_text:
@@ -1058,12 +1059,8 @@ class PrefixAndTruncationTest(unittest.TestCase):
             if name not in ("qwen3", "smollm"):
                 continue
             tmpl_with_anchor = {**tmpl_dict, "start_anchor": "<|im_start|>assistant\n"}
-            # Expected: feed (prefix + gen) without prefix kwarg, but auto-truncate
-            # via parse_response should match feeding gen with prefix kwarg.
             via_prefix = parse_response(gen_text, tmpl_with_anchor, prefix=prompt)
-            via_concat = parse_response(prompt + gen_text, tmpl_with_anchor)
-            self.assertEqual(via_prefix, via_concat, msg=f"fixture={name}")
-            # Streaming forms.
+            # Streaming forms must match the one-shot prefix form for every chunking.
             for step in (1, 3, 7, 31):
                 with self.subTest(fixture=name, step=step):
                     stream = ResponseParser(tmpl_with_anchor, prefix=prompt)
@@ -1071,6 +1068,34 @@ class PrefixAndTruncationTest(unittest.TestCase):
                         stream.feed(chunk)
                     message, _ = stream.finalize()
                     self.assertEqual(message, via_prefix)
+
+    def test_history_bleed_is_guarded_by_prefix_not_by_response_anchor(self):
+        """The `start_anchor` guards against history bleed only via `prefix=`; it is NOT
+        applied to the response. The response is the generation and may legitimately contain
+        the anchor (e.g. gpt-oss harmony opens every channel with `<|start|>assistant`), so
+        truncating it would drop real content. Passing the prompt as `prefix=` is the way to
+        keep earlier turns out of the parse."""
+        spec = {
+            "defaults": {"role": "assistant"},
+            "start_anchor": "<|im_start|>assistant\n",
+            "fields": {"content": {"close_pattern": r"\Z", "content": "text"}},
+        }
+        prompt = "<|im_start|>user\nHi<|im_end|>\n<|im_start|>assistant\n"
+        gen = "Hello there!"
+        clean = {"role": "assistant", "content": "Hello there!"}
+        # The supported guard: pass the prompt as prefix= so history is truncated off the prefix.
+        self.assertEqual(parse_response(gen, spec, prefix=prompt), clean)
+        # Pure generation parses cleanly with no prefix.
+        self.assertEqual(parse_response(gen, spec), clean)
+        # An anchor inside the response is treated as content, never as a history boundary:
+        # gpt-oss re-emits `<|start|>assistant` between channels, and that content survives.
+        gpt_oss_gen = (
+            "<|channel|>analysis<|message|>thinking<|end|><|start|>assistant<|channel|>final<|message|>answer"
+        )
+        self.assertEqual(
+            parse_response(gpt_oss_gen, gpt_oss_template),
+            {"role": "assistant", "thinking": "thinking", "content": "answer"},
+        )
 
     def test_prefix_with_open_close_inside_truncated_region(self):
         """Prefix opens AND closes a region. The full open/chunk/close event

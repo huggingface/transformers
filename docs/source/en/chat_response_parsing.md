@@ -198,8 +198,12 @@ In addition to `fields`, the template supports two top-level keys:
 - `start_anchor` (str) / `start_anchor_pattern` (str regex) — Marks where the current assistant message
   begins inside a chat prompt. When you pass `prefix=` to `parse_response` or `get_response_parser`, the parser
   right-truncates the prefix past the **last** occurrence of this anchor before processing it, so earlier turns in
-  a multi-turn conversation don't pollute the current message's state. For ChatML-style models this is typically
-  `"<|im_start|>assistant\n"`. Exactly one of `start_anchor` or `start_anchor_pattern` must be set.
+  a multi-turn conversation don't pollute the current message's state. The anchor is applied only to the `prefix`,
+  never to the response/generation you parse — some formats legitimately re-emit it mid-message (gpt-oss harmony
+  output opens every channel with `<|start|>assistant`), so stripping the response past the anchor would drop the
+  model's own reasoning and tool calls. This is why the generation alone is never enough to guard against history
+  bleed: pass the prompt as `prefix=`. For ChatML-style models the anchor is typically `"<|im_start|>assistant\n"`.
+  Exactly one of `start_anchor` or `start_anchor_pattern` must be set.
 
 As with chat templates, response templates are stored as tokenizer attributes and saved with the tokenizer. Unlike
 chat templates, we save them inside `tokenizer_config.json` and not as a separate file, because their format fits

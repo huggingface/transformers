@@ -17,8 +17,8 @@ from .response_templates import ResponseTemplate, ResponseTemplateField, load_re
 
 
 def parse_response(text: str, response_template: dict | ResponseTemplate, *, prefix: str | None = None) -> dict:
-    """The main function for response parsing when you don't want streaming. Takes a whole output + text
-    and parses it without streaming any events, then returns the parsed message.
+    """The main function for response parsing when you don't want streaming. Takes generated output
+    and the prompt prefix and parses them  without streaming any events, then returns the parsed message.
     """
     response_template = load_response_template(response_template)
     stream = ResponseParser(response_template, prefix=prefix)
