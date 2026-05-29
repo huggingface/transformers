@@ -194,6 +194,32 @@ class GetFromCacheTests(unittest.TestCase):
                 # The error should be re-raised by cached_files, not caught in the exception handling block
                 cached_file(RANDOM_BERT, "nonexistent.json")
 
+    def test_get_checkpoint_shard_files_rejects_path_traversal(self):
+        # The shard filenames come from the untrusted `weight_map` of the checkpoint index. A value that
+        # escapes the model directory via `..` or an absolute path must be rejected so that loading a
+        # crafted local model cannot read files outside the model directory (path traversal, CWE-22).
+        from transformers.utils.hub import get_checkpoint_shard_files
+
+        for malicious in ["../escaped.safetensors", "/etc/escaped.safetensors"]:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                index_path = os.path.join(tmp_dir, "model.safetensors.index.json")
+                with open(index_path, "w") as f:
+                    json.dump({"metadata": {}, "weight_map": {"w": malicious}}, f)
+                with self.assertRaises(ValueError):
+                    get_checkpoint_shard_files(tmp_dir, index_path)
+
+    def test_get_checkpoint_shard_files_allows_subdirectories(self):
+        # Shards stored in a subdirectory of the model directory are legitimate and must still resolve:
+        # the traversal guard rejects escapes only, not nested paths.
+        from transformers.utils.hub import get_checkpoint_shard_files
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            index_path = os.path.join(tmp_dir, "model.safetensors.index.json")
+            with open(index_path, "w") as f:
+                json.dump({"metadata": {}, "weight_map": {"w": "sub/shard.safetensors"}}, f)
+            shard_files, _ = get_checkpoint_shard_files(tmp_dir, index_path)
+            self.assertEqual(shard_files, [os.path.join(tmp_dir, "sub/shard.safetensors")])
+
 
 class OfflineModeTests(unittest.TestCase):
     def test_list_repo_templates_w_offline(self):
