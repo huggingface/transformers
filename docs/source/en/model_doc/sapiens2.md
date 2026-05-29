@@ -306,6 +306,10 @@ print("Composite shape:", result["composite"].shape)    # [3, original_height, o
 
 [[autodoc]] Sapiens2Config
 
+## Sapiens2HeadConfig
+
+[[autodoc]] Sapiens2HeadConfig
+
 ## Sapiens2ImageProcessor
 
 [[autodoc]] Sapiens2ImageProcessor
