@@ -80,19 +80,21 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
     """
     Verify the TP plan of the model, log a warning if the layers that were not sharded and the rules that were not applied.
 
-    Only weight-sharding rules (colwise, rowwise, vocab, moe_experts) are checked.
-    Module/activation entries (e.g. PrepareModuleInput, SequenceParallel) set up
-    communication hooks on modules, not weight sharding, so they are excluded.
+    Only weight-sharding rules (colwise, rowwise, vocab, grouped_gemm, moe_gate_up_*,
+    moe_down_*) are checked. Module/activation entries (e.g. PrepareModuleInput,
+    SequenceParallel, moe_experts_allreduce, ep_router) set up communication hooks on
+    modules, not weight sharding, so they are excluded.
     """
 
     if tp_plan is None:
         return
 
     # Filter out module-level comm hooks — they don't shard weights.
-    # Plan values are registry names; entries beginning with "activation" or "module"
-    # configure communication hooks rather than parameter sharding.
+    # Plan values are registry names; entries beginning with "activation"/"module" or
+    # the forward-only MoE entries configure communication hooks rather than weight sharding.
+    forward_only = {"activation", "moe_experts_allreduce", "ep_router"}
     weight_plan = {
-        k: v for k, v in tp_plan.items() if not (v == "activation" or v.startswith(("activation_", "module_")))
+        k: v for k, v in tp_plan.items() if v not in forward_only and not v.startswith(("activation_", "module_"))
     }
 
     generic_keys = {replace_layer_number_by_wildcard(key) for key in expected_keys}
@@ -317,6 +319,51 @@ class PackedColwiseParallel(CustomParallelStyle):
         )
 
 
+class MoEParamShard(CustomParallelStyle):
+    """Parameter-only TP/EP style for MoE expert weights — sharding, no forward hook.
+
+    Wraps the named 3D expert parameters (``gate_up_proj`` / ``down_proj`` and their
+    biases) as DTensor placeholders with the configured placement. The matching forward
+    communication is declared *separately* in the plan via ``moe_experts_allreduce`` on
+    the experts *module*. This is the param-granularity decomposition requested in review:
+    weight sharding lives in configs at parameter level, module entries are forward-comm only.
+
+    Applied by the param-level pass of ``apply_tensor_parallel`` (which walks
+    ``named_parameters()`` and calls ``shard_parameters`` directly), not via ``_apply``.
+
+    ``shards_expert_dim`` is set for the EP ``grouped_gemm`` style, which shards dim 0
+    (the expert dimension). When True, ``module.num_experts`` is updated to the per-rank
+    local count so the experts forward (histc / clamp / sentinel masking) and the
+    ``ep_router`` sentinel index agree.
+    """
+
+    def __init__(self, placement, *, shards_expert_dim: bool = False):
+        super().__init__()
+        self.placement = placement
+        self.shards_expert_dim = shards_expert_dim
+
+    def shard_parameters(self, module, mesh, param_names=None):
+        # Wrap the requested params as DTensor placeholders. Runs on meta —
+        # distribute_tensor builds metadata only, no collective.
+        if not param_names:
+            return
+        for name in param_names:
+            meta = module._parameters.get(name)
+            if meta is None:
+                continue
+            if self.shards_expert_dim:
+                # dim 0 is the expert dimension; record the per-rank local count so the
+                # experts forward and the EP router agree on local expert ids/sentinel.
+                module.num_experts = meta.shape[0] // mesh.size()
+            module._parameters[name] = torch.nn.Parameter(
+                distribute_tensor(meta, mesh, [self.placement], src_data_rank=None),
+                requires_grad=meta.requires_grad,
+            )
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(placement={self.placement}, shards_expert_dim={self.shards_expert_dim})"
+
+
 if is_torch_available() and is_torch_greater_or_equal("2.5"):
 
     class _AllReduceBackward(torch.autograd.Function):
@@ -340,42 +387,29 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
 
 
 class MoEExpertsParallel(CustomParallelStyle):
-    """Tensor-parallel style for MoE expert modules.
+    """Tensor-parallel forward style for MoE expert modules.
 
-    Shards expert weights as DTensors, then wraps the module's forward so
-    that grouped_mm (which needs plain tensors) works transparently.
+    Forward-comm only — it does NOT shard weights. Expert weight sharding is declared
+    per-parameter in the config plan (``grouped_gemm`` / ``moe_gate_up_*`` / ``moe_down_*``)
+    and applied by the param-level pass; this style only wraps the experts ``forward`` so
+    that grouped_mm (which needs plain tensors) works on the already-sharded DTensor params.
 
     Lifecycle phases:
-    1. shard_parameters — wrap each expert weight named in shard_plan as a DTensor
-       placeholder with the declared placement.
-    2. transform_inputs_pre_forward — localize hidden_states (Replicate→local,
+    1. transform_inputs_pre_forward — localize hidden_states (Replicate→local,
        gives us an all-reduce on the backward gradient for free), then fix
        routing-weight gradients (their backward is partial; use allreduce-sum,
        not divide-by-world-size).
-    3. context_around_forward — swap DTensor params for local leaves so
+    2. context_around_forward — swap DTensor params for local leaves so
        grouped_mm sees plain tensors; restored on exit so save_pretrained
        still sees DTensors.
-    4. transform_output_post_forward — under TP-only each rank's output is
+    3. transform_output_post_forward — under TP-only each rank's output is
        partial (only its expert shard contributed); reduce/redistribute to
        output_layouts.
     """
 
-    def __init__(self, output_layouts=None, shard_plan=None):
+    def __init__(self, output_layouts=None):
         super().__init__()
         self.output_layouts = output_layouts or Replicate()
-        self._moe_shard_plan = shard_plan or {}
-
-    def shard_parameters(self, module, mesh):
-        # Wrap each expert weight as a DTensor placeholder. Runs on meta —
-        # distribute_tensor builds metadata only, no collective.
-        for name, placement in self._moe_shard_plan.items():
-            meta = module._parameters.get(name)
-            if meta is None:
-                continue
-            module._parameters[name] = torch.nn.Parameter(
-                distribute_tensor(meta, mesh, [placement], src_data_rank=None),
-                requires_grad=meta.requires_grad,
-            )
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         hidden_states, top_k_index, top_k_weights = args
@@ -385,8 +419,14 @@ class MoEExpertsParallel(CustomParallelStyle):
 
         if isinstance(top_k_weights, DTensor):
             top_k_weights = top_k_weights.to_local()
-        tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-        top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
+        # Under TP the router runs replicated, so its routing-weight gradient is partial
+        # across ranks and needs an all-reduce-sum in backward. Under EP the router output
+        # is already sliced per-rank by `ep_router` (non-local scores zeroed), so each
+        # rank's routing weights are independent — skip the all-reduce to avoid
+        # double-counting the gradient.
+        if not _is_expert_parallel_enabled(module):
+            tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+            top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
 
         return (hidden_states, top_k_index, top_k_weights), kwargs
 
@@ -414,6 +454,57 @@ class MoEExpertsParallel(CustomParallelStyle):
         return output.to_local()
 
 
+def _is_expert_parallel_enabled(module) -> bool:
+    """Whether the model owning ``module`` was loaded with expert parallelism enabled."""
+    config = getattr(module, "config", None)
+    dist_config = getattr(config, "distributed_config", None)
+    return bool(getattr(dist_config, "enable_expert_parallel", False))
+
+
+class EpRouterParallel(CustomParallelStyle):
+    """Expert-parallel router: forward-only slicing of router outputs to local experts.
+
+    Ported from the original ``RouterParallel`` (#39501). The gate runs replicated on
+    every rank and emits global ``(router_logits, router_scores, router_indices)``. Under
+    EP each rank owns ``num_experts // ep_size`` experts, so this post-forward hook zeroes
+    the scores of non-local experts and remaps the surviving indices into the local range,
+    using ``num_local_experts`` as the sentinel for dropped (non-local) slots. The
+    downstream experts forward masks that sentinel and ``moe_experts_allreduce`` sums the
+    partial per-rank results.
+
+    No parameter sharding — the gate weight stays replicated.
+
+    Example: 128 experts, EP=8 → num_local_experts=16. Rank 0 (owns experts 0-15) keeps
+    only indices in [0, 16), remaps them via fmod, and sets everything else to the
+    sentinel 16; its scores are zeroed everywhere except the surviving local slots.
+    """
+
+    def transform_output_post_forward(self, module, output, mesh):
+        ep_rank, ep_size = mesh.get_local_rank(), mesh.size()
+        num_experts = getattr(module, "num_experts", None)
+        if num_experts is None:
+            num_experts = getattr(getattr(module, "config", None), "num_experts", None)
+        if num_experts is None:
+            raise AttributeError(
+                f"Router module {type(module).__name__} is missing `num_experts` and `config.num_experts`"
+            )
+        if num_experts % ep_size != 0:
+            raise ValueError(f"num_experts must be divisible by ep_size: {num_experts} % {ep_size} != 0")
+        num_local_experts = num_experts // ep_size
+
+        router_logits, router_scores, router_indices = output
+        non_local_mask = (router_indices // num_local_experts) != ep_rank
+        router_scores = router_scores.masked_fill(non_local_mask, 0.0)
+        router_indices = router_indices.masked_fill(non_local_mask, -1)
+        # `-1 % 1 == 0`, so fmod only remaps correctly when there is more than one local expert.
+        if num_local_experts > 1:
+            router_indices = torch.fmod(router_indices, num_local_experts)
+        else:
+            router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
+        router_indices = router_indices.masked_fill(router_indices == -1, num_local_experts)
+        return router_logits, router_scores, router_indices
+
+
 class ParallelInterface(GeneralInterface):
     """Registry of named TP styles. Configs and modeling files reference these by string name.
 
@@ -434,6 +525,15 @@ class ParallelInterface(GeneralInterface):
                 input_layouts=Shard(1), output_layouts=Shard(-1), use_local_output=False
             ),
             "packed_colwise": PackedColwiseParallel(input_layouts=Replicate()),
+            # MoE expert weight sharding — param-level (no forward hook). The matching
+            # forward comm is declared separately via "moe_experts_allreduce" on the
+            # experts module. Two gate_up layouts: "*_colwise" packs along dim -2
+            # (Qwen3/Mixtral: [E, 2*inter, hidden]); "*_alt" packs along dim -1
+            # (GPT-OSS/Llama4: [E, hidden, 2*inter]).
+            "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),  # EP — expert dim
+            "moe_gate_up_colwise": MoEParamShard(_StridedShard(dim=-2, split_factor=2)),  # TP — Qwen3 layout
+            "moe_gate_up_colwise_alt": MoEParamShard(_StridedShard(dim=-1, split_factor=2)),  # TP — GPT-OSS layout
+            "moe_down_rowwise": MoEParamShard(Shard(-1)),  # TP — down_proj input dim
             # Row-parallel
             "rowwise_allreduce": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
             "rowwise_reduce_scatter": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Shard(1)),
@@ -456,16 +556,13 @@ class ParallelInterface(GeneralInterface):
                 use_local_output=True,
             ),
             "module_allgather_split": PrepareModuleInputOutput(),
-            # MoE — canonical shard_plan baked in (only variant in use across configs).
-            # gate_up_proj is packed (gate||up along output dim) so we use _StridedShard
-            # to interleave; down_proj is plain rowwise on its input dim.
-            "moe_experts_allreduce": MoEExpertsParallel(
-                output_layouts=Replicate(),
-                shard_plan={
-                    "gate_up_proj": _StridedShard(dim=-2, split_factor=2),
-                    "down_proj": Shard(-1),
-                },
-            ),
+            # MoE expert forward comm (no weight sharding — that is declared per-param via
+            # the "grouped_gemm" / "moe_*" styles above on gate_up_proj / down_proj). This
+            # entry only installs the forward hook that all-reduces the partial per-rank
+            # expert outputs. Used for both TP and EP.
+            "moe_experts_allreduce": MoEExpertsParallel(output_layouts=Replicate()),
+            # EP router — forward-only slicing of router outputs to local experts.
+            "ep_router": EpRouterParallel(),
         }
         if is_torch_available() and is_torch_greater_or_equal("2.5") and _torch_distributed_available
         else {}
