@@ -66,6 +66,8 @@ class MiniMaxConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.experts.gate_up_proj": "moe_gate_up_colwise",
+        "layers.*.mlp.experts.down_proj": "moe_down_rowwise",
         "layers.*.mlp.experts": "moe_experts_allreduce",
     }
     base_model_pp_plan = {

@@ -52,6 +52,8 @@ class MiniMaxM2Config(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise_allgather",
         "layers.*.self_attn.v_proj": "colwise_allgather",
         "layers.*.self_attn.o_proj": "vocab_allreduce",
+        "layers.*.mlp.experts.gate_up_proj": "moe_gate_up_colwise",
+        "layers.*.mlp.experts.down_proj": "moe_down_rowwise",
         "layers.*.mlp.experts": "moe_experts_allreduce",
     }
     base_model_sp_plan = {
@@ -64,6 +66,8 @@ class MiniMaxM2Config(PreTrainedConfig):
         "layers.*.self_attn.o_proj": "vocab_reduce_scatter",
         "layers.*.post_attention_layernorm": "activation",
         "layers.*.mlp": "module_allgather_split",
+        "layers.*.mlp.experts.gate_up_proj": "moe_gate_up_colwise",
+        "layers.*.mlp.experts.down_proj": "moe_down_rowwise",
         "layers.*.mlp.experts": "moe_experts_allreduce",
         "norm": "activation",
     }

@@ -48,6 +48,8 @@ class MixtralConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.experts.gate_up_proj": "moe_gate_up_colwise",
+        "layers.*.mlp.experts.down_proj": "moe_down_rowwise",
         "layers.*.mlp.experts": "moe_experts_allreduce",
     }
 
@@ -62,6 +64,8 @@ class MixtralConfig(PreTrainedConfig):
         "layers.*.self_attn.o_proj": "rowwise_reduce_scatter",
         "layers.*.post_attention_layernorm": "activation",
         "layers.*.mlp": "module_allgather_split",
+        "layers.*.mlp.experts.gate_up_proj": "moe_gate_up_colwise",
+        "layers.*.mlp.experts.down_proj": "moe_down_rowwise",
         "layers.*.mlp.experts": "moe_experts_allreduce",
         "norm": "activation",
     }
