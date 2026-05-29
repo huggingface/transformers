@@ -876,7 +876,11 @@ class ProcessorMixin(PushToHubMixin):
                 expanded_sample.append(text[batch_idx][last:start])
 
                 mm_type = m.lastgroup
-                replacement_text = next(replacements_iters[mm_type])
+                replacement_text = next(replacements_iters[mm_type], None)
+                if replacement_text is None:
+                    expanded_sample.append(text[batch_idx][last:end])
+                    last = end
+                    continue
                 replacement_offsets.append(
                     {
                         "type": mm_type,
