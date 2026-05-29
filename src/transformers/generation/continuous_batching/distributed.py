@@ -16,7 +16,6 @@ from typing import TypeVar
 
 import torch
 import torch.distributed as dist
-from torch.distributed.tensor.device_mesh import DeviceMesh
 
 from .requests import logger
 
@@ -27,7 +26,7 @@ T = TypeVar("T")
 class DistributedHelper:
     """A helper class to handle distributed-related operations. Notably, it does not crash when distributed is off."""
 
-    def __init__(self, device_mesh: DeviceMesh | None) -> None:
+    def __init__(self, device_mesh: "dist.device_mesh.DeviceMesh | None") -> None:
         self.device_mesh = device_mesh
         self.dist_on = dist.is_available() and dist.is_initialized()
 
