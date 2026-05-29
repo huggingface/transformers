@@ -67,16 +67,24 @@ class DeepGEMM:
 
 
 @functools.cache
-def _load_deepgemm_kernel() -> DeepGEMM:
-    """Load DeepGEMM once; raise `ImportError` if env or any required symbol is missing."""
+def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
+    """Load DeepGEMM once; raise `ImportError` if env or any required symbol is missing.
+
+    `requires_sm100` raises a Blackwell-specific error for callers (FP4 / Mega MoE)
+    that won't work on Hopper, instead of the generic SM90+ message.
+    """
     if not is_kernels_available():
         raise ImportError("DeepGEMM kernel requires the `kernels` package. Install it with `pip install -U kernels`.")
     if not torch.cuda.is_available():
         raise ImportError("DeepGEMM kernel requires CUDA, but CUDA is not available.")
 
-    major = torch.cuda.get_device_capability()[0]
-    if major < 9:
-        raise ImportError(f"DeepGEMM requires Hopper (SM90+); current device is SM{major}0.")
+    major, minor = torch.cuda.get_device_capability()
+    # DeepGEMM ships kernels only for SM90 (Hopper) and SM100 (Blackwell); anything
+    # else — Ada (SM89), Ampere (SM80), or future archs (SM110+) — has no build.
+    allowed = (10,) if requires_sm100 else (9, 10)
+    if major not in allowed:
+        arch = "Blackwell (SM100)" if requires_sm100 else "Hopper (SM90) or Blackwell (SM100)"
+        raise ImportError(f"DeepGEMM requires {arch}; current device is SM{major}{minor}.")
 
     cuda_major, cuda_minor = get_cuda_runtime_version()
     if (cuda_major, cuda_minor) < (12, 3):
@@ -181,7 +189,8 @@ def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> t
     if sf.dim() not in (2, 3):
         raise ValueError(f"DeepGEMM SF must be 2D or 3D, got {sf.dim()}D")
 
-    mn, kf = sf.size(-2), sf.size(-1)
+    mn = sf.size(-2)
+    kf = sf.size(-1)
     align_to = 16 // sf.element_size()  # `get_tma_aligned_size`: align(mn, 16 / element_size)
     aligned_mn = -(-mn // align_to) * align_to
     target_strides = (1, aligned_mn) if sf.dim() == 2 else (kf * aligned_mn, 1, aligned_mn)
@@ -204,8 +213,6 @@ def _select_fp8_cast_kwargs(
       - FP8 weights + float SF: gran_k=128 float SF (DSv3).
     """
     if weight.dtype == torch.int8:  # FP4
-        if torch.cuda.get_device_capability(device)[0] < 10:
-            raise RuntimeError("FP4 weights (int8-packed e2m1) require SM100+ (Blackwell).")
         return {"use_ue8m0": True, "gran_k": 32, "use_packed_ue8m0": True}
     # FP8 weights: validate block_size (informational; kernel infers recipe from SF dtype/shape).
     if block_size is None:
@@ -361,9 +368,11 @@ def deepgemm_fp8_fp4_linear(
     per-row SFs. Callers should route static activations through the Triton fallback.
     """
     if activation_scale is not None:
-        raise NotImplementedError("Static activation quantization is not supported on the DeepGEMM path.")
+        raise NotImplementedError("DeepGEMM linear does not support static activation quantization.")
+    if input.dtype not in (torch.bfloat16, torch.float16):
+        raise ValueError(f"DeepGEMM linear requires FP16 or BF16 activations, got {input.dtype}")
 
-    deepgemm = _load_deepgemm_kernel()
+    deepgemm = _load_deepgemm_kernel(requires_sm100=weight.dtype == torch.int8)
     cast_kwargs = _select_fp8_cast_kwargs(weight, weight_scale_inv, block_size=block_size, device=input.device)
 
     input_2d = input.view(-1, input.shape[-1])
@@ -400,7 +409,8 @@ def deepgemm_bf16_experts_forward(
 
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
-    num_tokens, hidden_dim = hidden_states.size(0), hidden_states.size(-1)
+    num_tokens = hidden_states.size(0)
+    hidden_dim = hidden_states.size(-1)
 
     use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
     (
@@ -455,18 +465,19 @@ def deepgemm_fp8_fp4_experts_forward(
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
     if self.activation_scheme == "static":
-        raise NotImplementedError(
-            "DeepGEMM experts dispatch does not support activation_scheme='static'. Use 'dynamic'."
-        )
+        raise NotImplementedError("DeepGEMM experts dispatch does not support static activation quantization.")
+    if hidden_states.dtype != torch.bfloat16:
+        raise ValueError(f"DeepGEMM experts path requires bfloat16 hidden states, got {hidden_states.dtype}")
 
-    deepgemm = _load_deepgemm_kernel()
+    deepgemm = _load_deepgemm_kernel(requires_sm100=self.down_proj.dtype == torch.int8)
     grouped_fp8_fp4_matmul = (
         deepgemm.grouped_fp8_fp4_matmul_nn if self.is_transposed else deepgemm.grouped_fp8_fp4_matmul_nt
     )
 
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
-    num_tokens, hidden_dim = hidden_states.size(0), hidden_states.size(-1)
+    num_tokens = hidden_states.size(0)
+    hidden_dim = hidden_states.size(-1)
 
     w_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
     ws_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
@@ -530,7 +541,7 @@ def deepgemm_fp8_fp4_experts_forward(
 def _megamoe_setup_weights(
     self: torch.nn.Module,
     deepgemm: DeepGEMM,
-    num_experts: int,
+    local_num_experts: int,
     intermediate_hidden: int,
     hidden_dim: int,
 ) -> None:
@@ -557,14 +568,14 @@ def _megamoe_setup_weights(
         gate_up_w.size(1),  # 2 * intermediate
         hidden_dim,
         recipe=(1, 32),
-        num_groups=num_experts,
+        num_groups=local_num_experts,
     )
     down_sf = deepgemm.transform_sf_into_required_layout(
         down_sf_raw.float(),
         down_w.size(1),  # hidden
         intermediate_hidden,
         recipe=(1, 32),
-        num_groups=num_experts,
+        num_groups=local_num_experts,
     )
     (gate_up, gate_up_sf), (down, down_sf) = deepgemm.transform_weights_for_mega_moe(
         (gate_up_w, gate_up_sf),
@@ -602,8 +613,11 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
       `transform_weights_for_mega_moe((gate_up, gate_up_sf), (down, down_sf))`.
       - `config.swiglu_limit` (optional): SwiGLU clamp; absent → unclamped.
     """
-    if torch.cuda.get_device_capability(hidden_states.device)[0] < 10:
-        raise RuntimeError("DeepGEMM Mega MoE requires SM100+ (Blackwell). Use the 'deepgemm' dispatch on Hopper.")
+    if self.gate_up_proj.dtype != torch.int8:
+        raise RuntimeError(
+            f"DeepGEMM Mega MoE requires FP4-packed expert weights (dtype=`int8`), got "
+            f"`{self.gate_up_proj.dtype}`. Use the 'deepgemm' dispatch for FP8 experts."
+        )
 
     if process_group is None:
         raise ValueError(
@@ -611,18 +625,26 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
             "(MoeTensorParalellExperts) supplies it automatically; pass it explicitly otherwise."
         )
 
-    deepgemm = _load_deepgemm_kernel()
+    deepgemm = _load_deepgemm_kernel(requires_sm100=True)
 
     num_top_k = top_k_index.size(-1)
-    num_experts = self.gate_up_proj.size(0)
+    num_tokens = hidden_states.size(0)
+    hidden_dim = hidden_states.size(-1)
     intermediate_hidden = self.gate_up_proj.size(1) // 2
-    num_tokens, hidden_dim = hidden_states.size(0), hidden_states.size(-1)
+
+    local_num_experts = self.gate_up_proj.size(0)
+    global_num_experts = local_num_experts * process_group.size()
+    if hidden_dim % 32 != 0 or intermediate_hidden % 32 != 0:
+        raise ValueError(
+            f"DeepGEMM Mega MoE requires `hidden_dim` and `intermediate_hidden` divisible by 32 "
+            f"(FP8 SF granularity); got hidden_dim={hidden_dim}, intermediate_hidden={intermediate_hidden}."
+        )
 
     # First-forward one-shot: pack UE8M0 SFs and interleave the L1/L2 weights for UTCCP.
     # The kernel asserts `sf.dtype == torch.int` so the raw loader-side scale_inv (UE8M0)
     # can't be passed directly; setup overwrites the same attributes with transformed views.
     if not getattr(self, "_megamoe_transformed", False):
-        _megamoe_setup_weights(self, deepgemm, num_experts, intermediate_hidden, hidden_dim)
+        _megamoe_setup_weights(self, deepgemm, local_num_experts, intermediate_hidden, hidden_dim)
 
     # Lazily (re)allocate the symmetric buffer when the cached one is too small.
     if getattr(self, "symm_buffer", None) is None or self.symm_buffer.num_max_tokens_per_rank < num_tokens:
@@ -630,7 +652,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
             process_group,
             hidden=hidden_dim,
             num_topk=num_top_k,
-            num_experts=num_experts * process_group.size(),  # global count
+            num_experts=global_num_experts,
             num_max_tokens_per_rank=num_tokens,
             intermediate_hidden=intermediate_hidden,
         )
