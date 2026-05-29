@@ -881,6 +881,27 @@ class SyntheticCacheTest(unittest.TestCase):
             static_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "StaticCache Scenario 2 failed"
         )
 
+    def test_static_layer_get_seq_length_returns_int(self):
+        """Test that StaticCache.get_seq_length() returns a Python int, not a Tensor.
+
+        StaticLayer stores `cumulative_length` as a torch.Tensor for CUDA-graph
+        stability, but get_seq_length() must return a plain Python int as declared
+        by its `-> int` signature and as required by callers that use the result in
+        standard Python arithmetic (e.g. `input_ids.shape[1] - past_length`).
+        """
+        static_cache = StaticCache(config=self.config, max_cache_len=self.max_cache_len)
+        # Before any update the cache is not initialized: must return 0 (int)
+        self.assertIsInstance(static_cache.get_seq_length(), int, "get_seq_length() must return int before initialization")
+        self.assertEqual(static_cache.get_seq_length(), 0)
+
+        # After an update the cache is initialized and cumulative_length is a Tensor internally,
+        # but get_seq_length() must still return a plain Python int.
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
+        static_cache.update(key_states=prefill, value_states=prefill, layer_idx=0)
+        seq_len = static_cache.get_seq_length()
+        self.assertIsInstance(seq_len, int, "get_seq_length() must return int after initialization, not a Tensor")
+        self.assertEqual(seq_len, 2)
+
     def test_sliding_window_cache(self):
         """Test fully sliding StaticCache with manually prefilled states and hardcoded assertions.
 
