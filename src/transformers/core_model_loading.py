@@ -83,7 +83,6 @@ def build_glob_alternation(
 class ConversionOps:
     """Base class for weight conversion operations."""
 
-
     def __repr__(self):
         if hasattr(self, "dim"):
             return f"{self.__class__.__name__}(dim={self.dim})"
@@ -936,7 +935,9 @@ class WeightConverter(WeightTransform):
         # dot-token boundary. Stops `mlp.experts.gate_up_proj` from substring-matching
         # the FP8 scale sibling `mlp.experts.gate_up_proj_scale_inv` on save.
 
-        if self.quantization_operation is not None and not getattr(self.quantization_operation, "supports_round_trip", False):
+        if self.quantization_operation is not None and not getattr(
+            self.quantization_operation, "supports_round_trip", False
+        ):
             raise ValueError(
                 f"{type(self.quantization_operation).__name__} is not opted into round-trip save "
                 "(set `supports_round_trip = True` on the op once its reverse_op is audited)."
