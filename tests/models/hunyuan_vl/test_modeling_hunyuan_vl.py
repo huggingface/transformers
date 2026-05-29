@@ -1,4 +1,4 @@
-# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Copyright (C) 2026 THL A29 Limited, a Tencent company and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,29 +11,36 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Testing suite for the PyTorch HunYuanVL model."""
 
 import unittest
 
+from transformers import (
+    HunYuanVLConfig,
+    HunYuanVLForCausalLM,
+    HunYuanVLForConditionalGeneration,
+    HunYuanVLTextConfig,
+    HunYuanVLVisionConfig,
+    is_torch_available,
+)
 from transformers.testing_utils import require_torch
-from transformers.utils import is_torch_available
 
 
 if is_torch_available():
     import torch
 
-    from transformers.models.hunyuan_vl.configuration_hunyuan_vl import HunYuanVLConfig
-    from transformers.models.hunyuan_vl.modeling_hunyuan_vl import HunYuanVLForConditionalGeneration
+
+def ids_tensor(shape, vocab_size):
+    return torch.randint(low=0, high=vocab_size, size=tuple(shape), dtype=torch.long)
 
 
-    def ids_tensor(shape, vocab_size):
-        return torch.randint(low=0, high=vocab_size, size=tuple(shape), dtype=torch.long)
-
-
-    def floats_tensor(shape, scale=1.0):
-        return torch.rand(tuple(shape), dtype=torch.float32) * scale
+def floats_tensor(shape, scale=1.0):
+    return torch.rand(tuple(shape), dtype=torch.float32) * scale
 
 
 class HunYuanVLVisionText2TextModelTester:
+    """Build a tiny HunYuanVL config plus matching multimodal inputs for unit tests."""
+
     def __init__(
         self,
         parent,
@@ -43,8 +50,6 @@ class HunYuanVLVisionText2TextModelTester:
         patch_size=16,
         image_size=64,
         image_token_id=5,
-        text_config=None,
-        vision_config=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -56,8 +61,9 @@ class HunYuanVLVisionText2TextModelTester:
         self.device = "cpu"
         self.num_image_patches = (image_size // patch_size) ** 2
         self.grid_hw = image_size // patch_size
+        # HunYuanVL inserts an extra column per row (newline) and 2 begin/end tokens.
         self.num_image_placeholder_tokens = self.grid_hw * (self.grid_hw + 1) + 2
-        self.text_config = text_config or {
+        self.text_config = {
             "vocab_size": 256,
             "hidden_size": 64,
             "intermediate_size": 128,
@@ -73,7 +79,7 @@ class HunYuanVLVisionText2TextModelTester:
             "rope_theta": 10000.0,
             "tie_word_embeddings": False,
         }
-        self.vision_config = vision_config or {
+        self.vision_config = {
             "num_channels": num_channels,
             "patch_size": patch_size,
             "temporal_patch_size": 1,
@@ -128,13 +134,30 @@ class HunYuanVLVisionText2TextModelTester:
 
 @require_torch
 class HunYuanVLModelTest(unittest.TestCase):
+    """Lightweight CPU model tests for `HunYuanVLForConditionalGeneration`.
+
+    These tests intentionally avoid the heavy `ModelTesterMixin` machinery so the suite stays runnable in
+    minimal environments (no GPU, no full Transformers test infrastructure). Coverage focuses on:
+
+    - The forward path produces the expected logits shape on multimodal inputs.
+    - Mismatched image / placeholder counts raise a clear error.
+    - Text-only forward and text-only generate continue to work without any pixel inputs.
+    - The expected backbone (`HunYuanVLTextModel`) is wired in as `model`.
+    """
+
     def setUp(self):
         self.model_tester = HunYuanVLVisionText2TextModelTester(self)
 
-    def test_forward_uses_dense_backbone(self):
+    def test_config_classes(self):
+        config = self.model_tester.get_config()
+        self.assertIsInstance(config, HunYuanVLConfig)
+        self.assertIsInstance(config.text_config, HunYuanVLTextConfig)
+        self.assertIsInstance(config.vision_config, HunYuanVLVisionConfig)
+
+    def test_forward_uses_text_backbone(self):
         config, _ = self.model_tester.prepare_config_and_inputs()
         model = HunYuanVLForConditionalGeneration(config).to(self.model_tester.device)
-        self.assertEqual(model.model.__class__.__name__, "HunYuanVLDenseV1Model")
+        self.assertEqual(model.model.__class__.__name__, "HunYuanVLTextModel")
 
     def test_forward_with_image_placeholders(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
@@ -193,3 +216,14 @@ class HunYuanVLModelTest(unittest.TestCase):
 
         self.assertEqual(generated.shape[0], input_ids.shape[0])
         self.assertGreaterEqual(generated.shape[1], input_ids.shape[1] + 1)
+
+    def test_for_causal_lm_text_only(self):
+        config = self.model_tester.get_config()
+        model = HunYuanVLForCausalLM(config).to(self.model_tester.device)
+        model.eval()
+
+        input_ids = torch.tensor([[config.bos_token_id, 5, 6]], device=self.model_tester.device)
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids)
+
+        self.assertEqual(outputs.logits.shape, (1, input_ids.shape[1], config.text_config.vocab_size))

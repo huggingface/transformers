@@ -1,3 +1,18 @@
+# Copyright (C) 2025 THL A29 Limited, a Tencent company and the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Processor class for HunYuanVL."""
+
 import numpy as np
 import torch
 
@@ -31,17 +46,28 @@ class HunYuanVLProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class HunYuanVLProcessor(ProcessorMixin):
+    r"""
+    HunYuanVL processor that wraps an image processor and a tokenizer for image-text-to-text generation.
+
+    The processor expands every `<image>` placeholder in the prompts into a span of placeholder tokens whose length is
+    inferred from the corresponding `image_grid_thw`. It also produces a 4-channel `position_ids` tensor whose
+    channels are `(text_pos, width, height, temporal)`. The width/height channels are overwritten with vision-aware
+    coordinates inside each image span; text tokens use the standard 1D position increment for all four channels.
+    """
+
     valid_processor_kwargs = HunYuanVLProcessorKwargs
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.tokenizer = tokenizer
 
-        required_attrs = ["image_token", "image_start_token", "image_end_token", "vocab_size", "pad_token"]
-        for attr in required_attrs:
+        # HunYuan-style tokenizers expose the special image tokens via attributes; preserve a useful error message
+        # if a caller forgot to register them.
+        for attr in ("image_token", "image_start_token", "image_end_token", "vocab_size", "pad_token"):
             if not hasattr(tokenizer, attr):
                 raise ValueError(
-                    f"Tokenizer missing required attribute '{attr}'. "
-                    "Please add the corresponding field mapping to `extra_special_tokens` in tokenizer_config.json"
+                    f"Tokenizer is missing required attribute '{attr}'. "
+                    "Add the corresponding mapping to `extra_special_tokens` in `tokenizer_config.json` or set the "
+                    "attribute manually before constructing the processor."
                 )
 
         self.image_token = tokenizer.image_token
@@ -77,7 +103,17 @@ class HunYuanVLProcessor(ProcessorMixin):
             and prompt[end_index : end_index + len(end_token)] == end_token
         )
 
-    def _build_position_ids(self, input_ids: torch.LongTensor, image_grid_thw=None) -> torch.LongTensor:
+    def _build_position_ids(
+        self, input_ids: torch.LongTensor, image_grid_thw: torch.LongTensor | None = None
+    ) -> torch.LongTensor:
+        """
+        Build the 4-channel `(text_pos, width, height, temporal)` position ids tensor.
+
+        Channels follow HunYuanVL's xdrope convention: text tokens use a flat sequence index in every channel, while
+        vision tokens belonging to a placeholder span overwrite the `width` and `height` channels with the per-image
+        2D grid coordinates. The temporal channel is reserved for compatibility with HunYuan checkpoints that share
+        the xdrope layout with the model's video-capable internal variants.
+        """
         seq_len = input_ids.shape[-1]
         device = input_ids.device
 
@@ -99,7 +135,7 @@ class HunYuanVLProcessor(ProcessorMixin):
                     f"image_index={image_index}, total_images={len(image_grid_thw)}."
                 )
 
-            _, grid_h, grid_w = [int(value) for value in image_grid_thw[image_index]]
+            _, grid_h, grid_w = (int(value) for value in image_grid_thw[image_index])
             patch_h, patch_w, _ = self._get_image_token_count(grid_h, grid_w)
             token_start = start_pos + 1 + int(self.cat_extra_token)
             replace_num = patch_h * (patch_w + 1)
@@ -109,7 +145,7 @@ class HunYuanVLProcessor(ProcessorMixin):
                 dtype=torch.int64,
                 device=device,
             )
-            patch_h_list = []
+            patch_h_list: list[int] = []
             for h_idx in range(patch_h):
                 patch_h_list += [h_idx] * (patch_w + 1)
             position_ids_h[token_start : token_start + replace_num] = torch.tensor(
@@ -135,7 +171,7 @@ class HunYuanVLProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        image_inputs = {}
+        image_inputs: dict = {}
         image_grid_thw = None
         if images is not None:
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
@@ -163,7 +199,7 @@ class HunYuanVLProcessor(ProcessorMixin):
                     has_wrappers = self._has_wrappers(
                         text[i], token_start, self.image_start_token, self.image_token, self.image_end_token
                     )
-                    _, grid_h, grid_w = [int(value) for value in image_grid_thw[index]]
+                    _, grid_h, grid_w = (int(value) for value in image_grid_thw[index])
                     _, _, num_image_tokens = self._get_image_token_count(grid_h, grid_w)
                     replacement = self.placeholder_token * num_image_tokens
                     if not has_wrappers:
@@ -175,7 +211,9 @@ class HunYuanVLProcessor(ProcessorMixin):
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, add_special_tokens=False, **output_kwargs["text_kwargs"], return_tensors=None)
+        text_inputs = self.tokenizer(
+            text, add_special_tokens=False, **output_kwargs["text_kwargs"], return_tensors=None
+        )
         self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
         input_id_tensors = [torch.tensor(ids, dtype=torch.int64) for ids in text_inputs["input_ids"]]
@@ -192,7 +230,7 @@ class HunYuanVLProcessor(ProcessorMixin):
 
             position_id_tensors.append(self._build_position_ids(input_ids, image_grid_thw=sample_image_grid_thw))
             attention_masks.append(input_ids.ne(self.pad_id).long())
-            imgs_pos.append(self.get_imgs_pos(input_ids.tolist()))
+            imgs_pos.append(self._get_image_spans(input_ids.tolist()))
 
         if return_mm_token_type_ids:
             text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
@@ -219,17 +257,16 @@ class HunYuanVLProcessor(ProcessorMixin):
         )
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
-        """
-        Computes the number of placeholder tokens needed for multimodal image inputs with the given sizes.
-        """
-        vision_data = {}
+        """Compute the number of placeholder tokens needed for the given list of image sizes."""
+        vision_data: dict = {}
         if image_sizes is not None:
             images_kwargs = HunYuanVLProcessorKwargs._defaults.get("images_kwargs", {}).copy()
             images_kwargs.update(kwargs)
             merge_size = images_kwargs.get("merge_size") or self.image_processor.merge_size
 
             num_image_patches_size = [
-                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs) for image_size in image_sizes
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
             ]
             num_image_tokens = [
                 patch_hw[0] // merge_size * (patch_hw[1] // merge_size + 1) + (2 if self.cat_extra_token else 0)
@@ -253,16 +290,19 @@ class HunYuanVLProcessor(ProcessorMixin):
     def apply_chat_template(self, *args, **kwargs):
         return self.tokenizer.apply_chat_template(*args, **kwargs)
 
-    def get_imgs_pos(self, doc_ids):
-        doc_ids = np.array(doc_ids, dtype=np.int64).reshape(-1)
-        img_begin_index = np.where(doc_ids == self.image_start_token_id)[0]
-        img_end_index = np.where(doc_ids == self.image_end_token_id)[0]
+    def _get_image_spans(self, doc_ids: list[int]) -> list[list[int]]:
+        """
+        Return a list of `[image_start_inclusive, image_end_exclusive]` index pairs for each image span detected in
+        ``doc_ids``. Empty when the sample does not contain any images.
+        """
+        doc_ids_array = np.array(doc_ids, dtype=np.int64).reshape(-1)
+        img_begin_index = np.where(doc_ids_array == self.image_start_token_id)[0]
+        img_end_index = np.where(doc_ids_array == self.image_end_token_id)[0]
         if len(img_begin_index) == 0 or len(img_end_index) == 0:
             return []
-        imgs_pos = np.concatenate(
+        return np.concatenate(
             (np.reshape(img_begin_index + 1, (-1, 1)), np.reshape(img_end_index, (-1, 1))), axis=-1
         ).tolist()
-        return imgs_pos
 
     @property
     def model_input_names(self):

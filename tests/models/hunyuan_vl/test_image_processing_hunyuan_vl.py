@@ -17,9 +17,8 @@ import unittest
 
 from PIL import Image
 
-from transformers.testing_utils import require_torch, require_torchvision
-
 from transformers.models.hunyuan_vl.image_processing_hunyuan_vl import HunYuanVLImageProcessor
+from transformers.testing_utils import require_torch, require_torchvision
 
 
 class HunYuanVLImageProcessorTest(unittest.TestCase):

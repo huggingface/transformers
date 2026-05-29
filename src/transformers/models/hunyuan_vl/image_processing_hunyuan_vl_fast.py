@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (C) 2025 THL A29 Limited, a Tencent company and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """Fast image processor class for HunYuanVL."""
 
 import math
-from typing import Optional, Union
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -48,12 +46,11 @@ def smart_resize(
     factor: int = 16,
     min_pixels: int = 512 * 512,
     max_pixels: int = 2048 * 2048,
-):
-    """Rescales the image while preserving aspect ratio as much as possible."""
+) -> tuple[int, int]:
+    """Rescale ``(height, width)`` to a patch-aligned size while keeping the original aspect ratio."""
     if max(height, width) / min(height, width) > 200:
         raise ValueError(
-            "absolute aspect ratio must be smaller than 200, got "
-            f"{max(height, width) / min(height, width)}"
+            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
         )
     h_bar = round(height / factor) * factor
     w_bar = round(width / factor) * factor
@@ -69,11 +66,11 @@ def smart_resize(
 
 
 class HunYuanVLFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
+    min_pixels: int | None
+    max_pixels: int | None
+    patch_size: int | None
+    temporal_patch_size: int | None
+    merge_size: int | None
 
 
 class HunYuanVLImageProcessorFast(BaseImageProcessorFast):
@@ -118,9 +115,9 @@ class HunYuanVLImageProcessorFast(BaseImageProcessorFast):
 
     def _further_process_kwargs(
         self,
-        size: Optional[SizeDict] = None,
-        min_pixels: Optional[int] = None,
-        max_pixels: Optional[int] = None,
+        size: SizeDict | None = None,
+        min_pixels: int | None = None,
+        max_pixels: int | None = None,
         **kwargs,
     ) -> dict:
         if min_pixels is not None and max_pixels is not None:
@@ -133,7 +130,8 @@ class HunYuanVLImageProcessorFast(BaseImageProcessorFast):
         else:
             size = {**self.size}
 
-        resample = kwargs.get("resample", None)
+        # Real HunYuan checkpoints use BICUBIC; gracefully downgrade LANCZOS to BICUBIC for compatibility.
+        resample = kwargs.get("resample")
         is_lanczos = False
         if isinstance(resample, int) and not isinstance(resample, bool):
             is_lanczos = resample == int(PILImageResampling.LANCZOS)
@@ -156,11 +154,11 @@ class HunYuanVLImageProcessorFast(BaseImageProcessorFast):
             return super().preprocess(images, device="cpu", **kwargs)
         try:
             return super().preprocess(images, device=device, **kwargs)
-        except Exception as e:
+        except Exception as error:
             logger.warning(
                 "Exception during image preprocessing on %s: %s. Falling back to CPU.",
                 device,
-                str(e),
+                str(error),
             )
             if torch.cuda.is_available():
                 torch.cuda.current_stream().synchronize()
@@ -171,7 +169,7 @@ class HunYuanVLImageProcessorFast(BaseImageProcessorFast):
         images: ImageInput,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: str | torch.device | None = None,
         **kwargs: Unpack[DefaultFastImageProcessorKwargs],
     ) -> BatchFeature:
         images = self._prepare_image_like_inputs(
@@ -187,19 +185,19 @@ class HunYuanVLImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: "F.InterpolationMode | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         patch_size: int,
         temporal_patch_size: int,
         merge_size: int,
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
-    ):
+    ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -277,16 +275,19 @@ class HunYuanVLImageProcessorFast(BaseImageProcessorFast):
             tensor_type=return_tensors,
         )
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
-        min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
-        max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> tuple[int, int]:
+        """Return the `(grid_h, grid_w)` patch counts that the processor would produce for an image of `height x width`."""
+        images_kwargs = images_kwargs or {}
+        min_pixels = images_kwargs.get("min_pixels", self.size["shortest_edge"])
+        max_pixels = images_kwargs.get("max_pixels", self.size["longest_edge"])
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
 
         factor = patch_size * merge_size
-        resized_height, resized_width = smart_resize(height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels)
-        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        return (grid_h, grid_w)
+        resized_height, resized_width = smart_resize(
+            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+        )
+        return resized_height // patch_size, resized_width // patch_size
 
 
 __all__ = ["HunYuanVLImageProcessorFast"]

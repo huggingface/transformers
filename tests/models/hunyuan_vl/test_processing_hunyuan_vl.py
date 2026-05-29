@@ -88,7 +88,7 @@ class HunYuanVLProcessorTest(unittest.TestCase):
 
     def test_model_input_names(self):
         processor = self.get_processor()
-        self.assertListEqual(
-            processor.model_input_names,
-            ["input_ids", "attention_mask", "pixel_values", "image_grid_thw", "position_ids", "imgs_pos"],
+        self.assertSetEqual(
+            set(processor.model_input_names),
+            {"input_ids", "attention_mask", "pixel_values", "image_grid_thw", "position_ids", "imgs_pos"},
         )

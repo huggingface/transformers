@@ -17,19 +17,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-import inspect
 from huggingface_hub.dataclasses import strict
-from ...configuration_utils import PretrainedConfig
-from ...utils import auto_docstring
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="tencent/HunyuanOCR")
 @strict
-class HunYuanVLVisionConfig(PretrainedConfig):
+class HunYuanVLVisionConfig(PreTrainedConfig):
     r"""
     Vision backbone configuration for the dense-only, image-text HunYuanVL open-source variant.
 
@@ -69,104 +66,70 @@ class HunYuanVLVisionConfig(PretrainedConfig):
     model_type = "hunyuan_vl_vision"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        hidden_act="gelu",
-        hidden_size=1152,
-        intermediate_size=4304,
-        interpolate_mode="bilinear",
-        rms_norm_eps=1e-05,
-        learnable_mlp_pooling_size=0,
-        attention_dropout=0.0,
-        num_attention_heads=16,
-        num_key_value_heads=None,
-        num_channels=3,
-        num_hidden_layers=27,
-        out_hidden_size=4096,
-        patch_size=16,
-        remove_prenorm=True,
-        spatial_merge_size=2,
-        temporal_patch_size=1,
-        resize_resolution=2048,
-        img_max_token_num=4096,
-        max_image_size=2048,
-        min_image_size=512,
-        anyres_vit_max_image_size=2048,
-        max_vit_seq_len=16384,
-        text_hidden_size=3072,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    hidden_act: str = "gelu"
+    hidden_size: int = 1152
+    intermediate_size: int = 4304
+    interpolate_mode: str = "bilinear"
+    rms_norm_eps: float = 1e-5
+    learnable_mlp_pooling_size: int = 0
+    attention_dropout: float = 0.0
+    num_attention_heads: int = 16
+    num_key_value_heads: int | None = None
+    num_channels: int = 3
+    num_hidden_layers: int = 27
+    out_hidden_size: int = 4096
+    patch_size: int = 16
+    remove_prenorm: bool = True
+    spatial_merge_size: int = 2
+    temporal_patch_size: int = 1
+    resize_resolution: int = 2048
+    img_max_token_num: int = 4096
+    max_image_size: int = 2048
+    min_image_size: int = 512
+    anyres_vit_max_image_size: int = 2048
+    max_vit_seq_len: int = 16384
+    text_hidden_size: int = 3072
 
-        self.hidden_act = hidden_act
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.interpolate_mode = interpolate_mode
-        self.learnable_mlp_pooling_size = learnable_mlp_pooling_size
-        self.attention_dropout = attention_dropout
-        self.num_attention_heads = num_attention_heads
-        if not num_key_value_heads:
-            self.num_key_value_heads = num_attention_heads
-        else:
-            self.num_key_value_heads = num_key_value_heads
-        self.num_channels = num_channels
-        self.num_hidden_layers = num_hidden_layers
-        self.out_hidden_size = out_hidden_size
-        self.patch_size = patch_size
-        self.remove_prenorm = remove_prenorm
-        self.spatial_merge_size = spatial_merge_size
-        self.temporal_patch_size = temporal_patch_size
-        self.rms_norm_eps = rms_norm_eps
-
-        self.resize_resolution = resize_resolution
-        self.img_max_token_num = img_max_token_num
-        self.max_image_size = max_image_size
-        self.min_image_size = min_image_size
-        self.anyres_vit_max_image_size = anyres_vit_max_image_size
-        self.max_vit_seq_len = max_vit_seq_len
-        self.text_hidden_size = text_hidden_size
+    def __post_init__(self, **kwargs):
+        if not self.num_key_value_heads:
+            self.num_key_value_heads = self.num_attention_heads
+        super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="tencent/Hunyuan-A13B-Instruct")
+@auto_docstring(checkpoint="tencent/HunyuanOCR")
 @strict
 class HunYuanVLTextConfig(PreTrainedConfig):
     r"""
-    eod_token_id (int, *optional*, defaults to 3):
-        Token ID representing the end-of-document marker. Used to indicate the termination of a text sequence.
+    Text backbone configuration for the dense-only, image-text HunYuanVL open-source variant.
+
+    Inherits the standard fields from [`HunYuanDenseV1Config`] and adds a few legacy aliases that some Tencent
+    checkpoints persist on disk (`pad_id`, `attention_head_dim`, `rope_scaling`, `rope_theta`). Those legacy fields are
+    normalized into the canonical `pad_token_id` / `head_dim` / `rope_parameters` slots in `__post_init__` so the rest
+    of the model only ever needs to read the canonical fields.
+
+    eod_token_id (`int`, *optional*, defaults to 3):
+        Token id representing the end-of-document marker. Inherited from [`HunYuanDenseV1Config`] and re-documented
+        here so the auto-generated docstring stays in sync.
+    sep_token_id (`int`, *optional*, defaults to 4):
+        Token id used as a separator marker by HunYuan tokenizers.
     rope_theta (`float`, *optional*, defaults to 10000.0):
-        Base period used by RoPE. Preserved explicitly so Tencent checkpoints that save legacy top-level rope fields
-        can be normalized into the standard `rope_parameters` structure without losing the original theta value.
+        Legacy alias preserved for compatibility with checkpoints that persist a top-level rope theta. The value is
+        merged into `rope_parameters` during normalization.
     rope_scaling (`dict`, *optional*):
-        Legacy RoPE scaling payload from Tencent checkpoints. When provided, it is normalized into
-        `rope_parameters` and kept in sync for backward compatibility during config loading.
+        Legacy RoPE scaling payload from Tencent checkpoints. When provided, it is normalized into `rope_parameters`
+        (and the equivalent `xdrope` rope type is rewritten to `dynamic`).
     pad_id (`int`, *optional*):
-        Legacy padding token field from Tencent checkpoints. When `pad_token_id` is unset or `-1`, this value is
-        normalized into `pad_token_id`.
+        Legacy padding token field. When `pad_token_id` is unset or `-1`, this value is normalized into `pad_token_id`.
     attention_head_dim (`int`, *optional*):
         Legacy alias for `head_dim`. When `head_dim` is not provided, this value is used as the per-head hidden size.
     org_vocab_size (`int`, *optional*):
         Original vocabulary size recorded in exported checkpoints for compatibility with Tencent tooling.
-    routed_scaling_factor (`float`, *optional*, defaults to 1.0):
-        Legacy routing scaling field kept only for checkpoint compatibility in the dense-only open-source variant.
     use_qk_norm (`bool`, *optional*, defaults to `False`):
-        Whether to enable query/key normalization in the text backbone.
+        Legacy flag preserved for checkpoint compatibility. Has no runtime effect in the open-source variant.
     use_cla (`bool`, *optional*, defaults to `False`):
-        Whether to enable CLA-specific behavior present in some checkpoints.
+        Legacy flag preserved for checkpoint compatibility. Has no runtime effect in the open-source variant.
     enable_lm_head_fp32 (`bool`, *optional*, defaults to `False`):
-        Whether to execute the LM head in float32 for numerical stability.
-    num_experts (`int | list[int] | None`, *optional*, defaults to 1):
-        Legacy MoE field kept only for checkpoint compatibility. The open-source `hunyuan_vl` implementation is dense-only.
-    moe_topk (`int | list[int] | None`, *optional*, defaults to 1):
-        Legacy MoE field kept only for checkpoint compatibility. The open-source `hunyuan_vl` implementation is dense-only.
-    num_shared_expert (`int | list[int] | None`, *optional*):
-        Legacy MoE field kept only for checkpoint compatibility. It is preserved for loading Tencent checkpoints but does
-        not enable shared-expert execution in the dense-only open-source variant.
-    moe_layer_num_skipped (`int`, *optional*, defaults to 0):
-        Legacy checkpoint field indicating how many initial layers skipped MoE routing in internal training variants.
-        Preserved for checkpoint compatibility only.
-    enable_moe_fp32_combine (`bool`, *optional*, defaults to `True`):
-        Legacy checkpoint flag preserved for compatibility. It has no effect on runtime execution in the dense-only
-        open-source implementation.
+        Legacy flag preserved for checkpoint compatibility. Has no runtime effect in the open-source variant.
     """
 
     model_type = "hunyuan_vl_text"
@@ -203,174 +166,88 @@ class HunYuanVLTextConfig(PreTrainedConfig):
         "xdrope_section",
     }
 
+    sep_token_id: int | None = 4
+    rope_scaling: dict | None = None
+    rope_theta: float = 10000.0
     pad_id: int | None = None
     attention_head_dim: int | None = None
     org_vocab_size: int | None = None
-    routed_scaling_factor: float = 1.0
     use_qk_norm: bool = False
     use_cla: bool = False
     enable_lm_head_fp32: bool = False
-    rope_scaling: dict | None = None
-    rope_theta: float = 10000.0
-    sep_token_id: int | None = 4
-    num_experts: int | list[int] | None = 1
-    moe_topk: int | list[int] | None = 1
-    moe_intermediate_size: int | list[int] | None = None
-    num_shared_expert: int | list[int] | None = None
-    moe_layer_num_skipped: int = 0
-    enable_moe_fp32_combine: bool = True
 
     def __post_init__(self, **kwargs):
+        # Translate legacy aliases into canonical fields before invoking the standard validation.
+        if self.head_dim is None and self.attention_head_dim is not None:
+            self.head_dim = self.attention_head_dim
+        if self.pad_token_id == -1 and self.pad_id not in (None, -1):
+            self.pad_token_id = self.pad_id
+
+        # Only normalize rope payloads when a legacy ``rope_scaling`` blob was provided. Otherwise let the parent
+        # ``HunYuanDenseV1Config.__post_init__`` (and its ``standardize_rope_params`` helper) populate
+        # ``rope_parameters`` itself, which keeps the canonical ``{rope_theta, rope_type}`` shape consistent across
+        # save / reload cycles.
+        if self.rope_scaling is not None:
+            rope_parameters = self._normalize_rope_parameters(
+                getattr(self, "rope_parameters", None),
+                self.rope_scaling,
+                self.rope_theta,
+            )
+            if rope_parameters is not None:
+                self.rope_parameters = rope_parameters
+                self.rope_scaling = rope_parameters
+                self.rope_theta = rope_parameters["rope_theta"]
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
         super().__post_init__(**kwargs)
 
-    def __init__(
-        self,
-        vocab_size=290943,
-        hidden_size=4096,
-        intermediate_size=11008,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=None,
-        hidden_act="silu",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        eod_token_id=3,
-        sep_token_id=4,
-        pretraining_tp=1,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        head_dim=None,
-        pad_id=None,
-        attention_head_dim=None,
-        org_vocab_size=None,
-        routed_scaling_factor=1.0,
-        use_qk_norm=False,
-        use_cla=False,
-        enable_lm_head_fp32=False,
-        num_experts=1,
-        moe_topk=1,
-        moe_intermediate_size=None,
-        num_shared_expert=None,
-        moe_layer_num_skipped=0,
-        enable_moe_fp32_combine=True,
-        **kwargs,
-    ):
-        if head_dim is None:
-            head_dim = attention_head_dim
-        if pad_token_id == -1 and pad_id not in (None, -1):
-            pad_token_id = pad_id
-
-        rope_parameters = self._normalize_rope_parameters(kwargs.pop("rope_parameters", None), rope_scaling, rope_theta)
-        self.rope_parameters = rope_parameters
-
-        _ = super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            eod_token_id=eod_token_id,
-            pretraining_tp=pretraining_tp,
-            tie_word_embeddings=tie_word_embeddings,
-            rope_parameters=rope_parameters,
-            attention_bias=attention_bias,
-            attention_dropout=attention_dropout,
-            head_dim=head_dim,
-            **kwargs,
-        )
-
-        self.sep_token_id = sep_token_id
-        self.pad_id = pad_id
-        self.attention_head_dim = attention_head_dim
-        self.org_vocab_size = org_vocab_size
-        self.routed_scaling_factor = routed_scaling_factor
-        self.use_qk_norm = use_qk_norm
-        self.use_cla = use_cla
-        self.enable_lm_head_fp32 = enable_lm_head_fp32
-        self.rope_scaling = rope_parameters
-        self.rope_theta = rope_theta if rope_parameters is None else rope_parameters["rope_theta"]
-        self.num_experts = num_experts
-        self.moe_topk = moe_topk
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_shared_expert = num_shared_expert
-        self.moe_layer_num_skipped = moe_layer_num_skipped
-        self.enable_moe_fp32_combine = enable_moe_fp32_combine
-
     @staticmethod
     def _normalize_rope_parameters(
-        rope_parameters: dict | None, rope_scaling: dict | None, rope_theta: float
+        rope_parameters: dict | None,
+        rope_scaling: dict | None,
+        rope_theta: float,
     ) -> dict | None:
-        if rope_parameters is None and rope_scaling is not None:
-            rope_parameters = dict(rope_scaling)
-        elif rope_parameters is not None:
-            rope_parameters = dict(rope_parameters)
-
+        if rope_parameters is None and rope_scaling is None:
+            return None
         if rope_parameters is None:
-            rope_parameters = {}
+            rope_parameters = dict(rope_scaling)
+        else:
+            rope_parameters = dict(rope_parameters)
 
         rope_type = rope_parameters.get("rope_type", rope_parameters.get("type", "default"))
         if rope_type == "xdrope":
             rope_type = "dynamic"
         rope_parameters["rope_type"] = rope_type
+        # Mirror the rope type under the legacy ``type`` key so checkpoints exported with either spelling continue
+        # to round-trip without losing information.
         rope_parameters["type"] = rope_type
         rope_parameters.setdefault("rope_theta", rope_theta)
         return rope_parameters
 
-    def _apply_compat_fields(self) -> "HunYuanVLTextConfig":
-        if self.head_dim is None:
-            self.head_dim = getattr(self, "attention_head_dim", None)
-        if self.pad_token_id == -1 and getattr(self, "pad_id", None) not in (None, -1):
-            self.pad_token_id = self.pad_id
-
-        rope_parameters = self._normalize_rope_parameters(
-            getattr(self, "rope_parameters", None),
-            getattr(self, "rope_scaling", None),
-            getattr(self, "rope_theta", 10000.0),
-        )
-        self.rope_parameters = rope_parameters
-        self.rope_scaling = rope_parameters
-        if rope_parameters is not None:
-            self.rope_theta = rope_parameters["rope_theta"]
-
-        return self
-
     def _rope_parameters_validation(self):
+        # Skip rope validation when no rope payload was provided so minimal configs continue to work.
         if getattr(self, "rope_parameters", None) is None and getattr(self, "rope_scaling", None) is None:
             return
-
         self.standardize_rope_params()
         self.validate_rope()
 
 
 @auto_docstring(checkpoint="tencent/HunyuanOCR")
-@strict
-class HunYuanVLConfig(PretrainedConfig):
+class HunYuanVLConfig(PreTrainedConfig):
     r"""
     Top-level configuration for the open-source HunYuanVL integration.
 
     This configuration describes the dense-only, image-text-only variant used for OCR and document-understanding style
-    workloads. Legacy MoE- and Tencent-export-related fields may still appear in nested text configs for checkpoint
-    compatibility, but they do not enable MoE runtime behavior in this open-source implementation.
+    workloads. It mirrors the `Qwen2_5_VL` / `Qwen3_VL` family layout: the top-level config simply composes a
+    [`HunYuanVLTextConfig`] (text backbone) and a [`HunYuanVLVisionConfig`] (vision tower) plus a few token ids that
+    delimit image spans in multimodal prompts.
 
+    text_config (`HunYuanVLTextConfig` or `dict`, *optional*):
+        Configuration of the text backbone. When `None`, default values are used.
+    vision_config (`HunYuanVLVisionConfig` or `dict`, *optional*):
+        Configuration of the vision tower. When `None`, default values are used.
+    image_token_id (`int`, *optional*, defaults to 120120):
+        Token id used as the visual placeholder in multimodal prompts.
     im_start_id (`int`, *optional*, defaults to 120118):
         Token id marking the beginning of an image span in multimodal prompts.
     im_end_id (`int`, *optional*, defaults to 120119):
@@ -396,10 +273,10 @@ class HunYuanVLConfig(PretrainedConfig):
         self,
         text_config=None,
         vision_config=None,
-        im_start_id=120118,
-        im_end_id=120119,
-        image_token_id=120120,
-        im_newline_id=120121,
+        image_token_id: int = 120120,
+        im_start_id: int = 120118,
+        im_end_id: int = 120119,
+        im_newline_id: int = 120121,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -409,59 +286,46 @@ class HunYuanVLConfig(PretrainedConfig):
         else:
             self.vision_config = vision_config
 
+        # When loading legacy "flat" Tencent checkpoints (where text fields live at the top level instead of inside a
+        # nested `text_config` block) we fold the recognized text-side keys into the text config payload. This keeps
+        # ``HunYuanVLConfig.from_pretrained(...)`` working with both the upstream nested layout and the existing
+        # public OCR checkpoints.
         text_kwargs = self._extract_text_kwargs(kwargs)
-        self.text_config = self._build_text_config(text_config, text_kwargs, kwargs)
+
+        if text_config is None:
+            self.text_config = self.sub_configs["text_config"](**text_kwargs)
+        elif isinstance(text_config, dict):
+            text_config = {**text_config, **text_kwargs}
+            self.text_config = self.sub_configs["text_config"](**text_config)
+        else:
+            self.text_config = text_config
 
         self.image_token_id = image_token_id
         self.im_start_id = im_start_id
         self.im_end_id = im_end_id
         self.im_newline_id = im_newline_id
 
+        # Keep the vision tower in sync with the consuming text backbone size.
         self.vision_config.text_hidden_size = self.text_config.hidden_size
 
-        attn_implementation = kwargs.pop(
-            "attn_implementation", getattr(self.text_config, "_attn_implementation_internal", None)
-        )
-        experts_implementation = kwargs.pop(
-            "experts_implementation", getattr(self.text_config, "_experts_implementation_internal", None)
-        )
+        # Propagate text-side identifiers to the top-level config so generic generation utilities can read them.
+        kwargs.setdefault("pad_token_id", self.text_config.pad_token_id)
+        kwargs.setdefault("bos_token_id", self.text_config.bos_token_id)
+        kwargs.setdefault("eos_token_id", self.text_config.eos_token_id)
+        kwargs.setdefault("tie_word_embeddings", self.text_config.tie_word_embeddings)
 
-        super().__init__(
-            pad_token_id=self.text_config.pad_token_id,
-            bos_token_id=self.text_config.bos_token_id,
-            eos_token_id=self.text_config.eos_token_id,
-            tie_word_embeddings=self.text_config.tie_word_embeddings,
-            attn_implementation=attn_implementation,
-            experts_implementation=experts_implementation,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     @classmethod
     def _extract_text_kwargs(cls, kwargs: dict) -> dict:
-        text_signature = inspect.signature(cls.sub_configs["text_config"].__init__).parameters
-        text_keys = set(text_signature) | {"rope_scaling", "rope_theta"}
+        """
+        Pop and return the subset of ``kwargs`` that should be forwarded to [`HunYuanVLTextConfig`].
+
+        Required to support legacy Tencent checkpoints whose ``config.json`` stores the text-backbone fields at the
+        top level instead of inside a nested ``text_config`` block.
+        """
+        text_keys = set(cls.sub_configs["text_config"].__dataclass_fields__) | {"rope_scaling", "rope_theta"}
         return {key: kwargs.pop(key) for key in list(kwargs) if key in text_keys}
-
-    @classmethod
-    def _build_text_config(cls, text_config, text_kwargs: dict, kwargs: dict) -> HunYuanVLTextConfig:
-        text_config_class = cls.sub_configs["text_config"]
-
-        if text_config is None:
-            normalized_text_config = dict(text_kwargs)
-            normalized_text_config.setdefault("dtype", kwargs.get("torch_dtype", kwargs.get("dtype")))
-            return text_config_class(**normalized_text_config)
-
-        if isinstance(text_config, dict):
-            normalized_text_config = dict(text_config)
-            normalized_text_config.update(text_kwargs)
-            return text_config_class(**normalized_text_config)
-
-        if text_kwargs:
-            text_config_dict = text_config.to_dict()
-            text_config_dict.update(text_kwargs)
-            return text_config_class(**text_config_dict)
-
-        return text_config._apply_compat_fields()
 
 
 __all__ = ["HunYuanVLConfig", "HunYuanVLVisionConfig", "HunYuanVLTextConfig"]
