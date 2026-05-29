@@ -172,6 +172,22 @@ class Ernie4_5_VLMoeVideoProcessingTest(VideoProcessingTestMixin, unittest.TestC
         )
         self.assertEqual(video_processor.size, {"longest_edge": 42, "shortest_edge": 42})
 
+    def test_get_video_processor_dict_rejects_font_path_traversal(self):
+        # `font` comes from the (untrusted) video processor config and is opened as a file when
+        # `draw_on_frames` is set. A value that escapes the repo via `..` or an absolute path would let
+        # a malicious config open an arbitrary local file (path traversal, CWE-22), so it must be rejected.
+        import json
+        import os
+        import tempfile
+
+        from transformers.utils import VIDEO_PROCESSOR_NAME
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with open(os.path.join(tmp_dir, VIDEO_PROCESSOR_NAME), "w", encoding="utf-8") as f:
+                json.dump({"draw_on_frames": True, "font": "../evil.ttf"}, f)
+            with self.assertRaises(ValueError):
+                self.fast_video_processing_class.get_video_processor_dict(tmp_dir)
+
     def test_call_pil(self):
         for video_processing_class in self.video_processor_list:
             video_processing = video_processing_class(**self.video_processor_dict)

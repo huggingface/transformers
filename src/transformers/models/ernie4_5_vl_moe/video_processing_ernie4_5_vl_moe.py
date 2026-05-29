@@ -242,6 +242,12 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
                 "Expected a `font` to be saved when using `draw_on_frames` in Ernie 4.5 VL Moe; found nothing."
             )
         if font_name is not None and draws_on_frames:
+            # `font_name` comes from the (untrusted) video processor config; reject values that escape
+            # the repo via `..` or an absolute path so a malicious config cannot open an arbitrary local
+            # file (path traversal, CWE-22). Files in subdirectories of the repo are still allowed.
+            base_dir = Path(pretrained_model_name_or_path).resolve()
+            if not Path(pretrained_model_name_or_path, font_name).resolve().is_relative_to(base_dir):
+                raise ValueError(f"Invalid font path: {font_name!r}")
             video_processor_dict["font"] = cached_file(
                 pretrained_model_name_or_path,
                 filename=font_name,
