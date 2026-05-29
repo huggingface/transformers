@@ -82,22 +82,7 @@ def _load_deepgemm_kernel() -> DeepGEMM:
     if (cuda_major, cuda_minor) < (12, 3):
         raise ImportError(f"DeepGEMM requires CUDA runtime ≥ 12.3, found {cuda_major}.{cuda_minor}.")
 
-    # TODO: remove once kernels-community either removes the stale cxx11-ABI build.
-    # The published deep-gemm snapshot ships two build variants of the same hub SHA:
-    # a stable-ABI build (id `_deep_gemm_cuda_47ad41b...`) that includes the post-PR-#558
-    # dynamic-libstdc++ fix, and a cxx11 build (id `_deep_gemm_cuda_388adb9...`) that's
-    # stale, static-links libstdc++, and segfaults inside `IncludeParser::get_hash_value`
-    # → libstdc++ codecvt on first kernel call. The `kernels` resolver prefers the cxx11
-    # variant whenever `torch.compiled_with_cxx11_abi()` is True (default for Linux torch
-    # wheels), landing us on the broken one. Lie about the ABI for the duration of this
-    # `get_kernel` call so the resolver picks the working stable-ABI variant instead.
-    _real_compiled_with_cxx11_abi = torch.compiled_with_cxx11_abi
-    torch.compiled_with_cxx11_abi = lambda: False
-    try:
-        kernel = lazy_load_kernel("deep-gemm")
-    finally:
-        torch.compiled_with_cxx11_abi = _real_compiled_with_cxx11_abi
-
+    kernel = lazy_load_kernel("deep-gemm")
     if kernel is None:
         raise ImportError(
             "Failed to load `kernels-community/deep-gemm` — check that a build matches the current torch/CUDA."
@@ -227,6 +212,7 @@ def _select_fp8_cast_kwargs(
         raise ValueError(
             "DeepGEMM requires block-wise quantized FP8 weights, but the experts have no `block_size` set."
         )
+    block_size = tuple(block_size)
     if block_size not in ((128, 128), (1, 128)):
         raise ValueError(f"DeepGEMM requires `block_size` ∈ {{(128, 128), (1, 128)}}, got {block_size}.")
     if weight_scale_inv.dtype == torch.float8_e8m0fnu:

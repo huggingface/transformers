@@ -294,10 +294,11 @@ class DeepseekV4Config(PreTrainedConfig):
         # yarn is applied ONLY to layers with a compressor (CSA/HCA); pure
         # sliding-window layers use plain RoPE with `theta=rope_theta` (10000) and no
         # scaling. Compress layers use `theta=compress_rope_theta` (160000) with yarn
-        # factor=16. Per-rope-type `attention_scaling` from `rope_init_fn` (1.0 for
-        # `rope_type="default"`, non-trivial for YaRN-style scaling) is stored in the
-        # rotary and applied to cos/sin at forward time — no per-config override
-        # needed here.
+        # factor=16. For a YaRN compress layer we force `attention_factor=1.0`: the V4
+        # reference does NOT multiply cos/sin by YaRN's computed mscale, and leaving the
+        # key unset lets `_compute_yarn_parameters` derive `0.1·log(factor)+1 ≈ 1.277`.
+        # We only inject the key when `rope_type="yarn"` — the default-rope validator
+        # rejects it (and `compute_default_rope_parameters` hardcodes 1.0 anyway).
         rp = self.rope_parameters or {}
         if isinstance(rp.get("main"), dict) and isinstance(rp.get("compress"), dict):
             # Already nested — drop any leftover top-level keys.
@@ -315,6 +316,8 @@ class DeepseekV4Config(PreTrainedConfig):
                 "partial_rotary_factor": self.partial_rotary_factor,
             }
             compress.setdefault("rope_type", "default")
+            if compress["rope_type"] == "yarn":
+                compress.setdefault("attention_factor", 1.0)
             self.rope_parameters = {"main": main, "compress": compress}
 
 
