@@ -13,6 +13,7 @@
 import os
 import socket
 import tempfile
+import unittest
 from abc import ABC, abstractmethod
 
 from transformers import TorchAoConfig, set_seed
@@ -533,7 +534,8 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_backward_impl)(tmp_dir, model_class, atol, rtol)
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                _init_distributed(tp=self.tensor_parallel_size)(_test_tp_backward_impl)(tmp_dir, model_class, atol, rtol)
 
     @is_tensor_parallel_test
     def test_tp_generation(self):
@@ -551,9 +553,10 @@ class TensorParallelTesterMixin(ABC):
             set_seed(42)
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_impl)(
-                tmp_dir, model_class, atol, rtol, max_new_tokens
-            )
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_impl)(
+                    tmp_dir, model_class, atol, rtol, max_new_tokens
+                )
 
     @is_tensor_parallel_test
     def test_tp_generation_quantized(self):
