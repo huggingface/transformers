@@ -561,6 +561,7 @@ class ProcessorTesterMixin:
         call_signature = inspect.signature(processor.__call__)
         input_args = [param.name for param in call_signature.parameters.values()]
         inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
+        # Shouldn't sample when input is a decoded video without metadata (fpx/duration/etc.)
         if "videos" in inputs_dict:
             inputs_dict["do_sample_frames"] = False
 
@@ -809,6 +810,7 @@ class ProcessorTesterMixin:
         inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
 
         processing_kwargs = {"return_tensors": "pt", "padding": True}
+        # Shouldn't sample when input is a decoded video without metadata (fpx/duration/etc.)
         if "videos" in inputs_dict:
             processing_kwargs["do_sample_frames"] = False
 

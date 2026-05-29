@@ -348,15 +348,15 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
 
     def resize_and_split_patches(
         self,
-        videos: "torch.Tensor",
+        video: "torch.Tensor",
         resample,
         slice_mode: bool,
         max_slice_nums: int,
         scale_resolution: int,
         patch_size: int,
     ):
-        num_frames = videos.shape[1]
-        video_size = videos.shape[-2:]
+        num_frames = video.shape[1]
+        video_size = video.shape[-2:]
         best_grid = None
 
         if slice_mode:
@@ -366,7 +366,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         new_height, new_width = self.find_best_resize(
             video_size, scale_resolution, patch_size, allow_upscale=(best_grid is None)
         )
-        source_videos = self.resize(videos, size=SizeDict(height=new_height, width=new_width), resample=resample)
+        source_videos = self.resize(video, size=SizeDict(height=new_height, width=new_width), resample=resample)
 
         # Collect all patches: [source, *slices]
         patches = [source_videos]
@@ -378,14 +378,14 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             patch_height, patch_width = refine_height // grid_y, refine_width // grid_x
 
             refine_videos = self.resize(
-                videos, size=SizeDict(height=refine_height, width=refine_width), resample=resample
+                video, size=SizeDict(height=refine_height, width=refine_width), resample=resample
             )
             refine_videos = divide_to_patches(refine_videos, (patch_height, patch_width))
             patches.extend(refine_videos)
 
         # Reorder from `all_sources+all_patches` to represent each video as `source+patch`
         patches_grouped_by_batch = [
-            [patches[patch][batch] for patch in range(len(patches))] for batch in range(len(videos))
+            [patches[patch][batch] for patch in range(len(patches))] for batch in range(len(video))
         ]
 
         # MiniCPM needs to process each video as a single frame instead of processing all together
@@ -400,8 +400,8 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         grid = best_grid if best_grid is not None else (0, 0)
         num_patches = (grid[0] * grid[1]) + 1
         # Expand by batch size per each video
-        num_patches = [[num_patches] * num_frames] * len(videos)
-        grids = [[grid] * num_frames] * len(videos)
+        num_patches = [[num_patches] * num_frames] * len(video)
+        grids = [[grid] * num_frames] * len(video)
         return interleaved_frames, grids, num_patches
 
     def _preprocess(
