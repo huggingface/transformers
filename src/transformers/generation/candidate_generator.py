@@ -1432,7 +1432,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         logits_processor: Optional["LogitsProcessorList"] = None,
     ):
         # Heuristic: use the device of the last layer of the main model for the MTP layers
-        self.device = next(x.device for x in main_model.base_model.layers[-1].parameters())
+        self.device = next(x.device for x in main_model.base_model.layers[-1].parameters())  # type: ignore
         self.mtp_model = MtpLayerStack.from_pretrained(main_model, device_map={"": self.device})
 
         self.num_mtp_layers = len(self.mtp_model.layers)

@@ -90,7 +90,9 @@ class MtpLayerStack(PreTrainedModel):
         # Infer the type of the layers based on the main model
         layer_cls = type(main_model.base_model.layers[0])
         norm_cls = next(
-            type(module) for name, module in main_model.base_model.layers[0].named_modules() if "norm" in name
+            type(module)
+            for name, module in main_model.base_model.layers[0].named_modules()  # type: ignore
+            if "norm" in name
         )
 
         # Instantiate new mtp layers
@@ -137,7 +139,7 @@ class MtpLayerStack(PreTrainedModel):
 
         # We create this dummy cache simply to create the masks correctly, since they rely on the sizes of layer 0 of
         # the cache. Note that it does not create any copy of data, it simply keep a ref to internal tensors
-        dummy_cache_for_masking = Cache(layers=past_key_values.layers[self.config.num_hidden_layers :])
+        dummy_cache_for_masking = Cache(layers=past_key_values.layers[self.config.num_hidden_layers :])  # type: ignore
 
         drafted_logits = []
         drafted_tokens = []
@@ -182,7 +184,7 @@ class MtpLayerStack(PreTrainedModel):
 
             # Roll by 1 and append for next layer
             input_ids = torch.cat([input_ids[:, 1:], next_mtp_token], dim=-1)
-            attention_mask = torch.cat([attention_mask[:, 1:], attention_mask.new_ones(batch_size, 1)], dim=-1)
+            attention_mask = torch.cat([attention_mask[:, 1:], attention_mask.new_ones(batch_size, 1)], dim=-1)  # type: ignore
             position_ids = torch.cat([position_ids[:, 1:], position_ids[:, -1:] + 1], dim=-1)
 
             # Need to cat ful_ids as well for the processors
@@ -199,7 +201,7 @@ class MtpLayerStack(PreTrainedModel):
         num_hidden_layers = main_model.config.get_text_config().num_hidden_layers
         # Heuristic: the main model should have the mtp layer patterns under `_keys_to_ignore_on_load_unexpected` to avoid
         # loading them by default, so use it to later load the correct keys from the checkpoints
-        mtp_patterns = main_model._keys_to_ignore_on_load_unexpected.copy()
+        mtp_patterns = main_model._keys_to_ignore_on_load_unexpected.copy()  # type: ignore
         # Due to different released checkpoints, only keep the ones with layer number >= num_hidden_layers - otherwise
         # mtp layers in a smaller checkpoints could be wrongly added as a 2nd mtp layer of a bigger checkpoint
         final_mtp_patterns = []
