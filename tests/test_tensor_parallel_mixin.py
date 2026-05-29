@@ -156,6 +156,19 @@ def _get_active_tp_plan(model_tp):
     return tp_plan or getattr(model_tp, "_tp_plan", None) or {}
 
 
+def _get_applied_plan(model_tp):
+    """The plan apply_tensor_parallel actually applied (SP > EP > TP), with prefixed keys."""
+    config = model_tp.config
+    distributed_config = getattr(config, "distributed_config", None)
+    if getattr(distributed_config, "enable_sequence_parallel", False) and (
+        getattr(config, "base_model_sp_plan", None) is not None
+    ):
+        return getattr(model_tp, "_sp_plan", None) or {}
+    if getattr(distributed_config, "enable_expert_parallel", False):
+        return getattr(model_tp, "_ep_plan", None) or {}
+    return getattr(model_tp, "_tp_plan", None) or {}
+
+
 def _verify_tp_sharding(rank, model_tp, model_ref):
     """Verify TP sharding by comparing parameter shapes between TP and reference models.
 
@@ -191,6 +204,33 @@ def _verify_tp_sharding(rank, model_tp, model_ref):
                             f"Weight {name} sharding incorrect: expected <= {expected_size}, got {param_local.size(dim)}"
                         )
                     break
+
+    # Two-sided check: every parameter whose plan entry is a *weight-sharding* style must
+    # actually come back sharded. The loop above only validates params that happen to be
+    # sharded; on its own it cannot detect a param that should have been sharded but wasn't.
+    # That gap is dangerous for styles whose forward gracefully degrades to a correct-but-
+    # replicated result when their params are left unsharded (e.g. MoEExpertsParallel keys off
+    # has_sharded_params), which would pass the output-equality assertions while silently
+    # running unparallelized.
+    applied_plan = _get_applied_plan(model_tp)
+    forward_only = {"activation", "moe_experts_allreduce", "ep_router"}
+    unsharded = []
+    for name, param in model_tp.named_parameters():
+        # lm_head sharding is special-cased by apply_tensor_parallel (tied-weight handling).
+        if name.endswith(("lm_head.weight", "lm_head.bias")):
+            continue
+        style = _get_parameter_tp_plan(name, applied_plan, is_weight=True)
+        if style is None or style in forward_only or style.startswith(("activation_", "module_")):
+            continue
+        # A correctly TP-applied weight is a DTensor with a non-replicate placement. Check the
+        # placements directly — do NOT go through _to_local(), which replicates sharded DTensors
+        # back to full and would hide the exact condition we're trying to catch.
+        is_sharded = isinstance(param, DTensor) and any(not p.is_replicate() for p in param.placements)
+        if not is_sharded:
+            unsharded.append((name, style))
+    assert not unsharded, (
+        f"Parameters declared for weight sharding were left unsharded (silent fallback to replicated): {unsharded}"
+    )
 
     return sharded_params
 
