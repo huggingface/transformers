@@ -1091,15 +1091,6 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
             test-time flip augmentation. When provided, the model assumes `pixel_values` contains
             horizontally-flipped images and calls `flip_back` on the output heatmaps to restore the
             original orientation.
-
-            Typical usage: run a second forward pass on `pixel_values.flip(-1)` with this argument,
-            then average the two heatmap outputs:
-
-            ```python
-            outputs = model(pixel_values)
-            outputs_flipped = model(pixel_values.flip(-1), flip_pairs=flip_pairs)
-            heatmaps = (outputs.heatmaps + outputs_flipped.heatmaps) / 2
-            ```
         labels (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`, *optional*):
             Heatmap ground truth for computing the loss.
         """
