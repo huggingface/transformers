@@ -287,6 +287,11 @@ loss.backward()
 
 [[autodoc]] MusicFlamingoProcessor
 
+## MusicFlamingoModel
+
+[[autodoc]] MusicFlamingoModel
+    - forward
+
 ## MusicFlamingoForConditionalGeneration
 
 [[autodoc]] MusicFlamingoForConditionalGeneration

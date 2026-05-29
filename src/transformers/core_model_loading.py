@@ -30,8 +30,8 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from .distributed.sharding_utils import DtensorShardOperation, _dtensor_from_local_like
 from .integrations.accelerate import get_device, offload_weight
+from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 from .utils import is_env_variable_true
 from .utils.loading_report import LoadStateDictInfo
 from .utils.logging import get_logger, tqdm
@@ -40,10 +40,10 @@ from .utils.logging import get_logger, tqdm
 _torch_distributed_available = torch.distributed.is_available()
 
 if TYPE_CHECKING:
+    from .integrations.tensor_parallel import TensorParallelLayer
     from .modeling_utils import LoadStateDictConfig, PreTrainedModel
     from .quantizers import HfQuantizer
-elif _torch_distributed_available:
-    from torch.distributed.tensor import DTensor
+
 
 logger = get_logger(__name__)
 
@@ -392,7 +392,7 @@ class PermuteForRope(ConversionOps):
 
     def _apply(self, tensor: torch.Tensor) -> torch.Tensor:
         dim1, dim2 = tensor.shape
-        n_heads = getattr(self.config, "num_attention_heads", 1)
+        n_heads = self.config.getattr("num_attention_heads", 1)
 
         tensor = tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
         tensor = tensor.transpose(1, 2).reshape(dim1, dim2)
@@ -408,10 +408,11 @@ class PermuteForRope(ConversionOps):
         **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
         self.config = config
-        output = {}
+        output: dict[str, list[torch.Tensor]] = {}
         for key, tensors in input_dict.items():
-            tensor = tensors[0] if isinstance(tensors, list) else tensors
-            output[key] = self._apply(tensor)
+            if len(tensors) != 1:
+                raise ValueError("PermuteForRope expects a single tensor per key.")
+            output[key] = [self._apply(tensors[0])]
         return output
 
 
@@ -613,7 +614,7 @@ class WeightTransform:
         self._original_target_patterns = self.target_patterns.copy()
 
         # Init fields that will be used during conversion
-        self.distributed_operation: Any = None
+        self.distributed_operation: TensorParallelLayer | None = None
         self.quantization_operation: ConversionOps | None = None
         self.collected_tensors: dict[str, list[Future]] = defaultdict(list)
         self.layer_targets: dict[str, set[str]] = defaultdict(set)
@@ -771,9 +772,7 @@ class WeightTransform:
             kwargs["operations"] = [op.reverse_op for op in self.operations[::-1]]
 
         reverse_transform = self.__class__(
-            source_patterns=self._original_target_patterns,
-            target_patterns=self._original_source_patterns,
-            **kwargs,
+            source_patterns=self._original_target_patterns, target_patterns=self._original_source_patterns, **kwargs
         )
         reverse_transform.scope_prefix = self.scope_prefix
         reverse_transform.base_model_prefix = self.base_model_prefix
@@ -799,7 +798,7 @@ class WeightTransform:
                 tensors = [future.result() for future in tensors if future.result() is not None]
             # Sync loading
             elif callable(tensors[0]):
-                tensors = [tensor for func in tensors if (tensor := func()) is not None]
+                tensors = [func() for func in tensors]
             # Add them to the new dictionary
             collected_tensors[key] = tensors
 
@@ -1002,26 +1001,36 @@ def spawn_materialize(
     tensor: torch.Tensor,
     device=None,
     dtype=None,
-    sharding_op: DtensorShardOperation | None = None,
-    tensor_idx: int | None = None,
 ) -> Future | Callable:
-    """Materialize (and optionally shard) a tensor, asynchronously if a thread pool is provided.
-
-    When ``sharding_op`` is given the tensor is sharded according to the DTensor
-    placement strategy; otherwise it is simply copied to *device*/*dtype*.
-    Without a thread pool a deferred callable is returned instead of a Future.
-    """
+    """Materialize a tensor from file asynchronously if `thread_pool` is provided, or return a Callable that will
+    load the tensor synchronously when called."""
 
     def _job():
-        if sharding_op is not None:
-            return sharding_op.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
         return _materialize_copy(tensor, device, dtype)
 
     if thread_pool is not None:
         return thread_pool.submit(_job)
-    # Return the Callable here, not the Tensor itself, so we actually delay loading
-    # to avoid saturating cpu memory during Conversion
-    return _job
+    else:
+        # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
+        # memory during Conversion
+        return _job
+
+
+def spawn_tp_materialize(
+    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, device=None, dtype=None
+) -> Future | Callable:
+    """Materialize and shard a tensor (according to the TP-plan) from file asynchronously if `thread_pool` is provided, or
+    return a Callable that will load the tensor synchronously when called."""
+
+    def _job():
+        return sharding_method.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
+
+    if thread_pool is not None:
+        return thread_pool.submit(_job)
+    else:
+        # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
+        # memory during Conversion
+        return _job
 
 
 def dot_natural_key(s: str):
@@ -1087,12 +1096,12 @@ def log_conversion_errors(
         raise SkipParameters()
 
 
-@torch.no_grad()
 def set_param_for_module(
     model: PreTrainedModel,
     target_name: str,
     param_value: torch.Tensor,
     loading_info: LoadStateDictInfo,
+    distributed_operation: TensorParallelLayer | None,
     hf_quantizer: HfQuantizer,
 ):
     module_path, _, param_name = target_name.rpartition(".")
@@ -1107,25 +1116,27 @@ def set_param_for_module(
     if ref is None:
         loading_info.unexpected_keys.add(target_name)
     else:
-        if not isinstance(param_value, torch.nn.Parameter) and not isinstance(ref, DTensor):
+        if not isinstance(param_value, torch.nn.Parameter):
             if param_name not in module_obj._buffers:
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
         # Remove from missing keys (it's either mismatched, or all good)
         loading_info.missing_keys.discard(target_name)
 
-        expected_shape = ref._local_tensor.shape if isinstance(ref, DTensor) else ref.shape
+        # Determine expected shape: for TP, use sharded shape; otherwise, use full shape
+        if distributed_operation is not None:
+            expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(ref.shape))
+        else:
+            expected_shape = ref.shape
 
         if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
             loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
         else:
-            if isinstance(ref, DTensor):
-                local_param = param_value.detach() if isinstance(param_value, torch.nn.Parameter) else param_value
-                dtensor_param = _dtensor_from_local_like(local_param, ref)
-                param_value = torch.nn.Parameter(dtensor_param, requires_grad=ref.requires_grad)
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
             setattr(module_obj, param_name, param_value)
+            if distributed_operation is not None:
+                distributed_operation.update_module_attributes(module_obj)
 
 
 def offload_and_maybe_resave_param(
@@ -1307,21 +1318,10 @@ def convert_and_load_state_dict_in_model(
     """
     base_model_prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
+    device_map = load_config.device_map or {"": "cpu"}
     hf_quantizer = load_config.hf_quantizer
     dtype = load_config.dtype
     device_mesh = load_config.device_mesh
-
-    if load_config.device_map is not None:
-        device_map = load_config.device_map
-    elif device_mesh is not None:
-        if device_mesh.device_type == "cpu":
-            device_map = {"": torch.device("cpu")}
-        else:
-            device_map = {
-                "": torch.device(device_mesh.device_type, getattr(torch, device_mesh.device_type).current_device())
-            }
-    else:
-        device_map = {"": "cpu"}
     disk_offload_folder = load_config.disk_offload_folder
     offload_buffers = load_config.offload_buffers
     dtype_plan = load_config.dtype_plan or {}
@@ -1356,6 +1356,10 @@ def convert_and_load_state_dict_in_model(
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
     param_name_to_load: dict[str, WeightRenaming | WeightConverter] = {}
 
+    # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
+    # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
+    if tp_plan != {}:
+        tp_plan_alt, tp_plan_by_group_name, _ = build_glob_alternation(list(tp_plan.keys()))
     if dtype_plan != {}:
         dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
@@ -1419,23 +1423,32 @@ def convert_and_load_state_dict_in_model(
             elif empty_param is not None and empty_param.dtype != _dtype:
                 _dtype = empty_param.dtype  # usually correct when initializing
 
-            # 4. Materialize tensor — shard-on-read for DTensor params, plain copy otherwise
-            param_device = get_device(device_map, renamed_key, valid_torch_device=True)
-            if isinstance(empty_param, DTensor):
-                tensor_idx = (
-                    len(mapping.collected_tensors.get(source_pattern, []))
-                    if isinstance(mapping, WeightConverter) and isinstance(mapping.operations[0], MergeModulelist)
-                    else None
-                )
-                future_or_tensor = spawn_materialize(
-                    thread_pool,
-                    tensor,
-                    param_device,
-                    _dtype,
-                    sharding_op=DtensorShardOperation(empty_param),
-                    tensor_idx=tensor_idx,
-                )
-            else:
+            # 4. Handle TP sharding or device_map placement
+            future_or_tensor = None
+            if device_mesh and tp_plan:
+                if matched_tp_pattern := tp_plan_alt.search(renamed_key):
+                    matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
+                    if getattr(mapping, "distributed_operation", None) is None:
+                        tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
+                        mapping.distributed_operation = tp_layer(
+                            device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
+                        )
+                    shard_index = (
+                        len(mapping.collected_tensors.get(source_pattern, []))
+                        if isinstance(mapping, WeightConverter) and isinstance(mapping.operations[0], MergeModulelist)
+                        else None
+                    )
+                    future_or_tensor = spawn_tp_materialize(
+                        thread_pool,
+                        tensor,
+                        mapping.distributed_operation,
+                        shard_index,
+                        device_map[""],
+                        _dtype,
+                    )
+
+            if future_or_tensor is None:
+                param_device = get_device(device_map, renamed_key, valid_torch_device=True)
                 future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
@@ -1465,7 +1478,14 @@ def convert_and_load_state_dict_in_model(
                             target_name, param, loading_info, disk_offload_folder, disk_offload_index, mapping
                         )
                     else:
-                        set_param_for_module(model, target_name, param, loading_info, hf_quantizer)
+                        set_param_for_module(
+                            model,
+                            target_name,
+                            param,
+                            loading_info,
+                            mapping.distributed_operation,
+                            hf_quantizer,
+                        )
 
                 # Cleanup all the tensors that were gathered before next iteration
                 del realized_value

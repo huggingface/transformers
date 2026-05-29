@@ -182,6 +182,11 @@ This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb)
 [[autodoc]] VoxtralRealtimeEncoder
     - forward
 
+## VoxtralRealtimeModel
+
+[[autodoc]] VoxtralRealtimeModel
+    - forward
+
 ## VoxtralRealtimeForConditionalGeneration
 
 [[autodoc]] VoxtralRealtimeForConditionalGeneration
