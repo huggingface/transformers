@@ -1119,6 +1119,21 @@ class GroupedGemmParallel(TensorParallelLayer):
             module.num_experts = self.get_expected_sharded_shape((self.empty_param.shape[0],))[0]
 
 
+_KERNEL_MANAGED_EP_IMPLS = frozenset({"deepgemm_megamoe", "sonicmoe_ep"})
+
+
+def _is_kernel_managed_ep(mod: nn.Module) -> bool:
+    """True for experts impls that own dispatch + combine themselves.
+
+    These kernels handle the full EP forward (token dispatch over NVLink → grouped GEMM on
+    rank-local experts → weighted combine back) inside a single call, so the RouterParallel
+    global→local remap and the outer all-reduce on the experts output must both be skipped.
+    They expect raw global `top_k_index` (no sentinel masking) and need the EP `process_group`
+    passed as a 4th positional arg.
+    """
+    return getattr(getattr(mod, "config", None), "_experts_implementation", None) in _KERNEL_MANAGED_EP_IMPLS
+
+
 class RouterParallel(TensorParallelLayer):
     """
     Allows to reshape the router scores to support running expert parallel.
@@ -1181,10 +1196,10 @@ class RouterParallel(TensorParallelLayer):
         + masked in grouped_mm/batched_mm. After the expert forward, an all_reduce sums
         partial outputs across EP ranks to produce the full result.
 
-        Mega MoE skips this remap: its kernel does the EP dispatch itself and wants raw
-        global expert ids with unmasked routing weights.
+        Kernel-managed EP impls (Mega MoE, sonic-moe EP) skip this remap: their kernels do the
+        EP dispatch themselves and want raw global expert ids with unmasked routing weights.
         """
-        if _is_megamoe(mod):
+        if _is_kernel_managed_ep(mod):
             return outputs
 
         ep_rank, ep_size = device_mesh.get_local_rank(), device_mesh.size()
@@ -1234,10 +1249,11 @@ class MoeTensorParalellExperts(TensorParallelLayer):
         top_k_index = inputs[1]
         top_k_weights = inputs[2]
 
-        # Mega MoE is inference-only (the kernel has no backward) and handles EP
-        # dispatch + combine + per-rank token sharding internally. Skip the gradient
-        # sync hooks and append the EP `process_group` so the forward can rendezvous.
-        if _is_megamoe(mod):
+        # Kernel-managed EP impls (Mega MoE, sonic-moe EP) handle dispatch + combine +
+        # per-rank token sharding internally. Skip the gradient sync hooks and append the
+        # EP `process_group` so the forward can rendezvous. Mega MoE is inference-only;
+        # sonic-moe EP supports backward natively (drouter all-reduce happens inside).
+        if _is_kernel_managed_ep(mod):
             return hidden_states, top_k_index, top_k_weights, device_mesh.get_group()
 
         # all_reduce_backward on hidden_states for correct colwise (gate_up_proj) gradient
@@ -1251,8 +1267,8 @@ class MoeTensorParalellExperts(TensorParallelLayer):
         return hidden_states, top_k_index, top_k_weights
 
     def _prepare_output_fn(self, mod, outputs, device_mesh):
-        # Mega MoE returned the fully-combined gathered output; skip the all-reduce.
-        if _is_megamoe(mod):
+        # Kernel-managed EP impls return the fully-combined output; skip the all-reduce.
+        if _is_kernel_managed_ep(mod):
             return outputs
         # all_reduce_forward to sum partial expert outputs across GPUs
         return all_reduce_forward(outputs, device_mesh)
@@ -1263,10 +1279,6 @@ class MoeTensorParalellExperts(TensorParallelLayer):
         # This class doesn't shard tensors - sharding is handled by packed_colwise/rowwise
         # on the individual weight tensors (gate_up_proj/down_proj)
         return param[...].to(device=device, dtype=dtype)
-
-
-def _is_megamoe(mod: nn.Module) -> bool:
-    return getattr(getattr(mod, "config", None), "_experts_implementation", None) == "deepgemm_megamoe"
 
 
 class MoeIdentityExpertParallel(TensorParallelLayer):
