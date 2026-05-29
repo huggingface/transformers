@@ -936,11 +936,6 @@ class WeightConverter(WeightTransform):
         # dot-token boundary. Stops `mlp.experts.gate_up_proj` from substring-matching
         # the FP8 scale sibling `mlp.experts.gate_up_proj_scale_inv` on save.
 
-        # `quantization_operation` is the on-the-fly quantize op attached by
-        # `convert_and_load_state_dict_in_model` when the checkpoint wasn't pre-quantized.
-        # Only opt-in (`supports_round_trip=True`) quant ops are safe to reverse — today
-        # that's just `Fp8Quantize` / `Fp8Dequantize`. Unaudited quant backends bail
-        # rather than silently write a half-converted checkpoint.
         if self.quantization_operation is not None and not getattr(self.quantization_operation, "supports_round_trip", False):
             raise ValueError(
                 f"{type(self.quantization_operation).__name__} is not opted into round-trip save "
