@@ -173,6 +173,12 @@ class Qwen3_5TextRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
         super().__init__()
         self.mrope_section = config.rope_parameters.get("mrope_section", [11, 11, 10])
 
+    def forward(self, x, position_ids):
+        # With `device_map="auto"`, `position_ids` may be built on a different device than the shard
+        # holding the rotary buffers; realign it (the buffers are already moved to `x.device` below).
+        position_ids = position_ids.to(x.device)
+        return super().forward(x, position_ids)
+
     def compute_default_rope_parameters(
         config: Qwen3_5TextConfig | None = None,
         device: Optional["torch.device"] = None,
@@ -448,6 +454,13 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
         Returns:
             `torch.Tensor`: hidden_states.
         """
+        # With `device_map="auto"` the vision tower may live on a different device than the incoming
+        # `pixel_values`/`grid_thw`. Realign both here so every tensor derived from `grid_thw`
+        # (indices, position ids, cu_seqlens) is built on the vision device too.
+        device = self.patch_embed.proj.weight.device
+        hidden_states = hidden_states.to(device)
+        grid_thw = grid_thw.to(device)
+
         bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
             grid_thw,
             num_grid_per_side=self.num_grid_per_side,
@@ -614,6 +627,9 @@ class Qwen3_5Model(Qwen3VLModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
+            # Tied `embed_tokens`/`lm_head` can be dispatched to different devices under
+            # `device_map="auto"`; align `input_ids` with the embedding weight before the lookup.
+            input_ids = input_ids.to(self.get_input_embeddings().weight.device)
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:

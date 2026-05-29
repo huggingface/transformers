@@ -188,6 +188,9 @@ class Qwen2VLRotaryEmbedding(nn.Module):
 
     # Ignore copy
     def forward(self, x, position_ids):
+        # Under `device_map="auto"` the rotary module is parameter-light and its inputs may not be
+        # moved to the same device as `inv_freq`, so align `position_ids` with the buffer's device.
+        position_ids = position_ids.to(self.inv_freq.device)
         # In contrast to other models, Qwen2_VL has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
         inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
@@ -742,6 +745,11 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
             The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
         """
+        # Under `device_map="auto"` the vision inputs may land on a different device than the patch
+        # embedding weights; align them (and `grid_thw`-derived tensors) with the vision tower's device.
+        device = self.patch_embed.proj.weight.device
+        hidden_states = hidden_states.to(device)
+        grid_thw = grid_thw.to(device)
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
 
@@ -1222,6 +1230,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         """
 
         if inputs_embeds is None:
+            input_ids = input_ids.to(self.get_input_embeddings().weight.device)
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:

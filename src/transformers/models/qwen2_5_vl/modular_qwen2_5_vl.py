@@ -255,6 +255,11 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         Returns:
             `torch.Tensor`: hidden_states.
         """
+        # Under `device_map="auto"` the vision inputs may land on a different device than the patch
+        # embedding weights; align them (and `grid_thw`-derived tensors) with the vision tower's device.
+        device = self.patch_embed.proj.weight.device
+        hidden_states = hidden_states.to(device)
+        grid_thw = grid_thw.to(device)
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
         window_index, cu_window_seqlens = get_vision_window_index(
@@ -512,6 +517,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
         """
 
         if inputs_embeds is None:
+            input_ids = input_ids.to(self.get_input_embeddings().weight.device)
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:

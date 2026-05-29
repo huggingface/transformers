@@ -287,6 +287,9 @@ class Qwen3VLTextRotaryEmbedding(LlamaRotaryEmbedding):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
+        # Under `device_map="auto"` the rotary module is parameter-light and its inputs may not be
+        # moved to the same device as `x`, so align `position_ids` before the matmul below.
+        position_ids = position_ids.to(x.device)
         # In contrast to other models, Qwen3VL has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
         if position_ids.ndim == 2:
@@ -482,6 +485,11 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         Returns:
             `torch.Tensor`: hidden_states.
         """
+        # Under `device_map="auto"` the vision inputs may land on a different device than the patch
+        # embedding weights; align them (and `grid_thw`-derived tensors) with the vision tower's device.
+        device = self.patch_embed.proj.weight.device
+        hidden_states = hidden_states.to(device)
+        grid_thw = grid_thw.to(device)
         bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
             grid_thw,
             num_grid_per_side=self.num_grid_per_side,
@@ -757,6 +765,7 @@ class Qwen3VLModel(Qwen2VLModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
+            input_ids = input_ids.to(self.get_input_embeddings().weight.device)
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         image_mask = None
