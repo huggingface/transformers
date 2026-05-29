@@ -12,13 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 import torch
 import torch.distributed as dist
-from torch.distributed.tensor.device_mesh import DeviceMesh
 
 from .requests import logger
+
+
+if TYPE_CHECKING:
+    from torch.distributed.tensor.device_mesh import DeviceMesh
 
 
 T = TypeVar("T")
@@ -27,7 +30,7 @@ T = TypeVar("T")
 class DistributedHelper:
     """A helper class to handle distributed-related operations. Notably, it does not crash when distributed is off."""
 
-    def __init__(self, device_mesh: DeviceMesh | None) -> None:
+    def __init__(self, device_mesh: "DeviceMesh | None") -> None:
         self.device_mesh = device_mesh
         self.dist_on = dist.is_available() and dist.is_initialized()
 
