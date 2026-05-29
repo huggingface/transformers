@@ -86,9 +86,14 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
         arch = "Blackwell (SM100)" if requires_sm100 else "Hopper (SM90) or Blackwell (SM100)"
         raise ImportError(f"DeepGEMM requires {arch}; current device is SM{major}{minor}.")
 
+    # Per the DeepGEMM README: SM90 needs CUDA 12.3+, SM100 needs CUDA 12.9+.
     cuda_major, cuda_minor = get_cuda_runtime_version()
-    if (cuda_major, cuda_minor) < (12, 3):
-        raise ImportError(f"DeepGEMM requires CUDA runtime ≥ 12.3, found {cuda_major}.{cuda_minor}.")
+    min_cuda = (12, 9) if major == 10 else (12, 3)
+    if (cuda_major, cuda_minor) < min_cuda:
+        raise ImportError(
+            f"DeepGEMM on SM{major}{minor} requires CUDA runtime ≥ {min_cuda[0]}.{min_cuda[1]}, "
+            f"found {cuda_major}.{cuda_minor}."
+        )
 
     kernel = lazy_load_kernel("deep-gemm")
     if kernel is None:
