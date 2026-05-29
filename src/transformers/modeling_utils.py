@@ -57,6 +57,7 @@ from .distributed.fsdp import is_fsdp_enabled
 from .distributed.sharding_utils import _dtensor_from_local_like
 from .distributed.tensor_parallel import (
     _get_parameter_tp_plan,
+    resolve_parallel_plan,
     verify_tp_plan,
 )
 from .distributed.utils import (
@@ -1470,8 +1471,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         The full tp plan for the model's modules
         """
-        if hasattr(self.config, "distributed_config") and self.config.distributed_config.enable_expert_parallel:
-            return self._ep_plan
+        distributed_config = getattr(self.config, "distributed_config", None)
+        if distributed_config is not None:
+            return resolve_parallel_plan(self, distributed_config)
         return self._tp_plan
 
     @property
@@ -4359,7 +4361,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Finalize model weight initialization
         active_tp_plan = (
-            getattr(model, "_tp_plan", None) if getattr(distributed_config, "tp_size", None) is not None else None
+            resolve_parallel_plan(model, distributed_config)
+            if distributed_config is not None and getattr(distributed_config, "tp_size", None) is not None
+            else None
         )
         load_config = LoadStateDictConfig(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
