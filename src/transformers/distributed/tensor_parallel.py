@@ -572,22 +572,42 @@ class ParallelInterface(GeneralInterface):
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
-def apply_tensor_parallel(model, tp_mesh, tp_plan):
-    """Apply tensor parallelism by calling each style's ``_apply`` on the
-    matching submodules.
+# Styles that shard a *parameter* (declared at param granularity in configs) rather than
+# installing a module forward hook. These are applied in a dedicated first pass that walks
+# named_parameters(); any matching forward comm is a separate module-level entry.
+PARAM_ONLY_STYLES = frozenset(
+    {
+        "grouped_gemm",
+        "moe_gate_up_colwise",
+        "moe_gate_up_colwise_alt",
+        "moe_down_rowwise",
+    }
+)
 
-    Walks ``model.named_modules()``, resolves each name against the wildcard
-    ``tp_plan`` from the model config, and applies the corresponding style
-    from ``ALL_PARALLEL_STYLES`` (looked up by string name) directly.
+
+def apply_tensor_parallel(model, tp_mesh, tp_plan):
+    """Apply tensor parallelism in two passes, looking each style up by string name.
+
+    Pass 1 (param-level): walk ``model.named_parameters()`` and, for keys whose plan
+    style is in ``PARAM_ONLY_STYLES`` (e.g. MoE expert weights), shard the parameter
+    directly as a DTensor placeholder. No forward hook is installed.
+
+    Pass 2 (module-level): walk ``model.named_modules()``, resolve each name against
+    the wildcard ``tp_plan`` and call the style's ``_apply`` (forward hooks + optional
+    Linear sharding). Param sharding runs first so module forward hooks (e.g.
+    ``moe_experts_allreduce``) see already-sharded DTensor params.
     """
     distributed_config = getattr(model.config, "distributed_config", None)
     sp_requested = getattr(distributed_config, "enable_sequence_parallel", False)
     sp_supported = getattr(model.config, "base_model_sp_plan", None) is not None
     enable_sp = sp_requested and sp_supported
+    enable_ep = getattr(distributed_config, "enable_expert_parallel", False)
 
     if tp_plan is None:
         if enable_sp:
             tp_plan = dict(model._sp_plan or {})
+        elif enable_ep:
+            tp_plan = dict(model._ep_plan or {})
         else:
             tp_plan = dict(model._tp_plan or {})
 
@@ -600,9 +620,21 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
         if not tied_source_in_plan:
             tp_plan.pop("lm_head", None)
 
+    # Pass 1: param-level sharding (meta DTensor placeholders). Declared per-parameter
+    # in the plan (e.g. MoE expert weights). Materialize the iterator first since we
+    # mutate each parent module's `_parameters` as we go.
+    for param_name, _ in list(model.named_parameters()):
+        style_name = _get_parameter_tp_plan(parameter_name=param_name, tp_plan=tp_plan, is_weight=True)
+        if style_name not in PARAM_ONLY_STYLES:
+            continue
+        parent_name, short_name = param_name.rsplit(".", 1)
+        parent = model.get_submodule(parent_name)
+        ALL_PARALLEL_STYLES[style_name].shard_parameters(parent, tp_mesh, param_names=[short_name])
+
+    # Pass 2: module-level styles (forward hooks + optional sharding for Linear modules).
     for name, submodule in model.named_modules():
         style_value = _get_parameter_tp_plan(parameter_name=name, tp_plan=tp_plan, is_weight=False)
-        if style_value is None:
+        if style_value is None or style_value in PARAM_ONLY_STYLES:
             continue
         ALL_PARALLEL_STYLES[style_value]._apply(submodule, tp_mesh)
 
