@@ -31,6 +31,8 @@ from ..utils.loading_report import log_state_dict_report
 
 if TYPE_CHECKING:
     from ..configuration_utils import PreTrainedConfig
+    from .logits_process import LogitsProcessorList
+
 
 logger = logging.get_logger(__name__)
 
@@ -123,15 +125,24 @@ class MtpLayerStack(PreTrainedModel):
         position_ids: torch.Tensor | None,
         past_key_values: Cache | None,
         logits_to_keep: int | torch.Tensor = 1,
+        # Control how we sample the new token from each layer
+        do_sample: bool = False,
+        logits_processor: LogitsProcessorList | None = None,
+        full_input_ids: torch.Tensor | None = None,  # needed as input for the logits_processor
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size = input_ids.shape[0]
+        """
+        Sample 1 new token for each mtp layers present in this model. Note that the inputs are assumed to be
+        already sliced and correct here, i.e. if the main model just processed inputs corresponding to tokens
+        at positions [N-1, N] in the sequence, then from it you draft a new token for position N+1, and the
+        `input_ids`/`position_ids`/`attention_mask` here are assumed to correspond to data for tokens at positions
+        [N, N+1], i.e. shifted by 1 from the main model, by the newly drafted token. The `last_hidden_states` though
+        will correspond to the same as the main model, i.e. positions [N-1, N] in the sequence length dimension.
 
-        # Here `input_ids`/`attention_mask`/`position_ids` are the inputs that the main model just processed, + the length of
-        # the last drafted token from main model logits
-        mtp_input_ids = input_ids[:, 1:]
-        mtp_position_ids = position_ids[:, 1:]
-        mtp_attention_mask = attention_mask[:, 1:]
+        `full_input_ids` correspond to the full sequence of `input_ids`, which is used in case we have any `logits_processor`
+        as some processors may require to check the length/value of the full previous sequence of ids.
+        """
+        batch_size = input_ids.shape[0]
 
         # We create this dummy cache simply to create the masks correctly, since they rely on the sizes of layer 0 of
         # the cache. Note that it does not create any copy of data, it simply keep a ref to internal tensors
@@ -141,14 +152,14 @@ class MtpLayerStack(PreTrainedModel):
         drafted_tokens = []
         for mtp_layer in self.layers:
             # We need to recompute those every layer since they change
-            inputs_embeds = self.embed_tokens(mtp_input_ids).to(last_hidden_states.device)
-            position_embeddings = self.rotary_emb(inputs_embeds, position_ids=mtp_position_ids)
+            inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
+            position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids)
             causal_mask = create_causal_mask(
                 config=self.config,
                 inputs_embeds=inputs_embeds,
-                attention_mask=mtp_attention_mask,
+                attention_mask=attention_mask,
                 past_key_values=dummy_cache_for_masking,
-                position_ids=mtp_position_ids,
+                position_ids=position_ids,
             )
 
             last_hidden_states, logits = mtp_layer(
@@ -156,7 +167,7 @@ class MtpLayerStack(PreTrainedModel):
                 last_hidden_states,
                 position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
-                position_ids=mtp_position_ids,
+                position_ids=position_ids,
                 past_key_values=past_key_values,
                 logits_to_keep=logits_to_keep,
                 **kwargs,
@@ -164,20 +175,30 @@ class MtpLayerStack(PreTrainedModel):
 
             # Append the drafted logits
             drafted_logits.append(logits)
-            # For now, assume greedy decoding
-            next_mtp_token = logits.argmax(dim=-1).to(mtp_input_ids.device)
+
+            # Decode one token
+            next_token_logits = logits[:, -1, :].to(device=input_ids.device)
+            if logits_processor is not None and full_input_ids is not None:
+                next_token_scores = logits_processor(full_input_ids, next_token_logits.to(torch.float32))
+            if do_sample:
+                probs = nn.functional.softmax(next_token_scores, dim=-1, dtype=torch.float32)
+                next_mtp_token = torch.multinomial(probs, num_samples=1)
+            else:
+                next_mtp_token = torch.argmax(next_token_scores, dim=-1, keepdim=True)
             drafted_tokens.append(next_mtp_token)
 
             # Roll by 1 and append for next layer
-            mtp_input_ids = torch.cat([mtp_input_ids[:, 1:], next_mtp_token], dim=-1)
-            mtp_attention_mask = torch.cat(
-                [mtp_attention_mask[:, 1:], mtp_attention_mask.new_ones(batch_size, 1)], dim=-1
-            )
-            mtp_position_ids = torch.cat([mtp_position_ids[:, 1:], mtp_position_ids[:, -1:] + 1], dim=-1)
+            input_ids = torch.cat([input_ids[:, 1:], next_mtp_token], dim=-1)
+            attention_mask = torch.cat([attention_mask[:, 1:], attention_mask.new_ones(batch_size, 1)], dim=-1)
+            position_ids = torch.cat([position_ids[:, 1:], position_ids[:, -1:] + 1], dim=-1)
 
-        candidate_ids = torch.cat(drafted_tokens, dim=1)
+            # Need to cat ful_ids as well for the processors
+            if full_input_ids is not None:
+                full_input_ids = torch.cat([full_input_ids, next_mtp_token], dim=-1)
+
+        new_candidate_ids = torch.cat(drafted_tokens, dim=1)
         candidate_logits = torch.cat(drafted_logits, dim=1)
-        return candidate_ids, candidate_logits
+        return new_candidate_ids, candidate_logits
 
     @classmethod
     def from_pretrained(cls, main_model: PreTrainedModel, device_map=None, **kwargs) -> MtpLayerStack:
