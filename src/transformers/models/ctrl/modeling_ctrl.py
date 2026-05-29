@@ -27,8 +27,10 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast,
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
     auto_docstring,
+    can_return_tuple,
     logging,
 )
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_ctrl import CTRLConfig
 
 
@@ -127,6 +129,7 @@ class MultiHeadAttention(nn.Module):
             k,
             v,
             attention_mask,
+            dropout=0.0,
             scaling=self.scaling,
             **kwargs,
         )
@@ -160,15 +163,14 @@ class EncoderLayer(nn.Module):
         **kwargs,
     ):
         normed = self.layernorm1(x)
-        attn_outputs = self.multi_head_attention(
+        attn_output = self.multi_head_attention(
             normed,
             normed,
             normed,
             layer_past=layer_past,
             attention_mask=attention_mask,
             **kwargs,
-        )
-        attn_output = attn_outputs[0]
+        )[0]
         attn_output = self.dropout1(attn_output)
         out1 = x + attn_output
 
@@ -177,8 +179,7 @@ class EncoderLayer(nn.Module):
         ffn_output = self.dropout2(ffn_output)
         out2 = out1 + ffn_output
 
-        outputs = (out2,) + attn_outputs[1:]
-        return outputs
+        return out2
 
 
 @auto_docstring
@@ -186,6 +187,10 @@ class CTRLPreTrainedModel(PreTrainedModel):
     config: CTRLConfig
     base_model_prefix = "transformer"
     _supports_sdpa = True
+    _can_record_outputs = {
+        "hidden_states": EncoderLayer,
+        "attentions": OutputRecorder(MultiHeadAttention, index=1),
+    }
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -222,6 +227,7 @@ class CTRLModel(CTRLPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.w = new_embeddings
 
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -232,11 +238,8 @@ class CTRLModel(CTRLPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,  # NOOP kwargs, for now
-    ) -> tuple[torch.Tensor] | BaseModelOutputWithPast:
+        **kwargs,
+    ) -> BaseModelOutputWithPast:
         r"""
         Example:
 
@@ -257,12 +260,7 @@ class CTRLModel(CTRLPreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 5, 1280]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -297,6 +295,9 @@ class CTRLModel(CTRLPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.w(input_ids)
 
+        if attention_mask is not None and attention_mask.ndim < 4:
+            attention_mask = attention_mask.view(batch_size, -1)
+
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
@@ -315,36 +316,19 @@ class CTRLModel(CTRLPreTrainedModel):
 
         hidden_states = self.dropout(hidden_states)
 
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-        for i, h in enumerate(self.h):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-            outputs = h(
+        for h in self.h:
+            hidden_states = h(
                 hidden_states,
                 layer_past=past_key_values,
                 attention_mask=causal_mask,
-                output_attentions=output_attentions,
                 **kwargs,
             )
-            hidden_states = outputs[0]
-            if output_attentions:
-                all_attentions += (outputs[1],)
 
         hidden_states = self.layernorm(hidden_states)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v for v in [hidden_states, past_key_values, all_hidden_states, all_attentions] if v is not None
-            )
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
+            past_key_values=past_key_values if use_cache else None,
         )
 
 
@@ -365,6 +349,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -376,12 +361,9 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> tuple[torch.Tensor] | CausalLMOutputWithPast:
+    ) -> CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
@@ -413,8 +395,6 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
         >>> list(outputs.logits.shape)
         [1, 5, 246534]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         transformer_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
@@ -423,9 +403,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = transformer_outputs[0]
@@ -441,10 +419,6 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
-
-        if not return_dict:
-            output = (logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -494,6 +468,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -505,11 +480,8 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
+    ) -> SequenceClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -587,8 +559,6 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> loss.backward()  # doctest: +IGNORE_RESULT
         ```"""
 
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         transformer_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
@@ -597,9 +567,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = transformer_outputs[0]
@@ -650,10 +618,6 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
-        if not return_dict:
-            output = (pooled_logits,) + transformer_outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
         return SequenceClassifierOutput(
             loss=loss,
             logits=pooled_logits,
