@@ -487,7 +487,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             batch_size, num_frames = stacked_videos.shape[:2]
             if do_resize:
                 stacked_videos, grids, num_patches = self.resize_and_split_patches(
-                    videos=stacked_videos,
+                    stacked_videos,
                     resample=resample,
                     slice_mode=slice_mode,
                     max_slice_nums=max_slice_nums,

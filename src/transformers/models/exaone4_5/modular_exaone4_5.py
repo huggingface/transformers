@@ -52,6 +52,15 @@ from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
 @strict
 class Exaone4_5_VisionConfig(Qwen2_5_VLVisionConfig):
+    r"""
+    window_size (`int`, *optional*, defaults to 11):
+        Size of windows.
+    out_hidden_size (`int`, *optional*, defaults to 3584):
+        The output hidden size of the vision model.
+    fullatt_block_indexes (`int`, *optional*, defaults to `[7, 15, 23, 31]`):
+        Indices of layers with full attention
+    """
+
     model_type = "exaone4_5_vision"
     base_config_key = "vision_config"
     num_key_value_heads: int = 8

@@ -29,8 +29,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @strict
 class Exaone4_5_VisionConfig(PreTrainedConfig):
     r"""
-    tokens_per_second (`int`, *optional*, defaults to 41):
-        Number of tokens to merge for each second of video.
     window_size (`int`, *optional*, defaults to 11):
         Size of windows.
     out_hidden_size (`int`, *optional*, defaults to 3584):
