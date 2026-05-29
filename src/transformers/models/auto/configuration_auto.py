@@ -21,7 +21,10 @@ from collections.abc import Callable, Iterator, KeysView, ValuesView
 from typing import Any, TypeVar
 
 from ...configuration_utils import PreTrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
+from ...dynamic_module_utils import (
+    get_class_from_dynamic_module,
+    resolve_trust_remote_code,
+)
 from ...utils import CONFIG_NAME, logging
 from .auto_mappings import CONFIG_MAPPING_NAMES, SPECIAL_MODEL_TYPE_TO_MODULE_NAME
 
@@ -86,27 +89,6 @@ def config_class_to_model_type(config) -> str | None:
         if cls.__name__ == config:
             return key
     return None
-
-
-def _local_checkpoint_contains_auto_map_module(
-    pretrained_model_name_or_path,
-    class_ref: str,
-) -> bool:
-    path = os.fspath(pretrained_model_name_or_path)
-    if "--" in class_ref:
-        _, class_ref = class_ref.split("--", 1)
-    if os.path.isdir(path):
-        checkpoint_dir = path
-    elif os.path.isfile(path):
-        checkpoint_dir = os.path.dirname(path) or os.curdir
-    else:
-        return False
-    try:
-        module_file, _ = class_ref.rsplit(".", 1)
-    except ValueError:
-        return False
-    module_path = os.path.join(checkpoint_dir, *module_file.split(".")) + ".py"
-    return os.path.isfile(module_path)
 
 
 class _LazyConfigMapping(OrderedDict[str, type[PreTrainedConfig]]):
@@ -350,6 +332,10 @@ class AutoConfig:
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
                 execute code present on the Hub on your local machine.
+            prefer_auto_map (`bool`, *optional*, defaults to `False`):
+                When `True` and `trust_remote_code=True`, prefer the checkpoint's `auto_map`
+                code over an explicitly registered local class for the same `model_type`.
+                By default, explicitly registered local classes keep precedence.
             kwargs(additional keyword arguments, *optional*):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
@@ -391,6 +377,7 @@ class AutoConfig:
         kwargs["name_or_path"] = pretrained_model_name_or_path
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         code_revision = kwargs.pop("code_revision", None)
+        prefer_auto_map = kwargs.pop("prefer_auto_map", False)
 
         config_dict, unused_kwargs = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
@@ -405,22 +392,23 @@ class AutoConfig:
         else:
             dynamic_module_source = pretrained_model_name_or_path
 
-        local_checkpoint_has_own_code = False
         if has_remote_code:
             class_ref = config_dict["auto_map"]["AutoConfig"]
-            local_checkpoint_has_own_code = _local_checkpoint_contains_auto_map_module(
-                pretrained_model_name_or_path,
-                class_ref,
-            )
             if "--" in class_ref:
                 upstream_repo = class_ref.split("--")[0]
             else:
                 upstream_repo = None
             trust_remote_code = resolve_trust_remote_code(
-                trust_remote_code, dynamic_module_source, has_local_code, has_remote_code, upstream_repo
+                trust_remote_code,
+                dynamic_module_source,
+                has_local_code,
+                has_remote_code,
+                upstream_repo=upstream_repo,
             )
 
-        if has_remote_code and trust_remote_code and (not explicit_local_code or local_checkpoint_has_own_code):
+        should_prefer_auto_map = prefer_auto_map and explicit_local_code
+
+        if has_remote_code and trust_remote_code and (should_prefer_auto_map or not explicit_local_code):
             config_class = get_class_from_dynamic_module(
                 class_ref, dynamic_module_source, code_revision=code_revision, **kwargs
             )

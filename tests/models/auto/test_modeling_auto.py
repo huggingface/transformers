@@ -42,7 +42,6 @@ sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
 
 from test_module.custom_configuration import CustomConfig  # noqa E402
 
-
 if is_torch_available():
     import torch
     from test_module.custom_modeling import CustomModel
@@ -310,7 +309,9 @@ class AutoModelTest(unittest.TestCase):
 
         # Test the dynamic module is reloaded if we force it.
         reloaded_model = AutoModel.from_pretrained(
-            "hf-internal-testing/test_dynamic_model", trust_remote_code=True, force_download=True
+            "hf-internal-testing/test_dynamic_model",
+            trust_remote_code=True,
+            force_download=True,
         )
         self.assertIsNot(model.__class__, reloaded_model.__class__)
 
@@ -335,7 +336,9 @@ class AutoModelTest(unittest.TestCase):
 
         # Test the dynamic module is reloaded if we force it.
         reloaded_model = AutoModel.from_pretrained(
-            "hf-internal-testing/test_dynamic_model_with_util", trust_remote_code=True, force_download=True
+            "hf-internal-testing/test_dynamic_model_with_util",
+            trust_remote_code=True,
+            force_download=True,
         )
         self.assertIsNot(model.__class__, reloaded_model.__class__)
 
@@ -354,7 +357,8 @@ class AutoModelTest(unittest.TestCase):
 
         # This one uses a relative import to a util file, this checks it is downloaded and used properly.
         model = AutoModel.from_pretrained(
-            "hf-internal-testing/ref_to_test_dynamic_model_with_util", trust_remote_code=True
+            "hf-internal-testing/ref_to_test_dynamic_model_with_util",
+            trust_remote_code=True,
         )
         self.assertEqual(model.__class__.__name__, "NewModel")
 
@@ -385,7 +389,9 @@ class AutoModelTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
                 model = AutoModel.from_pretrained(
-                    "hf-internal-testing/test_dynamic_model_v1.0", trust_remote_code=True, cache_dir=tmp_dir
+                    "hf-internal-testing/test_dynamic_model_v1.0",
+                    trust_remote_code=True,
+                    cache_dir=tmp_dir,
                 )
                 self.assertEqual(model.__class__.__name__, "NewModel")
 
@@ -440,7 +446,9 @@ class AutoModelTest(unittest.TestCase):
                 if CustomConfig in mapping._extra_content:
                     del mapping._extra_content[CustomConfig]
 
-    def test_from_pretrained_saved_dynamic_model_conflict(self):
+    def test_from_pretrained_saved_dynamic_model_conflict_prefers_local_by_default(
+        self,
+    ):
         class NewModelConfigLocal(BertConfig):
             model_type = "new-model"
 
@@ -464,14 +472,8 @@ class AutoModelTest(unittest.TestCase):
                     tmp_dir,
                     trust_remote_code=True,
                 )
-                self.assertIsNot(reloaded_model.__class__, NewModelLocal)
-                self.assertIsNot(reloaded_model.config.__class__, NewModelConfigLocal)
-                self.assertFalse(getattr(reloaded_model.__class__, "local_only_marker", False))
-                self.assertEqual(reloaded_model.__class__.__name__, "NewModel")
-                self.assertEqual(
-                    reloaded_model.config.__class__.__name__,
-                    "NewModelConfig",
-                )
+                self.assertIs(reloaded_model.__class__, NewModelLocal)
+                self.assertTrue(getattr(reloaded_model.__class__, "local_only_marker", False))
         finally:
             if "new-model" in CONFIG_MAPPING._extra_content:
                 del CONFIG_MAPPING._extra_content["new-model"]
@@ -517,13 +519,15 @@ class AutoModelTest(unittest.TestCase):
 
     def test_repo_not_found(self):
         with self.assertRaisesRegex(
-            EnvironmentError, "bert-base is not a local folder and is not a valid model identifier"
+            EnvironmentError,
+            "bert-base is not a local folder and is not a valid model identifier",
         ):
             _ = AutoModel.from_pretrained("bert-base")
 
     def test_revision_not_found(self):
         with self.assertRaisesRegex(
-            EnvironmentError, r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)"
+            EnvironmentError,
+            r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)",
         ):
             _ = AutoModel.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
 

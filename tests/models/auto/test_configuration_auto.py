@@ -32,7 +32,6 @@ sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
 
 from test_module.custom_configuration import CustomConfig  # noqa E402
 
-
 SAMPLE_ROBERTA_CONFIG = get_tests_dir("fixtures/dummy-config.json")
 
 
@@ -83,13 +82,15 @@ class AutoConfigTest(unittest.TestCase):
 
     def test_repo_not_found(self):
         with self.assertRaisesRegex(
-            EnvironmentError, "bert-base is not a local folder and is not a valid model identifier"
+            EnvironmentError,
+            "bert-base is not a local folder and is not a valid model identifier",
         ):
             _ = AutoConfig.from_pretrained("bert-base")
 
     def test_revision_not_found(self):
         with self.assertRaisesRegex(
-            EnvironmentError, r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)"
+            EnvironmentError,
+            r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)",
         ):
             _ = AutoConfig.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
 
@@ -117,7 +118,9 @@ class AutoConfigTest(unittest.TestCase):
             self.assertEqual(reloaded_config.auto_map["AutoConfig"], "configuration.NewModelConfig")
         self.assertEqual(reloaded_config.__class__.__name__, "NewModelConfig")
 
-    def test_from_pretrained_saved_dynamic_config_conflict(self):
+    def test_from_pretrained_saved_dynamic_config_conflict_prefers_local_by_default(
+        self,
+    ):
         class NewModelConfigLocal(BertConfig):
             model_type = "new-model"
             local_only_marker = True
@@ -137,18 +140,15 @@ class AutoConfigTest(unittest.TestCase):
                     tmp_dir,
                     trust_remote_code=True,
                 )
-                self.assertIsNot(reloaded_config.__class__, NewModelConfigLocal)
-                self.assertFalse(getattr(reloaded_config.__class__, "local_only_marker", False))
-                self.assertEqual(
-                    reloaded_config.auto_map["AutoConfig"],
-                    "configuration.NewModelConfig",
-                )
-                self.assertEqual(reloaded_config.__class__.__name__, "NewModelConfig")
+                self.assertIs(reloaded_config.__class__, NewModelConfigLocal)
+                self.assertTrue(getattr(reloaded_config.__class__, "local_only_marker", False))
         finally:
             if "new-model" in CONFIG_MAPPING._extra_content:
                 del CONFIG_MAPPING._extra_content["new-model"]
 
-    def test_from_pretrained_saved_dynamic_config_conflict_from_custom_config_file(self):
+    def test_from_pretrained_saved_dynamic_config_conflict_prefer_auto_map_from_custom_config_file(
+        self,
+    ):
         class NewModelConfigLocal(BertConfig):
             model_type = "new-model"
             local_only_marker = True
@@ -170,10 +170,10 @@ class AutoConfigTest(unittest.TestCase):
                 self.assertTrue(os.path.exists(custom_config_path))
 
                 AutoConfig.register("new-model", NewModelConfigLocal)
-
                 reloaded_config = AutoConfig.from_pretrained(
                     custom_config_path,
                     trust_remote_code=True,
+                    prefer_auto_map=True,
                 )
                 self.assertIsNot(reloaded_config.__class__, NewModelConfigLocal)
                 self.assertFalse(getattr(reloaded_config.__class__, "local_only_marker", False))
@@ -212,6 +212,28 @@ class AutoConfigTest(unittest.TestCase):
             config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
             self.assertEqual(config.__class__.__name__, "NewModelConfig")
 
+        finally:
+            if "new-model" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["new-model"]
+
+    def test_from_pretrained_dynamic_config_conflict_prefer_auto_map(self):
+        class NewModelConfigLocal(BertConfig):
+            model_type = "new-model"
+            local_only_marker = True
+
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+
+        try:
+            AutoConfig.register("new-model", NewModelConfigLocal)
+            reloaded_config = AutoConfig.from_pretrained(
+                "hf-internal-testing/test_dynamic_model",
+                trust_remote_code=True,
+                prefer_auto_map=True,
+            )
+            self.assertIsNot(reloaded_config.__class__, NewModelConfigLocal)
+            self.assertFalse(getattr(reloaded_config.__class__, "local_only_marker", False))
+            self.assertEqual(reloaded_config.__class__.__name__, "NewModelConfig")
         finally:
             if "new-model" in CONFIG_MAPPING._extra_content:
                 del CONFIG_MAPPING._extra_content["new-model"]

@@ -24,7 +24,10 @@ from typing import Any, TypeVar
 from huggingface_hub import repo_exists
 
 from ...configuration_utils import PreTrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
+from ...dynamic_module_utils import (
+    get_class_from_dynamic_module,
+    resolve_trust_remote_code,
+)
 from ...utils import (
     CONFIG_NAME,
     cached_file,
@@ -36,7 +39,11 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
+from .configuration_auto import (
+    AutoConfig,
+    model_type_to_module_name,
+    replace_list_option_in_docstrings,
+)
 
 
 if is_torch_available():
@@ -206,6 +213,7 @@ class _BaseAutoModelClass:
     @classmethod
     def from_config(cls, config, **kwargs):
         trust_remote_code = kwargs.pop("trust_remote_code", None)
+        _ = kwargs.pop("prefer_auto_map", None)
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping
         explicit_local_code = has_local_code and not _get_model_class(
@@ -218,7 +226,11 @@ class _BaseAutoModelClass:
             else:
                 upstream_repo = None
             trust_remote_code = resolve_trust_remote_code(
-                trust_remote_code, config._name_or_path, has_local_code, has_remote_code, upstream_repo=upstream_repo
+                trust_remote_code,
+                config._name_or_path,
+                has_local_code,
+                has_remote_code,
+                upstream_repo=upstream_repo,
             )
 
         if has_remote_code and trust_remote_code and not explicit_local_code:
@@ -261,8 +273,14 @@ class _BaseAutoModelClass:
         return config
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike[str], *model_args, **kwargs):
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str | os.PathLike[str],
+        *model_args,
+        **kwargs,
+    ):
         config = kwargs.pop("config", None)
+        prefer_auto_map = kwargs.pop("prefer_auto_map", False)
         trust_remote_code = kwargs.get("trust_remote_code")
         kwargs["_from_auto"] = True
         hub_kwargs_names = [
@@ -307,7 +325,9 @@ class _BaseAutoModelClass:
                 adapter_kwargs["token"] = token
 
             maybe_adapter_path = find_adapter_config_file(
-                pretrained_model_name_or_path, _commit_hash=commit_hash, **adapter_kwargs
+                pretrained_model_name_or_path,
+                _commit_hash=commit_hash,
+                **adapter_kwargs,
             )
 
             if maybe_adapter_path is not None:
@@ -341,6 +361,7 @@ class _BaseAutoModelClass:
                 return_unused_kwargs=True,
                 code_revision=code_revision,
                 _commit_hash=commit_hash,
+                prefer_auto_map=prefer_auto_map,
                 **hub_kwargs,
                 **kwargs,
             )
@@ -377,7 +398,11 @@ class _BaseAutoModelClass:
 
         if has_remote_code and trust_remote_code and not explicit_local_code:
             model_class = get_class_from_dynamic_module(
-                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
+                class_ref,
+                pretrained_model_name_or_path,
+                code_revision=code_revision,
+                **hub_kwargs,
+                **kwargs,
             )
             _ = hub_kwargs.pop("code_revision", None)
             # This block handles the case where the user is loading a model with `trust_remote_code=True`
@@ -388,7 +413,11 @@ class _BaseAutoModelClass:
                 model_class.register_for_auto_class(auto_class=cls)
             model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class.from_pretrained(
-                pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
+                pretrained_model_name_or_path,
+                *model_args,
+                config=config,
+                **hub_kwargs,
+                **kwargs,
             )
         elif has_local_code:
             model_class = _get_model_class(config, cls._model_mapping)
@@ -403,7 +432,11 @@ class _BaseAutoModelClass:
                 if parent_quant is not None:
                     config.quantization_config = parent_quant
             return model_class.from_pretrained(
-                pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
+                pretrained_model_name_or_path,
+                *model_args,
+                config=config,
+                **hub_kwargs,
+                **kwargs,
             )
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
@@ -476,7 +509,8 @@ def insert_head_doc(docstring, head_doc: str = ""):
             f"one of the model classes of the library (with a {head_doc} head) ",
         )
     return docstring.replace(
-        "one of the model classes of the library ", "one of the base model classes of the library "
+        "one of the model classes of the library ",
+        "one of the base model classes of the library ",
     )
 
 
@@ -569,7 +603,9 @@ def add_generation_mixin_to_remote_model(model_class):
     )
     if has_custom_generate_in_class or has_custom_prepare_inputs:
         model_class_with_generation_mixin = type(
-            model_class.__name__, (model_class, GenerationMixin), {**model_class.__dict__}
+            model_class.__name__,
+            (model_class, GenerationMixin),
+            {**model_class.__dict__},
         )
         return model_class_with_generation_mixin
     return model_class
