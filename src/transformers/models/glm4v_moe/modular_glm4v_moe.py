@@ -105,9 +105,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
     attention_bias: bool = True
     router_aux_loss_coef: float = 0.0001
     use_qk_norm = AttributeError()
-
-    def __post_init__(self, **kwargs):
-        super().__post_init__(self, **kwargs)
+    num_nextn_predict_layers = AttributeError()
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5V")
