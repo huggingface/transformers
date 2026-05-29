@@ -158,7 +158,6 @@ class GlmOcrVisionAttention(Glm4vVisionAttention):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        rotary_pos_emb: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:

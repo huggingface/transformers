@@ -36,11 +36,17 @@ from ...integrations import use_experts_implementation, use_kernel_forward_from_
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput, MoeModelOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+    MoeModelOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     can_return_tuple,
@@ -436,32 +442,15 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Glm4vMoe causal language model (or autoregressive) outputs.
-    """
-)
+@auto_docstring
 @dataclass
-class Glm4vMoeCausalLMOutputWithPast(ModelOutput):
+class Glm4vMoeCausalLMOutputWithPast(CausalLMOutputWithPast):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
     router_logits: tuple[torch.FloatTensor] | None = None
     aux_loss: torch.FloatTensor | None = None
@@ -655,11 +644,11 @@ class Glm4vMoeVisionAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.is_causal = False
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        rotary_pos_emb: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
@@ -732,25 +721,22 @@ class Glm4vMoeVisionBlock(GradientCheckpointingLayer):
         self.attn = Glm4vMoeVisionAttention(config)
         self.mlp = Glm4vMoeisionMlp(config, bias=False)
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        rotary_pos_emb: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
         r"""
         cu_seqlens (`torch.Tensor`):
             Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
-        rotary_pos_emb (`torch.Tensor`, *optional*):
-            Precomputed rotary positional embeddings applied to the vision attention query/key states.
         """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,
-            rotary_pos_emb=rotary_pos_emb,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -1048,27 +1034,15 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Llava outputs, with hidden states and attentions.
-    """
-)
+@auto_docstring
 @dataclass
-class Glm4vMoeModelOutputWithPast(ModelOutput):
+class Glm4vMoeModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
     router_logits: tuple[torch.FloatTensor] | None = None
 
@@ -1386,6 +1360,7 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
             position_ids = None
         return position_ids
 
+    @deprecate_kwarg("rope_deltas", version="v5.10")
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -1399,7 +1374,6 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        rope_deltas: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Glm4vMoeModelOutputWithPast:
@@ -1408,8 +1382,6 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")

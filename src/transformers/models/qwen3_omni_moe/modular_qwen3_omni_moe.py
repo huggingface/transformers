@@ -1153,12 +1153,13 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3VLMoeTextModel):
         self.rotary_emb = Qwen3OmniMoeThinkerTextRotaryEmbedding(config)
 
 
+@auto_docstring
 @dataclass
 class Qwen3OmniMoeThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     r"""
-    Args:
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
+    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+        The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
     rope_deltas: torch.LongTensor | None = None
@@ -1257,7 +1258,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         position_ids=None,
         past_key_values=None,
         inputs_embeds=None,
-        rope_deltas=None,
         labels=None,
         use_cache=None,
         output_router_logits: bool | None = None,

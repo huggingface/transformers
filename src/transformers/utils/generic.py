@@ -429,7 +429,7 @@ class ModelOutput(OrderedDict):
             raise ValueError(f"{self.__class__.__name__} should not have more than one required field.")
 
         first_field = getattr(self, class_fields[0].name)
-        other_fields_are_none = all(getattr(self, field.name) is None for field in class_fields[1:])
+        other_fields_are_none = all(self.__dict__.get(field.name) is None for field in class_fields[1:])
 
         if other_fields_are_none and not is_tensor(first_field):
             if isinstance(first_field, dict):
@@ -466,7 +466,7 @@ class ModelOutput(OrderedDict):
                 self[class_fields[0].name] = first_field
         else:
             for field in class_fields:
-                v = getattr(self, field.name)
+                v = self.__dict__.get(field.name)
                 if v is not None:
                     self[field.name] = v
 

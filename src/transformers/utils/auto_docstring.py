@@ -4203,6 +4203,13 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         doc_class = cls.__doc__
         if custom_args is None and doc_class:
             custom_args = doc_class
+
+        # Pass over docs from the direct parent, if it is a class from `modeling_outputs.py`
+        direct_ancestor = cls.__mro__[1]
+        if direct_ancestor.__name__ != "ModelOutput" and direct_ancestor.__doc__:
+            custom_args = "" if custom_args is None else custom_args
+            custom_args = "\n" + set_min_indent(direct_ancestor.__doc__.strip("\n"), 0) + "\n" + custom_args
+
         docstring_args = auto_method_docstring(
             cls.__init__,
             parent_class=cls,
