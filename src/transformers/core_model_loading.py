@@ -83,14 +83,6 @@ def build_glob_alternation(
 class ConversionOps:
     """Base class for weight conversion operations."""
 
-    # Quantization-only opt-in: set True on a quantize/dequantize op once its `reverse_op`
-    # has been audited to round-trip a save cycle correctly. Today only `Fp8Quantize` /
-    # `Fp8Dequantize` are flagged — every other quantization backend (bnb, torchao, eetq,
-    # mxfp4, quanto, ...) stays False until verified. `WeightConverter.reverse_transform`
-    # only consults this on the converter's `quantization_operation`; the regular shape
-    # ops (Chunk, MergeModulelist, ...) reverse themselves through their own `reverse_op`
-    # property and don't need a flag.
-    supports_round_trip: bool = False
 
     def __repr__(self):
         if hasattr(self, "dim"):
@@ -949,7 +941,7 @@ class WeightConverter(WeightTransform):
         # Only opt-in (`supports_round_trip=True`) quant ops are safe to reverse — today
         # that's just `Fp8Quantize` / `Fp8Dequantize`. Unaudited quant backends bail
         # rather than silently write a half-converted checkpoint.
-        if self.quantization_operation is not None and not self.quantization_operation.supports_round_trip:
+        if self.quantization_operation is not None and not getattr(self.quantization_operation, "supports_round_trip", False):
             raise ValueError(
                 f"{type(self.quantization_operation).__name__} is not opted into round-trip save "
                 "(set `supports_round_trip = True` on the op once its reverse_op is audited)."
