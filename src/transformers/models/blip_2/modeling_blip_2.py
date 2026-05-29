@@ -419,6 +419,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
         "Blip2QFormerMultiHeadAttention",
         "Blip2EncoderLayer",
         "Blip2TextEmbeddings",
+        "Blip2VisionEmbeddings",
         "T5Block",
         "OPTDecoderLayer",
     ]

@@ -320,6 +320,7 @@ class Ovis2Model(LlavaModel):
                 inputs_embeds=inputs_embeds,
                 image_features=image_features,
             )
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
             for i, visual_indicator_id in enumerate(self.visual_indicator_token_ids):
