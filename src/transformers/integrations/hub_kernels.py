@@ -100,14 +100,14 @@ try:
         "RMSNorm": {
             "cuda": {
                 Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/liger_kernels",
+                    repo_id="kernels-community/liger-kernels",
                     layer_name="LigerRMSNorm",
                     # revision="pure-layer-test",
                 ),
             },
             "rocm": {
                 Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/liger_kernels",
+                    repo_id="kernels-community/liger-kernels",
                     layer_name="LigerRMSNorm",
                 )
             },
@@ -119,13 +119,13 @@ try:
             },
             "mps": {
                 Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/mlx_rmsnorm",
+                    repo_id="kernels-community/mlx-rmsnorm",
                     layer_name="RMSNorm",
                 )
             },
             "npu": {
                 Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/liger_kernels",
+                    repo_id="kernels-community/liger-kernels",
                     layer_name="LigerRMSNorm",
                 )
             },
