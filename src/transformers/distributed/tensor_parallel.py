@@ -581,6 +581,57 @@ PARAM_ONLY_STYLES = frozenset(
     }
 )
 
+MOE_TP_PARAM_STYLES = frozenset({"moe_tp_gate_up_colwise", "moe_tp_down_rowwise"})
+
+
+def _merge_plans(base: dict[str, str], overlay: dict[str, str]) -> dict[str, str]:
+    """Merge parallel plans; overlay entries win on duplicate keys."""
+    merged = dict(base)
+    merged.update(overlay)
+    return merged
+
+
+def _strip_moe_tp_when_ep(plan: dict[str, str], enable_ep: bool) -> dict[str, str]:
+    if not enable_ep:
+        return plan
+    return {
+        key: style
+        for key, style in plan.items()
+        if not (key.endswith((".gate_up_proj", ".down_proj")) and style in MOE_TP_PARAM_STYLES)
+    }
+
+
+def resolve_parallel_plan(model, distributed_config) -> dict[str, str]:
+    """Compose SP/TP dense recipe with optional EP MoE overlay.
+
+    When ``distributed_config.tp_plan`` is set, it is returned as-is. Otherwise the
+    base plan is ``_sp_plan`` if sequence parallelism is requested and the config defines
+    ``base_model_sp_plan``, else ``_tp_plan``. Expert-parallel entries from ``_ep_plan``
+    are merged on top when ``enable_expert_parallel``; EP wins on key conflicts and any
+    leftover intra-expert ``moe_tp_*`` entries are stripped.
+    """
+    if distributed_config is None:
+        return dict(getattr(model, "_tp_plan", None) or {})
+
+    if distributed_config.tp_plan is not None:
+        return dict(distributed_config.tp_plan)
+
+    enable_sp = bool(
+        getattr(distributed_config, "enable_sequence_parallel", False)
+        and getattr(model.config, "base_model_sp_plan", None) is not None
+    )
+    enable_ep = bool(getattr(distributed_config, "enable_expert_parallel", False))
+
+    if enable_sp:
+        base = dict(getattr(model, "_sp_plan", None) or {})
+    else:
+        base = dict(getattr(model, "_tp_plan", None) or {})
+
+    if enable_ep:
+        base = _merge_plans(base, dict(getattr(model, "_ep_plan", None) or {}))
+
+    return _strip_moe_tp_when_ep(base, enable_ep)
+
 
 def apply_tensor_parallel(model, tp_mesh, tp_plan):
     """Apply tensor parallelism in two passes, looking each style up by string name.
@@ -598,6 +649,7 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
     sp_requested = getattr(distributed_config, "enable_sequence_parallel", False)
     sp_supported = getattr(model.config, "base_model_sp_plan", None) is not None
     enable_sp = sp_requested and sp_supported
+
     enable_ep = getattr(distributed_config, "enable_expert_parallel", False)
 
     if tp_plan is None:
