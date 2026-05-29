@@ -829,6 +829,9 @@ def is_mamba_2_ssm_available() -> bool:
     return is_torch_cuda_available() and is_available and version.parse(mamba_ssm_version) >= version.parse("2.0.4")
 
 
+is_falcon_mamba_ssm_available = is_mamba_ssm_available
+
+
 @lru_cache
 def is_flash_linear_attention_available():
     is_available, fla_version = _is_package_available("fla", return_version=True)

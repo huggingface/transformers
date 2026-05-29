@@ -130,6 +130,7 @@ from .import_utils import (
     is_env_variable_true,
     is_essentia_available,
     is_faiss_available,
+    is_falcon_mamba_ssm_available,
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
