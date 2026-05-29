@@ -394,3 +394,27 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
                 new_tokens = output_ids[0, inputs.input_ids.size(1) :]
                 completion = tokenizer.decode(new_tokens, skip_special_tokens=True)
                 self.assertEqual(completion, expected)
+
+
+@require_torch
+@require_torch_accelerator
+@slow
+class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
+    model_id = "deepseek-ai/DeepSeek-V4-Flash-Base"
+    prompt = "List the first ten prime numbers:"
+
+    def test_v4_flash_base_native_fp8_generation(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id,
+            dtype="auto",
+            device_map="auto",
+            attn_implementation="eager",
+            quantization_config=FineGrainedFP8Config(dequantize=False),
+        )
+        inputs = tokenizer(self.prompt, return_tensors="pt").to(model.device)
+        with torch.no_grad():
+            out = model.generate(**inputs, max_new_tokens=32, do_sample=False)
+        decoded = tokenizer.decode(out[0], skip_special_tokens=False)
+        expected_prefix = "List the first ten prime numbers: 2, 3, 5, 7, 11, 13, 17, 19, 23, 29."
+        self.assertTrue(decoded.startswith(expected_prefix), decoded)
