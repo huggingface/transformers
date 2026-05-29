@@ -1438,7 +1438,8 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         self.num_mtp_layers = len(self.mtp_model.layers)
         # Artificially add the MTP layers to the cache
         if (cache := model_kwargs.get("past_key_values")) is not None:
-            cache.layers.extend([DynamicLayer() for _ in range(self.num_mtp_layers)])
+            if len(cache) != main_model.config.get_text_config().num_hidden_layers + self.num_mtp_layers:
+                cache.layers.extend([DynamicLayer() for _ in range(self.num_mtp_layers)])
         else:
             raise ValueError("No cache yet")
 
@@ -1467,7 +1468,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
 
         # The input_ids/position_ids/attention_mask are the full sequence here. Slice to get only the ones that were last
         # processed by the main model, + the last final token
-        num_last_main_model_toks = n_last_matches if not self.is_main_model_prefill else input_ids.shape[1] - 1
+        num_last_main_model_toks = n_last_matches + 1 if not self.is_main_model_prefill else input_ids.shape[1] - 1
         mtp_input_ids = input_ids[:, -num_last_main_model_toks - 1 :]
         mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_toks - 1 :].to(self.device)
         mtp_attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_toks - 1 :].to(self.device)
@@ -1487,6 +1488,8 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         # Once we arrive here the first time, it's no longer the case
         self.is_main_model_prefill = False
 
+        # cat everything back together (we need to return the full ids here)
+        candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
         return candidate_ids, candidate_logits
 
     def update_candidate_strategy(self, *args, **kwargs):

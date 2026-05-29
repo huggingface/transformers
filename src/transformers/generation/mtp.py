@@ -135,7 +135,7 @@ class MtpLayerStack(PreTrainedModel):
 
         # We create this dummy cache simply to create the masks correctly, since they rely on the sizes of layer 0 of
         # the cache. Note that it does not create any copy of data, it simply keep a ref to internal tensors
-        dummy_cache_for_masking = Cache(layers=past_key_values.layers[self.config.num_hidden_layers:])
+        dummy_cache_for_masking = Cache(layers=past_key_values.layers[self.config.num_hidden_layers :])
 
         drafted_logits = []
         drafted_tokens = []
@@ -173,10 +173,9 @@ class MtpLayerStack(PreTrainedModel):
             mtp_attention_mask = torch.cat(
                 [mtp_attention_mask[:, 1:], mtp_attention_mask.new_ones(batch_size, 1)], dim=-1
             )
-            mtp_position_ids = mtp_position_ids.roll(-1, dims=-1)
-            mtp_position_ids[:, -1] = mtp_position_ids[:, -2] + 1
+            mtp_position_ids = torch.cat([mtp_position_ids[:, 1:], mtp_position_ids[:, -1:] + 1], dim=-1)
 
-        candidate_ids = torch.cat([input_ids, torch.cat(drafted_tokens, dim=1)], dim=1)
+        candidate_ids = torch.cat(drafted_tokens, dim=1)
         candidate_logits = torch.cat(drafted_logits, dim=1)
         return candidate_ids, candidate_logits
 
