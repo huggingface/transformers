@@ -1,4 +1,5 @@
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -8,10 +9,12 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...distributed.fsdp import is_fsdp_managed_module
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, Wav2Vec2BaseModelOutput
-from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Adapter,
     Wav2Vec2AdapterLayer,
@@ -229,6 +232,35 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class Wav2Vec2ConformerSelfAttention(nn.Module):
     """Construct an Wav2Vec2ConformerSelfAttention object.
     Can be enhanced with rotary or relative position embeddings.
@@ -237,9 +269,12 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
 
+        self.config = config
         self.head_size = config.hidden_size // config.num_attention_heads
         self.num_heads = config.num_attention_heads
         self.position_embeddings_type = config.position_embeddings_type
+        self.is_causal = False
+        self.scale = self.head_size**-0.5
 
         self.linear_q = nn.Linear(config.hidden_size, config.hidden_size)
         self.linear_k = nn.Linear(config.hidden_size, config.hidden_size)
@@ -261,8 +296,8 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         relative_position_embeddings: torch.Tensor | None = None,
-        output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         # self-attention mechanism
         batch_size, sequence_length, hidden_size = hidden_states.size()
 
@@ -287,36 +322,32 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
 
-        if self.position_embeddings_type == "relative":
-            if relative_position_embeddings is None:
-                raise ValueError(
-                    "`relative_position_embeddings` has to be defined when `self.position_embeddings_type =="
-                    " 'relative'"
-                )
-            # apply relative_position_embeddings to qk scores
-            # as proposed in Transformer_XL: https://huggingface.co/papers/1901.02860
-            scores = self._apply_relative_embeddings(
-                query=query, key=key, relative_position_embeddings=relative_position_embeddings
-            )
-        else:
-            scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_size)
+        query, attention_mask = self._apply_relative_position_encoding(
+            query=query,
+            key=key,
+            attention_mask=attention_mask,
+            relative_position_embeddings=relative_position_embeddings,
+        )
 
-        # apply attention_mask if necessary
-        if attention_mask is not None:
-            scores = scores + attention_mask
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        # => (batch, head, time1, time2)
-        probs = torch.softmax(scores, dim=-1)
-        probs = self.dropout(probs)
+        hidden_states, attn_weights = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout.p,
+            scaling=self.scale,
+            **kwargs,
+        )
 
-        # => (batch, head, time1, d_k)
-        hidden_states = torch.matmul(probs, value)
-
-        # => (batch, time1, hidden_size)
-        hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, self.num_heads * self.head_size)
+        hidden_states = hidden_states.reshape(batch_size, sequence_length, -1)
         hidden_states = self.linear_out(hidden_states)
 
-        return hidden_states, probs
+        return hidden_states, attn_weights
 
     def _apply_rotary_embedding(self, hidden_states, relative_position_embeddings):
         batch_size, sequence_length, hidden_size = hidden_states.size()
@@ -337,9 +368,20 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
 
         return hidden_states
 
-    def _apply_relative_embeddings(self, query, key, relative_position_embeddings):
+    def _apply_relative_position_encoding(self, query, key, attention_mask, relative_position_embeddings):
+        """Compute relative position bias (matrix b+d) as described in
+        https://huggingface.co/papers/1901.02860, and modify query
+        with pos_bias_u for content-based attention (matrix a+c).
+        """
+        if self.position_embeddings_type != "relative":
+            return query, attention_mask
+
+        if relative_position_embeddings is None:
+            raise ValueError(
+                "`relative_position_embeddings` has to be defined when `self.position_embeddings_type == 'relative'`"
+            )
+
         # 1. project positional embeddings
-        # => (batch, head, 2*time1-1, d_k)
         proj_relative_position_embeddings = self.linear_pos(relative_position_embeddings)
         proj_relative_position_embeddings = proj_relative_position_embeddings.view(
             relative_position_embeddings.size(0), -1, self.num_heads, self.head_size
@@ -347,34 +389,30 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         proj_relative_position_embeddings = proj_relative_position_embeddings.transpose(1, 2)
         proj_relative_position_embeddings = proj_relative_position_embeddings.transpose(2, 3)
 
-        # 2. Add bias to query
-        # => (batch, head, time1, d_k)
-        query = query.transpose(1, 2)
-        q_with_bias_u = (query + self.pos_bias_u).transpose(1, 2)
-        q_with_bias_v = (query + self.pos_bias_v).transpose(1, 2)
+        # 2. compute matrix b and matrix d
+        query_for_bias = query.transpose(1, 2)
+        q_with_bias_v = (query_for_bias + self.pos_bias_v).transpose(1, 2)
+        relative_attention_scores = torch.matmul(q_with_bias_v, proj_relative_position_embeddings)
 
-        # 3. attention score: first compute matrix a and matrix c
-        # as described in https://huggingface.co/papers/1901.02860 Section 3.3
-        # => (batch, head, time1, time2)
-        scores_ac = torch.matmul(q_with_bias_u, key.transpose(-2, -1))
+        # 3. shift (skew) to get proper relative position indexing
+        relative_attention_scores_shape = relative_attention_scores.shape
+        relative_attention_scores = nn.functional.pad(relative_attention_scores, (1, 0)).view(
+            *relative_attention_scores_shape[:2],
+            relative_attention_scores_shape[3] + 1,
+            relative_attention_scores_shape[2],
+        )
+        relative_attention_scores = relative_attention_scores[:, :, 1:].view(relative_attention_scores_shape)
+        relative_attention_scores = relative_attention_scores[:, :, :, : key.size(2)]
 
-        # 4. then compute matrix b and matrix d
-        # => (batch, head, time1, 2*time1-1)
-        scores_bd = torch.matmul(q_with_bias_v, proj_relative_position_embeddings)
+        # 4. scale and combine with attention mask
+        relative_attention_scores = relative_attention_scores / math.sqrt(self.head_size)
+        if attention_mask is not None:
+            relative_attention_scores = relative_attention_scores + attention_mask
 
-        # 5. shift matrix b and matrix d
-        zero_pad = torch.zeros((*scores_bd.size()[:3], 1), device=scores_bd.device, dtype=scores_bd.dtype)
-        scores_bd_padded = torch.cat([zero_pad, scores_bd], dim=-1)
-        scores_bd_padded_shape = scores_bd.size()[:2] + (scores_bd.shape[3] + 1, scores_bd.shape[2])
-        scores_bd_padded = scores_bd_padded.view(*scores_bd_padded_shape)
-        scores_bd = scores_bd_padded[:, :, 1:].view_as(scores_bd)
-        scores_bd = scores_bd[:, :, :, : scores_bd.size(-1) // 2 + 1]
+        # 5. add pos_bias_u to query for the content-based attention (matrix a+c)
+        query = query + self.pos_bias_u[None, :, None, :]
 
-        # 6. sum matrices
-        # => (batch, head, time1, time2)
-        scores = (scores_ac + scores_bd) / math.sqrt(self.head_size)
-
-        return scores
+        return query, relative_attention_scores
 
 
 class Wav2Vec2ConformerEncoderLayer(GradientCheckpointingLayer):
@@ -407,7 +445,7 @@ class Wav2Vec2ConformerEncoderLayer(GradientCheckpointingLayer):
         hidden_states,
         attention_mask: torch.Tensor | None = None,
         relative_position_embeddings: torch.Tensor | None = None,
-        output_attentions: bool = False,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ):
         # 1. Feed-Forward 1 layer
         residual = hidden_states
@@ -422,7 +460,7 @@ class Wav2Vec2ConformerEncoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             relative_position_embeddings=relative_position_embeddings,
-            output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states = self.self_attn_dropout(hidden_states)
         hidden_states = hidden_states + residual
@@ -467,6 +505,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
+        **kwargs,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -506,7 +545,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
                     hidden_states,
                     attention_mask=attention_mask,
                     relative_position_embeddings=relative_position_embeddings,
-                    output_attentions=output_attentions,
+                    **kwargs,
                 )
                 hidden_states = layer_outputs[0]
 
@@ -548,6 +587,7 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
     main_input_name = "input_values"
     input_modalities = "audio"
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
 
     @torch.no_grad()
     def _init_weights(self, module):

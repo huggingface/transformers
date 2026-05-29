@@ -1,4 +1,5 @@
 import math
+from collections.abc import Callable
 
 import torch
 from torch import nn
@@ -9,6 +10,7 @@ from ...activations import ACT2FN
 from ...distributed.fsdp import is_fsdp_managed_module
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...masking_utils import create_bidirectional_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -18,7 +20,8 @@ from ...modeling_outputs import (
     Wav2Vec2BaseModelOutput,
     XVectorOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2FeedForward, Wav2Vec2ForSequenceClassification, Wav2Vec2Model
 from ..wav2vec2_conformer.modeling_wav2vec2_conformer import (
@@ -28,6 +31,7 @@ from ..wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerRelPositionalEmbedding,
     Wav2Vec2ConformerRotaryPositionalEmbedding,
     Wav2Vec2ConformerSelfAttention,
+    eager_attention_forward,
 )
 from .configuration_wav2vec2_bert import Wav2Vec2BertConfig
 
@@ -191,9 +195,12 @@ class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
         nn.Module.__init__(self)
         hidden_size = config.hidden_size if not is_adapter_attention else config.output_hidden_size
 
+        self.config = config
         self.head_size = hidden_size // config.num_attention_heads
         self.num_heads = config.num_attention_heads
         self.position_embeddings_type = config.position_embeddings_type if not is_adapter_attention else None
+        self.is_causal = False
+        self.scale = self.head_size**-0.5
 
         self.linear_q = nn.Linear(hidden_size, hidden_size)
         self.linear_k = nn.Linear(hidden_size, hidden_size)
@@ -216,13 +223,77 @@ class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
             num_positions = self.left_max_position_embeddings + self.right_max_position_embeddings + 1
             self.distance_embedding = nn.Embedding(num_positions, self.head_size)
 
+    def _apply_relative_position_encoding(self, query, key, attention_mask, relative_position_embeddings):
+        """Compute relative position bias and modify query/attention_mask.
+        Handles both 'relative' (Transformer-XL style) and 'relative_key' position embeddings.
+        """
+        if self.position_embeddings_type == "relative":
+            if relative_position_embeddings is None:
+                raise ValueError(
+                    "`relative_position_embeddings` has to be defined when `self.position_embeddings_type == 'relative'`"
+                )
+
+            # 1. project positional embeddings
+            proj_relative_position_embeddings = self.linear_pos(relative_position_embeddings)
+            proj_relative_position_embeddings = proj_relative_position_embeddings.view(
+                relative_position_embeddings.size(0), -1, self.num_heads, self.head_size
+            )
+            proj_relative_position_embeddings = proj_relative_position_embeddings.transpose(1, 2)
+            proj_relative_position_embeddings = proj_relative_position_embeddings.transpose(2, 3)
+
+            # 2. compute matrix b and matrix d
+            query_for_bias = query.transpose(1, 2)
+            q_with_bias_v = (query_for_bias + self.pos_bias_v).transpose(1, 2)
+            relative_attention_scores = torch.matmul(q_with_bias_v, proj_relative_position_embeddings)
+
+            # 3. shift (skew) to get proper relative position indexing
+            relative_attention_scores_shape = relative_attention_scores.shape
+            relative_attention_scores = nn.functional.pad(relative_attention_scores, (1, 0)).view(
+                *relative_attention_scores_shape[:2],
+                relative_attention_scores_shape[3] + 1,
+                relative_attention_scores_shape[2],
+            )
+            relative_attention_scores = relative_attention_scores[:, :, 1:].view(relative_attention_scores_shape)
+            relative_attention_scores = relative_attention_scores[:, :, :, : key.size(2)]
+
+            # 4. scale and combine with attention mask
+            relative_attention_scores = relative_attention_scores / math.sqrt(self.head_size)
+            if attention_mask is not None:
+                relative_attention_scores = relative_attention_scores + attention_mask
+
+            # 5. add pos_bias_u to query for the content-based attention (matrix a+c)
+            query = query + self.pos_bias_u[None, :, None, :]
+
+            return query, relative_attention_scores
+
+        if self.position_embeddings_type == "relative_key":
+            query_length, key_length = query.shape[2], key.shape[2]
+
+            position_ids_l = torch.arange(query_length, dtype=torch.long, device=query.device).view(-1, 1)
+            position_ids_r = torch.arange(key_length, dtype=torch.long, device=query.device).view(1, -1)
+            distance = position_ids_r - position_ids_l
+            distance = torch.clamp(distance, -self.left_max_position_embeddings, self.right_max_position_embeddings)
+
+            positional_embedding = self.distance_embedding(distance + self.left_max_position_embeddings)
+            positional_embedding = positional_embedding.to(dtype=query.dtype)  # fp16 compatibility
+
+            relative_position_attn_weights = torch.einsum("bhld,lrd->bhlr", query, positional_embedding)
+            relative_position_bias = relative_position_attn_weights / math.sqrt(self.head_size)
+
+            if attention_mask is not None:
+                attention_mask = attention_mask + relative_position_bias
+            else:
+                attention_mask = relative_position_bias
+
+        return query, attention_mask
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         relative_position_embeddings: torch.Tensor | None = None,
-        output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         # self-attention mechanism
         batch_size, sequence_length, hidden_size = hidden_states.size()
 
@@ -247,50 +318,32 @@ class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
 
-        if self.position_embeddings_type == "relative":
-            if relative_position_embeddings is None:
-                raise ValueError(
-                    "`relative_position_embeddings` has to be defined when `self.position_embeddings_type =="
-                    " 'relative'"
-                )
-            # apply relative_position_embeddings to qk scores
-            # as proposed in Transformer_XL: https://huggingface.co/papers/1901.02860
-            scores = self._apply_relative_embeddings(
-                query=query, key=key, relative_position_embeddings=relative_position_embeddings
-            )
-        else:
-            scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_size)
+        query, attention_mask = self._apply_relative_position_encoding(
+            query=query,
+            key=key,
+            attention_mask=attention_mask,
+            relative_position_embeddings=relative_position_embeddings,
+        )
 
-        if self.position_embeddings_type == "relative_key":
-            query_length, key_length = query.shape[2], key.shape[2]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-            position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
-            distance = position_ids_r - position_ids_l
-            distance = torch.clamp(distance, -self.left_max_position_embeddings, self.right_max_position_embeddings)
+        hidden_states, attn_weights = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout.p,
+            scaling=self.scale,
+            **kwargs,
+        )
 
-            positional_embedding = self.distance_embedding(distance + self.left_max_position_embeddings)
-            positional_embedding = positional_embedding.to(dtype=query.dtype)  # fp16 compatibility
-
-            relative_position_attn_weights = torch.einsum("bhld,lrd->bhlr", query, positional_embedding)
-            scores = scores + (relative_position_attn_weights / math.sqrt(self.head_size))
-
-        # apply attention_mask if necessary
-        if attention_mask is not None:
-            scores = scores + attention_mask
-
-        # => (batch, head, time1, time2)
-        probs = torch.softmax(scores, dim=-1)
-        probs = self.dropout(probs)
-
-        # => (batch, head, time1, d_k)
-        hidden_states = torch.matmul(probs, value)
-
-        # => (batch, time1, hidden_size)
-        hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, self.num_heads * self.head_size)
+        hidden_states = hidden_states.reshape(batch_size, sequence_length, -1)
         hidden_states = self.linear_out(hidden_states)
 
-        return hidden_states, probs
+        return hidden_states, attn_weights
 
 
 class Wav2Vec2BertEncoderLayer(GradientCheckpointingLayer):
@@ -323,8 +376,8 @@ class Wav2Vec2BertEncoderLayer(GradientCheckpointingLayer):
         hidden_states,
         attention_mask: torch.Tensor | None = None,
         relative_position_embeddings: torch.Tensor | None = None,
-        output_attentions: bool = False,
         conv_attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ):
         # 1. Feed-Forward 1 layer
         residual = hidden_states
@@ -339,7 +392,7 @@ class Wav2Vec2BertEncoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             relative_position_embeddings=relative_position_embeddings,
-            output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states = self.self_attn_dropout(hidden_states)
         hidden_states = hidden_states + residual
@@ -382,6 +435,7 @@ class Wav2Vec2BertEncoder(nn.Module):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
+        **kwargs,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -421,8 +475,8 @@ class Wav2Vec2BertEncoder(nn.Module):
                     hidden_states,
                     attention_mask=attention_mask,
                     relative_position_embeddings=relative_position_embeddings,
-                    output_attentions=output_attentions,
                     conv_attention_mask=conv_attention_mask,
+                    **kwargs,
                 )
                 hidden_states = layer_outputs[0]
 
@@ -529,7 +583,6 @@ class Wav2Vec2BertAdapterLayer(nn.Module):
         self,
         hidden_states,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool = False,
         sub_sampled_lengths: torch.Tensor | None = None,
     ):
         residual = self.residual_layer_norm(hidden_states)
@@ -565,7 +618,6 @@ class Wav2Vec2BertAdapterLayer(nn.Module):
         hidden_states, attn_weights = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
         )
         hidden_states = self.self_attn_dropout(hidden_states)
         hidden_states = hidden_states + residual
@@ -585,6 +637,7 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
     main_input_name = "input_features"
     input_modalities = "audio"
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
 
     @torch.no_grad()
     def _init_weights(self, module):

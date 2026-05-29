@@ -505,6 +505,7 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
             self.pos_bias_u = nn.Parameter(torch.zeros(self.num_heads, self.head_size))
             self.pos_bias_v = nn.Parameter(torch.zeros(self.num_heads, self.head_size))
 
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerSelfAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -583,6 +584,7 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
 
         return hidden_states
 
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerSelfAttention._apply_relative_position_encoding
     def _apply_relative_position_encoding(self, query, key, attention_mask, relative_position_embeddings):
         """Compute relative position bias (matrix b+d) as described in
         https://huggingface.co/papers/1901.02860, and modify query
