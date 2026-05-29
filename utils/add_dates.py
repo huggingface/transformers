@@ -237,7 +237,7 @@ def _read_model_card_content(model_card: str) -> str:
 
 def _get_dates_pattern_match(content: str):
     """Search for the dates pattern in content and return match object"""
-    pattern = r"\n\*This model was (?:published in HF papers on (.*) and)? contributed to Hugging Face Transformers on (\d{4}-\d{2}-\d{2})\.\*"
+    pattern = r"\n\*This model was (?:published in HF papers on (.*) and )?contributed to Hugging Face Transformers on (\d{4}-\d{2}-\d{2})\.\*"
     return re.search(pattern, content)
 
 
