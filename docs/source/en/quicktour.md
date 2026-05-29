@@ -43,18 +43,6 @@ from huggingface_hub import notebook_login
 notebook_login()
 ```
 
-Install PyTorch.
-
-```bash
-!pip install torch
-```
-
-Then install an up-to-date version of Transformers and some additional libraries from the Hugging Face ecosystem for accessing datasets and vision models, evaluating training, and optimizing training for large models.
-
-```bash
-!pip install -U transformers datasets evaluate accelerate timm
-```
-
 </hfoption>
 <hfoption id="CLI">
 
@@ -64,20 +52,21 @@ Make sure the [huggingface_hub[cli]](https://huggingface.co/docs/huggingface_hub
 hf auth login
 ```
 
+</hfoption>
+</hfoptions>
+
 Install PyTorch.
 
 ```bash
-pip install torch
+# remove ! if installing from the CLI
+!pip install torch
 ```
 
 Then install an up-to-date version of Transformers and some additional libraries from the Hugging Face ecosystem for accessing datasets and vision models, evaluating training, and optimizing training for large models.
 
 ```bash
-pip install -U transformers datasets evaluate accelerate timm
+!pip install -U transformers datasets evaluate accelerate timm
 ```
-
-</hfoption>
-</hfoptions>
 
 ## Pretrained models
 
