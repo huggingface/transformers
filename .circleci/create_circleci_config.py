@@ -21,6 +21,8 @@ from typing import Any
 import yaml
 
 
+bon = 1
+
 COMMON_ENV_VARIABLES = {
     "OMP_NUM_THREADS": 1,
     "TRANSFORMERS_IS_CI": True,
