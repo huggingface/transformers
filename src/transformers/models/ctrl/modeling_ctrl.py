@@ -22,6 +22,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
@@ -54,23 +55,19 @@ def positional_encoding(position, d_model_size, dtype):
     return pos_encoding
 
 
-def eager_attention_forward(module, query, key, value, attention_mask=None, causal_mask=None, scaling=None, **kwargs):
-    attn_weights = torch.matmul(query, key.transpose(-1, -2))
-
+def eager_attention_forward(module, query, key, value, attention_mask, scaling=None, dropout=0.0, **kwargs):
     if scaling is None:
-        attn_weights = attn_weights / np.sqrt(key.shape[-1])
-    else:
-        attn_weights = attn_weights * scaling
+        scaling = query.size(-1) ** -0.5
 
-    if causal_mask is not None:
-        nd, ns = attn_weights.size(-2), attn_weights.size(-1)
-        causal_mask = causal_mask[ns - nd : ns, :ns].to(dtype=query.dtype)
-        attn_weights += causal_mask * -1e4
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
 
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attention_weights = torch.softmax(attn_weights, dim=-1)
+    attention_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attention_weights = attention_weights.type(value.dtype)
+    attention_weights = nn.functional.dropout(attention_weights, p=dropout, training=module.training)
+
     attn_output = torch.matmul(attention_weights, value)
     attn_output = attn_output.transpose(1, 2)
 
@@ -78,21 +75,22 @@ def eager_attention_forward(module, query, key, value, attention_mask=None, caus
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, d_model_size, num_heads, layer_idx=None, config=None):
+    def __init__(self, config, layer_idx=None):
         super().__init__()
         self.config = config
-        self.num_heads = num_heads
-        self.d_model_size = d_model_size
+        self.num_heads = config.n_head
+        self.d_model_size = config.n_embd
         self.layer_idx = layer_idx
         self.is_causal = True
 
-        self.depth = int(d_model_size / self.num_heads)
+        self.depth = int(self.d_model_size / self.num_heads)
+        self.scaling = self.depth**-0.5
 
-        self.Wq = nn.Linear(d_model_size, d_model_size)
-        self.Wk = nn.Linear(d_model_size, d_model_size)
-        self.Wv = nn.Linear(d_model_size, d_model_size)
+        self.Wq = nn.Linear(self.d_model_size, self.d_model_size)
+        self.Wk = nn.Linear(self.d_model_size, self.d_model_size)
+        self.Wv = nn.Linear(self.d_model_size, self.d_model_size)
 
-        self.dense = nn.Linear(d_model_size, d_model_size)
+        self.dense = nn.Linear(self.d_model_size, self.d_model_size)
 
     def split_into_heads(self, x, batch_size):
         x = x.reshape(batch_size, -1, self.num_heads, self.depth)
@@ -103,7 +101,6 @@ class MultiHeadAttention(nn.Module):
         v,
         k,
         q,
-        mask,
         layer_past=None,
         attention_mask=None,
         use_cache=False,
@@ -123,16 +120,9 @@ class MultiHeadAttention(nn.Module):
         if layer_past is not None:
             k, v = layer_past.update(k, v, self.layer_idx)
 
-        attn_implementation = getattr(self.config, "_attn_implementation", "eager")
-        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(attn_implementation, eager_attention_forward)
-        if attn_implementation == "eager":
-            causal_mask = mask
-        elif mask is not None and (attention_mask is not None or (q.size(-2) != k.size(-2) and q.size(-2) != 1)):
-            nd, ns = q.size(-2), k.size(-2)
-            causal_mask = mask[ns - nd : ns, :ns].to(dtype=q.dtype) * -1e4
-            attention_mask = causal_mask[None, None, :, :] if attention_mask is None else attention_mask + causal_mask
-        else:
-            causal_mask = None
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         scaled_attention, attn = attention_interface(
             self,
@@ -140,8 +130,7 @@ class MultiHeadAttention(nn.Module):
             k,
             v,
             attention_mask,
-            causal_mask=causal_mask,
-            scaling=None if attn_implementation == "eager" else self.depth**-0.5,
+            scaling=self.scaling,
             output_attentions=output_attentions,
             **kwargs,
         )
@@ -155,22 +144,21 @@ def point_wise_feed_forward_network(d_model_size, dff):
 
 
 class EncoderLayer(nn.Module):
-    def __init__(self, d_model_size, num_heads, dff, rate=0.1, layer_idx=None, config=None):
+    def __init__(self, config, layer_idx=None):
         super().__init__()
 
-        self.multi_head_attention = MultiHeadAttention(d_model_size, num_heads, layer_idx=layer_idx, config=config)
-        self.ffn = point_wise_feed_forward_network(d_model_size, dff)
+        self.multi_head_attention = MultiHeadAttention(config, layer_idx=layer_idx)
+        self.ffn = point_wise_feed_forward_network(config.n_embd, config.dff)
 
-        self.layernorm1 = nn.LayerNorm(d_model_size, eps=1e-6)
-        self.layernorm2 = nn.LayerNorm(d_model_size, eps=1e-6)
+        self.layernorm1 = nn.LayerNorm(config.n_embd, eps=1e-6)
+        self.layernorm2 = nn.LayerNorm(config.n_embd, eps=1e-6)
 
-        self.dropout1 = nn.Dropout(rate)
-        self.dropout2 = nn.Dropout(rate)
+        self.dropout1 = nn.Dropout(config.resid_pdrop)
+        self.dropout2 = nn.Dropout(config.resid_pdrop)
 
     def forward(
         self,
         x,
-        mask,
         layer_past=None,
         attention_mask=None,
         use_cache=False,
@@ -182,7 +170,6 @@ class EncoderLayer(nn.Module):
             normed,
             normed,
             normed,
-            mask,
             layer_past=layer_past,
             attention_mask=attention_mask,
             use_cache=use_cache,
@@ -226,12 +213,7 @@ class CTRLModel(CTRLPreTrainedModel):
         self.w = nn.Embedding(config.vocab_size, config.n_embd)
 
         self.dropout = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList(
-            [
-                EncoderLayer(config.n_embd, config.n_head, config.dff, config.resid_pdrop, layer_idx=i, config=config)
-                for i in range(config.n_layer)
-            ]
-        )
+        self.h = nn.ModuleList([EncoderLayer(config, layer_idx=i) for i in range(config.n_layer)])
         self.layernorm = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
 
         self.register_buffer(
@@ -312,25 +294,10 @@ class CTRLModel(CTRLPreTrainedModel):
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)
 
-        # Attention mask.
-        if attention_mask is not None:
+        if attention_mask is not None and attention_mask.ndim < 4:
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
             attention_mask = attention_mask.view(batch_size, -1)
-            # We create a 3D attention mask from a 2D tensor mask.
-            # Sizes are [batch_size, 1, 1, to_seq_length]
-            # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-            # this attention mask is more simple than the triangular masking of causal attention
-            # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-
-            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-            # masked positions, this operation will create a tensor which is 0.0 for
-            # positions we want to attend and the dtype's smallest value for masked positions.
-            # Since we are adding it to the raw scores before the softmax, this is
-            # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
@@ -341,9 +308,14 @@ class CTRLModel(CTRLPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.w(input_ids)
-        # inputs_embeds = embedded.unsqueeze(0) if len(input_ids.shape)<2 else embedded
-        seq_len = input_shape[-1]
-        mask = torch.triu(torch.ones(seq_len + past_length, seq_len + past_length), 1).to(device)
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
 
         inputs_embeds *= np.sqrt(self.d_model_size)
 
@@ -362,9 +334,8 @@ class CTRLModel(CTRLPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
             outputs = h(
                 hidden_states,
-                mask,
                 layer_past=past_key_values,
-                attention_mask=attention_mask,
+                attention_mask=causal_mask,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
             )
