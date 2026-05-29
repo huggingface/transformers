@@ -64,12 +64,11 @@ def eager_attention_forward(module, query, key, value, attention_mask, scaling=N
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attention_weights = nn.functional.softmax(attn_weights, dim=-1)
-    attention_weights = attention_weights.type(value.dtype)
+    attention_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attention_weights = nn.functional.dropout(attention_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attention_weights, value)
-    attn_output = attn_output.transpose(1, 2)
+    attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attention_weights
 
@@ -103,8 +102,6 @@ class MultiHeadAttention(nn.Module):
         q,
         layer_past=None,
         attention_mask=None,
-        use_cache=False,
-        output_attentions=False,
         **kwargs,
     ):
         batch_size = q.shape[0]
@@ -131,7 +128,6 @@ class MultiHeadAttention(nn.Module):
             v,
             attention_mask,
             scaling=self.scaling,
-            output_attentions=output_attentions,
             **kwargs,
         )
         original_size_attention = scaled_attention.reshape(batch_size, -1, self.d_model_size)
@@ -161,8 +157,6 @@ class EncoderLayer(nn.Module):
         x,
         layer_past=None,
         attention_mask=None,
-        use_cache=False,
-        output_attentions=False,
         **kwargs,
     ):
         normed = self.layernorm1(x)
@@ -172,8 +166,7 @@ class EncoderLayer(nn.Module):
             normed,
             layer_past=layer_past,
             attention_mask=attention_mask,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
+            **kwargs,
         )
         attn_output = attn_outputs[0]
         attn_output = self.dropout1(attn_output)
@@ -294,11 +287,6 @@ class CTRLModel(CTRLPreTrainedModel):
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)
 
-        if attention_mask is not None and attention_mask.ndim < 4:
-            if batch_size <= 0:
-                raise ValueError("batch_size has to be defined and > 0")
-            attention_mask = attention_mask.view(batch_size, -1)
-
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
             token_type_embeds = self.w(token_type_ids)
@@ -336,8 +324,8 @@ class CTRLModel(CTRLPreTrainedModel):
                 hidden_states,
                 layer_past=past_key_values,
                 attention_mask=causal_mask,
-                use_cache=use_cache,
                 output_attentions=output_attentions,
+                **kwargs,
             )
             hidden_states = outputs[0]
             if output_attentions:
