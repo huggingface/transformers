@@ -83,11 +83,6 @@ def build_glob_alternation(
 class ConversionOps:
     """Base class for weight conversion operations."""
 
-    # Opt-in: set True on subclasses whose `reverse_op` has been audited to round-trip
-    # cleanly (forward(reverse(x)) == x within numerical tolerance). Default False keeps
-    # the save path conservative — unaudited ops bail rather than silently corrupt a
-    # checkpoint. The bail lives in `WeightConverter.reverse_transform`.
-    supports_round_trip: bool = False
 
     def __repr__(self):
         if hasattr(self, "dim"):
@@ -957,16 +952,7 @@ class WeightConverter(WeightTransform):
             raise ValueError("WeightConverter requires at least one operation.")
 
     def reverse_transform(self) -> WeightTransform:
-        # Append `(?=\.|$)` to each reversed source so the match has to end on a
-        # dot-token boundary. Stops `mlp.experts.gate_up_proj` from substring-matching
-        # the FP8 scale sibling `mlp.experts.gate_up_proj_scale_inv` on save.
-
-        # `quantization_operation` is the on-the-fly quantize op attached by
-        # `convert_and_load_state_dict_in_model` when the checkpoint wasn't pre-quantized.
-        # We only allow reversing if the op has been opted in via `supports_round_trip`
-        # (audited reverse_op pair, e.g. Fp8Quantize ↔ Fp8Dequantize). Unaudited ops
-        # bail with a clear error rather than silently writing a half-converted checkpoint.
-        if self.quantization_operation is not None and not self.quantization_operation.supports_round_trip:
+        if self.quantization_operation is not None and getattr(self.quantization_operation, "reverse_op", None) is not None:
             raise ValueError(
                 f"{type(self.quantization_operation).__name__} is not opted into round-trip save "
                 "(set `supports_round_trip = True` on the op once its reverse_op is audited)."
