@@ -962,7 +962,6 @@ class GenerationMixin(ContinuousMixin):
         assistant_model: Optional["PreTrainedModel"] = None,
         target_tokenizer: Optional["PreTrainedTokenizerBase"] = None,
         assistant_tokenizer: Optional["PreTrainedTokenizerBase"] = None,
-        use_mtp: bool | None = None,
     ) -> CandidateGenerator:
         """
         Returns the candidate generator to be used in `assisted_generation`
@@ -987,7 +986,7 @@ class GenerationMixin(ContinuousMixin):
                 logits_processor=logits_processor,
                 vocab_size=self.config.get_text_config().vocab_size,
             )
-        elif use_mtp:
+        elif generation_config.use_mtp:
             candidate_generator = MTPCandidateGenerator(
                 main_model=self,
                 generation_config=generation_config,
@@ -2151,7 +2150,6 @@ class GenerationMixin(ContinuousMixin):
         synced_gpus,
         assistant_model,
         streamer,
-        use_mtp,
     ) -> dict[str, Any]:
         """
         Extracts and returns the generation mode related keyword arguments from the provided kwargs.
@@ -2161,7 +2159,6 @@ class GenerationMixin(ContinuousMixin):
             "assistant_tokenizer": kwargs.pop("assistant_tokenizer", None),
             "assistant_model": assistant_model,
             "streamer": streamer,
-            "use_mtp": use_mtp,
         }
         world_size = dist.get_world_size() if dist.is_available() and dist.is_initialized() else 1  # type: ignore
         generation_mode_kwargs["synced_gpus"] = (
@@ -2193,7 +2190,6 @@ class GenerationMixin(ContinuousMixin):
         negative_prompt_ids: torch.Tensor | None = None,
         negative_prompt_attention_mask: torch.Tensor | None = None,
         custom_generate: str | Callable | None = None,
-        use_mtp: bool | None = None,
         **kwargs,
     ) -> GenerateOutput | torch.LongTensor:
         r"""
@@ -2377,12 +2373,7 @@ class GenerationMixin(ContinuousMixin):
 
         # 1. Handle kwargs, `generation_config`, validate them and obtain generation mode
         generation_mode_kwargs = self._extract_generation_mode_kwargs(
-            custom_generate,
-            kwargs,
-            synced_gpus,
-            assistant_model,
-            streamer,
-            use_mtp,
+            custom_generate, kwargs, synced_gpus, assistant_model, streamer
         )
 
         # Check length values before updating the config with defaults. We'll use it later to define the final min/max length (# 6)
@@ -2398,7 +2389,7 @@ class GenerationMixin(ContinuousMixin):
         )
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
-        generation_mode = generation_config.get_generation_mode(assistant_model, use_mtp)
+        generation_mode = generation_config.get_generation_mode(assistant_model)
         deprecated_mode_repo = self._get_deprecated_gen_repo(generation_mode, trust_remote_code, custom_generate)
 
         if isinstance(custom_generate, Callable):
@@ -3491,7 +3482,6 @@ class GenerationMixin(ContinuousMixin):
         assistant_model: Optional["PreTrainedModel"] = None,
         assistant_tokenizer: Optional["PreTrainedTokenizerBase"] = None,
         tokenizer: Optional["PreTrainedTokenizerBase"] = None,
-        use_mtp: bool | None = None,
         **model_kwargs,
     ) -> GenerateNonBeamOutput | torch.LongTensor:
         r"""
@@ -3554,7 +3544,6 @@ class GenerationMixin(ContinuousMixin):
             logits_processor=logits_processor,
             target_tokenizer=tokenizer,
             assistant_tokenizer=assistant_tokenizer,
-            use_mtp=use_mtp,
             model_kwargs=model_kwargs,
         )
         # init values

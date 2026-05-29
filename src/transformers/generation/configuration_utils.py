@@ -155,6 +155,8 @@ class GenerationConfig(PushToHubMixin):
             Whether or not to use sampling ; use greedy decoding otherwise.
         num_beams (`int`, *optional*):
             Number of beams for beam search. 1 means no beam search.
+        use_mtp: (`bool`):
+            Whether or not to use Multi-Token Prediction (MTP) if the model supports it.
 
         > Parameters that control the cache
 
@@ -384,6 +386,7 @@ class GenerationConfig(PushToHubMixin):
         # Parameters that control the generation strategy used
         self.do_sample = kwargs.pop("do_sample", None)
         self.num_beams = kwargs.pop("num_beams", None)
+        self.use_mtp = kwargs.pop("use_mtp", None)
 
         # Parameters that control the cache
         self.use_cache = kwargs.pop("use_cache", None)
@@ -504,9 +507,7 @@ class GenerationConfig(PushToHubMixin):
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string(ignore_metadata=True)}"
 
-    def get_generation_mode(
-        self, assistant_model: Optional["PreTrainedModel"] = None, use_mtp: bool = False
-    ) -> GenerationMode:
+    def get_generation_mode(self, assistant_model: Optional["PreTrainedModel"] = None) -> GenerationMode:
         """
         Returns the generation mode triggered by the [`GenerationConfig`] instance.
 
@@ -546,7 +547,7 @@ class GenerationConfig(PushToHubMixin):
         # Assisted generation may extend some generation modes
         if (
             assistant_model is not None
-            or use_mtp
+            or self.use_mtp
             or self.prompt_lookup_num_tokens is not None
             or self.assistant_early_exit is not None
         ):
@@ -607,6 +608,7 @@ class GenerationConfig(PushToHubMixin):
             "assistant_confidence_threshold": 0.4,
             "assistant_lookbehind": 10,
             "target_lookbehind": 10,
+            "use_mtp": False,
             # Deprecated arguments (moved to the Hub). TODO joao, manuel: remove in v4.62.0
             "num_beam_groups": 1,
             "diversity_penalty": 0.0,
