@@ -321,7 +321,13 @@ if __name__ == "__main__":
     parser.add_argument("--model-id", type=str, default="meta-llama/Llama-3.1-8B-Instruct")
     parser.add_argument("--attn", type=str, default="kernels-community/flash-attn3")
     parser.add_argument("--tp-size", type=int, default=1, help="Tensor parallel size (1 = no TP).")
-    parser.add_argument("--rollouts-lengths", "-rl", type=int, nargs="+", help="If this is specified, only the rollouts benchmarks run, with the given sizes (in tokens).")
+    parser.add_argument(
+        "--rollouts-lengths",
+        "-rl",
+        type=int,
+        nargs="+",
+        help="If this is specified, only the rollouts benchmarks run, with the given sizes (in tokens).",
+    )
     cli_args = parser.parse_args()
 
     results = BenchmarkResults(model_id=cli_args.model_id, attn_impl=cli_args.attn, tp_size=cli_args.tp_size)
@@ -382,7 +388,9 @@ if __name__ == "__main__":
         results.add_benchmark(
             data=gsm8k_data,
             max_new_tokens=256,
-            cb_config=ContinuousBatchingConfig(max_blocks_per_request=0, use_async_batching=False, use_cuda_graph=False),
+            cb_config=ContinuousBatchingConfig(
+                max_blocks_per_request=0, use_async_batching=False, use_cuda_graph=False
+            ),
             gen_config=GenerationConfig(eos_token_id=-1),
             label="gsm8k_bare_bones",
             score_fn=gsm8k_score_fn,
@@ -417,7 +425,6 @@ if __name__ == "__main__":
             gen_config=GenerationConfig(eos_token_id=-1, do_sample=True, num_return_sequences=8),
             label="multi_return_seq",
         )
-
 
     ## RL rollouts: small batch, growing generation lengths
     for length in rollout_sizes:
