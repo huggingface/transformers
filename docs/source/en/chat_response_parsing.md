@@ -414,13 +414,18 @@ in another language, you should be aware of our implementation details. This sec
 who had to implement an entire Jinja parser to get non-Python chat templating to work - we hope that if you
 follow the simple guidelines below, then response templates should be much less painful:
 
-- We use Python's `re` module for regexes. Since all Python3 strings are unicode, this means **all of our regex matches
-  are unicode-aware.** This particularly affects common characters like `\w`. Make sure you set the relevant
-  unicode flags in your engine.
+- We use Python's [`regex`](https://pypi.org/project/regex/) module for all regexes used in chat parsing.
+  Since all Python3 strings are unicode, **all of our regex matches are unicode-aware**. This particularly affects 
+  common characters like `\w`. Make sure you set the relevant unicode flags in your engine.
 - We compile all regexes with `re.DOTALL` enabled and `re.MULTILINE` disabled, so `.` matches `\n` but `^` and `$`
   only match the start/end of the whole input, not line breaks.
 - We use `(?P<name>...)` syntax for named groups. Other regex implementations have very different named capture group
   syntax, so you may need to search for this pattern in regexes and rewrite it to match your local implementation.
+- We use partial regex matching to decide when we can emit data. This is necessary because the end of a region may consist of multiple tokens,
+  and we don't want to emit that end-of-region delimiter, so we hold tokens back until we're sure that they're inside the region and not part of the boundary.
+  This means that whenever a region end regex has a partial match, we hold back data until the regex either matches or fails. If your regex engine
+  doesn't support partial matching, you can still implement response templates, but you may need to find another solution to this issue. One simple
+  approach is just to hold back these regions / emit them as `dirty` until you definitively see the ending delimiter. 
 - Your regex engine may (rarely) not support lookarounds like `(?!...)`. Although these aren't commonly used in response
   templates, they can appear and we do support them! You might need to either throw an error in those cases, or manually
   extract the lookarounds and enforce them in your code when the regex engine finds a possible match.

@@ -19,7 +19,6 @@ from transformers import AutoTokenizer
 from transformers.utils.chat_parsing import ResponseParser, parse_response
 
 
-
 cohere_template = {
     "defaults": {"role": "assistant"},
     "start_anchor": "<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>",
@@ -716,6 +715,18 @@ _STREAMING_FIXTURES = [
         "<|channel|>analysis<|message|>thinking chunk<|end|><|channel|>final<|message|>done text",
     ),
     (
+        # Tool-call variant: the `tool_calls` open_pattern's full match spans far
+        # more than the old 64-byte hold window, so streaming used to silently drop
+        # it. Kept as a streaming fixture so every chunking step re-checks it.
+        "gpt_oss_tool",
+        gpt_oss_template,
+        (
+            "<|channel|>analysis<|message|>Let me check.<|end|>"
+            "<|start|>assistant<|channel|>commentary to=functions.get_current_weather "
+            '<|constrain|>json<|message|>{"location": "San Francisco, CA"}<|call|>'
+        ),
+    ),
+    (
         "smollm",
         smollm_template,
         '<think>thinking</think>\n<tool_call>{"name": "fn", "arguments": {"x": 1}}</tool_call>',
@@ -924,6 +935,27 @@ class ResponseEventStreamTest(unittest.TestCase):
         self.assertEqual("".join(per_field_chunks["json_call"]), '{"a": 1, "b": 2}')
         self.assertEqual("".join(per_field_chunks["xml_call"]), "<name=foo><age=10>")
         self.assertEqual("".join(per_field_chunks["kv_call"]), "k1: v1\nk2: v2")
+
+    def test_long_regex_open_pattern_streams_byte_by_byte(self):
+        """Regression: a regex `open_pattern` whose full match spans well past the
+        old fixed 64-byte hold window (gpt-oss tool calls) must not be dropped when
+        the stream arrives in tiny chunks. Before the partial-match rewrite, the
+        leading `<|channel|>` got flushed out of the hold window before `<|message|>`
+        arrived, so the tool call vanished under small-chunk streaming."""
+        text = (
+            "<|channel|>analysis<|message|>Let me check.<|end|>"
+            "<|start|>assistant<|channel|>commentary to=functions.get_current_weather "
+            '<|constrain|>json<|message|>{"location": "San Francisco, CA"}<|call|>'
+        )
+        expected = parse_response(text, gpt_oss_template)
+        # Sanity: the whole-string parse really does recover the tool call.
+        self.assertEqual(len(expected["tool_calls"]), 1)
+        self.assertEqual(expected["tool_calls"][0]["function"]["name"], "get_current_weather")
+        streamer = ResponseParser(gpt_oss_template)
+        for ch in text:  # one byte at a time -- the worst case for the old heuristic
+            streamer.feed(ch)
+        message, _ = streamer.finalize()
+        self.assertEqual(message, expected)
 
     def test_feed_after_finalize_raises(self):
         streamer = ResponseParser(smollm_template)

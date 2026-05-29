@@ -8,8 +8,9 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
+
+import regex as re
 
 from .content_parsers import STREAMABLE_PARSERS, process_field
 from .response_templates import ResponseTemplate, ResponseTemplateField, load_response_template
@@ -122,19 +123,7 @@ class ResponseParser:
     def _process(self, events: list[dict], eos: bool) -> None:
         while True:
             watch = self._watchlist()
-            best = self._best_match(watch)
-            # Mid-stream, a match that reaches the end of the current buffer
-            # is ambiguous: `$`-alts are zero-width at len(buffer), and regex
-            # quantifiers like `\w+` may still extend if more input arrives.
-            # Literal non-zero-width matches can never extend, so we always
-            # commit those. At EOS we commit whatever we have and rely on the
-            # no-progress guard below to stop re-firing zero-width no-ops.
-            if (
-                best is not None
-                and not eos
-                and _should_defer(best[1], best[2], len(self._buffer), is_open=(best[0] == "open"))
-            ):
-                best = None
+            best, hold_start = self._scan(watch, eos)
 
             if best is not None:
                 kind, fld, m = best
@@ -154,26 +143,20 @@ class ResponseParser:
                         break
                 continue
 
-            # No match in the current buffer.
+            # No committable match in the current buffer.
             if eos:
                 if self._pos < len(self._buffer):
                     self._accumulate(events, self._buffer[self._pos :])
                     self._pos = len(self._buffer)
                 self._close_current(events)
                 break
-            if not watch:
-                # No termination patterns active (explicit region whose
-                # close_re is None, or an implicit region with no close and
-                # no explicit opens). Safe to stream everything buffered.
-                if self._pos < len(self._buffer):
-                    self._accumulate(events, self._buffer[self._pos :])
-                    self._pos = len(self._buffer)
-                break
-            hold = self._max_hold(watch)
-            safe_end = len(self._buffer) - hold
-            if safe_end > self._pos:
-                self._accumulate(events, self._buffer[self._pos : safe_end])
-                self._pos = safe_end
+            # Stream everything up to the earliest still-pending delimiter. When
+            # nothing is pending `hold_start == len(self._buffer)`, so this flushes
+            # the whole buffer; otherwise we hold the (possibly partial) delimiter
+            # bytes back until more input resolves them.
+            if hold_start > self._pos:
+                self._accumulate(events, self._buffer[self._pos : hold_start])
+                self._pos = hold_start
             break
 
     def _watchlist(self) -> list[tuple[str, ResponseTemplateField]]:
@@ -193,29 +176,72 @@ class ResponseParser:
                 watch.append(("close", impl))
         return watch
 
-    def _best_match(
-        self, watch: list[tuple[str, ResponseTemplateField]]
-    ) -> tuple[str, ResponseTemplateField, re.Match] | None:
-        """Earliest-starting (longest on ties, opens before closes) match."""
+    def _scan(
+        self, watch: list[tuple[str, ResponseTemplateField]], eos: bool
+    ) -> tuple[tuple[str, ResponseTemplateField, re.Match] | None, int]:
+        """Single pass over the watched delimiters, using the `regex` module's
+        partial matching to decide -- per delimiter -- whether it can be committed
+        now or must be held. Returns `(best, hold_start)`:
+
+        * `best` is the earliest-starting delimiter we can safely commit *now*
+          (longest on ties, opens before closes), or `None`.
+        * `hold_start` is the leftmost buffer position occupied by a still-pending
+          match: a partial (incomplete) delimiter, or a complete one ending at the
+          buffer edge that more input could still grow. Bytes before it are safe to
+          emit; bytes from it onward must be held. It stays `len(self._buffer)` when
+          nothing is pending, letting the caller flush the whole buffer.
+
+        A complete match is committable only if it starts strictly before
+        `hold_start` -- otherwise an earlier (or co-located) pending delimiter could
+        turn out to be the real one. At EOS nothing can grow, so partial matching is
+        skipped and every complete match is committable.
+
+        (The `regex` module always reports the empty string as a live prefix, so a
+        partial search with no real match returns a zero-width match at the buffer
+        end; that lands in the pending branch with `start == len(self._buffer)`, a
+        no-op for `hold_start`.)
+        """
         best_key: tuple | None = None
         best: tuple[str, ResponseTemplateField, re.Match] | None = None
+        hold_start = len(self._buffer)
         for kind, fld in watch:
-            regex = fld.open_re if kind == "open" else fld.close_re
-            assert regex is not None  # Should always be correct, and keeps ty happy
-            m = regex.search(self._buffer, self._pos)
+            pattern = fld.open_re if kind == "open" else fld.close_re
+            assert pattern is not None  # watched delimiters always carry a regex
+            if eos:
+                m = pattern.search(self._buffer, self._pos)
+            else:
+                m = pattern.search(self._buffer, self._pos, partial=True)
             if m is None:
+                continue
+            if not eos and (m.partial or self._can_grow(kind, fld, m)):
+                # Pending: can't commit, and blocks emitting from its start onward.
+                hold_start = min(hold_start, m.start())
                 continue
             key = (m.start(), -(m.end() - m.start()), 0 if kind == "open" else 1, fld.name)
             if best_key is None or key < best_key:
                 best_key, best = key, (kind, fld, m)
-        return best
+        # A committable match co-located with or after a pending one must wait too:
+        # the pending delimiter starts no later and might be the one that fires.
+        if best is not None and best[2].start() >= hold_start:
+            best = None
+        return best, hold_start
 
-    def _max_hold(self, watch: list[tuple[str, ResponseTemplateField]]) -> int:
-        hold = 0
-        for kind, fld in watch:
-            literals = fld.open_lits if kind == "open" else fld.close_lits
-            hold = max(hold, _pattern_hold(self._buffer, self._pos, literals))
-        return hold
+    def _can_grow(self, kind: str, fld: ResponseTemplateField, m: re.Match) -> bool:
+        r"""Whether a *complete* match ending at the current buffer edge could still
+        change as more input arrives -- in which case we defer rather than commit. A
+        match ending before the edge has already seen its terminating byte and is
+        final. At the edge: zero-width matches (`$` / `\Z`) are only real at true
+        EOS; a fully-present literal that no other literal in its set extends cannot
+        grow (the fast path that keeps literal delimiters zero-latency); anything
+        else (regex delimiters, prefix-overlapping literal lists) might."""
+        if m.end() != len(self._buffer):
+            return False
+        if m.start() == m.end():
+            return True
+        lits, can_extend = (
+            (fld.open_lits, fld.open_lit_can_extend) if kind == "open" else (fld.close_lits, fld.close_lit_can_extend)
+        )
+        return lits is None or can_extend
 
     def _accumulate(self, events: list[dict], text: str) -> None:
         """Route `text` into the currently active region. When the current
@@ -262,42 +288,3 @@ class ResponseParser:
         self._captures = {}
         self._body = ""
         self._opened = False
-
-
-def _should_defer(fld: ResponseTemplateField, m: re.Match, buf_len: int, is_open: bool) -> bool:
-    """Whether a match that already succeeded should nonetheless be deferred
-    until more input (or EOS) arrives. A match is "ambiguous at the edge" when
-    it ends at the current buffer end and either (a) it was zero-width (`$`-alt
-    style), (b) the delimiter was specified as a regex (which may still extend
-    with more input), or (c) the delimiter is a literal-alternation where one
-    literal is a prefix of another (so a short match could yet grow). Otherwise,
-    a non-zero-width literal match cannot be extended and is safe to commit."""
-    if m.end() != buf_len:
-        return False
-    if is_open:
-        literals, can_extend = fld.open_lits, fld.open_lit_can_extend
-    else:
-        literals, can_extend = fld.close_lits, fld.close_lit_can_extend
-    return literals is None or can_extend or m.start() == m.end()
-
-
-def _pattern_hold(buffer: str, start: int, literals: list[str] | None) -> int:
-    """How many trailing bytes of `buffer[start:]` must stay held because they
-    might be a partial match for the delimiter. For literal delimiters this is
-    the longest-trailing-prefix across all literals; for regex delimiters
-    (literals is None) we use a conservative constant window. Caller must have
-    already verified that the delimiter's regex has no full match from `start`
-    onward."""
-    avail = len(buffer) - start
-    if avail <= 0:
-        return 0
-    if literals is not None:
-        best = 0
-        for literal in literals:
-            max_k = min(len(literal) - 1, avail)
-            for k in range(max_k, best, -1):
-                if buffer.endswith(literal[:k]):
-                    best = k
-                    break
-        return best
-    return min(avail, 64)  # 64 chosen as a safe default for now, but later we might consider making this configurable

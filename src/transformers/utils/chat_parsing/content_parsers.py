@@ -12,8 +12,9 @@ a result this is mostly agent-written."""
 from __future__ import annotations
 
 import json
-import re
 from typing import Any
+
+import regex as re
 
 
 def _text(text: str, args: dict) -> str:

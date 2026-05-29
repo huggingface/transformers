@@ -9,9 +9,10 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Any
+
+import regex as re
 
 from ...utils import logging
 from .content_parsers import CONTENT_PARSERS, validate_transform_strings
@@ -206,9 +207,7 @@ def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
         "response_template", spec, "start_anchor", "start_anchor_pattern"
     )
     if start_anchor_re is None:
-        raise ValueError(
-            "response_template must define 'start_anchor' or 'start_anchor_pattern'."
-        )
+        raise ValueError("response_template must define 'start_anchor' or 'start_anchor_pattern'.")
     return ResponseTemplate(
         defaults=dict(defaults),
         fields=fields,
