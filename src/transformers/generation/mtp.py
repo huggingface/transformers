@@ -23,7 +23,7 @@ from torch import nn
 
 from ..cache_utils import Cache
 from ..conversion_mapping import get_model_conversion_mapping
-from ..core_model_loading import convert_and_load_state_dict_in_model, WeightRenaming
+from ..core_model_loading import WeightRenaming, convert_and_load_state_dict_in_model
 from ..masking_utils import create_causal_mask
 from ..modeling_utils import LoadStateDictConfig, PreTrainedModel, _get_resolved_checkpoint_files
 from ..utils import logging
@@ -164,7 +164,7 @@ class MtpLayerStack(PreTrainedModel):
             )
 
             # Only compute logits for next drafted token
-            logits = self.shared_head(last_hidden_states[:, -1:, :].to(self.shared_head.weight.dtype))
+            logits = self.shared_head(last_hidden_states[:, -1:, :])
 
             # Append the drafted logits
             drafted_logits.append(logits)
@@ -245,7 +245,12 @@ class MtpLayerStack(PreTrainedModel):
         # Note that since the layer numbers are dynamic, we cannot register those conversions - we also add the `mtp_block`
         # part for all weights since we cannot distinguish easily those that are under the main model's block or not. It will
         # be removed after for the few that should not have it
-        weight_conversions = [WeightRenaming(source_patterns=f"layers.{N}.", target_patterns=f"layers.{N-num_hidden_layers}.mtp_block.") for N in range(num_hidden_layers, num_hidden_layers+num_mtp_layers)]
+        weight_conversions = [
+            WeightRenaming(
+                source_patterns=f"layers.{N}.", target_patterns=f"layers.{N - num_hidden_layers}.mtp_block."
+            )
+            for N in range(num_hidden_layers, num_hidden_layers + num_mtp_layers)
+        ]
         weight_conversions.extend(get_model_conversion_mapping(mtp_model, add_legacy=False))
         weight_conversions.extend(main_model._weight_conversions)
 
@@ -253,7 +258,9 @@ class MtpLayerStack(PreTrainedModel):
         loading_info, _ = convert_and_load_state_dict_in_model(
             model=mtp_model,
             state_dict=mtp_state_dict,
-            load_config=LoadStateDictConfig(weight_mapping=weight_conversions, device_map=device_map),
+            load_config=LoadStateDictConfig(
+                weight_mapping=weight_conversions, device_map=device_map, dtype=main_model.config.dtype
+            ),
             tp_plan=None,
         )
         # Maybe remove the shared head/embedding from unexpected
