@@ -44,6 +44,7 @@ if is_torch_available():
     from torch.distributed.tensor.placement_types import _StridedShard
     from torch.multiprocessing.spawn import ProcessRaisedException
 
+    from transformers.distributed.configuration_utils import DistributedConfig
     from transformers.distributed.tensor_parallel import (
         ALL_PARALLEL_STYLES,
         PARAM_ONLY_STYLES,
@@ -185,6 +186,23 @@ def _ep_param_shard_impl(rank, world_size):
     assert gate_up.to_local().shape[0] == 4 // world_size, gate_up.to_local().shape
     assert down.to_local().shape[0] == 4 // world_size, down.to_local().shape
     # grouped_gemm updates num_experts to the per-rank local count.
+    assert experts.num_experts == 4 // world_size, experts.num_experts
+
+
+def _merged_tp_ep_impl(rank, world_size):
+    set_seed(0)
+    mesh = init_device_mesh("cpu", (world_size,), mesh_dim_names=("tp",))
+    model = TinyMoEModel(num_experts=4, hidden=8, intermediate=16)
+    model._tp_plan = dict(TP_PLAN_DECOMPOSED)
+    model._ep_plan = dict(EP_PLAN)
+    model.config.distributed_config = DistributedConfig(tp_size=world_size, enable_expert_parallel=True)
+    apply_tensor_parallel(model, mesh, None)
+
+    experts = model.layers[0].experts
+    gate_up, down = experts.gate_up_proj, experts.down_proj
+
+    assert isinstance(gate_up, DTensor), f"gate_up_proj not sharded: {type(gate_up)}"
+    assert gate_up.placements[0] == Shard(0), gate_up.placements
     assert experts.num_experts == 4 // world_size, experts.num_experts
 
 
@@ -335,6 +353,11 @@ class TestMoEDistributedApply(unittest.TestCase):
     def test_ep_router_slices_scores_and_remaps_indices(self):
         self._skip_if_unsupported()
         _init_distributed(tp=self.world_size)(_ep_router_impl)(self.world_size)
+
+    @is_tensor_parallel_test
+    def test_merged_tp_ep_plan_shards_expert_dim(self):
+        self._skip_if_unsupported()
+        _init_distributed(tp=self.world_size)(_merged_tp_ep_impl)(self.world_size)
 
 
 # =============================================================================

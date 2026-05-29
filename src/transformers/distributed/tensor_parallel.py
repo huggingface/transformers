@@ -650,15 +650,8 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
     sp_supported = getattr(model.config, "base_model_sp_plan", None) is not None
     enable_sp = sp_requested and sp_supported
 
-    enable_ep = getattr(distributed_config, "enable_expert_parallel", False)
-
     if tp_plan is None:
-        if enable_sp:
-            tp_plan = dict(model._sp_plan or {})
-        elif enable_ep:
-            tp_plan = dict(model._ep_plan or {})
-        else:
-            tp_plan = dict(model._tp_plan or {})
+        tp_plan = resolve_parallel_plan(model, distributed_config)
 
     # tie_weights() replaces lm_head.weight with embed_tokens.weight after TP is applied.
     # If embed_tokens isn't in the plan, sharding lm_head as a DTensor causes tie to
