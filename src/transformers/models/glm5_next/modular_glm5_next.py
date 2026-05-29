@@ -149,26 +149,28 @@ class Glm5NextForgetGate(nn.Module):
         linear_attn_config = config.linear_attn_config
         self.head_dim = linear_attn_config["head_dim"]
         self.num_heads = linear_attn_config["num_heads"]
-        self.safe_gate_lower_bound = linear_attn_config.get("lower_bound")
+        self.safe_gate = linear_attn_config.get("safe_gate", False)
+        self.safe_gate_lower_bound = linear_attn_config.get("lower_bound", None)
         qk_projection_size = self.head_dim * self.num_heads
         self.f_a_proj = nn.Linear(hidden_size, self.head_dim, bias=False)
         self.f_b_proj = nn.Linear(self.head_dim, qk_projection_size, bias=False)
         self.dt_bias = nn.Parameter(torch.empty(qk_projection_size, dtype=torch.float32))
-        self.A_log = nn.Parameter(torch.empty(1, 1, self.num_heads, 1, dtype=torch.float32))
+        self.A_log = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         forget_gate = self.f_b_proj(self.f_a_proj(hidden_states))
         batch_size, seq_len = forget_gate.shape[:2]
         g = forget_gate.float() + self.dt_bias.view(1, 1, -1)
         g = g.view(batch_size, seq_len, self.num_heads, self.head_dim)
+        A_log = self.A_log.float().view(1, 1, self.num_heads, 1)
 
-        if self.safe_gate_lower_bound is not None:
-            return self.safe_gate_lower_bound * torch.sigmoid(torch.exp(self.A_log.float()) * g)
+        if self.safe_gate and self.safe_gate_lower_bound is not None:
+            return self.safe_gate_lower_bound * torch.sigmoid(torch.exp(A_log) * g)
 
         threshold = 20.0
         g_linear = g > threshold
         sp = torch.where(g_linear, g, torch.log(1.0 + torch.exp(g)))
-        return -torch.exp(self.A_log.float()) * sp
+        return -torch.exp(A_log) * sp
 
 
 class Glm5NextKdaSequential(nn.Module):
@@ -261,7 +263,7 @@ class Glm5NextLinearAttention(nn.Module):
 
         linear_attn_config = config.linear_attn_config
         self.head_dim = linear_attn_config["head_dim"]
-        self.v_head_dim = linear_attn_config.get("v_head_dim", 128)
+        self.v_head_dim = self.head_dim
         self.num_heads = linear_attn_config["num_heads"]
         self.conv_kernel_size = linear_attn_config.get("short_conv_kernel_size", 4)
 
@@ -402,7 +404,7 @@ class Glm5NextIndexer(nn.Module):
 
         self.wq_b = nn.Linear(self.q_lora_rank, self.n_heads * self.head_dim, bias=False)
         self.wk = nn.Linear(self.hidden_size, self.head_dim, bias=False)
-        self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
+        self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-6) if config.index_dsa_use_layernorm else nn.Identity()
         self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
         self.softmax_scale = self.head_dim**-0.5
 
@@ -540,10 +542,14 @@ class Glm5NextAttention(nn.Module):
             self.q_a_layernorm = Glm5NextRMSNorm(config.q_lora_rank, eps=config.rms_norm_eps)
             self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
 
-        # Key-Value projections (MLA compressed path, no RoPE component in compressed KV).
-        self.kv_a_proj_with_mqa = nn.Linear(config.hidden_size, self.kv_lora_rank, bias=config.attention_bias)
+        # Key-Value projections (MLA compressed path plus single-head RoPE key stream).
+        self.kv_a_proj_with_mqa = nn.Linear(
+            config.hidden_size,
+            self.kv_lora_rank + self.qk_rope_head_dim,
+            bias=config.attention_bias,
+        )
         self.kv_a_layernorm = Glm5NextRMSNorm(self.kv_lora_rank, eps=config.rms_norm_eps)
-        kv_b_out = self.num_heads * (self.qk_head_dim + self.v_head_dim)
+        kv_b_out = self.num_heads * (self.qk_nope_head_dim + self.v_head_dim)
         self.kv_b_proj = nn.Linear(self.kv_lora_rank, kv_b_out, bias=False)
 
         # Output projection
@@ -555,11 +561,16 @@ class Glm5NextAttention(nn.Module):
 
         self.scaling = self.qk_head_dim ** (-0.5)
 
-        # DSA indexer scaffold. The current bf16 checkpoint has no
-        # `self_attn.indexer.*` keys, so keep it disabled unless explicitly
-        # requested on a future DSA/NSA config.
-        self.indexer = Glm5NextIndexer(config, layer_idx) if getattr(config, "enable_dsa_indexer", False) else None
-        indexer_types = getattr(config, "indexer_types", None) or ["full"] * config.num_hidden_layers
+        has_indexer_config = config.index_dsa_use_layernorm is not None or config.index_topk_pattern is not None
+        self.indexer = Glm5NextIndexer(config, layer_idx) if has_indexer_config else None
+        indexer_types = getattr(config, "indexer_types", None)
+        if indexer_types is None:
+            freq = config.index_topk_freq
+            offset = config.index_skip_topk_offset
+            indexer_types = [
+                "full" if (max(index_layer_idx - offset, 0) % freq) == 0 else "shared"
+                for index_layer_idx in range(config.num_hidden_layers)
+            ]
         self.skip_topk = self.indexer is None or indexer_types[layer_idx] == "shared"
         self.next_skip_topk = (
             self.indexer is not None
@@ -586,16 +597,26 @@ class Glm5NextAttention(nn.Module):
             q_resid = self.q_a_layernorm(self.q_a_proj(hidden_states))
             query_states = self.q_b_proj(q_resid)
         query_states = query_states.view(batch_size, seq_length, -1, self.qk_head_dim).transpose(1, 2)
+        # NoPE MLA: GLM-5-Next full-attention layers keep the `qk_rope_head_dim` query/key
+        # slice but do NOT rotate it (matches sglang `skip_rope=mla_nope`). Position
+        # information is carried by the KDA linear-attention layers and the DSA indexer,
+        # which applies RoPE on its own projections.
 
         # ===== KV path =====
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        k_compressed = self.kv_a_layernorm(compressed_kv)
+        k_compressed, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        k_compressed = self.kv_a_layernorm(k_compressed)
 
         kv_expanded = self.kv_b_proj(k_compressed)
-        kv_expanded = kv_expanded.view(batch_size, seq_length, -1, self.qk_head_dim + self.v_head_dim)
-        key_states, value_states = torch.split(kv_expanded, [self.qk_head_dim, self.v_head_dim], dim=-1)
+        kv_expanded = kv_expanded.view(batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
+        key_states, value_states = torch.split(kv_expanded, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
+        if self.qk_rope_head_dim > 0:
+            # Single-head (MQA) key-pe stream broadcast to all heads, unrotated (NoPE).
+            k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+            k_pe = k_pe.expand(-1, key_states.shape[1], -1, -1)
+            key_states = torch.cat([key_states, k_pe], dim=-1)
 
         # Cache update
         if past_key_values is not None:
@@ -776,9 +797,10 @@ class Glm5NextDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = Glm5NextRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = Glm5NextRMSNorm(config.hidden_size, config.rms_norm_eps)
 
+        self.mhc = config.mhc
         self.hc_mult = config.hc_mult
-        self.attn_hc = Glm5NextHyperConnection(config)
-        self.ffn_hc = Glm5NextHyperConnection(config)
+        self.attn_hc = Glm5NextHyperConnection(config) if self.mhc else None
+        self.ffn_hc = Glm5NextHyperConnection(config) if self.mhc else None
 
     def forward(
         self,
@@ -791,6 +813,26 @@ class Glm5NextDecoderLayer(GradientCheckpointingLayer):
         prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, None]:
+        if not self.mhc:
+            residual = hidden_states
+            hidden_states = self.input_layernorm(hidden_states)
+            hidden_states, _, _ = self.self_attn(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
+            hidden_states = residual + hidden_states
+
+            residual = hidden_states
+            hidden_states = self.post_attention_layernorm(hidden_states)
+            hidden_states = residual + self.mlp(hidden_states)
+
+            return hidden_states, hidden_states
+
         if self.layer_idx == 0:
             hidden_states = hidden_states.unsqueeze(2).expand(-1, -1, self.hc_mult, -1).contiguous()
 
@@ -884,8 +926,9 @@ class Glm5NextRotaryEmbedding(LlamaRotaryEmbedding):
 class Glm5NextModel(LlamaModel, Glm5NextPreTrainedModel):
     def __init__(self, config: Glm5NextConfig):
         super().__init__(config)
+        self.mhc = config.mhc
         self.hc_mult = config.hc_mult
-        self.hc_head = Glm5NextHyperHead()
+        self.hc_head = Glm5NextHyperHead() if self.mhc else None
         self.post_init()
 
     @merge_with_config_defaults
@@ -937,7 +980,8 @@ class Glm5NextModel(LlamaModel, Glm5NextPreTrainedModel):
                 **kwargs,
             )
 
-        hidden_states = self.hc_head(hidden_states)
+        if self.mhc:
+            hidden_states = self.hc_head(hidden_states)
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,

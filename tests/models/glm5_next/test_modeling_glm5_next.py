@@ -124,12 +124,14 @@ class Glm5NextModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_default_linear_attn_config(self):
         config = Glm5NextConfig(num_hidden_layers=8)
+        self.assertFalse(config.mhc)
         self.assertEqual(config.linear_attn_config["kda_layers"], [0, 1, 2, 4, 5, 6])
         self.assertEqual(config.linear_attn_config["full_attn_layers"], [3, 7])
         self.assertEqual(config.linear_attn_config["head_dim"], 128)
         self.assertEqual(config.linear_attn_config["num_heads"], 64)
         self.assertEqual(config.linear_attn_config["short_conv_kernel_size"], 4)
-        self.assertEqual(config.linear_attn_config["v_head_dim"], 128)
+        self.assertEqual(config.linear_attn_config["lower_bound"], None)
+        self.assertFalse(config.linear_attn_config["safe_gate"])
         self.assertEqual(
             config.layer_types,
             [

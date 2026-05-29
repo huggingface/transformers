@@ -36,6 +36,9 @@ class Glm5NextConfig(PreTrainedConfig):
     linear_attn_config (`dict`, *optional*):
         KDA linear attention layout and dimensions. Layers listed in
         `kda_layers` use KDA; layers listed in `full_attn_layers` use MLA.
+    mhc (`bool`, *optional*, defaults to `False`):
+        Enables MHC residual streams. Older checkpoints without this field use
+        the standard single-stream residual path.
     hc_mult (`int`, *optional*, defaults to 4):
         Number of MHC residual streams.
     hc_eps (`float`, *optional*, defaults to 1e-6):
@@ -48,9 +51,15 @@ class Glm5NextConfig(PreTrainedConfig):
         Number of DSA indexer heads.
     index_topk (`int`, *optional*, defaults to 2048):
         Number of sparse-attention positions selected by the DSA indexer.
-    enable_dsa_indexer (`bool`, *optional*, defaults to `False`):
-        Enables the optional DSA indexer scaffold when checkpoints contain
-        `self_attn.indexer.*` weights.
+    index_dsa_use_layernorm (`bool`, *optional*):
+        Whether DSA indexer keys include `indexer.k_norm.*`. If this field is
+        absent, GLM5-Next keeps the legacy no-indexer path.
+    index_skip_topk_offset (`int`, *optional*, defaults to 1):
+        Offset used when deriving the default DSA indexer shared/full pattern.
+    index_topk_freq (`int`, *optional*, defaults to 1):
+        Frequency used when deriving the default DSA indexer shared/full pattern.
+    index_topk_pattern (`str` or `list[str]`, *optional*):
+        Explicit DSA indexer shared/full pattern.
     indexer_types (`list[str]`, *optional*):
         Per-layer DSA indexer mode. Values are `"full"` or `"shared"`.
     mlp_layer_types (`list[str]`, *optional*):
@@ -112,15 +121,19 @@ class Glm5NextConfig(PreTrainedConfig):
     n_group: int = 1
     topk_group: int = 1
     norm_topk_prob: bool = True
-    swiglu_limit: float = 10.0
+    swiglu_limit: float | None = None
     linear_attn_config: dict | None = None
+    mhc: bool = False
     hc_mult: int = 4
     hc_eps: float = 1e-6
     hc_sinkhorn_iters: int = 20
     index_head_dim: int = 128
     index_n_heads: int = 32
     index_topk: int | None = 2048
-    enable_dsa_indexer: bool = False
+    index_dsa_use_layernorm: bool | None = None
+    index_skip_topk_offset: int | None = 1
+    index_topk_freq: int | None = 1
+    index_topk_pattern: str | list[str] | None = None
     indexer_types: list[str] | None = None
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
@@ -153,8 +166,8 @@ class Glm5NextConfig(PreTrainedConfig):
                 "kda_layers": kda_layers,
                 "num_heads": 64,
                 "short_conv_kernel_size": 4,
-                "v_head_dim": 128,
-                "lower_bound": -5.0,
+                "lower_bound": None,
+                "safe_gate": False,
             }
 
         if self.layer_types is None:
@@ -165,15 +178,16 @@ class Glm5NextConfig(PreTrainedConfig):
             ]
 
         if self.indexer_types is None:
-            pattern = kwargs.pop("index_topk_pattern", None)
-            freq = kwargs.pop("index_topk_freq", 1)
+            pattern = self.index_topk_pattern
+            freq = self.index_topk_freq
+            offset = self.index_skip_topk_offset
             if isinstance(pattern, str):
                 self.indexer_types = [{"F": "full", "S": "shared"}[char] for char in pattern]
             elif pattern is not None:
                 self.indexer_types = list(pattern)
             else:
                 self.indexer_types = [
-                    "full" if (max(layer_idx - 1, 0) % freq) == 0 else "shared"
+                    "full" if (max(layer_idx - offset, 0) % freq) == 0 else "shared"
                     for layer_idx in range(self.num_hidden_layers)
                 ]
 
