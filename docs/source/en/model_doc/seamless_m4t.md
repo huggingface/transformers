@@ -11,6 +11,12 @@ specific language governing permissions and limitations under the License.
 -->
 *This model was released on 2023-08-22 and added to Hugging Face Transformers on 2023-10-23.*
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
+
 # SeamlessM4T
 
 

@@ -15,6 +15,12 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2020-10-11 and added to Hugging Face Transformers on 2022-05-17.*
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
+
 # Wav2Vec2-Conformer
 
 
