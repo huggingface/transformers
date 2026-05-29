@@ -852,12 +852,15 @@ class ProcessorMixin(PushToHubMixin):
             return text, []
 
         # Use named regex so we can extract groups later and replace
+        # TODO @raushan: vllm encodes text and mm-data separately causing errors when a placeholder
+        # has no associated mm-data. Thus we can check if there are any `replacements` and skip otherwise
+        # Plan: update all models and contrib to vllm, they might benefit largely from `replacement_offsets`
         token_groups = []
-        if image_token := getattr(self, "image_token", None):
+        if len(images_replacements) > 0 and (image_token := getattr(self, "image_token", None)) is not None:
             token_groups.append(f"(?P<image>{re.escape(image_token)})")
-        if video_token := getattr(self, "video_token", None):
+        if len(videos_replacements) > 0 and (video_token := getattr(self, "video_token", None)) is not None:
             token_groups.append(f"(?P<video>{re.escape(video_token)})")
-        if audio_token := getattr(self, "audio_token", None):
+        if len(audio_replacements) > 0 and (audio_token := getattr(self, "audio_token", None)) is not None:
             token_groups.append(f"(?P<audio>{re.escape(audio_token)})")
 
         regex_special_mm_tokens = "|".join(token_groups) or r"(?!)"
