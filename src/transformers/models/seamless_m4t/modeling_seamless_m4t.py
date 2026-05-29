@@ -1027,7 +1027,7 @@ class SeamlessM4TAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scale = self.head_dim**-0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
         self.is_causal = is_causal
         self.layer_idx = layer_idx
@@ -1104,7 +1104,7 @@ class SeamlessM4TAttention(nn.Module):
             value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scale,
+            scaling=self.scaling,
             **kwargs,
         )
 

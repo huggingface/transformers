@@ -723,7 +723,7 @@ class SeamlessM4Tv2ConformerAdapterLayer(nn.Module):
 
         # The rest of the computation is identical to a vanilla Transformer
         # encoder layer.
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
         )
@@ -903,7 +903,7 @@ class SeamlessM4Tv2Attention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scale = self.head_dim**-0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
         self.is_causal = is_causal
         self.layer_idx = layer_idx
@@ -977,7 +977,7 @@ class SeamlessM4Tv2Attention(nn.Module):
             value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scale,
+            scaling=self.scaling,
             **kwargs,
         )
 
@@ -1050,7 +1050,7 @@ class SeamlessM4Tv2EncoderLayer(GradientCheckpointingLayer):
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             **kwargs,
@@ -1140,7 +1140,7 @@ class SeamlessM4Tv2DecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
@@ -1154,7 +1154,7 @@ class SeamlessM4Tv2DecoderLayer(GradientCheckpointingLayer):
             residual = hidden_states
             hidden_states = self.cross_attention_layer_norm(hidden_states)
 
-            hidden_states, cross_attn_weights = self.cross_attention(
+            hidden_states, _ = self.cross_attention(
                 hidden_states=hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
                 past_key_values=past_key_values,
