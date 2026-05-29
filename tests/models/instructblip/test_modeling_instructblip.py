@@ -719,16 +719,10 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
 
         expected_text = Expectations(
             {
-                (
-                    None,
-                    None,
-                ): "The image depicts a man ironing clothes on the back of a yellow van in the middle of a busy city street. The man is wearing a yellow shirt with a yellow tie, and he is holding an ironing board in one hand and a laundry basket in the other. The image is unusual in that it shows a man ironing clothes on the back of a van in the middle of a busy city street.",
-                (
-                    "xpu",
-                    5,
-                ): "The image depicts a man ironing clothes on the back of a yellow van in the middle of a busy city street. The man is wearing a yellow shirt with an ironing board attached to the back of the van, suggesting that he is doing his own laundry at home. The image is unusual in that it shows a man ironing clothes on the back of a van in the middle of a busy city street, which may suggest that he is doing his own laundry at home.",
+                (None, None): "The image depicts a man ironing clothes on the back of a yellow van in the middle of a busy city street. The man is wearing a yellow shirt with a yellow tie, and he is holding an ironing board in one hand and a laundry basket in the other. The image is unusual in that it shows a man ironing clothes on the back of a van in the middle of a busy city street.",
+                ("xpu", 5): "The image depicts a man ironing clothes on the back of a yellow van in the middle of a busy city street. The man is wearing a yellow shirt with an ironing board attached to the back of the van, suggesting that he is doing his own laundry at home. The image is unusual in that it shows a man ironing clothes on the back of a van in the middle of a busy city street, which may suggest that he is doing his own laundry at home.",
             }
-        ).get_expectation()
+        ).get_expectation()  # fmt: skip
         self.assertEqual(generated_text, expected_text)
 
     def test_inference_interpolate_pos_encoding(self):
