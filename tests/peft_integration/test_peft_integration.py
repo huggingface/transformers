@@ -19,6 +19,7 @@ import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from datasets import Dataset, DatasetDict
 from huggingface_hub import hf_hub_download
@@ -696,7 +697,11 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
     def test_peft_load_adapter_warmup_uses_adapter_expected_keys(self):
         """
-        Check that adapter loading only warms up memory for adapter parameters.
+        Check that adapter loading only warms up memory for adapter parameters by capturing the device map passed to
+        `caching_allocator_warmup`.
+
+        Note: this test depends on `_load_pretrained_model` calling `caching_allocator_warmup`; if that internal
+        contract changes, update the test to keep checking the keys used for warmup sizing.
         """
         from peft import LoraConfig
 
@@ -721,21 +726,17 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 self.assertTrue(dummy_state_dict)
 
                 captured_device_maps = []
-                original_warmup = modeling_utils.caching_allocator_warmup
 
                 def capture_warmup(model, expanded_device_map, hf_quantizer):
                     captured_device_maps.append(dict(expanded_device_map))
 
-                modeling_utils.caching_allocator_warmup = capture_warmup
-                try:
+                with patch.object(modeling_utils, "caching_allocator_warmup", side_effect=capture_warmup):
                     with CaptureLogger(logging.get_logger("transformers.integrations.peft")):
                         model.load_adapter(
                             adapter_state_dict=dummy_state_dict,
                             adapter_name=adapter_name,
                             peft_config=peft_config,
                         )
-                finally:
-                    modeling_utils.caching_allocator_warmup = original_warmup
 
                 self.assertTrue(captured_device_maps)
                 warmed_keys = set().union(*(device_map.keys() for device_map in captured_device_maps))
