@@ -17,9 +17,8 @@ Weight sharding for MoE experts is declared per-parameter in the config plan and
 applied by the param-level pass of ``apply_tensor_parallel``:
 
   * ``grouped_gemm``          — EP, ``Shard(0)`` on the expert dim
-  * ``moe_gate_up_colwise``   — TP, ``_StridedShard(dim=-2)`` (Qwen3/Mixtral layout)
-  * ``moe_gate_up_colwise_alt`` — TP, ``_StridedShard(dim=-1)`` (GPT-OSS/Llama4 layout)
-  * ``moe_down_rowwise``      — TP, ``Shard(-1)`` on down_proj's input dim
+  * ``moe_tp_gate_up_colwise``   — TP, ``_StridedShard(dim=-2)`` (Qwen3/Mixtral layout)
+  * ``moe_tp_down_rowwise``      — TP, ``Shard(-1)`` on down_proj's input dim
 
 The experts *module* keeps a forward-only ``moe_experts_allreduce`` hook (no baked
 ``shard_plan``), and the router (gate) uses ``ep_router`` to slice router outputs to
@@ -114,8 +113,8 @@ EP_PLAN = {
 }
 
 TP_PLAN_DECOMPOSED = {
-    "layers.*.experts.gate_up_proj": "moe_gate_up_colwise",
-    "layers.*.experts.down_proj": "moe_down_rowwise",
+    "layers.*.experts.gate_up_proj": "moe_tp_gate_up_colwise",
+    "layers.*.experts.down_proj": "moe_tp_down_rowwise",
     "layers.*.experts": "moe_experts_allreduce",
 }
 
@@ -270,11 +269,11 @@ class TestMoEPlanResolution(unittest.TestCase):
     def test_tp_decomposed_plan_resolves_per_param(self):
         self.assertEqual(
             _get_parameter_tp_plan("layers.0.experts.gate_up_proj", TP_PLAN_DECOMPOSED, is_weight=True),
-            "moe_gate_up_colwise",
+            "moe_tp_gate_up_colwise",
         )
         self.assertEqual(
             _get_parameter_tp_plan("layers.0.experts.down_proj", TP_PLAN_DECOMPOSED, is_weight=True),
-            "moe_down_rowwise",
+            "moe_tp_down_rowwise",
         )
 
 
@@ -292,19 +291,14 @@ class TestMoEPlacementExpectations(unittest.TestCase):
         self.assertTrue(style.shards_expert_dim)
 
     def test_tp_gate_up_is_strided_shard_on_packed_dim(self):
-        style = ALL_PARALLEL_STYLES["moe_gate_up_colwise"]
+        style = ALL_PARALLEL_STYLES["moe_tp_gate_up_colwise"]
         self.assertIsInstance(style.placement, _StridedShard)
         self.assertEqual(style.placement.dim, -2)
         self.assertEqual(style.placement.split_factor, 2)
         self.assertFalse(style.shards_expert_dim)
 
-        alt = ALL_PARALLEL_STYLES["moe_gate_up_colwise_alt"]
-        self.assertIsInstance(alt.placement, _StridedShard)
-        self.assertEqual(alt.placement.dim, -1)
-        self.assertEqual(alt.placement.split_factor, 2)
-
     def test_tp_down_is_rowwise_on_last_dim(self):
-        style = ALL_PARALLEL_STYLES["moe_down_rowwise"]
+        style = ALL_PARALLEL_STYLES["moe_tp_down_rowwise"]
         self.assertEqual(style.placement, Shard(-1))
         self.assertNotIsInstance(style.placement, _StridedShard)
         self.assertFalse(style.shards_expert_dim)

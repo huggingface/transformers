@@ -76,8 +76,8 @@ class Cohere2MoeConfig(PreTrainedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise_allreduce",
         # Depending on layers, `mlp` can be a MoE or an MLP layer
-        "layers.*.mlp.experts.gate_up_proj": "moe_gate_up_colwise",
-        "layers.*.mlp.experts.down_proj": "moe_down_rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
+        "layers.*.mlp.experts.down_proj": "moe_tp_down_rowwise",
         "layers.*.mlp.experts": "moe_experts_allreduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",

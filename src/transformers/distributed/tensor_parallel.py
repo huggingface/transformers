@@ -80,8 +80,8 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
     """
     Verify the TP plan of the model, log a warning if the layers that were not sharded and the rules that were not applied.
 
-    Only weight-sharding rules (colwise, rowwise, vocab, grouped_gemm, moe_gate_up_*,
-    moe_down_*) are checked. Module/activation entries (e.g. PrepareModuleInput,
+    Only weight-sharding rules (colwise, rowwise, vocab, grouped_gemm, moe_tp_gate_up_*,
+    moe_tp_down_*) are checked. Module/activation entries (e.g. PrepareModuleInput,
     SequenceParallel, moe_experts_allreduce, ep_router) set up communication hooks on
     modules, not weight sharding, so they are excluded.
     """
@@ -390,7 +390,7 @@ class MoEExpertsParallel(CustomParallelStyle):
     """Tensor-parallel forward style for MoE expert modules.
 
     Forward-comm only — it does NOT shard weights. Expert weight sharding is declared
-    per-parameter in the config plan (``grouped_gemm`` / ``moe_gate_up_*`` / ``moe_down_*``)
+    per-parameter in the config plan (``grouped_gemm`` / ``moe_tp_gate_up_*`` / ``moe_tp_down_*``)
     and applied by the param-level pass; this style only wraps the experts ``forward`` so
     that grouped_mm (which needs plain tensors) works on the already-sharded DTensor params.
 
@@ -527,13 +527,11 @@ class ParallelInterface(GeneralInterface):
             "packed_colwise": PackedColwiseParallel(input_layouts=Replicate()),
             # MoE expert weight sharding — param-level (no forward hook). The matching
             # forward comm is declared separately via "moe_experts_allreduce" on the
-            # experts module. Two gate_up layouts: "*_colwise" packs along dim -2
-            # (Qwen3/Mixtral: [E, 2*inter, hidden]); "*_alt" packs along dim -1
-            # (GPT-OSS/Llama4: [E, hidden, 2*inter]).
+            # experts module. gate_up is packed (gate||up) along dim -2
+            # (Qwen3/Mixtral: [E, 2*inter, hidden]).
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),  # EP — expert dim
-            "moe_gate_up_colwise": MoEParamShard(_StridedShard(dim=-2, split_factor=2)),  # TP — Qwen3 layout
-            "moe_gate_up_colwise_alt": MoEParamShard(_StridedShard(dim=-1, split_factor=2)),  # TP — GPT-OSS layout
-            "moe_down_rowwise": MoEParamShard(Shard(-1)),  # TP — down_proj input dim
+            "moe_tp_gate_up_colwise": MoEParamShard(_StridedShard(dim=-2, split_factor=2)),  # TP — packed gate/up
+            "moe_tp_down_rowwise": MoEParamShard(Shard(-1)),  # TP — down_proj input dim
             # Row-parallel
             "rowwise_allreduce": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
             "rowwise_reduce_scatter": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Shard(1)),
@@ -578,9 +576,8 @@ ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 PARAM_ONLY_STYLES = frozenset(
     {
         "grouped_gemm",
-        "moe_gate_up_colwise",
-        "moe_gate_up_colwise_alt",
-        "moe_down_rowwise",
+        "moe_tp_gate_up_colwise",
+        "moe_tp_down_rowwise",
     }
 )
 

@@ -91,7 +91,7 @@ experts.1.w3.weight  ─┘
 ```
 
 > [!TIP]
-> The fused expert weights (`experts.gate_up_proj`, `experts.down_proj`) are sharded at parameter granularity by the parallel plan, not as whole modules. Tensor parallelism uses `moe_gate_up_colwise` / `moe_down_rowwise` and expert parallelism uses `grouped_gemm`; the experts module itself only carries the forward-communication entry `moe_experts_allreduce`. See [Expert parallelism](./expert_parallelism) for details.
+> The fused expert weights (`experts.gate_up_proj`, `experts.down_proj`) are sharded at parameter granularity by the parallel plan, not as whole modules. Tensor parallelism uses `moe_tp_gate_up_colwise` / `moe_tp_down_rowwise` and expert parallelism uses `grouped_gemm`; the experts module itself only carries the forward-communication entry `moe_experts_allreduce`. See [Expert parallelism](./expert_parallelism) for details.
 
 ### Composite models (e.g., vision-language)
 
