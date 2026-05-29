@@ -140,6 +140,8 @@ if is_accelerate_available():
     from accelerate.utils import extract_model_from_parallel
 
 if TYPE_CHECKING:
+    from kernels.layer.mode import Mode
+
     from ._typing import DeviceMeshLike
 
 
@@ -3746,7 +3748,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return dtype_plan
 
-    def set_use_kernels(self, use_kernels, kernel_config: KernelConfig | None = None):
+    def set_use_kernels(self, use_kernels, kernel_config: KernelConfig | None = None, mode: "Mode | None" = None):
         """
         Set whether or not to use the `kernels` library to kernelize some layers of the model.
         Args:
@@ -3754,11 +3756,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 Whether or not to use the `kernels` library to kernelize some layers of the model.
             kernel_config (`KernelConfig`, *optional*):
                 The kernel configuration to use to kernelize the model. If `None`, the default kernel mapping will be used.
+            mode (`Mode`, *optional*):
+                The mode that should be applied during `kernelize`. Optional, defaults to either training or inference mode
+                based on the internal `training` flag.
         """
         if use_kernels:
             if not is_kernels_available():
                 raise ValueError(
-                    "`use_kernels=True` requires kernels>=0.9.0. Please install the latest version with `pip install -U kernels`"
+                    "Kernels are not available. To use kernels, please install kernels using `pip install -U kernels`"
                 )
             from kernels import use_kernel_mapping
 
@@ -3778,10 +3783,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # Param inherit_mapping should be False to avoid still loading kernel from remote
                 inherit_mapping = not kernel_config.use_local_kernel
                 with use_kernel_mapping(kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
-                    self.use_kernels = True
+                    self.kernelize(mode=mode)
             # We use the default kernel mapping in .integrations.hub_kernels
             else:
-                self.use_kernels = True
+                self.kernelize(mode=mode)
         else:
             self.use_kernels = False
 
@@ -4592,7 +4597,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def loss_function(self, value):
         self._loss_function = value
 
-    def kernelize(self, mode=None):
+    def kernelize(self, mode: "Mode | None" = None):
         """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
         if not is_kernels_available():
             raise ValueError(
@@ -4621,7 +4626,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         try:
             self.apply(attach_hidden_kernels)
 
-            mode = Mode.INFERENCE if not self.training else Mode.TRAINING if mode is None else mode
+            mode = Mode.TRAINING if self.training else Mode.INFERENCE if mode is None else mode
             kernelize(self, device=Device(type=self.device.type), mode=mode)
             self._use_kernels = True
 

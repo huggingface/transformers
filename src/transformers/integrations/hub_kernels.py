@@ -89,95 +89,108 @@ try:
             "cuda": LayerRepository(
                 repo_id="kernels-community/deformable-detr",
                 layer_name="MultiScaleDeformableAttention",
+                version=1,
             )
         },
         "Llama4TextMoe": {
             "cuda": LayerRepository(
                 repo_id="kernels-community/moe",
                 layer_name="Llama4TextMoe",
+                version=1,
             )
         },
         "SwiGLUMLP": {
-            "cuda": {
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerSwiGLUMLP",
-                ),
-                Mode.TRAINING: LayerRepository(
-                    repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerSwiGLUMLP",
-                ),
-            }
+            "cuda": LayerRepository(
+                repo_id="kernels-community/liger-kernels",
+                layer_name="LigerSwiGLUMLP",
+                version=1,
+            ),
         },
         "RMSNorm": {
+            # TODO: training but not compile should work...
             "cuda": {
+                #Mode.TRAINING: LayerRepository(
+                #    repo_id="kernels-community/liger-kernels",
+                #    layer_name="LigerRMSNorm",
+                #    version=1,
+                #),
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
                     layer_name="LigerRMSNorm",
-                ),
-                Mode.TRAINING: LayerRepository(
-                    repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerRMSNorm",
+                    version=1,
                 ),
             },
             "rocm": {
+                Mode.TRAINING: LayerRepository(
+                    repo_id="kernels-community/liger-kernels",
+                    layer_name="LigerRMSNorm",
+                    version=1,
+                ),
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
                     layer_name="LigerRMSNorm",
-                )
+                    version=1,
+                ),
             },
             "xpu": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/rmsnorm",
                     layer_name="RMSNorm",
+                    version=1,
                 )
             },
             "mps": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/mlx_rmsnorm",
                     layer_name="RMSNorm",
+                    version=1,
                 )
             },
             "npu": {
+                Mode.TRAINING: LayerRepository(
+                    repo_id="kernels-community/liger-kernels",
+                    layer_name="LigerRMSNorm",
+                    version=1,
+                ),
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
                     layer_name="LigerRMSNorm",
-                )
+                    version=1,
+                ),
             },
-        },
-        "MLP": {
-            "cuda": LayerRepository(
-                repo_id="medmekk/triton-llama-mlp",
-                layer_name="TritonLlamaMLP",
-            )
         },
         "MegaBlocksMoeMLP": {
             "cuda": {
                 Mode.TRAINING: LayerRepository(
                     repo_id="kernels-community/megablocks",
                     layer_name="MegaBlocksMoeMLP",
+                    version=1,
                 ),
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/megablocks",
                     layer_name="MegaBlocksMoeMLP",
+                    version=1,
                 ),
             },
             "rocm": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="ahadnagy/megablocks",
                     layer_name="MegaBlocksMoeMLP",
+                    version=1,
                 )
             },
             "xpu": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/megablocks",
                     layer_name="MegaBlocksMoeMLP",
+                    version=1,
                 )
             },
             "cpu": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/megablocks",
                     layer_name="CPUMegaBlocksMoeMLP",
+                    version=1,
                 )
             },
         },
@@ -236,23 +249,18 @@ try:
         _FUNCTION_KERNEL_MAPPING = {
             "rotary_pos_emb": {
                 "xpu": {
-                Mode.INFERENCE: FuncRepository(
-                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
-                )
-                },
-                "cuda": {
-                    Mode.TRAINING: FuncRepository(
-                        repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
-                    ),
                     Mode.INFERENCE: FuncRepository(
-                        repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
-                    ),
+                        repo_id="kernels-community/rotary", func_name="apply_rotary_transformers", version=1
+                    )
                 },
+                "cuda": FuncRepository(
+                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers", version=1
+                ),
             },
             "ForCausalLMLoss": {
                 "cuda": {
-                    Mode.TRAINING: FuncRepository(
-                        repo_id="kernels-community/liger-kernels", func_name="LigerForCausalLMLoss"
+                    Mode.TRAINING | Mode.TORCH_COMPILE: FuncRepository(
+                        repo_id="kernels-community/liger-kernels", func_name="LigerForCausalLMLoss", version=1
                     ),
                 },
             },

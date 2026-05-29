@@ -489,8 +489,10 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         hidden_states = hidden_states[:, slice_indices, :]
 
+        # We only compute logits during inference (no labels given) or when we do not use any kernel (materialization of logits needed)
+        logits = self.lm_head(hidden_states) if labels is None or not self.use_kernels else None
+
         loss = None
-        logits = self.lm_head(hidden_states) if not self.use_kernels else None
         if labels is not None:
             loss = self.loss_function(
                 hidden_states=hidden_states,
@@ -499,7 +501,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
                 labels=labels,
                 vocab_size=self.config.vocab_size,
                 hidden_size=hidden_states.shape[-1],
-                **kwargs
+                **kwargs,
             )
 
         return CausalLMOutputWithPast(
