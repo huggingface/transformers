@@ -1431,6 +1431,12 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         model_kwargs: dict[str, Any],
         logits_processor: Optional["LogitsProcessorList"] = None,
     ):
+        if not hasattr(main_model.config.get_text_config(), "num_nextn_predict_layers"):
+            raise ValueError(
+                "Could not find `num_nextn_predict_layers` in the model config. This model probably has no associated "
+                "mtp weights."
+            )
+
         # Heuristic: use the device of the last layer of the main model for the MTP layers
         self.device = next(x.device for x in main_model.base_model.layers[-1].parameters())  # type: ignore
         self.mtp_model = MtpLayerStack.from_pretrained(main_model, device_map={"": self.device})
