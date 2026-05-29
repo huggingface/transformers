@@ -71,7 +71,10 @@ _CHAT_TEMPLATE_LARGE = pathlib.Path(cached_file("gg-hf-gg/gemma-4-31B-it", "chat
 
 _RESPONSE_TEMPLATE = {
     "defaults": {"role": "assistant"},
-    "start_anchor": "<|turn>model\n",
+    # The chat template only emits `<|turn>model\n` when the previous message wasn't a tool_call/
+    # tool_response. After a tool_response the prefix just ends with `<tool_response|>` and the
+    # model continues from there, so we accept either anchor and truncate past the latest one.
+    "start_anchor": ["<|turn>model\n", "<tool_response|>"],
     "fields": {
         "thinking": {
             "open": "<|channel>thought\n",
