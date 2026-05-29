@@ -23,7 +23,7 @@ from torch import nn
 
 from ..cache_utils import Cache
 from ..conversion_mapping import get_model_conversion_mapping
-from ..core_model_loading import convert_and_load_state_dict_in_model
+from ..core_model_loading import convert_and_load_state_dict_in_model, WeightRenaming
 from ..masking_utils import create_causal_mask
 from ..modeling_utils import LoadStateDictConfig, PreTrainedModel, _get_resolved_checkpoint_files
 from ..utils import logging
@@ -80,7 +80,9 @@ class MtpLayerStack(PreTrainedModel):
     _supports_flex_attn = True
     _supports_flash_attn = True
     # Since the embedding/head are shared with main model, silence any warning if they are provided again
-    _keys_to_ignore_on_load_unexpected = [r"\.shared_head\.head\.weight", r"\.embed_tokens\.weight"]
+    _keys_to_ignore_on_load_unexpected = ["shared_head.head.weight", "embed_tokens.weight"]
+    # Silence as well when not provided, since one again we take them from main model
+    _keys_to_ignore_on_load_missing = ["shared_head.weight", "embed_tokens.weight"]
 
     def __init__(self, main_model: PreTrainedModel, num_mtp_layers: int):
         super().__init__(main_model.config.get_text_config())
@@ -102,8 +104,8 @@ class MtpLayerStack(PreTrainedModel):
         # The embeddings and head are shared between main model and each MTP layer
         self.embed_tokens = main_model.get_input_embeddings()
         self.shared_head = main_model.lm_head
-        # Use the same rotary class
-        self.rotary_emb = type(main_model.base_model.rotary_emb)(config=self.config)
+        # Use the same rotary class (it only has non-persistent buffers)
+        self.rotary_emb = main_model.base_model.rotary_emb
 
         self.post_init()
 
@@ -162,7 +164,7 @@ class MtpLayerStack(PreTrainedModel):
             )
 
             # Only compute logits for next drafted token
-            logits = self.shared_head(last_hidden_states[:, -1:, :])
+            logits = self.shared_head(last_hidden_states[:, -1:, :].to(self.shared_head.weight.dtype))
 
             # Append the drafted logits
             drafted_logits.append(logits)
@@ -203,7 +205,7 @@ class MtpLayerStack(PreTrainedModel):
         final_mtp_patterns = []
         for pattern in mtp_patterns:
             match_object = re.search(r"\.(\d+)", pattern)
-            if match_object is not None and match_object.group(1) < num_hidden_layers:
+            if match_object is not None and int(match_object.group(1)) < num_hidden_layers:
                 continue
             final_mtp_patterns.append(pattern)
         if len(final_mtp_patterns) == 0:
@@ -237,14 +239,14 @@ class MtpLayerStack(PreTrainedModel):
             for k in file_pointer.keys():
                 # It's one of the mtp weights
                 if k in mtp_weight_map.keys():
-                    # Rename dynamically to change the index of layers and add to state_dict
-                    renamed = re.sub(
-                        r"layers\.(\d+)\.", lambda m: f"layers.{int(m.group(1)) - num_hidden_layers}.mtp_block", k
-                    )
-                    mtp_state_dict[renamed] = file_pointer.get_slice(k)  # don't materialize yet
+                    mtp_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
 
         # For the correct conversions, we need first the mtp-specific renamings, then the main_model conversions
-        weight_conversions = get_model_conversion_mapping(mtp_model, add_legacy=False)
+        # Note that since the layer numbers are dynamic, we cannot register those conversions - we also add the `mtp_block`
+        # part for all weights since we cannot distinguish easily those that are under the main model's block or not. It will
+        # be removed after for the few that should not have it
+        weight_conversions = [WeightRenaming(source_patterns=f"layers.{N}.", target_patterns=f"layers.{N-num_hidden_layers}.mtp_block.") for N in range(num_hidden_layers, num_hidden_layers+num_mtp_layers)]
+        weight_conversions.extend(get_model_conversion_mapping(mtp_model, add_legacy=False))
         weight_conversions.extend(main_model._weight_conversions)
 
         # Load the weights
@@ -254,6 +256,8 @@ class MtpLayerStack(PreTrainedModel):
             load_config=LoadStateDictConfig(weight_mapping=weight_conversions, device_map=device_map),
             tp_plan=None,
         )
+        # Maybe remove the shared head/embedding from unexpected
+        mtp_model._adjust_missing_and_unexpected_keys(loading_info)
 
         # finally close all opened file pointers
         for k in all_pointer:
