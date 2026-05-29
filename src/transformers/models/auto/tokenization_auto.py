@@ -277,6 +277,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("qwen3_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_next", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_omni_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("hunyuan_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_vl_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("rag", "RagTokenizer"),

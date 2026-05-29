@@ -151,6 +151,7 @@ else:
             ("pp_chart2table", "PPChart2TableProcessor"),
             ("pp_formulanet", "PPFormulaNetProcessor"),
             ("qianfan_ocr", "QianfanOCRProcessor"),
+            ("hunyuan_vl", "HunYuanVLProcessor"),
             ("qwen2_5_omni", "Qwen2_5OmniProcessor"),
             ("qwen2_5_vl", "Qwen2_5_VLProcessor"),
             ("qwen2_audio", "Qwen2AudioProcessor"),
