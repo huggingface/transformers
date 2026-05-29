@@ -24,6 +24,7 @@ _import_structure = {
     "tensor_parallel": [
         "ALL_PARALLEL_STYLES",
         "apply_tensor_parallel",
+        "resolve_parallel_plan",
         "verify_tp_plan",
     ],
     "utils": [],
@@ -38,6 +39,7 @@ if TYPE_CHECKING:
     from .tensor_parallel import (
         ALL_PARALLEL_STYLES,
         apply_tensor_parallel,
+        resolve_parallel_plan,
         verify_tp_plan,
     )
 

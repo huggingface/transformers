@@ -39,9 +39,30 @@ model = AutoModelForCausalLM.from_pretrained(
 ```
 
 > [!TIP]
-> Expert parallelism automatically enables [tensor parallelism](./perf_infer_gpu_multi) for attention layers.
+> With `enable_expert_parallel=True`, Transformers **merges** the model's expert-parallel plan with the dense recipe: [tensor parallelism](./perf_infer_gpu_multi) for attention and shared MLP when `enable_sequence_parallel=False` (typical inference), or the model's sequence-parallel plan for dense layers when `enable_sequence_parallel=True` (typical training with FSDP).
 
-This argument switches to the `ep_plan` (expert parallel plan) defined in each MoE model's config file. The plan is declared at parameter granularity: the `grouped_gemm` style shards each expert weight (`gate_up_proj`, `down_proj`) along the expert dimension so every device loads only its local experts, the `ep_router` style routes tokens to those local experts, and `moe_experts_allreduce` combines the per-device outputs with an all-reduce. The same decomposition is used for tensor parallelism (`moe_tp_gate_up_colwise` / `moe_tp_down_rowwise` shard the expert weights within each expert instead of across experts), so weight sharding always lives in the config at parameter level while the experts module only declares forward communication.
+At load time, `resolve_parallel_plan` composes `base_model_sp_plan` or `base_model_tp_plan` with `base_model_ep_plan`. Expert weights use `grouped_gemm` (shard along the expert dimension), `ep_router` routes tokens to local experts, and `moe_experts_allreduce` combines partial outputs. For MoE without expert parallelism, `moe_tp_gate_up_colwise` / `moe_tp_down_rowwise` shard within each expert instead. Weight sharding is declared per parameter in the config; the experts module entry only configures forward communication.
+
+**Training (SP + EP + FSDP):**
+
+```py
+distributed_config = DistributedConfig(
+    tp_size=8,
+    fsdp_size=4,
+    enable_sequence_parallel=True,
+    enable_expert_parallel=True,
+)
+```
+
+**Inference (TP + EP):**
+
+```py
+distributed_config = DistributedConfig(
+    tp_size=8,
+    fsdp_size=1,
+    enable_expert_parallel=True,
+)
+```
 
 Launch your inference script with [torchrun](https://pytorch.org/docs/stable/elastic/run.html) and specify how many devices to use. The number of devices must evenly divide the total number of experts.
 
