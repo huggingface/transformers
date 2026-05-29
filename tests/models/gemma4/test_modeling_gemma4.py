@@ -904,3 +904,79 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
         eager_generated_text = tokenizer.decode(eager_outputs[0], skip_special_tokens=True)
         self.assertEqual(export_generated_text, eager_generated_text)
+
+
+@require_torch_accelerator
+class Gemma4VisionPoolerFloat16Test(unittest.TestCase):
+    """Regression test for the float16 overflow in the Gemma-4 vision pooler scaling.
+
+    ``Gemma4VisionModel`` scales the pooled vision features by ``sqrt(hidden_size)``. For the
+    high-magnitude activations produced by the larger Gemma-4 checkpoints, this product exceeds
+    the float16 maximum (65504) and saturates to ``inf``, which then turns the downstream logits
+    into ``NaN``. The scaling and the following standardize must be computed in float32. This
+    test forces that high-activation regime on a small config and checks that the float16 output
+    stays finite and matches the float32 result.
+    """
+
+    def _build_model_and_inputs(self):
+        from transformers.modeling_outputs import BaseModelOutput
+        from transformers.models.gemma4.configuration_gemma4 import Gemma4VisionConfig
+        from transformers.models.gemma4.modeling_gemma4 import Gemma4VisionModel
+
+        # A 4x4 patch grid pooled with a 2x2 kernel yields 4 slots, each a true average of 4
+        # patches, so the pooled magnitude equals the encoder activation (no inflation factor).
+        batch_size, grid_size, kernel = 2, 4, 2
+        num_patches = grid_size * grid_size
+        config = Gemma4VisionConfig(
+            image_size=num_patches,
+            patch_size=2,
+            num_channels=3,
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=1,
+            intermediate_size=37,
+            pooling_kernel_size=kernel,
+            standardize=True,
+        )
+        model = Gemma4VisionModel(config).to(torch_device).float().eval()
+        with torch.no_grad():
+            model.std_bias.fill_(6.0e4)  # representative magnitude, kept below the float16 max
+            model.std_scale.fill_(1.0e-3)
+
+        # Choose an encoder activation that is float16-representable but overflows float16 once
+        # multiplied by sqrt(hidden_size) in the pooler scaling (the regime large checkpoints hit).
+        float16_max = 65504.0
+        activation = 0.5 * float16_max
+        self.assertLess(activation, float16_max)  # the pooled value (== activation) is representable
+        self.assertGreater(activation * config.hidden_size**0.5, float16_max)  # the scaling overflows
+
+        class _LargeOutputEncoder(torch.nn.Module):
+            def forward(self, inputs_embeds, **kwargs):
+                return BaseModelOutput(last_hidden_state=torch.full_like(inputs_embeds, activation))
+
+        model.encoder = _LargeOutputEncoder()
+
+        # (x, y) patch positions on the 4x4 grid, so the 2x2 pooling averages complete blocks.
+        coords = torch.arange(grid_size, device=torch_device)
+        positions = torch.stack([coords.repeat(grid_size), coords.repeat_interleave(grid_size)], dim=-1)
+        pixel_position_ids = positions[None].repeat(batch_size, 1, 1)
+        pixel_values = torch.randn(
+            batch_size, num_patches, config.patch_size**2 * config.num_channels, device=torch_device
+        )
+        return model, pixel_values, pixel_position_ids
+
+    def test_pooler_float16_stays_finite_and_matches_float32(self):
+        model, pixel_values, pixel_position_ids = self._build_model_and_inputs()
+        with torch.no_grad():
+            reference = model(pixel_values=pixel_values, pixel_position_ids=pixel_position_ids).last_hidden_state
+
+        model = model.half()
+        with torch.no_grad():
+            output = model(pixel_values=pixel_values.half(), pixel_position_ids=pixel_position_ids).last_hidden_state
+
+        self.assertTrue(
+            torch.isfinite(output).all(),
+            "float16 vision output contains inf/NaN; the pooler scaling overflowed.",
+        )
+        torch.testing.assert_close(output.float(), reference, rtol=1e-2, atol=1e-1)
