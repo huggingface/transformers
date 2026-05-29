@@ -17,9 +17,6 @@ rendered properly in your Markdown viewer.
 
 # Granite Speech Plus
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -145,6 +142,11 @@ for k in range(NUM_SEGMENTS):
 ## GraniteSpeechPlusEncoderConfig
 
 [[autodoc]] GraniteSpeechPlusEncoderConfig
+
+## GraniteSpeechPlusModel
+
+[[autodoc]] GraniteSpeechPlusModel
+    - forward
 
 ## GraniteSpeechPlusForConditionalGeneration
 

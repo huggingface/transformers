@@ -25,7 +25,7 @@ CHECKER_CONFIG = {
     "label": "Config attributes",
     # Approximate: iterates CONFIG_MAPPING at runtime and also reads modeling_*.py files
     # in each config's directory via os.listdir(). Deprecated models are skipped.
-    "file_globs": ["src/transformers/models/**/configuration_*.py", "src/transformers/models/**/modeling_*.py"],
+    "cache_globs": ["src/transformers/models/**/configuration_*.py", "src/transformers/models/**/modeling_*.py"],
     "check_args": [],
     "fix_args": None,
 }
@@ -105,6 +105,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],
     "HiggsAudioV2Config": ["audio_bos_token", "audio_stream_bos_id", "audio_stream_eos_id"],
     "HiggsAudioV2TokenizerConfig": ["downsample_factor"],
+    "Cohere2MoeConfig": ["rope_scaling", "sliding_window_pattern"],
     "CsmConfig": ["tie_codebooks_embeddings"],
     "DeepseekV2Config": ["norm_topk_prob"],
     "DeepseekV4Config": [
@@ -173,9 +174,26 @@ SPECIAL_CASES_TO_ALLOW = {
     "GptOssConfig": True,
     "LwDetrConfig": True,
     "NemotronHConfig": True,
+    # RfDetr config attributes only used in loss code
+    "RfDetrConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "class_loss_coefficient",
+        "dice_loss_coefficient",
+        "eos_coefficient",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+        "mask_class_loss_coefficient",
+        "mask_dice_loss_coefficient",
+        "mask_loss_coefficient",
+        "mask_point_sample_ratio",
+    ],
     # Internally uses Got Ocr2 so no need to use in the modeling code as we remap in auto instead
     "PPChart2TableConfig": True,
     "PPChart2TableVisionConfig": True,
+    "GlmgaConfig": ["vision_config"],
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)

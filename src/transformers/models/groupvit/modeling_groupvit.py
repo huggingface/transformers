@@ -260,8 +260,8 @@ class GroupViTTokenAssign(nn.Module):
         return new_image_tokens, attention
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class GroupViTModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
