@@ -194,6 +194,7 @@ SPECIAL_CASES_TO_ALLOW = {
     # Internally uses Got Ocr2 so no need to use in the modeling code as we remap in auto instead
     "PPChart2TableConfig": True,
     "PPChart2TableVisionConfig": True,
+    "GlmgaConfig": ["vision_config"],
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)

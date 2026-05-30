@@ -171,6 +171,7 @@ if TYPE_CHECKING:
     from .glm_moe_dsa import *
     from .glm_ocr import *
     from .glmasr import *
+    from .glmga import *
     from .glpn import *
     from .got_ocr2 import *
     from .gpt2 import *
@@ -255,6 +256,7 @@ if TYPE_CHECKING:
     from .mbart50 import *
     from .megatron_bert import *
     from .megatron_gpt2 import *
+    from .mellum import *
     from .metaclip_2 import *
     from .mgp_str import *
     from .mimi import *
