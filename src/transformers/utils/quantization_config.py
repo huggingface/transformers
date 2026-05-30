@@ -1158,8 +1158,14 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             )
 
         if sparsity_config:
+            sparsity_config_format = sparsity_config.get("format")
+            # `format` is an untrusted config.json value used as a compressed_tensors registry name. A name
+            # containing ":" is resolved as a "<path>:<attr>" plugin spec and the file is imported and
+            # executed (arbitrary code execution, CWE-94), so reject it before the lookup.
+            if sparsity_config_format is not None and ":" in str(sparsity_config_format):
+                raise ValueError(f"Invalid sparsity_config format: {sparsity_config_format!r}")
             self.sparsity_config = SparsityCompressionConfig.load_from_registry(
-                sparsity_config.get("format"), **sparsity_config
+                sparsity_config_format, **sparsity_config
             )
 
         self.quant_method = QuantizationMethod.COMPRESSED_TENSORS
