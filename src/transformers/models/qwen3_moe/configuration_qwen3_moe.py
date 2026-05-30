@@ -76,13 +76,6 @@ class Qwen3MoeConfig(PreTrainedConfig):
         "layers.*.self_attn.q_norm": "activation_seq_dim_2",
         "layers.*.self_attn.k_norm": "activation_seq_dim_2",
         "layers.*.post_attention_layernorm": "activation",
-        "layers.*.mlp": "module_allgather_split",
-        "layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
-        "layers.*.mlp.experts.down_proj": "moe_tp_down_rowwise",
-        "layers.*.mlp.experts": "moe_experts_allreduce",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_reduce_scatter",
         "norm": "activation",
     }
     # Expert-only EP plan: only shards MoE experts, not attention.
@@ -139,6 +132,33 @@ class Qwen3MoeConfig(PreTrainedConfig):
         self.sliding_window = self.sliding_window if self.use_sliding_window else None
         self.mlp_only_layers = [] if self.mlp_only_layers is None else self.mlp_only_layers
         super().__post_init__(**kwargs)
+        self._update_sp_plan()
+
+    def _update_sp_plan(self):
+        self.base_model_sp_plan = self.base_model_sp_plan.copy()
+
+        is_moe_layer = lambda layer_idx: (layer_idx not in self.mlp_only_layers) and (
+            self.num_experts > 0 and (layer_idx + 1) % self.decoder_sparse_step == 0
+        )
+        for i in range(self.num_hidden_layers):
+            if is_moe_layer(i):
+                self.base_model_sp_plan.update(
+                    {
+                        f"layers.{i}.mlp": "module_allgather_split",
+                        f"layers.{i}.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
+                        f"layers.{i}.mlp.experts.down_proj": "moe_tp_down_rowwise",
+                        f"layers.{i}.mlp.experts": "moe_experts_allreduce",
+                    }
+                )
+            else:
+                self.base_model_sp_plan.update(
+                    {
+                        f"layers.{i}.mlp": "module_allgather",
+                        f"layers.{i}.mlp.gate_proj": "colwise",
+                        f"layers.{i}.mlp.up_proj": "colwise",
+                        f"layers.{i}.mlp.down_proj": "rowwise_reduce_scatter",
+                    }
+                )
 
 
 __all__ = ["Qwen3MoeConfig"]

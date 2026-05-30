@@ -545,6 +545,37 @@ class TensorParallelTesterMixin(ABC):
             return self.model_tester.causal_lm_class
         return self.all_model_classes[0]
 
+    def _assert_mixed_mlp_layers(self, model, config):
+        """If the config interleaves dense and sparse/MoE layers, fail fast unless the tiny test
+        model actually built both kinds.
+        """
+        layer_types = getattr(config, "mlp_layer_types", None)
+        if layer_types is not None:
+            # MoE marker is 'sparse' or 'moe' depending on the model; dense is always 'dense'.
+            intends_mixed = "dense" in layer_types and any(t != "dense" for t in layer_types)
+        else:
+            sparse_step = getattr(config, "decoder_sparse_step", 1) or 1
+            intends_mixed = sparse_step > 1 or bool(getattr(config, "mlp_only_layers", None))
+        if not intends_mixed:
+            return
+
+        kinds = {
+            "moe" if hasattr(module, "experts") else "dense"
+            for name, module in model.named_modules()
+            if name.endswith(".mlp")
+        }
+        # Empty means this model's feed-forward isn't named `.mlp` (e.g. `block_sparse_moe`); the
+        # structural check doesn't apply, so skip rather than spuriously fail its TP test.
+        if not kinds:
+            return
+        self.assertEqual(
+            kinds,
+            {"dense", "moe"},
+            f"{type(model).__name__}: config interleaves dense/MoE mlp layers but the tiny test config "
+            f"built only {kinds}. Adjust the model tester (num_hidden_layers / decoder_sparse_step / "
+            f"mlp_layer_types) so both kinds exist.",
+        )
+
     def _skip_if_not_supported(self):
         """Check and skip test if TP is not supported for this model/environment."""
         if not is_torch_greater_or_equal("2.9"):
@@ -606,6 +637,7 @@ class TensorParallelTesterMixin(ABC):
         with tempfile.TemporaryDirectory() as tmp_dir:
             set_seed(42)
             model = model_class(config)
+            self._assert_mixed_mlp_layers(model, config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
             _init_distributed(tp=self.tensor_parallel_size)(_test_tp_forward_impl)(tmp_dir, model_class, atol, rtol)
@@ -622,6 +654,7 @@ class TensorParallelTesterMixin(ABC):
         with tempfile.TemporaryDirectory() as tmp_dir:
             set_seed(42)
             model = model_class(config)
+            self._assert_mixed_mlp_layers(model, config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
             _init_distributed(tp=self.tensor_parallel_size)(_test_tp_backward_impl)(tmp_dir, model_class, atol, rtol)

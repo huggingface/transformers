@@ -63,6 +63,15 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     The `is_weight` is important because for weights, we want to support `.weights` and `.bias` cases seamlessly! but
     not parent classes for `post_init` calls
     """
+    # Try exact (indexed) keys before wildcard ones, so a per-layer override wins over a
+    # generic rule.
+    # e.g. for param "layers.0.mlp.experts.gate_up_proj", an indexed plan key
+    # "layers.0.mlp.experts.gate_up_proj" is matched here, before collapsing to the generic
+    # "layers.*.mlp.experts.gate_up_proj".
+    if parameter_name in tp_plan:
+        return tp_plan[parameter_name]
+    elif is_weight and "." in parameter_name and (module_name := parameter_name.rsplit(".", 1)[0]) in tp_plan:
+        return tp_plan[module_name]
     generic_param_name = replace_layer_number_by_wildcard(parameter_name)
     if generic_param_name in tp_plan:
         return tp_plan[generic_param_name]
