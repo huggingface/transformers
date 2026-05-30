@@ -70,21 +70,119 @@ def get_packed_grad_shard(grad, world_size, rank, dim):
     return grad.index_select(dim, torch.tensor(indices, device=grad.device))
 
 
+def _snapshot_threads(rank, traceback_dir):
+    """Snapshot all OS threads just before dist cleanup.
+
+    Writes thread IDs (decimal + hex), comm names, states, and wait channels to
+    rank_{rank}_threads.txt.  The hex IDs can then be matched against the thread
+    address printed by faulthandler after a crash to identify which C++ thread
+    (gloo transport loop, autograd worker, etc.) caused the abort.
+    """
+    import threading
+    import time
+
+    py_threads = {t.ident: t.name for t in threading.enumerate()}
+    lines = [f"t={time.monotonic():.3f}  pid={os.getpid()}"]
+    task_dir = "/proc/self/task"
+    if os.path.isdir(task_dir):
+        try:
+            tids = sorted(int(x) for x in os.listdir(task_dir))
+        except OSError:
+            tids = []
+        lines.append(f"OS threads={len(tids)}  Python threads={len(py_threads)}")
+        for tid in tids:
+            base = f"{task_dir}/{tid}"
+            comm = wchan = state = ""
+            try:
+                comm = open(f"{base}/comm").read().strip()  # noqa: SIM115
+            except OSError:
+                pass
+            try:
+                wchan = open(f"{base}/wchan").read().strip()  # noqa: SIM115
+            except OSError:
+                pass
+            try:
+                for line in open(f"{base}/status"):  # noqa: SIM115
+                    if line.startswith("State:"):
+                        state = line.split(":", 1)[1].strip()
+                        break
+            except OSError:
+                pass
+            py_tag = f" [Python:{py_threads[tid]}]" if tid in py_threads else ""
+            lines.append(f"  tid={tid} ({tid:#x}){py_tag} comm={comm!r} state={state} wchan={wchan}")
+    else:
+        lines.append("(/proc/self/task not available — not Linux)")
+
+    out = os.path.join(traceback_dir, f"rank_{rank}_threads.txt")
+    with open(out, "w") as f:
+        f.write("\n".join(lines) + "\n")
+        f.flush()
+
+
+def _install_sigabrt_handler(rank, traceback_dir):
+    """Override faulthandler's SIGABRT handler with a richer Python-level handler.
+
+    On SIGABRT the handler captures:
+      1. Full Python stack for every live Python thread (via sys._current_frames)
+      2. C-level backtrace of the *main thread* (via ctypes backtrace_symbols_fd)
+
+    Limitation: Python signal handlers always run in the main thread, so the
+    C backtrace is the main thread's stack, not the crashing C++ thread's.
+    Use the thread snapshot (rank_{rank}_threads.txt) + faulthandler hex thread
+    ID to identify which C++ thread crashed.
+
+    After writing diagnostics the handler re-raises SIGABRT with the default
+    handler so the process terminates normally.
+    """
+    import ctypes
+    import ctypes.util
+    import signal
+    import sys
+    import threading
+    import traceback as tb_module
+
+    def _handler(sig, frame):
+        out = os.path.join(traceback_dir, f"rank_{rank}_sigabrt.txt")
+        with open(out, "w") as f:
+            f.write("=== Python stacks (all threads) ===\n")
+            for tid, stack in sys._current_frames().items():
+                name = next((t.name for t in threading.enumerate() if t.ident == tid), "?")
+                f.write(f"\n--- tid={tid:#x} [{name}] ---\n")
+                f.write("".join(tb_module.format_stack(stack)))
+            f.flush()
+            f.write("\n=== C-level backtrace (main thread) ===\n")
+            f.flush()
+            try:
+                libc = ctypes.CDLL(ctypes.util.find_library("c"))
+                buf = (ctypes.c_void_p * 256)()
+                n = libc.backtrace(buf, 256)
+                libc.backtrace_symbols_fd(buf, n, f.fileno())
+            except Exception as ex:
+                f.write(f"(unavailable: {ex})\n")
+            f.flush()
+        signal.signal(signal.SIGABRT, signal.SIG_DFL)
+        os.kill(os.getpid(), signal.SIGABRT)
+
+    signal.signal(signal.SIGABRT, _handler)
+
+
 def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs, traceback_dir=None):
     """Wrapper to set up distributed environment and run the test function."""
     import faulthandler
     import sys
     import traceback as tb_module
 
-    # Write faulthandler output (C-level aborts: SIGABRT, SIGSEGV, etc.) to a
-    # per-rank file so the parent process can surface the exact Python stack.
-    # NOTE: tb_file is intentionally NOT closed early — it must remain open through
-    # dist.barrier() and dist.destroy_process_group() so that faulthandler can still
-    # write if gloo C++ destructors call abort() during cleanup.
+    # faulthandler handles SIGSEGV/SIGBUS/SIGILL/SIGFPE (captures Python frames of
+    # the crashing thread).  SIGABRT is overridden by _install_sigabrt_handler below
+    # for richer diagnostics (Python stacks of all threads + C backtrace of main thread).
+    # NOTE: tb_file is intentionally NOT closed early — it must stay open through
+    # dist.barrier() and dist.destroy_process_group() so faulthandler can still write
+    # if a C++ destructor calls abort() during cleanup.
     if traceback_dir is not None:
         tb_path = os.path.join(traceback_dir, f"rank_{rank}_faulthandler.txt")
         tb_file = open(tb_path, "w")  # noqa: SIM115  — kept open until process exit
         faulthandler.enable(file=tb_file, all_threads=True)
+        _install_sigabrt_handler(rank, traceback_dir)
 
         def _crumb(msg):
             """Write a timestamped breadcrumb so we know which step crashed."""
@@ -109,6 +207,13 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs, trace
     world_size = tp
     setup_dist_env(rank, world_size, port)
 
+    try:
+        import torch as _torch
+
+        _crumb(f"torch={_torch.__version__}")
+    except Exception:
+        pass
+
     _crumb("init_process_group:start")
     dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
     _crumb("init_process_group:done")
@@ -127,6 +232,11 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs, trace
                 f.write(exc_text)
         _crumb("func:exception_raised")
         raise
+
+    # Snapshot all OS threads before dist teardown so the crashing-thread hex ID
+    # from faulthandler / SIGABRT handler can be resolved to a C++ thread name.
+    if traceback_dir is not None:
+        _snapshot_threads(rank, traceback_dir)
 
     _crumb("barrier:start")
     dist.barrier()
@@ -156,43 +266,23 @@ def _init_distributed(tp: int, max_retries: int = 5, backend: str = "gloo"):
                     except ProcessExitedException as e:
                         if "EADDRINUSE" in str(e) and attempt < max_retries - 1:
                             continue
-                        # Check breadcrumbs first: if every rank completed
-                        # destroy_process_group, the test logic itself succeeded and the
-                        # signal was raised by a C++ background thread during process exit
-                        # (a known gloo/PyTorch shutdown race).  Treat it as a pass.
-                        all_done = all(
-                            os.path.exists(os.path.join(tb_dir, f"rank_{r}_breadcrumb.txt"))
-                            and "destroy_process_group:done"
-                            in open(os.path.join(tb_dir, f"rank_{r}_breadcrumb.txt")).read()
-                            for r in range(world_size)
-                        )
-                        if all_done:
-                            import warnings
-
-                            warnings.warn(
-                                f"Spawned process received {e.signal_name} after "
-                                "destroy_process_group:done on all ranks — treating as "
-                                "a pass (gloo C++ shutdown race, not a test logic failure).",
-                                stacklevel=2,
-                            )
-                            return
                         traces = []
                         for r in range(world_size):
-                            # Breadcrumb: always show last known step even when no exception
                             crumb_path = os.path.join(tb_dir, f"rank_{r}_breadcrumb.txt")
                             if os.path.exists(crumb_path):
                                 with open(crumb_path) as f:
-                                    crumb = f.read().strip()
-                                traces.append(f"[Rank {r} last known steps]\n{crumb}")
+                                    traces.append(f"[Rank {r} breadcrumb]\n{f.read().strip()}")
                             for suffix, label in (
                                 ("_exception.txt", "Python exception"),
-                                ("_faulthandler.txt", "C-level traceback (faulthandler)"),
+                                ("_threads.txt", "Thread snapshot (before dist cleanup)"),
+                                ("_sigabrt.txt", "SIGABRT handler (Python stacks + main-thread C backtrace)"),
+                                ("_faulthandler.txt", "faulthandler (non-SIGABRT signals)"),
                             ):
                                 path = os.path.join(tb_dir, f"rank_{r}{suffix}")
                                 if os.path.exists(path):
                                     with open(path) as f:
                                         content = f.read().strip()
-                                    body = content or "(file exists but is empty — crash likely in a C++ thread with no Python frames at that point)"
+                                    body = content or "(file exists but is empty)"
                                     traces.append(f"[Rank {r} {label}]\n{body}")
                         trace_block = ("\n\n" + "\n\n".join(traces)) if traces else " (no files captured — check stderr)"
                         raise RuntimeError(
