@@ -14,11 +14,13 @@
 
 import inspect
 import unittest
+from unittest.mock import MagicMock
 
 import numpy as np
 
 from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_vision_available
+from transformers.video_utils import VideoMetadata
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
@@ -176,6 +178,77 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip("qwen3_vl can't sample frames from image frames directly, user can use `qwen-vl-utils`")
     def test_apply_chat_template_video_2(self):
         pass
+
+    def test_replace_video_token_uses_video_token_attr(self):
+        """
+        Regression test for https://github.com/huggingface/transformers/issues/XXXXX.
+
+        `replace_video_token` must expand each frame using `self.video_token`, not the
+        hardcoded string `"<|placeholder|>"`.  When Qwen3VLProcessor is used with a
+        model whose tokenizer names its video pad token differently (e.g. Qwen3.5 uses
+        `<|video_pad|>`), the hardcoded string produces zero matches against
+        `config.video_token_id`, causing the forward-pass check
+        "Video features and video tokens do not match, tokens: 0, features: N" to raise.
+        """
+        if not is_vision_available():
+            self.skipTest("vision not available")
+
+        # Build a minimal processor without downloading weights.
+        video_token = "<|video_pad|>"
+        vision_start_token = "<|vision_start|>"
+        vision_end_token = "<|vision_end|>"
+
+        mock_tokenizer = MagicMock()
+        mock_tokenizer.video_token = video_token
+        mock_tokenizer.video_token_id = 999
+        mock_tokenizer.image_token = "<|image_pad|>"
+        mock_tokenizer.image_token_id = 998
+        mock_tokenizer.vision_start_token = vision_start_token
+        mock_tokenizer.vision_start_token_id = 997
+        mock_tokenizer.vision_end_token = vision_end_token
+        mock_tokenizer.vision_end_token_id = 996
+        mock_tokenizer.init_kwargs = {}
+
+        mock_video_processor = MagicMock()
+        mock_video_processor.merge_size = 2
+        mock_video_processor.temporal_patch_size = 2
+
+        mock_image_processor = MagicMock()
+
+        processor = Qwen3VLProcessor(
+            image_processor=mock_image_processor,
+            tokenizer=mock_tokenizer,
+            video_processor=mock_video_processor,
+        )
+
+        # Simulate processed video output: 2 frames, each with a 4-token spatial grid.
+        # video_grid_thw = (num_frames=2, H=2, W=2) → frame_seqlen = 2*2 / merge_size**2 = 1
+        import torch
+
+        video_grid_thw = [torch.tensor([2, 2, 2])]
+        metadata = VideoMetadata(
+            total_num_frames=4,
+            fps=2.0,
+            frames_indices=[0, 2],
+        )
+        video_inputs = {
+            "video_grid_thw": video_grid_thw,
+            "video_metadata": [metadata],
+        }
+
+        result = processor.replace_video_token(video_inputs, video_idx=0)
+
+        # The result must contain `self.video_token` (i.e. "<|video_pad|>"), never the
+        # hardcoded string "<|placeholder|>".
+        self.assertIn(video_token, result, "replace_video_token must use self.video_token")
+        self.assertNotIn(
+            "<|placeholder|>",
+            result,
+            "replace_video_token must not hardcode '<|placeholder|>' — use self.video_token instead",
+        )
+        # Sanity-check structure: vision_start and vision_end tokens appear once per frame.
+        self.assertEqual(result.count(vision_start_token), 2)
+        self.assertEqual(result.count(vision_end_token), 2)
 
     @require_av
     def test_apply_chat_template_video_frame_sampling(self):
