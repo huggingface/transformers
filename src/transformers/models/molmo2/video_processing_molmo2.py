@@ -88,20 +88,27 @@ def build_resized_image(
     image_std: list[float],
     image_patch_size: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    input_dtype = image_chw.dtype
     chw_resized = backend.resize(
         image_chw,
         size=SizeDict(height=base_image_input_size[0], width=base_image_input_size[1]),
         resample=resample,
         antialias=False,
     )
-    chw_normalized = backend.rescale_and_normalize(
-        chw_resized,
-        do_rescale=do_rescale,
-        rescale_factor=rescale_factor,
-        do_normalize=do_normalize,
-        image_mean=image_mean,
-        image_std=image_std,
-    )
+    if torch.is_floating_point(image_chw):
+        chw_resized = torch.clip(chw_resized, 0.0, 1.0).to(input_dtype)
+    else:
+        if image_chw.dtype != torch.uint8:
+            raise TypeError(f"Molmo2 expects float images or uint8 images, but got {image_chw.dtype}")
+        chw_resized = torch.clip(chw_resized, 0, 255).to(input_dtype)
+
+    chw_normalized = chw_resized.to(torch.float32)
+    if do_rescale and input_dtype == torch.uint8:
+        chw_normalized = chw_normalized / (1.0 / rescale_factor)
+    if do_normalize:
+        mean = chw_normalized.new_tensor(image_mean)[:, None, None]
+        std = chw_normalized.new_tensor(image_std)[:, None, None]
+        chw_normalized = (chw_normalized - mean) / std
     resized = chw_normalized.permute(1, 2, 0).unsqueeze(0)
     crop_patch_w = base_image_input_size[1] // image_patch_size
     crop_patch_h = base_image_input_size[0] // image_patch_size

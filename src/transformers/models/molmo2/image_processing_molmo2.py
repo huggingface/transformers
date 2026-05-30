@@ -130,7 +130,7 @@ def resize_and_normalize_image(
 
     resized = resized.to(torch.float32)
     if do_rescale and input_dtype == torch.uint8:
-        resized = resized * rescale_factor
+        resized = resized / (1.0 / rescale_factor)
     if do_normalize:
         mean = resized.new_tensor(image_mean)[:, None, None]
         std = resized.new_tensor(image_std)[:, None, None]
