@@ -70,16 +70,21 @@ def get_packed_grad_shard(grad, world_size, rank, dim):
     return grad.index_select(dim, torch.tensor(indices, device=grad.device))
 
 
-def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
+def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs, traceback_dir=None):
     """Wrapper to set up distributed environment and run the test function."""
     import faulthandler
     import sys
-    import traceback
+    import traceback as tb_module
 
-    # Enable faulthandler so that C-level aborts (SIGABRT, SIGSEGV, etc.) dump
-    # the Python stack trace to stderr before the process dies, making it
-    # possible to locate the exact line that triggered the crash.
-    faulthandler.enable(file=sys.stderr, all_threads=True)
+    # Write faulthandler output (C-level aborts: SIGABRT, SIGSEGV, etc.) to a
+    # per-rank file so the parent process can surface the exact Python stack.
+    tb_file = None
+    if traceback_dir is not None:
+        tb_path = os.path.join(traceback_dir, f"rank_{rank}_faulthandler.txt")
+        tb_file = open(tb_path, "w")
+        faulthandler.enable(file=tb_file, all_threads=True)
+    else:
+        faulthandler.enable(file=sys.stderr, all_threads=True)
 
     def setup_dist_env(rank, world_size, port):
         os.environ["WORLD_SIZE"] = str(world_size)
@@ -96,10 +101,18 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
     try:
         func(rank, *func_args, **func_kwargs)
     except Exception:
-        print(f"\n[Rank {rank}] Exception in spawned process:", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
+        exc_text = tb_module.format_exc()
+        print(f"\n[Rank {rank}] Exception in spawned process:\n{exc_text}", file=sys.stderr)
         sys.stderr.flush()
+        if traceback_dir is not None:
+            exc_path = os.path.join(traceback_dir, f"rank_{rank}_exception.txt")
+            with open(exc_path, "w") as f:
+                f.write(exc_text)
         raise
+    finally:
+        if tb_file is not None:
+            tb_file.flush()
+            tb_file.close()
 
     dist.barrier()
     dist.destroy_process_group()
@@ -113,22 +126,33 @@ def _init_distributed(tp: int, max_retries: int = 5, backend: str = "gloo"):
             world_size = tp
             for attempt in range(max_retries):
                 port = _find_free_port()
-                spawn_args = (func, tp, port, backend, args, kwargs)
-                try:
-                    mp.spawn(_global_wrapper, args=spawn_args, nprocs=world_size)
-                    return
-                except ProcessRaisedException as e:
-                    if "EADDRINUSE" in str(e) and attempt < max_retries - 1:
-                        continue
-                    raise
-                except ProcessExitedException as e:
-                    if "EADDRINUSE" in str(e) and attempt < max_retries - 1:
-                        continue
-                    raise RuntimeError(
-                        f"Spawned process terminated with a signal ({e}). "
-                        "This usually means a C-level abort (e.g. assertion in PyTorch/NCCL). "
-                        "Check stderr above for the Python traceback printed by _global_wrapper."
-                    ) from e
+                with tempfile.TemporaryDirectory() as tb_dir:
+                    spawn_args = (func, tp, port, backend, args, kwargs, tb_dir)
+                    try:
+                        mp.spawn(_global_wrapper, args=spawn_args, nprocs=world_size)
+                        return
+                    except ProcessRaisedException as e:
+                        if "EADDRINUSE" in str(e) and attempt < max_retries - 1:
+                            continue
+                        raise
+                    except ProcessExitedException as e:
+                        if "EADDRINUSE" in str(e) and attempt < max_retries - 1:
+                            continue
+                        traces = []
+                        for r in range(world_size):
+                            for suffix in ("_exception.txt", "_faulthandler.txt"):
+                                path = os.path.join(tb_dir, f"rank_{r}{suffix}")
+                                if os.path.exists(path):
+                                    with open(path) as f:
+                                        content = f.read().strip()
+                                    if content:
+                                        label = "Python exception" if suffix == "_exception.txt" else "C-level traceback (faulthandler)"
+                                        traces.append(f"[Rank {r} {label}]\n{content}")
+                        trace_block = ("\n\n" + "\n\n".join(traces)) if traces else " (no traceback captured — check stderr)"
+                        raise RuntimeError(
+                            f"Spawned process terminated with a signal ({e}).\n"
+                            f"Captured tracebacks:{trace_block}"
+                        ) from e
 
         return wrapper
 
