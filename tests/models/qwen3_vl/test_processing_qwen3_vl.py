@@ -181,7 +181,7 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_replace_video_token_uses_video_token_attr(self):
         """
-        Regression test for https://github.com/huggingface/transformers/issues/XXXXX.
+        Regression test for https://github.com/huggingface/transformers/issues/46294.
 
         `replace_video_token` must expand each frame using `self.video_token`, not the
         hardcoded string `"<|placeholder|>"`.  When Qwen3VLProcessor is used with a
@@ -193,38 +193,25 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if not is_vision_available():
             self.skipTest("vision not available")
 
-        # Build a minimal processor without downloading weights.
+        import torch
+
         video_token = "<|video_pad|>"
         vision_start_token = "<|vision_start|>"
         vision_end_token = "<|vision_end|>"
 
-        mock_tokenizer = MagicMock()
-        mock_tokenizer.video_token = video_token
-        mock_tokenizer.video_token_id = 999
-        mock_tokenizer.image_token = "<|image_pad|>"
-        mock_tokenizer.image_token_id = 998
-        mock_tokenizer.vision_start_token = vision_start_token
-        mock_tokenizer.vision_start_token_id = 997
-        mock_tokenizer.vision_end_token = vision_end_token
-        mock_tokenizer.vision_end_token_id = 996
-        mock_tokenizer.init_kwargs = {}
-
+        # Bypass ProcessorMixin.__init__ (which does hard isinstance checks on each
+        # sub-processor) and set only the four attributes that replace_video_token reads.
+        processor = object.__new__(Qwen3VLProcessor)
+        processor.video_token = video_token
+        processor.vision_start_token = vision_start_token
+        processor.vision_end_token = vision_end_token
         mock_video_processor = MagicMock()
         mock_video_processor.merge_size = 2
         mock_video_processor.temporal_patch_size = 2
-
-        mock_image_processor = MagicMock()
-
-        processor = Qwen3VLProcessor(
-            image_processor=mock_image_processor,
-            tokenizer=mock_tokenizer,
-            video_processor=mock_video_processor,
-        )
+        processor.video_processor = mock_video_processor
 
         # Simulate processed video output: 2 frames, each with a 4-token spatial grid.
         # video_grid_thw = (num_frames=2, H=2, W=2) → frame_seqlen = 2*2 / merge_size**2 = 1
-        import torch
-
         video_grid_thw = [torch.tensor([2, 2, 2])]
         metadata = VideoMetadata(
             total_num_frames=4,
