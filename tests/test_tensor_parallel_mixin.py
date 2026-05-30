@@ -78,13 +78,26 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs, trace
 
     # Write faulthandler output (C-level aborts: SIGABRT, SIGSEGV, etc.) to a
     # per-rank file so the parent process can surface the exact Python stack.
-    tb_file = None
+    # NOTE: tb_file is intentionally NOT closed early — it must remain open through
+    # dist.barrier() and dist.destroy_process_group() so that faulthandler can still
+    # write if gloo C++ destructors call abort() during cleanup.
     if traceback_dir is not None:
         tb_path = os.path.join(traceback_dir, f"rank_{rank}_faulthandler.txt")
-        tb_file = open(tb_path, "w")
+        tb_file = open(tb_path, "w")  # noqa: SIM115  — kept open until process exit
         faulthandler.enable(file=tb_file, all_threads=True)
+
+        def _crumb(msg):
+            """Write a timestamped breadcrumb so we know which step crashed."""
+            import time
+
+            with open(os.path.join(traceback_dir, f"rank_{rank}_breadcrumb.txt"), "a") as _f:
+                _f.write(f"{time.monotonic():.3f} {msg}\n")
+                _f.flush()
     else:
         faulthandler.enable(file=sys.stderr, all_threads=True)
+
+        def _crumb(msg):
+            pass
 
     def setup_dist_env(rank, world_size, port):
         os.environ["WORLD_SIZE"] = str(world_size)
@@ -96,10 +109,14 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs, trace
     world_size = tp
     setup_dist_env(rank, world_size, port)
 
+    _crumb("init_process_group:start")
     dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
+    _crumb("init_process_group:done")
 
     try:
+        _crumb("func:start")
         func(rank, *func_args, **func_kwargs)
+        _crumb("func:done")
     except Exception:
         exc_text = tb_module.format_exc()
         print(f"\n[Rank {rank}] Exception in spawned process:\n{exc_text}", file=sys.stderr)
@@ -108,14 +125,15 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs, trace
             exc_path = os.path.join(traceback_dir, f"rank_{rank}_exception.txt")
             with open(exc_path, "w") as f:
                 f.write(exc_text)
+        _crumb("func:exception_raised")
         raise
-    finally:
-        if tb_file is not None:
-            tb_file.flush()
-            tb_file.close()
 
+    _crumb("barrier:start")
     dist.barrier()
+    _crumb("barrier:done")
+    _crumb("destroy_process_group:start")
     dist.destroy_process_group()
+    _crumb("destroy_process_group:done")
 
 
 def _init_distributed(tp: int, max_retries: int = 5, backend: str = "gloo"):
@@ -140,15 +158,23 @@ def _init_distributed(tp: int, max_retries: int = 5, backend: str = "gloo"):
                             continue
                         traces = []
                         for r in range(world_size):
-                            for suffix in ("_exception.txt", "_faulthandler.txt"):
+                            # Breadcrumb: always show last known step even when no exception
+                            crumb_path = os.path.join(tb_dir, f"rank_{r}_breadcrumb.txt")
+                            if os.path.exists(crumb_path):
+                                with open(crumb_path) as f:
+                                    crumb = f.read().strip()
+                                traces.append(f"[Rank {r} last known steps]\n{crumb}")
+                            for suffix, label in (
+                                ("_exception.txt", "Python exception"),
+                                ("_faulthandler.txt", "C-level traceback (faulthandler)"),
+                            ):
                                 path = os.path.join(tb_dir, f"rank_{r}{suffix}")
                                 if os.path.exists(path):
                                     with open(path) as f:
                                         content = f.read().strip()
-                                    if content:
-                                        label = "Python exception" if suffix == "_exception.txt" else "C-level traceback (faulthandler)"
-                                        traces.append(f"[Rank {r} {label}]\n{content}")
-                        trace_block = ("\n\n" + "\n\n".join(traces)) if traces else " (no traceback captured — check stderr)"
+                                    body = content or "(file exists but is empty — crash likely in a C++ thread with no Python frames at that point)"
+                                    traces.append(f"[Rank {r} {label}]\n{body}")
+                        trace_block = ("\n\n" + "\n\n".join(traces)) if traces else " (no files captured — check stderr)"
                         raise RuntimeError(
                             f"Spawned process terminated with a signal ({e}).\n"
                             f"Captured tracebacks:{trace_block}"
