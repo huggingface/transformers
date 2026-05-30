@@ -103,6 +103,41 @@ def arange_for_pooling(
     )
 
 
+def resize_and_normalize_image(
+    backend: "TorchvisionBackend",
+    image_chw: torch.Tensor,
+    output_size: list[int],
+    resample: PILImageResampling,
+    do_rescale: bool,
+    rescale_factor: float,
+    do_normalize: bool,
+    image_mean: list[float],
+    image_std: list[float],
+) -> torch.Tensor:
+    input_dtype = image_chw.dtype
+    resized = backend.resize(
+        image_chw,
+        size=SizeDict(height=output_size[0], width=output_size[1]),
+        resample=resample,
+        antialias=False,
+    )
+    if torch.is_floating_point(image_chw):
+        resized = torch.clip(resized, 0.0, 1.0).to(input_dtype)
+    else:
+        if image_chw.dtype != torch.uint8:
+            raise TypeError(f"Molmo2 expects float images or uint8 images, but got {image_chw.dtype}")
+        resized = torch.clip(resized, 0, 255).to(input_dtype)
+
+    resized = resized.to(torch.float32)
+    if do_rescale and input_dtype == torch.uint8:
+        resized = resized * rescale_factor
+    if do_normalize:
+        mean = resized.new_tensor(image_mean)[:, None, None]
+        std = resized.new_tensor(image_std)[:, None, None]
+        resized = (resized - mean) / std
+    return resized
+
+
 def build_resized_image(
     backend: "TorchvisionBackend",
     image_chw: torch.Tensor,
@@ -115,23 +150,18 @@ def build_resized_image(
     image_std: list[float],
     image_patch_size: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    if image_chw.dtype == torch.uint8:
-        image_chw = image_chw.to(torch.float32)
-    chw_resized = backend.resize(
+    chw_resized = resize_and_normalize_image(
+        backend,
         image_chw,
-        size=SizeDict(height=base_image_input_size[0], width=base_image_input_size[1]),
-        resample=resample,
-        antialias=False,
-    )
-    chw_normalized = backend.rescale_and_normalize(
-        chw_resized,
+        base_image_input_size,
+        resample,
         do_rescale=do_rescale,
         rescale_factor=rescale_factor,
         do_normalize=do_normalize,
         image_mean=image_mean,
         image_std=image_std,
     )
-    resized = chw_normalized.permute(1, 2, 0).unsqueeze(0)
+    resized = chw_resized.permute(1, 2, 0).unsqueeze(0)
     crop_patch_w = base_image_input_size[1] // image_patch_size
     crop_patch_h = base_image_input_size[0] // image_patch_size
     resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(crop_patch_h, crop_patch_w)
@@ -187,11 +217,11 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         src_h = tiling_h * window_size + margin_size
         src_w = tiling_w * window_size + margin_size
 
-        if image_chw.dtype == torch.uint8:
-            image_chw = image_chw.to(torch.float32)
-        src = self.resize(image_chw, size=SizeDict(height=src_h, width=src_w), resample=resample, antialias=False)
-        src = self.rescale_and_normalize(
-            src,
+        src = resize_and_normalize_image(
+            self,
+            image_chw,
+            [src_h, src_w],
+            resample,
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_normalize=do_normalize,

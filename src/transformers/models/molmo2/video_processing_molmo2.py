@@ -88,8 +88,6 @@ def build_resized_image(
     image_std: list[float],
     image_patch_size: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    if image_chw.dtype == torch.uint8:
-        image_chw = image_chw.to(torch.float32)
     chw_resized = backend.resize(
         image_chw,
         size=SizeDict(height=base_image_input_size[0], width=base_image_input_size[1]),
