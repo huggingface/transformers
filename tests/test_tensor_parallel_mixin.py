@@ -13,6 +13,7 @@
 import os
 import socket
 import tempfile
+import unittest
 from abc import ABC, abstractmethod
 
 from transformers import TorchAoConfig, set_seed
@@ -33,7 +34,7 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
     import torch.multiprocessing as mp
-    from torch.multiprocessing.spawn import ProcessRaisedException
+    from torch.multiprocessing.spawn import ProcessExitedException, ProcessRaisedException
 
 
 def _find_free_port():
@@ -71,6 +72,14 @@ def get_packed_grad_shard(grad, world_size, rank, dim):
 
 def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
     """Wrapper to set up distributed environment and run the test function."""
+    import faulthandler
+    import sys
+    import traceback
+
+    # Enable faulthandler so that C-level aborts (SIGABRT, SIGSEGV, etc.) dump
+    # the Python stack trace to stderr before the process dies, making it
+    # possible to locate the exact line that triggered the crash.
+    faulthandler.enable(file=sys.stderr, all_threads=True)
 
     def setup_dist_env(rank, world_size, port):
         os.environ["WORLD_SIZE"] = str(world_size)
@@ -84,7 +93,13 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
 
     dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
 
-    func(rank, *func_args, **func_kwargs)
+    try:
+        func(rank, *func_args, **func_kwargs)
+    except Exception:
+        print(f"\n[Rank {rank}] Exception in spawned process:", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+        raise
 
     dist.barrier()
     dist.destroy_process_group()
@@ -106,6 +121,14 @@ def _init_distributed(tp: int, max_retries: int = 5, backend: str = "gloo"):
                     if "EADDRINUSE" in str(e) and attempt < max_retries - 1:
                         continue
                     raise
+                except ProcessExitedException as e:
+                    if "EADDRINUSE" in str(e) and attempt < max_retries - 1:
+                        continue
+                    raise RuntimeError(
+                        f"Spawned process terminated with a signal ({e}). "
+                        "This usually means a C-level abort (e.g. assertion in PyTorch/NCCL). "
+                        "Check stderr above for the Python traceback printed by _global_wrapper."
+                    ) from e
 
         return wrapper
 
@@ -533,7 +556,11 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_backward_impl)(tmp_dir, model_class, atol, rtol)
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+
+            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_backward_impl)(
+                tmp_dir, model_class, atol, rtol
+            )
 
     @is_tensor_parallel_test
     def test_tp_generation(self):
@@ -551,6 +578,7 @@ class TensorParallelTesterMixin(ABC):
             set_seed(42)
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
             _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_impl)(
                 tmp_dir, model_class, atol, rtol, max_new_tokens
             )
