@@ -60,6 +60,26 @@ logger = logging.get_logger(__name__)
 
 
 def create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
+    """
+    Fill a pre-allocated embedding tensor with sinusoidal positional encodings,
+    with DeepSpeed ZeRO-3 support.
+
+    Sinusoidal embeddings encode each position using alternating sine and cosine
+    functions at geometrically spaced frequencies, as described in
+    *Attention Is All You Need* (Vaswani et al., 2017).
+
+    Args:
+        n_pos (`int`):
+            Number of positions to generate embeddings for (i.e. the maximum
+            sequence length).
+        dim (`int`):
+            Embedding dimension. Should be even so that sine and cosine values
+            alternate across the full dimension.
+        out (`torch.Tensor`):
+            Pre-allocated output tensor of shape `(n_pos, dim)` that will be
+            filled **in-place** with sinusoidal values. Gradient tracking is
+            disabled on this tensor before writing.
+    """
     if is_deepspeed_zero3_enabled():
         import deepspeed
 
@@ -71,6 +91,20 @@ def create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
 
 
 def _create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
+    """
+    Internal implementation of sinusoidal positional embedding generation,
+    without DeepSpeed ZeRO-3 handling.
+
+    Fills `out` in-place using the formula from *Attention Is All You Need*:
+
+    - ``out[pos, 2i]   = sin(pos / 10000 ** (2i / dim))``
+    - ``out[pos, 2i+1] = cos(pos / 10000 ** (2i / dim))``
+
+    Args:
+        n_pos (`int`): Number of positions (maximum sequence length).
+        dim (`int`): Embedding dimension.
+        out (`torch.Tensor`): Tensor of shape `(n_pos, dim)` to fill in-place.
+    """
     position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
     out.requires_grad = False
     out[:, 0::2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
