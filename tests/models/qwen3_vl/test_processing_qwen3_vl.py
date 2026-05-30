@@ -210,13 +210,15 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         mock_video_processor.temporal_patch_size = 2
         processor.video_processor = mock_video_processor
 
-        # Simulate processed video output: 2 frames, each with a 4-token spatial grid.
+        # Simulate processed video output: 2 temporal patches, spatial grid 2×2.
         # video_grid_thw = (num_frames=2, H=2, W=2) → frame_seqlen = 2*2 / merge_size**2 = 1
+        # temporal_patch_size=2 means each temporal patch covers 2 raw frames, so
+        # 2 patches × 2 frames = 4 raw frame indices → _calculate_timestamps returns 2 timestamps.
         video_grid_thw = [torch.tensor([2, 2, 2])]
         metadata = VideoMetadata(
             total_num_frames=4,
             fps=2.0,
-            frames_indices=[0, 2],
+            frames_indices=[0, 1, 2, 3],
         )
         video_inputs = {
             "video_grid_thw": video_grid_thw,
