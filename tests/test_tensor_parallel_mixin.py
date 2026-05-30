@@ -173,6 +173,17 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs, trace
     except Exception:
         pass
 
+    if traceback_dir is not None and rank == 0:
+        try:
+            from torch.utils.collect_env import get_pretty_env_info
+
+            env_path = os.path.join(traceback_dir, "rank_0_collect_env.txt")
+            with open(env_path, "w") as f:
+                f.write(get_pretty_env_info())
+                f.flush()
+        except Exception:
+            pass
+
     _crumb("init_process_group:start")
     dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
     _crumb("init_process_group:done")
@@ -226,6 +237,10 @@ def _init_distributed(tp: int, max_retries: int = 5, backend: str = "gloo"):
                         if "EADDRINUSE" in str(e) and attempt < max_retries - 1:
                             continue
                         traces = []
+                        collect_env_path = os.path.join(tb_dir, "rank_0_collect_env.txt")
+                        if os.path.exists(collect_env_path):
+                            with open(collect_env_path) as f:
+                                traces.append(f"[PyTorch collect_env (rank 0)]\n{f.read().strip()}")
                         for r in range(world_size):
                             crumb_path = os.path.join(tb_dir, f"rank_{r}_breadcrumb.txt")
                             if os.path.exists(crumb_path):
