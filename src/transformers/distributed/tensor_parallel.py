@@ -581,60 +581,60 @@ PARAM_ONLY_STYLES = frozenset(
     }
 )
 
-MOE_TP_PARAM_STYLES = frozenset({"moe_tp_gate_up_colwise", "moe_tp_down_rowwise"})
-
-
-def _merge_plans(base: dict[str, str], overlay: dict[str, str]) -> dict[str, str]:
-    """Merge parallel plans; overlay entries win on duplicate keys."""
-    merged = dict(base)
-    merged.update(overlay)
-    return merged
-
-
-def _strip_moe_tp_when_ep(plan: dict[str, str], enable_ep: bool) -> dict[str, str]:
-    if not enable_ep:
-        return plan
-    return {
-        key: style
-        for key, style in plan.items()
-        if not (key.endswith((".gate_up_proj", ".down_proj")) and style in MOE_TP_PARAM_STYLES)
+SEQUENCE_PARALLEL_STYLES = frozenset(
+    {
+        "vocab_reduce_scatter",
+        "rowwise_reduce_scatter",
+        "module_allgather_split",
+        "module_allgather_hidden_states",
+        "activation",
+        "activation_seq_dim_2",
     }
+)
 
 
-def resolve_parallel_plan(model, distributed_config) -> dict[str, str]:
-    """Compose SP/TP dense recipe with optional EP MoE overlay.
-
-    When ``distributed_config.tp_plan`` is set, it is returned as-is. Otherwise the
-    base plan is ``_sp_plan`` if sequence parallelism is requested and the config defines
-    ``base_model_sp_plan``, else ``_tp_plan``. Expert-parallel entries from ``_ep_plan``
-    are merged on top when ``enable_expert_parallel``; EP wins on key conflicts and any
-    leftover intra-expert ``moe_tp_*`` entries are stripped.
+def resolve_parallel_plan(
+    model, user_tp_plan: dict[str, str] | None, enable_sp: bool, enable_ep: bool
+) -> dict[str, str]:
     """
-    if distributed_config is None:
-        return dict(getattr(model, "_tp_plan", None) or {})
+    Resolve the parallel plan to apply, given enable_sequence_parallel and enable_expert_parallel.
 
-    if distributed_config.tp_plan is not None:
-        return dict(distributed_config.tp_plan)
+    user_tp_plan is an explicit override (DistributedConfig.tp_plan); when provided it
+    replaces the dense base recipe (_tp_plan / _sp_plan). _ep_plan is still overlaid
+    when EP is on. When user_tp_plan is None the base is resolved from the model defaults:
+        - user_tp_plan != None  -> user_tp_plan (∪ _ep_plan if EP)
+        - SP=true,  EP=false    -> _sp_plan
+        - SP=false, EP=true     -> _tp_plan ∪ _ep_plan (inference TP+EP)
+        - SP=true,  EP=true     -> _sp_plan ∪ _ep_plan (training SP+EP)
+        - SP=false, EP=false    -> _tp_plan (experts keep moe_tp_*)
+    """
 
-    enable_sp = bool(
-        getattr(distributed_config, "enable_sequence_parallel", False)
-        and getattr(model.config, "base_model_sp_plan", None) is not None
-    )
-    enable_ep = bool(getattr(distributed_config, "enable_expert_parallel", False))
-
-    if enable_sp:
-        base = dict(getattr(model, "_sp_plan", None) or {})
-    else:
-        base = dict(getattr(model, "_tp_plan", None) or {})
+    if user_tp_plan is not None:  # either TP or SP
+        base = dict(user_tp_plan)
+    elif enable_sp:  # take default base_sp_plan
+        base = dict(getattr(model, "_sp_plan", None) or {})  # training plan
+    else:  # take default base_tp_plan
+        base = dict(getattr(model, "_tp_plan", None) or {})  # inference plan
 
     if enable_ep:
-        base = _merge_plans(base, dict(getattr(model, "_ep_plan", None) or {}))
+        base = {**base, **dict(getattr(model, "_ep_plan", None) or {})}
+        # Strip moe_tp_* for TP experts when EP is enabled
+        base = {
+            key: style
+            for key, style in base.items()
+            if not (
+                key.endswith((".gate_up_proj", ".down_proj"))
+                and style in ("moe_tp_gate_up_colwise", "moe_tp_down_rowwise")
+            )
+        }
+    return base
 
-    return _strip_moe_tp_when_ep(base, enable_ep)
 
-
-def apply_tensor_parallel(model, tp_mesh, tp_plan):
+def apply_tensor_parallel(model, tp_mesh):
     """Apply tensor parallelism in two passes, looking each style up by string name.
+
+    Plan resolution: Merging the three plans (SP, TP, EP) into a single plan
+    (see `resolve_parallel_plan`).
 
     Pass 1 (param-level): walk ``model.named_parameters()`` and, for keys whose plan
     style is in ``PARAM_ONLY_STYLES`` (e.g. MoE expert weights), shard the parameter
@@ -645,13 +645,32 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
     Linear sharding). Param sharding runs first so module forward hooks (e.g.
     ``moe_experts_allreduce``) see already-sharded DTensor params.
     """
-    distributed_config = getattr(model.config, "distributed_config", None)
-    sp_requested = getattr(distributed_config, "enable_sequence_parallel", False)
-    sp_supported = getattr(model.config, "base_model_sp_plan", None) is not None
-    enable_sp = sp_requested and sp_supported
+    enable_sp = bool(
+        getattr(model.config.distributed_config, "enable_sequence_parallel", False)
+        and getattr(model.config, "base_model_sp_plan", None) is not None
+    )
+    enable_ep = bool(
+        getattr(model.config.distributed_config, "enable_expert_parallel", False)
+        and getattr(model.config, "base_model_ep_plan", None) is not None
+    )
 
-    if tp_plan is None:
-        tp_plan = resolve_parallel_plan(model, distributed_config)
+    # case when enable_sequence_parallel=True and tp_plan!=None (but tp_plan has no sequence parallel styles keys) raise an error
+    user_tp_plan = model.config.distributed_config.tp_plan
+    if (
+        enable_sp
+        and user_tp_plan is not None  # user provided tp_plan manually
+        and not any(style in SEQUENCE_PARALLEL_STYLES for style in user_tp_plan.values())
+    ):
+        raise ValueError(
+            "enable_sequence_parallel=True but the provided tp_plan shards no sequence dimension "
+            f"(none of {sorted(SEQUENCE_PARALLEL_STYLES)}). Provide a sequence-parallel plan "
+            "(e.g. 'vocab_reduce_scatter' on the embedding) or set enable_sequence_parallel=False. "
+            f"tp_plan: {user_tp_plan}"
+        )
+
+    tp_plan = resolve_parallel_plan(model, user_tp_plan, enable_sp=enable_sp, enable_ep=enable_ep)
+    logger.info(f"TP plan has been resolved: {tp_plan}")
+    model.tp_plan = tp_plan
 
     # tie_weights() replaces lm_head.weight with embed_tokens.weight after TP is applied.
     # If embed_tokens isn't in the plan, sharding lm_head as a DTensor causes tie to

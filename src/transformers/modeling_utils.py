@@ -57,7 +57,6 @@ from .distributed.fsdp import is_fsdp_enabled
 from .distributed.sharding_utils import _dtensor_from_local_like
 from .distributed.tensor_parallel import (
     _get_parameter_tp_plan,
-    resolve_parallel_plan,
     verify_tp_plan,
 )
 from .distributed.utils import (
@@ -1471,9 +1470,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         The full tp plan for the model's modules
         """
-        distributed_config = getattr(self.config, "distributed_config", None)
-        if distributed_config is not None:
-            return resolve_parallel_plan(self, distributed_config)
+        #TODO(3outeille): should we resolve the plan here as well or rely on set attribute after resolving in apply_tensor_parallel?
         return self._tp_plan
 
     @property
@@ -4353,18 +4350,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # `apply_tensor_parallel` see the shared-parameter graph and can route tied
             # entries (e.g. `lm_head` -> `embed_tokens`) correctly. `_finalize_model_loading`
             # re-runs `tie_weights` after the checkpoint is loaded to handle missing-key edge cases.
+            #TODO(3outeille): there is 3 times calls of tie_weight (once here, once in apply_fully_shard_data_parallel, once at the end of from_pretrained)
             model.tie_weights()
             model = distribute_model(model, distributed_config, device_mesh)
         elif device_map is not None:
             # Expand device_map if it was passed as a `str`, i.e. `device_map="auto"`
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
 
-        # Finalize model weight initialization
-        active_tp_plan = (
-            resolve_parallel_plan(model, distributed_config)
-            if distributed_config is not None and getattr(distributed_config, "tp_size", None) is not None
-            else None
-        )
         load_config = LoadStateDictConfig(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             ignore_mismatched_sizes=ignore_mismatched_sizes,
@@ -4376,7 +4368,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             dtype_plan=dtype_plan,
             hf_quantizer=hf_quantizer,
             device_mesh=device_mesh,
-            tp_plan=active_tp_plan,
+            tp_plan=model.tp_plan, #TODO: why only tp_plan and model.fsdp_plan as well ? 
             weights_only=weights_only,
             weight_mapping=weight_conversions,
             use_safetensors=use_safetensors,
