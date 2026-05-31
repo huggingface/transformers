@@ -93,6 +93,9 @@ else:
         "PrefillFirstScheduler",
         "Scheduler",
     ]
+    _import_structure["activations"] = [
+        "GenerationActivations",
+    ]
     _import_structure["utils"] = [
         "GenerationMixin",
         "GenerateBeamDecoderOnlyOutput",
@@ -127,6 +130,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
+        from .activations import GenerationActivations
         from .candidate_generator import (
             AssistedCandidateGenerator,
             CandidateGenerator,

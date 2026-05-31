@@ -280,3 +280,8 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 
 [[autodoc]] CompileConfig
     - __call__
+
+## GenerationActivations
+
+[[autodoc]] generation.GenerationActivations
+    - all
