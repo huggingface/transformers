@@ -431,6 +431,8 @@ class Mamba2Mixer(nn.Module):
         use_precomputed_states = (
             cache_params is not None and cache_params.has_previous_state(self.layer_idx) and seq_len == 1
         )
+        # Snapshot before any cache
+        has_previous_state = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
         # 2. Convolution sequence transformation
         if use_precomputed_states:
@@ -443,7 +445,7 @@ class Mamba2Mixer(nn.Module):
                 hidden_states_B_C = hidden_states_B_C + self.conv1d.bias
             hidden_states_B_C = self.act(hidden_states_B_C)
         else:
-            if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
+            if has_previous_state:
                 hidden_states_B_C = torch.cat(
                     [cache_params.layers[self.layer_idx].conv_states[:, :, 1:], hidden_states_B_C], dim=-1
                 )
@@ -455,7 +457,7 @@ class Mamba2Mixer(nn.Module):
                 cache_params.update_conv_state(conv_states, layer_idx=self.layer_idx)
 
             hidden_states_B_C = self.act(self.conv1d(hidden_states_B_C)[..., :hidden_states_B_C.shape[-1]].transpose(1, 2))
-            if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
+            if has_previous_state:
                 hidden_states_B_C = hidden_states_B_C[:, -seq_len:, :]
 
         hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
@@ -572,7 +574,7 @@ class Mamba2Mixer(nn.Module):
             # (middle term of factorization of off-diag blocks; A terms)
             previous_states = (
                 cache_params.layers[self.layer_idx].recurrent_states[:, None].to(dtype=states.dtype, device=states.device)
-                if cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+                if has_previous_state
                 else torch.zeros_like(states[:, :1])
             )
             states = torch.cat([previous_states, states], dim=1)
