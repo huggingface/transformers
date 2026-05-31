@@ -73,37 +73,7 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     return None
 
 
-# =============================================================================
-# Style protocol
-# =============================================================================
-
-
 class TensorParallelLayer:
-    """Base class for DTensor-based TP styles. Configs/modeling files reference these by name.
-
-    The DTensor-era successor to the legacy hook-based TensorParallelLayer in
-    integrations/tensor_parallel.py. Every registry entry exposes the same two
-    optional concerns; the dispatcher routes by plan-key granularity:
-
-      - shard_param(module, param, mesh) — invoked for *parameter*-keyed plan
-        entries (one call per matching param). Wraps the param as a DTensor placeholder.
-        Runs on meta — distribute_tensor builds metadata only, no collective.
-      - install_forward(module, mesh) — invoked for *module*-keyed plan entries.
-        Installs forward comm by replacing module.forward with
-        transform_inputs_pre_forward → original forward → transform_output_post_forward,
-        run inside context_around_forward (a context manager — used by the MoE /
-        packed-linear styles to swap DTensor params for plain local leaves around fused ops).
-
-    A style is a *weight-sharder* iff it overrides shard_param — verify_tp_plan uses
-    that fact (an identity check against the base shard_param) to tell weight rules from
-    forward-only ones (MoE comm, EP router, prepare-input), which leave it as the no-op default.
-
-    Override what you need:
-      - shard_param(module, param, mesh) — wrap one param as a DTensor placeholder
-      - transform_inputs_pre_forward(module, args, kwargs, mesh) → (args, kwargs)
-      - context_around_forward(module) → context manager wrapping the call
-      - transform_output_post_forward(module, output, mesh) → output
-    """
 
     def shard_param(self, module, param, mesh):
         """Wrap ONE parameter as a DTensor placeholder. Default: no-op."""
@@ -130,12 +100,6 @@ class TensorParallelLayer:
 
         module.forward = tp_forward
         return module
-
-
-# =============================================================================
-# High-Level API Functions
-# =============================================================================
-
 
 def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
     """
@@ -270,12 +234,6 @@ class RowwiseParallel(TensorParallelLayer):
 
 
 class SequenceParallel(TensorParallelLayer):
-    """Replicate (ones-init) norm params; run the module with activations sharded on the seq dim.
-
-    Param replication happens in install_forward (not shard_param) — SP is a
-    module-keyed forward style, not a weight-sharder, so verify_tp_plan treats it as
-    forward-only (it does not override shard_param).
-    """
 
     def __init__(self, *, sequence_dim: int = 1, use_local_output: bool = True):
         self.sequence_dim = sequence_dim
@@ -309,10 +267,6 @@ class SequenceParallel(TensorParallelLayer):
 
 class PrepareModuleInputOutput(TensorParallelLayer):
     """Allgather input (Shard(1) → Replicate) + local split output (Replicate → Shard(1)).
-
-    Used for MoE blocks with SP: the input sequence is gathered before routing,
-    and the output (after expert allreduce) is split back to match the residual.
-    Forward output split is a local op (no comm). Backward creates the all-gather.
     """
 
     def __init__(self, use_local_output=True):
@@ -333,11 +287,6 @@ class PrepareModuleInputOutput(TensorParallelLayer):
 
 class PrepareModuleInput(TensorParallelLayer):
     """Allgather a module input (default input_layout → desired_layout, then to-local).
-
-    Forward-only prepare-input for block modules (e.g. an MoE block under SP): converts the
-    incoming tensor to a DTensor, redistributes to the desired layout, and (by default)
-    returns a plain local tensor for downstream modeling code. If input_kwarg is set the
-    transform acts on that keyword argument; otherwise it acts on the first positional arg.
     """
 
     def __init__(self, *, input_kwarg=None, input_layout=None, desired_layout=None, use_local_output=True):
@@ -497,18 +446,11 @@ class PackedColwiseParallel(TensorParallelLayer):
 
 
 class MoEParamShard(TensorParallelLayer):
-    """Parameter-only TP/EP style for MoE expert weights — sharding, no forward hook.
+    """Param-only TP/EP style for MoE expert weights: shard the named 3D params as DTensor
+    placeholders; the matching forward comm is a separate moe_experts_allreduce entry.
 
-    Wraps the named 3D expert parameters (gate_up_proj / down_proj and their
-    biases) as DTensor placeholders with the configured placement. The matching forward
-    communication is declared *separately* in the plan via moe_experts_allreduce on
-    the experts *module*. This is the param-granularity decomposition: weight sharding
-    lives in configs at parameter level, module entries are forward-comm only.
-
-    shards_expert_dim is set for the EP grouped_gemm style, which shards dim 0
-    (the expert dimension). When True, module.num_experts is updated to the per-rank
-    local count so the experts forward (histc / clamp / sentinel masking) and the
-    ep_router sentinel index agree.
+    shards_expert_dim (EP grouped_gemm) shards dim 0 and updates module.num_experts to the
+    per-rank local count, so the experts forward and ep_router sentinel agree.
     """
 
     def __init__(self, placement, *, shards_expert_dim: bool = False):
