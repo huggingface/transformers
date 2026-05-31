@@ -42,10 +42,8 @@ except ImportError:
 if TYPE_CHECKING:
     try:
         from ..tokenization_utils_base import PreTrainedTokenizerBase
-        from ..utils import ModelOutput
     except ImportError:
         PreTrainedTokenizerBase = None  # type: ignore[assignment,misc]
-        ModelOutput = None  # type: ignore[assignment,misc]
 
 logger = _hf_logging.get_logger(__name__) if _hf_logging is not None else _logging.getLogger(__name__)
 
@@ -121,7 +119,7 @@ class GenerationActivations:
     @classmethod
     def from_generate_output(
         cls,
-        gen_output: ModelOutput,
+        gen_output: Any,
         tokenizer: PreTrainedTokenizerBase | None = None,
         *,
         input_ids: torch.LongTensor | None = None,
