@@ -21,7 +21,7 @@ Fusion mapping oferă o modalitate opțională de a înlocui sub-modulele modelu
 Se bazează pe:
 
 - [Monkey patching](./monkey_patching) pentru a schimba clasele de module înainte de instanțierea modelului.
-- [Încărcarea dinamică de weights](./weightconverter) pentru a mapa weights între layout-urile de runtime original și fuzionat.
+- [Încărcarea dinamică de weights](./weightconverter) pentru a mapa weights între layout-ul de rulare original și cel fuzionat.
 
 > [!WARNING]
 > Fusion mapping este o funcție experimentală de încărcare. Schimbă structura modulelor la rulare și poți afecta comportamentul modelului. Folosește-o doar când dorești explicit un layout de rulare fuzionat.
@@ -77,7 +77,7 @@ Notă: Cu mecanismul actual de monkey-patching, înregistrarea fusion este la ni
 Pentru a adăuga o nouă familie de fusion:
 
 1. Adaugă un predicat `is_fusable`.
-   Acesta decide dacă un modul descoperit este compatibil cu fusion-ul.
+   Acesta determină dacă un modul descoperit este compatibil cu fusion-ul.
 2. Adaugă opțional `target_modules_patterns`.
    Aceasta face pasul de descoperire mai explicit prin pre-filtrarea numelor modulelor candidate înainte de `is_fusable(...)`.
 3. Adaugă un factory `make_fused_class`.
