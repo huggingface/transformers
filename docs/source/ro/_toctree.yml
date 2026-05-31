@@ -6,7 +6,7 @@
   - local: quicktour
     title: Pornire rapidă
   title: Începe
-  - isExpanded: true
+- isExpanded: true
   sections:
   - isExpanded: false
     sections:
@@ -22,3 +22,5 @@
       title: Fusion mapping
     - local: how_to_hack_models
       title: Personalizarea componentelor modelului
+    - local: model_sharing
+      title: Distribuire
