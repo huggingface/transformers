@@ -24,3 +24,5 @@
       title: Personalizarea componentelor modelului
     - local: model_sharing
       title: Distribuire
+    - local: serialization
+      title: Exportarea pentru producție
