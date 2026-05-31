@@ -833,6 +833,11 @@ else:
         # Also map XImageProcessorFast -> XImageProcessor for backward compat with old class names.
         def getattr_factory(target):
             def _getattr(name):
+                # Only names ending in "Fast" are genuine class aliases; arbitrary
+                # attribute probing (e.g. introspection by third-party libraries) must
+                # not emit a deprecation warning or trigger a spurious import.
+                if not name.endswith("Fast"):
+                    raise AttributeError(f"module {target!r} has no attribute {name!r}")
                 new_name = name.removesuffix("Fast")
                 logger.warning(
                     "Accessing `%s` from `%s`. Returning `%s` instead. Behavior may be "
