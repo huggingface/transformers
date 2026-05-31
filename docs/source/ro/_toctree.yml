@@ -26,3 +26,15 @@
       title: Distribuire
     - local: serialization
       title: Exportarea pentru producție
+    - isExpanded: false
+      sections:
+      - local: contributing
+        title: Contribuie la Transformers
+      - local: modular_transformers
+        title: Adaugă un model cu modular transformers
+      - local: multimodal_processing
+        title: Procesatoare multimodale
+      - local: add_vision_processing_components
+        title: Componente de procesare vizuală
+      - local: add_audio_processing_components
+        title: Componente de procesare audio
