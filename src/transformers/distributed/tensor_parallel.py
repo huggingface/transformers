@@ -501,13 +501,13 @@ class MoEExpertsParallel(TensorParallelLayer):
     def __init__(self, output_layouts=None):
         self.output_layouts = output_layouts or Replicate()
 
-    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
         hidden_states, top_k_index, top_k_weights = args
         tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
         if not isinstance(hidden_states, DTensor):
             hidden_states = DTensor.from_local(hidden_states, mesh, [Replicate()], run_check=False)
         hidden_states = hidden_states.to_local()
-        if _is_expert_parallel_enabled(module):
+        if is_expert_parallel:
             # Under EP each rank computes only its local experts' contribution from the
             # same replicated hidden_states. Sum those local input gradients in backward
             # before propagating to upstream replicated layers.
@@ -520,10 +520,25 @@ class MoEExpertsParallel(TensorParallelLayer):
         # is already sliced per-rank by `ep_router` (non-local scores zeroed), so each
         # rank's routing weights are independent — skip the all-reduce to avoid
         # double-counting the gradient.
-        if not _is_expert_parallel_enabled(module):
+        if not is_expert_parallel:
             top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
 
         return (hidden_states, top_k_index, top_k_weights), kwargs
+
+    def install_forward(self, module, mesh, *, is_expert_parallel=False):
+        """Install pre / around / post transforms; ``is_expert_parallel`` is baked into the closure."""
+        original_forward = module.forward
+
+        def tp_forward(*args, **kwargs):
+            args, kwargs = self.transform_inputs_pre_forward(
+                module, args, kwargs, mesh, is_expert_parallel=is_expert_parallel
+            )
+            with self.context_around_forward(module):
+                output = original_forward(*args, **kwargs)
+            return self.transform_output_post_forward(module, output, mesh)
+
+        module.forward = tp_forward
+        return module
 
     def context_around_forward(self, module):
         return _swap_dtensor_params_for_local(module)
@@ -547,18 +562,6 @@ class MoEExpertsParallel(TensorParallelLayer):
         if output.placements != (target,):
             output = output.redistribute(placements=(target,))
         return output.to_local()
-
-
-# TOOD(3outeille): is there a workaround ?
-def _is_expert_parallel_enabled(module) -> bool:
-    """Whether the model owning module was loaded with expert parallelism enabled."""
-    # MoE expert modules typically do not carry `config`; apply_tensor_parallel stamps
-    # `_expert_parallel_enabled` when installing `moe_experts_allreduce` under EP.
-    if getattr(module, "_expert_parallel_enabled", False):
-        return True
-    config = getattr(module, "config", None)
-    dist_config = getattr(config, "distributed_config", None)
-    return bool(getattr(dist_config, "enable_expert_parallel", False))
 
 
 class EpRouterParallel(TensorParallelLayer):
@@ -707,11 +710,8 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
         # Install forward hooks for modules as needed by the plan.
         style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=tp_plan, is_weight=False)
         if style_name is not None and style_name in ALL_PARALLEL_STYLES:
-            # Expert modules carry no `config`; stamp the EP flag so MoEExpertsParallel's
-            # backward (routing-weight all-reduce) can detect EP via _is_expert_parallel_enabled.
-            if style_name == "moe_experts_allreduce" and enable_ep:
-                module._expert_parallel_enabled = True
-            ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
+            is_expert_parallel = style_name == "moe_experts_allreduce"
+            ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh, is_expert_parallel=is_expert_parallel)
 
     # Under SP, inputs_embeds is sequence-sharded after embed_tokens, so
     # auto-generated position_ids would use the wrong (local) seq_len.

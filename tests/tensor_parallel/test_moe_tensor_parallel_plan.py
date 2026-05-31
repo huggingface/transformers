@@ -48,7 +48,6 @@ if is_torch_available():
         ALL_PARALLEL_STYLES,
         TensorParallelLayer,
         _get_parameter_tp_plan,
-        _is_expert_parallel_enabled,
         apply_tensor_parallel,
     )
 
@@ -253,22 +252,25 @@ def _tp_param_shard_impl(rank, world_size):
     assert experts.num_experts == 4, experts.num_experts
 
 
-def _ep_expert_parallel_flag_impl(rank, world_size):
-    set_seed(0)
+def _ep_routing_weight_grad_no_allreduce_impl(rank, world_size):
     mesh = init_device_mesh("cpu", (world_size,), mesh_dim_names=("tp",))
-    model = TinyMoEModel(num_experts=4, hidden=8, intermediate=16)
+    model = TinyInputGradModel()
     model.config.distributed_config = type(
         "DistributedConfig",
         (),
         {"enable_expert_parallel": True, "enable_sequence_parallel": False, "tp_size": world_size},
     )()
-    apply_tensor_parallel(model, mesh, dict(EP_PLAN))
+    apply_tensor_parallel(model, mesh, {"layers.*.experts": "moe_experts_allreduce"})
 
-    # Expert modules carry no `config`; apply_tensor_parallel must stamp the flag so the
-    # MoEExpertsParallel backward detects EP (Bug 1 — skips the wrong routing-weight allreduce).
-    experts = model.layers[0].experts
-    assert getattr(experts, "_expert_parallel_enabled", False), "EP flag not stamped on experts module"
-    assert _is_expert_parallel_enabled(experts), "EP not detected on experts module without config"
+    hidden_states = torch.tensor([[1.0]])
+    top_k_index = torch.zeros((1, 1), dtype=torch.long)
+    top_k_weights = torch.ones((1, 1), requires_grad=True)
+
+    output = model.layers[0].experts(hidden_states, top_k_index, top_k_weights)
+    output.sum().backward()
+    # d(output)/d(top_k_weights) = hidden * weight[0] = 2.0 locally; under EP the closure
+    # skips routing-weight all-reduce, so grad stays 2.0 rather than world_size * 2.0.
+    torch.testing.assert_close(top_k_weights.grad, torch.tensor([[2.0]]))
 
 
 def _ep_hidden_states_grad_allreduce_impl(rank, world_size):
@@ -416,9 +418,9 @@ class TestMoEDistributedApply(unittest.TestCase):
         _init_distributed(tp=self.world_size)(_ep_router_impl)(self.world_size)
 
     @is_tensor_parallel_test
-    def test_ep_stamps_expert_parallel_flag_on_experts_module(self):
+    def test_ep_skips_routing_weight_grad_allreduce(self):
         self._skip_if_unsupported()
-        _init_distributed(tp=self.world_size)(_ep_expert_parallel_flag_impl)(self.world_size)
+        _init_distributed(tp=self.world_size)(_ep_routing_weight_grad_no_allreduce_impl)(self.world_size)
 
     @is_tensor_parallel_test
     def test_ep_allreduces_hidden_states_gradient_across_local_experts(self):
