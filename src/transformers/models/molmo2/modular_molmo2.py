@@ -902,20 +902,33 @@ class Molmo2GQAAttention(nn.Module):
             if self.config._attn_implementation == "sdpa" and not torch.is_autocast_enabled():
                 value_states = value_states.float()
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
+        dropout = 0.0 if not self.training else self.attention_dropout
+        if self.config._attn_implementation == "eager":
+            key_states = repeat_kv(key_states, self.num_key_value_groups)
+            value_states = repeat_kv(value_states, self.num_key_value_groups)
+            attn_weights = torch.matmul(query_states / math.sqrt(query_states.size(-1)), key_states.transpose(2, 3))
+            if attention_mask is not None:
+                attn_weights = attn_weights + attention_mask
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            is_causal=self.is_causal,
-            scaling=self.scaling,
-            dropout=0.0 if not self.training else self.attention_dropout,
-        )
+            attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+            attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=self.training)
+            attn_output = torch.matmul(attn_weights.to(value_states.dtype), value_states)
+            attn_output = attn_output.transpose(1, 2).contiguous()
+        else:
+            attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+                self.config._attn_implementation, eager_attention_forward
+            )
+
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask,
+                is_causal=self.is_causal,
+                scaling=self.scaling,
+                dropout=dropout,
+            )
 
         attn_output = attn_output.to(target_dtype)
         attn_output = attn_output.reshape(batch_size, -1, self.num_heads * self.head_dim).contiguous()
