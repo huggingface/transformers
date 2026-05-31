@@ -908,15 +908,17 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
         )
 
 
-def get_block_sequence_ids_for_mask(token_type_ids: torch.Tensor, device: torch.device | None = None) -> torch.Tensor:
-    # First find where a new image block starts: 1 if image and previous not image
-    # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
-    is_image = (token_type_ids == 1).to(device=device)
-    is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
-    new_image_start = is_image & ~is_previous_image
-    group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
-    block_sequence_ids = torch.where(is_image, group_ids, -1)
-    return block_sequence_ids
+def token_type_ids_mask_function(token_type_ids: torch.Tensor | None = None) -> Callable | None:
+    if token_type_ids is None:
+        return None
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        safe_idx = torch.where(kv_idx < token_type_ids.shape[1], kv_idx, 0)
+        token_type_ids_at_kv_idx = token_type_ids[batch_idx, safe_idx]
+        token_type_ids_at_kv_idx = torch.where(kv_idx < token_type_ids.shape[1], token_type_ids_at_kv_idx, 0)
+        return (token_type_ids[batch_idx, q_idx] == 1) & (token_type_ids_at_kv_idx == 1)
+
+    return inner_mask
 
 
 def create_causal_mask_mapping(
@@ -932,8 +934,8 @@ def create_causal_mask_mapping(
     **kwargs,
 ) -> dict:
     """
-    Create the causal mask mapping for Molmo2 forward passes. Multimodal spans use bidirectional attention within
-    each contiguous image/video group.
+    Create the causal mask mapping for Molmo2 forward passes. Multimodal patch tokens use bidirectional attention
+    within the visual region.
     """
     if is_training and mm_token_type_ids is None:
         raise ValueError("`mm_token_type_ids` is required as a model input when training")
@@ -952,9 +954,7 @@ def create_causal_mask_mapping(
         else (past_key_values is None or not past_key_values.is_initialized or has_multimodal_inputs)
     )
     if mm_token_type_ids is not None and is_first_iteration:
-        mask_kwargs["block_sequence_ids"] = get_block_sequence_ids_for_mask(
-            mm_token_type_ids, device=inputs_embeds.device
-        )
+        mask_kwargs["or_mask_function"] = token_type_ids_mask_function(mm_token_type_ids.to(inputs_embeds.device))
 
     return create_causal_mask(**mask_kwargs)
 
@@ -1308,9 +1308,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             "position_ids": position_ids,
         }
         if mm_token_type_ids is not None and inputs_embeds.shape[1] != 1:
-            mask_kwargs["block_sequence_ids"] = get_block_sequence_ids_for_mask(
-                mm_token_type_ids, device=inputs_embeds.device
-            )
+            mask_kwargs["or_mask_function"] = token_type_ids_mask_function(mm_token_type_ids.to(inputs_embeds.device))
 
         return create_masks_for_generate(**mask_kwargs)
 

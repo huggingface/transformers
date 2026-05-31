@@ -54,7 +54,6 @@ from ...utils import (
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata
-from ..gemma3.modeling_gemma3 import get_block_sequence_ids_for_mask
 from ..llama.modeling_llama import (
     LlamaPreTrainedModel,
     LlamaRMSNorm,
@@ -1467,6 +1466,19 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
         )
 
 
+def token_type_ids_mask_function(token_type_ids: torch.Tensor | None = None) -> Callable | None:
+    if token_type_ids is None:
+        return None
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        safe_idx = torch.where(kv_idx < token_type_ids.shape[1], kv_idx, 0)
+        token_type_ids_at_kv_idx = token_type_ids[batch_idx, safe_idx]
+        token_type_ids_at_kv_idx = torch.where(kv_idx < token_type_ids.shape[1], token_type_ids_at_kv_idx, 0)
+        return (token_type_ids[batch_idx, q_idx] == 1) & (token_type_ids_at_kv_idx == 1)
+
+    return inner_mask
+
+
 def create_causal_mask_mapping(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -1480,8 +1492,8 @@ def create_causal_mask_mapping(
     **kwargs,
 ) -> dict:
     """
-    Create the causal mask mapping for Molmo2 forward passes. Multimodal spans use bidirectional attention within
-    each contiguous image/video group.
+    Create the causal mask mapping for Molmo2 forward passes. Multimodal patch tokens use bidirectional attention
+    within the visual region.
     """
     if is_training and mm_token_type_ids is None:
         raise ValueError("`mm_token_type_ids` is required as a model input when training")
@@ -1500,9 +1512,7 @@ def create_causal_mask_mapping(
         else (past_key_values is None or not past_key_values.is_initialized or has_multimodal_inputs)
     )
     if mm_token_type_ids is not None and is_first_iteration:
-        mask_kwargs["block_sequence_ids"] = get_block_sequence_ids_for_mask(
-            mm_token_type_ids, device=inputs_embeds.device
-        )
+        mask_kwargs["or_mask_function"] = token_type_ids_mask_function(mm_token_type_ids.to(inputs_embeds.device))
 
     return create_causal_mask(**mask_kwargs)
 
@@ -1856,9 +1866,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             "position_ids": position_ids,
         }
         if mm_token_type_ids is not None and inputs_embeds.shape[1] != 1:
-            mask_kwargs["block_sequence_ids"] = get_block_sequence_ids_for_mask(
-                mm_token_type_ids, device=inputs_embeds.device
-            )
+            mask_kwargs["or_mask_function"] = token_type_ids_mask_function(mm_token_type_ids.to(inputs_embeds.device))
 
         return create_masks_for_generate(**mask_kwargs)
 
