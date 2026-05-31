@@ -307,7 +307,7 @@ class CircleCIJob:
 torch_job = CircleCIJob(
     "torch",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
-    marker="not generate",
+    marker="not (generate or is_training_test or is_tensor_parallel_test)",
     parallelism=6,
 )
 
