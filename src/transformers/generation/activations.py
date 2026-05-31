@@ -372,6 +372,42 @@ class GenerationActivations:
 
     # ── Utility methods ────────────────────────────────────────────────────
 
+    def layer(self, index: int) -> torch.FloatTensor:
+        """``[total_len, hidden_dim]`` at a single layer index.
+
+        When batched, shape is ``[batch_size, total_len, hidden_dim]``.
+        """
+        if self.batch_size:
+            return self.hidden_states[:, index, :, :]
+        return self.hidden_states[index]
+
+    @property
+    def last_layer(self) -> torch.FloatTensor:
+        """``[total_len, hidden_dim]`` at the final transformer layer.
+
+        When batched, shape is ``[batch_size, total_len, hidden_dim]``.
+        """
+        return self.layer(self.num_layers - 1)
+
+    @property
+    def last_token(self) -> torch.FloatTensor:
+        """``[num_layers, hidden_dim]`` at the final token position.
+
+        When batched, shape is ``[batch_size, num_layers, hidden_dim]``.
+        """
+        if self.batch_size:
+            return self.hidden_states[:, :, -1, :]
+        return self.hidden_states[:, -1, :]
+
+    def mean_pool_tokens(self) -> torch.FloatTensor:
+        """``[num_layers, hidden_dim]`` mean-pooled across the token axis.
+
+        When batched, shape is ``[batch_size, num_layers, hidden_dim]``.
+        """
+        if self.batch_size:
+            return self.hidden_states.mean(dim=2)
+        return self.hidden_states.mean(dim=1)
+
     def pool_layers(self, target_layers: int) -> torch.FloatTensor:
         """Adaptive-average-pool the layer axis to a fixed grid size.
 
