@@ -15,4 +15,6 @@
     - local: models
       title: Încărcarea modelelor
     - local: custom_models
-      title: Personalizarea modelelor 
+      title: Personalizarea modelelor
+    - local: monkey_patching
+      title: Monkey patching 
