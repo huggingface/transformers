@@ -386,10 +386,19 @@ class Molmo2VisionBackbone(PreTrainedModel):
         self.post_init()
 
     def encode_image(self, images: torch.Tensor) -> torch.Tensor:
+        image_shape = None
+        if images.dim() == 4:
+            image_shape = images.shape[:3]
+            images = images.reshape(-1, images.shape[-2], images.shape[-1])
+
         image_outputs = self.image_vit(images, output_hidden_states=True)
         image_features = image_outputs.hidden_states
         features = [image_features[layer + 1] for layer in self.vit_layers]
-        return torch.cat(features, dim=-1)
+        image_features = torch.cat(features, dim=-1)
+
+        if image_shape is not None:
+            image_features = image_features.reshape(*image_shape, -1)
+        return image_features
 
     def forward(
         self,
