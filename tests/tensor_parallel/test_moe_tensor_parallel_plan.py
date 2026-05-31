@@ -60,7 +60,8 @@ if is_torch_available():
 # Tiny inline MoE model (Qwen3-style expert layout)
 # =============================================================================
 
-#TODO(3outeille): double checking tests
+# TODO(3outeille): double checking tests
+
 
 class TinyMoEExperts(nn.Module):
     """Qwen3-style: gate_up [E, 2*inter, hidden], down [E, hidden, inter]."""

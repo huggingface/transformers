@@ -549,7 +549,7 @@ class MoEExpertsParallel(TensorParallelLayer):
         return output.to_local()
 
 
-#TOOD(3outeille): is there a workaround ?
+# TOOD(3outeille): is there a workaround ?
 def _is_expert_parallel_enabled(module) -> bool:
     """Whether the model owning module was loaded with expert parallelism enabled."""
     # MoE expert modules typically do not carry `config`; apply_tensor_parallel stamps
