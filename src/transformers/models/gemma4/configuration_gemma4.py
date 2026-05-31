@@ -136,10 +136,7 @@ class Gemma4TextConfig(PreTrainedConfig):
         "layers.*.mlp.down_proj": "rowwise_allreduce",
     }
     base_model_ep_plan = {
-        # EP plan for google/gemma-4-26B-A4B-it: do not tp in attention (num_global_key_value_heads=2 too small to partition)
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        # EP-only: shard routed experts; keep attention and dense MLP replicated.
         "layers.*.router": "ep_router",
         "layers.*.experts.gate_up_proj": "grouped_gemm",
         "layers.*.experts.down_proj": "grouped_gemm",

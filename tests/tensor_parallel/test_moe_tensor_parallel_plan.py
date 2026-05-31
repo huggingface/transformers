@@ -46,17 +46,21 @@ if is_torch_available():
 
     from transformers.distributed.tensor_parallel import (
         ALL_PARALLEL_STYLES,
-        PARAM_ONLY_STYLES,
-        CustomParallelStyle,
+        TensorParallelLayer,
         _get_parameter_tp_plan,
+        _is_expert_parallel_enabled,
         apply_tensor_parallel,
     )
+
+    # MoE expert-weight sharding styles — declared per-parameter in config plans.
+    MOE_PARAM_SHARD_STYLES = ("grouped_gemm", "moe_tp_gate_up_colwise", "moe_tp_down_rowwise")
 
 
 # =============================================================================
 # Tiny inline MoE model (Qwen3-style expert layout)
 # =============================================================================
 
+#TODO(3outeille): double checking tests
 
 class TinyMoEExperts(nn.Module):
     """Qwen3-style: gate_up [E, 2*inter, hidden], down [E, hidden, inter]."""
@@ -117,6 +121,41 @@ TP_PLAN_DECOMPOSED = {
     "layers.*.experts.down_proj": "moe_tp_down_rowwise",
     "layers.*.experts": "moe_experts_allreduce",
 }
+
+EP_INPUT_GRAD_PLAN = {
+    "layers.*.experts.weight": "grouped_gemm",
+    "layers.*.experts": "moe_experts_allreduce",
+}
+
+
+class TinyInputGradExperts(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.num_experts = 2
+        self.weight = nn.Parameter(torch.tensor([[[2.0]], [[3.0]]]))
+
+    def forward(self, hidden_states, top_k_index, top_k_weights):
+        output = torch.zeros_like(hidden_states)
+        for expert_idx in range(self.num_experts):
+            token_idx, slot_idx = (top_k_index == expert_idx).nonzero(as_tuple=True)
+            if token_idx.numel() == 0:
+                continue
+            weight = self.weight[expert_idx, 0]
+            output[token_idx] += hidden_states[token_idx] * top_k_weights[token_idx, slot_idx].unsqueeze(-1) * weight
+        return output
+
+
+class TinyInputGradBlock(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.experts = TinyInputGradExperts()
+
+
+class TinyInputGradModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.layers = nn.ModuleList([TinyInputGradBlock()])
+        self.config = _TinyConfig()
 
 
 # =============================================================================
@@ -211,6 +250,45 @@ def _tp_param_shard_impl(rank, world_size):
     assert down.to_local().shape[-1] == 16 // world_size, down.to_local().shape
     # TP does not shard the expert dim, so num_experts is unchanged.
     assert experts.num_experts == 4, experts.num_experts
+
+
+def _ep_expert_parallel_flag_impl(rank, world_size):
+    set_seed(0)
+    mesh = init_device_mesh("cpu", (world_size,), mesh_dim_names=("tp",))
+    model = TinyMoEModel(num_experts=4, hidden=8, intermediate=16)
+    model.config.distributed_config = type(
+        "DistributedConfig",
+        (),
+        {"enable_expert_parallel": True, "enable_sequence_parallel": False, "tp_size": world_size},
+    )()
+    apply_tensor_parallel(model, mesh, dict(EP_PLAN))
+
+    # Expert modules carry no `config`; apply_tensor_parallel must stamp the flag so the
+    # MoEExpertsParallel backward detects EP (Bug 1 — skips the wrong routing-weight allreduce).
+    experts = model.layers[0].experts
+    assert getattr(experts, "_expert_parallel_enabled", False), "EP flag not stamped on experts module"
+    assert _is_expert_parallel_enabled(experts), "EP not detected on experts module without config"
+
+
+def _ep_hidden_states_grad_allreduce_impl(rank, world_size):
+    mesh = init_device_mesh("cpu", (world_size,), mesh_dim_names=("tp",))
+    model = TinyInputGradModel()
+    model.config.distributed_config = type(
+        "DistributedConfig",
+        (),
+        {"enable_expert_parallel": True, "enable_sequence_parallel": False, "tp_size": world_size},
+    )()
+    apply_tensor_parallel(model, mesh, dict(EP_INPUT_GRAD_PLAN))
+
+    hidden_states = torch.tensor([[1.0]], requires_grad=True)
+    top_k_index = torch.zeros((1, 1), dtype=torch.long)
+    top_k_weights = torch.ones((1, 1))
+
+    output = model.layers[0].experts(hidden_states, top_k_index, top_k_weights)
+    torch.testing.assert_close(output, torch.tensor([[5.0]]))
+
+    output.sum().backward()
+    torch.testing.assert_close(hidden_states.grad, torch.tensor([[5.0]]))
 
 
 def _ep_router_impl(rank, world_size):
@@ -336,6 +414,16 @@ class TestMoEDistributedApply(unittest.TestCase):
         self._skip_if_unsupported()
         _init_distributed(tp=self.world_size)(_ep_router_impl)(self.world_size)
 
+    @is_tensor_parallel_test
+    def test_ep_stamps_expert_parallel_flag_on_experts_module(self):
+        self._skip_if_unsupported()
+        _init_distributed(tp=self.world_size)(_ep_expert_parallel_flag_impl)(self.world_size)
+
+    @is_tensor_parallel_test
+    def test_ep_allreduces_hidden_states_gradient_across_local_experts(self):
+        self._skip_if_unsupported()
+        _init_distributed(tp=self.world_size)(_ep_hidden_states_grad_allreduce_impl)(self.world_size)
+
 
 # =============================================================================
 # Layer 4 — Registry regression guard
@@ -347,15 +435,18 @@ class TestMoEDistributedApply(unittest.TestCase):
 class TestMoERegistryShape(unittest.TestCase):
     def test_moe_experts_allreduce_has_no_baked_shard_plan(self):
         # Guards against re-introducing the bundled shard_plan (sharding now lives in configs).
-        # MoEExpertsParallel is forward-comm only: no baked shard plan and no shard_parameters
+        # MoEExpertsParallel is forward-comm only: no baked shard plan and no shard_param
         # override (it inherits the base no-op).
         style = ALL_PARALLEL_STYLES["moe_experts_allreduce"]
         self.assertFalse(hasattr(style, "_moe_shard_plan"))
-        self.assertIs(type(style).shard_parameters, CustomParallelStyle.shard_parameters)
+        self.assertIs(type(style).shard_param, TensorParallelLayer.shard_param)
 
-    def test_param_only_styles_registered(self):
-        for name in PARAM_ONLY_STYLES:
+    def test_param_shard_styles_registered_and_shard_weights(self):
+        # The MoE expert-weight styles are registered and are weight-sharders, i.e. they
+        # override the base no-op shard_param (the same test verify_tp_plan uses).
+        for name in MOE_PARAM_SHARD_STYLES:
             self.assertIn(name, ALL_PARALLEL_STYLES)
+            self.assertIsNot(type(ALL_PARALLEL_STYLES[name]).shard_param, TensorParallelLayer.shard_param)
 
     def test_ep_router_registered(self):
         self.assertIn("ep_router", ALL_PARALLEL_STYLES)

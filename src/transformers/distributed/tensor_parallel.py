@@ -318,6 +318,8 @@ class PrepareModuleInput(TensorParallelLayer):
 # =============================================================================
 
 
+# TODO(3outeille): this can be removed once we merge sp + ep / tp + ep plans.
+# no more strided shard on gate_up_proj because we will be using grouped_gemm.
 def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tensor) -> torch.Tensor:
     """Stitch a local grad back onto the original DTensor parameter.
 
@@ -501,9 +503,15 @@ class MoEExpertsParallel(TensorParallelLayer):
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         hidden_states, top_k_index, top_k_weights = args
+        tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
         if not isinstance(hidden_states, DTensor):
             hidden_states = DTensor.from_local(hidden_states, mesh, [Replicate()], run_check=False)
         hidden_states = hidden_states.to_local()
+        if _is_expert_parallel_enabled(module):
+            # Under EP each rank computes only its local experts' contribution from the
+            # same replicated hidden_states. Sum those local input gradients in backward
+            # before propagating to upstream replicated layers.
+            hidden_states = _AllReduceBackward.apply(hidden_states, tp_group)
 
         if isinstance(top_k_weights, DTensor):
             top_k_weights = top_k_weights.to_local()
@@ -513,7 +521,6 @@ class MoEExpertsParallel(TensorParallelLayer):
         # rank's routing weights are independent — skip the all-reduce to avoid
         # double-counting the gradient.
         if not _is_expert_parallel_enabled(module):
-            tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
             top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
 
         return (hidden_states, top_k_index, top_k_weights), kwargs
@@ -542,8 +549,13 @@ class MoEExpertsParallel(TensorParallelLayer):
         return output.to_local()
 
 
+#TOOD(3outeille): is there a workaround ?
 def _is_expert_parallel_enabled(module) -> bool:
     """Whether the model owning module was loaded with expert parallelism enabled."""
+    # MoE expert modules typically do not carry `config`; apply_tensor_parallel stamps
+    # `_expert_parallel_enabled` when installing `moe_experts_allreduce` under EP.
+    if getattr(module, "_expert_parallel_enabled", False):
+        return True
     config = getattr(module, "config", None)
     dist_config = getattr(config, "distributed_config", None)
     return bool(getattr(dist_config, "enable_expert_parallel", False))
@@ -695,6 +707,10 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
         # Install forward hooks for modules as needed by the plan.
         style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=tp_plan, is_weight=False)
         if style_name is not None and style_name in ALL_PARALLEL_STYLES:
+            # Expert modules carry no `config`; stamp the EP flag so MoEExpertsParallel's
+            # backward (routing-weight all-reduce) can detect EP via _is_expert_parallel_enabled.
+            if style_name == "moe_experts_allreduce" and enable_ep:
+                module._expert_parallel_enabled = True
             ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
 
     # Under SP, inputs_embeds is sequence-sharded after embed_tokens, so
