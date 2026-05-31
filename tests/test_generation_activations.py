@@ -322,3 +322,43 @@ class GenerationActivationsBatchTest(unittest.TestCase):
         self.assertEqual(pooled.shape[0], 2)  # batch
         self.assertEqual(pooled.shape[1], target)  # pooled layers
         self.assertEqual(pooled.shape[3], acts.hidden_dim)
+
+
+class GenerationActivationsProjectionTest(unittest.TestCase):
+    """Tests for per-layer and per-token projection properties."""
+
+    def test_layer_index(self):
+        """layer(n) returns [T, D] for the correct layer."""
+        gen_out, _, _ = _generate_and_extract(max_new_tokens=4)
+        acts = GenerationActivations.from_generate_output(gen_out)
+        l0 = acts.layer(0)
+        self.assertEqual(l0.ndim, 2)
+        self.assertEqual(l0.shape, (acts.total_len, acts.hidden_dim))
+        l_last = acts.layer(acts.num_layers - 1)
+        self.assertEqual(l_last.shape, (acts.total_len, acts.hidden_dim))
+
+    def test_last_layer(self):
+        """last_layer equals layer(-1)."""
+        gen_out, _, _ = _generate_and_extract(max_new_tokens=3)
+        acts = GenerationActivations.from_generate_output(gen_out)
+        self.assertTrue(torch.equal(acts.last_layer, acts.layer(acts.num_layers - 1)))
+
+    def test_last_token(self):
+        """last_token returns [L, D]."""
+        gen_out, _, _ = _generate_and_extract(max_new_tokens=2)
+        acts = GenerationActivations.from_generate_output(gen_out)
+        lt = acts.last_token
+        self.assertEqual(lt.ndim, 2)
+        self.assertEqual(lt.shape, (acts.num_layers, acts.hidden_dim))
+        # Verify it matches the last position of the full tensor
+        self.assertTrue(torch.equal(lt, acts.hidden_states[:, -1, :]))
+
+    def test_mean_pool_tokens(self):
+        """mean_pool_tokens returns [L, D]."""
+        gen_out, _, _ = _generate_and_extract(max_new_tokens=3)
+        acts = GenerationActivations.from_generate_output(gen_out)
+        mp = acts.mean_pool_tokens()
+        self.assertEqual(mp.ndim, 2)
+        self.assertEqual(mp.shape, (acts.num_layers, acts.hidden_dim))
+        # Verify it equals manual mean over token axis
+        self.assertTrue(torch.allclose(mp, acts.hidden_states.mean(dim=1)))
