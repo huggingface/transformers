@@ -17,4 +17,6 @@
     - local: custom_models
       title: Personalizarea modelelor
     - local: monkey_patching
-      title: Monkey patching 
+      title: Monkey patching
+    - local: fusion_mapping
+      title: Fusion mapping
