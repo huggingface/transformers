@@ -33,7 +33,6 @@ from ..cache_utils import (
     QuantizedCache,
     StaticCache,
 )
-from ..distributed.fsdp import is_fsdp_managed_module
 from ..dynamic_module_utils import (
     check_python_requirements,
     get_cached_module_file,
@@ -41,6 +40,7 @@ from ..dynamic_module_utils import (
     resolve_trust_remote_code,
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
+from ..integrations.fsdp import is_fsdp_managed_module
 from ..masking_utils import create_masks_for_generate
 from ..tokenization_python import ExtensionsTrie
 from ..utils import (
@@ -2152,7 +2152,7 @@ class GenerationMixin(ContinuousMixin):
             "assistant_model": assistant_model,
             "streamer": streamer,
         }
-        world_size = dist.get_world_size() if dist.is_available() and dist.is_initialized() else 1
+        world_size = dist.get_world_size() if dist.is_available() and dist.is_initialized() else 1  # type: ignore
         generation_mode_kwargs["synced_gpus"] = (
             (is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)) and world_size > 1
             if synced_gpus is None
@@ -2599,7 +2599,7 @@ class GenerationMixin(ContinuousMixin):
             # The following logic allows an early break if all peers finished generating their sequence
             this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0, device=device)
             # send 0.0 if we finished, 1.0 otherwise
-            dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
+            dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)  # type: ignore
             # did all peers finish? the reduced sum will be 0.0 then
             if this_peer_finished_flag.item() == 0.0:
                 return False
@@ -2762,6 +2762,13 @@ class GenerationMixin(ContinuousMixin):
         batch_size = input_ids.shape[0]
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
+
+        # `pad_token_id` is created on `inputs_tensor.device` in `_prepare_special_tokens`. For multimodal models
+        # (e.g. BLIP-2, LLaVA) sharded across devices via `device_map="auto"`, `inputs_tensor` (e.g. `pixel_values`
+        # on the vision encoder) and `input_ids` (on the language model) can live on different devices, so we need to
+        # realign `pad_token_id` with `input_ids` to avoid cross-device ops below.
+        if pad_token_id is not None:
+            pad_token_id = pad_token_id.to(input_ids.device)
 
         model_forward = (
             self.get_compiled_call(generation_config.compile_config)

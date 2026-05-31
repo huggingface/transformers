@@ -133,12 +133,6 @@ class GlmImageTextConfig(Glm4vTextConfig):
     >>> configuration = model.config
     ```"""
 
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
-    }
-
     vocab_size: int = 168064
     max_position_embeddings: int = 131072
     vision_vocab_size: int = 16512
@@ -808,7 +802,6 @@ class GlmImageModel(Glm4vModel):
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
-        rope_deltas: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GlmImageModelOutputWithPast:
         r"""
@@ -817,8 +810,6 @@ class GlmImageModel(Glm4vModel):
             Images are packed across all samples in the batch.
         images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Number of images (including target grids) for each sample in the batch.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
