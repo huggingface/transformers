@@ -12,3 +12,5 @@
     sections:
     - local: weightconverter
       title: Încărcarea dinamică de weights
+    - local: models
+      title: Loading models
