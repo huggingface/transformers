@@ -710,8 +710,10 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
         # Install forward hooks for modules as needed by the plan.
         style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=tp_plan, is_weight=False)
         if style_name is not None and style_name in ALL_PARALLEL_STYLES:
-            is_expert_parallel = style_name == "moe_experts_allreduce"
-            ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh, is_expert_parallel=is_expert_parallel)
+            if style_name == "moe_experts_allreduce":
+                ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh, is_expert_parallel=True)
+            else:
+                ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
 
     # Under SP, inputs_embeds is sequence-sharded after embed_tokens, so
     # auto-generated position_ids would use the wrong (local) seq_len.
