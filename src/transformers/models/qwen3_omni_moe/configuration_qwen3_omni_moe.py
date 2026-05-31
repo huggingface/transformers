@@ -471,9 +471,11 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
     def _update_sp_plan(self):
         self.base_model_sp_plan = self.base_model_sp_plan.copy()
 
-        is_moe_layer = lambda layer_idx: (layer_idx not in self.mlp_only_layers) and (
-            self.num_experts > 0 and (layer_idx + 1) % self.decoder_sparse_step == 0
-        )
+        def is_moe_layer(layer_idx):
+            return (layer_idx not in self.mlp_only_layers) and (
+                self.num_experts > 0 and (layer_idx + 1) % self.decoder_sparse_step == 0
+            )
+
         for i in range(self.num_hidden_layers):
             if is_moe_layer(i):
                 self.base_model_sp_plan.update(
