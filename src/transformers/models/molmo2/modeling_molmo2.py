@@ -212,6 +212,19 @@ class Molmo2GQAAttention(nn.Module):
             attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=self.training)
             attn_output = torch.matmul(attn_weights.to(value_states.dtype), value_states)
             attn_output = attn_output.transpose(1, 2).contiguous()
+        elif self.config._attn_implementation == "sdpa":
+            key_states = repeat_kv(key_states, self.num_key_value_groups)
+            value_states = repeat_kv(value_states, self.num_key_value_groups)
+            attn_output = F.scaled_dot_product_attention(
+                query_states,
+                key_states,
+                value_states,
+                attn_mask=attention_mask,
+                is_causal=False,
+                dropout_p=dropout,
+            )
+            attn_output = attn_output.transpose(1, 2).contiguous()
+            attn_weights = None
         else:
             attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
                 self.config._attn_implementation, eager_attention_forward
