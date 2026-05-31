@@ -20,6 +20,7 @@ from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation.activations import GenerationActivations
+from transformers.testing_utils import require_torch_accelerator, slow
 
 
 # Small model used for fast CI-friendly tests.  Must support
@@ -57,6 +58,8 @@ def _generate_and_extract(
     return gen_out, tokenizer, inputs
 
 
+@require_torch_accelerator
+@slow
 class GenerationActivationsTest(unittest.TestCase):
     """Core tests for GenerationActivations."""
 
@@ -146,7 +149,7 @@ class GenerationActivationsTest(unittest.TestCase):
         gen_out, _, _ = _generate_and_extract(max_new_tokens=4)
         acts = GenerationActivations.from_generate_output(gen_out)
 
-        target = acts.num_layers // 2  # e.g. 37 → 18 (Qwen3-0.6B may vary)
+        target = acts.num_layers // 2  # e.g. 29 → 14 on Qwen3-0.6B
         if target < 1:
             target = 1
 
@@ -194,6 +197,8 @@ class GenerationActivationsTest(unittest.TestCase):
         self.assertIn("num_layers=", r)
 
 
+@require_torch_accelerator
+@slow
 class GenerationActivationsBatchTest(unittest.TestCase):
     """Tests for batched inputs (batch_size > 1)."""
 

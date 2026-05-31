@@ -84,9 +84,9 @@ class GenerationActivations:
         )
 
         acts = GenerationActivations.from_generate_output(gen_out)
-        # acts.hidden_states           → [37, 40, 4096]
+        # acts.hidden_states           → [37, 39, 4096]  (prompt_len + max_new_tokens - 1)
         # acts.prompt_hidden_states    → [37, 8, 4096]
-        # acts.generated_hidden_states → [37, 32, 4096]
+        # acts.generated_hidden_states → [37, 31, 4096]  (max_new_tokens - 1; see notes)
         # acts.num_layers              → 37
         # acts.prompt_len              → 8
 
@@ -130,9 +130,14 @@ class GenerationActivations:
         """Build from a :class:`~generation.GenerateDecoderOnlyOutput` or
         :class:`~generation.GenerateEncoderDecoderOutput`.
 
-        The first step of ``hidden_states`` (index 0) is assumed to contain the
-        full prompt plus one generated token.  Subsequent steps each contain
-        one generated token.  Layers are the innermost tuple element.
+        The first step of ``hidden_states`` (index 0) is assumed to contain
+        the hidden states for the full prompt (the prefill forward pass).
+        Each subsequent step contains the hidden states for exactly one
+        generated token (fed as input to the next forward pass).  Note that
+        the *last* generated token is never fed back as input, so it has no
+        corresponding hidden states entry; the number of generated-token
+        hidden states is ``max_new_tokens - 1``.  Layers are the innermost
+        tuple element.
 
         Args:
             gen_output:
@@ -227,9 +232,12 @@ class GenerationActivations:
     ) -> GenerationActivations:
         """Stack the per-step ``tuple[tuple[Tensor]]`` into a dense tensor.
 
-        The first element (step 0) contains the full prompt plus one generated
-        token.  Subsequent elements each contain exactly one generated token.
-        Layers are stacked along dim 0, tokens along dim 1.
+        The first element (step 0) contains the hidden states for the full
+        prompt (the prefill forward pass).  Subsequent elements each contain
+        the hidden states for exactly one generated token.  Because the last
+        generated token is never fed back as input, the generated portion has
+        ``max_new_tokens - 1`` tokens.  Layers are stacked along dim 0, tokens
+        along dim 1.
 
         When ``batch_size > 1`` and ``attention_mask`` is provided, a boolean
         valid-token mask is constructed to exclude left-padding positions.
@@ -343,6 +351,11 @@ class GenerationActivations:
         """``[num_layers, generated_len, hidden_dim]`` — activations for
         generated tokens only.
 
+        Note that this contains ``max_new_tokens - 1`` tokens, **not** all
+        generated tokens: the last generated token is never fed back as
+        input to the model and therefore has no hidden states entry in the
+        generate output.
+
         When batched, shape is
         ``[batch_size, num_layers, generated_len, hidden_dim]``.
         """
@@ -363,7 +376,8 @@ class GenerationActivations:
         """Adaptive-average-pool the layer axis to a fixed grid size.
 
         Useful for normalizing across architectures with different layer counts
-        (e.g. Qwen has 37 layers, Llama has 33).  Uses
+        (e.g. Qwen3-8B has 37 layers including the embedding output,
+        Llama-3.1-8B has 33).  Uses
         :func:`torch.nn.functional.adaptive_avg_pool1d` — this averages
         neighbouring layers, it does **not** truncate.
 
