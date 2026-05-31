@@ -275,7 +275,7 @@ class Granite4VisionWindowQFormerDownsampler(nn.Module):
         self._spatial_offset = spatial_offset
         self._downsample_rate = config.downsample_rate
 
-        self.qformer = AutoModel.from_config(config.qformer_config)
+        self.qformer = AutoModel.from_config(config.qformer_config, attn_implementation="eager")
 
         self.image_side = config.vision_config.image_size // config.vision_config.patch_size
         query_side_str, window_side_str = config.downsample_rate.split("/")
