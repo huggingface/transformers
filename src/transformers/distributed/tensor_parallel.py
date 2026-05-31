@@ -131,7 +131,7 @@ class TensorParallelLayer:
         return module
 
 
-#TODO(3outeille): inlined in verify_tp_plan ? and understand why that works
+# TODO(3outeille): inlined in verify_tp_plan ? and understand why that works
 def _shards_weight(style) -> bool:
     """True iff the concrete style overrides the base no-op ``shard_param``.
 
@@ -350,7 +350,8 @@ class PrepareModuleInputOutput(TensorParallelLayer):
             output = DTensor.from_local(output, mesh, [Replicate()], run_check=False)
         return output.redistribute(placements=[Shard(1)]).to_local()
 
-#TODO(3outeille): Why not just PrepareModuleInput
+
+# TODO(3outeille): Why not just PrepareModuleInput
 class ModuleAllgatherInput(TensorParallelLayer):
     """Allgather a module input (default ``input_layout`` → ``desired_layout``, then to-local).
 
@@ -758,41 +759,13 @@ class ParallelInterface(GeneralInterface):
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
-#TODO: inlined in apply_tensor_parallel
-def _apply_tp_plan_to_model(model, tp_mesh, tp_plan):
-    """Apply the resolved plan in a single ``named_modules()`` walk.
-
-    For each module: first shard its *direct* params (param-keyed lookup → ``shard_param``,
-    no-op for forward-only styles), then install its forward comm (module-keyed lookup →
-    ``install_forward``, no-op for param-only styles). Both lookups use the wildcard plan.
-
-    Sharding a module's params happens *before* its own ``install_forward`` in the same
-    iteration, so forward hooks (e.g. ``moe_experts_allreduce``) see already-sharded
-    DTensor params. The ``is_weight=True`` parent fallback in ``_get_parameter_tp_plan``
-    maps e.g. ``q_proj.weight`` → ``q_proj`` → ``colwise``, so weight-sharders fire without
-    per-param plan keys.
-    """
-    for name, module in model.named_modules():
-        # Pass A — shard this module's direct params (param-keyed). Materialize the
-        # iterator since shard_param mutates module._parameters.
-        for p_name, _ in list(module.named_parameters(recurse=False)):
-            full = f"{name}.{p_name}" if name else p_name
-            style_name = _get_parameter_tp_plan(parameter_name=full, tp_plan=tp_plan, is_weight=True)
-            if style_name is not None and style_name in ALL_PARALLEL_STYLES:
-                ALL_PARALLEL_STYLES[style_name].shard_param(module, p_name, tp_mesh)
-        # Pass B — install this module's forward comm (module-keyed).
-        style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=tp_plan, is_weight=False)
-        if style_name is not None and style_name in ALL_PARALLEL_STYLES:
-            ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
-
-
 def apply_tensor_parallel(model, tp_mesh, tp_plan):
     """Apply tensor parallelism by looking each style up by string name.
 
-    A single ``named_modules()`` walk (``_apply_tp_plan_to_model``) shards each module's
-    direct params (param-keyed plan entries → ``shard_param``) and installs its forward
-    comm (module-keyed entries → ``install_forward``). Plus the cross-cutting setup:
-    tie-weights handling, SP position_ids injection, and loss_parallel activation.
+    A single ``named_modules()`` walk shards each module's direct params (param-keyed plan
+    entries → ``shard_param``) and installs its forward comm (module-keyed entries →
+    ``install_forward``). Plus the cross-cutting setup: tie-weights handling, SP position_ids
+    injection, and loss_parallel activation.
     """
     distributed_config = getattr(model.config, "distributed_config", None)
     sp_requested = getattr(distributed_config, "enable_sequence_parallel", False)
@@ -817,7 +790,17 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
         if not tied_source_in_plan:
             tp_plan.pop("lm_head", None)
 
-    _apply_tp_plan_to_model(model, tp_mesh, tp_plan)
+    for name, module in model.named_modules():
+        # Shard each parameter directly on the module using the specified style.
+        for p_name, _ in list(module.named_parameters(recurse=False)):
+            full = f"{name}.{p_name}" if name else p_name
+            style_name = _get_parameter_tp_plan(parameter_name=full, tp_plan=tp_plan, is_weight=True)
+            if style_name is not None and style_name in ALL_PARALLEL_STYLES:
+                ALL_PARALLEL_STYLES[style_name].shard_param(module, p_name, tp_mesh)
+        # Install forward hooks for modules as needed by the plan.
+        style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=tp_plan, is_weight=False)
+        if style_name is not None and style_name in ALL_PARALLEL_STYLES:
+            ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
 
     # Under SP, inputs_embeds is sequence-sharded after embed_tokens, so
     # auto-generated position_ids would use the wrong (local) seq_len.
