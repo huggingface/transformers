@@ -74,7 +74,6 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
 
 
 class TensorParallelLayer:
-
     def shard_param(self, module, param, mesh):
         """Wrap ONE parameter as a DTensor placeholder. Default: no-op."""
         pass
@@ -100,6 +99,7 @@ class TensorParallelLayer:
 
         module.forward = tp_forward
         return module
+
 
 def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
     """
@@ -234,7 +234,6 @@ class RowwiseParallel(TensorParallelLayer):
 
 
 class SequenceParallel(TensorParallelLayer):
-
     def __init__(self, *, sequence_dim: int = 1, use_local_output: bool = True):
         self.sequence_dim = sequence_dim
         self.use_local_output = use_local_output
@@ -266,8 +265,7 @@ class SequenceParallel(TensorParallelLayer):
 
 
 class PrepareModuleInputOutput(TensorParallelLayer):
-    """Allgather input (Shard(1) → Replicate) + local split output (Replicate → Shard(1)).
-    """
+    """Allgather input (Shard(1) → Replicate) + local split output (Replicate → Shard(1))."""
 
     def __init__(self, use_local_output=True):
         self.use_local_output = use_local_output
@@ -286,8 +284,7 @@ class PrepareModuleInputOutput(TensorParallelLayer):
 
 
 class PrepareModuleInput(TensorParallelLayer):
-    """Allgather a module input (default input_layout → desired_layout, then to-local).
-    """
+    """Allgather a module input (default input_layout → desired_layout, then to-local)."""
 
     def __init__(self, *, input_kwarg=None, input_layout=None, desired_layout=None, use_local_output=True):
         self.input_kwarg = input_kwarg
