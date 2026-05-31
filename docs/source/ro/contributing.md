@@ -90,7 +90,7 @@ Indiferent cum alegi să contribui, te rugăm să fii atent și să respecți
 
 Există mai multe moduri în care poți contribui la 🤗 Transformers:
 
-* Remediează problemele existente în codul curent.
+* Remediază problemele existente în codul curent.
 * Trimite issues legate de bug-uri sau funcții noi dorite.
 * Implementează modele noi.
 * Contribuie la exemple sau la documentație.
@@ -115,7 +115,7 @@ Fă tot posibilul să urmezi aceste ghiduri când trimiți un issue legat de bug
 
 Biblioteca 🤗 Transformers este robustă și fiabilă datorită utilizatorilor care raportează problemele pe care le întâmpină.
 
-Înainte de a raporta un issue, am aprecia cu adevărat dacă ai putea **te asigura că bug-ul nu a fost deja raportat** (folosește bara de căutare pe GitHub la Issues). Issue-ul tău ar trebui să fie legat și de bug-uri din bibliotecă în sine, nu din codul tău. Dacă nu ești sigur dacă bug-ul este în codul tău sau în bibliotecă, te rugăm să întrebi mai întâi în [forum](https://discuss.huggingface.co/) sau pe [Discord-ul](https://discord.com/invite/hugging-face-879548962464493619) nostru. Aceasta ne ajută să răspundem mai rapid la problemele legate de bibliotecă față de întrebările generale.
+Înainte de a raporta un issue, am aprecia cu adevărat dacă ai putea **să te asiguri că bug-ul nu a fost deja raportat** (folosește bara de căutare pe GitHub la Issues). Issue-ul tău ar trebui să fie legat și de bug-uri din bibliotecă în sine, nu din codul tău. Dacă nu ești sigur dacă bug-ul este în codul tău sau în bibliotecă, te rugăm să întrebi mai întâi în [forum](https://discuss.huggingface.co/) sau pe [Discord-ul](https://discord.com/invite/hugging-face-879548962464493619) nostru. Aceasta ne ajută să răspundem mai rapid la problemele legate de bibliotecă față de întrebările generale.
 
 > [!TIP]
 > Avem un [bot de documentație](https://huggingface.co/spaces/huggingchat/hf-docs-chat) și te încurajăm să adresezi toate întrebările acolo. Există întotdeauna posibilitatea ca bug-ul tău să poată fi rezolvat cu un simplu flag 👾🔫
@@ -479,7 +479,7 @@ utile pentru a evita munca duplicată și pentru a le diferenția de PR-urile ga
 ☐ Toate metodele publice trebuie să aibă docstrings informative (consultă
 [`modeling_bert.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py)
 pentru un exemplu).<br>
-☐ Datorită repository-ului care crește rapid, nu adăuga imagini, videoclipuri și alte
+☐ Deoarece repository-ul crește rapid, nu adăuga imagini, videoclipuri și alte
 fișiere non-text care vor îngreuna semnificativ repository-ul. În schimb, folosește un repository Hub
 precum [`hf-internal-testing`](https://huggingface.co/hf-internal-testing)
 pentru a găzdui aceste fișiere și a le referencia prin URL. Îți recomandăm să plasezi imaginile legate de documentație în următorul repository:
