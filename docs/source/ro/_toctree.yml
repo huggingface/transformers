@@ -6,3 +6,9 @@
   - local: quicktour
     title: Pornire rapidă
   title: Începe
+  - isExpanded: true
+  sections:
+  - isExpanded: false
+    sections:
+    - local: weightconverter
+      title: Încărcarea dinamică de weights
