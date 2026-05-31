@@ -188,17 +188,6 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
 
 
-# =============================================================================
-# Native styles (hand-rolled: shard_param + forward-wrap, replacing torch's
-# Col/Row/Sequence ParallelStyle subclasses). The matmul collective is implicit
-# in DTensor op-dispatch — the params stay DTensors and the input is converted to
-# a DTensor and kept (no to_local), so F.linear(dtensor_input, dtensor_weight)
-# dispatches through DTensor. The transforms only do the boundary
-# from_local / redistribute / to_local. Redistributes use async_op=True to overlap
-# the collective with compute (matching torch's own Col/Row/Sequence styles).
-# =============================================================================
-
-
 class ColwiseParallel(TensorParallelLayer):
     """Column-wise: weight & bias → Shard(0) (Embedding: Shard(1)); input replicated, output Shard(-1)."""
 
@@ -577,28 +566,6 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
 
 
 class MoEExpertsParallel(TensorParallelLayer):
-    """Tensor-parallel forward style for MoE expert modules.
-
-    Forward-comm only — it does NOT shard weights. Expert weight sharding is declared
-    per-parameter in the config plan (``grouped_gemm`` / ``moe_tp_gate_up_*`` / ``moe_tp_down_*``)
-    and applied via ``shard_param``; this style only wraps the experts ``forward`` so
-    that grouped_mm (which needs plain tensors) works on the already-sharded DTensor params.
-
-    Lifecycle phases:
-    1. transform_inputs_pre_forward — localize hidden_states (Replicate→local,
-       gives us an all-reduce on the backward gradient for free), then fix
-       routing-weight gradients (their backward is partial; use allreduce-sum,
-       not divide-by-world-size).
-    2. context_around_forward — swap DTensor params for local leaves so
-       grouped_mm sees plain tensors; restored on exit so save_pretrained
-       still sees DTensors.
-    3. transform_output_post_forward — under TP-only each rank's output is
-       partial (only its expert shard contributed); reduce/redistribute to
-       output_layouts.
-
-    The redistributes stay synchronous (no async_op) because the param swap inspects
-    tensor identity around the call, where an AsyncCollectiveTensor wrapper would be a hazard.
-    """
 
     def __init__(self, output_layouts=None):
         self.output_layouts = output_layouts or Replicate()
