@@ -351,8 +351,7 @@ class PrepareModuleInputOutput(TensorParallelLayer):
         return output.redistribute(placements=[Shard(1)]).to_local()
 
 
-# TODO(3outeille): Why not just PrepareModuleInput
-class ModuleAllgatherInput(TensorParallelLayer):
+class PrepareModuleInput(TensorParallelLayer):
     """Allgather a module input (default ``input_layout`` → ``desired_layout``, then to-local).
 
     Forward-only prepare-input for block modules (e.g. an MoE block under SP): converts the
@@ -738,8 +737,8 @@ class ParallelInterface(GeneralInterface):
             "activation_seq_dim_2": SequenceParallel(sequence_dim=2, use_local_output=True),
             # Module-level prepare-input (allgather seq-sharded input → replicate, to local).
             # use_local_output=True: our modeling code expects plain tensors downstream.
-            "module_allgather": ModuleAllgatherInput(input_layout=Shard(1), desired_layout=Replicate()),
-            "module_allgather_hidden_states": ModuleAllgatherInput(
+            "module_allgather": PrepareModuleInput(input_layout=Shard(1), desired_layout=Replicate()),
+            "module_allgather_hidden_states": PrepareModuleInput(
                 input_kwarg="hidden_states", input_layout=Shard(1), desired_layout=Replicate()
             ),
             "module_allgather_split": PrepareModuleInputOutput(),
