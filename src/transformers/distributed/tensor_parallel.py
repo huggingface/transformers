@@ -94,8 +94,9 @@ class TensorParallelLayer:
         run inside ``context_around_forward`` (a context manager — used by the MoE /
         packed-linear styles to swap DTensor params for plain local leaves around fused ops).
 
-    A style is a *weight-sharder* iff it overrides ``shard_param`` (see ``_shards_weight``);
-    forward-only styles (MoE comm, EP router, prepare-input) leave it as the no-op default.
+    A style is a *weight-sharder* iff it overrides ``shard_param`` — ``verify_tp_plan`` uses
+    that fact (an identity check against the base ``shard_param``) to tell weight rules from
+    forward-only ones (MoE comm, EP router, prepare-input), which leave it as the no-op default.
 
     Override what you need:
       - shard_param(module, param, mesh) — wrap one param as a DTensor placeholder
@@ -131,19 +132,6 @@ class TensorParallelLayer:
         return module
 
 
-# TODO(3outeille): inlined in verify_tp_plan ? and understand why that works
-def _shards_weight(style) -> bool:
-    """True iff the concrete style overrides the base no-op ``shard_param``.
-
-    Single source of truth for "does this rule shard a weight?", replacing the old
-    ``PARAM_ONLY_STYLES`` frozenset and ``verify_tp_plan``'s hardcoded ``forward_only``
-    set. Works because forward-only styles override only the forward-wrap hooks (never
-    ``shard_param``), so weight-sharders (colwise / rowwise / vocab / packed / MoE param)
-    are distinguished from forward-only styles (MoE comm / EP router / prepare-input).
-    """
-    return type(style).shard_param is not TensorParallelLayer.shard_param
-
-
 # =============================================================================
 # High-Level API Functions
 # =============================================================================
@@ -154,9 +142,9 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
     Verify the TP plan of the model, log a warning if the layers that were not sharded and the rules that were not applied.
 
     Only weight-sharding rules (colwise, rowwise, vocab, grouped_gemm, moe_tp_gate_up_*,
-    moe_tp_down_*, packed_colwise) are checked, as determined by ``_shards_weight``.
-    Module/forward entries (PrepareModuleInput, SequenceParallel, moe_experts_allreduce,
-    ep_router) set up communication hooks rather than weight sharding, so they are excluded.
+    moe_tp_down_*, packed_colwise) are checked. Module/forward entries (PrepareModuleInput,
+    SequenceParallel, moe_experts_allreduce, ep_router) set up communication hooks rather
+    than weight sharding, so they are excluded.
     """
 
     if tp_plan is None:
@@ -164,7 +152,9 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
 
     # Keep only weight-sharding rules — forward-comm entries don't shard weights.
     weight_plan = {
-        k: v for k, v in tp_plan.items() if v in ALL_PARALLEL_STYLES and _shards_weight(ALL_PARALLEL_STYLES[v])
+        k: v
+        for k, v in tp_plan.items()
+        if v in ALL_PARALLEL_STYLES and type(ALL_PARALLEL_STYLES[v]).shard_param is not TensorParallelLayer.shard_param
     }
 
     generic_keys = {replace_layer_number_by_wildcard(key) for key in expected_keys}
@@ -283,7 +273,8 @@ class SequenceParallel(TensorParallelLayer):
     """Replicate (ones-init) norm params; run the module with activations sharded on the seq dim.
 
     Param replication happens in ``install_forward`` (not ``shard_param``) — SP is a
-    module-keyed forward style, not a weight-sharder, so ``_shards_weight`` reports False.
+    module-keyed forward style, not a weight-sharder, so ``verify_tp_plan`` treats it as
+    forward-only (it does not override ``shard_param``).
     """
 
     def __init__(self, *, sequence_dim: int = 1, use_local_output: bool = True):
@@ -566,7 +557,6 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
 
 
 class MoEExpertsParallel(TensorParallelLayer):
-
     def __init__(self, output_layouts=None):
         self.output_layouts = output_layouts or Replicate()
 
