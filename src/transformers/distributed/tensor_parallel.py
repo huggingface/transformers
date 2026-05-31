@@ -81,21 +81,21 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
 class TensorParallelLayer:
     """Base class for DTensor-based TP styles. Configs/modeling files reference these by name.
 
-    The DTensor-era successor to the legacy hook-based ``TensorParallelLayer`` in
-    ``integrations/tensor_parallel.py``. Every registry entry exposes the same two
+    The DTensor-era successor to the legacy hook-based TensorParallelLayer in
+    integrations/tensor_parallel.py. Every registry entry exposes the same two
     optional concerns; the dispatcher routes by plan-key granularity:
 
-      - ``shard_param(module, param, mesh)`` — invoked for *parameter*-keyed plan
+      - shard_param(module, param, mesh) — invoked for *parameter*-keyed plan
         entries (one call per matching param). Wraps the param as a DTensor placeholder.
-        Runs on meta — ``distribute_tensor`` builds metadata only, no collective.
-      - ``install_forward(module, mesh)`` — invoked for *module*-keyed plan entries.
-        Installs forward comm by replacing ``module.forward`` with
-        ``transform_inputs_pre_forward`` → original forward → ``transform_output_post_forward``,
-        run inside ``context_around_forward`` (a context manager — used by the MoE /
+        Runs on meta — distribute_tensor builds metadata only, no collective.
+      - install_forward(module, mesh) — invoked for *module*-keyed plan entries.
+        Installs forward comm by replacing module.forward with
+        transform_inputs_pre_forward → original forward → transform_output_post_forward,
+        run inside context_around_forward (a context manager — used by the MoE /
         packed-linear styles to swap DTensor params for plain local leaves around fused ops).
 
-    A style is a *weight-sharder* iff it overrides ``shard_param`` — ``verify_tp_plan`` uses
-    that fact (an identity check against the base ``shard_param``) to tell weight rules from
+    A style is a *weight-sharder* iff it overrides shard_param — verify_tp_plan uses
+    that fact (an identity check against the base shard_param) to tell weight rules from
     forward-only ones (MoE comm, EP router, prepare-input), which leave it as the no-op default.
 
     Override what you need:
@@ -223,7 +223,7 @@ class RowwiseParallel(TensorParallelLayer):
 
     Linear input is sharded on the last dim; Embedding input is replicated. The module
     forward produces a Partial output which the boundary redistribute reduces to
-    ``output_layouts`` (Replicate → allreduce, Shard(1) → reduce-scatter).
+    output_layouts (Replicate → allreduce, Shard(1) → reduce-scatter).
     """
 
     def __init__(self, *, input_layouts=None, output_layouts=None, use_local_output: bool = True):
@@ -272,9 +272,9 @@ class RowwiseParallel(TensorParallelLayer):
 class SequenceParallel(TensorParallelLayer):
     """Replicate (ones-init) norm params; run the module with activations sharded on the seq dim.
 
-    Param replication happens in ``install_forward`` (not ``shard_param``) — SP is a
-    module-keyed forward style, not a weight-sharder, so ``verify_tp_plan`` treats it as
-    forward-only (it does not override ``shard_param``).
+    Param replication happens in install_forward (not shard_param) — SP is a
+    module-keyed forward style, not a weight-sharder, so verify_tp_plan treats it as
+    forward-only (it does not override shard_param).
     """
 
     def __init__(self, *, sequence_dim: int = 1, use_local_output: bool = True):
@@ -332,11 +332,11 @@ class PrepareModuleInputOutput(TensorParallelLayer):
 
 
 class PrepareModuleInput(TensorParallelLayer):
-    """Allgather a module input (default ``input_layout`` → ``desired_layout``, then to-local).
+    """Allgather a module input (default input_layout → desired_layout, then to-local).
 
     Forward-only prepare-input for block modules (e.g. an MoE block under SP): converts the
     incoming tensor to a DTensor, redistributes to the desired layout, and (by default)
-    returns a plain local tensor for downstream modeling code. If ``input_kwarg`` is set the
+    returns a plain local tensor for downstream modeling code. If input_kwarg is set the
     transform acts on that keyword argument; otherwise it acts on the first positional arg.
     """
 
@@ -376,15 +376,15 @@ def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tens
     """Stitch a local grad back onto the original DTensor parameter.
 
     During forward we replace the DTensor param with a detached plain-tensor
-    leaf (see ``_swap_dtensor_params_for_local``) because ``grouped_mm`` / fused
+    leaf (see _swap_dtensor_params_for_local) because grouped_mm / fused
     ops don't accept DTensor inputs. That swap breaks the autograd link between
-    the local leaf's grad and the DTensor param's ``.grad``, so this tensor hook
+    the local leaf's grad and the DTensor param's .grad, so this tensor hook
     runs on the leaf and copies/accumulates the grad onto the original DTensor.
 
-    NOTE: An autograd-aware ``param.to_local()`` swap would let backward stitch
+    NOTE: An autograd-aware param.to_local() swap would let backward stitch
     the grad automatically, but DTensor's backward path then redistributes the
     resulting grad — and that redistribute does not currently support
-    ``_StridedShard`` placements (used by ``MoEExpertsParallel`` / ``PackedColwiseParallel``).
+    _StridedShard placements (used by MoEExpertsParallel / PackedColwiseParallel).
     """
     tensor_meta = original_param._spec.tensor_meta
     detached_grad = local_grad.detach()
@@ -409,11 +409,11 @@ def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tens
 
 @contextlib.contextmanager
 def _swap_dtensor_params_for_local(module):
-    """Temporarily replace DTensor params with local-shard ``Parameter``s for forward.
+    """Temporarily replace DTensor params with local-shard Parameters for forward.
 
-    ``grouped_mm`` / fused kernels don't accept DTensor inputs, so each DTensor
-    param is swapped for a detached local ``Parameter``. A tensor hook
-    (``_accumulate_local_param_grad``) on the local leaf copies the backward
+    grouped_mm / fused kernels don't accept DTensor inputs, so each DTensor
+    param is swapped for a detached local Parameter. A tensor hook
+    (_accumulate_local_param_grad) on the local leaf copies the backward
     grad back onto the original DTensor.
 
     The original DTensor params are restored on exit (even on exception) so
@@ -441,8 +441,8 @@ def _swap_dtensor_params_for_local(module):
 class PackedColwiseParallel(TensorParallelLayer):
     """Column-wise parallel style for fused linear weights packed along the output dimension.
 
-    Unlike the plain ``ColwiseParallel``, the packed forward swaps params to local leaves
-    (``_swap_dtensor_params_for_local``) rather than relying on DTensor dispatch, so its
+    Unlike the plain ColwiseParallel, the packed forward swaps params to local leaves
+    (_swap_dtensor_params_for_local) rather than relying on DTensor dispatch, so its
     redistributes stay synchronous.
     """
 
@@ -499,16 +499,16 @@ class PackedColwiseParallel(TensorParallelLayer):
 class MoEParamShard(TensorParallelLayer):
     """Parameter-only TP/EP style for MoE expert weights — sharding, no forward hook.
 
-    Wraps the named 3D expert parameters (``gate_up_proj`` / ``down_proj`` and their
+    Wraps the named 3D expert parameters (gate_up_proj / down_proj and their
     biases) as DTensor placeholders with the configured placement. The matching forward
-    communication is declared *separately* in the plan via ``moe_experts_allreduce`` on
+    communication is declared *separately* in the plan via moe_experts_allreduce on
     the experts *module*. This is the param-granularity decomposition: weight sharding
     lives in configs at parameter level, module entries are forward-comm only.
 
-    ``shards_expert_dim`` is set for the EP ``grouped_gemm`` style, which shards dim 0
-    (the expert dimension). When True, ``module.num_experts`` is updated to the per-rank
+    shards_expert_dim is set for the EP grouped_gemm style, which shards dim 0
+    (the expert dimension). When True, module.num_experts is updated to the per-rank
     local count so the experts forward (histc / clamp / sentinel masking) and the
-    ``ep_router`` sentinel index agree.
+    ep_router sentinel index agree.
     """
 
     def __init__(self, placement, *, shards_expert_dim: bool = False):
@@ -542,7 +542,7 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
         Used for MoE routing weights: the forward value is replicated (same on all
         ranks), but the backward gradient is partial (each rank has 1/tp_size from
         its expert shard). We need to sum the partial gradients without dividing by
-        world_size, which is what DTensor's ``Replicate`` backward does incorrectly.
+        world_size, which is what DTensor's Replicate backward does incorrectly.
         """
 
         @staticmethod
@@ -604,7 +604,7 @@ class MoEExpertsParallel(TensorParallelLayer):
 
 
 def _is_expert_parallel_enabled(module) -> bool:
-    """Whether the model owning ``module`` was loaded with expert parallelism enabled."""
+    """Whether the model owning module was loaded with expert parallelism enabled."""
     config = getattr(module, "config", None)
     dist_config = getattr(config, "distributed_config", None)
     return bool(getattr(dist_config, "enable_expert_parallel", False))
@@ -613,12 +613,12 @@ def _is_expert_parallel_enabled(module) -> bool:
 class EpRouterParallel(TensorParallelLayer):
     """Expert-parallel router: forward-only slicing of router outputs to local experts.
 
-    Ported from the original ``RouterParallel`` (#39501). The gate runs replicated on
-    every rank and emits global ``(router_logits, router_scores, router_indices)``. Under
-    EP each rank owns ``num_experts // ep_size`` experts, so this post-forward hook zeroes
+    Ported from the original RouterParallel (#39501). The gate runs replicated on
+    every rank and emits global (router_logits, router_scores, router_indices). Under
+    EP each rank owns num_experts // ep_size experts, so this post-forward hook zeroes
     the scores of non-local experts and remaps the surviving indices into the local range,
-    using ``num_local_experts`` as the sentinel for dropped (non-local) slots. The
-    downstream experts forward masks that sentinel and ``moe_experts_allreduce`` sums the
+    using num_local_experts as the sentinel for dropped (non-local) slots. The
+    downstream experts forward masks that sentinel and moe_experts_allreduce sums the
     partial per-rank results.
 
     No parameter sharding — the gate weight stays replicated.
@@ -658,10 +658,10 @@ class ParallelInterface(GeneralInterface):
     """Registry of named TP styles. Configs and modeling files reference these by string name.
 
     Adding a new entry here is the supported way to introduce a new TP style.
-    Users can also override or extend at runtime via ``ALL_PARALLEL_STYLES["my_style"] = ...``.
+    Users can also override or extend at runtime via ALL_PARALLEL_STYLES["my_style"] = ....
 
-    Naming convention: ``{kind}[_{comm}][_{extra}]``. The ``_{comm}`` suffix is dropped only when
-    comm is ``"none"`` (no collective). All entries are eager instances; the dict literal lives
+    Naming convention: {kind}[_{comm}][_{extra}]. The _{comm} suffix is dropped only when
+    comm is "none" (no collective). All entries are eager instances; the dict literal lives
     behind a torch-availability guard so this module remains importable without torch.
     """
 
@@ -718,9 +718,9 @@ ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 def apply_tensor_parallel(model, tp_mesh, tp_plan):
     """Apply tensor parallelism by looking each style up by string name.
 
-    A single ``named_modules()`` walk shards each module's direct params (param-keyed plan
-    entries → ``shard_param``) and installs its forward comm (module-keyed entries →
-    ``install_forward``). Plus the cross-cutting setup: tie-weights handling, SP position_ids
+    A single named_modules() walk shards each module's direct params (param-keyed plan
+    entries → shard_param) and installs its forward comm (module-keyed entries →
+    install_forward). Plus the cross-cutting setup: tie-weights handling, SP position_ids
     injection, and loss_parallel activation.
     """
     distributed_config = getattr(model.config, "distributed_config", None)
