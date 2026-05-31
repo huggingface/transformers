@@ -13,4 +13,6 @@
     - local: weightconverter
       title: Încărcarea dinamică de weights
     - local: models
-      title: Loading models
+      title: Încărcarea modelelor
+    - local: custom_models
+      title: Personalizarea modelelor 
