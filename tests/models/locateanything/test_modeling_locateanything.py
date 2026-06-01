@@ -118,75 +118,48 @@ class LocateAnythingModelTest(unittest.TestCase):
             model.model.get_placeholder_mask(input_ids, inputs_embeds, torch.ones(2, config.text_config.hidden_size))
 
     @slow
-    def test_real_model_matches_remote_code_generation(self):
+    def test_real_model_slow_generation(self):
+        # Expected strings were captured from the original `trust_remote_code` model
+        # (transformers==4.57.1) on the same inputs. The original remote code does not import on
+        # current Transformers, so instead of comparing at runtime we guard numerical equivalence of
+        # the ported model in pure auto-regressive ("slow") decoding against those captured outputs.
         from PIL import Image
 
-        image = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/p-blog/candy.JPG",
-                stream=True,
-                timeout=30,
-            ).raw
-        ).convert("RGB")
-        prompt = "Locate a single instance that matches the following description: animal."
-        messages = [{"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": prompt}]}]
-
-        remote_processor = AutoProcessor.from_pretrained(self.model_id, trust_remote_code=True)
-        local_processor = AutoProcessor.from_pretrained(self.model_id, trust_remote_code=False)
-
-        remote_text = remote_processor.py_apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        local_text = local_processor.py_apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        self.assertEqual(remote_text, local_text)
-
-        remote_images, remote_videos = remote_processor.process_vision_info(messages)
-        local_images, local_videos = local_processor.process_vision_info(messages)
-        remote_inputs = remote_processor(
-            text=[remote_text], images=remote_images, videos=remote_videos, return_tensors="pt"
-        )
-        local_inputs = local_processor(
-            text=[local_text], images=local_images, videos=local_videos, return_tensors="pt"
-        )
-
-        for key in remote_inputs:
-            if hasattr(remote_inputs[key], "shape"):
-                self.assertEqual(remote_inputs[key].shape, local_inputs[key].shape)
-
+        processor = AutoProcessor.from_pretrained(self.model_id, trust_remote_code=False)
         dtype = torch.bfloat16
-        remote_model = AutoModel.from_pretrained(self.model_id, trust_remote_code=True, torch_dtype=dtype).to(
-            torch_device
-        )
-        local_model = AutoModel.from_pretrained(self.model_id, trust_remote_code=False, torch_dtype=dtype).to(
-            torch_device
-        )
-        remote_model.eval()
-        local_model.eval()
+        model = AutoModel.from_pretrained(self.model_id, trust_remote_code=False, torch_dtype=dtype).to(torch_device)
+        model.eval()
 
-        remote_inputs = remote_inputs.to(torch_device)
-        local_inputs = local_inputs.to(torch_device)
+        cases = [
+            (
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/p-blog/candy.JPG",
+                "Locate a single instance that matches the following description: animal.",
+                "<ref>animal</ref><box><501><459><547><541></box><|im_end|>",
+            ),
+            (
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
+                "Locate all instances that match the following description: cat.",
+                "<ref>cat</ref><box><0><112><494><988></box><|im_end|>",
+            ),
+        ]
+        for url, prompt, expected in cases:
+            image = Image.open(requests.get(url, stream=True, timeout=30).raw).convert("RGB")
+            messages = [
+                {"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": prompt}]}
+            ]
+            text = processor.py_apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+            images, videos = processor.process_vision_info(messages)
+            inputs = processor(text=[text], images=images, videos=videos, return_tensors="pt").to(torch_device)
 
-        remote_output = remote_model.generate(
-            pixel_values=remote_inputs["pixel_values"].to(dtype),
-            input_ids=remote_inputs["input_ids"],
-            attention_mask=remote_inputs["attention_mask"],
-            image_grid_hws=remote_inputs.get("image_grid_hws", None),
-            tokenizer=remote_processor.tokenizer,
-            max_new_tokens=64,
-            use_cache=True,
-            generation_mode="slow",
-            do_sample=False,
-            verbose=False,
-        )
-        local_output = local_model.generate(
-            pixel_values=local_inputs["pixel_values"].to(dtype),
-            input_ids=local_inputs["input_ids"],
-            attention_mask=local_inputs["attention_mask"],
-            image_grid_hws=local_inputs.get("image_grid_hws", None),
-            tokenizer=local_processor.tokenizer,
-            max_new_tokens=64,
-            use_cache=True,
-            generation_mode="slow",
-            do_sample=False,
-            verbose=False,
-        )
-
-        self.assertEqual(remote_output[0], local_output[0])
+            output = model.generate(
+                pixel_values=inputs["pixel_values"].to(dtype),
+                input_ids=inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                image_grid_hws=inputs.get("image_grid_hws", None),
+                tokenizer=processor.tokenizer,
+                max_new_tokens=64,
+                use_cache=True,
+                generation_mode="slow",
+                do_sample=False,
+            )
+            self.assertEqual(output[0], expected)
