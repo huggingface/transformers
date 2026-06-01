@@ -44,7 +44,7 @@ try:
 except ImportError:
     VideoInput = None
 
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 
@@ -598,9 +598,57 @@ class LocateAnythingProcessor(ProcessorMixin):
             image_inputs["image_grid_hws"] = np.concatenate(image_grid_hws_list, axis=0)
 
         video_inputs = {}  # Video data is merged into image_inputs now
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         text_inputs = self.tokenizer(new_sample_list, **output_kwargs["text_kwargs"])
 
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(array_ids)
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            mm_token_type_ids[array_ids == self.video_token_id] = 2
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
         return BatchFeature(data={**text_inputs, **image_inputs, **video_inputs})
+
+    def _num_image_tokens(self, height: int, width: int) -> tuple[int, int]:
+        """Replicates the image processor resize/patch logic to count placeholder tokens for one image."""
+        image_processor = self.image_processor
+        patch_size = image_processor.patch_size
+        merge_h, merge_w = image_processor.merge_kernel_size
+        width, height = int(width), int(height)
+        if (width // patch_size) * (height // patch_size) > image_processor.in_token_limit:
+            scale = math.sqrt(image_processor.in_token_limit / ((width // patch_size) * (height // patch_size)))
+            width, height = int(width * scale), int(height * scale)
+        pad_w = merge_w * patch_size
+        pad_h = merge_h * patch_size
+        target_w = math.ceil(width / pad_w) * pad_w
+        target_h = math.ceil(height / pad_h) * pad_h
+        grid_w, grid_h = target_w // patch_size, target_h // patch_size
+        num_image_patches = grid_h * grid_w
+        num_image_tokens = num_image_patches // (merge_h * merge_w)
+        return num_image_tokens, num_image_patches
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            num_image_tokens, num_image_patches = [], []
+            for height, width in image_sizes:
+                tokens, patches = self._num_image_tokens(height, width)
+                num_image_tokens.append(tokens)
+                num_image_patches.append(patches)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
 
     def batch_decode(self, *args, **kwargs):
         return self.tokenizer.batch_decode(*args, **kwargs)
