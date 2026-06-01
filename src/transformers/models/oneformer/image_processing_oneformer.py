@@ -18,7 +18,7 @@ import os
 from typing import Union
 
 import torch
-from huggingface_hub import RepositoryNotFoundError
+from huggingface_hub.errors import RepositoryNotFoundError
 from torch import nn
 from torchvision.transforms.v2 import functional as tvF
 
