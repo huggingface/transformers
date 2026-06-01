@@ -30,6 +30,7 @@ class VivitVideoProcessor(BaseVideoProcessor):
     rescale_factor = 1 / 127.5
     do_normalize = True
     do_convert_rgb = True
+    do_sample_frames = False
     model_input_names = ["pixel_values"]
 
     def rescale_and_normalize(self, images, do_rescale, rescale_factor, do_normalize, image_mean, image_std):

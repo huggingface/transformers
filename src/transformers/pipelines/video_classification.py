@@ -148,21 +148,22 @@ class VideoClassificationPipeline(Pipeline):
         if num_frames is None:
             num_frames = self.model.config.num_frames
 
-        if video.startswith("http://") or video.startswith("https://"):
-            video = BytesIO(httpx.get(video, follow_redirects=True).content)
+        # Decode the video manually because image processors can't decode or sample frames
+        if self.video_processor is None:
+            if video.startswith("http://") or video.startswith("https://"):
+                video = BytesIO(httpx.get(video, follow_redirects=True).content)
 
-        container = av.open(video)
+            container = av.open(video)
+            start_idx = 0
+            end_idx = num_frames * frame_sampling_rate - 1
+            indices = np.linspace(start_idx, end_idx, num=num_frames, dtype=np.int64)
 
-        start_idx = 0
-        end_idx = num_frames * frame_sampling_rate - 1
-        indices = np.linspace(start_idx, end_idx, num=num_frames, dtype=np.int64)
-
-        video = read_video_pyav(container, indices)
-        video = list(video)
-
-        processor = self.video_processor if self.video_processor is not None else self.image_processor
-        model_inputs = processor(video, return_tensors="pt")
-        model_inputs = model_inputs.to(self.dtype)
+            video = read_video_pyav(container, indices)
+            video = list(video)
+            model_inputs = self.image_processor(video, return_tensors="pt").to(self.dtype)
+        else:
+            processing_kwargs = {"num_frames": num_frames, "do_sample_frames": True}
+            model_inputs = self.video_processor(video, **processing_kwargs, return_tensors="pt").to(self.dtype)
         return model_inputs
 
     def _forward(self, model_inputs):

@@ -30,6 +30,7 @@ class TimesformerVideoProcessor(BaseVideoProcessor):
     rescale_factor = 1 / 255
     do_normalize = True
     do_convert_rgb = True
+    do_sample_frames = False
     model_input_names = ["pixel_values"]
 
     def preprocess(self, videos, **kwargs):
