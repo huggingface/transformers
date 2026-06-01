@@ -863,6 +863,9 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "recurrent_gemma": [
+            WeightRenaming(r"temporal_block\.(q_proj|k_proj|v_proj|o_proj)", r"self_attn.\1"),
+        ],
         "nomic_bert": [
             WeightRenaming(r"encoder.layers", r"layers"),
             WeightRenaming(r"emb_ln", r"embeddings.LayerNorm"),
