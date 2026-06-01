@@ -610,13 +610,14 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     deepgemm = _load_deepgemm_kernel(requires_sm100=True)
     gate_up_sf_raw = to_local(module.gate_up_proj_scale_inv.data)
     down_sf_raw = to_local(module.down_proj_scale_inv.data)
-    # `_interleave_l1_weights` does `reshape`/`empty_like`/`copy_` and expects plain int8.
+    # Force int8 view: the kernel's interleave reshape/empty_like/copy_ is bit-level.
     gate_up_w = to_local(module.gate_up_proj.data).view(torch.int8).contiguous()
     down_w = to_local(module.down_proj.data).view(torch.int8).contiguous()
 
-    num_local_experts = gate_up_w.size(0)
-    intermediate_hidden = gate_up_w.size(1) // 2
-    hidden_dim = gate_up_w.size(2)
+    intermediate_hidden = module.intermediate_dim
+    num_local_experts = module.num_experts
+    hidden_dim = module.hidden_dim
+
     if hidden_dim % 32 != 0 or intermediate_hidden % 32 != 0:
         raise ValueError(
             f"DeepGEMM Mega MoE requires `hidden_dim` and `intermediate_hidden` divisible by 32 "
@@ -625,14 +626,14 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
 
     gate_up_sf = deepgemm.transform_sf_into_required_layout(
         gate_up_sf_raw.float(),
-        gate_up_w.size(1),  # 2 * intermediate
+        2 * intermediate_hidden,
         hidden_dim,
         recipe=(1, 32),
         num_groups=num_local_experts,
     )
     down_sf = deepgemm.transform_sf_into_required_layout(
         down_sf_raw.float(),
-        down_w.size(1),  # hidden
+        hidden_dim,
         intermediate_hidden,
         recipe=(1, 32),
         num_groups=num_local_experts,

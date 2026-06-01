@@ -243,6 +243,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 other = [p for p in conv._original_source_patterns if not p.endswith(".weight")]
                 target = [t.removesuffix("$") for t in conv._original_target_patterns]
                 if dequantize:
+                    # `Fp8Dequantize` pairs each weight with its scale and folds the scale
+                    # into the weight, so by the time the model's merge ops run only the
+                    # dequantized weight remains — one converter, one target bucket.
                     conv = WeightConverter(
                         source_patterns=anchored_weight + scale_sources + other,
                         target_patterns=target,
@@ -250,18 +253,25 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                     )
                     updated.append(conv)
                 else:
+                    # Scales mirror weights: they must go through the *same* merge ops so
+                    # the per-expert / per-shard structure stays aligned. We can't fold
+                    # them into the weight converter because the ops route all inputs to
+                    # a single target bucket — weights need `target`, scales need
+                    # `target_scale_inv`. Sibling converter with the same ops is the
+                    # cleanest expression of that symmetry.
+                    ops = list(conv.operations)
                     updated.append(
                         WeightConverter(
                             source_patterns=anchored_weight + other,
                             target_patterns=target,
-                            operations=list(conv.operations),
+                            operations=ops,
                         )
                     )
                     updated.append(
                         WeightConverter(
                             source_patterns=scale_sources,
                             target_patterns=[t + "_scale_inv" for t in target],
-                            operations=list(conv.operations),
+                            operations=ops,
                         )
                     )
             else:
