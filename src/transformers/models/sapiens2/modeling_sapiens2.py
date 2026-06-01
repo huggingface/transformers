@@ -285,9 +285,11 @@ class Sapiens2RopePositionEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         image_size = config.image_size
         image_h, image_w = image_size if isinstance(image_size, Iterable) else (image_size, image_size)
-        patch_size = config.patch_size if isinstance(config.patch_size, int) else config.patch_size[0]
-        self.num_patches_h = image_h // patch_size
-        self.num_patches_w = image_w // patch_size
+        patch_size = config.patch_size
+        patch_size_h = patch_size if isinstance(patch_size, int) else patch_size[0]
+        patch_size_w = patch_size if isinstance(patch_size, int) else patch_size[1]
+        self.num_patches_h = image_h // patch_size_h
+        self.num_patches_w = image_w // patch_size_w
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = pixel_values.shape
@@ -969,8 +971,10 @@ class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
 
         batch_size, _, image_height, image_width = pixel_values.shape
         patch_size = self.config.patch_size
-        num_patches_height = image_height // patch_size
-        num_patches_width = image_width // patch_size
+        patch_size_h = patch_size if isinstance(patch_size, int) else patch_size[0]
+        patch_size_w = patch_size if isinstance(patch_size, int) else patch_size[1]
+        num_patches_height = image_height // patch_size_h
+        num_patches_width = image_width // patch_size_w
 
         num_prefix = 1 + getattr(self.config, "num_register_tokens", 0)
         return_class_token = getattr(self.config, "return_class_token", False)
@@ -1058,8 +1062,11 @@ class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
         outputs = self.model(pixel_values, **kwargs)
 
         batch_size, _, height, width = pixel_values.shape
-        patch_height = height // self.config.patch_size
-        patch_width = width // self.config.patch_size
+        patch_size = self.config.patch_size
+        patch_size_h = patch_size if isinstance(patch_size, int) else patch_size[0]
+        patch_size_w = patch_size if isinstance(patch_size, int) else patch_size[1]
+        patch_height = height // patch_size_h
+        patch_width = width // patch_size_w
 
         patch_tokens = outputs.last_hidden_state[:, 1 + self.config.num_register_tokens :]
         feature_map = patch_tokens.transpose(1, 2).reshape(batch_size, -1, patch_height, patch_width)
@@ -1173,8 +1180,11 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
         outputs = self.model(pixel_values, **kwargs)
 
         batch_size, _, height, width = pixel_values.shape
-        patch_height = height // self.config.patch_size
-        patch_width = width // self.config.patch_size
+        patch_size = self.config.patch_size
+        patch_size_h = patch_size if isinstance(patch_size, int) else patch_size[0]
+        patch_size_w = patch_size if isinstance(patch_size, int) else patch_size[1]
+        patch_height = height // patch_size_h
+        patch_width = width // patch_size_w
 
         patch_tokens = outputs.last_hidden_state[:, 1 + self.config.num_register_tokens :]
         feature_map = patch_tokens.transpose(1, 2).reshape(batch_size, -1, patch_height, patch_width)
@@ -1243,8 +1253,11 @@ class Sapiens2ForNormalEstimation(Sapiens2PreTrainedModel):
         outputs = self.model(pixel_values, **kwargs)
 
         batch_size, _, height, width = pixel_values.shape
-        patch_height = height // self.config.patch_size
-        patch_width = width // self.config.patch_size
+        patch_size = self.config.patch_size
+        patch_size_h = patch_size if isinstance(patch_size, int) else patch_size[0]
+        patch_size_w = patch_size if isinstance(patch_size, int) else patch_size[1]
+        patch_height = height // patch_size_h
+        patch_width = width // patch_size_w
 
         patch_tokens = outputs.last_hidden_state[:, 1 + self.config.num_register_tokens :]
         feature_map = patch_tokens.transpose(1, 2).reshape(batch_size, -1, patch_height, patch_width)
@@ -1316,8 +1329,11 @@ class Sapiens2ForPointmapEstimation(Sapiens2PreTrainedModel):
         outputs = self.model(pixel_values, **kwargs)
 
         batch_size, _, height, width = pixel_values.shape
-        patch_height = height // self.config.patch_size
-        patch_width = width // self.config.patch_size
+        patch_size = self.config.patch_size
+        patch_size_h = patch_size if isinstance(patch_size, int) else patch_size[0]
+        patch_size_w = patch_size if isinstance(patch_size, int) else patch_size[1]
+        patch_height = height // patch_size_h
+        patch_width = width // patch_size_w
 
         patch_tokens = outputs.last_hidden_state[:, 1 + self.config.num_register_tokens :]
         feature_map = patch_tokens.transpose(1, 2).reshape(batch_size, -1, patch_height, patch_width)
@@ -1388,8 +1404,11 @@ class Sapiens2ForImageMatting(Sapiens2PreTrainedModel):
         outputs = self.model(pixel_values, **kwargs)
 
         batch_size, _, height, width = pixel_values.shape
-        patch_height = height // self.config.patch_size
-        patch_width = width // self.config.patch_size
+        patch_size = self.config.patch_size
+        patch_size_h = patch_size if isinstance(patch_size, int) else patch_size[0]
+        patch_size_w = patch_size if isinstance(patch_size, int) else patch_size[1]
+        patch_height = height // patch_size_h
+        patch_width = width // patch_size_w
 
         patch_tokens = outputs.last_hidden_state[:, 1 + self.config.num_register_tokens :]
         feature_map = patch_tokens.transpose(1, 2).reshape(batch_size, -1, patch_height, patch_width)

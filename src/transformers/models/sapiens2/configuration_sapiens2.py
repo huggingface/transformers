@@ -225,9 +225,11 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
         ):
             image_size = self.image_size
             image_h, image_w = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
-            patch_size = self.patch_size if isinstance(self.patch_size, int) else self.patch_size[0]
-            h = image_h // patch_size
-            w = image_w // patch_size
+            patch_size = self.patch_size
+            patch_size_h = patch_size if isinstance(patch_size, int) else patch_size[0]
+            patch_size_w = patch_size if isinstance(patch_size, int) else patch_size[1]
+            h = image_h // patch_size_h
+            w = image_w // patch_size_w
             for kernel_size in self.head_config.scale_conv_kernel_sizes:
                 padding = (kernel_size - 1) // 2
                 h = (h + 2 * padding - kernel_size) // 2 + 1
