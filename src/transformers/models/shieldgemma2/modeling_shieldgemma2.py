@@ -21,6 +21,7 @@ from ...modeling_outputs import ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
+    can_return_tuple,
     logging,
 )
 from ..auto import AutoModelForImageTextToText
@@ -44,6 +45,10 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
     config: ShieldGemma2Config
     input_modalities = ("image", "text")
     base_model_prefix = "model"
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def __init__(self, config: ShieldGemma2Config):
         super().__init__(config=config)
@@ -65,6 +70,7 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
         self.model.get_decoder().set_output_embeddings(new_embeddings)
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

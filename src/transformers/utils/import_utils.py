@@ -985,7 +985,7 @@ def is_flash_attn_2_available() -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
     # FA4 is also distributed under "flash_attn", hence we need to check the naming here
     is_available = is_available and "flash-attn" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])
     ]
 
     if not is_available or not (is_torch_cuda_available() or is_torch_mlu_available()):
@@ -1004,7 +1004,7 @@ def is_flash_attn_3_available() -> bool:
     is_available = _is_package_available("flash_attn_interface")[0]
     # Resolving and ensuring the proper name of FA3 being associated
     is_available = is_available and "flash-attn-3" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn_interface"]
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn_interface", [])
     ]
     return is_available and is_torch_cuda_available()
 
@@ -1016,7 +1016,7 @@ def is_flash_attn_4_available() -> bool:
     # NOTE: FA2 seems to distribute the `cute` subdirectory even if only FA2 has been installed
     #       -> check for the proper (normalized) distribution name
     is_available = is_available and "flash-attn-4" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])
     ]
 
     return is_available and is_torch_cuda_available()
@@ -1027,7 +1027,7 @@ def is_flash_attn_greater_or_equal(library_version: str) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
     # FA4 is also distributed under "flash_attn", hence we need to check the naming here
     is_available = is_available and "flash-attn" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])
     ]
 
     if not is_available:
@@ -1372,16 +1372,6 @@ def is_matplotlib_available() -> bool:
 @lru_cache
 def is_mistral_common_available() -> bool:
     return is_vision_available() and _is_package_available("mistral_common")[0]
-
-
-@lru_cache
-def is_opentelemetry_available() -> bool:
-    try:
-        return _is_package_available("opentelemetry")[0] and version.parse(
-            importlib.metadata.version("opentelemetry-api")
-        ) >= version.parse("1.30.0")
-    except Exception as _:
-        return False
 
 
 @lru_cache
