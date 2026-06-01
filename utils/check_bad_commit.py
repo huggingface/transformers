@@ -292,20 +292,21 @@ def get_commit_info(commit, pr_number=None, github_token=None):
     if not pr_number:
         url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit_to_query}/pulls"
         pr_info_for_commit = requests.get(url, headers=headers).json()
-        if len(pr_info_for_commit) > 0:
-            pr_number = pr_info_for_commit[0]["number"]
+        if isinstance(pr_info_for_commit, list) and len(pr_info_for_commit) > 0:
+            pr_number = pr_info_for_commit[0].get("number")
 
     # If we have a PR number, get author and merged_by info
     if pr_number:
         url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
         pr_for_commit = requests.get(url, headers=headers).json()
-        author = pr_for_commit["user"]["login"]
-        if pr_for_commit["merged_by"] is not None:
-            merged_author = pr_for_commit["merged_by"]["login"]
+        author = pr_for_commit.get("user", {}).get("login")
+        merged_by = pr_for_commit.get("merged_by")
+        if merged_by is not None:
+            merged_author = merged_by.get("login")
 
     parent = commit_info["parents"][0]["sha"]
     if author is None:
-        author = commit_info["author"]["login"]
+        author = (commit_info.get("author") or {}).get("login")
 
     return {"commit": commit, "pr_number": pr_number, "author": author, "merged_by": merged_author, "parent": parent}
 
