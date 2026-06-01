@@ -1112,11 +1112,10 @@ class Sapiens2Config(DINOv3ViTConfig):
 class Sapiens2Embeddings(DINOv3ViTEmbeddings):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
-        if not config.use_mask_token:
-            del self.mask_token
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if config.use_mask_token else None
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
-        if bool_masked_pos is not None and not self.config.use_mask_token:
+        if bool_masked_pos is not None and self.mask_token is None:
             raise ValueError("bool_masked_pos requires use_mask_token=True in the config")
         return super().forward(pixel_values, bool_masked_pos)
 
