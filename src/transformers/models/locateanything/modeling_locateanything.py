@@ -21,6 +21,7 @@
 import math
 from collections.abc import Sequence
 from copy import deepcopy
+from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -562,6 +563,18 @@ class MoonViTPreTrainedEncoder(PreTrainedModel):
         hidden_states = self.encoder(hidden_states, grid_hws)
         hidden_states = patch_merger(hidden_states, grid_hws, merge_kernel_size=self.merge_kernel_size)
         return hidden_states
+
+
+@dataclass
+@auto_docstring(custom_intro="Base class for LocateAnything causal language model (or autoregressive) outputs.")
+class LocateAnythingCausalLMOutputWithPast(CausalLMOutputWithPast):
+    r"""
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(num_images, sequence_length, hidden_size)`. The projected image features
+        (`image_hidden_states`) produced by the MoonViT vision tower and the multimodal projector.
+    """
+
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 @auto_docstring
@@ -1205,11 +1218,12 @@ class LocateAnythingForConditionalGeneration(LocateAnythingPreTrainedModel, Gene
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> tuple | LocateAnythingCausalLMOutputWithPast:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         input_embeds = self.language_model.get_input_embeddings()(input_ids)
 
+        image_features = None
         if pixel_values is not None:
             image_features = self.get_image_features(
                 pixel_values, image_grid_hws=image_grid_hws, image_flags=image_flags
@@ -1246,14 +1260,16 @@ class LocateAnythingForConditionalGeneration(LocateAnythingPreTrainedModel, Gene
 
         if not return_dict:
             output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
+            output = (loss,) + output if loss is not None else output
+            return output + (image_features,)
 
-        return CausalLMOutputWithPast(
+        return LocateAnythingCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_hidden_states=image_features,
         )
 
     def extract_feature(self, pixel_values, image_grid_hws):
