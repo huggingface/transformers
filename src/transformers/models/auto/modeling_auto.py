@@ -1898,6 +1898,33 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_IMAGE_MATTING_NAMES = OrderedDict(
+    [
+        ("sapiens2", "Sapiens2ForImageMatting"),
+        ("vitmatte", "VitMatteForImageMatting"),
+    ]
+)
+
+MODEL_FOR_NORMAL_ESTIMATION_MAPPING_NAMES = OrderedDict(
+    [
+        ("sapiens2", "Sapiens2ForNormalEstimation"),
+    ]
+)
+
+MODEL_FOR_POINTMAP_ESTIMATION_MAPPING_NAMES = OrderedDict(
+    [
+        ("sapiens2", "Sapiens2ForPointmapEstimation"),
+    ]
+)
+
+MODEL_FOR_POSE_ESTIMATION_MAPPING_NAMES = OrderedDict(
+    [
+        ("sapiens2", "Sapiens2ForPoseEstimation"),
+        ("vitpose", "VitPoseForPoseEstimation"),
+    ]
+)
+
+
 MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_MAPPING_NAMES)
 MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_PRETRAINING_MAPPING_NAMES)
 MODEL_FOR_CAUSAL_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
@@ -2011,6 +2038,13 @@ MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING = _LazyAutoMapping(
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES)
 
 MODEL_FOR_AUDIO_TOKENIZATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_TOKENIZATION_NAMES)
+
+MODEL_FOR_IMAGE_MATTING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_MATTING_NAMES)
+MODEL_FOR_NORMAL_ESTIMATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_NORMAL_ESTIMATION_MAPPING_NAMES)
+MODEL_FOR_POINTMAP_ESTIMATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_POINTMAP_ESTIMATION_MAPPING_NAMES
+)
+MODEL_FOR_POSE_ESTIMATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_POSE_ESTIMATION_MAPPING_NAMES)
 
 
 class AutoModelForMaskGeneration(_BaseAutoModelClass):
@@ -2355,6 +2389,34 @@ AutoModelForAudioTokenization = auto_class_update(
 )
 
 
+class AutoModelForImageMatting(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_IMAGE_MATTING_MAPPING
+
+
+AutoModelForImageMatting = auto_class_update(AutoModelForImageMatting, head_doc="image matting")
+
+
+class AutoModelForNormalEstimation(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_NORMAL_ESTIMATION_MAPPING
+
+
+AutoModelForNormalEstimation = auto_class_update(AutoModelForNormalEstimation, head_doc="normal estimation")
+
+
+class AutoModelForPointmapEstimation(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_POINTMAP_ESTIMATION_MAPPING
+
+
+AutoModelForPointmapEstimation = auto_class_update(AutoModelForPointmapEstimation, head_doc="pointmap estimation")
+
+
+class AutoModelForPoseEstimation(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_POSE_ESTIMATION_MAPPING
+
+
+AutoModelForPoseEstimation = auto_class_update(AutoModelForPoseEstimation, head_doc="pose estimation")
+
+
 __all__ = [
     "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
     "MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING",
@@ -2449,4 +2511,8 @@ __all__ = [
     "AutoModelForZeroShotImageClassification",
     "AutoModelForZeroShotObjectDetection",
     "AutoModelForImageTextToText",
+    "AutoModelForImageMatting",
+    "AutoModelForNormalEstimation",
+    "AutoModelForPointmapEstimation",
+    "AutoModelForPoseEstimation",
 ]
