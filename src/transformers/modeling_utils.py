@@ -4870,8 +4870,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 yield name, tensor
 
     def train(self, mode: bool = True):
+        changed_mode = self.training != mode
         out = super().train(mode)
-        if self.use_kernels:
+        # Avoid recasting kernels if not necessary
+        if self.use_kernels and changed_mode:
             self.kernelize()
         return out
 
