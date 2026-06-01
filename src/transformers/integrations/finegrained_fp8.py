@@ -989,7 +989,10 @@ class Fp8Dequantize(ConversionOps):
         # Derive block size from the scale grid rather than the global config: MoE experts
         # ship MXFP4 with a ``[1, 32]`` block, dense linears ship FP8 with ``[128, 128]``,
         # and the same dequant has to handle both within one checkpoint.
-        scale_rows, scale_cols = scales.shape[-2:]
+        try:
+            scale_rows, scale_cols = scales.shape[-2:]
+        except Exception as e:
+            scale_rows, scale_cols = 1, 1
         if rows % scale_rows or cols % scale_cols:
             raise ValueError(
                 f"Weight shape ({rows}, {cols}) not divisible by scale grid ({scale_rows}, {scale_cols})."
