@@ -358,11 +358,11 @@ class MllamaImageProcessor(TorchvisionBackend):
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 224, "width": 224}
-    do_resize = True
+    do_resize = True  # trf-ignore: TRF016 (enforced by validator)
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    do_pad = True
+    do_pad = True  # trf-ignore: TRF016 (enforced by validator)
     max_image_tiles = 4
     valid_kwargs = MllamaImageProcessorKwargs
     model_input_names = ["pixel_values", "num_tiles", "aspect_ratio_ids", "aspect_ratio_mask"]
