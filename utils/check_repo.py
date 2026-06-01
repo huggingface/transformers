@@ -465,11 +465,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Siglip2VisionModel",
     "Siglip2TextModel",
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
-    "VitPoseForPoseEstimation",  # no autoclass for pose estimation
-    "Sapiens2ForPoseEstimation",  # no autoclass for pose estimation
-    "Sapiens2ForNormalEstimation",  # no autoclass for normal estimation
-    "Sapiens2ForPointmapEstimation",  # no autoclass for pointmap estimation
-    "Sapiens2ForImageMatting",  # no autoclass for matting
     "CLIPTextModel",
     "MetaClip2TextModel",
     "MetaClip2TextModelWithProjection",

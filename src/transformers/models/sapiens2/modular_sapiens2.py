@@ -20,7 +20,9 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 from torchvision.transforms.v2 import functional as tvF
 
+from transformers.backbone_utils import filter_output_hidden_states
 from transformers.image_processing_backends import TorchvisionBackend
+from transformers.models.dinov3_vit.modular_dinov3_vit import DINOv3ViTBackboneOutput
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -66,6 +68,17 @@ from ..vitpose.modeling_vitpose import VitPoseEstimatorOutput, flip_back
 
 
 logger = logging.get_logger(__name__)
+
+
+@auto_docstring(
+    custom_intro="""
+    Output type of [`Sapiens2Backbone`], extending [`BackboneOutput`] with optional CLS tokens from
+    each selected feature stage (used when `config.return_class_token=True`).
+    """
+)
+@dataclass
+class Sapiens2BackboneOutput(DINOv3ViTBackboneOutput):
+    pass
 
 
 @auto_docstring(
@@ -1059,6 +1072,12 @@ class Sapiens2Config(DINOv3ViTConfig):
         forward call so the model flips heatmaps back before returning them.
     head_config (`Sapiens2HeadConfig`, *optional*):
         Configuration for the decode head. See [`Sapiens2HeadConfig`] for the available options.
+    rms_norm_eps (`float`, *optional*, defaults to 1e-6):
+        Epsilon for the RMS normalization layers.
+    normalize_backbone_outputs (`bool`, *optional*, defaults to `True`):
+        Whether to apply RMSNorm to the backbone outputs before returning them from the forward pass.
+        Feature maps, class tokens, and hidden states are all normalized when this is `True`.
+        Only applies when the model is used as a backbone.
     """
 
     model_type = "sapiens2"
@@ -1071,7 +1090,8 @@ class Sapiens2Config(DINOv3ViTConfig):
     use_mask_token: bool = False
     use_gated_mlp: bool = True
     hidden_act: str = "silu"
-    layer_norm_eps: float = 1e-6
+    rms_norm_eps: float = 1e-6
+    normalize_backbone_outputs: bool = True
     num_register_tokens: int = 8
     key_bias: bool = True
     use_qk_norm: bool = True
@@ -1146,12 +1166,8 @@ class Sapiens2Attention(DINOv3ViTAttention):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.k_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim, bias=config.key_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim, bias=config.value_bias)
-        self.q_norm = (
-            Sapiens2RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
-        )
-        self.k_norm = (
-            Sapiens2RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
-        )
+        self.q_norm = Sapiens2RMSNorm(self.head_dim, eps=config.rms_norm_eps) if config.use_qk_norm else nn.Identity()
+        self.k_norm = Sapiens2RMSNorm(self.head_dim, eps=config.rms_norm_eps) if config.use_qk_norm else nn.Identity()
 
     def forward(
         self,
@@ -1195,8 +1211,8 @@ class Sapiens2Layer(DINOv3ViTLayer):
     def __init__(self, config: Sapiens2Config, layer_idx: int):
         super().__init__(config)
         self.attention = Sapiens2Attention(config, layer_idx=layer_idx)
-        self.norm1 = Sapiens2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.norm2 = Sapiens2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm1 = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm2 = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layer_scale2 = nn.Identity()
 
 
@@ -1396,13 +1412,71 @@ class Sapiens2Encoder(DINOv3ViTEncoder):
 class Sapiens2Model(DINOv3ViTModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
-        self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class Sapiens2Backbone(DINOv3ViTBackbone):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
-        self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+    @can_return_tuple
+    @filter_output_hidden_states
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Sapiens2BackboneOutput:
+        pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
+        hidden_states = self.embeddings(pixel_values)
+        position_embeddings = self.rope_embeddings(pixel_values)
+
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
+        output = self.model(hidden_states, position_embeddings, **kwargs)
+        stage_hidden_states = output.hidden_states
+
+        batch_size, _, image_height, image_width = pixel_values.shape
+        patch_size = self.config.patch_size
+        num_patches_height = image_height // patch_size
+        num_patches_width = image_width // patch_size
+
+        num_prefix = 1 + getattr(self.config, "num_register_tokens", 0)
+        return_class_token = getattr(self.config, "return_class_token", False)
+
+        feature_maps, cls_tokens = [], []
+        sequence_output = None
+        last_stage_idx = len(self.stage_names) - 1
+        for idx, (stage_name, hidden_state) in enumerate(zip(self.stage_names, stage_hidden_states)):
+            if self.config.normalize_backbone_outputs:
+                hidden_state = self.norm(hidden_state)
+            if idx == last_stage_idx:
+                sequence_output = hidden_state
+
+            if stage_name in self.out_features:
+                if return_class_token:
+                    cls_tokens.append(hidden_state[:, 0, :])
+                patch_tokens = hidden_state[:, num_prefix:, :]
+                if self.config.reshape_hidden_states:
+                    fmap = (
+                        patch_tokens.reshape(batch_size, num_patches_height, num_patches_width, patch_tokens.shape[-1])
+                        .permute(0, 3, 1, 2)
+                        .contiguous()
+                    )
+                else:
+                    fmap = patch_tokens
+
+                feature_maps.append(fmap)
+
+        output = Sapiens2BackboneOutput(
+            feature_maps=tuple(feature_maps),
+            cls_tokens=tuple(cls_tokens) if return_class_token else None,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
+        )
+        output.last_hidden_state = sequence_output
+
+        return output
 
 
 @auto_docstring(checkpoint="facebook/sapiens2-seg-0.4b")
