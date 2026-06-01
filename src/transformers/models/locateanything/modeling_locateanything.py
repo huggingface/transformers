@@ -34,10 +34,10 @@ from ... import initialization as init
 from ...activations import PytorchGELUTanh
 from ...cache_utils import DynamicCache
 from ...generation import GenerationMixin
-from ...modeling_outputs import CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_flash_attn_2_available, logging, torch_compilable_check
-from ..auto import AutoModelForCausalLM
+from ..auto import AutoModel
 from .configuration_locateanything import LocateAnythingConfig, MoonViTConfig
 
 
@@ -566,6 +566,20 @@ class MoonViTPreTrainedEncoder(PreTrainedModel):
 
 
 @dataclass
+@auto_docstring(custom_intro="Base class for LocateAnything outputs, with hidden states and image features.")
+class LocateAnythingModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    past_key_values (`Cache`, *optional*):
+        Cached key/value states used to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        The projected image features produced by the MoonViT vision tower and the multimodal projector.
+    """
+
+    past_key_values: list[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
+
+
+@dataclass
 @auto_docstring(custom_intro="Base class for LocateAnything causal language model (or autoregressive) outputs.")
 class LocateAnythingCausalLMOutputWithPast(CausalLMOutputWithPast):
     r"""
@@ -612,6 +626,178 @@ class LocateAnythingPreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=std)
             if module.padding_idx is not None:
                 init.zeros_(module.weight[module.padding_idx])
+
+
+@auto_docstring(
+    custom_intro="The LocateAnything model: a MoonViT vision tower and an MLP projector on top of a causal language model."
+)
+@auto_docstring(
+    custom_intro="The LocateAnything model: a MoonViT vision tower and an MLP projector on top of a language model backbone, without a language modeling head."
+)
+class LocateAnythingModel(LocateAnythingPreTrainedModel):
+    def __init__(self, config: LocateAnythingConfig):
+        super().__init__(config)
+
+        if config.vision_config.model_type != "moonvit":
+            raise ValueError(
+                f"Unsupported vision model type: {config.vision_config.model_type}. Only moonvit is supported."
+            )
+        vision_attn_impl = getattr(config.vision_config, "_attn_implementation", None) or "flash_attention_2"
+        if vision_attn_impl == "flash_attention_2" and not is_flash_attn_2_available():
+            logger.warning_once("flash_attn is not available for MoonViT inference; falling back to sdpa.")
+            vision_attn_impl = "sdpa"
+        config.vision_config._attn_implementation = vision_attn_impl
+        self.vision_model = MoonViTPreTrainedEncoder(config.vision_config)
+
+        text_attn_impl = (
+            getattr(config.text_config, "_attn_implementation", None)
+            or getattr(config, "_attn_implementation", None)
+            or "sdpa"
+        )
+        if text_attn_impl == "flash_attention_2" and not is_flash_attn_2_available():
+            logger.warning_once("flash_attn is not available for LocateAnything text inference; falling back to sdpa.")
+            text_attn_impl = "sdpa"
+        config.text_config._attn_implementation = text_attn_impl
+        config.text_config._attn_implementation_internal = text_attn_impl
+
+        self.language_model = AutoModel.from_config(config.text_config)
+
+        vit_hidden_size = config.vision_config.hidden_size
+        llm_hidden_size = config.text_config.hidden_size
+
+        # MLP for moonvit (without pixel_shuffle_back, direct mapping)
+        self.mlp1 = nn.Sequential(
+            nn.LayerNorm(vit_hidden_size * 4),
+            nn.Linear(vit_hidden_size * 4, llm_hidden_size),
+            nn.GELU(),
+            nn.Linear(llm_hidden_size, llm_hidden_size),
+        )
+        self.image_token_index = config.image_token_index
+
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.language_model.set_input_embeddings(value)
+
+    def set_decoder(self, decoder):
+        self.language_model = decoder
+
+    def get_decoder(self):
+        return self.language_model
+
+    def extract_feature(self, pixel_values, image_grid_hws):
+        return self.vision_model(pixel_values=pixel_values, grid_hws=image_grid_hws)
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_hws: torch.Tensor | None = None,
+        image_flags: torch.Tensor | None = None,
+    ) -> torch.FloatTensor:
+        """
+        Encodes image pixels with the vision tower and projects them into the language model hidden size.
+        """
+        image_features = self.extract_feature(pixel_values, image_grid_hws)
+
+        if image_flags is not None and image_flags.sum() > 0:
+            filtered_image_features = []
+            feature_index = 0
+            for flag in image_flags:
+                num_images = flag.item()
+                if num_images != 0:
+                    filtered_image_features.extend(image_features[feature_index : feature_index + num_images])
+                    feature_index += num_images
+                else:
+                    feature_index += 1
+            image_features = filtered_image_features
+
+        if not image_features:
+            return torch.empty(
+                0, self.config.text_config.hidden_size, device=pixel_values.device, dtype=pixel_values.dtype
+            )
+
+        image_features = torch.cat(image_features, dim=0)
+        return self.mlp1(image_features)
+
+    def get_placeholder_mask(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor,
+    ) -> torch.BoolTensor:
+        """
+        Obtains the image placeholder mask and checks that the number of placeholder tokens matches image features.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.image_token_index, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.image_token_index
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
+        )
+        return special_image_mask
+
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor | None = None,
+        input_ids: torch.LongTensor = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        image_grid_hws: torch.Tensor | None = None,
+        image_flags: torch.Tensor | None = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        **kwargs,
+    ) -> LocateAnythingModelOutputWithPast:
+        r"""
+        image_grid_hws (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
+            The grid height and width (in patches) of each image, used by the MoonViT vision tower.
+        image_flags (`torch.Tensor`, *optional*):
+            Per-sample flags selecting which packed images contribute visual features.
+        """
+        input_embeds = self.get_input_embeddings()(input_ids)
+
+        image_features = None
+        if pixel_values is not None:
+            image_features = self.get_image_features(
+                pixel_values, image_grid_hws=image_grid_hws, image_flags=image_flags
+            )
+            image_features = image_features.to(input_embeds.device, input_embeds.dtype)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=input_embeds, image_features=image_features
+            )
+            input_embeds = input_embeds.masked_scatter(special_image_mask, image_features)
+
+        outputs = self.language_model(
+            inputs_embeds=input_embeds,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+
+        return LocateAnythingModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=image_features,
+        )
 
 
 def build_window_attention_mask(
@@ -1093,10 +1279,16 @@ def handle_pattern(x0, token_ids: dict[str, int], generation_mode: str = "hybrid
 
 
 @auto_docstring(
-    custom_intro="The LocateAnything model: a MoonViT vision tower and an MLP projector on top of a causal language model."
+    custom_intro="The LocateAnything model with a language modeling head, for visual grounding via Parallel Box Decoding."
 )
 class LocateAnythingForConditionalGeneration(LocateAnythingPreTrainedModel, GenerationMixin):
-    config_class = LocateAnythingConfig
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _checkpoint_conversion_mapping = {
+        r"^language_model\.model\.": "model.language_model.",
+        r"^language_model\.lm_head\.": "lm_head.",
+        r"^vision_model\.": "model.vision_model.",
+        r"^mlp1\.": "model.mlp1.",
+    }
 
     def __init__(self, config: LocateAnythingConfig):
         super().__init__(config)
@@ -1106,46 +1298,31 @@ class LocateAnythingForConditionalGeneration(LocateAnythingPreTrainedModel, Gene
         self.downsample_ratio = config.downsample_ratio
         self.loss_version = config.loss_version
 
-        if config.vision_config.model_type != "moonvit":
-            raise ValueError(
-                f"Unsupported vision model type: {config.vision_config.model_type}. Only moonvit is supported."
-            )
-        vision_attn_impl = getattr(config.vision_config, "_attn_implementation", None) or "flash_attention_2"
-        if vision_attn_impl == "flash_attention_2" and not is_flash_attn_2_available():
-            logger.warning_once("flash_attn is not available for MoonViT inference; falling back to sdpa.")
-            vision_attn_impl = "sdpa"
-        config.vision_config._attn_implementation = vision_attn_impl
-        self.vision_model = MoonViTPreTrainedEncoder(config.vision_config)
-
-        text_attn_impl = (
-            getattr(config.text_config, "_attn_implementation", None)
-            or getattr(config, "_attn_implementation", None)
-            or "sdpa"
-        )
-        if text_attn_impl == "flash_attention_2" and not is_flash_attn_2_available():
-            logger.warning_once("flash_attn is not available for LocateAnything text inference; falling back to sdpa.")
-            text_attn_impl = "sdpa"
-        config.text_config._attn_implementation = text_attn_impl
-        config.text_config._attn_implementation_internal = text_attn_impl
-
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-
-        vit_hidden_size = config.vision_config.hidden_size
-        llm_hidden_size = config.text_config.hidden_size
-
-        # MLP for moonvit (without pixel_shuffle_back, direct mapping)
-        self.mlp1 = nn.Sequential(
-            nn.LayerNorm(vit_hidden_size * 4),
-            nn.Linear(vit_hidden_size * 4, llm_hidden_size),
-            nn.GELU(),
-            nn.Linear(llm_hidden_size, llm_hidden_size),
-        )
-        self.image_token_index = config.image_token_index
+        self.model = LocateAnythingModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.token_ids = get_token_ids_from_config(config)
 
         # Initialize weights and set up tied-weight bookkeeping.
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.model.set_decoder(decoder)
+
+    def get_decoder(self):
+        return self.model.get_decoder()
 
     def get_image_features(
         self,
@@ -1153,56 +1330,9 @@ class LocateAnythingForConditionalGeneration(LocateAnythingPreTrainedModel, Gene
         image_grid_hws: torch.Tensor | None = None,
         image_flags: torch.Tensor | None = None,
     ) -> torch.FloatTensor:
-        """
-        Encodes image pixels with the vision tower and projects them into the language model hidden size.
-        """
-        image_features = self.extract_feature(pixel_values, image_grid_hws)
+        return self.model.get_image_features(pixel_values, image_grid_hws=image_grid_hws, image_flags=image_flags)
 
-        if image_flags is not None and image_flags.sum() > 0:
-            filtered_image_features = []
-            feature_index = 0
-            for flag in image_flags:
-                num_images = flag.item()
-                if num_images != 0:
-                    filtered_image_features.extend(image_features[feature_index : feature_index + num_images])
-                    feature_index += num_images
-                else:
-                    feature_index += 1
-            image_features = filtered_image_features
-
-        if not image_features:
-            return torch.empty(
-                0, self.config.text_config.hidden_size, device=pixel_values.device, dtype=pixel_values.dtype
-            )
-
-        image_features = torch.cat(image_features, dim=0)
-        return self.mlp1(image_features)
-
-    def get_placeholder_mask(
-        self,
-        input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor,
-    ) -> torch.BoolTensor:
-        """
-        Obtains the image placeholder mask and checks that the number of placeholder tokens matches image features.
-        """
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.image_token_index, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.image_token_index
-
-        n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
-            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
-        )
-        return special_image_mask
-
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -1219,31 +1349,27 @@ class LocateAnythingForConditionalGeneration(LocateAnythingPreTrainedModel, Gene
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | LocateAnythingCausalLMOutputWithPast:
+        r"""
+        image_grid_hws (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
+            The grid height and width (in patches) of each image, used by the MoonViT vision tower.
+        image_flags (`torch.Tensor`, *optional*):
+            Per-sample flags selecting which packed images contribute visual features.
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        input_embeds = self.language_model.get_input_embeddings()(input_ids)
-
-        image_features = None
-        if pixel_values is not None:
-            image_features = self.get_image_features(
-                pixel_values, image_grid_hws=image_grid_hws, image_flags=image_flags
-            )
-            image_features = image_features.to(input_embeds.device, input_embeds.dtype)
-            special_image_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=input_embeds, image_features=image_features
-            )
-            input_embeds = input_embeds.masked_scatter(special_image_mask, image_features)
-
-        outputs = self.language_model(
-            inputs_embeds=input_embeds,
+        outputs = self.model(
+            pixel_values=pixel_values,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            image_grid_hws=image_grid_hws,
+            image_flags=image_flags,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
-        logits = outputs.logits
+        logits = self.lm_head(outputs.last_hidden_state)
 
         loss = None
         if labels is not None:
@@ -1252,16 +1378,16 @@ class LocateAnythingForConditionalGeneration(LocateAnythingPreTrainedModel, Gene
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.language_model.config.vocab_size)
+            shift_logits = shift_logits.view(-1, self.config.text_config.vocab_size)
             shift_labels = shift_labels.view(-1)
             # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits, outputs.past_key_values, outputs.hidden_states, outputs.attentions)
             output = (loss,) + output if loss is not None else output
-            return output + (image_features,)
+            return output + (outputs.image_hidden_states,)
 
         return LocateAnythingCausalLMOutputWithPast(
             loss=loss,
@@ -1269,31 +1395,8 @@ class LocateAnythingForConditionalGeneration(LocateAnythingPreTrainedModel, Gene
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features,
+            image_hidden_states=outputs.image_hidden_states,
         )
-
-    def extract_feature(self, pixel_values, image_grid_hws):
-        vit_embeds = self.vision_model(pixel_values=pixel_values, grid_hws=image_grid_hws)
-
-        return vit_embeds
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
-
-    def set_decoder(self, decoder):
-        self.language_model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.language_model.get_decoder()
 
     @torch.no_grad()
     def generate(
@@ -1322,7 +1425,7 @@ class LocateAnythingForConditionalGeneration(LocateAnythingPreTrainedModel, Gene
         # `verbose` is accepted for backward compatibility but no longer drives any timing logic.
         generate_kwargs.pop("verbose", False)
 
-        pixel_values = pixel_values.to(self.language_model.dtype)
+        pixel_values = pixel_values.to(self.dtype)
         if isinstance(image_grid_hws, np.ndarray):
             image_grid_hws = torch.from_numpy(image_grid_hws).to(pixel_values.device, dtype=torch.int32)
 
@@ -1337,22 +1440,22 @@ class LocateAnythingForConditionalGeneration(LocateAnythingPreTrainedModel, Gene
             raise ValueError(f"Unsupported generation_mode='{generation_mode}'. Use 'fast', 'slow', or 'hybrid'.")
 
         device = input_ids.device
-        embed_tokens = self.language_model.get_input_embeddings()
+        embed_tokens = self.get_input_embeddings()
 
         # Build the prompt embeddings once, scattering the projected image features into the
         # image placeholder positions (same merge used by `forward`).
         if visual_features is not None:
             vit_embeds = visual_features
         elif pixel_values is not None:
-            vit_embeds = self.extract_feature(pixel_values, image_grid_hws)
+            vit_embeds = self.model.extract_feature(pixel_values, image_grid_hws)
             vit_embeds = torch.cat(vit_embeds, dim=0)
-            vit_embeds = self.mlp1(vit_embeds)
+            vit_embeds = self.model.mlp1(vit_embeds)
         else:
             vit_embeds = None
 
         prompt_embeds = embed_tokens(input_ids)
         if vit_embeds is not None:
-            special_image_mask = self.get_placeholder_mask(
+            special_image_mask = self.model.get_placeholder_mask(
                 input_ids, inputs_embeds=prompt_embeds, image_features=vit_embeds
             )
             prompt_embeds = prompt_embeds.masked_scatter(special_image_mask, vit_embeds.to(prompt_embeds.dtype))
@@ -1397,7 +1500,7 @@ class LocateAnythingForConditionalGeneration(LocateAnythingPreTrainedModel, Gene
                 attn = torch.ones((batch_size, sequence.size(1)), dtype=torch.long, device=device)
 
             inputs_embeds = _embed_new(sequence, past_len)
-            outputs = self.language_model(
+            outputs = self.model.language_model(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attn,
                 position_ids=position_ids,
@@ -1407,9 +1510,10 @@ class LocateAnythingForConditionalGeneration(LocateAnythingPreTrainedModel, Gene
             past_key_values = outputs.past_key_values
             # Roll back the speculative window so only committed tokens stay cached.
             past_key_values.crop(commit_len)
+            logits = self.lm_head(outputs.last_hidden_state)
 
             if use_mtp:
-                next_token_logits = outputs.logits[:, -n_future_tokens:, :]
+                next_token_logits = logits[:, -n_future_tokens:, :]
                 _, _, x0, box_avg = sample_tokens(
                     next_token_logits, generated, self.token_ids, keep_k=5, **generate_kwargs
                 )
@@ -1419,7 +1523,7 @@ class LocateAnythingForConditionalGeneration(LocateAnythingPreTrainedModel, Gene
                 out_type = out_pattern["type"]
                 out_token = torch.tensor(out_pattern["tokens"], dtype=generated.dtype, device=device)
             else:
-                next_token_logits = outputs.logits[:, -1:, :]
+                next_token_logits = logits[:, -1:, :]
                 _, _, x0, _ = sample_tokens(next_token_logits, generated, self.token_ids, **generate_kwargs)
                 out_token = x0[0]
                 out_type = self._classify_ar_token(out_token[0].item(), generation_mode)
@@ -1451,4 +1555,9 @@ class LocateAnythingForConditionalGeneration(LocateAnythingPreTrainedModel, Gene
         return "im_end" if token_val == self.token_ids["im_end_token_id"] else "continue_ar"
 
 
-__all__ = ["LocateAnythingForConditionalGeneration", "LocateAnythingPreTrainedModel", "MoonViTPreTrainedEncoder"]
+__all__ = [
+    "LocateAnythingForConditionalGeneration",
+    "LocateAnythingModel",
+    "LocateAnythingPreTrainedModel",
+    "MoonViTPreTrainedEncoder",
+]

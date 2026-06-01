@@ -92,7 +92,7 @@ class LocateAnythingModelTest(unittest.TestCase):
 
         config = self.get_tiny_config()
         model = LocateAnythingForConditionalGeneration(config)
-        model.extract_feature = lambda pixel_values, image_grid_hws: [
+        model.model.extract_feature = lambda pixel_values, image_grid_hws: [
             torch.ones(1, config.vision_config.hidden_size * 4, device=pixel_values.device)
         ]
 
@@ -109,13 +109,13 @@ class LocateAnythingModelTest(unittest.TestCase):
         inputs_embeds = model.get_input_embeddings()(input_ids)
         image_features = torch.ones(1, config.text_config.hidden_size)
 
-        image_mask = model.get_placeholder_mask(input_ids, inputs_embeds, image_features)
+        image_mask = model.model.get_placeholder_mask(input_ids, inputs_embeds, image_features)
 
         self.assertEqual(image_mask.shape, inputs_embeds.shape)
         self.assertEqual(image_mask[..., 0].sum(), 1)
 
         with self.assertRaises(ValueError):
-            model.get_placeholder_mask(input_ids, inputs_embeds, torch.ones(2, config.text_config.hidden_size))
+            model.model.get_placeholder_mask(input_ids, inputs_embeds, torch.ones(2, config.text_config.hidden_size))
 
     @slow
     def test_real_model_matches_remote_code_generation(self):
