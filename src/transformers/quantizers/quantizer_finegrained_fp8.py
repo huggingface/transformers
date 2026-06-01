@@ -111,24 +111,11 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        # Mega MoE needs the L1/L2 weights packed + permuted into the UTCCP layout
-        # before the first forward. The kernel asserts `sf.dtype == torch.int` and
-        # the interleave reshapes the weight in place — so it has to happen on the
-        # post-load (and post-TP-shard) tensors. `set_experts_implementation`
-        # already refuses to flip in/out of `deepgemm_megamoe` at runtime (see
-        # `PreTrainedModel.set_experts_implementation`), so transforming once here
-        # is sufficient.
-        if getattr(model.config, "_experts_implementation", None) != "deepgemm_megamoe":
-            return
-        from ..integrations.deepgemm import setup_megamoe_weights
-        from ..integrations.finegrained_fp8 import FP8Experts
-
-        for module in model.modules():
-            if isinstance(module, FP8Experts):
-                setup_megamoe_weights(module)
-
     def update_tp_plan(self, config):
+        # TODO: standardize the API so megamoe (and any future impl-specific TP layer)
+        # owns its own plan-swap logic, e.g. via an attribute on the experts class or
+        # a registry. For now we hard-code the swap here — fine while megamoe is the
+        # only experts impl that needs a distinct TP layer, won't scale otherwise.
         # When the MoE experts impl is locked to MegaMoE at load time, swap the
         # experts plan key to the MegaMoE-specific TP layer (no gradient sync hooks,
         # appends EP `process_group`). Done at load time so the runtime
@@ -198,16 +185,19 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         return []
 
     def update_weight_conversions(self, weight_conversions):
-        """When loading with ``dequantize=True``, prepend :class:`Fp8Dequantize` to each
-        model-supplied :class:`WeightConverter` so per-block scales fold into the weight
-        *before* any merge/concat collapses the per-expert structure. Also pulls scale
-        sources in alongside the weight sources (anchored with ``$``) so the dequant op
-        sees both for the same target bucket.
+        """When loading with ``dequantize=True``, attach an :class:`Fp8Dequantize` op to
+        every existing :class:`WeightConverter` so that per-block scales are folded into
+        the weight *before* any later merge/concat ops collapse the per-expert structure.
 
-        For ``dequantize=False`` we pass through — substring matching plus suffix-preserving
-        rename means the model's existing ``*.weight → *.proj`` converter *also* maps the
-        ``*.weight_scale_inv → *.proj_scale_inv`` keys with the same merge ops, so no
-        sibling scale converter is needed.
+        For each model-supplied converter that has a ``.weight`` source, we:
+          1. anchor the existing weight patterns with ``$`` so they don't accidentally
+             also match the ``.weight_scale_inv`` keys (the regex is searched, so the
+             unanchored prefix would match both, sending scales to the wrong bucket);
+          2. add anchored ``*.weight_scale_inv`` sources next to each weight pattern so
+             the loader collects scale tensors alongside the weight tensors into the
+             *same* converter bucket (both keys rewrite to the same target);
+          3. prepend a fresh :class:`Fp8Dequantize` op so dequant runs first, before
+             any merge/concat collapses the per-expert structure.
 
         The generic ``weight$ + weight_scale_inv → weight`` converter from
         :meth:`get_weight_conversions` is still appended at the end as a fallback for
@@ -221,6 +211,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         # Some upstream FP8 checkpoints (e.g. DeepSeek-V4-Flash) ship per-block scales
         # under a ``.scale`` suffix instead of HF's canonical ``.weight_scale_inv``.
+        # Prepending the rename here (instead of in each model's conversion_mapping)
+        # keeps the model-side mapping clean — the rename only kicks in when FP8 dequant
+        # is actually active, so a non-FP8 save / load round-trip doesn't see a stray
+        # rule that ``test_reverse_loading_mapping`` can't match.
         scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale$", target_patterns=r"\1.weight_scale_inv")
         weight_conversions = [scale_rename] + list(weight_conversions)
 
@@ -236,10 +230,12 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 anchored_weight = [p + "$" for p in weight_sources]
                 scale_sources = [p[: -len(".weight")] + ".weight_scale_inv$" for p in weight_sources]
                 other = [p for p in conv.source_patterns if not p.endswith(".weight")]
+                new_sources = anchored_weight + scale_sources + other
+                new_ops = [Fp8Dequantize(self)] + list(conv.operations)
                 conv = WeightConverter(
-                    source_patterns=anchored_weight + scale_sources + other,
+                    source_patterns=new_sources,
                     target_patterns=conv._original_target_patterns,
-                    operations=[Fp8Dequantize(self)] + list(conv.operations),
+                    operations=new_ops,
                 )
             updated.append(conv)
         # Generic fallback for plain ``nn.Linear`` weights with no model-specific converter.
