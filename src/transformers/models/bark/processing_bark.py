@@ -17,6 +17,7 @@ Processor class for Bark
 
 import json
 import os
+from pathlib import Path
 
 import numpy as np
 
@@ -29,6 +30,11 @@ from ..auto import AutoTokenizer
 
 
 logger = logging.get_logger(__name__)
+
+
+def _validate_speaker_embedding_path(path: str | os.PathLike, base_directory: str | os.PathLike):
+    if Path(path).resolve().parent != Path(base_directory).resolve():
+        raise ValueError(f"Invalid speaker embedding path: {path!r}")
 
 
 @auto_docstring
@@ -139,7 +145,8 @@ class BarkProcessor(ProcessorMixin):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         if self.speaker_embeddings is not None:
-            os.makedirs(os.path.join(save_directory, speaker_embeddings_directory, "v2"), exist_ok=True)
+            speaker_embeddings_dir = os.path.join(save_directory, speaker_embeddings_directory)
+            os.makedirs(os.path.join(speaker_embeddings_dir, "v2"), exist_ok=True)
 
             embeddings_dict = {}
 
@@ -150,10 +157,10 @@ class BarkProcessor(ProcessorMixin):
 
                 tmp_dict = {}
                 for key in self.speaker_embeddings[prompt_key]:
+                    speaker_embedding_path = os.path.join(speaker_embeddings_dir, f"{prompt_key}_{key}.npy")
+                    _validate_speaker_embedding_path(speaker_embedding_path, speaker_embeddings_dir)
                     np.save(
-                        os.path.join(
-                            embeddings_dict["repo_or_path"], speaker_embeddings_directory, f"{prompt_key}_{key}"
-                        ),
+                        speaker_embedding_path,
                         voice_preset[key],
                         allow_pickle=False,
                     )

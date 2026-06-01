@@ -49,6 +49,31 @@ class BarkProcessorTest(unittest.TestCase):
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
 
+    def test_save_pretrained_rejects_speaker_embedding_path_traversal(self):
+        tokenizer = self.get_tokenizer()
+
+        voice_preset = {
+            "semantic_prompt": np.ones(1),
+            "coarse_prompt": np.ones((2, 1)),
+            "fine_prompt": np.ones((8, 1)),
+        }
+        for key, value in voice_preset.items():
+            np.save(os.path.join(self.tmpdirname, f"{key}.npy"), value, allow_pickle=False)
+
+        processor = BarkProcessor(
+            tokenizer=tokenizer,
+            speaker_embeddings={
+                "repo_or_path": self.tmpdirname,
+                "../escaped": {key: f"{key}.npy" for key in voice_preset},
+            },
+        )
+        save_dir = os.path.join(self.tmpdirname, "save")
+
+        with self.assertRaisesRegex(ValueError, "Invalid speaker embedding path"):
+            processor.save_pretrained(save_dir)
+
+        self.assertFalse(os.path.exists(os.path.join(save_dir, "escaped_semantic_prompt.npy")))
+
     @slow
     def test_save_load_pretrained_additional_features(self):
         processor = BarkProcessor.from_pretrained(
