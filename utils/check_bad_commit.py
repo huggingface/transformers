@@ -258,7 +258,7 @@ git bisect run python3 target_script.py
 def get_commit_info(commit, pr_number=None, github_token=None):
     """Get information for a commit via `api.github.com`."""
     if commit is None:
-        return {"commit": None, "pr_number": None, "author": None, "merged_by": None}
+        return {"commit": None, "pr_number": None, "author": None, "merged_by": None, "parent": None}
 
     author = None
     merged_author = None
@@ -288,14 +288,16 @@ def get_commit_info(commit, pr_number=None, github_token=None):
             # Use the first SHA (the PR commit)
             commit_to_query = match.group(1)
 
-    # If no PR number yet, try to discover it from the commit
+    # If no PR number yet, try to discover it from the commit.
+    # The API can return an error dict (e.g. rate limit) instead of a list, so guard with isinstance.
     if not pr_number:
         url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit_to_query}/pulls"
         pr_info_for_commit = requests.get(url, headers=headers).json()
         if isinstance(pr_info_for_commit, list) and len(pr_info_for_commit) > 0:
             pr_number = pr_info_for_commit[0].get("number")
 
-    # If we have a PR number, get author and merged_by info
+    # If we have a PR number, get author and merged_by info.
+    # Use .get() throughout: on rate-limit/403 the API returns an error dict, not the expected PR object.
     if pr_number:
         url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
         pr_for_commit = requests.get(url, headers=headers).json()
@@ -319,8 +321,10 @@ if __name__ == "__main__":
     parser.add_argument("--test", type=str, help="The test to check.")
     parser.add_argument("--file", type=str, help="The report file.")
     parser.add_argument("--output_file", type=str, required=True, help="The path of the output file.")
-    parser.add_argument("--github_token", type=str, default=None, help="GitHub token to avoid API rate limits.")
+    parser.add_argument("--github_token", type=str, default=None, help="GitHub token to avoid API rate limits. Falls back to GITHUB_TOKEN env var.")
     args = parser.parse_args()
+    if args.github_token is None:
+        args.github_token = os.environ.get("GITHUB_TOKEN")
 
     run_idx = os.environ.get("run_idx")
     n_runners = os.environ.get("n_runners")
