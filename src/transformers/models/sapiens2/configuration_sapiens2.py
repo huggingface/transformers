@@ -34,6 +34,8 @@ class Sapiens2HeadConfig(PreTrainedConfig):
         Kernel size for each upsample block. Auto-filled with `[4, ...]` when
         `upsample_out_channels` is set but this is `None`.
         Must have the same length as `upsample_out_channels`.
+    upsample_kernel_size (`int`, defaults to 4):
+        Default kernel size for upsample blocks when `upsample_kernel_sizes` is not set.
     use_pixel_shuffle (`bool`, *optional*):
         Whether the upsample head uses pixel-shuffle upsampling instead of transposed convolutions.
         When `None` (default), the head uses transposed convolutions.
@@ -43,12 +45,17 @@ class Sapiens2HeadConfig(PreTrainedConfig):
         Kernel size for each refinement conv layer. Auto-filled with `[1, ...]` when
         `conv_out_channels` is set but this is `None`.
         Must have the same length as `conv_out_channels`.
+    conv_kernel_size (`int`, defaults to 1):
+        Default kernel size for conv layers when `conv_kernel_sizes` is not set.
     scale_conv_out_channels (`list[int]`, *optional*):
         Output channel counts for the stride-2 conv layers used to predict the focal-length scale.
         When `None` (default), no scale branch is built.
     scale_conv_kernel_sizes (`list[int]`, *optional*):
         Kernel size for each scale conv layer. Auto-filled with `[1, ...]` when
         `scale_conv_out_channels` is set but this is `None`.
+        Must have the same length as `scale_conv_out_channels`.
+    scale_conv_kernel_size (`int`, defaults to 1):
+        Default kernel size for scale conv layers when `scale_conv_kernel_sizes` is not set.
     scale_final_input_size (`int`, *optional*):
         Flattened feature size passed into the scale MLP.
         When `None` (default), it is automatically inferred from `image_size` and `patch_size`
@@ -63,21 +70,24 @@ class Sapiens2HeadConfig(PreTrainedConfig):
 
     upsample_out_channels: list[int] | None = None
     upsample_kernel_sizes: list[int] | None = None
+    upsample_kernel_size: int = 4
     use_pixel_shuffle: bool | None = None
     conv_out_channels: list[int] | None = None
     conv_kernel_sizes: list[int] | None = None
+    conv_kernel_size: int = 1
     scale_conv_out_channels: list[int] | None = None
     scale_conv_kernel_sizes: list[int] | None = None
+    scale_conv_kernel_size: int = 1
     scale_final_input_size: int | None = None
     scale_final_hidden_sizes: list[int] | None = None
 
     def __post_init__(self, **kwargs):
         if self.upsample_out_channels is not None and self.upsample_kernel_sizes is None:
-            self.upsample_kernel_sizes = [4] * len(self.upsample_out_channels)
+            self.upsample_kernel_sizes = [self.upsample_kernel_size] * len(self.upsample_out_channels)
         if self.conv_out_channels is not None and self.conv_kernel_sizes is None:
-            self.conv_kernel_sizes = [1] * len(self.conv_out_channels)
+            self.conv_kernel_sizes = [self.conv_kernel_size] * len(self.conv_out_channels)
         if self.scale_conv_out_channels is not None and self.scale_conv_kernel_sizes is None:
-            self.scale_conv_kernel_sizes = [1] * len(self.scale_conv_out_channels)
+            self.scale_conv_kernel_sizes = [self.scale_conv_kernel_size] * len(self.scale_conv_out_channels)
         super().__post_init__(**kwargs)
 
 
@@ -127,8 +137,18 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     num_key_value_heads_per_layer (`list[int]`, *optional*):
         Number of key/value heads for each transformer layer. Setting a layer's value equal to
         `num_attention_heads` gives full multi-head attention; a smaller value gives grouped-query
-        attention. Defaults to `num_attention_heads` for the first 8 and last 8 layers and
-        `num_attention_heads // 2` for all other layers.
+        attention. Defaults to `num_attention_heads` for the first `num_first_full_attention_layers`
+        and last `num_last_full_attention_layers` layers and `num_key_valueattention_heads` for all other
+        layers.
+    num_key_value_attention_heads (`int`):
+        Number of key/value heads for layers that use grouped-query attention when `num_key_value_heads_per_layer`
+        is not set. Ignored when `num_key_value_heads_per_layer` is set.
+    num_first_full_attention_layers (`int`, *optional*, defaults to 8):
+        Number of leading transformer layers that use full multi-head attention.
+        Only used when `num_key_value_heads_per_layer` is `None`.
+    num_last_full_attention_layers (`int`, *optional*, defaults to 8):
+        Number of trailing transformer layers that use full multi-head attention.
+        Only used when `num_key_value_heads_per_layer` is `None`.
     semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
         Label index ignored when computing the segmentation loss.
     flip_pairs (`list[list[int]]`, *optional*):
@@ -177,6 +197,9 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     normalize_backbone_outputs: bool = True
     use_qk_norm: bool = True
     num_key_value_heads_per_layer: list[int] | None = None
+    num_key_value_attention_heads: int = 8
+    num_first_full_attention_layers: int = 8
+    num_last_full_attention_layers: int = 8
     semantic_loss_ignore_index: int = 255
     flip_pairs: list[list[int]] | None = None
     head_config: Sapiens2HeadConfig | dict | None = None
@@ -185,8 +208,11 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
         if self.num_key_value_heads_per_layer is None:
             self.num_key_value_heads_per_layer = [
                 self.num_attention_heads
-                if (i < 8 or i >= self.num_hidden_layers - 8)
-                else self.num_attention_heads // 2
+                if (
+                    i < self.num_first_full_attention_layers
+                    or i >= self.num_hidden_layers - self.num_last_full_attention_layers
+                )
+                else self.num_key_value_attention_heads
                 for i in range(self.num_hidden_layers)
             ]
         if isinstance(self.head_config, dict):
