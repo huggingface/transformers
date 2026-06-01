@@ -993,6 +993,7 @@ class Fp8Dequantize(ConversionOps):
         try:
             scale_rows, scale_cols = scales.shape[-2:]
         except Exception:
+            # scale can be a single tensor in extreme cases where it was not wrapped properly but is [1,0].
             scale_rows, scale_cols = 1, 1
         if rows % scale_rows or cols % scale_cols:
             raise ValueError(
