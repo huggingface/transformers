@@ -1185,7 +1185,10 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
             tokenized_request = self.tokenizer.encode_chat_completion(chat_request)
             if tokenize:
-                outputs.append(tokenized_request.tokens)
+                tokens = tokenized_request.tokens
+                if continue_final_message and tokens and tokens[-1] == self.eos_token_id:
+                    tokens = tokens[:-1]
+                outputs.append(tokens)
             else:
                 outputs.append(tokenized_request.text)
             images.extend(tokenized_request.images)

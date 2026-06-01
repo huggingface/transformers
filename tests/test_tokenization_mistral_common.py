@@ -919,13 +919,34 @@ class TestMistralCommonBackend(unittest.TestCase):
             self.tokenizer.apply_chat_template(conversation, tokenize=False, continue_final_message=True),
             expected_tokenized.text,
         )
+        # mistral-common itself has a bug where it adds EOS even with continue_final_message=True.
+        # Transformers strips it defensively, so compare against expected without the trailing EOS.
+        expected_tokens = list(expected_tokenized.tokens)
+        if expected_tokens and expected_tokens[-1] == self.tokenizer.eos_token_id:
+            expected_tokens = expected_tokens[:-1]
         self.assertEqual(
             self.tokenizer.apply_chat_template(conversation, tokenize=True, continue_final_message=True).input_ids,
-            expected_tokenized.tokens,
+            expected_tokens,
         )
 
         with self.assertRaises(InvalidMessageStructureException):
             self.tokenizer.apply_chat_template(conversation, tokenize=False, continue_final_message=False)
+
+        # Regression test: EOS must not appear with continue_final_message=True (#46326)
+        # Minimal 3-message conversation: system + user + assistant
+        short_conversation = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hi!"},
+            {"role": "assistant", "content": "Hello!"},
+        ]
+        tokens = self.tokenizer.apply_chat_template(
+            short_conversation, tokenize=True, continue_final_message=True
+        ).input_ids
+        self.assertNotEqual(
+            tokens[-1],
+            self.tokenizer.eos_token_id,
+            "EOS token must not be present when continue_final_message=True",
+        )
 
     def test_apply_chat_template_with_add_generation_prompt(self):
         conversation = [
@@ -1372,7 +1393,12 @@ class TestMistralCommonBackend(unittest.TestCase):
         ).input_ids
 
         for output, expected in zip(token_outputs, expected_tokenized):
-            self.assertEqual(output, expected.tokens)
+            # mistral-common adds EOS even with continue_final_message=True (bug).
+            # Transformers strips it, so strip from expected before comparing.
+            expected_tokens = list(expected.tokens)
+            if expected_tokens and expected_tokens[-1] == self.tokenizer.eos_token_id:
+                expected_tokens = expected_tokens[:-1]
+            self.assertEqual(output, expected_tokens)
 
         # Test 2:
         # without continue_final_message
