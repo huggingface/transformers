@@ -98,6 +98,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("convnext", "ConvNextModel"),
         ("convnextv2", "ConvNextV2Model"),
         ("cosmos3_omni", "Cosmos3ReasonerModel"),
+        ("cosmos3_omni_text", "Cosmos3ReasonerTextModel"),
         ("cpmant", "CpmAntModel"),
         ("csm", "CsmForConditionalGeneration"),
         ("ctrl", "CTRLModel"),

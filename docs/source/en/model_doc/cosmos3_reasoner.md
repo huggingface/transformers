@@ -70,6 +70,29 @@ print(output[0])
 
 [[autodoc]] Cosmos3ReasonerConfig
 
+## Cosmos3ReasonerVisionConfig
+
+[[autodoc]] Cosmos3ReasonerVisionConfig
+
+## Cosmos3ReasonerTextConfig
+
+[[autodoc]] Cosmos3ReasonerTextConfig
+
+## Cosmos3ReasonerProcessor
+
+[[autodoc]] Cosmos3ReasonerProcessor
+    - __call__
+
+## Cosmos3ReasonerVisionModel
+
+[[autodoc]] Cosmos3ReasonerVisionModel
+    - forward
+
+## Cosmos3ReasonerTextModel
+
+[[autodoc]] Cosmos3ReasonerTextModel
+    - forward
+
 ## Cosmos3ReasonerModel
 
 [[autodoc]] Cosmos3ReasonerModel

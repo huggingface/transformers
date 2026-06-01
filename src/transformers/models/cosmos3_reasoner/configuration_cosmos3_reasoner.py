@@ -140,4 +140,4 @@ class Cosmos3ReasonerConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Cosmos3ReasonerConfig"]
+__all__ = ["Cosmos3ReasonerConfig", "Cosmos3ReasonerTextConfig", "Cosmos3ReasonerVisionConfig"]

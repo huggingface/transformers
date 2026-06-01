@@ -1,0 +1,200 @@
+# Copyright 2026 NVIDIA Corporation and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Testing suite for the PyTorch Cosmos3 Reasoner model.
+
+The Reasoner tower is architecturally identical to Qwen3-VL, so this mirrors the Qwen3-VL
+common-test setup. The custom regression tests in the Qwen3-VL suite (position-id / image /
+video forward checks) are intentionally omitted here — they cover behavior inherited verbatim
+from Qwen3-VL. The `test_mismatching_num_image_tokens` override and gradient-checkpointing
+xfails are kept because the base `VLMModelTest` versions do not hold for this architecture.
+"""
+
+import copy
+import unittest
+
+import pytest
+
+from transformers import (
+    Cosmos3ReasonerConfig,
+    Cosmos3ReasonerForConditionalGeneration,
+    Cosmos3ReasonerModel,
+    is_torch_available,
+)
+from transformers.models.cosmos3_reasoner.configuration_cosmos3_reasoner import (
+    Cosmos3ReasonerTextConfig,
+    Cosmos3ReasonerVisionConfig,
+)
+from transformers.testing_utils import (
+    require_torch,
+    torch_device,
+)
+
+from ...test_modeling_common import floats_tensor
+from ...vlm_tester import VLMModelTest, VLMModelTester
+
+
+if is_torch_available():
+    import torch
+
+
+class Cosmos3ReasonerVisionText2TextModelTester(VLMModelTester):
+    base_model_class = Cosmos3ReasonerModel
+    config_class = Cosmos3ReasonerConfig
+    text_config_class = Cosmos3ReasonerTextConfig
+    vision_config_class = Cosmos3ReasonerVisionConfig
+    conditional_generation_class = Cosmos3ReasonerForConditionalGeneration
+
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_token_id", 3)
+        kwargs.setdefault("video_token_id", 4)
+        kwargs.setdefault("vision_start_token_id", 5)
+        kwargs.setdefault("vision_end_token_id", 6)
+        kwargs.setdefault("image_size", 16)
+        kwargs.setdefault("patch_size", 16)
+        kwargs.setdefault("num_image_tokens", 32)
+        kwargs.setdefault("hidden_act", "silu")
+        kwargs.setdefault("num_attention_heads", 4)
+        kwargs.setdefault("num_key_value_heads", 2)
+        kwargs.setdefault("head_dim", 8)
+        kwargs.setdefault("depth", 2)
+        kwargs.setdefault("vision_hidden_act", "gelu_pytorch_tanh")
+        kwargs.setdefault("num_heads", 4)
+        kwargs.setdefault("spatial_merge_size", 1)
+        kwargs.setdefault("temporal_patch_size", 2)
+        kwargs.setdefault("num_position_embeddings", 16)
+        kwargs.setdefault("deepstack_visual_indexes", [0, 1])
+        kwargs.setdefault(
+            "rope_parameters",
+            {
+                "rope_type": "default",
+                "mrope_section": [16, 8, 8],
+                "mrope_interleaved": True,
+                "rope_theta": 10000,
+            },
+        )
+        super().__init__(parent, **kwargs)
+
+        # These can be inferred from existing properties and don't get separate kwargs
+        self.out_hidden_size = self.hidden_size
+        self.vision_hidden_size = self.hidden_size
+        self.vision_intermediate_size = self.hidden_size
+
+    def create_pixel_values(self):
+        # Cosmos3 Reasoner (like Qwen3-VL) expects flattened patches:
+        # (total_patches, channels * patch_size^2 * temporal_patch_size)
+        return floats_tensor(
+            [
+                self.batch_size * (self.image_size**2) // (self.patch_size**2),
+                self.num_channels * (self.patch_size**2) * self.temporal_patch_size,
+            ]
+        )
+
+    def place_image_tokens(self, input_ids, config):
+        # Place image tokens with vision_start_token_id prefix
+        input_ids = input_ids.clone()
+        # Clear any accidental special tokens first
+        input_ids[:, -1] = self.pad_token_id
+        input_ids[input_ids == self.video_token_id] = self.pad_token_id
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
+        input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
+        # Place image tokens with vision_start_token_id prefix
+        input_ids[:, 1] = self.image_token_id
+        input_ids[:, 0] = self.vision_start_token_id
+        return input_ids
+
+    def get_additional_inputs(self, config, input_ids, modality_inputs):
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.image_token_id] = 1
+        return {
+            "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
+            "mm_token_type_ids": mm_token_type_ids,
+        }
+
+    def get_config(self):
+        # Cosmos3ReasonerConfig expects text_config and vision_config as dicts, not config objects
+        return self.config_class(
+            text_config=self.get_text_config().to_dict(),
+            vision_config=self.get_vision_config().to_dict(),
+            image_token_id=self.image_token_id,
+            video_token_id=self.video_token_id,
+            vision_start_token_id=self.vision_start_token_id,
+            vision_end_token_id=self.vision_end_token_id,
+            tie_word_embeddings=self.tie_word_embeddings,
+            pad_token_id=self.pad_token_id,
+        )
+
+
+@require_torch
+class Cosmos3ReasonerModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = Cosmos3ReasonerVisionText2TextModelTester
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing(self):
+        super().test_training_gradient_checkpointing()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
+
+    def test_mismatching_num_image_tokens(self):
+        # Override the base test because we need to slice image_grid_thw too
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            _ = model(**input_dict)  # successful forward with no modifications
+            curr_input_dict = copy.deepcopy(input_dict)
+
+            # remove one image but leave the image token in text
+            patch_size = config.vision_config.patch_size
+            one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-one_img_length:, ...]
+            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
+
+            model.base_model.rope_deltas = None
+            # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:one_img_length]
+            image_grid_thw = curr_input_dict["image_grid_thw"][:1]
+            mm_token_type_ids = curr_input_dict["mm_token_type_ids"][:1]
+            input_ids = torch.cat([input_ids, input_ids], dim=0)
+
+            # one image and two image tokens raise an error
+            with self.assertRaises(ValueError):
+                _ = model(
+                    input_ids=input_ids,
+                    pixel_values=pixel_values,
+                    image_grid_thw=image_grid_thw,
+                    mm_token_type_ids=torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0),
+                )
+
+            model.base_model.rope_deltas = None
+            # two images and two image tokens don't raise an error
+            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
+            image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
+            mm_token_type_ids = torch.cat(
+                [curr_input_dict["mm_token_type_ids"][:1], curr_input_dict["mm_token_type_ids"][:1]], dim=0
+            )
+            _ = model(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                image_grid_thw=image_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
+            )
