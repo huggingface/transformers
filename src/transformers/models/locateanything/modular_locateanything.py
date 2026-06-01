@@ -1121,6 +1121,9 @@ class LocateAnythingModel(LocateAnythingPreTrainedModel):
                 f"Unsupported vision model type: {config.vision_config.model_type}. Only moonvit is supported."
             )
         vision_attn_impl = getattr(config.vision_config, "_attn_implementation", None) or "flash_attention_2"
+        # `magi` is the original training-time attention; it is not an inference attention backend.
+        if vision_attn_impl == "magi":
+            vision_attn_impl = "flash_attention_2"
         if vision_attn_impl == "flash_attention_2" and not is_flash_attn_2_available():
             logger.warning_once("flash_attn is not available for MoonViT inference; falling back to sdpa.")
             vision_attn_impl = "sdpa"
@@ -1132,6 +1135,8 @@ class LocateAnythingModel(LocateAnythingPreTrainedModel):
             or getattr(config, "_attn_implementation", None)
             or "sdpa"
         )
+        if text_attn_impl == "magi":
+            text_attn_impl = "flash_attention_2"
         if text_attn_impl == "flash_attention_2" and not is_flash_attn_2_available():
             logger.warning_once("flash_attn is not available for LocateAnything text inference; falling back to sdpa.")
             text_attn_impl = "sdpa"
