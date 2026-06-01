@@ -111,6 +111,23 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
+    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        # Mega MoE needs the L1/L2 weights packed + permuted into the UTCCP layout
+        # before the first forward. The kernel asserts `sf.dtype == torch.int` and
+        # the interleave reshapes the weight in place — so it has to happen on the
+        # post-load (and post-TP-shard) tensors. `set_experts_implementation`
+        # already refuses to flip in/out of `deepgemm_megamoe` at runtime (see
+        # `PreTrainedModel.set_experts_implementation`), so transforming once here
+        # is sufficient.
+        if getattr(model.config, "_experts_implementation", None) != "deepgemm_megamoe":
+            return
+        from ..integrations.deepgemm import setup_megamoe_weights
+        from ..integrations.finegrained_fp8 import FP8Experts
+
+        for module in model.modules():
+            if isinstance(module, FP8Experts):
+                setup_megamoe_weights(module)
+
     def update_tp_plan(self, config):
         # When the MoE experts impl is locked to MegaMoE at load time, swap the
         # experts plan key to the MegaMoE-specific TP layer (no gradient sync hooks,

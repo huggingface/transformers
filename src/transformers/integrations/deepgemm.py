@@ -588,54 +588,63 @@ def deepgemm_fp8_fp4_experts_forward(
     )
 
 
-def _megamoe_setup_weights(
-    self: torch.nn.Module,
-    deepgemm: DeepGEMM,
-    local_num_experts: int,
-    intermediate_hidden: int,
-    hidden_dim: int,
-) -> None:
-    """One-shot pack + permute of the L1/L2 weights into the Mega MoE UTCCP layout.
+def setup_megamoe_weights(module: torch.nn.Module) -> None:
+    """One-shot pack + permute of an FP8Experts module's L1/L2 weights into the
+    Mega MoE UTCCP layout. Called at load time by the FP8 quantizer when
+    ``experts_implementation == 'deepgemm_megamoe'`` — megamoe is locked at load
+    time (see :meth:`PreTrainedModel.set_experts_implementation`), so this never
+    needs to re-run on a forward.
 
-    1. Cast UE8M0 SF → FP32 and call `transform_sf_into_required_layout` → packed
-       int32 in MN-major TMA-aligned layout.
-    2. Run `transform_weights_for_mega_moe`: interleaves gate/up on L1 and transposes
-       both SFs for UTCCP.
-    3. Overwrite the loader-side parameters in place; the interleave preserves the
-       `[E_local, 2*I, *]` leading dims so downstream `.size(...)` reads stay valid.
+    Steps:
+      1. Cast UE8M0 SF → FP32 and call ``transform_sf_into_required_layout`` →
+         packed int32 in MN-major TMA-aligned layout.
+      2. Run ``transform_weights_for_mega_moe``: interleaves gate/up on L1 and
+         transposes both SFs for UTCCP.
+      3. Overwrite the loader-side parameters in place; the interleave preserves
+         the ``[E_local, 2*I, *]`` leading dims so downstream ``.size(...)`` reads
+         stay valid.
 
-    Unwraps any `DTensor` wrappers FSDP2/EP may have placed around the loader-side
-    Parameters — the kernel takes raw pointers.
+    Unwraps any ``DTensor`` wrappers FSDP2/EP may have placed around the loader-
+    side Parameters — the kernel takes raw pointers.
     """
-    gate_up_sf_raw = to_local(self.gate_up_proj_scale_inv.data)
-    down_sf_raw = to_local(self.down_proj_scale_inv.data)
+    deepgemm = _load_deepgemm_kernel(requires_sm100=True)
+    gate_up_sf_raw = to_local(module.gate_up_proj_scale_inv.data)
+    down_sf_raw = to_local(module.down_proj_scale_inv.data)
     # `_interleave_l1_weights` does `reshape`/`empty_like`/`copy_` and expects plain int8.
-    gate_up_w = to_local(self.gate_up_proj.data).view(torch.int8).contiguous()
-    down_w = to_local(self.down_proj.data).view(torch.int8).contiguous()
+    gate_up_w = to_local(module.gate_up_proj.data).view(torch.int8).contiguous()
+    down_w = to_local(module.down_proj.data).view(torch.int8).contiguous()
+
+    num_local_experts = gate_up_w.size(0)
+    intermediate_hidden = gate_up_w.size(1) // 2
+    hidden_dim = gate_up_w.size(2)
+    if hidden_dim % 32 != 0 or intermediate_hidden % 32 != 0:
+        raise ValueError(
+            f"DeepGEMM Mega MoE requires `hidden_dim` and `intermediate_hidden` divisible by 32 "
+            f"(FP8 SF granularity); got hidden_dim={hidden_dim}, intermediate_hidden={intermediate_hidden}."
+        )
 
     gate_up_sf = deepgemm.transform_sf_into_required_layout(
         gate_up_sf_raw.float(),
         gate_up_w.size(1),  # 2 * intermediate
         hidden_dim,
         recipe=(1, 32),
-        num_groups=local_num_experts,
+        num_groups=num_local_experts,
     )
     down_sf = deepgemm.transform_sf_into_required_layout(
         down_sf_raw.float(),
         down_w.size(1),  # hidden
         intermediate_hidden,
         recipe=(1, 32),
-        num_groups=local_num_experts,
+        num_groups=num_local_experts,
     )
     (gate_up, gate_up_sf), (down, down_sf) = deepgemm.transform_weights_for_mega_moe(
         (gate_up_w, gate_up_sf),
         (down_w, down_sf),
     )
-    self.gate_up_proj = torch.nn.Parameter(gate_up, requires_grad=False)
-    self.gate_up_proj_scale_inv = torch.nn.Parameter(gate_up_sf, requires_grad=False)
-    self.down_proj = torch.nn.Parameter(down, requires_grad=False)
-    self.down_proj_scale_inv = torch.nn.Parameter(down_sf, requires_grad=False)
-    self._megamoe_transformed = True
+    module.gate_up_proj = torch.nn.Parameter(gate_up, requires_grad=False)
+    module.gate_up_proj_scale_inv = torch.nn.Parameter(gate_up_sf, requires_grad=False)
+    module.down_proj = torch.nn.Parameter(down, requires_grad=False)
+    module.down_proj_scale_inv = torch.nn.Parameter(down_sf, requires_grad=False)
 
 
 def deepgemm_fp8_fp4_megamoe_experts_forward(
@@ -680,21 +689,9 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
+    num_local_experts = self.gate_up_proj.size(0)
     intermediate_hidden = self.gate_up_proj.size(1) // 2
-
-    local_num_experts = self.gate_up_proj.size(0)
-    global_num_experts = local_num_experts * process_group.size()
-    if hidden_dim % 32 != 0 or intermediate_hidden % 32 != 0:
-        raise ValueError(
-            f"DeepGEMM Mega MoE requires `hidden_dim` and `intermediate_hidden` divisible by 32 "
-            f"(FP8 SF granularity); got hidden_dim={hidden_dim}, intermediate_hidden={intermediate_hidden}."
-        )
-
-    # First-forward one-shot: pack UE8M0 SFs and interleave the L1/L2 weights for UTCCP.
-    # The kernel asserts `sf.dtype == torch.int` so the raw loader-side scale_inv (UE8M0)
-    # can't be passed directly; setup overwrites the same attributes with transformed views.
-    if not getattr(self, "_megamoe_transformed", False):
-        _megamoe_setup_weights(self, deepgemm, local_num_experts, intermediate_hidden, hidden_dim)
+    num_global_experts = num_local_experts * process_group.size()
 
     # Lazily (re)allocate the symmetric buffer when the cached one is too small.
     if getattr(self, "symm_buffer", None) is None or self.symm_buffer.num_max_tokens_per_rank < num_tokens:
@@ -702,7 +699,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
             process_group,
             hidden=hidden_dim,
             num_topk=num_top_k,
-            num_experts=global_num_experts,
+            num_experts=num_global_experts,
             num_max_tokens_per_rank=num_tokens,
             intermediate_hidden=intermediate_hidden,
         )
