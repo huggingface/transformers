@@ -170,7 +170,7 @@ class ZambaAttention(nn.Module):
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
+        attn_output = self.o_proj(attn_output.to(hidden_states.dtype))
         return attn_output, attn_weights
 
 
@@ -643,7 +643,7 @@ class ZambaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["ZambaHybridLayer", "ZambaMambaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = False
+    _supports_flash_attn = True
     _supports_sdpa = True
     _is_stateful = True
     _can_record_outputs = {
