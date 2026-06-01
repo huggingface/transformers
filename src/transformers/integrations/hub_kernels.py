@@ -92,13 +92,14 @@ try:
                 version=1,
             )
         },
-        "Llama4TextMoe": {
-            "cuda": LayerRepository(
-                repo_id="kernels-community/moe",
-                layer_name="Llama4TextMoe",
-                version=1,
-            )
-        },
+        # NOTE: No longer maintained
+        # "Llama4TextMoe": {
+        #    "cuda": LayerRepository(
+        #        repo_id="kernels-community/moe",
+        #        layer_name="Llama4TextMoe",
+        #        version=1,
+        #    )
+        # },
         "SwiGLUMLP": {
             "cuda": LayerRepository(
                 repo_id="kernels-community/liger-kernels",
