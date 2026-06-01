@@ -106,6 +106,14 @@ class Cosmos3ReasonerTextConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="nvidia/Cosmos3-Nano")
 @strict
 class Cosmos3ReasonerConfig(PreTrainedConfig):
+    r"""
+    Configuration for the [Cosmos3](https://huggingface.co/nvidia/Cosmos3-Nano) Reasoner tower.
+
+    The Reasoner tower is architecturally identical to Qwen3-VL, so this config inherits all
+    fields from [`Qwen3VLConfig`] and only changes `model_type` so that conversion mappings
+    and key-renaming rules dispatch correctly when loading a unified Cosmos3 checkpoint.
+    """
+
     model_type = "cosmos3_omni"
     sub_configs = {"vision_config": Cosmos3ReasonerVisionConfig, "text_config": Cosmos3ReasonerTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
