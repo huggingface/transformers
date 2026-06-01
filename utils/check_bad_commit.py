@@ -321,7 +321,12 @@ if __name__ == "__main__":
     parser.add_argument("--test", type=str, help="The test to check.")
     parser.add_argument("--file", type=str, help="The report file.")
     parser.add_argument("--output_file", type=str, required=True, help="The path of the output file.")
-    parser.add_argument("--github_token", type=str, default=None, help="GitHub token to avoid API rate limits. Falls back to GITHUB_TOKEN env var.")
+    parser.add_argument(
+        "--github_token",
+        type=str,
+        default=None,
+        help="GitHub token to avoid API rate limits. Falls back to GITHUB_TOKEN env var.",
+    )
     args = parser.parse_args()
     if args.github_token is None:
         args.github_token = os.environ.get("GITHUB_TOKEN")
