@@ -17,11 +17,177 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
 
 
-class Cosmos3ReasonerProcessor(Qwen3VLProcessor):
-    pass
+import numpy as np
+
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring, logging
+
+
+logger = logging.get_logger(__name__)
+
+
+class Cosmos3ReasonerProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+            "return_token_type_ids": False,
+            "return_mm_token_type_ids": True,
+        },
+        "videos_kwargs": {"return_metadata": True},
+    }
+
+
+@auto_docstring
+class Cosmos3ReasonerProcessor(ProcessorMixin):
+    valid_processor_kwargs = Cosmos3ReasonerProcessorKwargs
+
+    def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
+        self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
+        self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if getattr(tokenizer, "image_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.image_token)
+        )
+        self.video_token_id = (
+            tokenizer.video_token_id
+            if getattr(tokenizer, "video_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.video_token)
+        )
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
+        self.vision_start_token = (
+            "<|vision_start|>" if not hasattr(tokenizer, "vision_start_token") else tokenizer.vision_start_token
+        )
+        self.vision_end_token = (
+            "<|vision_end|>" if not hasattr(tokenizer, "vision_end_token") else tokenizer.vision_end_token
+        )
+        self.vision_start_token_id = (
+            tokenizer.vision_start_token_id
+            if getattr(tokenizer, "vision_start_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.vision_start_token)
+        )
+        self.vision_end_token_id = (
+            tokenizer.vision_end_token_id
+            if getattr(tokenizer, "vision_end_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.vision_end_token)
+        )
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        merge_length = self.image_processor.merge_size**2
+        num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
+        return self.image_token * num_image_tokens
+
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+        merge_length = self.video_processor.merge_size**2
+        num_frames = video_inputs["video_grid_thw"][video_idx][0]
+        frame_seqlen = video_inputs["video_grid_thw"][video_idx][1:].prod() // merge_length
+        metadata = video_inputs["video_metadata"][video_idx]
+        video_placeholder = ""
+
+        if metadata.fps is None:
+            logger.warning_once(
+                "Cosmos3Reasoner requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+            )
+        metadata.fps = 24 if metadata.fps is None else metadata.fps
+
+        # if timestamps are not provided, calculate them
+        curr_timestamp = self._calculate_timestamps(
+            metadata.frames_indices,
+            metadata.fps,
+            self.video_processor.temporal_patch_size,
+        )
+
+        for frame_idx in range(num_frames):
+            curr_time = curr_timestamp[frame_idx]
+            video_placeholder += f"<{curr_time:.1f} seconds>"
+            video_placeholder += self.vision_start_token + "<|placeholder|>" * frame_seqlen + self.vision_end_token
+        return video_placeholder
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = Cosmos3ReasonerProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = Cosmos3ReasonerProcessorKwargs._defaults.get("videos_kwargs", {})
+            videos_kwargs.update(kwargs)
+            num_video_patches = [
+                self.video_processor.get_number_of_video_patches(*video_size, videos_kwargs)
+                for video_size in video_sizes
+            ]
+            num_video_tokens = [(num_patches // merge_size**2) for num_patches in num_video_patches]
+            vision_data["num_video_tokens"] = num_video_tokens
+
+        return MultiModalData(**vision_data)
+
+    def post_process_image_text_to_text(
+        self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
+    ):
+        """
+        Post-process the output of the model to decode the text.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+                Whether or not to clean up the tokenization spaces. Argument passed to the tokenizer's `batch_decode` method.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+
+        Returns:
+            `list[str]`: The decoded text.
+        """
+        return self.tokenizer.batch_decode(
+            generated_outputs,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+
+    @property
+    def model_input_names(self):
+        return super().model_input_names + ["mm_token_type_ids"]
+
+    def _calculate_timestamps(self, indices: list[int] | np.ndarray, video_fps: float, merge_size: int = 2):
+        if not isinstance(indices, list):
+            indices = indices.tolist()
+        if len(indices) % merge_size != 0:
+            indices.extend(indices[-1] for _ in range(merge_size - len(indices) % merge_size))
+        timestamps = [idx / video_fps for idx in indices]
+        # @JJJYmmm frames are merged by self.merge_size, \
+        # so we need to average the timestamps between the first/last frame within the temporal patch
+        timestamps = [
+            (timestamps[i] + timestamps[i + merge_size - 1]) / 2 for i in range(0, len(timestamps), merge_size)
+        ]
+        return timestamps
 
 
 __all__ = ["Cosmos3ReasonerProcessor"]
