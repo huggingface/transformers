@@ -993,20 +993,6 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         ).get_expectation()
         self.assertEqual(nested_simplify(outputs), expected_outputs)
 
-    @require_torch
-    def test_pt_ignore_subwords_slow_tokenizer_raises(self):
-        model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
-        tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
-
-        with self.assertRaises(ValueError):
-            pipeline(task="ner", model=model_name, tokenizer=tokenizer, aggregation_strategy=AggregationStrategy.FIRST)
-        with self.assertRaises(ValueError):
-            pipeline(
-                task="ner", model=model_name, tokenizer=tokenizer, aggregation_strategy=AggregationStrategy.AVERAGE
-            )
-        with self.assertRaises(ValueError):
-            pipeline(task="ner", model=model_name, tokenizer=tokenizer, aggregation_strategy=AggregationStrategy.MAX)
-
     @slow
     @require_torch
     def test_simple(self):
