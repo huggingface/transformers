@@ -1383,6 +1383,9 @@ class Qwen2_5OmniRotaryEmbedding(nn.Module):
 
     # Ignore copy
     def forward(self, x, position_ids):
+        # Under `device_map="auto"` the rotary module is parameter-light and its inputs may not be
+        # moved to the same device as `inv_freq`, so align `position_ids` with the buffer's device.
+        position_ids = position_ids.to(self.inv_freq.device)
         # In contrast to other models, Qwen2_5Omni has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
         inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)

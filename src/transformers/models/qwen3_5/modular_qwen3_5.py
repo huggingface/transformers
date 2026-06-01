@@ -173,12 +173,6 @@ class Qwen3_5TextRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
         super().__init__()
         self.mrope_section = config.rope_parameters.get("mrope_section", [11, 11, 10])
 
-    def forward(self, x, position_ids):
-        # With `device_map="auto"`, `position_ids` may be built on a different device than the shard
-        # holding the rotary buffers; realign it (the buffers are already moved to `x.device` below).
-        position_ids = position_ids.to(x.device)
-        return super().forward(x, position_ids)
-
     def compute_default_rope_parameters(
         config: Qwen3_5TextConfig | None = None,
         device: Optional["torch.device"] = None,

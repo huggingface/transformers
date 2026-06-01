@@ -147,8 +147,8 @@ class Qwen3_5TextRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        # With `device_map="auto"`, `position_ids` may be built on a different device than the shard
-        # holding the rotary buffers; realign it (the buffers are already moved to `x.device` below).
+        # Under `device_map="auto"` the rotary module is parameter-light and its inputs may not be
+        # moved to the same device as `x`, so align `position_ids` before the matmul below.
         position_ids = position_ids.to(x.device)
         # In contrast to other models, Qwen3_5 has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
