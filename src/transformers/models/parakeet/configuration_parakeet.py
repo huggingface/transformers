@@ -243,6 +243,9 @@ class ParakeetRNNTConfig(PreTrainedConfig):
         The config object or dictionary of the encoder.
     blank_token_id (`int`, *optional*, defaults to 1024):
         Blank token id. Different from `pad_token_id` for RNNT.
+    durations (`tuple[int, ...]`, *optional*, defaults to `()`):
+        Always empty for RNN-T (no duration head). Kept as a config attribute so the joint network
+        can be shared with TDT, whose joint head emits `vocab_size + len(durations)` logits.
     num_prompts (`int`, *optional*, defaults to 0):
         Number of language/task prompts for prompt-conditioned multilingual checkpoints. When `> 0`,
         the model exposes a `prompt_kernel` MLP that conditions the encoder output on a one-hot

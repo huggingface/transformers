@@ -708,6 +708,9 @@ class ParakeetForRNNTModelTester:
         The default tester uses an offline encoder (att_context_size=None); force a small
         cache-aware context here so the code path is actually exercised rather than skipped.
         """
+        from transformers.cache_utils import Cache
+        from transformers.models.parakeet.modeling_parakeet import ParakeetConv1dPaddingCache
+
         config.encoder_config.att_context_size = [3, 1]
         model = ParakeetForRNNT(config=config)
         model.to(torch_device).eval()
@@ -715,15 +718,14 @@ class ParakeetForRNNTModelTester:
         state = model.get_initial_streaming_state(
             batch_size=self.batch_size, target_lang=target_lang, device=torch_device, dtype=torch.float32
         )
-        self.parent.assertIn("cache_last_channel", state)
+        self.parent.assertIn("past_key_values", state)
+        self.parent.assertIn("padding_cache", state)
         self.parent.assertIn("last_token", state)
+        self.parent.assertIsInstance(state["past_key_values"], Cache)
+        self.parent.assertIsInstance(state["padding_cache"], ParakeetConv1dPaddingCache)
+        self.parent.assertEqual(len(state["past_key_values"].layers), self.num_hidden_layers)
         self.parent.assertEqual(state["last_token"].shape, (self.batch_size, 1))
         self.parent.assertEqual(state["last_token"].dtype, torch.long)
-        # cache_last_channel: (num_layers, batch, left_ctx, hidden_size)
-        self.parent.assertEqual(
-            state["cache_last_channel"].shape,
-            (self.num_hidden_layers, self.batch_size, 3, self.hidden_size),
-        )
 
     def prepare_config_and_inputs_for_common(self):
         config, input_features, attention_mask = self.prepare_config_and_inputs()
