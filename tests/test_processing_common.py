@@ -1048,6 +1048,31 @@ class ProcessorTesterMixin:
                 return_tensors="pt",
             )
 
+    def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
+        # Regression for #46192: a flat top-level kwarg (e.g. return_tensors) was silently
+        # dropped when its modality dict (e.g. text_kwargs={...}) was also passed without
+        # that key. Companion to test_doubly_passed_kwargs which covers the conflict case.
+        processor = self.get_processor()
+        self.skip_processor_without_typed_kwargs(processor)
+
+        text = self.prepare_text_inputs(modalities=["image", "video", "audio"])
+        inputs_dict = {
+            "text": text,
+            "images": self.prepare_image_inputs(),
+            "videos": self.prepare_video_inputs(),
+            "audio": self.prepare_audio_inputs(),
+        }
+        call_signature = inspect.signature(processor.__call__)
+        input_args = [param.name for param in call_signature.parameters.values()]
+        inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
+
+        # Sampling frames from a numpy video array can raise on some video processors.
+        extra_kwargs = {"do_sample_frames": False} if "videos" in inputs_dict else {}
+
+        inputs = processor(**inputs_dict, **extra_kwargs, text_kwargs={}, return_tensors="pt")
+        for k, v in inputs.items():
+            self.assertIsInstance(v, torch.Tensor, msg=f"{k} should be a torch.Tensor")
+
     def test_args_overlap_kwargs(self):
         if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
@@ -1538,6 +1563,26 @@ class ProcessorTesterMixin:
             # When we save as single files, tokenizers and processors share a chat template, which means
             # the reloaded tokenizer should get the chat template as well
             self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
+
+    def test_chat_template_saving_rejects_path_traversal(self):
+        # A malicious chat_template dict key must not be usable to escape the save directory and write
+        # attacker-controlled content to an arbitrary path (path traversal, CWE-22). The dict key is used
+        # verbatim as a `<name>.jinja` filename, so `save_pretrained` must reject names that are not plain
+        # filenames instead of silently writing outside the target directory.
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        signature = inspect.signature(processor.__init__)
+        if "chat_template" not in {*signature.parameters.keys()}:
+            self.skipTest("Processor doesn't accept chat templates at input")
+
+        processor.chat_template = {"default": "a", "../../PWNED": "attacker content"}
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            save_dir = os.path.join(tmpdirname, "save")
+            # Where the "../../PWNED" key would land if traversal succeeded:
+            # save/additional_chat_templates/../../PWNED.jinja -> tmpdirname/PWNED.jinja
+            canary = Path(tmpdirname, "PWNED.jinja")
+            with self.assertRaises(ValueError):
+                processor.save_pretrained(save_dir)
+            self.assertFalse(canary.exists())
 
     @require_torch
     def _test_apply_chat_template(
