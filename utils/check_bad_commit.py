@@ -304,7 +304,8 @@ def get_commit_info(commit, pr_number=None, github_token=None):
         if merged_by is not None:
             merged_author = merged_by.get("login")
 
-    parent = commit_info["parents"][0]["sha"]
+    parents = commit_info.get("parents", [])
+    parent = parents[0]["sha"] if parents else None
     if author is None:
         author = (commit_info.get("author") or {}).get("login")
 
