@@ -558,7 +558,8 @@ class RecurrentGemmaRecurrentDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         use_cache: bool | None = None,
-        past_key_values: Cache | None = None,  # unused: recurrent block manages state internally, kept for uniform layer interface
+        past_key_values: Cache
+        | None = None,  # unused: recurrent block manages state internally, kept for uniform layer interface
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         raw_activations = activations
