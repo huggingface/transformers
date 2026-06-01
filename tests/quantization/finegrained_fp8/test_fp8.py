@@ -453,3 +453,53 @@ class FP8LinearTest(unittest.TestCase):
 
         x_ = linear(x)
         self.assertEqual(x_.shape, (1, 5, 256))
+
+
+@require_accelerate
+@require_torch_accelerator
+@unittest.skipIf(
+    get_device_properties()[0] == "cuda"
+    and (get_device_properties()[1] < 8 or (get_device_properties()[1] == 8 and get_device_properties()[2] < 9)),
+    "Skipping FP8QuantizeOnInitTest because it is not supported on GPU with capability < 8.9",
+)
+class FP8QuantizeOnInitTest(unittest.TestCase):
+    """Quantize a freshly-constructed model (no checkpoint) when `config.quantization_config` is set."""
+
+    model_name = "meta-llama/Llama-3.2-1B"
+
+    def _build_config(self):
+        config = AutoConfig.from_pretrained(self.model_name)
+        config.quantization_config = FineGrainedFP8Config().to_dict()
+        return config
+
+    def test_direct_init_quantizes(self):
+        """`cls(config)` with a `quantization_config` returns a quantized model with fp8 weights + scales."""
+        config = self._build_config()
+        model = AutoModelForCausalLM.from_config(config).to(torch_device)
+
+        self.assertTrue(getattr(model, "is_quantized", False))
+        self.assertIsInstance(model.hf_quantizer, FineGrainedFP8HfQuantizer)
+        # Marker used to run quantization only on the construction root must not leak onto the config.
+        self.assertFalse(hasattr(model.config, "_quantization_init_root"))
+
+        weight = model.model.layers[0].self_attn.q_proj.weight
+        weight_scale_inv = model.model.layers[0].self_attn.q_proj.weight_scale_inv
+        self.assertEqual(weight.dtype, torch.float8_e4m3fn)
+        self.assertEqual(weight_scale_inv.dtype, torch.float32)
+
+    def test_save_then_load_round_trip(self):
+        """A model quantized on init can be saved and reloaded with `from_pretrained`."""
+        config = self._build_config()
+        model = AutoModelForCausalLM.from_config(config).to(torch_device)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            reloaded = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=torch_device)
+        self.assertTrue(getattr(reloaded, "is_quantized", False))
+        self.assertEqual(reloaded.model.layers[0].self_attn.q_proj.weight.dtype, torch.float8_e4m3fn)
+
+    def test_no_quantization_config_is_noop(self):
+        """Without a `quantization_config`, construction is unchanged (no quantizer attached)."""
+        config = AutoConfig.from_pretrained(self.model_name)
+        model = AutoModelForCausalLM.from_config(config)
+        self.assertFalse(getattr(model, "is_quantized", False))
+        self.assertIsNone(getattr(model, "hf_quantizer", None))

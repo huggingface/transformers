@@ -95,7 +95,7 @@ from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from .monkey_patching import apply_patches, patch_output_recorders
 from .pytorch_utils import id_tensor_storage
 from .quantizers import HfQuantizer
-from .quantizers.auto import get_hf_quantizer
+from .quantizers.auto import AutoHfQuantizer, get_hf_quantizer
 from .quantizers.quantizers_utils import get_module_from_name
 from .safetensors_conversion import auto_conversion
 from .utils import (
@@ -1346,6 +1346,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.config = config
         self.name_or_path = config.name_or_path
 
+        # Claim the "construction root" for on-the-fly quantization (see `_maybe_quantize_on_init`). The outermost
+        # model's `__init__` runs before its submodules', so the first `PreTrainedModel` built in the tree claims the
+        # root; nested submodels (which share the same `config` object) see the marker already set and won't re-claim it.
+        if (
+            getattr(config, "quantization_config", None) is not None
+            and getattr(config, "_quantization_init_root", None) is None
+        ):
+            config._quantization_init_root = id(self)
+
         # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
         self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
@@ -1439,6 +1448,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Maybe initialize the weights and tie the keys
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
+
+        # If the config carries a `quantization_config`, quantize the freshly-initialized model in-place. This is a
+        # no-op unless `self` is the construction root (see `__init__`) and the model holds real (non-meta) weights,
+        # so `from_pretrained` - which builds on meta and runs its own quantization - is left untouched.
+        self._maybe_quantize_on_init()
 
     @property
     def tp_plan(self) -> dict[str, str]:
@@ -3767,6 +3781,61 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules_strict, torch.float32))
 
         return dtype_plan
+
+    def _maybe_quantize_on_init(self):
+        """Quantize a freshly-constructed model in-place when `config.quantization_config` is set.
+
+        This mirrors what `from_pretrained` does for on-the-fly quantization (build the `HfQuantizer`, swap the
+        modules via `preprocess_model`, quantize the weights, then `postprocess_model`), but for the
+        construct-from-scratch path (`cls(config)` / `AutoModel.from_config`) where there is no checkpoint. The
+        randomly-initialized weights are routed back through the exact same quantization-aware loader used by
+        `from_pretrained`, so the resulting model is byte-for-byte equivalent to loading those weights quantized.
+
+        It is a no-op unless all of the following hold:
+          - `self` is the construction root (the outermost model, see `__init__`);
+          - the model holds real (non-meta) weights - `from_pretrained` builds on meta and quantizes itself, so we
+            must not touch that path;
+          - the quantizer opts in via `HfQuantizer.supports_quantize_on_init` (quantizers that need calibration
+            data, e.g. AWQ/GPTQ, stay opt-out).
+        """
+        quantization_config = getattr(self.config, "quantization_config", None)
+        if quantization_config is None or getattr(self.config, "_quantization_init_root", None) != id(self):
+            return
+        try:
+            # `from_pretrained` builds the skeleton on meta and runs its own quantization during weight loading;
+            # detect that case and bail out so we only handle the construct-from-scratch path.
+            if any(param.device.type == "meta" for param in self.parameters()):
+                return
+
+            hf_quantizer = AutoHfQuantizer.from_config(quantization_config, pre_quantized=False)
+            if not getattr(hf_quantizer, "supports_quantize_on_init", False):
+                return
+            hf_quantizer.validate_environment(device_map=None, weights_only=True)
+
+            dtype = self.dtype
+            # Capture the full-precision random weights *before* swapping modules - `preprocess_model` replaces the
+            # `nn.Linear`/experts with fresh (empty) quantized modules, which would otherwise discard them.
+            state_dict = self.state_dict()
+            with torch.device("meta"):
+                hf_quantizer.preprocess_model(
+                    model=self, dtype=dtype, device_map=None, checkpoint_files=None, use_kernels=False
+                )
+
+            load_config = LoadStateDictConfig(
+                dtype=dtype,
+                dtype_plan=self._get_dtype_plan(dtype),
+                hf_quantizer=hf_quantizer,
+                weight_mapping=get_model_conversion_mapping(self, None, hf_quantizer),
+            )
+            convert_and_load_state_dict_in_model(self, state_dict, load_config, tp_plan=None)
+
+            self.hf_quantizer = hf_quantizer
+            hf_quantizer.postprocess_model(self)
+        finally:
+            # Always release the marker so the next independent construction can re-claim the root, even if the
+            # quantizer bailed out (no GPU, not opted in, ...) or raised.
+            if hasattr(self.config, "_quantization_init_root"):
+                del self.config._quantization_init_root
 
     def set_use_kernels(self, use_kernels, kernel_config: KernelConfig | None = None):
         """
