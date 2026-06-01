@@ -490,12 +490,12 @@ class GlmAsrModel(GlmAsrPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for GlmAsr causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class GlmAsrCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
