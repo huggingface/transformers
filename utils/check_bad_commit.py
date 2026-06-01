@@ -255,7 +255,7 @@ git bisect run python3 target_script.py
     return result
 
 
-def get_commit_info(commit, pr_number=None):
+def get_commit_info(commit, pr_number=None, github_token=None):
     """Get information for a commit via `api.github.com`."""
     if commit is None:
         return {"commit": None, "pr_number": None, "author": None, "merged_by": None}
@@ -263,13 +263,15 @@ def get_commit_info(commit, pr_number=None):
     author = None
     merged_author = None
 
+    headers = {"Authorization": f"token {github_token}"} if github_token else {}
+
     # Use PR number from environment if not provided
     if pr_number is None:
         pr_number = os.environ.get("pr_number")
 
     # First, get commit info to check if it's a merge commit
     url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit}"
-    commit_info = requests.get(url).json()
+    commit_info = requests.get(url, headers=headers).json()
 
     commit_to_query = commit
 
@@ -287,14 +289,14 @@ def get_commit_info(commit, pr_number=None):
     # If no PR number yet, try to discover it from the commit
     if not pr_number:
         url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit_to_query}/pulls"
-        pr_info_for_commit = requests.get(url).json()
+        pr_info_for_commit = requests.get(url, headers=headers).json()
         if len(pr_info_for_commit) > 0:
             pr_number = pr_info_for_commit[0]["number"]
 
     # If we have a PR number, get author and merged_by info
     if pr_number:
         url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
-        pr_for_commit = requests.get(url).json()
+        pr_for_commit = requests.get(url, headers=headers).json()
         author = pr_for_commit["user"]["login"]
         if pr_for_commit["merged_by"] is not None:
             merged_author = pr_for_commit["merged_by"]["login"]
@@ -313,6 +315,7 @@ if __name__ == "__main__":
     parser.add_argument("--test", type=str, help="The test to check.")
     parser.add_argument("--file", type=str, help="The report file.")
     parser.add_argument("--output_file", type=str, required=True, help="The path of the output file.")
+    parser.add_argument("--github_token", type=str, default=None, help="GitHub token to avoid API rate limits.")
     args = parser.parse_args()
 
     run_idx = os.environ.get("run_idx")
@@ -321,10 +324,7 @@ if __name__ == "__main__":
     print(f"start_commit: {args.start_commit}")
     print(f"end_commit: {args.end_commit}")
 
-    # `get_commit_info` uses `requests.get()` to request info. via `api.github.com` without using token.
-    # If there are many new failed tests in a workflow run, this script may fail at some point with `KeyError` at
-    # `pr_number = pr_info_for_commit[0]["number"]` due to the rate limit.
-    # Let's cache the commit info. and reuse them whenever possible.
+    # Cache commit info to avoid redundant API calls and reduce rate limit pressure.
     commit_info_cache = {}
 
     if len({args.test is None, args.file is None}) != 2:
@@ -385,7 +385,7 @@ if __name__ == "__main__":
             if bad_commit in commit_info_cache:
                 commit_info = commit_info_cache[bad_commit]
             else:
-                commit_info = get_commit_info(bad_commit)
+                commit_info = get_commit_info(bad_commit, github_token=args.github_token)
                 commit_info_cache[bad_commit] = commit_info
 
             commit_info_copied = copy.deepcopy(commit_info)
