@@ -51,9 +51,9 @@ The original code can be found [here](https://github.com/facebookresearch/sapien
 
 ## Usage examples
 
-### Image feature extraction
+### Image feature extraction with AutoModel
 
-The example below shows how to obtain image features with [`Sapiens2Model`].
+The example below shows how to obtain the CLS token (whole-image embedding) with [`Sapiens2Model`].
 
 ```python
 import torch
@@ -71,16 +71,32 @@ with torch.inference_mode():
 
 # outputs.pooler_output is the CLS token (whole-image embedding)
 cls_token = outputs.pooler_output
+print("CLS token shape:", cls_token.shape)  # [1, 1024]
+```
 
-# Split patch tokens from last_hidden_state for dense tasks
-_, _, height, width = inputs["pixel_values"].shape
-num_patches_h = height // model.config.patch_size
-num_patches_w = width // model.config.patch_size
-patch_tokens = outputs.last_hidden_state[:, 1 + model.config.num_register_tokens :, :]
-patch_features = patch_tokens.unflatten(1, (num_patches_h, num_patches_w))
+### Image feature extraction with AutoBackbone
 
+[`Sapiens2Backbone`] exposes patch tokens already reshaped to spatial dimensions and CLS tokens directly on the output object.
+
+```python
+import torch
+from transformers import AutoBackbone, AutoImageProcessor
+from transformers.image_utils import load_image
+
+image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
+
+image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision="refs/pr/1")
+model = AutoBackbone.from_pretrained("facebook/sapiens2-pretrain-0.4b", device_map="auto", revision="refs/pr/1")
+
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
+with torch.inference_mode():
+    outputs = model(**inputs, return_class_token=True)
+
+# Patch tokens shaped (batch, height, width, channels)
+patch_features = outputs.feature_maps[0]
+cls_token = outputs.cls_tokens[0]
 print("CLS token shape:", cls_token.shape)           # [1, 1024]
-print("Patch features shape:", patch_features.shape) # [1, H/patch, W/patch, 1024]
+print("Patch features shape:", patch_features.shape) # [1, 64, 48, 1024]
 ```
 
 ### Normal estimation

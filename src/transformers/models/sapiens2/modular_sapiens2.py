@@ -39,7 +39,7 @@ from ...image_utils import (
     get_image_size_for_max_height_width,
     make_list_of_images,
 )
-from ...modeling_outputs import ModelOutput, SemanticSegmenterOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
@@ -1440,6 +1440,41 @@ class Sapiens2Model(DINOv3ViTModel):
         super().__init__(config)
         self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        bool_masked_pos: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
+            pre-training.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoModel
+        >>> from transformers.image_utils import load_image
+        >>> import torch
+
+        >>> image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision="refs/pr/1")
+        >>> model = AutoModel.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision="refs/pr/1")
+
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+        >>> with torch.inference_mode():
+        ...     outputs = model(**inputs)
+
+        >>> cls_token = outputs.pooler_output
+        >>> cls_token.shape
+        torch.Size([1, 1024])
+        ```
+        """
+        return super().forward(pixel_values, bool_masked_pos=bool_masked_pos, **kwargs)
+
 
 class Sapiens2Backbone(DINOv3ViTBackbone):
     def __init__(self, config: Sapiens2Config):
@@ -1454,6 +1489,28 @@ class Sapiens2Backbone(DINOv3ViTBackbone):
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sapiens2BackboneOutput:
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import AutoBackbone, AutoImageProcessor
+        >>> from transformers.image_utils import load_image
+        >>> import torch
+
+        >>> image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision="refs/pr/1")
+        >>> model = AutoBackbone.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision="refs/pr/1")
+
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+        >>> with torch.inference_mode():
+        ...     outputs = model(**inputs, return_class_token=True)
+
+        >>> outputs.feature_maps[0].shape
+        torch.Size([1, 1024, 64, 48])
+        >>> outputs.cls_tokens[0].shape
+        torch.Size([1, 1024])
+        ```
+        """
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_states = self.embeddings(pixel_values)
         position_embeddings = self.rope_embeddings(pixel_values)
@@ -1527,6 +1584,25 @@ class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
             Ground truth semantic segmentation maps for computing the loss.
             Indices should be in `[0, ..., config.num_labels - 1]`.
             If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoModel
+        >>> from transformers.image_utils import load_image
+        >>> import torch
+
+        >>> image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-seg-0.4b", revision="refs/pr/1")
+        >>> model = AutoModel.from_pretrained("facebook/sapiens2-seg-0.4b", revision="refs/pr/1")
+
+        >>> inputs = image_processor(image, return_tensors="pt")
+        >>> with torch.inference_mode():
+        ...     outputs = model(**inputs)
+
+        >>> outputs.logits.shape
+        torch.Size([1, 29, 1024, 768])
+        ```
         """
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
@@ -1585,6 +1661,26 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
             original orientation.
         labels (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`, *optional*):
             Heatmap ground truth for computing the loss.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoModel
+        >>> from transformers.image_utils import load_image
+        >>> import torch
+
+        >>> image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pose-0.4b", revision="refs/pr/1")
+        >>> model = AutoModel.from_pretrained("facebook/sapiens2-pose-0.4b", revision="refs/pr/1")
+
+        >>> boxes = [[[270.8, 0.6, 294.1, 379.5]]]
+        >>> inputs = image_processor(image, boxes=boxes, return_tensors="pt")
+        >>> with torch.inference_mode():
+        ...     outputs = model(**inputs)
+
+        >>> outputs.heatmaps.shape
+        torch.Size([1, 308, 256, 192])
+        ```
         """
         outputs = self.model(pixel_values, **kwargs)
 
@@ -1636,6 +1732,25 @@ class Sapiens2ForNormalEstimation(Sapiens2PreTrainedModel):
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, num_labels, height, width)`, *optional*):
             Ground-truth surface normal maps for computing the loss.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoModel
+        >>> from transformers.image_utils import load_image
+        >>> import torch
+
+        >>> image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-normal-0.4b", revision="refs/pr/1")
+        >>> model = AutoModel.from_pretrained("facebook/sapiens2-normal-0.4b", revision="refs/pr/1")
+
+        >>> inputs = image_processor(image, return_tensors="pt")
+        >>> with torch.inference_mode():
+        ...     outputs = model(**inputs)
+
+        >>> outputs.normals.shape
+        torch.Size([1, 3, 1024, 768])
+        ```
         """
         outputs = self.model(pixel_values, **kwargs)
 
@@ -1690,6 +1805,25 @@ class Sapiens2ForPointmapEstimation(Sapiens2PreTrainedModel):
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`, *optional*):
             Ground-truth pointmap for computing the loss.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoModel
+        >>> from transformers.image_utils import load_image
+        >>> import torch
+
+        >>> image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pointmap-0.4b", revision="refs/pr/1")
+        >>> model = AutoModel.from_pretrained("facebook/sapiens2-pointmap-0.4b", revision="refs/pr/1")
+
+        >>> inputs = image_processor(image, return_tensors="pt")
+        >>> with torch.inference_mode():
+        ...     outputs = model(**inputs)
+
+        >>> outputs.pointmaps.shape
+        torch.Size([1, 3, 1024, 768])
+        ```
         """
         outputs = self.model(pixel_values, **kwargs)
 
@@ -1741,6 +1875,27 @@ class Sapiens2ForImageMatting(Sapiens2PreTrainedModel):
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, 4, height, width)`, *optional*):
             Ground-truth matting targets for computing the loss.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoModel
+        >>> from transformers.image_utils import load_image
+        >>> import torch
+
+        >>> image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-matting-1b", revision="refs/pr/1")
+        >>> model = AutoModel.from_pretrained("facebook/sapiens2-matting-1b", revision="refs/pr/1")
+
+        >>> inputs = image_processor(image, return_tensors="pt")
+        >>> with torch.inference_mode():
+        ...     outputs = model(**inputs)
+
+        >>> outputs.alphas.shape
+        torch.Size([1, 1, 1024, 768])
+        >>> outputs.foregrounds.shape
+        torch.Size([1, 3, 1024, 768])
+        ```
         """
         outputs = self.model(pixel_values, **kwargs)
 
