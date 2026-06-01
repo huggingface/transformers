@@ -84,6 +84,7 @@ EXTRA_TAGS_MAPPING = {
     "blip-2": ["blip_2_qformer"],
     "chinese_clip": ["chinese_clip_vision_model"],
     "clip": ["clip_text_model", "clip_vision_model"],
+    "conformer": ["conformer_ctc", "conformer_encoder"],
     "data2vec-audio": ["data2vec-text", "data2vec-vision"],
     "depth_anything": ["depth_anything_v2"],
     "donut-swin": ["nougat"],

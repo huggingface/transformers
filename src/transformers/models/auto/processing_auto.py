@@ -69,6 +69,8 @@ else:
             ("colmodernvbert", "ColModernVBertProcessor"),
             ("colpali", "ColPaliProcessor"),
             ("colqwen2", "ColQwen2Processor"),
+            ("conformer_ctc", "ConformerProcessor"),
+            ("conformer_encoder", "ConformerProcessor"),
             ("deepseek_vl", "DeepseekVLProcessor"),
             ("deepseek_vl_hybrid", "DeepseekVLHybridProcessor"),
             ("dia", "DiaProcessor"),

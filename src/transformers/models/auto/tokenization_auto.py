@@ -98,6 +98,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("cohere", "CohereTokenizer" if is_tokenizers_available() else None),
         ("cohere2", "CohereTokenizer" if is_tokenizers_available() else None),
         ("colqwen2", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("conformer_ctc", "ConformerTokenizer" if is_tokenizers_available() else None),
+        ("conformer_encoder", "ConformerTokenizer" if is_tokenizers_available() else None),
         ("convbert", "BertTokenizer" if is_tokenizers_available() else None),
         ("cpm", "CpmTokenizer" if is_tokenizers_available() else None),
         ("cpmant", "CpmAntTokenizer"),
