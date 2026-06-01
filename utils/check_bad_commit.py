@@ -263,7 +263,7 @@ def get_commit_info(commit, pr_number=None, github_token=None):
     author = None
     merged_author = None
 
-    headers = {"Authorization": f"token {github_token}"} if github_token else {}
+    headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {github_token}"} if github_token else {}
 
     # Use PR number from environment if not provided
     if pr_number is None:
