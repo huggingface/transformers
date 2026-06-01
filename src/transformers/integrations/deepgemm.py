@@ -154,6 +154,47 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
 # ── Scale-factor helpers ───────────────────────────────────────────────────────
 
 
+@functools.cache
+def _is_sm100(device: torch.device) -> bool:
+    """``True`` for Blackwell (SM100+). Cached: device capability is fixed for the
+    process lifetime and this gets hit on every linear/expert forward.
+    """
+    return torch.cuda.get_device_capability(device)[0] >= 10
+
+
+_DEEPGEMM_VISITED_DEVICES: set[int] = set()
+
+
+def _assert_single_device(device: torch.device, context: str) -> None:
+    """Reject DeepGEMM calls that span multiple CUDA devices in the same process
+    (e.g. ``device_map="auto"`` across N GPUs). The SM100 kernel has a kernel-
+    level memory-ordering bug that surfaces only in this configuration: kernels
+    on the new device can read stale tiles before prior cross-device copies are
+    visible. ``CUDA_LAUNCH_BLOCKING=1`` masks it (full serialization); NCCL-
+    sync'd distributed setups (torchrun + EP) mask it too. Single-process multi-
+    GPU has neither, and bracketing each DeepGEMM call with explicit
+    ``torch.cuda.synchronize`` empirically isn't enough to plug the race.
+
+    Raised as :class:`ImportError` from the per-linear path so :func:`fp8_linear`
+    falls back to Triton (which has no such race); raised as :class:`RuntimeError`
+    from the experts path where there's no fallback — the user explicitly chose
+    ``experts_implementation="deepgemm"`` and must switch to ``"grouped_mm"`` /
+    ``"eager"`` or run with proper distributed/EP for multi-GPU.
+    """
+    idx = device.index if device.index is not None else torch.cuda.current_device()
+    _DEEPGEMM_VISITED_DEVICES.add(idx)
+    if len(_DEEPGEMM_VISITED_DEVICES) <= 1:
+        return
+    msg = (
+        f"DeepGEMM kernels race when driven from a single process across multiple devices "
+        f"({sorted(_DEEPGEMM_VISITED_DEVICES)}) and produce garbage. Run with a distributed "
+        f"setup (TP/EP) so each process drives one device, "
+    )
+    if context == "linear":
+        raise ImportError(msg + "or fall back to the Triton kernel (handled automatically).")
+    raise RuntimeError(msg + "or pick `experts_implementation='grouped_mm'`.")
+
+
 def _ceil_to_ue8m0(sf: torch.Tensor) -> torch.Tensor:
     """Round each fp32 SF up to the nearest power of 2 (zero mantissa).
 
@@ -372,6 +413,8 @@ def deepgemm_fp8_fp4_linear(
     Static (per-tensor) activation quantization is rejected — DeepGEMM needs
     per-row SFs. Callers should route static activations through the Triton fallback.
     """
+    _assert_single_device(input.device, context="linear")
+
     if activation_scale is not None:
         raise NotImplementedError("DeepGEMM linear does not support static activation quantization.")
     if input.dtype not in (torch.bfloat16, torch.float16):
@@ -417,7 +460,7 @@ def deepgemm_bf16_experts_forward(
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
 
-    use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
+    use_psum_layout = _is_sm100(device)
     (
         sorted_hidden,
         sorted_weights,
@@ -469,6 +512,8 @@ def deepgemm_fp8_fp4_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
+    _assert_single_device(hidden_states.device, context="experts")
+
     if self.activation_scheme == "static":
         raise NotImplementedError("DeepGEMM experts dispatch does not support static activation quantization.")
     if hidden_states.dtype != torch.bfloat16:
@@ -490,7 +535,7 @@ def deepgemm_fp8_fp4_experts_forward(
     ws_down = to_local(self.down_proj_scale_inv)
 
     cast_kwargs = _select_fp8_cast_kwargs(w_up, ws_up, getattr(self, "block_size", None), device)
-    use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
+    use_psum_layout = _is_sm100(device)
     (
         sorted_hidden,
         sorted_weights,
@@ -627,7 +672,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     if process_group is None:
         raise ValueError(
             "DeepGEMM Mega MoE requires a `process_group` for the EP group. The TP wrapping "
-            "(MoeTensorParalellExperts) supplies it automatically; pass it explicitly otherwise."
+            "(MoeTensorParalellMegaMoeExperts) supplies it automatically; pass it explicitly otherwise."
         )
 
     deepgemm = _load_deepgemm_kernel(requires_sm100=True)

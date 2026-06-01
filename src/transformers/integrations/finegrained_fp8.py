@@ -211,12 +211,15 @@ def fp8_linear(
             for dynamic (per-token) quant.
         output_dtype: desired output dtype.
     """
-    # Triton handles only FP8 weights + float SFs. FP4 weights and/or UE8M0 SFs (DeepSeek V4)
-    # must take the DeepGEMM path. Static activation (per-tensor scalar) is Triton-only — DeepGEMM's
-    # kernel expects per-row SFs and rejects scalar SFs at its host-side check.
-    deepgemm_required = weight.dtype == torch.int8 or weight_scale_inv.dtype == torch.float8_e8m0fnu
+    # Triton handles FP8 weights + either fp32 or UE8M0 SFs (it casts the SF to fp32 at the
+    # kernel boundary — see comment in :func:`finegrained_fp8_linear`). Only FP4 (int8) weights
+    # genuinely require the DeepGEMM path. Static activation (per-tensor scalar) is Triton-only:
+    # DeepGEMM's kernel expects per-row SFs and rejects scalar SFs at its host-side check.
+    deepgemm_required = weight.dtype == torch.int8
     deepgemm_compatible = activation_scale is None and (
-        deepgemm_required or (block_size is not None and block_size[0] == block_size[1] == 128)
+        deepgemm_required
+        or weight_scale_inv.dtype == torch.float8_e8m0fnu
+        or (block_size is not None and block_size[0] == block_size[1] == 128)
     )
 
     if deepgemm_compatible:
@@ -230,25 +233,22 @@ def fp8_linear(
                 activation_scale=activation_scale,
                 bias=bias,
             )
-        except ImportError:
-            logger.warning_once(
-                "DeepGEMM kernel is not available or compatible, falling back to Triton finegrained-fp8 kernel. "
-                "To use DeepGEMM FP8 matmul, ensure you have a Hopper (SM90+) or newer GPU with CUDA runtime 12.3+, "
-                "and that the `kernels` package is installed and up to date (`pip install -U kernels`)."
-            )
+        except ImportError as e:
+            # Forward the original reason so the user knows whether DeepGEMM is unavailable
+            # (env/build issue) or refused this specific input (e.g. multi-device on SM100).
+            logger.warning_once(f"DeepGEMM unavailable for this call, falling back to Triton. Reason: {e}")
 
     if deepgemm_required:
         if activation_scale is not None:
             raise RuntimeError(
-                "Static (per-tensor) activation quantization is not supported with FP4 weights or "
-                "UE8M0 weight scales — DeepGEMM expects per-row SFs and the Triton fallback can't "
-                "handle these formats. Use dynamic activation quantization instead."
+                "Static (per-tensor) activation quantization is not supported with FP4 weights — "
+                "DeepGEMM expects per-row SFs and the Triton fallback has no FP4 path. "
+                "Use dynamic activation quantization instead."
             )
         raise RuntimeError(
-            "FP4 weights and/or UE8M0 weight scales require the DeepGEMM path; the Triton fallback "
-            "handles FP8 weights with float32 SFs only. Make sure your system is compatible with the "
-            "DeepGEMM path: SM90+ GPU (SM100+ for FP4), CUDA runtime 12.3+, PyTorch ≥2.6, and the "
-            "`kernels` package installed."
+            "FP4 weights require the DeepGEMM path; the Triton fallback handles FP8 weights only. "
+            "Make sure your system is compatible with the DeepGEMM path: SM100+ GPU, CUDA runtime "
+            "12.9+, PyTorch ≥2.6, and the `kernels` package installed."
         )
 
     return finegrained_fp8_linear(input, weight, weight_scale_inv, block_size, bias, activation_scale, output_dtype)
@@ -635,7 +635,7 @@ class FP8Experts(nn.Module):
         final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
 
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero(as_tuple=False).view(-1)
 

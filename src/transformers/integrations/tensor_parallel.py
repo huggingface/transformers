@@ -1127,11 +1127,6 @@ class RouterParallel(TensorParallelLayer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def prepare_module_tp(self, module, device_mesh, config=None, **kwargs):
-        super().prepare_module_tp(module, device_mesh, **kwargs)
-        if not hasattr(module, "config") and config is not None:
-            module.config = config
-
     def _prepare_input_fn(self, mod, inputs, device_mesh):
         return inputs
 
@@ -1180,13 +1175,7 @@ class RouterParallel(TensorParallelLayer):
         The sentinel index (num_local_experts) is skipped by one_hot encoding or clamped
         + masked in grouped_mm/batched_mm. After the expert forward, an all_reduce sums
         partial outputs across EP ranks to produce the full result.
-
-        Mega MoE skips this remap: its kernel does the EP dispatch itself and wants raw
-        global expert ids with unmasked routing weights.
         """
-        if _is_megamoe(mod):
-            return outputs
-
         ep_rank, ep_size = device_mesh.get_local_rank(), device_mesh.size()
         num_experts = getattr(mod, "num_experts", None)
         if num_experts is None:
@@ -1217,6 +1206,19 @@ class RouterParallel(TensorParallelLayer):
         return param[...].to(device=device, dtype=dtype)
 
 
+class RouterParallelMegaMoe(RouterParallel):
+    """Router TP plan used with DeepGEMM Mega MoE.
+
+    Mega MoE handles EP dispatch inside the kernel and wants raw global expert ids
+    with unmasked routing weights, so the router doesn't pre-shard per EP rank like
+    `RouterParallel._prepare_output_fn` does. The quantizer's `update_tp_plan` swaps
+    `"ep_router"` → `"megamoe_router"` when `experts_implementation == "deepgemm_megamoe"`.
+    """
+
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
+        return outputs
+
+
 class MoeTensorParalellExperts(TensorParallelLayer):
     """
     Note: For tensor parallel, the MoEExpertsParallel TP layer handles gradient sync:
@@ -1234,12 +1236,6 @@ class MoeTensorParalellExperts(TensorParallelLayer):
         top_k_index = inputs[1]
         top_k_weights = inputs[2]
 
-        # Mega MoE is inference-only (the kernel has no backward) and handles EP
-        # dispatch + combine + per-rank token sharding internally. Skip the gradient
-        # sync hooks and append the EP `process_group` so the forward can rendezvous.
-        if _is_megamoe(mod):
-            return hidden_states, top_k_index, top_k_weights, device_mesh.get_group()
-
         # all_reduce_backward on hidden_states for correct colwise (gate_up_proj) gradient
         hidden_states = all_reduce_backward(hidden_states, device_mesh)
 
@@ -1251,9 +1247,6 @@ class MoeTensorParalellExperts(TensorParallelLayer):
         return hidden_states, top_k_index, top_k_weights
 
     def _prepare_output_fn(self, mod, outputs, device_mesh):
-        # Mega MoE returned the fully-combined gathered output; skip the all-reduce.
-        if _is_megamoe(mod):
-            return outputs
         # all_reduce_forward to sum partial expert outputs across GPUs
         return all_reduce_forward(outputs, device_mesh)
 
@@ -1265,8 +1258,30 @@ class MoeTensorParalellExperts(TensorParallelLayer):
         return param[...].to(device=device, dtype=dtype)
 
 
-def _is_megamoe(mod: nn.Module) -> bool:
-    return getattr(getattr(mod, "config", None), "_experts_implementation", None) == "deepgemm_megamoe"
+class MoeTensorParalellMegaMoeExperts(TensorParallelLayer):
+    """TP layer for DeepGEMM Mega MoE experts.
+
+    Mega MoE is inference-only (the kernel has no backward) and handles EP dispatch +
+    combine + per-rank token sharding internally — so we skip the gradient-sync hooks
+    that the regular `MoeTensorParalellExperts` would apply, and we forward the EP
+    `process_group` into the module so the symm-buffer rendezvous can run on first
+    forward. The quantizer's `update_tp_plan` swaps the experts plan key from
+    `"moe_tp_experts"` to `"megamoe_experts"` when
+    `from_pretrained(..., experts_implementation="deepgemm_megamoe")`.
+    """
+
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
+        hidden_states, top_k_index, top_k_weights = inputs[0], inputs[1], inputs[2]
+        return hidden_states, top_k_index, top_k_weights, device_mesh.get_group()
+
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
+        # Kernel returned the fully-combined gathered output; no further reduction.
+        return outputs
+
+    def shard_tensor(
+        self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
+    ) -> torch.Tensor:
+        return param[...].to(device=device, dtype=dtype)
 
 
 class MoeIdentityExpertParallel(TensorParallelLayer):
@@ -1307,7 +1322,9 @@ class ParallelInterface(GeneralInterface):
             "sequence_parallel": SequenceParallel(),
             "grouped_gemm": GroupedGemmParallel(),
             "ep_router": RouterParallel(),
+            "megamoe_router": RouterParallelMegaMoe(),
             "moe_tp_experts": MoeTensorParalellExperts(),
+            "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
             "moe_identity_expert": MoeIdentityExpertParallel(),
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
             "mla_kv_a_proj": MlaKvAProjParallel(),

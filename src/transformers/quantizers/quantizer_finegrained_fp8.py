@@ -112,6 +112,20 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         )
 
     def update_tp_plan(self, config):
+        # When the MoE experts impl is locked to MegaMoE at load time, swap the
+        # experts plan key to the MegaMoE-specific TP layer (no gradient sync hooks,
+        # appends EP `process_group`). Done at load time so the runtime
+        # `MoeTensorParalellExperts` plan stays clean of impl-aware branches.
+        # Some models (e.g. V4) ship the experts mapping under `base_model_ep_plan`
+        # instead of `base_model_tp_plan` — swap both.
+        if getattr(config, "_experts_implementation", None) == "deepgemm_megamoe":
+            swap = {"moe_tp_experts": "megamoe_experts", "ep_router": "megamoe_router"}
+            for plan_attr in ("base_model_tp_plan", "base_model_ep_plan"):
+                base_plan = getattr(config, plan_attr, None) or {}
+                updated_plan = {k: swap.get(v, v) for k, v in base_plan.items()}
+                if updated_plan != base_plan:
+                    setattr(config, plan_attr, updated_plan)
+
         if "Qwen3" in config.__class__.__name__:
             text_plan = {
                 "layers.*.self_attn.q_proj.weight": "colwise",
