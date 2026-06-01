@@ -187,4 +187,47 @@ class ParakeetTDTConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["ParakeetCTCConfig", "ParakeetEncoderConfig", "ParakeetTDTConfig"]
+@auto_docstring(checkpoint="nvidia/parakeet-rnnt-0.6b")
+@strict
+class ParakeetRNNTConfig(ParakeetTDTConfig):
+    r"""
+    A conventional RNN-T (RNN Transducer) is the degenerate case of a TDT (Token-and-Duration Transducer)
+    where no token durations are predicted: the joint network emits token logits only, and the encoder
+    frame pointer advances by exactly one frame on each blank emission. [`ParakeetRNNTConfig`] is therefore
+    a [`ParakeetTDTConfig`] with `durations` pinned to the empty tuple, which makes the joint head shrink to
+    just `vocab_size` (no duration logits).
+
+    decoder_hidden_size (`int`, *optional*, defaults to 640):
+        Hidden size of the LSTM prediction network and joint network.
+    num_decoder_layers (`int`, *optional*, defaults to 2):
+        Number of LSTM layers in the prediction network.
+    max_symbols_per_step (`int`, *optional*, defaults to 10):
+        Maximum number of symbols to emit per encoder time step during greedy decoding.
+    durations (`list[int]`, *optional*, defaults to `[]`):
+        Pinned to the empty list for RNN-T: no token durations are predicted, so the joint head outputs
+        only `vocab_size` logits.
+    encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
+        The config object or dictionary of the encoder.
+    blank_token_id (`int`, *optional*, defaults to 8192):
+        Blank token id. Different from `pad_token_id` for RNN-T.
+
+    Example:
+    ```python
+    >>> from transformers import ParakeetForRNNT, ParakeetRNNTConfig
+
+    >>> # Initializing a Parakeet RNN-T configuration
+    >>> configuration = ParakeetRNNTConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = ParakeetForRNNT(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
+
+    model_type = "parakeet_rnnt"
+    durations: list[int] | tuple[int, ...] = ()
+
+
+__all__ = ["ParakeetCTCConfig", "ParakeetEncoderConfig", "ParakeetRNNTConfig", "ParakeetTDTConfig"]
