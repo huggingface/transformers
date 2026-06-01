@@ -12,13 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
-from typing import TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import torch
-import torch.distributed as dist
-from torch.distributed.tensor.device_mesh import DeviceMesh
+import torch.distributed as _dist
 
 from .requests import logger
+
+
+# torch marks `torch.distributed` members as possibly-missing, which leads to type check errors. To avoid them, we mark
+# the module as `Any` (same as `DeviceMeshLike` in `_typing.py`)
+dist: Any = _dist
+
+
+if TYPE_CHECKING or torch.distributed.is_available():  # prevents runtime import errors when distributed is off
+    from torch.distributed.device_mesh import DeviceMesh
+else:
+    DeviceMesh = object  # only used for type checking, so this is ok
 
 
 T = TypeVar("T")
