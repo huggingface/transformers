@@ -1103,6 +1103,8 @@
         title: MusicGen
       - local: model_doc/musicgen_melody
         title: MusicGen Melody
+      - local: model_doc/nemotron_asr
+        title: NemotronAsr
       - local: model_doc/parakeet
         title: Parakeet
       - local: model_doc/pe_audio

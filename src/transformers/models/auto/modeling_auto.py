@@ -329,6 +329,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mvp", "MvpModel"),
         ("nanochat", "NanoChatModel"),
         ("nemotron", "NemotronModel"),
+        ("nemotron_asr", "NemotronAsrForRNNT"),
+        ("nemotron_asr_encoder", "NemotronAsrEncoder"),
         ("nemotron_h", "NemotronHModel"),
         ("nllb-moe", "NllbMoeModel"),
         ("nomic_bert", "NomicBertModel"),
@@ -1692,6 +1694,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_RNNT_MAPPING_NAMES = OrderedDict(
     [
         # Model for RNN Transducer (RNN-T) mapping.
+        ("nemotron_asr", "NemotronAsrForRNNT"),
         ("parakeet_rnnt", "ParakeetForRNNT"),
     ]
 )

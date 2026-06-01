@@ -138,6 +138,7 @@ else:
             ("owlvit", "OwlViTProcessor"),
             ("paddleocr_vl", "PaddleOCRVLProcessor"),
             ("paligemma", "PaliGemmaProcessor"),
+            ("nemotron_asr", "ParakeetProcessor"),
             ("parakeet_ctc", "ParakeetProcessor"),
             ("parakeet_rnnt", "ParakeetProcessor"),
             ("parakeet_tdt", "ParakeetProcessor"),

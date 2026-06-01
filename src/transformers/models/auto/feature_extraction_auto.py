@@ -61,6 +61,8 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("moshi", "EncodecFeatureExtractor"),
         ("musicgen", "EncodecFeatureExtractor"),
         ("musicgen_melody", "MusicgenMelodyFeatureExtractor"),
+        ("nemotron_asr", "NemotronAsrFeatureExtractor"),
+        ("nemotron_asr_encoder", "NemotronAsrFeatureExtractor"),
         ("parakeet_ctc", "ParakeetFeatureExtractor"),
         ("parakeet_encoder", "ParakeetFeatureExtractor"),
         ("parakeet_rnnt", "ParakeetFeatureExtractor"),
