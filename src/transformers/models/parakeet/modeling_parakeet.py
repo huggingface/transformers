@@ -37,8 +37,8 @@ from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig, ParakeetTDTConfig
-from .generation_parakeet import ParakeetTDTDecoderCache, ParakeetTDTGenerationMixin
+from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig, ParakeetRNNTConfig, ParakeetTDTConfig
+from .generation_parakeet import ParakeetRNNTGenerationMixin, ParakeetTDTDecoderCache, ParakeetTDTGenerationMixin
 
 
 logger = logging.get_logger(__name__)
@@ -1041,4 +1041,19 @@ class ParakeetForTDT(ParakeetPreTrainedModel, ParakeetTDTGenerationMixin):
         )
 
 
-__all__ = ["ParakeetForCTC", "ParakeetForTDT", "ParakeetEncoder", "ParakeetPreTrainedModel"]
+@auto_docstring(
+    custom_intro="""
+    Parakeet Encoder with an RNN-T (RNN Transducer) head.
+
+    RNN-T can be seen the special case of TDT (Token-and-Duration Transducer) with no duration head: the joint
+    network predicts token logits only (so its output width is just `vocab_size`), and during greedy
+    decoding the encoder frame pointer advances by one frame on every blank emission. The module stack
+    (encoder, decoder prediction network, joint network) is identical to [`ParakeetForTDT`]; only the
+    duration-free generation loop differs, which lives in [`ParakeetRNNTGenerationMixin`].
+    """
+)
+class ParakeetForRNNT(ParakeetRNNTGenerationMixin, ParakeetForTDT):
+    config: ParakeetRNNTConfig
+
+
+__all__ = ["ParakeetForCTC", "ParakeetForRNNT", "ParakeetForTDT", "ParakeetEncoder", "ParakeetPreTrainedModel"]
