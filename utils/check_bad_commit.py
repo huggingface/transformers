@@ -188,7 +188,18 @@ def find_bad_commit(target_test, start_commit, end_commit):
     # The test fails on `start_commit`, and
     #   - if the CI is run on PR: this block checks if the test also failed on `start_commit`.
     #   - otherwise: the test passed on `end_commit` --> an actual new failing test, this block is skipped.
-    if is_pr_ci and failure_at_base_commit != "" and failure_at_workflow_commit != failure_at_base_commit:
+
+    # TODO: A helper method to handle this and other possible error messages in a clean and centralized way.
+    failure_at_workflow_commit_processed = failure_at_workflow_commit
+    failure_at_base_commit_processed = failure_at_base_commit
+    if "torch.OutOfMemoryError: CUDA out of memory" in failure_at_workflow_commit_processed:
+        failure_at_workflow_commit_processed = "torch.OutOfMemoryError: CUDA out of memory"
+    if "torch.OutOfMemoryError: CUDA out of memory" in failure_at_base_commit_processed:
+        failure_at_base_commit_processed = "torch.OutOfMemoryError: CUDA out of memory"
+
+    different_failures = failure_at_workflow_commit_processed != failure_at_base_commit_processed
+
+    if is_pr_ci and failure_at_base_commit != "" and different_failures:
         result["bad_commit"] = start_commit
         result["status"] = (
             f"test fails both on the current commit ({start_commit}) and the previous commit ({end_commit}), but with DIFFERENT error message!"
@@ -198,7 +209,7 @@ def find_bad_commit(target_test, start_commit, end_commit):
         result["failure_at_bad_commit"] = failure_at_workflow_commit
         return result
     # Fail on both commits but with the same error message ==> don't include
-    elif is_pr_ci and failure_at_workflow_commit == failure_at_base_commit:
+    elif is_pr_ci and not different_failures:
         result["bad_commit"] = None
         result["status"] = (
             f"test fails both on the current commit ({start_commit}) and the previous commit ({end_commit}) with the SAME error message!"
