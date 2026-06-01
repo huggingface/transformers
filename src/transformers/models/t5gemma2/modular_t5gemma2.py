@@ -86,13 +86,6 @@ class T5Gemma2TextConfig(Gemma3TextConfig, PreTrainedConfig):
     """
 
     model_type = "t5gemma2_text"
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
-    }
-
     use_bidirectional_attention = AttributeError()
 
     def __post_init__(self, **kwargs):
@@ -980,7 +973,7 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
     _tied_weights_keys = {
         "lm_head.out_proj.weight": "model.encoder.text_model.embed_tokens.weight",
     }
-    _tp_plan = {"lm_head.out_proj": "colwise_allgather"}
+    _tp_plan = {"lm_head.out_proj": "colwise_gather_output"}
     _pp_plan = {"lm_head.out_proj": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: T5Gemma2Config):
