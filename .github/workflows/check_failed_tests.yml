@@ -240,7 +240,7 @@ jobs:
           n_runners: ${{ needs.setup_check_new_failures.outputs.n_runners }}
           run_idx: ${{ matrix.run_idx }}
           pr_number: ${{ inputs.pr_number }}
-        run: python3 utils/check_bad_commit.py --start_commit "$START_SHA" --end_commit "$END_SHA" --file "ci_results_${job}/new_failures.json" --output_file "new_failures_with_bad_commit_${job}_${run_idx}.json"
+        run: python3 utils/check_bad_commit.py --start_commit "$START_SHA" --end_commit "$END_SHA" --file "ci_results_${job}/new_failures.json" --output_file "new_failures_with_bad_commit_${job}_${run_idx}.json" --github_token "${{ secrets.GITHUB_TOKEN }}"
 
       - name: Show results
         working-directory: /transformers
