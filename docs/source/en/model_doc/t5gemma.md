@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-04-08 and added to Hugging Face Transformers on 2025-06-25.*
+*This model was published in HF papers on 2025-04-08 and contributed to Hugging Face Transformers on 2025-06-25.*
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
