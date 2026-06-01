@@ -15,7 +15,7 @@ if is_torch_available():
 class CompressedTensorsTest(unittest.TestCase):
     tinyllama_w4a16 = "nm-testing/TinyLlama-1.1B-Chat-v1.0-W4A16-e2e"
     tinyllama_int8 = "nm-testing/TinyLlama-1.1B-Chat-v1.0-W8A8-e2e"
-    tinyllama_fp8 = "nm-testing/TinyLlama-1.1B-Chat-v1.0-FP8-e2e"
+    tinyllama_fp8 = "nm-testing/tinyllama-fp8-dynamic-compressed"
     tinyllama_w8a16 = "nm-testing/TinyLlama-1.1B-Chat-v1.0-W8A16-e2e"
 
     prompt = "The capital of France is Paris, the capital of Germany is Berlin"
@@ -88,3 +88,30 @@ class CompressedTensorsTest(unittest.TestCase):
         # check perplexity
         perplexity = torch.exp(outputs.loss)
         self.assertLessEqual(perplexity, expected_perplexity)
+
+    def test_tinyllama_fp8_uses_fp8_kernel(self):
+        """Verify FP8 model uses CompressedTensorsFP8Linear on GPU/XPU."""
+        if not (torch.cuda.is_available() or (hasattr(torch, "xpu") and torch.xpu.is_available())):
+            self.skipTest("FP8 kernel path requires GPU or XPU")
+
+        from transformers.integrations.compressed_tensors_fp8 import CompressedTensorsFP8Linear
+
+        model = AutoModelForCausalLM.from_pretrained(self.tinyllama_fp8, device_map="auto")
+
+        fp8_count = sum(1 for m in model.modules() if isinstance(m, CompressedTensorsFP8Linear))
+        self.assertGreater(fp8_count, 0, "FP8 model should use CompressedTensorsFP8Linear on GPU/XPU")
+
+        # Verify weights are in FP8 dtype
+        for module in model.modules():
+            if isinstance(module, CompressedTensorsFP8Linear):
+                self.assertEqual(module.weight.dtype, torch.float8_e4m3fn)
+                break
+
+    def test_non_fp8_model_unaffected(self):
+        """Verify non-FP8 models (e.g. INT8) do not use the FP8 kernel path."""
+        from transformers.integrations.compressed_tensors_fp8 import CompressedTensorsFP8Linear
+
+        int8_model = "nm-testing/tinyllama-w8a8-compressed"
+        model = AutoModelForCausalLM.from_pretrained(int8_model, device_map="auto")
+        fp8_count = sum(1 for m in model.modules() if isinstance(m, CompressedTensorsFP8Linear))
+        self.assertEqual(fp8_count, 0, "INT8 model should NOT use CompressedTensorsFP8Linear")

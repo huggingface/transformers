@@ -63,6 +63,69 @@ print(f"{mem_params/2**30:.4f} GB")
 # 8.4575 GB
 ```
 
+## FP8 kernel acceleration
+
+When an FP8 compressed-tensors model is loaded on a supported GPU, transformers automatically uses hardware-accelerated FP8 matmul kernels (`torch._scaled_mm`) instead of dequantizing weights back to BF16. This keeps weights in FP8 format throughout inference for lower memory usage and faster computation.
+
+### Supported devices
+
+| Device | Kernel | Notes |
+|--------|--------|-------|
+| Intel XPU | `torch._scaled_mm` | All XPU devices with FP8 support |
+| NVIDIA CUDA (SM89+) | `torch._scaled_mm` | Ada Lovelace (L4, L40), Hopper (H100), Blackwell and newer |
+| CPU / CUDA SM80 (A100) | Fallback | Dequantizes to BF16, uses standard matmul |
+
+### Supported models
+
+- **Per-channel dynamic**: e.g. [RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic](https://huggingface.co/RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic)
+- **Per-tensor static**: e.g. [RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8](https://huggingface.co/RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8)
+
+### Loading a pre-quantized FP8 model
+
+No extra configuration is needed — the FP8 kernel path is automatically activated when the model's config specifies FP8 quantization and a supported GPU is available.
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained(
+    "RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic",
+    device_map="auto",
+    torch_dtype=torch.bfloat16,
+)
+tokenizer = AutoTokenizer.from_pretrained("RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic")
+inputs = tokenizer("Hello, how are you?", return_tensors="pt").to(model.device)
+outputs = model.generate(**inputs, max_new_tokens=20)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
+
+### Online FP8 quantization
+
+You can also quantize a BF16 model to FP8 on-the-fly during loading by passing a `CompressedTensorsConfig` with an FP8 quantization scheme. This does not require the `compressed-tensors` library.
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, CompressedTensorsConfig
+from compressed_tensors.quantization import QuantizationScheme, QuantizationArgs, QuantizationType, QuantizationStrategy
+
+ct_config = CompressedTensorsConfig(
+    config_groups={
+        "group_0": QuantizationScheme(
+            weights=QuantizationArgs(
+                num_bits=8, type=QuantizationType.FLOAT, strategy=QuantizationStrategy.CHANNEL,
+            ),
+        ),
+    },
+    run_compressed=True,
+)
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen2.5-7B-Instruct",
+    quantization_config=ct_config,
+    device_map="auto",
+    torch_dtype=torch.bfloat16,
+)
+```
+
 ## Model checkpoint
 
 Compressed-tensor models are defined through its configuration entry. The following example is taken from the [nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf](https://huggingface.co/nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf/blob/main/config.json) `config.json` file.
