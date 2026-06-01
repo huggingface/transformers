@@ -47,6 +47,7 @@ except ImportError:
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.import_utils import requires
 
 
 try:
@@ -345,6 +346,7 @@ class LocateAnythingProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@requires(backends=("torchvision",))
 @auto_docstring
 class LocateAnythingProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]

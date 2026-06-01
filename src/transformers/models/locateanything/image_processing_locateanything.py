@@ -19,6 +19,7 @@ from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_utils import ImageInput, make_list_of_images, valid_images
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType
+from ...utils.import_utils import requires
 
 
 MEAN = (0.5, 0.5, 0.5)
@@ -42,6 +43,7 @@ class LocateAnythingImagesKwargs(ImagesKwargs, total=False):
     merge_kernel_size: list[int] | tuple[int, int]
 
 
+@requires(backends=("torchvision",))
 class LocateAnythingImageProcessor(BaseImageProcessor):
     model_type = "locateanything"
     valid_kwargs = LocateAnythingImagesKwargs
