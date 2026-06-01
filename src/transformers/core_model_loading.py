@@ -931,16 +931,20 @@ class WeightConverter(WeightTransform):
             raise ValueError("WeightConverter requires at least one operation.")
 
     def reverse_transform(self) -> WeightTransform:
-        # Append `(?=\.|$)` to each reversed source so the match has to end on a
-        # dot-token boundary. Stops `mlp.experts.gate_up_proj` from substring-matching
-        # the FP8 scale sibling `mlp.experts.gate_up_proj_scale_inv` on save.
+        r"""
+        We do a lookahead with `(?=\.|$)` for each reverse source key to make sure
+        key in the model weight like `mlp.experts.gate_up_proj` are not processed together with the scales
+        `mlp.experts.gate_up_proj_scales`.
 
-        if self.quantization_operation is not None and not getattr(
-            self.quantization_operation, "supports_round_trip", False
-        ):
+        This is required because for FP8 quantization for example, you have in the original conversion mapping nothing
+        to differenciate scales from the weights.
+        """
+        if self.quantization_operation is not None and getattr(
+            self.quantization_operation, "reverse_op", None
+        ) is not None:
             raise ValueError(
-                f"{type(self.quantization_operation).__name__} is not opted into round-trip save "
-                "(set `supports_round_trip = True` on the op once its reverse_op is audited)."
+                f"{type(self.quantization_operation).__name__} does not have a  `reverse_op` method so it does not support"
+                "reverse transformations."
             )
 
         def _bounded(p: str) -> str:
