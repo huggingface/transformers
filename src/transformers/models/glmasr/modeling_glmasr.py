@@ -373,7 +373,6 @@ class GlmAsrModelOutputWithPast(BaseModelOutputWithPast):
 )
 class GlmAsrModel(GlmAsrPreTrainedModel):
     _tp_plan = None
-    _sp_plan = None
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
 
@@ -491,12 +490,12 @@ class GlmAsrModel(GlmAsrPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for GlmAsr causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class GlmAsrCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

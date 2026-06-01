@@ -60,12 +60,12 @@ class AudioFlamingo3ModelOutputWithPast(VoxtralModelOutputWithPast):
     pass
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for AudioFlamingo3 causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class AudioFlamingo3CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -182,7 +182,6 @@ class AudioFlamingo3MultiModalProjector(VoxtralMultiModalProjector):
 )
 class AudioFlamingo3Model(VoxtralModel):
     _tp_plan = None
-    _sp_plan = None
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
 
