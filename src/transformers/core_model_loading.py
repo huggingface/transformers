@@ -123,16 +123,13 @@ class Chunk(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        targets = self.get_target_patterns(input_dict, target_patterns)
+        targets = target_patterns
         sizes = len(targets)
         chunks = torch.chunk(tensor, sizes, dim=self.dim)
+        if len(input_dict) > 1 or len(target_patterns) == 1 or len(chunks) != len(target_patterns):
+            raise ValueError(f"Failed to convert {kwargs.get('full_layer_name')}")
         return dict(zip(targets, chunks))
 
-    def get_target_patterns(self, input_dict: dict, target_patterns: list[str]) -> list[str]:
-        # Here we always return the target patterns
-        if len(input_dict) > 1 or len(target_patterns) == 1:
-            raise ValueError("Undefined Operation encountered!")
-        return target_patterns
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -929,35 +926,6 @@ class WeightConverter(WeightTransform):
                 )
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
-
-    def reverse_transform(self) -> WeightTransform:
-        r"""
-        We do a lookahead with `(?=\.|$)` for each reverse source key to make sure
-        key in the model weight like `mlp.experts.gate_up_proj` are not processed together with the scales
-        `mlp.experts.gate_up_proj_scales`.
-
-        This is required because for FP8 quantization for example, you have in the original conversion mapping nothing
-        to differenciate scales from the weights.
-        """
-        if self.quantization_operation is not None and getattr(
-            self.quantization_operation, "reverse_op", None
-        ) is not None:
-            raise ValueError(
-                f"{type(self.quantization_operation).__name__} does not have a  `reverse_op` method so it does not support"
-                "reverse transformations."
-            )
-
-        def _bounded(p: str) -> str:
-            return p if p.endswith(("$", r"(?=\.|$)")) else p + r"(?=\.|$)"
-
-        reverse = WeightConverter(
-            source_patterns=[_bounded(p) for p in self._original_target_patterns],
-            target_patterns=self._original_source_patterns,
-            operations=[op.reverse_op for op in self.operations[::-1]],
-        )
-        reverse.scope_prefix = self.scope_prefix
-        reverse.base_model_prefix = self.base_model_prefix
-        return reverse
 
     def convert(
         self,

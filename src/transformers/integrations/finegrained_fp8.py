@@ -676,7 +676,7 @@ class FP8Experts(nn.Module):
         if self.has_gate:
             gu_proj_out, gu_proj_in = 2 * self.intermediate_dim, self.hidden_dim
             self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, gu_proj_out, gu_proj_in, dtype=dtype))
-            gu_scale_out = _cdiv(gu_proj_out, self.block_size[0]) if self.block_size is not None else 1
+            gu_scale_out = max(_cdiv(gu_proj_out, self.block_size[0]), 2) if self.block_size is not None else 2
             gu_scale_in = _cdiv(gu_proj_in, self.block_size[1]) if self.block_size is not None else 1
             self.gate_up_proj_scale_inv = nn.Parameter(
                 torch.empty(self.num_experts, gu_scale_out, gu_scale_in, dtype=torch.float32)
@@ -867,8 +867,6 @@ class Fp8Quantize(ConversionOps):
     A quantization operation that creates two tensors, weight and scale out of a weight.
     """
 
-    supports_round_trip = True
-
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
@@ -949,8 +947,6 @@ class Fp8Dequantize(ConversionOps):
         original *weight* key. Scale entries are dropped from the output so the
         remaining ops only see weights.
     """
-
-    supports_round_trip = True
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
