@@ -51,7 +51,9 @@ The original code can be found [here](https://github.com/facebookresearch/sapien
 
 ## Usage examples
 
-### Image feature extraction with AutoModel
+<hfoptions id="usage">
+
+<hfoption id="AutoModel">
 
 The example below shows how to obtain the CLS token (whole-image embedding) with [`Sapiens2Model`].
 
@@ -74,7 +76,9 @@ cls_token = outputs.pooler_output
 print("CLS token shape:", cls_token.shape)  # [1, 1024]
 ```
 
-### Image feature extraction with AutoBackbone
+</hfoption>
+
+<hfoption id="AutoBackbone">
 
 [`Sapiens2Backbone`] exposes patch tokens already reshaped to spatial dimensions and CLS tokens directly on the output object.
 
@@ -99,7 +103,9 @@ print("CLS token shape:", cls_token.shape)           # [1, 1024]
 print("Patch features shape:", patch_features.shape) # [1, 64, 48, 1024]
 ```
 
-### Normal estimation
+</hfoption>
+
+<hfoption id="Normal estimation">
 
 The example below shows how to estimate surface normals with [`Sapiens2ForNormalEstimation`].
 The output normals are raw (unnormalized); use `post_process_normal_estimation` to resize and L2-normalize them.
@@ -140,7 +146,9 @@ normals_rgb[:, background_mask] = 0
 print("Normals RGB shape:", normals_rgb.shape)   # [3, original_height, original_width]
 ```
 
-### Pointmap estimation
+</hfoption>
+
+<hfoption id="Pointmap estimation">
 
 The example below shows how to estimate per-pixel 3D coordinates with [`Sapiens2ForPointmapEstimation`].
 Use `post_process_pointmap_estimation` to remove preprocessing padding, resize to the original image size, and apply the predicted focal-length scale.
@@ -191,7 +199,9 @@ if foreground_depth.numel() > 0:
 print("Pointmap RGB shape:", pointmap_rgb.shape)  # [3, original_height, original_width]
 ```
 
-### Pose estimation
+</hfoption>
+
+<hfoption id="Pose estimation">
 
 The example below shows how to run pose estimation with [`Sapiens2ForPoseEstimation`].
 The model predicts per-keypoint heatmaps; use `post_process_pose_estimation` to decode them back to
@@ -223,7 +233,9 @@ scores = results[0]["scores"]         # (num_keypoints,) — per-keypoint confid
 print("Keypoints shape:", keypoints.shape)
 ```
 
-### Pose estimation with flip augmentation
+</hfoption>
+
+<hfoption id="Pose estimation with flip augmentation">
 
 Horizontal flip augmentation (test-time augmentation) improves keypoint accuracy by averaging
 predictions from the original and mirrored image. Pass `flip_pairs` — a tensor of
@@ -255,7 +267,9 @@ keypoints = results[0]["keypoints"]
 scores = results[0]["scores"]
 ```
 
-### Semantic segmentation
+</hfoption>
+
+<hfoption id="Semantic segmentation">
 
 The example below shows how to perform body-part segmentation with [`Sapiens2ForSemanticSegmentation`].
 
@@ -284,7 +298,9 @@ segmentation = image_processor.post_process_semantic_segmentation(
 print("Segmentation map shape:", segmentation.shape)  # [original_height, original_width]
 ```
 
-### Matting
+</hfoption>
+
+<hfoption id="Matting">
 
 The example below shows how to run image matting with [`Sapiens2ForImageMatting`].
 Outputs are sigmoid-activated and already in `[0, 1]`; use `post_process_image_matting` to resize and split
@@ -318,6 +334,10 @@ print("Alpha shape:", result["alpha"].shape)        # [1, original_height, origi
 print("Foreground shape:", result["foreground"].shape)  # [3, original_height, original_width]
 print("Composite shape:", result["composite"].shape)    # [3, original_height, original_width] — uint8 [0, 255]
 ```
+
+</hfoption>
+
+</hfoptions>
 
 ## Sapiens2Config
 
