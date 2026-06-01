@@ -130,7 +130,6 @@ class Chunk(ConversionOps):
             raise ValueError(f"Failed to convert {kwargs.get('full_layer_name')}")
         return dict(zip(targets, chunks))
 
-
     @property
     def reverse_op(self) -> ConversionOps:
         return Concatenate(self.dim)
