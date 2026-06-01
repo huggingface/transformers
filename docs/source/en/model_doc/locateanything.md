@@ -101,9 +101,15 @@ print(output)
 [[autodoc]] LocateAnythingProcessor
     - __call__
 
+## LocateAnythingModel
+
+[[autodoc]] LocateAnythingModel
+    - forward
+    - get_image_features
+    - get_placeholder_mask
+
 ## LocateAnythingForConditionalGeneration
 
 [[autodoc]] LocateAnythingForConditionalGeneration
     - forward
     - get_image_features
-    - get_placeholder_mask

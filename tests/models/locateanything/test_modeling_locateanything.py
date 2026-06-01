@@ -16,20 +16,20 @@ import unittest
 import requests
 import torch
 
-from transformers import AutoModel, AutoModelForImageTextToText, AutoProcessor, is_torch_available
+from transformers import AutoModelForImageTextToText, AutoProcessor, is_torch_available
 from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING
 from transformers.models.auto.processing_auto import PROCESSOR_MAPPING
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 
 if is_torch_available():
-    from transformers import LocateAnythingForConditionalGeneration
+    from transformers import LocateAnythingForConditionalGeneration, LocateAnythingModel
 
 
 @require_torch
 @require_vision
 class LocateAnythingModelTest(unittest.TestCase):
-    all_model_classes = (LocateAnythingForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (LocateAnythingModel, LocateAnythingForConditionalGeneration) if is_torch_available() else ()
 
     model_id = "nvidia/LocateAnything-3B"
 
@@ -127,7 +127,9 @@ class LocateAnythingModelTest(unittest.TestCase):
 
         processor = AutoProcessor.from_pretrained(self.model_id, trust_remote_code=False)
         dtype = torch.bfloat16
-        model = AutoModel.from_pretrained(self.model_id, trust_remote_code=False, torch_dtype=dtype).to(torch_device)
+        model = LocateAnythingForConditionalGeneration.from_pretrained(
+            self.model_id, trust_remote_code=False, torch_dtype=dtype
+        ).to(torch_device)
         model.eval()
 
         # Note: MoonViT packs all image patches into a single sequence. Without flash-attention the

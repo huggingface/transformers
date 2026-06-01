@@ -550,7 +550,7 @@ class MoonViTPreTrainedEncoder(PreTrainedModel):
         )
         self.post_init()
 
-    def forward(self, pixel_values: torch.Tensor, grid_hws: torch.Tensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, grid_hws: torch.Tensor, **kwargs) -> torch.Tensor:
         """
         Args:
             pixel_values (torch.Tensor): The input pixel values.

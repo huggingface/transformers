@@ -275,7 +275,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("llava_next", "LlavaNextModel"),
         ("llava_next_video", "LlavaNextVideoModel"),
         ("llava_onevision", "LlavaOnevisionModel"),
-        ("locateanything", "LocateAnythingForConditionalGeneration"),
+        ("locateanything", "LocateAnythingModel"),
         ("longcat_flash", "LongcatFlashModel"),
         ("longformer", "LongformerModel"),
         ("longt5", "LongT5Model"),
