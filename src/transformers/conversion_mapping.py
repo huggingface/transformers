@@ -435,6 +435,12 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
+        "locateanything": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^vision_model", target_patterns="model.vision_model"),
+            WeightRenaming(source_patterns=r"^mlp1", target_patterns="model.mlp1"),
+        ],
         "qwen2_audio": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
