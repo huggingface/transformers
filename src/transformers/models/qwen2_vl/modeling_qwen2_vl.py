@@ -1420,11 +1420,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
 
-        model_inputs = {
-            key: value.to(self.device) if isinstance(value, torch.Tensor) else value
-            for key, value in model_inputs.items()
-        }
-
         return model_inputs
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):

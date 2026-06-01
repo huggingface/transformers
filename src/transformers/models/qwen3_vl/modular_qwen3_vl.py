@@ -986,11 +986,6 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
 
-        model_inputs = {
-            key: value.to(self.device) if isinstance(value, torch.Tensor) else value
-            for key, value in model_inputs.items()
-        }
-
         return model_inputs
 
     def _expand_inputs_for_generation(

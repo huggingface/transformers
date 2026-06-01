@@ -553,6 +553,10 @@ class GenerationTesterMixin:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
                 new_model = model_class.from_pretrained(tmp_dir, device_map="auto")
+                inputs_dict = {
+                    key: value.to(new_model.device) if isinstance(value, torch.Tensor) else value
+                    for key, value in inputs_dict.items()
+                }
 
                 new_model.generate(
                     max_new_tokens=self.max_new_tokens,
