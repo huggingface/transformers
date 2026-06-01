@@ -448,13 +448,6 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
         Returns:
             `torch.Tensor`: hidden_states.
         """
-        # With `device_map="auto"` the vision tower may live on a different device than the incoming
-        # `pixel_values`/`grid_thw`. Realign both here so every tensor derived from `grid_thw`
-        # (indices, position ids, cu_seqlens) is built on the vision device too.
-        device = self.patch_embed.proj.weight.device
-        hidden_states = hidden_states.to(device)
-        grid_thw = grid_thw.to(device)
-
         bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
             grid_thw,
             num_grid_per_side=self.num_grid_per_side,
@@ -621,9 +614,6 @@ class Qwen3_5Model(Qwen3VLModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            # Tied `embed_tokens`/`lm_head` can be dispatched to different devices under
-            # `device_map="auto"`; align `input_ids` with the embedding weight before the lookup.
-            input_ids = input_ids.to(self.get_input_embeddings().weight.device)
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:

@@ -144,9 +144,6 @@ class Qwen3_5MoeTextRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        # Under `device_map="auto"` the rotary module is parameter-light and its inputs may not be
-        # moved to the same device as `x`, so align `position_ids` before the matmul below.
-        position_ids = position_ids.to(x.device)
         # In contrast to other models, Qwen3_5Moe has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
         if position_ids.ndim == 2:
@@ -1179,13 +1176,6 @@ class Qwen3_5MoeVisionModel(Qwen3_5MoePreTrainedModel):
         Returns:
             `torch.Tensor`: hidden_states.
         """
-        # With `device_map="auto"` the vision tower may live on a different device than the incoming
-        # `pixel_values`/`grid_thw`. Realign both here so every tensor derived from `grid_thw`
-        # (indices, position ids, cu_seqlens) is built on the vision device too.
-        device = self.patch_embed.proj.weight.device
-        hidden_states = hidden_states.to(device)
-        grid_thw = grid_thw.to(device)
-
         bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
             grid_thw,
             num_grid_per_side=self.num_grid_per_side,
@@ -1675,9 +1665,6 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            # Tied `embed_tokens`/`lm_head` can be dispatched to different devices under
-            # `device_map="auto"`; align `input_ids` with the embedding weight before the lookup.
-            input_ids = input_ids.to(self.get_input_embeddings().weight.device)
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
@@ -2108,6 +2095,11 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMi
         if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
+
+        model_inputs = {
+            key: value.to(self.device) if isinstance(value, torch.Tensor) else value
+            for key, value in model_inputs.items()
+        }
 
         return model_inputs
 

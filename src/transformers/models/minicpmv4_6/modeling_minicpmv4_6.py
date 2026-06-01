@@ -662,7 +662,7 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
             When set to `"4x"` the intermediate `vit_merger` is skipped so that each image keeps
             `4×` more visual tokens. Default `"16x"` mode applies the full merge pipeline.
         """
-        downsample_mode = downsample_mode or self.config.downsample_mode
+        downsample_mode = downsample_mode if downsample_mode else self.config.downsample_mode
         use_vit_merger = downsample_mode != "4x"
         pixel_values = pixel_values.to(dtype=self.vision_tower.dtype)
 

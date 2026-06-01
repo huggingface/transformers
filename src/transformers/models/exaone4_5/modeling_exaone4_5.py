@@ -556,11 +556,6 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
         Returns:
             `torch.Tensor`: hidden_states.
         """
-        # Under `device_map="auto"` the vision inputs may land on a different device than the patch
-        # embedding weights; align them (and `grid_thw`-derived tensors) with the vision tower's device.
-        device = self.patch_embed.proj.weight.device
-        hidden_states = hidden_states.to(device)
-        grid_thw = grid_thw.to(device)
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
         window_index, cu_window_seqlens = get_vision_window_index(
