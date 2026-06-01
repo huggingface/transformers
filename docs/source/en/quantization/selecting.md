@@ -115,7 +115,6 @@ See the [AWQ documentation](./awq) for more details.
 | Supports flexible formats including FP8 and sparsity.        | Primarily for loading pre-quantized models.                 |
 | FP8 kernel acceleration on NVIDIA (SM89+) and Intel XPU.    |                                                             |
 | On-the-fly FP8 quantization (BF16 → FP8) during loading.    |                                                             |
-| Compatible with `torch.compile`.                             |                                                             |
 
 See the [compressed-tensors documentation](./compressed_tensors) for more details.
 
