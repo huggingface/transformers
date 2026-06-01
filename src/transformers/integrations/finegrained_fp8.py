@@ -992,7 +992,7 @@ class Fp8Dequantize(ConversionOps):
         # and the same dequant has to handle both within one checkpoint.
         try:
             scale_rows, scale_cols = scales.shape[-2:]
-        except Exception as e:
+        except Exception:
             scale_rows, scale_cols = 1, 1
         if rows % scale_rows or cols % scale_cols:
             raise ValueError(
