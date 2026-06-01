@@ -385,6 +385,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list[torch.Tensor],
+        do_convert_rgb: bool,
         do_resize: bool,
         resample,
         do_rescale: bool,
@@ -409,6 +410,8 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         visual_units: list[torch.Tensor] = []
         num_frames_per_video: list[int] = []
         for video, metadata in zip(videos, video_metadata):
+            if do_convert_rgb:
+                video = self.convert_to_rgb(video)
             units_before = len(visual_units)
             if stack_frames > 1:
                 duration = metadata.duration
