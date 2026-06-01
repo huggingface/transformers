@@ -104,10 +104,10 @@ class Gemma4VideoProcessor(BaseVideoProcessor):
     image_std = [1.0, 1.0, 1.0]
     size = None
     default_to_square = True
+    do_convert_rgb = True
     do_resize = True
     do_rescale = True
     do_normalize = True
-    do_convert_rgb = True
     num_frames = 32
     do_sample_frames = True
     patch_size = 16
