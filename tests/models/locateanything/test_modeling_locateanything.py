@@ -130,12 +130,9 @@ class LocateAnythingModelTest(unittest.TestCase):
         model = AutoModel.from_pretrained(self.model_id, trust_remote_code=False, torch_dtype=dtype).to(torch_device)
         model.eval()
 
+        # Note: MoonViT packs all image patches into a single sequence. Without flash-attention the
+        # sdpa fallback materializes an O(L^2) attention matrix, so keep to a moderately sized image.
         cases = [
-            (
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/p-blog/candy.JPG",
-                "Locate a single instance that matches the following description: animal.",
-                "<ref>animal</ref><box><501><459><547><541></box><|im_end|>",
-            ),
             (
                 "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
                 "Locate all instances that match the following description: cat.",
