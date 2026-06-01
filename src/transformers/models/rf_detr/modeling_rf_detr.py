@@ -77,7 +77,7 @@ class RfDetrDinov2Embeddings(nn.Module):
     def __init__(self, config: RfDetrDinov2Config) -> None:
         super().__init__()
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
+        self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size)) if config.use_mask_token else None
         self.patch_embeddings = RfDetrDinov2PatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
@@ -442,11 +442,7 @@ class RfDetrDinov2PreTrainedModel(PreTrainedModel):
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.mask_token is not None:
                 init.zeros_(module.mask_token)
-        if isinstance(module, RfDetrDinov2Embeddings):
-            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
-            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
-            init.zeros_(module.mask_token)
-        elif isinstance(module, RfDetrDinov2LayerScale):
+        if isinstance(module, RfDetrDinov2LayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
 
 

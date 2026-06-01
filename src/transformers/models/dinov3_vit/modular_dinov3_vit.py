@@ -437,9 +437,7 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         position_embeddings = self.rope_embeddings(pixel_values)
 
-        encoder_outputs: BaseModelOutput = self.model(
-            hidden_states, position_embeddings=position_embeddings, **kwargs
-        )
+        encoder_outputs: BaseModelOutput = self.model(hidden_states, position_embeddings=position_embeddings, **kwargs)
         sequence_output = self.norm(encoder_outputs.last_hidden_state)
         pooled_output = sequence_output[:, 0, :]
         return BaseModelOutputWithPooling(last_hidden_state=sequence_output, pooler_output=pooled_output)

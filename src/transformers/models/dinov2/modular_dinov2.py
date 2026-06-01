@@ -30,7 +30,6 @@ from ..swin.modeling_swin import SwinDropPath
 from ..vit.modeling_vit import (
     ViTAttention,
     ViTForImageClassification,
-    ViTModel,
     ViTPatchEmbeddings,
     ViTPreTrainedModel,
 )
@@ -47,7 +46,7 @@ class Dinov2Embeddings(nn.Module):
     def __init__(self, config: Dinov2Config) -> None:
         super().__init__()
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
+        self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size)) if config.use_mask_token else None
         self.patch_embeddings = Dinov2PatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
@@ -86,7 +85,7 @@ class Dinov2Embeddings(nn.Module):
         target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
 
-        if bool_masked_pos is not None:
+        if bool_masked_pos is not None and self.mask_token is not None:
             embeddings = torch.where(
                 bool_masked_pos.unsqueeze(-1), self.mask_token.to(embeddings.dtype).unsqueeze(0), embeddings
             )
@@ -198,11 +197,7 @@ class Dinov2PreTrainedModel(ViTPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module) -> None:
         super()._init_weights(module)
-        if isinstance(module, Dinov2Embeddings):
-            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
-            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
-            init.zeros_(module.mask_token)
-        elif isinstance(module, Dinov2LayerScale):
+        if isinstance(module, Dinov2LayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
 
 
@@ -224,7 +219,7 @@ class Dinov2Encoder(Dinov2PreTrainedModel):
 
 
 @auto_docstring
-class Dinov2Model(Dinov2PreTrainedModel, ViTModel):
+class Dinov2Model(Dinov2PreTrainedModel):
     def __init__(self, config: Dinov2Config):
         super().__init__(config)
         self.config = config

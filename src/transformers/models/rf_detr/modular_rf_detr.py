@@ -24,7 +24,6 @@ from torchvision.transforms.v2 import functional as tvF
 from ...activations import ACT2FN
 from ...backbone_utils import (
     BackboneConfigMixin,
-    BackboneMixin,
     consolidate_backbone_kwargs_to_config,
     filter_output_hidden_states,
 )
@@ -42,7 +41,7 @@ from ...image_utils import (
     get_max_height_width,
     validate_annotations,
 )
-from ...modeling_outputs import BackboneOutput, BaseModelOutput
+from ...modeling_outputs import BackboneOutput
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,

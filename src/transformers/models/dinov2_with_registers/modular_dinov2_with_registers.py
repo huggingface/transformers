@@ -21,7 +21,7 @@ from torch import nn
 from ... import initialization as init
 from ...backbone_utils import BackboneConfigMixin, filter_output_hidden_states
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
+from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
