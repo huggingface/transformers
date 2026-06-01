@@ -125,18 +125,19 @@ def _alloc_expert_proj(
     weight_k_div: int = 1,
     sf_gran_n: int | None = None,
     sf_gran_k: int | None = None,
+    min_sf_out: int = 1,
 ) -> tuple[nn.Parameter, nn.Parameter]:
     """Allocate `(weight, weight_scale_inv)` parameters for one expert projection.
 
     `weight_k_div` halves the K dim for FP4-packed storage (2 e2m1 values per byte).
     `sf_gran_n` / `sf_gran_k` set per-block (None → per-row/per-tensor) SF granularity.
+    `min_sf_out` floors the SF tensor's output dim — used by the fused gate_up
+    projection to keep room for both halves (pass `2`) even when `proj_out < sf_gran_n`
+    would otherwise collapse the SF dim to 1.
     """
     weight_t = torch.empty(num_experts, proj_out, proj_in // weight_k_div, dtype=weight_dtype)
     weight = nn.Parameter(weight_t, requires_grad=weight_t.is_floating_point())
-    # Force `sf_out >= 2`: a unit-size scale dim collapses under merge ops (concat/squeeze)
-    # and detaches scales from the weight's structural rank, which would re-introduce the
-    # FP8 substring-match issue PR #46265 fixed. Keep parity with weights' dim>=2.
-    sf_out = max(_cdiv(proj_out, sf_gran_n), 2) if sf_gran_n is not None else 2
+    sf_out = max(_cdiv(proj_out, sf_gran_n) if sf_gran_n is not None else 1, min_sf_out)
     sf_in = _cdiv(proj_in, sf_gran_k) if sf_gran_k is not None else 1
     sf_t = torch.empty(num_experts, sf_out, sf_in, dtype=sf_dtype)
     sf = nn.Parameter(sf_t, requires_grad=sf_t.is_floating_point())
@@ -605,7 +606,7 @@ class FP8Experts(nn.Module):
 
         if self.has_gate:
             self.gate_up_proj, self.gate_up_proj_scale_inv = _alloc_expert_proj(
-                self.num_experts, 2 * self.intermediate_dim, self.hidden_dim, **alloc_kwargs
+                self.num_experts, 2 * self.intermediate_dim, self.hidden_dim, min_sf_out=2, **alloc_kwargs
             )
             self.register_parameter("gate_up_proj_bias", None)
         else:

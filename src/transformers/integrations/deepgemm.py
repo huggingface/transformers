@@ -687,6 +687,14 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
 
     deepgemm = _load_deepgemm_kernel(requires_sm100=True)
 
+    # First-forward one-shot: pack UE8M0 SFs and interleave the L1/L2 weights for UTCCP.
+    # Kept lazy here (instead of in a quantizer load-time hook) so the megamoe-specific
+    # setup lives alongside the megamoe forward — `set_experts_implementation` refuses
+    # to flip in/out of `deepgemm_megamoe` at runtime, so the flag won't go stale.
+    if not getattr(self, "_megamoe_transformed", False):
+        setup_megamoe_weights(self)
+        self._megamoe_transformed = True
+
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
