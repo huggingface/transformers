@@ -676,6 +676,7 @@ class FP8Experts(nn.Module):
         if self.has_gate:
             gu_proj_out, gu_proj_in = 2 * self.intermediate_dim, self.hidden_dim
             self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, gu_proj_out, gu_proj_in, dtype=dtype))
+            # By construction both the weight and the scale need at least 2 weights
             gu_scale_out = max(_cdiv(gu_proj_out, self.block_size[0]), 2) if self.block_size is not None else 2
             gu_scale_in = _cdiv(gu_proj_in, self.block_size[1]) if self.block_size is not None else 1
             self.gate_up_proj_scale_inv = nn.Parameter(
