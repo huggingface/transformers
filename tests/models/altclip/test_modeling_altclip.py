@@ -290,6 +290,8 @@ class AltCLIPTextModelTester:
 @require_torch
 class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (AltCLIPTextModel,) if is_torch_available() else ()
+    # AltCLIPTextModel has large embeddings relative to model size, so we need higher split percentages
+    model_split_percents = [0.5, 0.8, 0.9]
 
     # TODO (@SunMarc): Fix me
     @unittest.skip(reason="It's broken.")
