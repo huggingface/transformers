@@ -157,8 +157,8 @@ class Sapiens2ModelTester:
             b, c, h, w = fm.shape
             self.parent.assertEqual(b, self.batch_size)
             self.parent.assertEqual(c, self.hidden_size)
-            self.parent.assertGreater(h, 0)
-            self.parent.assertGreater(w, 0)
+            self.parent.assertEqual(h, self.image_size // self.patch_size)
+            self.parent.assertEqual(w, self.image_size // self.patch_size)
 
     def create_and_check_model(self, config, pixel_values, labels):
         model = Sapiens2Model(config=config)

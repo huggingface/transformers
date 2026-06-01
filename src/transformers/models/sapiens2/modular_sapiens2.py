@@ -1293,8 +1293,8 @@ class Sapiens2ConvLayer(PPOCRV5ServerDetConvBatchnormLayer):
                 bias=bias,
                 groups=groups,
             )
-        self.norm = nn.InstanceNorm2d(orig_out_channels)
         self.pixel_shuffle = nn.PixelShuffle(scale_factor) if pixel_shuffle else nn.Identity()
+        self.norm = nn.InstanceNorm2d(orig_out_channels)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.convolution(hidden_states)
