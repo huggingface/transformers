@@ -128,6 +128,7 @@ class Llama4TextConfig(PreTrainedConfig):
         "layers.*.self_attn.o_proj": "rowwise_allreduce",
         "layers.*.feed_forward.experts.gate_up_proj": "grouped_gemm",  # row because not linear
         "layers.*.feed_forward.experts.down_proj": "grouped_gemm",  # col because not linear
+        "layers.*.feed_forward.experts": "moe_experts_allreduce",
         "layers.*.feed_forward.gate_proj": "colwise",
         "layers.*.feed_forward.up_proj": "colwise",
         "layers.*.feed_forward.down_proj": "rowwise_allreduce",
