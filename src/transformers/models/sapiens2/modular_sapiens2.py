@@ -366,20 +366,33 @@ def post_dark_unbiased_data_processing(
         (-1, -1): -(padded_width + 1),
     }
     # Dict mapping from (dx, dy) offsets to the corresponding values in the heatmap
-    h = {(dx, dy): heatmaps_flattened[index + offset] for (dx, dy), offset in position_to_index_offset.items()}
+    heatmap_values = {
+        (dx, dy): heatmaps_flattened[index + offset] for (dx, dy), offset in position_to_index_offset.items()
+    }
 
-    gradient_x = 0.5 * (h[0, 1] - h[0, -1])
-    gradient_y = 0.5 * (h[1, 0] - h[-1, 0])
-    derivative = torch.cat([gradient_x, gradient_y], dim=-1).reshape(num_persons, num_keypoints, 2, 1)
+    gradient_x = 0.5 * (heatmap_values[0, 1] - heatmap_values[0, -1])
+    gradient_y = 0.5 * (heatmap_values[1, 0] - heatmap_values[-1, 0])
 
-    hessian_xx = h[0, 1] - 2 * h[0, 0] + h[0, -1]
-    hessian_yy = h[1, 0] - 2 * h[0, 0] + h[-1, 0]
-    hessian_xy = 0.5 * (h[1, 1] - h[0, 1] - h[1, 0] + h[0, 0] + h[0, 0] - h[0, -1] - h[-1, 0] + h[-1, -1])
-    hessian = torch.cat([hessian_xx, hessian_xy, hessian_xy, hessian_yy], dim=-1).reshape(
-        num_persons, num_keypoints, 2, 2
+    hessian_xx = heatmap_values[0, 1] - 2 * heatmap_values[0, 0] + heatmap_values[0, -1]
+    hessian_yy = heatmap_values[1, 0] - 2 * heatmap_values[0, 0] + heatmap_values[-1, 0]
+    hessian_xy = 0.5 * (
+        heatmap_values[1, 1]
+        - heatmap_values[0, 1]
+        - heatmap_values[1, 0]
+        + heatmap_values[0, 0]
+        + heatmap_values[0, 0]
+        - heatmap_values[0, -1]
+        - heatmap_values[-1, 0]
+        + heatmap_values[-1, -1]
     )
-    hessian = torch.linalg.inv(hessian + torch.finfo(hessian.dtype).eps * torch.eye(2, device=device))
-    return keypoints - (hessian @ derivative).squeeze(-1)
+
+    eps = torch.finfo(hessian_xx.dtype).eps
+    hessian_xx = hessian_xx + eps
+    hessian_yy = hessian_yy + eps
+    determinant = hessian_xx * hessian_yy - hessian_xy * hessian_xy
+    offset_x = (hessian_yy * gradient_x - hessian_xy * gradient_y) / determinant
+    offset_y = (-hessian_xy * gradient_x + hessian_xx * gradient_y) / determinant
+    return keypoints - torch.cat([offset_x, offset_y], dim=-1)
 
 
 class Sapiens2ImageProcessorKwargs(BeitImageProcessorKwargs, total=False):
