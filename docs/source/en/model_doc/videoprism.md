@@ -9,11 +9,10 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2025-06-03 and added to Hugging Face Transformers on 2026-05-19.*
+*This model was released on 2025-06-03 and added to Hugging Face Transformers on 2026-05-31.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
     </div>
@@ -42,6 +41,12 @@ Notes:
 This model was contributed by [MHRDYN7](https://github.com/MHRDYN7) and reviewed by [qubvel](https://github.com/qubvel) & [zucchini-nlp](https://github.com/zucchini-nlp).
 The original code can be found [here](https://github.com/google-deepmind/videoprism).
 
+<Tip warning={true}>
+
+The video processor loaded via AutoProcessor is LlavaOnevisionVideoProcessor which is recomended for sampling frames exactly as in the original repository. However, please note that the [original processor](https://github.com/google-deepmind/videoprism/blob/main/videoprism/colabs/videoprism_video_encoder_demo.ipynb) uses Lanczos interpolation for resizing the frames, but that is not supported in pytorch yet and therefore LlavaOnevisionVideoProcessor uses Bicubic interpolation. 
+
+</Tip>
+
 ## Usage example
 
 The snippet below shows how to load the VideoPrismVisionModel for feature extraction using the `AutoModel` class.
@@ -53,7 +58,6 @@ from transformers import AutoModel, AutoVideoProcessor
 processor = AutoVideoProcessor.from_pretrained("MHRDYN7/videoprism-base-f16r288")
 model = AutoModel.from_pretrained(
     "MHRDYN7/videoprism-base-f16r288",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa" # use "eager" to replicate the exact behavior as the original model
 )
