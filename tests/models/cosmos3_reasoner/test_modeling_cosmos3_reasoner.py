@@ -151,6 +151,14 @@ class Cosmos3ReasonerModelTest(VLMModelTest, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         super().test_training_gradient_checkpointing_use_reentrant_true()
 
+    def test_reverse_loading_mapping(self):
+        # The unified-checkpoint conversion for model_type "cosmos3_omni" (defined in
+        # `conversion_mapping.py`) rewrites flat checkpoint keys into the nested
+        # `model.language_model.*` / `model.visual.*` layout. That `model.` prefix is the
+        # base-model prefix, so the mapping is only visible on the model-with-head, not on the
+        # base `Cosmos3ReasonerModel` (whose keys lack the prefix). Skip the base-model check.
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
     def test_mismatching_num_image_tokens(self):
         # Override the base test because we need to slice image_grid_thw too
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()

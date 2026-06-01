@@ -23,7 +23,7 @@ from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLTextModel,
     Qwen3VLVisionModel,
 )
-from ..qwen3_vl.modular_qwen3_vl import Qwen3VLProcessor
+from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
 
 
 class Cosmos3ReasonerVisionConfig(Qwen3VLVisionConfig):
