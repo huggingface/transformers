@@ -62,12 +62,44 @@ class TorchAoHfQuantizer(HfQuantizer):
 
     requires_calibration = False
     quantization_config: "TorchAoConfig"
+    _torchao_compat_patched = False
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
 
         size_digit = _fuzzy_match_size(type(self.quantization_config.quant_type).__name__)
         self.quantized_param_size = 0.5 if size_digit == "4" else 1
+
+        # Apply compatibility patches globally for torchao subclasses on load
+        self._apply_torchao_compat_patches()
+
+    @classmethod
+    def _apply_torchao_compat_patches(cls):
+        """Apply one-time monkey-patches for TorchAO tensor subclass compatibility.
+
+        TorchAO custom tensor subclasses (e.g. Float8Tensor) do not implement
+        `aten.normal_`. Since transformers calls `init.normal_` when initializing
+        missing parameters (e.g. tied target keys removed from checkpoint),
+        we override `torch.Tensor.normal_` to be a no-op for these subclasses.
+        """
+        # TODO: remove once torchao implements aten.normal_ for tensor subclasses
+        if cls._torchao_compat_patched:
+            return
+        try:
+            import torch
+            from torchao.utils import TorchAOBaseTensor
+
+            _orig_normal = torch.Tensor.normal_
+
+            def _safe_normal(self, mean=0, std=1, *, generator=None):
+                if isinstance(self, TorchAOBaseTensor):
+                    return self
+                return _orig_normal(self, mean, std, generator=generator)
+
+            torch.Tensor.normal_ = _safe_normal
+            cls._torchao_compat_patched = True
+        except ImportError:
+            pass
 
     def validate_environment(self, *args, **kwargs):
         if not is_torchao_available():
@@ -172,25 +204,42 @@ class TorchAoHfQuantizer(HfQuantizer):
 
         return TorchAoQuantize(self)
 
+    def _discover_quantized_param_names(self) -> set[str]:
+        """Extract unique parameter names from torchao safetensors metadata.
+        
+        The metadata keys are the original fully-qualified parameter names,
+        e.g. "model.layers.0.self_attn.q_proj.weight" or
+            "model.decoder.layers.0.experts.gate_up_proj".
+        """
+        if not hasattr(self, "metadata") or not self.metadata:
+            return {"weight"}  # conservative fallback
+        
+        param_names = set()
+        for meta_key in self.metadata:
+            if "." in meta_key:
+                param_names.add(meta_key.rsplit(".", 1)[-1])
+        
+        return param_names or {"weight"}
+
     def get_weight_conversions(self):
         from ..integrations.torchao import TorchAoDeserialize
-
         if self.pre_quantized:
-            return [
-                WeightConverter(
-                    # TODO: incr flexibility by generalizing the source patterns to match the format of "_weight_"
-                    # note that the matching logic is greedy, so for ex, if _weight_scale is before _weight_scale_and_zero in this list, it will match _weight_scale always (this is incorrect)
-                    # thus, the order of source_patterns is intentional
-                    source_patterns=[
-                        "_weight_qdata",
-                        "_weight_scale_and_zero",
-                        "_weight_per_tensor_scale",
-                        "_weight_scale",
-                        "_weight_zero_point",
-                        "_weight_act_pre_scale",
-                    ],
-                    target_patterns="weight",
-                    operations=[TorchAoDeserialize(self)],
-                ),
-            ]
+            param_names = self._discover_quantized_param_names()
+            converters = []
+            for param_name in sorted(param_names):
+                converters.append(
+                    WeightConverter(
+                        source_patterns=[
+                            f"_{param_name}_qdata",
+                            f"_{param_name}_scale_and_zero",
+                            f"_{param_name}_per_tensor_scale",
+                            f"_{param_name}_scale",
+                            f"_{param_name}_zero_point",
+                            f"_{param_name}_act_pre_scale",
+                        ],
+                        target_patterns=param_name,
+                        operations=[TorchAoDeserialize(self)],
+                    ),
+                )
+            return converters
         return []
