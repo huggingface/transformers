@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 import json
+import os
 import re
 import sys
 import unicodedata
@@ -12,6 +13,14 @@ from tqdm import tqdm
 import transformers
 from transformers import AutoTokenizer
 from transformers.tokenization_utils_tokenizers import TokenizersBackend
+
+MODEL_CHECKPOINTS = [
+    "almanach/camembert-base",
+    "microsoft/mpnet-base",
+    "google/rembert",
+    "facebook/xglm-564M",
+    "xlnet/xlnet-base-cased",
+]
 
 
 def _strip_separators_and_punct(text: str) -> str:
@@ -126,124 +135,116 @@ def _run_roundtrip_eval(tok, num_samples: int):
     return results
 
 
-def _compare_results(prev_results, curr_results, prev_label: str = "Prev", curr_label: str = "Curr"):
-    n = min(len(prev_results), len(curr_results))
+def _compare_backends(a_results, b_results, a_label: str, b_label: str):
+    """
+    Compare two backends sample-by-sample. A disagreement is any sample where
+    the backends produce different token IDs or different decoded output.
+    Roundtrip failures that are identical across both backends are NOT disagreements.
+    Returns list of disagreement dicts.
+    """
+    n = min(len(a_results), len(b_results))
     if not n:
         print("No overlapping samples to compare.")
-        return
+        return []
 
-    prev_ok = sum(1 for r in prev_results[:n] if r.get("roundtrip_ok"))
-    curr_ok = sum(1 for r in curr_results[:n] if r.get("roundtrip_ok"))
-
-    print("\n--- Roundtrip comparison ---")
-    if prev_label != "Prev" or curr_label != "Curr":
-        print(f"Prev label: {prev_label}")
-        print(f"Curr label: {curr_label}")
-
+    print(f"\n--- Backend agreement: {a_label} vs {b_label} ---")
     print(f"Samples compared: {n}")
-    print(f"Prev roundtrip OK: {prev_ok}/{n} ({100 * prev_ok / n:.1f}%)")
-    print(f"Curr roundtrip OK: {curr_ok}/{n} ({100 * curr_ok / n:.1f}%)")
 
-    diffs = []
-    diff_langs = Counter()
-    diff_patterns = Counter()
-    ids_diffs = []
+    disagreements = []
     ids_diff_langs = Counter()
+    decoded_diff_langs = Counter()
+
     for i in range(n):
-        a = prev_results[i]
-        b = curr_results[i]
+        a = a_results[i]
+        b = b_results[i]
         if a.get("index") != b.get("index") or a.get("field") != b.get("field"):
             break
-        if a.get("roundtrip_ok") != b.get("roundtrip_ok") or a.get("decoded") != b.get("decoded"):
-            prev_dec = a.get("decoded") or ""
-            curr_dec = b.get("decoded") or ""
-            pattern = _classify_roundtrip_diff(prev_dec, curr_dec)
-            diffs.append((a, b, pattern))
-            lang = a.get("language") or b.get("language") or "unknown"
-            diff_langs[lang] += 1
-            diff_patterns[pattern] += 1
-        if a.get("ids") != b.get("ids"):
-            lang = a.get("language") or b.get("language") or "unknown"
-            ids_diffs.append((a, b))
+
+        ids_differ = a.get("ids") != b.get("ids")
+        decoded_differs = a.get("decoded") != b.get("decoded")
+
+        if not ids_differ and not decoded_differs:
+            continue
+
+        lang = a.get("language") or b.get("language") or "unknown"
+        if ids_differ:
             ids_diff_langs[lang] += 1
+        if decoded_differs:
+            decoded_diff_langs[lang] += 1
 
-    print(f"Changed samples:   {len(diffs)}")
-    if diff_langs:
-        print("Changed by language:")
-        for lang, count in sorted(diff_langs.items(), key=lambda x: (-x[1], x[0])):
-            print(f"  {lang}: {count}")
-    if diff_patterns:
-        print("Changed by pattern:")
-        for label, count in sorted(diff_patterns.items(), key=lambda x: (-x[1], x[0])):
-            print(f"  {label}: {count}")
-    if diffs:
-        print("\nFirst few changed samples:")
-        for a, b, pattern in diffs[:10]:
-            print(f"  #{a['index']} prev_ok={a['roundtrip_ok']} curr_ok={b['roundtrip_ok']}")
-            prev_dec = a.get("decoded") or ""
-            curr_dec = b.get("decoded") or ""
-            max_len = max(len(prev_dec), len(curr_dec))
-            pos = 0
-            while pos < max_len and pos < len(prev_dec) and pos < len(curr_dec) and prev_dec[pos] == curr_dec[pos]:
-                pos += 1
-            radius = 40
-            start = max(0, pos - radius)
-            end = min(max_len, pos + radius)
-            prev_window = prev_dec[start:end]
-            curr_window = curr_dec[start:end]
-            marker = " " * max(0, pos - start) + "^"
-            print(f"    prev_decoded: {prev_window!r}")
-            print(f"    curr_decoded: {curr_window!r}")
-            print(f"    diff_window : {marker}")
-            print(f"    pattern     : {pattern}")
+        a_dec = a.get("decoded") or ""
+        b_dec = b.get("decoded") or ""
+        disagreements.append(
+            {
+                "language": lang,
+                "source": a.get("source") or b.get("source"),
+                "index": a.get("index"),
+                "field": a.get("field"),
+                "text": a.get("text", ""),
+                "ids_differ": ids_differ,
+                "decoded_differs": decoded_differs,
+                f"{a_label}_ids": a.get("ids"),
+                f"{b_label}_ids": b.get("ids"),
+                f"{a_label}_decoded": a_dec,
+                f"{b_label}_decoded": b_dec,
+                "decoded_diff_pattern": _classify_roundtrip_diff(a_dec, b_dec) if decoded_differs else None,
+            }
+        )
 
-    print("\n--- Token ID comparison ---")
-    print(f"Samples with different IDs: {len(ids_diffs)}/{n} ({100 * len(ids_diffs) / n:.1f}%)")
+    total_disagree = len(disagreements)
+    print(f"Disagreements:    {total_disagree}/{n} ({100 * total_disagree / n:.1f}%)")
+    print(f"  IDs differ:     {sum(d['ids_differ'] for d in disagreements)}")
+    print(f"  Decoded differ: {sum(d['decoded_differs'] for d in disagreements)}")
+
     if ids_diff_langs:
-        print("ID diffs by language:")
+        print("ID disagreements by language:")
         for lang, count in sorted(ids_diff_langs.items(), key=lambda x: (-x[1], x[0])):
             print(f"  {lang}: {count}")
-    if ids_diffs:
-        print("\nFirst few ID-differing samples:")
-        for a, b in ids_diffs[:10]:
-            prev_ids = a.get("ids") or []
-            curr_ids = b.get("ids") or []
-            text = a.get("text", "")
-            text_preview = text[:60] + ("..." if len(text) > 60 else "")
-            print(f"  #{a['index']} [{a.get('language', '?')}] field={a.get('field', '?')}")
-            print(f"    text    : {text_preview!r}")
-            print(f"    prev ids: {prev_ids[:20]}{'...' if len(prev_ids) > 20 else ''} (len={len(prev_ids)})")
-            print(f"    curr ids: {curr_ids[:20]}{'...' if len(curr_ids) > 20 else ''} (len={len(curr_ids)})")
+
+    if disagreements:
+        print("\nFirst few disagreements:")
+        for d in disagreements[:10]:
+            text_preview = d["text"][:60] + ("..." if len(d["text"]) > 60 else "")
+            print(f"  #{d['index']} [{d['language']}] field={d['field']}")
+            print(f"    text         : {text_preview!r}")
+            if d["ids_differ"]:
+                a_ids = d[f"{a_label}_ids"] or []
+                b_ids = d[f"{b_label}_ids"] or []
+                print(f"    {a_label} ids: {a_ids[:20]}{'...' if len(a_ids) > 20 else ''} (len={len(a_ids)})")
+                print(f"    {b_label} ids: {b_ids[:20]}{'...' if len(b_ids) > 20 else ''} (len={len(b_ids)})")
+            if d["decoded_differs"]:
+                a_dec = d[f"{a_label}_decoded"]
+                b_dec = d[f"{b_label}_decoded"]
+                max_len = max(len(a_dec), len(b_dec))
+                pos = 0
+                while pos < max_len and pos < len(a_dec) and pos < len(b_dec) and a_dec[pos] == b_dec[pos]:
+                    pos += 1
+                radius = 40
+                start = max(0, pos - radius)
+                end = min(max_len, pos + radius)
+                marker = " " * max(0, pos - start) + "^"
+                print(f"    {a_label} decoded: {a_dec[start:end]!r}")
+                print(f"    {b_label} decoded: {b_dec[start:end]!r}")
+                print(f"    diff_window     : {marker}")
+                print(f"    pattern         : {d['decoded_diff_pattern']}")
+
+    return disagreements
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("model_name", type=str)
-    parser.add_argument("version_tag", type=str)
-    parser.add_argument("--num-samples", type=int, default=1000)
-    parser.add_argument("--compare-to", type=str, default=None)
-    parser.add_argument("--backend", type=str, choices=["auto", "tokenizers"], default="auto")
-    parser.add_argument(
-        "--compare-backend",
-        type=str,
-        choices=["auto", "tokenizers"],
-        default=None,
-        help="Compare roundtrip stats between two backends in a single run.",
-    )
-    args = parser.parse_args()
+def _load_tokenizer(model_name: str, backend: str):
+    if backend == "auto":
+        return AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, use_fast=True)
+    return TokenizersBackend.from_pretrained(model_name)
 
-    if args.compare_backend and args.compare_to:
-        parser.error("--compare-backend and --compare-to cannot be used together.")
 
-    safe_model = re.sub(r"[^0-9A-Za-z_.\-]+", "_", args.model_name.replace("/", "-").replace(" ", "_"))
-    out_path = f"xlni_{safe_model}_{args.version_tag}"
+def _run_for_model(model_name: str, version_tag: str, args) -> dict:
+    """Run roundtrip eval (and optional backend comparison) for one model. Returns an agreement entry."""
+    safe_model = re.sub(r"[^0-9A-Za-z_.\-]+", "_", model_name.replace("/", "-").replace(" ", "_"))
+    out_path = f"xlni_{safe_model}_{version_tag}"
 
-    print(f"Transformers: {transformers.__version__}")
-    print(f"Loading tokenizer: {args.model_name} [backend={args.backend}]")
-    if args.backend == "auto":
-        tok = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True, use_fast=True)
-    else:
-        tok = TokenizersBackend.from_pretrained(args.model_name)
+    print(f"\n{'=' * 60}")
+    print(f"Model: {model_name}  [backend={args.backend}]")
+    tok = _load_tokenizer(model_name, args.backend)
     print(f"  Loaded {type(tok).__name__}")
 
     if hasattr(tok, "_tokenizer") and tok._tokenizer is not None:
@@ -252,54 +253,27 @@ def main():
 
     results = _run_roundtrip_eval(tok, args.num_samples)
 
-    # Print roundtrip statistics
-    total = len(results)
-    successful = sum(1 for r in results if r.get("roundtrip_ok"))
-    failed = total - successful
-
-    print("\n--- Roundtrip Results ---")
-    print(f"Total entries:      {total}")
-    print(f"Successful:         {successful} ({100 * successful / total:.1f}%)")
-    print(f"Failed:             {failed} ({100 * failed / total:.1f}%)")
-
-    if failed > 0:
-        print("\nFirst few failed roundtrips:")
-        count = 0
-        for r in results:
-            if not r.get("roundtrip_ok") and count < 5:
-                lang = r.get("language", "unknown")
-                text = r.get("text", "")
-                decoded = r.get("decoded", "")
-                text_preview = text[:60] + ("..." if len(text) > 60 else "")
-                decoded_preview = decoded[:60] + ("..." if len(decoded) > 60 else "")
-                print(f"  [{lang}]")
-                print(f"    Original: {text_preview!r}")
-                print(f"    Decoded:  {decoded_preview!r}")
-                count += 1
-
+    disagreements = []
     if args.compare_backend:
-        print(f"\nLoading comparison tokenizer: {args.model_name} [backend={args.compare_backend}]")
-        if args.compare_backend == "auto":
-            tok_compare = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True, use_fast=True)
-        else:
-            tok_compare = TokenizersBackend.from_pretrained(args.model_name)
+        print(f"\nLoading comparison tokenizer: {model_name} [backend={args.compare_backend}]")
+        tok_compare = _load_tokenizer(model_name, args.compare_backend)
         print(f"  Loaded {type(tok_compare).__name__}")
 
         compare_results = _run_roundtrip_eval(tok_compare, args.num_samples)
-        _compare_results(
+        disagreements = _compare_backends(
             results,
             compare_results,
-            prev_label=f"{args.backend} backend",
-            curr_label=f"{args.compare_backend} backend",
+            a_label=args.backend,
+            b_label=args.compare_backend,
         )
     elif args.compare_to:
         with open(args.compare_to, "r", encoding="utf-8") as f:
             prev_payload = json.load(f)
         prev_results = prev_payload.get("results", [])
-        _compare_results(prev_results, results)
+        _compare_backends(prev_results, results, a_label="saved", b_label=args.backend)
 
     payload = {
-        "model_name": args.model_name,
+        "model_name": model_name,
         "model_name_sanitized": safe_model,
         "transformers_version": transformers.__version__,
         "num_samples": args.num_samples,
@@ -311,6 +285,77 @@ def main():
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
     print(f"\nSaved {len(results)} roundtrip entries to '{out_path}'.")
+
+    return {
+        "model_name": model_name,
+        "total_samples": len(results),
+        "num_disagreements": len(disagreements),
+        "disagreements": disagreements,
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "model_name",
+        type=str,
+        nargs="?",
+        default=None,
+        help="Model checkpoint to evaluate. Omit to use --all-checkpoints.",
+    )
+    parser.add_argument("version_tag", type=str, nargs="?", default="v1")
+    parser.add_argument("--num-samples", type=int, default=1000)
+    parser.add_argument("--compare-to", type=str, default=None)
+    parser.add_argument("--backend", type=str, choices=["auto", "tokenizers"], default="auto")
+    parser.add_argument(
+        "--compare-backend",
+        type=str,
+        choices=["auto", "tokenizers"],
+        default=None,
+        help="Compare roundtrip stats between two backends in a single run.",
+    )
+    parser.add_argument(
+        "--all-checkpoints",
+        action="store_true",
+        help="Run eval for all MODEL_CHECKPOINTS instead of a single model.",
+    )
+    parser.add_argument(
+        "--agreement-out",
+        type=str,
+        default="tools/tokenizer_compare/output/tokenizers_agreement.json",
+        help="Output file for backend disagreements when --compare-backend is used.",
+    )
+    args = parser.parse_args()
+
+    if args.compare_backend and args.compare_to:
+        parser.error("--compare-backend and --compare-to cannot be used together.")
+
+    if not args.all_checkpoints and not args.model_name:
+        parser.error("Provide model_name or pass --all-checkpoints.")
+
+    print(f"Transformers: {transformers.__version__}")
+
+    checkpoints = MODEL_CHECKPOINTS if args.all_checkpoints else [args.model_name]
+    version_tag = args.version_tag or "v1"
+
+    all_agreement = []
+    for model_name in checkpoints:
+        entry = _run_for_model(model_name, version_tag, args)
+        all_agreement.append(entry)
+
+    if args.compare_backend:
+        agreement_payload = {
+            "transformers_version": transformers.__version__,
+            "backend": args.backend,
+            "compare_backend": args.compare_backend,
+            "num_samples": args.num_samples,
+            "models": all_agreement,
+        }
+        os.makedirs(os.path.dirname(os.path.abspath(args.agreement_out)), exist_ok=True)
+        with open(args.agreement_out, "w", encoding="utf-8") as f:
+            json.dump(agreement_payload, f, ensure_ascii=False, indent=2)
+        total_disagreements = sum(e["num_disagreements"] for e in all_agreement)
+        print(f"\nSaved {total_disagreements} disagreements across {len(checkpoints)} model(s) to '{args.agreement_out}'.")
 
 
 if __name__ == "__main__":
