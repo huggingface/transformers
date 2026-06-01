@@ -6,3 +6,23 @@
   - local: quicktour
     title: Pornire rapidă
   title: Începe
+- isExpanded: true
+  sections:
+  - isExpanded: false
+    sections:
+    - local: weightconverter
+      title: Încărcarea dinamică de weights
+    - local: models
+      title: Încărcarea modelelor
+    - local: custom_models
+      title: Personalizarea modelelor
+    - local: monkey_patching
+      title: Monkey patching
+    - local: fusion_mapping
+      title: Fusion mapping
+    - local: how_to_hack_models
+      title: Personalizarea componentelor modelului
+    - local: model_sharing
+      title: Distribuire
+    - local: serialization
+      title: Exportarea pentru producție
