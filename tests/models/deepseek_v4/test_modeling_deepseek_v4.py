@@ -288,11 +288,11 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
         # under ``do_sample=False`` for a fixed prompt — if this snapshot drifts,
         # something in the V4 forward / RoPE / Q-rescale / HC stack changed.
         expected = (
-            "Pipeline parallelism in ai is  driven by three key factors: the exponential increase in data "
-            "size, the development of increasingly powerful computational techniques (especially deep "
-            "learning), to handle this data, and the availability of massive computational resources on "
-            "which to run these methods, all of which are are  well aligned with  trends in  industry, "
-            " academia and  research"
+            "Pipeline parallelism in ai is  a technique where a model is split across multiple devices, "
+            "with each device responsible for a subset of layers. This allows for training of larger "
+            "models that cannot fit on a single device. However, it introduces idle time (bubbles) due to "
+            "sequential dependencies between stages. Techniques like micro-batching and gradient "
+            "accumulation are used"
         )
         decoded = tokenizer.decode(output_ids[0], skip_special_tokens=False)
         self.assertEqual(decoded, expected)
@@ -352,19 +352,19 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
             (
                 "What are the three properties of the UE8M0 scale factor format?",
                 (
-                    "Based on the standard naming convention for fixed-point data types "
-                    '(where "U" stands for unsigned, "E" for exponent, and "M" for mantissa), '
-                    "the **UE8M0** format has the following three properties:\n\n"
-                    "1.  **Unsigned (U):** The value is always non-negative"
+                    "Based on the standard naming convention for fixed-point data types, the **UE8M0** "
+                    "format has the following three properties:\n\n"
+                    "1.  **Unsigned (U):** The value is an unsigned integer. It cannot represent negative "
+                    "numbers.\n2.  **8 Integer Bits (E8):** The integer part"
                 ),
             ),
             (
                 'Write a short story that begins with: "Once upon a time, in a forest far away, there lived a..."',
                 (
-                    "Once upon a time, in a forest far away, there lived a squirrel named Pip who was "
-                    "terrified of the dark. While other squirrels slept soundly in their dreys as the "
-                    "moon rose, Pip would lie awake, his tiny heart hammering against his ribs. The "
-                    "rustle of leaves was a monster’s breath"
+                    "Once upon a time, in a forest far away, there lived a squirrel named Pip who could "
+                    "not store nuts. While every other squirrel in the Great Wood spent the golden autumn "
+                    "days frantically burying acorns and hazelnuts, Pip simply… forgot. He’d find a "
+                    "perfect, glossy acorn, hold"
                 ),
             ),
             (
@@ -373,7 +373,8 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
                     "The opening establishes a societal assumption that wealthy single men are naturally "
                     "seeking wives, making them prime targets for local families with eligible daughters. "
                     "Mrs. Bennet eagerly informs her indifferent husband that Netherfield Park has been "
-                    "leased, hoping to spark his interest in the new tenant. Mr. Bennet’s dry, reluctant engagement"
+                    "leased, hoping to spark his interest in the new, presumably wealthy, tenant. Their "
+                    "exchange highlights the central theme"
                 ),
             ),
         ]

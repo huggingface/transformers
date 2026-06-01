@@ -133,7 +133,10 @@ def _alloc_expert_proj(
     """
     weight_t = torch.empty(num_experts, proj_out, proj_in // weight_k_div, dtype=weight_dtype)
     weight = nn.Parameter(weight_t, requires_grad=weight_t.is_floating_point())
-    sf_out = _cdiv(proj_out, sf_gran_n) if sf_gran_n is not None else 1
+    # Force `sf_out >= 2`: a unit-size scale dim collapses under merge ops (concat/squeeze)
+    # and detaches scales from the weight's structural rank, which would re-introduce the
+    # FP8 substring-match issue PR #46265 fixed. Keep parity with weights' dim>=2.
+    sf_out = max(_cdiv(proj_out, sf_gran_n), 2) if sf_gran_n is not None else 2
     sf_in = _cdiv(proj_in, sf_gran_k) if sf_gran_k is not None else 1
     sf_t = torch.empty(num_experts, sf_out, sf_in, dtype=sf_dtype)
     sf = nn.Parameter(sf_t, requires_grad=sf_t.is_floating_point())
@@ -926,7 +929,11 @@ class Fp8Dequantize(ConversionOps):
         # Derive block size from the scale grid rather than the global config: MoE experts
         # ship MXFP4 with a ``[1, 32]`` block, dense linears ship FP8 with ``[128, 128]``,
         # and the same dequant has to handle both within one checkpoint.
-        scale_rows, scale_cols = scales.shape[-2:]
+        try:
+            scale_rows, scale_cols = scales.shape[-2:]
+        except Exception:
+            # scale can be a single tensor in extreme cases where it was not wrapped properly but is [1,0].
+            scale_rows, scale_cols = 1, 1
         if rows % scale_rows or cols % scale_cols:
             raise ValueError(
                 f"Weight shape ({rows}, {cols}) not divisible by scale grid ({scale_rows}, {scale_cols})."
