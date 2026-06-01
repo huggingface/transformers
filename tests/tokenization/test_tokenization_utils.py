@@ -152,6 +152,54 @@ class TokenizerUtilsTest(unittest.TestCase):
                 self.assertEqual(decoded_flat, "##：")
                 self.assertEqual(decoded_list, "##：")
 
+    def test_convert_tokens_to_ids_does_not_rebuild_added_vocab(self):
+        # Regression test for #46315: `_convert_token_to_id_with_added_voc` must
+        # look tokens up in the cached `_added_tokens_encoder` dict, not via the
+        # `added_tokens_encoder` property, which rebuilds and re-sorts the entire
+        # added-token mapping on every access. Going through the property made
+        # `convert_tokens_to_ids` O(T * N * logN) for N added tokens (regression
+        # from the v5 tokenizer refactor, #40936).
+        import json
+
+        from transformers import PreTrainedTokenizer
+        from transformers.models.ctrl.tokenization_ctrl import VOCAB_FILES_NAMES, CTRLTokenizer
+
+        # `CTRLTokenizer` is a regular (non-legacy) slow tokenizer, the family
+        # affected by the regression; fast tokenizer backends do not use this
+        # code path.
+        vocab = ["adapt", "re@@", "a@@", "apt", "c@@", "t", "<unk>"]
+        merges = ["#version: 0.2", "a p", "ap t</w>", "r e", "a d", "ad apt</w>", ""]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            vocab_file = os.path.join(tmp_dir, VOCAB_FILES_NAMES["vocab_file"])
+            merges_file = os.path.join(tmp_dir, VOCAB_FILES_NAMES["merges_file"])
+            with open(vocab_file, "w", encoding="utf-8") as f:
+                f.write(json.dumps(dict(zip(vocab, range(len(vocab))))))
+            with open(merges_file, "w", encoding="utf-8") as f:
+                f.write("\n".join(merges))
+            tokenizer = CTRLTokenizer(vocab_file, merges_file, unk_token="<unk>")
+
+        added = [f"added_{i}" for i in range(100)]
+        tokenizer.add_tokens(added)
+
+        rebuilds = 0
+        original_fget = PreTrainedTokenizer.added_tokens_encoder.fget
+
+        def counting_fget(self):
+            nonlocal rebuilds
+            rebuilds += 1
+            return original_fget(self)
+
+        PreTrainedTokenizer.added_tokens_encoder = property(counting_fget)
+        try:
+            ids = tokenizer.convert_tokens_to_ids(added)
+        finally:
+            PreTrainedTokenizer.added_tokens_encoder = property(original_fget)
+
+        # The added tokens resolve to their correct ids ...
+        self.assertEqual(ids, [tokenizer._added_tokens_encoder[token] for token in added])
+        # ... without rebuilding the sorted added-token mapping for every token.
+        self.assertEqual(rebuilds, 0)
+
     def test_extra_special_tokens_multimodal(self):
         attribute_special_tokens_list = [
             "bos_token",
