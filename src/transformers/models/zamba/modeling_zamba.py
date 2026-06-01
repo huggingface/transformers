@@ -644,7 +644,7 @@ class ZambaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["ZambaHybridLayer", "ZambaMambaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False
-    _supports_sdpa = False
+    _supports_sdpa = True
     _is_stateful = True
     _can_record_outputs = {
         "hidden_states": ZambaMambaDecoderLayer,
