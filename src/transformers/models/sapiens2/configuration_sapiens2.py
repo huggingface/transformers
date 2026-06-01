@@ -23,7 +23,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring
+@auto_docstring(checkpoint="facebook/sapiens2-seg-0.4b")
 @strict
 class Sapiens2HeadConfig(PreTrainedConfig):
     r"""
