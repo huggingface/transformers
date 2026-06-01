@@ -1403,23 +1403,6 @@ class ParakeetForTDT(ParakeetPreTrainedModel, ParakeetTDTGenerationMixin):
         )
 
 
-class ParakeetRNNTJointNetwork(nn.Module):
-    """Joint network that combines encoder and decoder outputs to predict tokens (no duration head)."""
-
-    def __init__(self, config: ParakeetRNNTConfig):
-        super().__init__()
-        self.activation = ACT2FN[config.hidden_act]
-        self.head = nn.Linear(config.joint_hidden_size, config.vocab_size)
-
-    def forward(
-        self,
-        decoder_hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.Tensor,
-    ) -> torch.Tensor:
-        joint_output = self.activation(encoder_hidden_states + decoder_hidden_states)
-        return self.head(joint_output)
-
-
 @dataclass
 class ParakeetRNNTOutput(BaseModelOutputWithPooling):
     """
@@ -1453,9 +1436,11 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
     def __init__(self, config: ParakeetRNNTConfig):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
-        self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.joint_hidden_size)
+        self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.decoder_hidden_size)
         self.decoder = ParakeetTDTDecoder(config)
-        self.joint = ParakeetRNNTJointNetwork(config)
+        # ParakeetTDTJointNetwork's head output size is `vocab_size + len(durations)`; for RNN-T
+        # `durations` is the empty tuple so it collapses to `vocab_size` — no duration head.
+        self.joint = ParakeetTDTJointNetwork(config)
         self.max_symbols_per_step = config.max_symbols_per_step
 
         # Optional prompt-conditioning: a small MLP projecting `[encoder_output, one_hot_prompt]`

@@ -263,8 +263,8 @@ import torch
 from datasets import Audio, load_dataset
 from transformers import AutoProcessor, ParakeetForRNNT
 
-processor = AutoProcessor.from_pretrained("nvidia/parakeet-rnnt-multilingual")
-model = ParakeetForRNNT.from_pretrained("nvidia/parakeet-rnnt-multilingual", device_map="auto").eval()
+processor = AutoProcessor.from_pretrained("nvidia/nemotron-3.5-asr-streaming-0.6b")
+model = ParakeetForRNNT.from_pretrained("nvidia/nemotron-3.5-asr-streaming-0.6b", device_map="auto").eval()
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))

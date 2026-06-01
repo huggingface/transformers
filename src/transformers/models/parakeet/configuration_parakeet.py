@@ -276,6 +276,9 @@ class ParakeetRNNTConfig(PreTrainedConfig):
     num_decoder_layers: int = 2
     hidden_act: str = "relu"
     max_symbols_per_step: int = 10
+    # `durations` is fixed to an empty tuple for RNN-T (no duration head). Kept as a config
+    # attribute so the joint network can be shared with TDT (which has a non-empty `durations`).
+    durations: list[int] | tuple[int, ...] = ()
     encoder_config: dict | PreTrainedConfig | None = None
     pad_token_id: int = 0
     blank_token_id: int = 1024
