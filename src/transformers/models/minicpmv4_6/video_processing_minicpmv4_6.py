@@ -87,9 +87,9 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
     do_resize = True
     do_rescale = True
     do_normalize = True
-    do_convert_rgb = True
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
+    do_convert_rgb = True
     max_slice_nums = 9
     scale_resolution = 448
     patch_size = 14
