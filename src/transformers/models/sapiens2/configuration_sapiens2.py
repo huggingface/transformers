@@ -116,6 +116,12 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
         Whether to reshape the hidden states to spatial dimensions when used as backbone.
     use_mask_token (`bool`, *optional*, defaults to `False`):
         Whether to use a mask token in the embeddings (needed for masked image modeling pretraining).
+    rms_norm_eps (`float`, *optional*, defaults to 1e-6):
+        Epsilon for the RMS normalization layers.
+    normalize_backbone_outputs (`bool`, *optional*, defaults to `True`):
+        Whether to apply RMSNorm to the backbone outputs before returning them from the forward pass.
+        Feature maps, class tokens, and hidden states are all normalized when this is `True`.
+        Only applies when the model is used as a backbone.
     use_qk_norm (`bool`, *optional*, defaults to `True`):
         Whether to apply RMSNorm to queries and keys before RoPE in attention layers.
     num_key_value_heads_per_layer (`list[int]`, *optional*):
@@ -145,7 +151,7 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     hidden_act: str = "silu"
     attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
-    layer_norm_eps: float = 1e-6
+    layer_norm_eps: float = 1e-5
     rope_theta: float = 100.0
     image_size: int | list[int] | tuple[int, int] = 224
     num_channels: int = 3
@@ -167,6 +173,8 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     reshape_hidden_states: bool = True
     sub_configs = {"head_config": Sapiens2HeadConfig}
     use_mask_token: bool = False
+    rms_norm_eps: float = 1e-6
+    normalize_backbone_outputs: bool = True
     use_qk_norm: bool = True
     num_key_value_heads_per_layer: list[int] | None = None
     semantic_loss_ignore_index: int = 255

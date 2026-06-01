@@ -268,20 +268,33 @@ def post_dark_unbiased_data_processing(
         (-1, -1): -(padded_width + 1),
     }
     # Dict mapping from (dx, dy) offsets to the corresponding values in the heatmap
-    h = {(dx, dy): heatmaps_flattened[index + offset] for (dx, dy), offset in position_to_index_offset.items()}
+    heatmap_values = {
+        (dx, dy): heatmaps_flattened[index + offset] for (dx, dy), offset in position_to_index_offset.items()
+    }
 
-    gradient_x = 0.5 * (h[0, 1] - h[0, -1])
-    gradient_y = 0.5 * (h[1, 0] - h[-1, 0])
-    derivative = torch.cat([gradient_x, gradient_y], dim=-1).reshape(num_persons, num_keypoints, 2, 1)
+    gradient_x = 0.5 * (heatmap_values[0, 1] - heatmap_values[0, -1])
+    gradient_y = 0.5 * (heatmap_values[1, 0] - heatmap_values[-1, 0])
 
-    hessian_xx = h[0, 1] - 2 * h[0, 0] + h[0, -1]
-    hessian_yy = h[1, 0] - 2 * h[0, 0] + h[-1, 0]
-    hessian_xy = 0.5 * (h[1, 1] - h[0, 1] - h[1, 0] + h[0, 0] + h[0, 0] - h[0, -1] - h[-1, 0] + h[-1, -1])
-    hessian = torch.cat([hessian_xx, hessian_xy, hessian_xy, hessian_yy], dim=-1).reshape(
-        num_persons, num_keypoints, 2, 2
+    hessian_xx = heatmap_values[0, 1] - 2 * heatmap_values[0, 0] + heatmap_values[0, -1]
+    hessian_yy = heatmap_values[1, 0] - 2 * heatmap_values[0, 0] + heatmap_values[-1, 0]
+    hessian_xy = 0.5 * (
+        heatmap_values[1, 1]
+        - heatmap_values[0, 1]
+        - heatmap_values[1, 0]
+        + heatmap_values[0, 0]
+        + heatmap_values[0, 0]
+        - heatmap_values[0, -1]
+        - heatmap_values[-1, 0]
+        + heatmap_values[-1, -1]
     )
-    hessian = torch.linalg.inv(hessian + torch.finfo(hessian.dtype).eps * torch.eye(2, device=device))
-    return keypoints - (hessian @ derivative).squeeze(-1)
+
+    eps = torch.finfo(hessian_xx.dtype).eps
+    hessian_xx = hessian_xx + eps
+    hessian_yy = hessian_yy + eps
+    determinant = hessian_xx * hessian_yy - hessian_xy * hessian_xy
+    offset_x = (hessian_yy * gradient_x - hessian_xy * gradient_y) / determinant
+    offset_y = (-hessian_xy * gradient_x + hessian_xx * gradient_y) / determinant
+    return keypoints - torch.cat([offset_x, offset_y], dim=-1)
 
 
 @auto_docstring
@@ -406,8 +419,8 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             crops = []
             for image, image_boxes in zip(images, boxes):
                 image = tvF.to_dtype_image(image, dtype=torch.float32, scale=False)
-                boxes_cxcywh = box_xywh_to_cxcywh(torch.tensor(image_boxes, dtype=torch.float32, device=image.device))
-                crops.extend(crop_and_resize(image, boxes=boxes_cxcywh, output_size=output_size))
+                boxes_tensor = box_xywh_to_cxcywh(torch.tensor(image_boxes, dtype=torch.float32, device=image.device))
+                crops.extend(crop_and_resize(image, boxes=boxes_tensor, output_size=output_size))
             images = crops
             do_resize = False  # crop_and_resize already produces the target size
 
@@ -560,7 +573,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             return [[] for _ in boxes]
 
         # (num_total_persons, 4)
-        boxes_xywh = torch.tensor(
+        boxes_tensor = torch.tensor(
             [bbox for image_boxes in boxes for bbox in image_boxes], dtype=torch.float32, device=device
         )
 
@@ -573,13 +586,14 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         )
 
         # Remap coordinates from heatmap space to original image space
-        boxes_cxcywh = box_xywh_to_cxcywh(boxes_xywh)
-        centers, scales = boxes_to_crop_params(boxes_cxcywh, output_size=(self.size["height"], self.size["width"]))
+        centers, scales = boxes_to_crop_params(
+            box_xywh_to_cxcywh(boxes_tensor), output_size=(self.size["height"], self.size["width"])
+        )
         heatmap_size = torch.tensor([heatmap_width - 1, heatmap_height - 1], dtype=torch.float32, device=device)
         all_keypoints = (
             all_keypoints / heatmap_size * scales[:, None, :] + centers[:, None, :] - 0.5 * scales[:, None, :]
         )
-        all_boxes = box_xywh_to_xyxy(boxes_xywh)  # (num_total_persons, 4)
+        all_boxes = box_xywh_to_xyxy(boxes_tensor)  # (num_total_persons, 4)
 
         if source_sizes is not None and target_sizes is not None:
             # (num_images, 2)

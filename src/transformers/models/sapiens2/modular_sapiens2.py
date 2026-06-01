@@ -22,7 +22,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from transformers.backbone_utils import filter_output_hidden_states
 from transformers.image_processing_backends import TorchvisionBackend
-from transformers.models.dinov3_vit.modular_dinov3_vit import DINOv3ViTBackboneOutput
+from transformers.models.dinov3_vit.modeling_dinov3_vit import DINOv3ViTBackboneOutput
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -1056,6 +1056,12 @@ class Sapiens2Config(DINOv3ViTConfig):
         Whether to reshape the hidden states to spatial dimensions when used as backbone.
     use_mask_token (`bool`, *optional*, defaults to `False`):
         Whether to use a mask token in the embeddings (needed for masked image modeling pretraining).
+    rms_norm_eps (`float`, *optional*, defaults to 1e-6):
+        Epsilon for the RMS normalization layers.
+    normalize_backbone_outputs (`bool`, *optional*, defaults to `True`):
+        Whether to apply RMSNorm to the backbone outputs before returning them from the forward pass.
+        Feature maps, class tokens, and hidden states are all normalized when this is `True`.
+        Only applies when the model is used as a backbone.
     use_qk_norm (`bool`, *optional*, defaults to `True`):
         Whether to apply RMSNorm to queries and keys before RoPE in attention layers.
     num_key_value_heads_per_layer (`list[int]`, *optional*):
@@ -1072,12 +1078,6 @@ class Sapiens2Config(DINOv3ViTConfig):
         forward call so the model flips heatmaps back before returning them.
     head_config (`Sapiens2HeadConfig`, *optional*):
         Configuration for the decode head. See [`Sapiens2HeadConfig`] for the available options.
-    rms_norm_eps (`float`, *optional*, defaults to 1e-6):
-        Epsilon for the RMS normalization layers.
-    normalize_backbone_outputs (`bool`, *optional*, defaults to `True`):
-        Whether to apply RMSNorm to the backbone outputs before returning them from the forward pass.
-        Feature maps, class tokens, and hidden states are all normalized when this is `True`.
-        Only applies when the model is used as a backbone.
     """
 
     model_type = "sapiens2"

@@ -24,9 +24,11 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
+from transformers.backbone_utils import filter_output_hidden_states
+
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin, filter_output_hidden_states
+from ...backbone_utils import BackboneMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -43,6 +45,23 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_sapiens2 import Sapiens2Config
+
+
+@auto_docstring(
+    custom_intro="""
+    Output type of [`Sapiens2Backbone`], extending [`BackboneOutput`] with optional CLS tokens from
+    each selected feature stage (used when `config.return_class_token=True`).
+    """
+)
+@dataclass
+class Sapiens2BackboneOutput(BackboneOutput):
+    r"""
+    cls_tokens (`tuple(torch.FloatTensor)`, *optional*):
+        CLS token from each selected feature stage, each of shape `(batch_size, hidden_size)`.
+        Only present when `config.return_class_token=True`.
+    """
+
+    cls_tokens: tuple[torch.FloatTensor] | None = None
 
 
 # General docstring
@@ -166,16 +185,14 @@ class Sapiens2Embeddings(nn.Module):
         super().__init__()
         self.config = config
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if config.use_mask_token else None
         self.register_tokens = nn.Parameter(torch.empty(1, config.num_register_tokens, config.hidden_size))
         self.patch_embeddings = nn.Conv2d(
             config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
         )
-        if not config.use_mask_token:
-            del self.mask_token
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
-        if bool_masked_pos is not None and not self.config.use_mask_token:
+        if bool_masked_pos is not None and self.mask_token is None:
             raise ValueError("bool_masked_pos requires use_mask_token=True in the config")
         batch_size = pixel_values.shape[0]
         target_dtype = self.patch_embeddings.weight.dtype
@@ -438,12 +455,8 @@ class Sapiens2Attention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.k_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim, bias=config.key_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim, bias=config.value_bias)
-        self.q_norm = (
-            Sapiens2RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
-        )
-        self.k_norm = (
-            Sapiens2RMSNorm(self.head_dim, eps=config.layer_norm_eps) if config.use_qk_norm else nn.Identity()
-        )
+        self.q_norm = Sapiens2RMSNorm(self.head_dim, eps=config.rms_norm_eps) if config.use_qk_norm else nn.Identity()
+        self.k_norm = Sapiens2RMSNorm(self.head_dim, eps=config.rms_norm_eps) if config.use_qk_norm else nn.Identity()
 
     def forward(
         self,
@@ -548,11 +561,11 @@ class Sapiens2Layer(GradientCheckpointingLayer):
 
     def __init__(self, config: Sapiens2Config, layer_idx: int):
         super().__init__()
-        self.norm1 = Sapiens2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm1 = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attention = Sapiens2Attention(config, layer_idx=layer_idx)
         self.layer_scale1 = Sapiens2LayerScale(config)
         self.drop_path = Sapiens2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-        self.norm2 = Sapiens2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm2 = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         if config.use_gated_mlp:
             self.mlp = Sapiens2GatedMLP(config)
@@ -841,7 +854,7 @@ class Sapiens2Model(Sapiens2PreTrainedModel):
         self.embeddings = Sapiens2Embeddings(config)
         self.rope_embeddings = Sapiens2RopePositionEmbedding(config)
         self.model = Sapiens2Encoder(config)
-        self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
@@ -879,23 +892,6 @@ class Sapiens2Model(Sapiens2PreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    Output type of [`Sapiens2Backbone`], extending [`BackboneOutput`] with optional CLS tokens from
-    each selected feature stage (used when `config.return_class_token=True`).
-    """
-)
-@dataclass
-class Sapiens2BackboneOutput(BackboneOutput):
-    r"""
-    cls_tokens (`tuple(torch.FloatTensor)`, *optional*):
-        CLS token from each selected feature stage, each of shape `(batch_size, hidden_size)`.
-        Only present when `config.return_class_token=True`.
-    """
-
-    cls_tokens: tuple[torch.FloatTensor] | None = None
-
-
 @auto_docstring
 class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
     def __init__(self, config: Sapiens2Config):
@@ -904,7 +900,7 @@ class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
         self.embeddings = Sapiens2Embeddings(config)
         self.rope_embeddings = Sapiens2RopePositionEmbedding(config)
         self.model = Sapiens2Encoder(config)
-        self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
@@ -941,11 +937,10 @@ class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
         sequence_output = None
         last_stage_idx = len(self.stage_names) - 1
         for idx, (stage_name, hidden_state) in enumerate(zip(self.stage_names, stage_hidden_states)):
+            if self.config.normalize_backbone_outputs:
+                hidden_state = self.norm(hidden_state)
             if idx == last_stage_idx:
-                hidden_state = self.norm(hidden_state)
                 sequence_output = hidden_state
-            elif self.config.apply_layernorm:
-                hidden_state = self.norm(hidden_state)
 
             if stage_name in self.out_features:
                 if return_class_token:
