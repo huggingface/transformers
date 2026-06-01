@@ -478,8 +478,8 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
             crops = []
             for image, image_boxes in zip(images, boxes):
                 image = tvF.to_dtype_image(image, dtype=torch.float32, scale=False)
-                boxes_cxcywh = box_xywh_to_cxcywh(torch.tensor(image_boxes, dtype=torch.float32, device=image.device))
-                crops.extend(crop_and_resize(image, boxes=boxes_cxcywh, output_size=output_size))
+                boxes_tensor = box_xywh_to_cxcywh(torch.tensor(image_boxes, dtype=torch.float32, device=image.device))
+                crops.extend(crop_and_resize(image, boxes=boxes_tensor, output_size=output_size))
             images = crops
             do_resize = False  # crop_and_resize already produces the target size
 
@@ -587,7 +587,7 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
             return [[] for _ in boxes]
 
         # (num_total_persons, 4)
-        boxes_xywh = torch.tensor(
+        boxes_tensor = torch.tensor(
             [bbox for image_boxes in boxes for bbox in image_boxes], dtype=torch.float32, device=device
         )
 
@@ -600,13 +600,14 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
         )
 
         # Remap coordinates from heatmap space to original image space
-        boxes_cxcywh = box_xywh_to_cxcywh(boxes_xywh)
-        centers, scales = boxes_to_crop_params(boxes_cxcywh, output_size=(self.size["height"], self.size["width"]))
+        centers, scales = boxes_to_crop_params(
+            box_xywh_to_cxcywh(boxes_tensor), output_size=(self.size["height"], self.size["width"])
+        )
         heatmap_size = torch.tensor([heatmap_width - 1, heatmap_height - 1], dtype=torch.float32, device=device)
         all_keypoints = (
             all_keypoints / heatmap_size * scales[:, None, :] + centers[:, None, :] - 0.5 * scales[:, None, :]
         )
-        all_boxes = box_xywh_to_xyxy(boxes_xywh)  # (num_total_persons, 4)
+        all_boxes = box_xywh_to_xyxy(boxes_tensor)  # (num_total_persons, 4)
 
         if source_sizes is not None and target_sizes is not None:
             # (num_images, 2)
