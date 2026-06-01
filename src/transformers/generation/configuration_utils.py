@@ -1670,6 +1670,9 @@ class ContinuousBatchingConfig:
             Remove unsupported logits processors instead of erroring. Default is True.
         disable_nccl_graph_mixing (`bool`, *optional*, defaults to `True`):
             Disable NCCL's safety net for parallel graph-captured comms. Never happens in CB and gives TP a perf boost.
+        cpu_group_timeout (`float`, *optional*, defaults to 300.0):
+            The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None
+            for no timeout. Default is 300 seconds.
     """
 
     # Size of each KV cache block
@@ -1750,6 +1753,10 @@ class ContinuousBatchingConfig:
     # CUDA graph with NCCL communication at the same time as 1. another CUDA graph with captured comms 2. an eager comm.
     # This is turned on by default because the above never happens in CB and this gives a nice perf boost.
     disable_nccl_graph_mixing: bool = True
+
+    # The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None for
+    # no timeout. Default is 300 seconds.
+    cpu_group_timeout: float | None = 300.0
 
     def __post_init__(self):
         # Only turn off graph mixing support if TP is on
