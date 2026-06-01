@@ -209,11 +209,11 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
             self.num_key_value_heads_per_layer = [
                 self.num_attention_heads
                 if (
-                    i < self.num_first_full_attention_layers
-                    or i >= self.num_hidden_layers - self.num_last_full_attention_layers
+                    layer_index < self.num_first_full_attention_layers
+                    or layer_index >= self.num_hidden_layers - self.num_last_full_attention_layers
                 )
                 else self.num_key_value_attention_heads
-                for i in range(self.num_hidden_layers)
+                for layer_index in range(self.num_hidden_layers)
             ]
         if isinstance(self.head_config, dict):
             self.head_config = Sapiens2HeadConfig(**self.head_config)
@@ -224,17 +224,21 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
             and self.head_config.scale_conv_kernel_sizes is not None
         ):
             image_size = self.image_size
-            image_h, image_w = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
+            image_height, image_width = (
+                image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
+            )
             patch_size = self.patch_size
-            patch_size_h = patch_size if isinstance(patch_size, int) else patch_size[0]
-            patch_size_w = patch_size if isinstance(patch_size, int) else patch_size[1]
-            h = image_h // patch_size_h
-            w = image_w // patch_size_w
+            patch_height = patch_size if isinstance(patch_size, int) else patch_size[0]
+            patch_width = patch_size if isinstance(patch_size, int) else patch_size[1]
+            features_height = image_height // patch_height
+            features_width = image_width // patch_width
             for kernel_size in self.head_config.scale_conv_kernel_sizes:
                 padding = (kernel_size - 1) // 2
-                h = (h + 2 * padding - kernel_size) // 2 + 1
-                w = (w + 2 * padding - kernel_size) // 2 + 1
-            self.head_config.scale_final_input_size = h * w * self.head_config.scale_conv_out_channels[-1]
+                features_height = (features_height + 2 * padding - kernel_size) // 2 + 1
+                features_width = (features_width + 2 * padding - kernel_size) // 2 + 1
+            self.head_config.scale_final_input_size = (
+                features_height * features_width * self.head_config.scale_conv_out_channels[-1]
+            )
         self.stage_names = ["stem"] + [f"stage{i}" for i in range(1, self.num_hidden_layers + 1)]
         self.set_output_features_output_indices(
             out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)

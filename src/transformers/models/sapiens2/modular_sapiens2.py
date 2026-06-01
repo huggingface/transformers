@@ -634,7 +634,10 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
             )
             # (num_total_persons, 2)
             per_person_scale = torch.cat(
-                [per_image_scale[i].unsqueeze(0).expand(len(boxes[i]), 2) for i in range(num_images)]
+                [
+                    per_image_scale[image_index].unsqueeze(0).expand(len(boxes[image_index]), 2)
+                    for image_index in range(num_images)
+                ]
             )
             all_keypoints = all_keypoints * per_person_scale[:, None, :]
             all_boxes = all_boxes * per_person_scale[:, [0, 1, 0, 1]]
@@ -1128,11 +1131,11 @@ class Sapiens2Config(DINOv3ViTConfig):
             self.num_key_value_heads_per_layer = [
                 self.num_attention_heads
                 if (
-                    i < self.num_first_full_attention_layers
-                    or i >= self.num_hidden_layers - self.num_last_full_attention_layers
+                    layer_index < self.num_first_full_attention_layers
+                    or layer_index >= self.num_hidden_layers - self.num_last_full_attention_layers
                 )
                 else self.num_key_value_attention_heads
-                for i in range(self.num_hidden_layers)
+                for layer_index in range(self.num_hidden_layers)
             ]
         if isinstance(self.head_config, dict):
             self.head_config = Sapiens2HeadConfig(**self.head_config)
@@ -1143,17 +1146,21 @@ class Sapiens2Config(DINOv3ViTConfig):
             and self.head_config.scale_conv_kernel_sizes is not None
         ):
             image_size = self.image_size
-            image_h, image_w = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
+            image_height, image_width = (
+                image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
+            )
             patch_size = self.patch_size
-            patch_size_h = patch_size if isinstance(patch_size, int) else patch_size[0]
-            patch_size_w = patch_size if isinstance(patch_size, int) else patch_size[1]
-            h = image_h // patch_size_h
-            w = image_w // patch_size_w
+            patch_height = patch_size if isinstance(patch_size, int) else patch_size[0]
+            patch_width = patch_size if isinstance(patch_size, int) else patch_size[1]
+            features_height = image_height // patch_height
+            features_width = image_width // patch_width
             for kernel_size in self.head_config.scale_conv_kernel_sizes:
                 padding = (kernel_size - 1) // 2
-                h = (h + 2 * padding - kernel_size) // 2 + 1
-                w = (w + 2 * padding - kernel_size) // 2 + 1
-            self.head_config.scale_final_input_size = h * w * self.head_config.scale_conv_out_channels[-1]
+                features_height = (features_height + 2 * padding - kernel_size) // 2 + 1
+                features_width = (features_width + 2 * padding - kernel_size) // 2 + 1
+            self.head_config.scale_final_input_size = (
+                features_height * features_width * self.head_config.scale_conv_out_channels[-1]
+            )
         super().__post_init__(**kwargs)
 
 
@@ -1426,17 +1433,19 @@ class Sapiens2PreTrainedModel(DINOv3ViTPreTrainedModel):
             inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
             init.copy_(module.inv_freq, inv_freq)
         elif isinstance(module, (Sapiens2Head, Sapiens2PointmapScaleHead)):
-            for m in module.modules():
-                if isinstance(m, nn.Conv2d):
-                    init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
-                elif isinstance(m, nn.Linear):
-                    init.kaiming_normal_(m.weight, mode="fan_in", nonlinearity="linear")
+            for head_module in module.modules():
+                if isinstance(head_module, nn.Conv2d):
+                    init.kaiming_normal_(head_module.weight, mode="fan_out", nonlinearity="relu")
+                elif isinstance(head_module, nn.Linear):
+                    init.kaiming_normal_(head_module.weight, mode="fan_in", nonlinearity="linear")
 
 
 class Sapiens2Encoder(DINOv3ViTEncoder):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
-        self.layer = nn.ModuleList([Sapiens2Layer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [Sapiens2Layer(config, layer_idx=layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
 
 class Sapiens2Model(DINOv3ViTModel):

@@ -607,7 +607,10 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             )
             # (num_total_persons, 2)
             per_person_scale = torch.cat(
-                [per_image_scale[i].unsqueeze(0).expand(len(boxes[i]), 2) for i in range(num_images)]
+                [
+                    per_image_scale[image_index].unsqueeze(0).expand(len(boxes[image_index]), 2)
+                    for image_index in range(num_images)
+                ]
             )
             all_keypoints = all_keypoints * per_person_scale[:, None, :]
             all_boxes = all_boxes * per_person_scale[:, [0, 1, 0, 1]]

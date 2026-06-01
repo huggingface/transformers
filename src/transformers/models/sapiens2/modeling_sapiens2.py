@@ -821,17 +821,19 @@ class Sapiens2PreTrainedModel(PreTrainedModel):
             inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
             init.copy_(module.inv_freq, inv_freq)
         elif isinstance(module, (Sapiens2Head, Sapiens2PointmapScaleHead)):
-            for m in module.modules():
-                if isinstance(m, nn.Conv2d):
-                    init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
-                elif isinstance(m, nn.Linear):
-                    init.kaiming_normal_(m.weight, mode="fan_in", nonlinearity="linear")
+            for head_module in module.modules():
+                if isinstance(head_module, nn.Conv2d):
+                    init.kaiming_normal_(head_module.weight, mode="fan_out", nonlinearity="relu")
+                elif isinstance(head_module, nn.Linear):
+                    init.kaiming_normal_(head_module.weight, mode="fan_in", nonlinearity="linear")
 
 
 class Sapiens2Encoder(Sapiens2PreTrainedModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
-        self.layer = nn.ModuleList([Sapiens2Layer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [Sapiens2Layer(config, layer_idx=layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         # Initialize weights and apply final processing
         self.post_init()
 
