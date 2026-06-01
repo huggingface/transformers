@@ -616,7 +616,12 @@ class Gemma4VisionPatchEmbedder(nn.Module):
 
 
 class Gemma4VisionPooler(nn.Module):
-    """Scaling and optional spatial pooling for vision encodings"""
+    """Spatial pooling and ``sqrt(hidden_size)`` scaling for vision encodings.
+
+    The scaling expands the activation magnitude, which can exceed the float16 range, so it is
+    computed in float32 and the pooled features are returned in float32. The caller
+    (``Gemma4VisionModel.forward``) standardizes them and casts back to the working dtype.
+    """
 
     def __init__(self, config: Gemma4VisionConfig):
         super().__init__()
@@ -670,7 +675,10 @@ class Gemma4VisionPooler(nn.Module):
                 hidden_states, pixel_position_ids, output_length
             )
 
-        hidden_states *= self.root_hidden_size
+        # Scale in float32 and return float32: the sqrt(hidden_size) scaling can push the
+        # activations past the float16 range (max 65504), so the magnitude is kept in float32
+        # until the caller standardizes it.
+        hidden_states = hidden_states.float() * self.root_hidden_size
         return hidden_states, padding_positions
 
 
@@ -2059,8 +2067,11 @@ class Gemma4VisionModel(Gemma4PreTrainedModel):
         # Strip padding tokens. pooler_mask is True = valid, False = padding.
         hidden_states = hidden_states[pooler_mask]
 
+        # The pooler returns float32-scaled features. Standardize in float32 (the std_bias
+        # subtraction cancels large values) and cast back to the working dtype.
         if self.config.standardize:
-            hidden_states = (hidden_states - self.std_bias) * self.std_scale
+            hidden_states = (hidden_states - self.std_bias.float()) * self.std_scale.float()
+        hidden_states = hidden_states.to(inputs_embeds.dtype)
 
         return BaseModelOutputWithPast(last_hidden_state=hidden_states)
 

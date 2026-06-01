@@ -304,9 +304,10 @@ class DeepseekV4Config(PreTrainedConfig):
                 **yarn,
                 "rope_theta": self.compress_rope_theta,
                 "partial_rotary_factor": self.partial_rotary_factor,
-                "attention_factor": 1.0,
             }
             compress.setdefault("rope_type", "default")
+            if compress["rope_type"] == "yarn":
+                compress.setdefault("attention_factor", 1.0)
             self.rope_parameters = {"main": main, "compress": compress}
 
 
