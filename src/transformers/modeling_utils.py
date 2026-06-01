@@ -4626,7 +4626,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         try:
             self.apply(attach_hidden_kernels)
 
-            mode = Mode.TRAINING if self.training else Mode.INFERENCE if mode is None else mode
+            mode = (Mode.TRAINING if self.training else Mode.INFERENCE) if mode is None else mode
             kernelize(self, device=Device(type=self.device.type), mode=mode)
             self._use_kernels = True
 

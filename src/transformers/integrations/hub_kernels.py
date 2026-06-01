@@ -107,13 +107,13 @@ try:
             ),
         },
         "RMSNorm": {
-            # TODO: training but not compile should work...
+            # NOTE: Not torch.compile friendly for unknown reasons
             "cuda": {
-                #Mode.TRAINING: LayerRepository(
-                #    repo_id="kernels-community/liger-kernels",
-                #    layer_name="LigerRMSNorm",
-                #    version=1,
-                #),
+                Mode.TRAINING: LayerRepository(
+                    repo_id="kernels-community/liger-kernels",
+                    layer_name="LigerRMSNorm",
+                    version=1,
+                ),
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
                     layer_name="LigerRMSNorm",
