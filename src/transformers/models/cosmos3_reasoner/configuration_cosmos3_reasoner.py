@@ -106,7 +106,6 @@ class Cosmos3ReasonerTextConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="nvidia/Cosmos3-Nano")
 @strict
 class Cosmos3ReasonerConfig(PreTrainedConfig):
-
     model_type = "cosmos3_omni"
     sub_configs = {"vision_config": Cosmos3ReasonerVisionConfig, "text_config": Cosmos3ReasonerTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]

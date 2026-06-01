@@ -1706,4 +1706,4 @@ class Cosmos3ReasonerForConditionalGeneration(Cosmos3ReasonerPreTrainedModel, Ge
         return input_ids, model_kwargs
 
 
-__all__ = ["Cosmos3ReasonerModel", "Cosmos3ReasonerForConditionalGeneration"]
+__all__ = ["Cosmos3ReasonerForConditionalGeneration"]

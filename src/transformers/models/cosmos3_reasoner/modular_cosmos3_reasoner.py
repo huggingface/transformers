@@ -19,9 +19,9 @@ from ...utils import auto_docstring
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig
 from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLForConditionalGeneration,
-    Qwen3VLModel,
     Qwen3VLPreTrainedModel,
 )
+from ..qwen3_vl.modular_qwen3_vl import Qwen3VLProcessor
 
 
 @auto_docstring(checkpoint="nvidia/Cosmos3-Nano")
@@ -67,16 +67,16 @@ class Cosmos3ReasonerPreTrainedModel(Qwen3VLPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = _COSMOS3_DROPPED_UNIFIED_CHECKPOINT_KEYS
 
 
-class Cosmos3ReasonerModel(Qwen3VLModel):
+class Cosmos3ReasonerForConditionalGeneration(Qwen3VLForConditionalGeneration):
     pass
 
 
-class Cosmos3ReasonerForConditionalGeneration(Qwen3VLForConditionalGeneration):
+class Cosmos3ReasonerProcessor(Qwen3VLProcessor):
     pass
 
 
 __all__ = [
     "Cosmos3ReasonerConfig",
-    "Cosmos3ReasonerModel",
     "Cosmos3ReasonerForConditionalGeneration",
+    "Cosmos3ReasonerProcessor",
 ]
