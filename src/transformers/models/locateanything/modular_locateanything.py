@@ -1061,6 +1061,16 @@ class LocateAnythingPreTrainedModel(LlavaPreTrainedModel):
     config_class = LocateAnythingConfig
     _no_split_modules = ["Qwen2DecoderLayer", "Qwen3DecoderLayer", "MoonVitEncoderLayer"]
 
+    def _check_and_adjust_attn_implementation(self, attn_implementation, is_init_check=False, *args, **kwargs):
+        # `magi` is the original block-diffusion training attention, not an inference backend. The MoonViT
+        # tower and the language backbone resolve it to a real implementation in `LocateAnythingModel.__init__`;
+        # tolerate it here so the (attention-less) top-level container loads from the published config.
+        if attn_implementation == "magi":
+            return "magi"
+        return PreTrainedModel._check_and_adjust_attn_implementation(
+            self, attn_implementation, is_init_check, *args, **kwargs
+        )
+
     def _init_weights(self, module):
         std = getattr(self.config, "initializer_range", None) or self.config.text_config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):

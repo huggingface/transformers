@@ -143,11 +143,6 @@ class LocateAnythingConfig(PreTrainedConfig):
         if not hasattr(self.text_config, "rope_theta"):
             self.text_config.rope_theta = 10000.0
 
-        # `magi` is the original block-diffusion training attention, not an inference backend.
-        # Reset it so Transformers selects a real implementation (sdpa / flash) at load time.
-        if getattr(self, "_attn_implementation", None) == "magi":
-            self._attn_implementation = None
-
         self.tie_word_embeddings = self.text_config.tie_word_embeddings
         super().__post_init__(**kwargs)
 
