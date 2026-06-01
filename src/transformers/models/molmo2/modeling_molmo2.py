@@ -384,6 +384,7 @@ class Molmo2ImageProjectorMLP(nn.Module):
 
 class Molmo2VisionBackbone(PreTrainedModel):
     config_class = Molmo2AdapterConfig
+    _supports_sdpa = True
 
     def __init__(self, vit_config: Molmo2VitConfig, adapter_config: Molmo2AdapterConfig):
         super().__init__(adapter_config)
