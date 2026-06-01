@@ -379,21 +379,16 @@ class Dinov2WithRegistersEncoder(Dinov2WithRegistersPreTrainedModel):
 @auto_docstring
 class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
     def __init__(self, config: Dinov2WithRegistersConfig):
-        r"""
-        add_pooling_layer (bool, *optional*, defaults to `True`):
-            Whether to add a pooling layer
-        use_mask_token (`bool`, *optional*, defaults to `False`):
-            Whether to use a mask token for masked image modeling.
-        """
         super().__init__(config)
         self.config = config
         self.embeddings = Dinov2WithRegistersEmbeddings(config)
-        self.layers = nn.ModuleList([Dinov2WithRegistersLayer(config) for _ in range(config.num_hidden_layers)])
+        self.encoder = Dinov2WithRegistersEncoder(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pooler = None
-        self.encoder = Dinov2WithRegistersEncoder(config)
-        # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self) -> Dinov2WithRegistersPatchEmbeddings:
+        return self.embeddings.patch_embeddings
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
@@ -420,9 +415,6 @@ class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
         sequence_output = self.layernorm(encoder_outputs.last_hidden_state)
         pooled_output = sequence_output[:, 0, :]
         return BaseModelOutputWithPooling(last_hidden_state=sequence_output, pooler_output=pooled_output)
-
-    def get_input_embeddings(self) -> Dinov2WithRegistersPatchEmbeddings:
-        return self.embeddings.patch_embeddings
 
 
 @auto_docstring(

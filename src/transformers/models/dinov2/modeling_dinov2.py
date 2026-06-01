@@ -73,7 +73,7 @@ class Dinov2Embeddings(nn.Module):
     def __init__(self, config: Dinov2Config) -> None:
         super().__init__()
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
+        self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size)) if config.use_mask_token else None
         self.patch_embeddings = Dinov2PatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
@@ -112,7 +112,7 @@ class Dinov2Embeddings(nn.Module):
         target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
 
-        if bool_masked_pos is not None:
+        if bool_masked_pos is not None and self.mask_token is not None:
             embeddings = torch.where(
                 bool_masked_pos.unsqueeze(-1), self.mask_token.to(embeddings.dtype).unsqueeze(0), embeddings
             )
@@ -333,11 +333,7 @@ class Dinov2PreTrainedModel(PreTrainedModel):
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.mask_token is not None:
                 init.zeros_(module.mask_token)
-        if isinstance(module, Dinov2Embeddings):
-            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
-            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
-            init.zeros_(module.mask_token)
-        elif isinstance(module, Dinov2LayerScale):
+        if isinstance(module, Dinov2LayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
 
 
@@ -361,21 +357,16 @@ class Dinov2Encoder(Dinov2PreTrainedModel):
 @auto_docstring
 class Dinov2Model(Dinov2PreTrainedModel):
     def __init__(self, config: Dinov2Config):
-        r"""
-        add_pooling_layer (bool, *optional*, defaults to `True`):
-            Whether to add a pooling layer
-        use_mask_token (`bool`, *optional*, defaults to `False`):
-            Whether to use a mask token for masked image modeling.
-        """
         super().__init__(config)
         self.config = config
         self.embeddings = Dinov2Embeddings(config)
-        self.layers = nn.ModuleList([Dinov2Layer(config) for _ in range(config.num_hidden_layers)])
+        self.encoder = Dinov2Encoder(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pooler = None
-        self.encoder = Dinov2Encoder(config)
-        # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self) -> Dinov2PatchEmbeddings:
+        return self.embeddings.patch_embeddings
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
@@ -402,9 +393,6 @@ class Dinov2Model(Dinov2PreTrainedModel):
         sequence_output = self.layernorm(encoder_outputs.last_hidden_state)
         pooled_output = sequence_output[:, 0, :]
         return BaseModelOutputWithPooling(last_hidden_state=sequence_output, pooler_output=pooled_output)
-
-    def get_input_embeddings(self) -> Dinov2PatchEmbeddings:
-        return self.embeddings.patch_embeddings
 
 
 @auto_docstring(

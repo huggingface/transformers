@@ -304,22 +304,17 @@ class VideomtLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output, _ = self.attention(hidden_states_norm, attention_mask)
+        self_attention_output, _ = self.attention(hidden_states_norm, attention_mask=attention_mask, **kwargs)
         self_attention_output = self.layer_scale1(self_attention_output)
-
-        # first residual connection
         hidden_states = self.drop_path(self_attention_output) + hidden_states
 
-        # in Videomt, layernorm is also applied after self-attention
         layer_output = self.norm2(hidden_states)
         layer_output = self.mlp(layer_output)
         layer_output = self.layer_scale2(layer_output)
-
-        # second residual connection
         layer_output = self.drop_path(layer_output) + hidden_states
-
         return layer_output
 
 
