@@ -77,6 +77,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     do_resize = True
     do_rescale = True
     do_normalize = True
+    do_convert_rgb = True
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
@@ -191,6 +192,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
+        do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
@@ -209,6 +211,8 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
+            if do_convert_rgb:
+                stacked_videos = self.convert_to_rgb(stacked_videos)
             height, width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
             resized_height, resized_width = height, width
             if do_resize:

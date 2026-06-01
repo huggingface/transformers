@@ -91,6 +91,7 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
     do_resize = True
     do_rescale = True
     do_normalize = True
+    do_convert_rgb = True
     patch_size = 16
     temporal_patch_size = 2
     merge_size = 2
@@ -186,6 +187,8 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
         resized_videos_grouped = {}
 
         for shape, stacked_videos in grouped_videos.items():
+            if do_convert_rgb:
+                stacked_videos = self.convert_to_rgb(stacked_videos)
             B, T, C, H, W = stacked_videos.shape
             num_frames, height, width = T, H, W
             if do_resize:
