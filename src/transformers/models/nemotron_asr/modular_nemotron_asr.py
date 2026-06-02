@@ -50,7 +50,7 @@ from ..parakeet.modeling_parakeet import ParakeetEncoderFeedForward
 from .generation_nemotron_asr import NemotronAsrDecoderCache, NemotronAsrGenerationMixin
 
 
-EPSILON = 1e-5
+LOG_ZERO_GUARD_VALUE = 2**-24
 
 logger = logging.get_logger(__name__)
 
@@ -206,29 +206,34 @@ class NemotronAsrConfig(PreTrainedConfig):
 
 
 class NemotronAsrFeatureExtractor(ParakeetFeatureExtractor):
-    def __init__(
-        self,
-        feature_size=80,
-        sampling_rate=16000,
-        hop_length=160,
-        n_fft=512,
-        win_length=400,
-        preemphasis=0.97,
-        padding_value=0.0,
-        do_normalize=True,
-        **kwargs,
-    ):
-        super().__init__(
-            feature_size=feature_size,
-            sampling_rate=sampling_rate,
-            hop_length=hop_length,
-            n_fft=n_fft,
-            win_length=win_length,
-            preemphasis=preemphasis,
-            padding_value=padding_value,
-            **kwargs,
+    def _torch_extract_fbank_features(self, waveform, device="cpu", center=True):
+        # spectrogram
+        window = torch.hann_window(self.win_length, periodic=False, device=device)
+        stft = torch.stft(
+            waveform,
+            self.n_fft,
+            hop_length=self.hop_length,
+            win_length=self.win_length,
+            window=window,
+            return_complex=True,
+            pad_mode="constant",
+            center=center,
         )
-        self.do_normalize = do_normalize
+        # Let's math original implementation
+        # magnitudes = torch.abs(stft) ** 2
+        magnitudes = torch.view_as_real(stft)
+        magnitudes = torch.sqrt(magnitudes.pow(2).sum(-1))
+        magnitudes = magnitudes.pow(2)
+
+        # log mel spectrogram
+        mel_filters = self.mel_filters.to(device)
+        mel_spec = mel_filters @ magnitudes
+        mel_spec = torch.log(mel_spec + LOG_ZERO_GUARD_VALUE)
+
+        # (batch_size, num_mel_filters, num_frames) -> (batch_size, num_frames, num_mel_filters)
+        mel_spec = mel_spec.permute(0, 2, 1)
+
+        return mel_spec
 
     def __call__(
         self,
@@ -240,9 +245,9 @@ class NemotronAsrFeatureExtractor(ParakeetFeatureExtractor):
         padding: str | None = "longest",
         max_length: int | None = None,
         sampling_rate: int | None = None,
-        do_normalize: bool | None = None,
         device: str | None = "cpu",
         return_token_timestamps: bool | None = None,
+        center: bool = True,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -271,14 +276,17 @@ class NemotronAsrFeatureExtractor(ParakeetFeatureExtractor):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors and allow automatic speech recognition
                 pipeline.
-            do_normalize (`bool`, *optional*, defaults to `True`):
-                Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
-                improve the performance of the model.
             device (`str`, *optional*, defaults to `'cpu'`):
                 Specifies the device for computation of the log-mel spectrogram of audio signals in the
                 `_torch_extract_fbank_features` method. (e.g., "cpu", "cuda")
             return_token_timestamps (`bool`, *optional*, defaults to `None`):
                 Deprecated. Use `return_attention_mask` instead from which the number of frames can be inferred.
+            center (`bool`, *optional*, defaults to `True`):
+                Whether to pad the audio on both sides so STFT frames are centered (`torch.stft(center=True)`). Use
+                `True` for offline extraction and for the first chunk of a streaming session. Use `False` for
+                subsequent streaming chunks: feeding `audio[hop * frame - n_fft // 2 : ...]` with `center=False`
+                reproduces, frame-for-frame, the features that a single `center=True` pass over the whole utterance
+                would have produced for those frames.
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -345,27 +353,20 @@ class NemotronAsrFeatureExtractor(ParakeetFeatureExtractor):
             )
             input_features = input_features.masked_fill(~timemask, 0.0)
 
-        input_features = self._torch_extract_fbank_features(input_features, device)
-        features_lengths = torch.floor_divide(
-            padded_inputs.audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length
-        )
+        input_features = self._torch_extract_fbank_features(input_features, device, center=center)
+        if center:
+            # `center=True` pads `n_fft // 2` on each side, so the number of valid frames is `floor(L / hop)`.
+            features_lengths = torch.floor_divide(
+                padded_inputs.audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length
+            )
+        else:
+            # `center=False` does no padding: `floor((L - n_fft) / hop) + 1` frames.
+            features_lengths = torch.floor_divide(padded_inputs.audio_lengths - self.n_fft, self.hop_length) + 1
         attention_mask = torch.arange(input_features.shape[1], device=device)[None, :] < features_lengths[:, None]
 
-        # Optionally normalize mel features per-utterance (zero-mean, unit-variance), ignoring padding.
-        # The call-time `do_normalize` argument (if not None) overrides the instance default.
-        normalize = self.do_normalize if do_normalize is None else do_normalize
-        mask = attention_mask.unsqueeze(-1)
-        if normalize:
-            input_features_masked = input_features * mask
-            # Mean uses n divisor; std uses Bessel-corrected n-1, both clamped to at least 1
-            # so single-frame / empty utterances don't divide by zero.
-            mean_denom = features_lengths.clamp_min(1).unsqueeze(-1)
-            std_denom = (features_lengths - 1).clamp_min(1).unsqueeze(-1)
-            mean = (input_features_masked.sum(dim=1) / mean_denom).unsqueeze(1)
-            variance = ((input_features_masked - mean) ** 2 * mask).sum(dim=1) / std_denom
-            std = torch.sqrt(variance.clamp_min(0.0)).unsqueeze(1)
-            input_features = (input_features - mean) / (std + EPSILON)
-        input_features *= mask
+        # NemotronAsr never normalizes the mel features (the NeMo checkpoint uses `normalize="NA"`);
+        # we only zero out the padded frames.
+        input_features *= attention_mask.unsqueeze(-1)
 
         return BatchFeature(
             data={
