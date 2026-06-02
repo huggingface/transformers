@@ -472,16 +472,16 @@ def deepgemm_bf16_experts_forward(
         total_padded_rows,
     ) = _dispatch_routed_input(hidden_states, top_k_index, top_k_weights, self.num_experts, use_psum_layout)
 
-    w_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
-    w_down = to_local(self.down_proj)
+    weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
+    weight_down = to_local(self.down_proj)
     up_bias = to_local(self.gate_up_proj_bias if self.has_gate else self.up_proj_bias) if self.has_bias else None
     down_bias = to_local(self.down_proj_bias) if self.has_bias else None
 
     # Up projection.
-    up_out_dim = w_up.shape[-1] if self.is_transposed else w_up.shape[1]
+    up_out_dim = weight_up.shape[-1] if self.is_transposed else weight_up.shape[1]
     act = _pad_for_deepgemm(sorted_hidden, sorted_to_padded, total_padded_rows)
     proj_out = torch.empty(total_padded_rows, up_out_dim, device=device, dtype=hidden_states.dtype)
-    grouped_bf16_matmul(act, w_up, proj_out, grouped_layout, use_psum_layout=use_psum_layout)
+    grouped_bf16_matmul(act, weight_up, proj_out, grouped_layout, use_psum_layout=use_psum_layout)
     if self.has_bias:
         proj_out.index_add_(0, sorted_to_padded, up_bias[expert_ids_g])
 
@@ -489,7 +489,7 @@ def deepgemm_bf16_experts_forward(
 
     # Down projection.
     out = torch.empty(total_padded_rows, hidden_dim, device=device, dtype=hidden_states.dtype)
-    grouped_bf16_matmul(proj_out, w_down, out, grouped_layout, use_psum_layout=use_psum_layout)
+    grouped_bf16_matmul(proj_out, weight_down, out, grouped_layout, use_psum_layout=use_psum_layout)
     if self.has_bias:
         out.index_add_(0, sorted_to_padded, down_bias[expert_ids_g])
 
@@ -529,12 +529,12 @@ def deepgemm_fp8_fp4_experts_forward(
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
 
-    w_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
-    ws_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
-    w_down = to_local(self.down_proj)
-    ws_down = to_local(self.down_proj_scale_inv)
+    weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
+    weight_scale_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
+    weight_down = to_local(self.down_proj)
+    weight_scale_down = to_local(self.down_proj_scale_inv)
 
-    cast_kwargs = _select_fp8_cast_kwargs(w_up, ws_up, getattr(self, "block_size", None), device)
+    cast_kwargs = _select_fp8_cast_kwargs(weight_up, weight_scale_up, getattr(self, "block_size", None), device)
     use_psum_layout = _is_sm100(device)
     (
         sorted_hidden,
@@ -552,10 +552,10 @@ def deepgemm_fp8_fp4_experts_forward(
     act_fp8, act_scales = deepgemm.per_token_cast_to_fp8(sorted_hidden, **cast_kwargs)
     act_fp8 = _pad_for_deepgemm(act_fp8, sorted_to_padded, total_padded_rows)
     act_scales = _pad_for_deepgemm(act_scales, sorted_to_padded, total_padded_rows)
-    proj_out = torch.empty(total_padded_rows, w_up.shape[1], device=device, dtype=torch.bfloat16)
+    proj_out = torch.empty(total_padded_rows, weight_up.shape[1], device=device, dtype=torch.bfloat16)
     grouped_fp8_fp4_matmul(
         (act_fp8, _coerce_sf_for_kernel(act_scales, expected_mn=total_padded_rows)),
-        (w_up, _coerce_sf_for_kernel(ws_up, expected_mn=w_up.size(-2))),
+        (weight_up, _coerce_sf_for_kernel(weight_scale_up, expected_mn=weight_up.size(-2))),
         proj_out,
         grouped_layout,
         recipe=sf_recipe,
@@ -568,7 +568,7 @@ def deepgemm_fp8_fp4_experts_forward(
     out = torch.empty(total_padded_rows, hidden_dim, device=device, dtype=torch.bfloat16)
     grouped_fp8_fp4_matmul(
         (proj_fp8, _coerce_sf_for_kernel(proj_scales, expected_mn=total_padded_rows)),
-        (w_down, _coerce_sf_for_kernel(ws_down, expected_mn=w_down.size(-2))),
+        (weight_down, _coerce_sf_for_kernel(weight_scale_down, expected_mn=weight_down.size(-2))),
         out,
         grouped_layout,
         recipe=sf_recipe,

@@ -389,8 +389,8 @@ def fp8_batched_mm_experts_forward(
             "Use the default eager dispatch or switch to activation_scheme='dynamic'."
         )
 
-    w_up = self.gate_up_proj if self.has_gate else self.up_proj
-    if w_up.dtype == torch.int8:
+    weight_up = self.gate_up_proj if self.has_gate else self.up_proj
+    if weight_up.dtype == torch.int8:
         raise NotImplementedError(
             "'batched_mm' experts dispatch is Triton-only and does not support FP4 (int8-packed) "
             "expert weights. Use experts_implementation='deepgemm' instead."
@@ -413,16 +413,16 @@ def fp8_batched_mm_experts_forward(
     # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
     expert_ids.clamp_(0, self.num_experts - 1)
 
-    w_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
-    ws_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
-    w_down = to_local(self.down_proj)
-    ws_down = to_local(self.down_proj_scale_inv)
+    weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
+    weight_scale_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
+    weight_down = to_local(self.down_proj)
+    weight_scale_down = to_local(self.down_proj_scale_inv)
 
     # --- Up projection per expert (FP8 batched) ---
     proj_out = finegrained_fp8.batched_matmul(
         selected_hidden_states,
-        w_up,
-        ws_up.float(),
+        weight_up,
+        weight_scale_up.float(),
         block_size=self.block_size,
         expert_ids=expert_ids,
     )  # (S, 2 * intermediate_dim) or (S, intermediate_dim) depending on gating
@@ -438,8 +438,8 @@ def fp8_batched_mm_experts_forward(
     # --- Down projection per expert (FP8 batched) ---
     proj_out = finegrained_fp8.batched_matmul(
         proj_out,
-        w_down,
-        ws_down.float(),
+        weight_down,
+        weight_scale_down.float(),
         block_size=self.block_size,
         expert_ids=expert_ids,
     )  # (S, hidden_dim)
@@ -466,8 +466,8 @@ def fp8_grouped_mm_experts_forward(
             "Use the default eager dispatch or switch to activation_scheme='dynamic'."
         )
 
-    w_up = self.gate_up_proj if self.has_gate else self.up_proj
-    if w_up.dtype == torch.int8:
+    weight_up = self.gate_up_proj if self.has_gate else self.up_proj
+    if weight_up.dtype == torch.int8:
         raise NotImplementedError(
             "'grouped_mm' experts dispatch is Triton-only and does not support FP4 (int8-packed) "
             "expert weights. Use experts_implementation='deepgemm' instead."
@@ -504,16 +504,16 @@ def fp8_grouped_mm_experts_forward(
     # quantized weights are inference-only, so no bwd pre-mask is needed.
     sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1)
 
-    w_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
-    ws_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
-    w_down = to_local(self.down_proj)
-    ws_down = to_local(self.down_proj_scale_inv)
+    weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
+    weight_scale_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
+    weight_down = to_local(self.down_proj)
+    weight_scale_down = to_local(self.down_proj_scale_inv)
 
     # --- Up projection per expert (FP8 grouped) ---
     proj_out = finegrained_fp8.grouped_matmul(
         selected_hidden_states_g,
-        w_up,
-        ws_up.float(),
+        weight_up,
+        weight_scale_up.float(),
         tokens_per_expert=tokens_per_expert,
         block_size=self.block_size,
         offsets=offsets,
@@ -530,8 +530,8 @@ def fp8_grouped_mm_experts_forward(
     # --- Down projection per expert (FP8 grouped) ---
     proj_out = finegrained_fp8.grouped_matmul(
         proj_out,
-        w_down,
-        ws_down.float(),
+        weight_down,
+        weight_scale_down.float(),
         tokens_per_expert=tokens_per_expert,
         block_size=self.block_size,
         offsets=offsets,
