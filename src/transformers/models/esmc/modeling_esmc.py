@@ -16,24 +16,24 @@
 import math
 import re
 from dataclasses import dataclass
-from typing import Optional, cast
+from typing import Callable, Optional, cast
 
 import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
+from ...masking_utils import create_bidirectional_mask  # type: ignore[import]
 from ...modeling_outputs import (  # type: ignore[import]
     MaskedLMOutput,
     ModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel  # type: ignore[import]
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel  # type: ignore[import]
 from ...utils import (  # type: ignore[import]
     auto_docstring,
     can_return_tuple,
-    is_flash_attn_2_available,
     logging,
 )
 from .configuration_esmc import ESMCConfig
@@ -42,24 +42,6 @@ from .modeling_esmc_sae import _ESMCSAELayer
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ESMCConfig"
-
-# Optional accelerated kernels. Pure-PyTorch fallbacks below if absent.
-if is_flash_attn_2_available():
-    from flash_attn import flash_attn_varlen_qkvpacked_func
-    from flash_attn.bert_padding import pad_input, unpad_input
-
-    _flash_attn_available = True
-else:
-    pad_input = unpad_input = flash_attn_varlen_qkvpacked_func = None
-    _flash_attn_available = False
-
-try:
-    from flash_attn.ops.triton.rotary import apply_rotary as apply_triton_rotary
-
-    _flash_attn_rotary_available = torch.cuda.is_available()
-except ImportError:
-    apply_triton_rotary = None  # type: ignore[assignment]
-    _flash_attn_rotary_available = False
 
 # Transformer Engine: fused LayerNorm+Linear / LayerNorm+MLP kernels with
 # fp32 reduction inside the LayerNorm. Recommended on GPU for accurate bf16
@@ -74,25 +56,6 @@ except ImportError:
     te = None  # type: ignore[assignment]
     _te_available = False
 
-# xformers: preferred SDPA implementation on GPU. Provides a fused
-# bf16 attention kernel with deterministic reduction order. Flash
-# Attention 2 and PyTorch's ``F.scaled_dot_product_attention`` are
-# progressively-less-preferred fallbacks.
-try:
-    import xformers.ops as xops  # type: ignore[import-untyped]
-
-    _xformers_available = True
-except ImportError:
-    xops = None  # type: ignore[assignment]
-    _xformers_available = False
-
-# Flash Attention 2: secondary SDPA fallback. Used when xformers is not
-# installed; fp16 / bf16 only.
-if _flash_attn_available:
-    from flash_attn import flash_attn_func
-else:
-    flash_attn_func = None  # type: ignore[assignment]
-
 if not _te_available:
     logger.warning(
         "ESMC: transformer_engine is not installed; falling back to "
@@ -104,24 +67,6 @@ if not _te_available:
         "`pip install transformer-engine[pytorch]` to enable fused fp32-"
         "reduction LayerNorm."
     )
-
-if not _xformers_available and not _flash_attn_available:
-    logger.warning(
-        "ESMC: neither xformers nor flash-attn is installed; falling back "
-        "to PyTorch ``F.scaled_dot_product_attention``. The attention "
-        "reduction order in bf16 differs from a fused kernel by ~1 bf16 "
-        "ULP per attention block; compounded across the 80-block stack "
-        "this reaches ~O(100) max-diff on the unnormalized residual stream. "
-        "Install xformers (preferred) with `pip install xformers` for a "
-        "fused attention kernel."
-    )
-
-if torch.cuda.is_available() and not _flash_attn_rotary_available:
-    logger.warning(
-        "ESMC: flash-attn rotary kernel not installed; falling back to "
-        "pure-PyTorch RoPE. For faster GPU inference run `pip install flash-attn`."
-    )
-
 
 # ---------------------------------------------------------------------------
 # Output dataclasses
@@ -421,48 +366,9 @@ class RotaryEmbedding(nn.Module):
         cos = self._cos_cached[seqlen_offset:]
         sin = self._sin_cached[seqlen_offset:]
 
-        if _flash_attn_rotary_available and q.device.type == "cuda":
-            q_rot = apply_triton_rotary(q, cos, sin, interleaved=self.interleaved)  # type: ignore[misc]
-            k_rot = apply_triton_rotary(k, cos, sin, interleaved=self.interleaved)  # type: ignore[misc]
-        else:
-            q_rot = _apply_rotary_emb_torch(q, cos, sin, self.interleaved)
-            k_rot = _apply_rotary_emb_torch(k, cos, sin, self.interleaved)
+        q_rot = _apply_rotary_emb_torch(q, cos, sin, self.interleaved)
+        k_rot = _apply_rotary_emb_torch(k, cos, sin, self.interleaved)
         return q_rot, k_rot
-
-
-class _TritonRotaryEmbedding(RotaryEmbedding):
-    """RoPE variant that delegates to the Flash-Attention Triton kernel.
-
-    Only used inside :class:`_FlashMultiHeadAttention` when Flash Attention 2
-    is available.  The ``forward`` signature differs from :class:`RotaryEmbedding`
-    because Flash Attention packs Q, K, V together.
-    """
-
-    def forward(
-        self, qkv: torch.Tensor, cu_seqlens: torch.Tensor, max_seqlen: int
-    ) -> torch.Tensor:  # type: ignore[override]
-        """Apply RoPE in-place to a packed ``(N, 3, n_heads, head_dim)`` tensor."""
-        self._update_cos_sin_cache(max_seqlen, device=qkv.device, dtype=qkv.dtype)
-        assert self._cos_cached is not None and self._sin_cached is not None
-        assert apply_triton_rotary is not None
-
-        apply_triton_rotary(
-            qkv[:, 0],
-            self._cos_cached,
-            self._sin_cached,
-            cu_seqlens=cu_seqlens,
-            max_seqlen=max_seqlen,
-            inplace=True,
-        )
-        apply_triton_rotary(
-            qkv[:, 1],
-            self._cos_cached,
-            self._sin_cached,
-            cu_seqlens=cu_seqlens,
-            max_seqlen=max_seqlen,
-            inplace=True,
-        )
-        return qkv
 
 
 # ---------------------------------------------------------------------------
@@ -594,60 +500,33 @@ def _gelu_ln_ffn(d_model: int, expansion_ratio: float, bias: bool) -> nn.Sequent
 # ---------------------------------------------------------------------------
 
 
-def _scaled_dot_product_attention(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    v: torch.Tensor,
-    *,
-    n_heads: int,
-    d_head: int,
-    seq_id: torch.Tensor | None,
-) -> torch.Tensor:
-    """Scaled dot-product attention with optional chain-aware mask.
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Reference attention ``softmax(Q @ Kᵀ * scaling + mask) @ V``.
 
-    Dispatches in order of preference:
-      1. xformers ``memory_efficient_attention`` — preferred fused kernel,
-         requires ``xformers``, no chain mask.
-      2. Flash Attention 2 (``flash_attn.flash_attn_func``) — secondary
-         fused kernel, requires ``flash-attn``, no chain mask, fp16 /
-         bf16 only.
-      3. PyTorch's ``F.scaled_dot_product_attention`` — last-resort path;
-         also handles the chain-aware mask when ``seq_id`` is present
-         and the fp32 path that Flash Attention 2 does not support.
+    Operates on ``(batch, n_heads, seq_len, head_dim)`` query/key/value and
+    returns ``(attn_output, attn_weights)``; ``attn_output`` is transposed back
+    to ``(batch, seq_len, n_heads, head_dim)`` to match the other
+    ``ALL_ATTENTION_FUNCTIONS`` backends.
     """
-    if seq_id is None and _xformers_available:
-        b, s, _ = q.shape
-        q4 = q.view(b, s, n_heads, d_head)
-        k4 = k.view(b, s, n_heads, d_head)
-        v4 = v.view(b, s, n_heads, d_head)
-        context = xops.memory_efficient_attention(  # type: ignore[union-attr]
-            q4, k4, v4, attn_bias=None, scale=d_head**-0.5
-        )
-        return context.reshape(b, s, n_heads * d_head)
-    if (
-        seq_id is None
-        and _flash_attn_available
-        and q.dtype in (torch.float16, torch.bfloat16)
-    ):
-        b, s, _ = q.shape
-        q4 = q.view(b, s, n_heads, d_head)
-        k4 = k.view(b, s, n_heads, d_head)
-        v4 = v.view(b, s, n_heads, d_head)
-        context = flash_attn_func(  # type: ignore[misc]
-            q4, k4, v4, dropout_p=0.0, softmax_scale=d_head**-0.5
-        )
-        return context.reshape(b, s, n_heads * d_head)  # type: ignore[union-attr]
-    b, s, _ = q.shape
-    q = q.view(b, s, n_heads, -1).transpose(1, 2)
-    k = k.view(b, s, n_heads, -1).transpose(1, 2)
-    v = v.view(b, s, n_heads, -1).transpose(1, 2)
-    if seq_id is not None:
-        mask = (seq_id.unsqueeze(-1) == seq_id.unsqueeze(-2)).unsqueeze(1)
-        context = F.scaled_dot_product_attention(q, k, v, mask)
-    else:
-        context = F.scaled_dot_product_attention(q, k, v)
-    _, h, _, d_out = context.shape
-    return context.transpose(1, 2).reshape(b, s, h * d_out)
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask[:, :, :, : key.shape[-2]]
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
 
 
 class MultiHeadAttention(nn.Module):
@@ -662,12 +541,20 @@ class MultiHeadAttention(nn.Module):
     """
 
     def __init__(
-        self, d_model: int, n_heads: int, bias: bool = False, qk_layernorm: bool = True
+        self,
+        config: ESMCConfig,
+        d_model: int,
+        n_heads: int,
+        bias: bool = False,
+        qk_layernorm: bool = True,
     ):
         super().__init__()
+        self.config = config
         self.d_model = d_model
         self.n_heads = n_heads
         self.d_head = d_model // n_heads
+        self.scaling = self.d_head**-0.5
+        self.attention_dropout = 0.0
 
         assert not bias, "ESMC was trained with bias=False; bias=True not supported"
         self.layernorm_qkv = _make_attn_layernorm_qkv(d_model, bias)
@@ -694,95 +581,50 @@ class MultiHeadAttention(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,
-        seq_id: torch.Tensor | None,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Return ``(context, attn_weights)``.
 
-        ``attn_weights`` is ``None`` unless ``output_attentions=True`` — the
-        fused SDPA backends (xformers, flash-attn 2, ``F.scaled_dot_product_attention``)
-        don't expose attention probabilities, so capturing them forces a
-        materialized ``softmax(Q @ K.T / sqrt(d)) @ V`` path with shape
-        ``(B, H, L, L)``.
+        Attention is computed by the backend selected through
+        ``config._attn_implementation`` (``eager`` / ``sdpa`` /
+        ``flash_attention_2`` / ...). RoPE and QK-LayerNorm are applied here; the
+        backend only computes ``softmax(QKᵀ)V``. ``attn_weights`` is ``None``
+        unless the backend exposes the probabilities — ``output_attentions=True``
+        forces the ``eager`` interface so they are observable.
         """
-        qkv = self.layernorm_qkv(x)
+        b, s, _ = hidden_states.shape
+        qkv = self.layernorm_qkv(hidden_states)
         q, k, v = torch.chunk(qkv, 3, dim=-1)
         q = self.q_ln(q).to(q.dtype)
         k = self.k_ln(k).to(q.dtype)
         q, k = self._apply_rotary(q, k)
 
-        b, s, _ = q.shape
+        # (B, S, D) -> (B, H, S, Dh)
+        q = q.view(b, s, self.n_heads, self.d_head).transpose(1, 2)
+        k = k.view(b, s, self.n_heads, self.d_head).transpose(1, 2)
+        v = v.view(b, s, self.n_heads, self.d_head).transpose(1, 2)
 
-        if output_attentions:
-            # Manual SDPA so attention probabilities are observable.
-            q4 = q.view(b, s, self.n_heads, self.d_head).transpose(1, 2)
-            k4 = k.view(b, s, self.n_heads, self.d_head).transpose(1, 2)
-            v4 = v.view(b, s, self.n_heads, self.d_head).transpose(1, 2)
-            scale = self.d_head**-0.5
-            attn_scores = (q4 @ k4.transpose(-2, -1)) * scale
-            if seq_id is not None:
-                mask = (seq_id.unsqueeze(-1) == seq_id.unsqueeze(-2)).unsqueeze(1)
-                attn_scores = attn_scores.masked_fill(~mask, float("-inf"))
-            attn_weights = torch.softmax(attn_scores, dim=-1)
-            context = (attn_weights @ v4).transpose(1, 2).reshape(b, s, -1)
-            return self.out_proj(context), attn_weights
-
-        context = _scaled_dot_product_attention(
-            q, k, v, n_heads=self.n_heads, d_head=self.d_head, seq_id=seq_id
-        )
-        return self.out_proj(context), None
-
-
-class _FlashMultiHeadAttention(MultiHeadAttention):
-    """Flash-Attention 2 variant of :class:`MultiHeadAttention`."""
-
-    def __init__(
-        self, d_model: int, n_heads: int, bias: bool = False, qk_layernorm: bool = True
-    ):
-        super().__init__(
-            d_model=d_model, n_heads=n_heads, bias=bias, qk_layernorm=qk_layernorm
-        )
-        self.rotary = _TritonRotaryEmbedding(d_model // n_heads)
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        seq_id: torch.Tensor | None,
-        output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        if output_attentions:
-            raise ValueError(
-                "output_attentions=True is not supported with "
-                "attn_implementation='flash_attention_2'. "
-                "Re-load the model with attn_implementation='sdpa' (or 'eager')."
+        attention_interface: Callable = eager_attention_forward
+        if not output_attentions:
+            attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+                self.config._attn_implementation, eager_attention_forward
             )
-        assert seq_id is not None and seq_id.dtype == torch.bool
 
-        seqlens = seq_id.sum(dim=-1, dtype=torch.int32)
-        cu_seqlens = F.pad(torch.cumsum(seqlens, dim=0, dtype=torch.int32), (1, 0))
-        max_seqlen = int(seqlens.max().item())
-
-        qkv = self.layernorm_qkv(x)
-        q, k, v = torch.chunk(qkv, 3, dim=-1)
-        q = self.q_ln(q).to(q.dtype)
-        k = self.k_ln(k).to(q.dtype)
-
-        # ``q``/``k``/``v`` are 2D ``(T, D)`` here: the parent ``ESMCModel.forward``
-        # calls ``unpad_input`` before the transformer stack to produce the
-        # varlen-flat layout that ``flash_attn_varlen_qkvpacked_func`` requires.
-        T = q.shape[0]
-        qkv_packed = torch.stack([q, k, v], dim=1).view(T, 3, self.n_heads, self.d_head)
-        qkv_packed = self.rotary(qkv_packed, cu_seqlens, max_seqlen)
-
-        context = flash_attn_varlen_qkvpacked_func(  # type: ignore[misc]
-            qkv_packed, cu_seqlens, max_seqlen, softmax_scale=self.d_head**-0.5
+        attn_output, attn_weights = attention_interface(
+            self,
+            q,
+            k,
+            v,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
         )
-        n_out, h_out, d_out = context.shape  # type: ignore[union-attr]
-        return (
-            self.out_proj(context.reshape(n_out, h_out * d_out)),  # type: ignore[union-attr]
-            None,
-        )
+        attn_output = attn_output.reshape(b, s, -1)
+        return self.out_proj(attn_output), attn_weights
 
 
 # ---------------------------------------------------------------------------
@@ -807,9 +649,9 @@ class UnifiedTransformerBlock(nn.Module):
 
     def __init__(
         self,
+        config: ESMCConfig,
         d_model: int,
         n_heads: int,
-        use_flash_attn: bool = False,
         bias: bool = False,
         expansion_ratio: float = 4.0,
         residue_scaling_factor: float = 1.0,
@@ -818,8 +660,9 @@ class UnifiedTransformerBlock(nn.Module):
     ):
         super().__init__()
 
-        attn_cls = _FlashMultiHeadAttention if use_flash_attn else MultiHeadAttention
-        self.attn = attn_cls(d_model, n_heads, bias=bias, qk_layernorm=qk_layernorm)
+        self.attn = MultiHeadAttention(
+            config, d_model, n_heads, bias=bias, qk_layernorm=qk_layernorm
+        )
 
         if ffn_type == "swiglu":
             self.ffn = _swiglu_ln_ffn(d_model, expansion_ratio, bias)
@@ -835,17 +678,16 @@ class UnifiedTransformerBlock(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        sequence_id: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
         Args:
             x: ``(batch, seq_len, d_model)``
-            sequence_id: ``(batch, seq_len)`` chain-ID tensor used to restrict
-                attention to tokens within the same chain. SDPA blocks accept
-                an integer tensor (``-1`` marks padding); the flash-attn block
-                takes a ``bool`` padding mask — the caller selects which.
-                ``None`` skips chain-aware masking entirely (fast path).
+            attention_mask: Additive attention bias broadcastable to
+                ``(batch, num_heads, seq_len, seq_len)``, or ``None`` for full
+                (unmasked) attention.
             output_attentions: When ``True``, returns the per-head attention
                 weights for this block alongside the residual output.
 
@@ -855,7 +697,7 @@ class UnifiedTransformerBlock(nn.Module):
             ``(batch, num_heads, seq_len, seq_len)`` or ``None``.
         """
         attn_out, attn_weights = self.attn(
-            x, sequence_id, output_attentions=output_attentions
+            x, attention_mask, output_attentions=output_attentions, **kwargs
         )
         x = x + attn_out / self.scaling_factor
         x = x + self.ffn(x) / self.scaling_factor
@@ -880,6 +722,7 @@ class TransformerStack(nn.Module):
 
     def __init__(
         self,
+        config: ESMCConfig,
         d_model: int,
         n_heads: int,
         n_layers: int,
@@ -888,15 +731,14 @@ class TransformerStack(nn.Module):
         qk_layernorm: bool = True,
         ffn_type: str = "swiglu",
         expansion_ratio: float = 8 / 3,
-        use_flash_attn: bool = False,
     ):
         super().__init__()
         self.blocks = nn.ModuleList(
             [
                 UnifiedTransformerBlock(
+                    config,
                     d_model,
                     n_heads,
-                    use_flash_attn=use_flash_attn,
                     residue_scaling_factor=math.sqrt(n_layers / 36)
                     if scale_residue
                     else 1.0,
@@ -913,9 +755,10 @@ class TransformerStack(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        sequence_id: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         layers_to_collect: list[int] | None = None,
         output_attentions: bool = False,
+        **kwargs,
     ) -> tuple[
         torch.Tensor,
         torch.Tensor,
@@ -926,7 +769,8 @@ class TransformerStack(nn.Module):
 
         Args:
             x: ``(batch, seq_len, d_model)``
-            sequence_id: Optional chain-id tensor forwarded to each block.
+            attention_mask: Additive attention bias forwarded to each block, or
+                ``None`` for full attention.
             layers_to_collect: Layer indices (0-based pre-block inputs plus
                 ``n_layers`` for the post-norm output) whose hidden states
                 should be returned.
@@ -947,7 +791,9 @@ class TransformerStack(nn.Module):
         for layer_idx, block in enumerate(self.blocks):
             if layer_idx in layers_to_collect:
                 collected.append(x)
-            x, attn_weights = block(x, sequence_id, output_attentions=output_attentions)
+            x, attn_weights = block(
+                x, attention_mask, output_attentions=output_attentions, **kwargs
+            )
             if output_attentions and attn_weights is not None:
                 all_attentions.append(attn_weights)
 
@@ -1010,15 +856,12 @@ class ESMCModel(ESMCPreTrainedModel):
 
     def __init__(self, config: ESMCConfig):
         super().__init__(config)
-        self._use_flash_attn = (
-            _flash_attn_available and config._attn_implementation == "flash_attention_2"
-        )
         self.embed = nn.Embedding(config.vocab_size, config.d_model)
         self.transformer = TransformerStack(
+            config,
             config.d_model,
             config.n_heads,
             config.n_layers,
-            use_flash_attn=self._use_flash_attn,
         )
         self._sae_models: nn.ModuleDict = nn.ModuleDict()
         self.post_init()
@@ -1197,52 +1040,47 @@ class ESMCModel(ESMCPreTrainedModel):
             layers_to_collect = []
 
         user_supplied_sequence_id = sequence_id is not None
-        if sequence_id is not None:
+        if user_supplied_sequence_id:
             bool_mask = sequence_id >= 0
         else:
             if attention_mask is None:
                 attention_mask = input_ids != self.config.pad_token_id
             assert attention_mask is not None
             bool_mask = attention_mask.bool()
-            sequence_id = bool_mask.to(torch.long) - 1
 
         x = self.embed(input_ids)
-        b, l_ = x.shape[:2]
 
-        if self._use_flash_attn:
-            if user_supplied_sequence_id and (sequence_id > 0).any():
+        if user_supplied_sequence_id:
+            if self.config._attn_implementation == "flash_attention_2" and (
+                sequence_id > 0
+            ).any():
                 raise ValueError(
                     "Multi-chain ``sequence_id`` (any value > 0) is not "
                     "supported with attn_implementation='flash_attention_2'. "
                     "Re-load the model with attn_implementation='sdpa' (or "
                     "'eager') for chain-aware attention masking."
                 )
-            assert unpad_input is not None
-            x, indices, *_ = unpad_input(x, bool_mask)
+            # Block-diagonal chain mask: a token attends only to tokens sharing
+            # its ``sequence_id``. Additive bias broadcast over heads, shape
+            # ``(batch, 1, seq_len, seq_len)``; handled by the eager / sdpa paths.
+            same_chain = sequence_id.unsqueeze(-1) == sequence_id.unsqueeze(-2)
+            attn_bias = torch.zeros(
+                same_chain.shape, dtype=x.dtype, device=x.device
+            ).masked_fill_(~same_chain, torch.finfo(x.dtype).min)
+            attn_bias = attn_bias.unsqueeze(1)
         else:
-            indices = None
+            attn_bias = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=x,
+                attention_mask=attention_mask,
+            )
 
-        if self._use_flash_attn:
-            trans_seq_id = bool_mask
-        elif user_supplied_sequence_id:
-            trans_seq_id = sequence_id
-        elif bool_mask.all() and not output_attentions:
-            # Fused SDPA fast path (xformers / flash) is correct only when the
-            # mask is uniform; output_attentions forces the manual branch.
-            trans_seq_id = None
-        else:
-            trans_seq_id = sequence_id
         last_hidden_state, _, collected, attentions = self.transformer(
             x,
-            sequence_id=trans_seq_id,
+            attention_mask=attn_bias,
             layers_to_collect=layers_to_collect,
             output_attentions=output_attentions,
         )
-
-        if self._use_flash_attn:
-            assert indices is not None and pad_input is not None
-            last_hidden_state = pad_input(last_hidden_state, indices, b, l_)
-            collected = [pad_input(h, indices, b, l_) for h in collected]
 
         # Stack once; reused for both SAE and hidden-state output.
         collected_tensor: torch.Tensor | None = (
