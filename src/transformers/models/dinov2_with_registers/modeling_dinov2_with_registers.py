@@ -529,6 +529,11 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
         [1, 768, 16, 16]
         ```"""
         embedding_output = self.embeddings(pixel_values)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
         # Iterate layers directly to collect per-stage hidden_states inline for feature_maps;
         # @capture_outputs handles injection into the returned BackboneOutput.
         hidden_state = embedding_output
