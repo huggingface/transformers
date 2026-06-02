@@ -140,8 +140,6 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     pos_embed_rescale (`float`, *optional*, defaults to 2.0):
         Amount to randomly rescale position embedding coordinates in log-uniform value in [1/rescale, rescale],
         applied only in training mode if not `None`.
-    apply_layernorm (`bool`, *optional*, defaults to `True`):
-        Whether to apply layer normalization to the feature maps when used as backbone.
     reshape_hidden_states (`bool`, *optional*, defaults to `True`):
         Whether to reshape the hidden states to spatial dimensions when used as backbone.
     use_mask_token (`bool`, *optional*, defaults to `False`):
@@ -191,7 +189,6 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     hidden_act: str = "silu"
     attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
-    layer_norm_eps: float = 1e-5
     rope_theta: float = 100.0
     image_size: int | list[int] | tuple[int, int] = 224
     num_channels: int = 3
@@ -209,7 +206,6 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     pos_embed_rescale: float | None = 2.0
     _out_features: list[str] | None = None
     _out_indices: list[int] | None = None
-    apply_layernorm: bool = True
     reshape_hidden_states: bool = True
     sub_configs = {"head_config": Sapiens2HeadConfig}
     use_mask_token: bool = False

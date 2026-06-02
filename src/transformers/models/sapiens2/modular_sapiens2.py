@@ -1081,8 +1081,6 @@ class Sapiens2Config(DINOv3ViTConfig):
     pos_embed_rescale (`float`, *optional*, defaults to 2.0):
         Amount to randomly rescale position embedding coordinates in log-uniform value in [1/rescale, rescale],
         applied only in training mode if not `None`.
-    apply_layernorm (`bool`, *optional*, defaults to `True`):
-        Whether to apply layer normalization to the feature maps when used as backbone.
     reshape_hidden_states (`bool`, *optional*, defaults to `True`):
         Whether to reshape the hidden states to spatial dimensions when used as backbone.
     use_mask_token (`bool`, *optional*, defaults to `False`):
@@ -1143,6 +1141,9 @@ class Sapiens2Config(DINOv3ViTConfig):
     semantic_loss_ignore_index: int = 255
     flip_pairs: list[list[int]] | None = None
     head_config: Sapiens2HeadConfig | dict | None = None
+
+    layer_norm_eps = AttributeError()  # inherited from DINOv3 but not used
+    apply_layernorm = AttributeError()  # inherited from DINOv3 but not used
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads_per_layer is None:
