@@ -32,6 +32,8 @@ if is_torchao_available():
 
 if is_torch_available():
     import torch
+    torch.set_num_threads(1)
+    assert torch.get_num_threads() == 1
     import torch.distributed as dist
     import torch.multiprocessing as mp
     from torch.multiprocessing.spawn import ProcessExitedException, ProcessRaisedException
@@ -673,6 +675,7 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
+            assert torch.get_num_threads() == 1
             _init_distributed(tp=self.tensor_parallel_size)(_test_tp_forward_impl)(tmp_dir, model_class, atol, rtol)
 
     @is_tensor_parallel_test
@@ -691,6 +694,7 @@ class TensorParallelTesterMixin(ABC):
 
             # TODO: only necessary for read-only cache systems; replace with a shared helper
 
+            assert torch.get_num_threads() == 1
             _init_distributed(tp=self.tensor_parallel_size)(_test_tp_backward_impl)(
                 tmp_dir, model_class, atol, rtol
             )
@@ -712,6 +716,7 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
             # TODO: only necessary for read-only cache systems; replace with a shared helper
+            assert torch.get_num_threads() == 1
             _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_impl)(
                 tmp_dir, model_class, atol, rtol, max_new_tokens
             )
@@ -732,6 +737,7 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
+            assert torch.get_num_threads() == 1
             _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_quantized_impl)(
                 tmp_dir, model_class, max_new_tokens
             )
@@ -750,6 +756,7 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
+            assert torch.get_num_threads() == 1
             _init_distributed(tp=self.tensor_parallel_size)(_test_ep_forward_impl)(tmp_dir, model_class, atol, rtol)
 
     @is_tensor_parallel_test
@@ -766,4 +773,5 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
+            assert torch.get_num_threads() == 1
             _init_distributed(tp=self.tensor_parallel_size)(_test_ep_backward_impl)(tmp_dir, model_class, atol, rtol)
