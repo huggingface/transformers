@@ -40,90 +40,21 @@ except ImportError:
     pad_input = None  # type: ignore[assignment]
     FLASH_ATTN_AVAILABLE = False
 
-try:
-    from cuequivariance_torch import (  # type: ignore[import]
-        attention_pair_bias as _cue_attn_pair_bias,
-    )
-    from cuequivariance_torch.primitives.triangle import (  # type: ignore[import]
-        triangle_multiplicative_update as _cue_tri_mul,
-    )
-
-    CUE_AVAILABLE = True
-except ImportError:
-    _cue_attn_pair_bias = None  # type: ignore[assignment]
-    _cue_tri_mul = None  # type: ignore[assignment]
-    CUE_AVAILABLE = False
-
-# Vendored inference-only Triton kernels.
-try:
-    from .kernels import (
-        FusedDropoutResidual as _FusedDropoutResidual,  # type: ignore[import]
-    )
-    from .kernels import (
-        FusedLNLinearSwiGLU as _FusedLNLinearSwiGLU,  # type: ignore[import]
-    )
-    from .kernels import fused_pair_bias as _fused_pair_bias  # type: ignore[import]
-    from .kernels import (  # type: ignore[import]
-        triangle_multiplicative_update_with_residual as _fused_trimul_with_residual,
-    )
-
-    TRITON_KERNELS_AVAILABLE = True
-except ImportError:
-    _fused_pair_bias = None  # type: ignore[assignment]
-    _fused_trimul_with_residual = None  # type: ignore[assignment]
-    _FusedLNLinearSwiGLU = None  # type: ignore[assignment]
-    _FusedDropoutResidual = None  # type: ignore[assignment]
-    TRITON_KERNELS_AVAILABLE = False
-
 from .configuration_esmfold2 import ESMFold2Config
-
-BACKEND_FUSED = "fused"
-BACKEND_CUEQ = "cuequivariance"
-_VALID_BACKENDS = (None, BACKEND_FUSED, BACKEND_CUEQ)
-
-
-def _fused_active(module: nn.Module, tensor: Tensor) -> bool:
-    """Common preconditions for the vendored fused Triton inference kernels."""
-    return (
-        TRITON_KERNELS_AVAILABLE
-        and getattr(module, "_kernel_backend", None) == BACKEND_FUSED
-        and not torch.is_grad_enabled()
-        and tensor.is_cuda
-    )
-
-
-def _cueq_active(module: nn.Module) -> bool:
-    return CUE_AVAILABLE and getattr(module, "_kernel_backend", None) == BACKEND_CUEQ
 
 
 class DropoutResidual(nn.Module):
-    """``residual + dropout(delta)`` with row/col-shared dropout.
+    """``residual + dropout(delta)`` with row/col-shared dropout."""
 
-    Same signature on both paths. ``use_fused_kernels=True`` + ``batch_dim=1``
-    routes through ``FusedDropoutResidual`` (single-pass over pair tensor,
-    in-place residual add). Falls back to unfused otherwise.
-    """
-
-    def __init__(
-        self, r: float, batch_dim: int, use_fused_kernels: bool = False
-    ) -> None:
+    def __init__(self, r: float, batch_dim: int) -> None:
         super().__init__()
         assert batch_dim in (1, 2), f"batch_dim must be 1 or 2, got {batch_dim}"
-        self._use_fused_kernels = (
-            use_fused_kernels and batch_dim == 1 and _FusedDropoutResidual is not None
-        )
         self._batch_dim = batch_dim
         self._r = r
-        if self._use_fused_kernels:
-            assert _FusedDropoutResidual is not None
-            self._impl: nn.Module = _FusedDropoutResidual(r)
-        else:
-            self._impl = nn.Dropout(r)
+        self._impl = nn.Dropout(r)
 
     def forward(self, residual: Tensor, delta: Tensor) -> Tensor:
-        if self._use_fused_kernels:
-            return self._impl(residual, delta)
-        # Unfused: row/col-shared dropout via [1, ...] mask broadcast.
+        # Row/col-shared dropout via [1, ...] mask broadcast.
         if self._r == 0.0 or not self.training:
             return residual + delta
         shape = list(delta.shape)
@@ -983,42 +914,6 @@ class AttentionPairBias(nn.Module):
             self.pair_norm = nn.LayerNorm(d_pair, eps=1e-5)
             self.pair_bias_proj = nn.Linear(d_pair, num_heads, bias=False)
 
-        self._kernel_backend: str | None = None
-
-    def set_kernel_backend(self, backend: str | None) -> None:
-        if backend not in _VALID_BACKENDS:
-            raise ValueError(
-                f"backend must be one of {_VALID_BACKENDS}, got {backend!r}"
-            )
-        self._kernel_backend = backend
-
-    def _is_zero_beta(self, beta: Tensor | float) -> bool:
-        if isinstance(beta, (int, float)):
-            return beta == 0.0
-        return bool((beta == 0).all())
-
-    def _can_use_fused_pair_bias(
-        self, z: Tensor, n_queries: int, beta: Tensor | float
-    ) -> bool:
-        return (
-            _fused_active(self, z)
-            and z.dim() == 4
-            and self._is_zero_beta(beta)
-            and hasattr(self, "pair_bias_proj")
-            and hasattr(self, "pair_norm")
-        )
-
-    def _can_use_cueq_pair_bias(
-        self, z: Tensor, n_queries: int, beta: Tensor | float
-    ) -> bool:
-        return (
-            _cueq_active(self)
-            and n_queries > 750
-            and z.dim() == 4
-            and self._is_zero_beta(beta)
-            and hasattr(self, "pair_bias_proj")
-        )
-
     def forward(
         self,
         a: Tensor,
@@ -1054,91 +949,30 @@ class AttentionPairBias(nn.Module):
                 num_diffusion_samples, dim=0
             )
 
-        if self._can_use_fused_pair_bias(z, n_queries, beta):
-            kernel_mask = (
-                attention_mask
-                if attention_mask is not None
-                else torch.ones(bsz, n_queries, device=a.device, dtype=torch.bool)
-            )
-            pair_norm_w = self.pair_norm.weight
-            pair_norm_b = (
-                self.pair_norm.bias
-                if self.pair_norm.bias is not None
-                else torch.zeros_like(pair_norm_w)
-            )
-            z_bf = z if z.dtype == torch.bfloat16 else z.to(torch.bfloat16)
-            bias = _fused_pair_bias(  # type: ignore[misc]
-                z_bf,
-                kernel_mask,
-                self.pair_bias_proj.weight,
-                num_heads=self.num_heads,
-                pair_norm_w=pair_norm_w,
-                pair_norm_b=pair_norm_b,
-            )  # (B, H, Q, K)
-            q_bhqd = q.transpose(1, 2)
-            k_bhqd = k.transpose(1, 2)
-            v_bhqd = v.transpose(1, 2)
-            attn_out = F.scaled_dot_product_attention(
-                q_bhqd, k_bhqd, v_bhqd, attn_mask=bias.to(q_bhqd.dtype)
-            )
-            g = torch.sigmoid(self.g_proj(x)).view(
-                bsz, n_queries, self.num_heads, self.head_dim
-            )
-            ctx = g * attn_out.transpose(1, 2)
-            out = self.out_proj(ctx.reshape(bsz, n_queries, d_model))
-            if s is not None:
-                out = torch.sigmoid(self.out_gate(s)) * out
-            return out
+        # Standard attention with pair bias
+        g = torch.sigmoid(self.g_proj(x)).view(
+            bsz, n_queries, self.num_heads, self.head_dim
+        )
 
-        if self._can_use_cueq_pair_bias(z, n_queries, beta):
-            kernel_mask = (
-                attention_mask
-                if attention_mask is not None
-                else torch.ones(bsz, n_queries, device=a.device, dtype=torch.bool)
-            )
-            out, _ = _cue_attn_pair_bias(  # type: ignore[misc]
-                s=x,
-                q=q.transpose(1, 2),
-                k=k.transpose(1, 2),
-                v=v.transpose(1, 2),
-                z=z,
-                mask=kernel_mask,
-                num_heads=self.num_heads,
-                w_proj_z=self.pair_bias_proj.weight,
-                w_proj_g=self.g_proj.weight,
-                w_proj_o=self.out_proj.weight,
-                w_ln_z=self.pair_norm.weight,
-                b_ln_z=self.pair_norm.bias,
-                return_z_proj=False,
-                is_cached_z_proj=False,
-            )
+        logits = torch.einsum("... i h d, ... j h d -> ... i j h", q, k) * self.scale
+
+        if z.dim() == 4:
+            pair_bias = self.pair_bias_proj(self.pair_norm(z))
         else:
-            # Standard attention with pair bias
-            g = torch.sigmoid(self.g_proj(x)).view(
-                bsz, n_queries, self.num_heads, self.head_dim
+            pair_bias = z.unsqueeze(-1)
+        logits = logits + pair_bias.to(dtype=logits.dtype)
+
+        if attention_mask is not None:
+            min_val = torch.finfo(logits.dtype).min
+            mask_bias = torch.where(
+                attention_mask.bool()[:, None, :, None], 0.0, min_val
             )
+            logits = logits + mask_bias.to(dtype=logits.dtype)
 
-            logits = (
-                torch.einsum("... i h d, ... j h d -> ... i j h", q, k) * self.scale
-            )
-
-            if z.dim() == 4:
-                pair_bias = self.pair_bias_proj(self.pair_norm(z))
-            else:
-                pair_bias = z.unsqueeze(-1)
-            logits = logits + pair_bias.to(dtype=logits.dtype)
-
-            if attention_mask is not None:
-                min_val = torch.finfo(logits.dtype).min
-                mask_bias = torch.where(
-                    attention_mask.bool()[:, None, :, None], 0.0, min_val
-                )
-                logits = logits + mask_bias.to(dtype=logits.dtype)
-
-            attn = torch.softmax(logits, dim=-2).to(dtype=v.dtype)
-            ctx = torch.einsum("... i j h, ... j h d -> ... i h d", attn, v)
-            ctx = g * ctx
-            out = self.out_proj(ctx.reshape(bsz, n_queries, d_model))
+        attn = torch.softmax(logits, dim=-2).to(dtype=v.dtype)
+        ctx = torch.einsum("... i j h, ... j h d -> ... i h d", attn, v)
+        ctx = g * ctx
+        out = self.out_proj(ctx.reshape(bsz, n_queries, d_model))
 
         if s is not None:
             out = torch.sigmoid(self.out_gate(s)) * out
@@ -1234,10 +1068,6 @@ class DiffusionTransformer(nn.Module):
                 for _ in range(num_blocks)
             ]
         )
-
-    def set_kernel_backend(self, backend: str | None) -> None:
-        for attn in self.attn_blocks:
-            cast(AttentionPairBias, attn).set_kernel_backend(backend)
 
     def forward(
         self,
@@ -1448,9 +1278,6 @@ class DiffusionModule(nn.Module):
         self.s_step_norm = nn.LayerNorm(c_token)
         self.token_norm = nn.LayerNorm(c_token)
 
-    def set_kernel_backend(self, backend: str | None) -> None:
-        self.token_transformer.set_kernel_backend(backend)
-
     def forward(
         self,
         x_noisy: Tensor,
@@ -1609,9 +1436,6 @@ class DiffusionStructureHead(nn.Module):
         self.inference_s_min = sh.inference_s_min
         self.inference_p = sh.inference_p
         self.inference_num_steps = sh.inference_num_steps
-
-    def set_kernel_backend(self, backend: str | None) -> None:
-        self.diffusion_module.set_kernel_backend(backend)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -2304,7 +2128,6 @@ class TriangleMultiplicativeBlock(nn.Module):
         )
         self.proj_gate = nn.Linear(self.input_channels, self.input_channels, bias=False)
 
-        self._use_kernels: bool = False
         # Default chunked for memory on long sequences; tests override with
         # ``set_chunk_size(None)`` for the unchunked path under bit-exact bf16
         # parity checks.
@@ -2312,15 +2135,6 @@ class TriangleMultiplicativeBlock(nn.Module):
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self._chunk_size = chunk_size
-
-    def split_kernel_weights(self) -> tuple[Tensor, Tensor]:
-        return (
-            self.proj_bundle.weight[: 2 * self.latent_channels, :],
-            self.proj_bundle.weight[2 * self.latent_channels :, :],
-        )
-
-    def _kernel_flow_direction(self) -> str:
-        return self.flow
 
     def _triangular_contract(self, left_stream: Tensor, right_stream: Tensor) -> Tensor:
         return torch.einsum(self._einsum_equation, left_stream, right_stream)
@@ -2347,37 +2161,6 @@ class TriangleMultiplicativeBlock(nn.Module):
     def forward(self, pair_grid: Tensor, visibility: Tensor | None = None) -> Tensor:
         if visibility is None:
             visibility = pair_grid.new_ones(pair_grid.shape[:-1])
-
-        if self._use_kernels:
-            p_in_weight, g_in_weight = self.split_kernel_weights()
-
-            try:
-                return _cue_tri_mul(  # type: ignore[misc]
-                    pair_grid,
-                    direction=self._kernel_flow_direction(),
-                    mask=visibility,
-                    norm_in_weight=self.norm_start.weight,
-                    norm_in_bias=self.norm_start.bias,
-                    p_in_weight=p_in_weight,
-                    g_in_weight=g_in_weight,
-                    norm_out_weight=self.norm_mix.weight,
-                    norm_out_bias=self.norm_mix.bias,
-                    p_out_weight=self.proj_emit.weight,
-                    g_out_weight=self.proj_gate.weight,
-                    eps=_EPS,
-                )
-            except Exception as e:
-                import logging as _logging
-
-                _logging.getLogger(__name__).warning(
-                    "cuequivariance triangle_multiplicative_update kernel failed "
-                    "(flow=%s, shape=%s, dtype=%s); falling back to chunked einsum. "
-                    "Error: %s",
-                    self.flow,
-                    tuple(pair_grid.shape),
-                    pair_grid.dtype,
-                    e,
-                )
 
         normalized_grid = self.norm_start(pair_grid)
         bundled = self.proj_bundle(normalized_grid)
@@ -2407,15 +2190,6 @@ class TriangleMultiplicativeUpdate(nn.Module):
             input_channels=dim, latent_channels=dim, flow=flow
         )
 
-    def set_kernel_backend(self, backend: str | None) -> None:
-        # Engine uses cueq when backend=="cuequivariance"; the "fused" backend
-        # routes through the parent PairUpdateBlock's fused path (bypassing this).
-        self._engine._use_kernels = backend == BACKEND_CUEQ
-        if backend == BACKEND_CUEQ and not CUE_AVAILABLE:
-            raise RuntimeError(
-                "backend='cuequivariance' but cuequivariance_torch is not installed."
-            )
-
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self._engine.set_chunk_size(chunk_size)
 
@@ -2437,88 +2211,11 @@ class Transition(nn.Module):
         self.ffn = SwiGLUMLP(d_model, expansion_ratio=expansion_ratio, bias=False)
         # Default chunked; set_chunk_size(None) disables for bit-exact parity tests.
         self._chunk_size: int | None = 64
-        self._fused_swiglu: nn.Module | None = None
-        self._kernel_backend: str | None = None
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self._chunk_size = chunk_size
 
-    def set_kernel_backend(self, backend: str | None) -> None:
-        """Install / uninstall FusedLNLinearSwiGLU (no cueq equivalent)."""
-        if backend not in _VALID_BACKENDS:
-            raise ValueError(
-                f"backend must be one of {_VALID_BACKENDS}, got {backend!r}"
-            )
-        self._kernel_backend = backend
-        if backend == BACKEND_FUSED and TRITON_KERNELS_AVAILABLE:
-            assert _FusedLNLinearSwiGLU is not None
-            d_model = self.norm.normalized_shape[0]
-            d_inner = self.ffn.hidden_features
-            has_ln_bias = self.norm.bias is not None
-            device = self.ffn.w12.weight.device
-            dtype = self.ffn.w12.weight.dtype
-            fused = _FusedLNLinearSwiGLU(
-                d_model=d_model,
-                d_inner=d_inner,
-                has_ln_bias=has_ln_bias,
-                device=device,
-                dtype=dtype,
-            )
-            with torch.no_grad():
-                fused.LN_W.copy_(self.norm.weight)
-                if has_ln_bias:
-                    fused.LN_B.copy_(self.norm.bias)  # type: ignore[union-attr]
-                # FusedLNLinearSwiGLU.W12 is (d_model, 2*d_inner); transpose nn.Linear once.
-                fused.W12.copy_(self.ffn.w12.weight.t().contiguous())
-            self._fused_swiglu = fused.eval().requires_grad_(False)
-        else:
-            self._fused_swiglu = None
-
-    def _can_use_fused_path(self, x: Tensor) -> bool:
-        return (
-            _fused_active(self, x)
-            and self._fused_swiglu is not None
-            and x.dtype == torch.bfloat16
-        )
-
-    def _swiglu_pre_w3(self, x_normed: Tensor) -> Tensor:
-        """SwiGLU through silu(x1)*x2, before the final w3."""
-        ffn = self.ffn
-        x12 = ffn.w12(x_normed)
-        x1, x2 = x12.split(ffn.hidden_features, dim=-1)
-        return F.silu(x1) * x2
-
-    def _addmm_residual(self, x: Tensor, hidden: Tensor) -> Tensor:
-        """x + w3(hidden) via single cuBLAS addmm — avoids transition-output allocation."""
-        ffn = self.ffn
-        x_shape = x.shape
-        out = torch.addmm(
-            x.contiguous().view(-1, x_shape[-1]),
-            hidden.view(-1, hidden.shape[-1]),
-            ffn.w3.weight.t(),
-        )
-        return out.view(x_shape)
-
     def forward(self, x: Tensor) -> Tensor:
-        # Inference-only fast path (addmm-fused residual + pre-alloc out)
-        # — diverges bit-exactly from ``x + ffn(norm(x))`` so we only use
-        # it when grad is disabled (binder-design / bit-exact tests run
-        # with grad on and need the reference path).
-        if not torch.is_grad_enabled() and self._can_use_fused_path(x):
-            fused = self._fused_swiglu
-            assert fused is not None
-            pre_w3 = fused
-            if self._chunk_size is None or x.shape[1] <= self._chunk_size:
-                hidden = pre_w3(x)
-                return self._addmm_residual(x, hidden)
-            out = torch.empty_like(x)
-            for s in range(0, x.shape[1], self._chunk_size):
-                e = min(s + self._chunk_size, x.shape[1])
-                sl = x[:, s:e]
-                hidden = pre_w3(sl)
-                out[:, s:e] = self._addmm_residual(sl, hidden)
-            return out
-        # Reference path — bit-exact with main: x + ffn(norm(x)).
         if self._chunk_size is None or x.shape[1] <= self._chunk_size:
             return x + self.ffn(self.norm(x))
         out_list: list[Tensor] = []
@@ -2537,73 +2234,19 @@ class PairUpdateBlock(nn.Module):
         self.tri_mul_out = TriangleMultiplicativeUpdate(dim=d_pair, _outgoing=True)
         self.tri_mul_in = TriangleMultiplicativeUpdate(dim=d_pair, _outgoing=False)
         self.pair_transition = Transition(d_pair, expansion_ratio=expansion_ratio)
-        self._kernel_backend: str | None = None
         # Row-shared dropout-residual; r=0 for inference (HF model is inference-only).
-        # backend='fused' swaps in the FusedDropoutResidual Triton kernel.
-        self.row_drop = DropoutResidual(0.0, batch_dim=1, use_fused_kernels=False)
-
-    def set_kernel_backend(self, backend: str | None) -> None:
-        if backend not in _VALID_BACKENDS:
-            raise ValueError(
-                f"backend must be one of {_VALID_BACKENDS}, got {backend!r}"
-            )
-        self.tri_mul_out.set_kernel_backend(backend)
-        self.tri_mul_in.set_kernel_backend(backend)
-        self.pair_transition.set_kernel_backend(backend)
-        self._kernel_backend = backend
-        self.row_drop = DropoutResidual(
-            0.0, batch_dim=1, use_fused_kernels=(backend == BACKEND_FUSED)
-        )
+        self.row_drop = DropoutResidual(0.0, batch_dim=1)
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self.tri_mul_out.set_chunk_size(chunk_size)
         self.tri_mul_in.set_chunk_size(chunk_size)
         self.pair_transition.set_chunk_size(chunk_size)
 
-    def _can_use_fused_trimul_with_residual(self, pair: Tensor) -> bool:
-        return _fused_active(self, pair) and pair.dtype == torch.bfloat16
-
-    def _fused_trimul_with_residual(
-        self, pair: Tensor, direction: str, pair_attention_mask: Tensor | None
-    ) -> Tensor:
-        """Fused TriMul+residual call; weights from the corresponding engine."""
-        tri = self.tri_mul_out if direction == "outgoing" else self.tri_mul_in
-        engine: TriangleMultiplicativeBlock = tri._engine  # type: ignore[assignment]
-        p_in_weight, g_in_weight = engine.split_kernel_weights()
-
-        def _bf16(t: Tensor) -> Tensor:
-            return t if t.dtype == torch.bfloat16 else t.to(torch.bfloat16)
-
-        return _fused_trimul_with_residual(  # type: ignore[misc]
-            pair,
-            direction,
-            residual=pair,
-            drop_mask=None,  # inference: no dropout, matches internal's eval path
-            norm_in_weight=_bf16(engine.norm_start.weight),
-            norm_in_bias=_bf16(engine.norm_start.bias),
-            p_in_weight=_bf16(p_in_weight),
-            g_in_weight=_bf16(g_in_weight),
-            norm_out_weight=_bf16(engine.norm_mix.weight),
-            norm_out_bias=_bf16(engine.norm_mix.bias),
-            p_out_weight=_bf16(engine.proj_emit.weight),
-            g_out_weight=_bf16(engine.proj_gate.weight),
-            mask=pair_attention_mask,
-            eps=_EPS,
-        )
-
     def forward(
         self, pair: Tensor, pair_attention_mask: Tensor | None = None
     ) -> Tensor:
-        if self._can_use_fused_trimul_with_residual(pair):
-            pair = self._fused_trimul_with_residual(
-                pair, "outgoing", pair_attention_mask
-            )
-            pair = self._fused_trimul_with_residual(
-                pair, "incoming", pair_attention_mask
-            )
-        else:
-            pair = self.row_drop(pair, self.tri_mul_out(pair, mask=pair_attention_mask))
-            pair = self.row_drop(pair, self.tri_mul_in(pair, mask=pair_attention_mask))
+        pair = self.row_drop(pair, self.tri_mul_out(pair, mask=pair_attention_mask))
+        pair = self.row_drop(pair, self.tri_mul_in(pair, mask=pair_attention_mask))
         pair = self.pair_transition(pair)
         return pair
 
@@ -2622,10 +2265,6 @@ class FoldingTrunk(nn.Module):
             ]
         )
 
-    def set_kernel_backend(self, backend: str | None) -> None:
-        for block in self.blocks:
-            cast(PairUpdateBlock, block).set_kernel_backend(backend)
-
     def set_chunk_size(self, chunk_size: int | None) -> None:
         for block in self.blocks:
             cast(PairUpdateBlock, block).set_chunk_size(chunk_size)
@@ -2633,23 +2272,12 @@ class FoldingTrunk(nn.Module):
     def forward(
         self, pair: Tensor, pair_attention_mask: Tensor | None = None
     ) -> Tensor:
-        # Cast pair → bf16 internally when the fused trimul backend is enabled
-        # (its bwd kernel requires bf16). Other backends keep the input dtype.
-        orig_dtype = pair.dtype
-        fused_on = (
-            len(self.blocks) > 0
-            and getattr(self.blocks[0], "_kernel_backend", None) == BACKEND_FUSED
-        )
-        if pair.is_cuda and fused_on and orig_dtype != torch.bfloat16:
-            pair = pair.to(torch.bfloat16)
         for block in self.blocks:
             fn = partial(block, pair_attention_mask=pair_attention_mask)
             if torch.is_grad_enabled():
                 pair = checkpoint(fn, pair, use_reentrant=False)  # pyright: ignore
             else:
                 pair = fn(pair)
-        if pair.dtype != orig_dtype:
-            pair = pair.to(orig_dtype)
         return pair
 
 
