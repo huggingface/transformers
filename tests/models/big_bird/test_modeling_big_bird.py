@@ -898,11 +898,15 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         model = BigBirdForMaskedLM.from_pretrained("google/bigbird-roberta-base")
         model.to(torch_device)
 
-        input_ids = tokenizer("The goal of life is [MASK] .", return_tensors="pt").input_ids.to(torch_device)
+        # Don't insert spaces around `[MASK]`; the tokenizer now keeps a leading
+        # space `▁` as a separate token, which would shift [MASK] off position
+        # 6 and the model would predict `<unk>` for the stray space token.
+        input_ids = tokenizer("The goal of life is[MASK].", return_tensors="pt").input_ids.to(torch_device)
+
+        mask_pos = (input_ids[0] == tokenizer.mask_token_id).nonzero().flatten()[0].item()
         logits = model(input_ids).logits
 
-        # [MASK] is token at 6th position
-        pred_token = tokenizer.decode(torch.argmax(logits[0, 6:7], axis=-1))
+        pred_token = tokenizer.decode(torch.argmax(logits[0, mask_pos]))
         self.assertEqual(pred_token, "happiness")
 
     def test_auto_padding(self):
