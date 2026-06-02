@@ -1647,6 +1647,9 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             Whether to dequantize the model during loading.
         modules_to_not_convert (`list`, *optional*):
             A list of module names that should not be converted during quantization.
+        scale_fmt (`str`, *optional*, defaults to `"float"`):
+            Storage dtype of the per-block weight scales: `"float"` (fp32, V3-style) or
+            `"ue8m0"` (1-byte `torch.float8_e8m0fnu`, V4-style).
     """
 
     def __init__(
@@ -1655,6 +1658,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         weight_block_size: tuple[int, int] = (128, 128),
         dequantize: bool = False,
         modules_to_not_convert: list | None = None,
+        scale_fmt: str = "float",
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.FP8
@@ -1662,6 +1666,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         self.activation_scheme = activation_scheme
         self.weight_block_size = weight_block_size
         self.dequantize = dequantize
+        self.scale_fmt = scale_fmt
         self.post_init()
 
     def post_init(self):
@@ -1675,6 +1680,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError("weight_block_size must be a tuple of two integers")
         if self.weight_block_size is not None and (self.weight_block_size[0] <= 0 or self.weight_block_size[1] <= 0):
             raise ValueError("weight_block_size must be a tuple of two positive integers")
+        if self.scale_fmt not in ("float", "ue8m0"):
+            raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
 
     def get_loading_attributes(self):
         return {"dequantize": self.dequantize, "modules_to_not_convert": self.modules_to_not_convert}
