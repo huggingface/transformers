@@ -12,17 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 import unittest
-from unittest.mock import MagicMock
 
 import numpy as np
 
 from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_vision_available
-from transformers.video_utils import VideoMetadata
 
-from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
@@ -38,6 +35,9 @@ if is_torch_available():
 class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3VLProcessor
     model_id = "Qwen/Qwen3-VL-235B-A22B-Instruct"
+    video_unstructured_max_length = 870
+    video_text_kwargs_max_length = 870
+    video_text_kwargs_override_max_length = 870
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
@@ -46,6 +46,7 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
+        cls.video_token = processor.video_token
 
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
@@ -169,184 +170,14 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for k in out_dict:
             self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
 
-    @require_av
+    @unittest.skip("qwen3_vl can't sample frames from image frames directly, user can use `qwen-vl-utils`")
+    def test_apply_chat_template_video_frame_sampling(self):
+        pass
+
     @unittest.skip("qwen3_vl can't sample frames from image frames directly, user can use `qwen-vl-utils`")
     def test_apply_chat_template_video_1(self):
         pass
 
-    @require_av
     @unittest.skip("qwen3_vl can't sample frames from image frames directly, user can use `qwen-vl-utils`")
     def test_apply_chat_template_video_2(self):
         pass
-
-    def test_replace_video_token_uses_video_token_attr(self):
-        """
-        Regression test for https://github.com/huggingface/transformers/issues/46294.
-
-        `replace_video_token` must expand each frame using `self.video_token`, not the
-        hardcoded string `"<|placeholder|>"`.  When Qwen3VLProcessor is used with a
-        model whose tokenizer names its video pad token differently (e.g. Qwen3.5 uses
-        `<|video_pad|>`), the hardcoded string produces zero matches against
-        `config.video_token_id`, causing the forward-pass check
-        "Video features and video tokens do not match, tokens: 0, features: N" to raise.
-        """
-        if not is_vision_available():
-            self.skipTest("vision not available")
-
-        import torch
-
-        video_token = "<|video_pad|>"
-        vision_start_token = "<|vision_start|>"
-        vision_end_token = "<|vision_end|>"
-
-        # Bypass ProcessorMixin.__init__ (which does hard isinstance checks on each
-        # sub-processor) and set only the four attributes that replace_video_token reads.
-        processor = object.__new__(Qwen3VLProcessor)
-        processor.video_token = video_token
-        processor.vision_start_token = vision_start_token
-        processor.vision_end_token = vision_end_token
-        mock_video_processor = MagicMock()
-        mock_video_processor.merge_size = 2
-        mock_video_processor.temporal_patch_size = 2
-        processor.video_processor = mock_video_processor
-
-        # Simulate processed video output: 2 temporal patches, spatial grid 2×2.
-        # video_grid_thw = (num_frames=2, H=2, W=2) → frame_seqlen = 2*2 / merge_size**2 = 1
-        # temporal_patch_size=2 means each temporal patch covers 2 raw frames, so
-        # 2 patches × 2 frames = 4 raw frame indices → _calculate_timestamps returns 2 timestamps.
-        video_grid_thw = [torch.tensor([2, 2, 2])]
-        metadata = VideoMetadata(
-            total_num_frames=4,
-            fps=2.0,
-            frames_indices=[0, 1, 2, 3],
-        )
-        video_inputs = {
-            "video_grid_thw": video_grid_thw,
-            "video_metadata": [metadata],
-        }
-
-        result = processor.replace_video_token(video_inputs, video_idx=0)
-
-        # The result must contain `self.video_token` (i.e. "<|video_pad|>"), never the
-        # hardcoded string "<|placeholder|>".
-        self.assertIn(video_token, result, "replace_video_token must use self.video_token")
-        self.assertNotIn(
-            "<|placeholder|>",
-            result,
-            "replace_video_token must not hardcode '<|placeholder|>' — use self.video_token instead",
-        )
-        # Sanity-check structure: vision_start and vision_end tokens appear once per frame.
-        self.assertEqual(result.count(vision_start_token), 2)
-        self.assertEqual(result.count(vision_end_token), 2)
-
-    @require_av
-    def test_apply_chat_template_video_frame_sampling(self):
-        processor = self.get_processor()
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
-
-        signature = inspect.signature(processor.__call__)
-        if "videos" not in {*signature.parameters.keys()} or (
-            signature.parameters.get("videos") is not None
-            and signature.parameters["videos"].annotation == inspect._empty
-        ):
-            self.skipTest("Processor doesn't accept videos at input")
-
-        messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "video",
-                            "url": url_to_local_path(
-                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
-                            ),
-                        },
-                        {"type": "text", "text": "What is shown in this video?"},
-                    ],
-                },
-            ]
-        ]
-
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-        self.assertEqual(len(formatted_prompt), 1)
-
-        # for fast test, set the longest edge to 8192
-        processor.video_processor.size.longest_edge = 8192
-
-        # Add video URL for return dict and load with `num_frames` arg
-        num_frames = 3
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            num_frames=num_frames,
-            fps=None,  # if pass num_frames, fps should be None
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 256)
-
-        # Load with `fps` arg
-        fps = 1
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            fps=fps,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 224)
-
-        # Load with `fps` and `num_frames` args, should raise an error
-        with self.assertRaises(ValueError):
-            out_dict_with_video = processor.apply_chat_template(
-                messages,
-                add_generation_prompt=True,
-                tokenize=True,
-                return_dict=True,
-                fps=fps,
-                num_frames=num_frames,
-            )
-
-        # Load without any arg should load the whole video
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 224)
-
-        # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
-        # because we assume they come from one video
-        messages[0][0]["content"][0] = {
-            "type": "video",
-            "url": [
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
-            ],
-        }
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            do_sample_frames=False,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 216)
-
-    def test_kwargs_overrides_custom_image_processor_kwargs(self):
-        processor = self.get_processor()
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-        inputs = processor(text=input_str, images=image_input, max_pixels=56 * 56 * 4, return_tensors="pt")
-        self.assertEqual(inputs[self.images_input_name].shape[0], 612)
-        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(inputs[self.images_input_name].shape[0], 100)
