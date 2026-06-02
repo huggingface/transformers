@@ -23,14 +23,10 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ... import initialization as init
-from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...generation import GenerationMode
-from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_outputs import BaseModelOutput
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -43,11 +39,23 @@ from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
-from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
-from ..parakeet.configuration_parakeet import ParakeetEncoderConfig
+from ..llama.modeling_llama import eager_attention_forward
+from ..parakeet.configuration_parakeet import ParakeetEncoderConfig, ParakeetTDTConfig
 from ..parakeet.feature_extraction_parakeet import ParakeetFeatureExtractor
-from ..parakeet.modeling_parakeet import ParakeetEncoderFeedForward
-from .generation_nemotron_asr import NemotronAsrDecoderCache, NemotronAsrGenerationMixin
+from ..parakeet.modeling_parakeet import (
+    ParakeetEncoder,
+    ParakeetEncoderAttention,
+    ParakeetEncoderBlock,
+    ParakeetEncoderFeedForward,
+    ParakeetEncoderModelOutput,
+    ParakeetEncoderRelPositionalEncoding,
+    ParakeetForTDT,
+    ParakeetPreTrainedModel,
+    ParakeetTDTDecoder,
+    ParakeetTDTJointNetwork,
+    ParakeetTDTOutput,
+)
+from .generation_nemotron_asr import NemotronAsrGenerationMixin, NemotronAsrTDTDecoderCache
 
 
 LOG_ZERO_GUARD_VALUE = 2**-24
@@ -140,7 +148,7 @@ class NemotronAsrEncoderConfig(ParakeetEncoderConfig):
 
 @auto_docstring(checkpoint="nvidia/nemotron-speech-streaming-en-0.6b")
 @strict
-class NemotronAsrConfig(PreTrainedConfig):
+class NemotronAsrConfig(ParakeetTDTConfig):
     r"""
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network (NeMo's `pred_hidden`).
@@ -153,6 +161,9 @@ class NemotronAsrConfig(PreTrainedConfig):
         Activation in the joint network.
     max_symbols_per_step (`int`, *optional*, defaults to 10):
         Maximum number of non-blank symbols emitted per encoder time step during greedy decoding.
+    durations (`list[int]`, *optional*, defaults to `()`):
+        Pinned to the empty tuple for RNN-T: no token durations are predicted, so the joint head outputs
+        only `vocab_size` logits.
     encoder_config (`Union[dict, NemotronAsrEncoderConfig]`, *optional*):
         The config object or dictionary of the encoder.
     blank_token_id (`int`, *optional*, defaults to 1024):
@@ -177,21 +188,12 @@ class NemotronAsrConfig(PreTrainedConfig):
     sub_configs = {"encoder_config": NemotronAsrEncoderConfig}
 
     vocab_size: int = 1025
-    decoder_hidden_size: int = 640
     joint_hidden_size: int = 640
-    num_decoder_layers: int = 2
-    hidden_act: str = "relu"
-    max_symbols_per_step: int = 10
-    encoder_config: dict | PreTrainedConfig | None = None
+    durations: list[int] | tuple[int, ...] = ()
     pad_token_id: int = 0
     blank_token_id: int = 1024
-    is_encoder_decoder: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config = NemotronAsrEncoderConfig(**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = NemotronAsrEncoderConfig()
         if self.decoder_hidden_size != self.joint_hidden_size:
             raise ValueError(
                 "NemotronAsrConfig currently requires decoder_hidden_size == joint_hidden_size "
@@ -199,7 +201,6 @@ class NemotronAsrConfig(PreTrainedConfig):
                 "RNNT checkpoints satisfy this; if you have a checkpoint where they differ, please "
                 "open an issue."
             )
-        self.initializer_range = self.encoder_config.initializer_range
         # The decoder starts on the blank token at frame 0 (NeMo's blank_as_pad convention).
         kwargs.setdefault("decoder_start_token_id", self.blank_token_id)
         super().__post_init__(**kwargs)
@@ -379,12 +380,12 @@ class NemotronAsrFeatureExtractor(ParakeetFeatureExtractor):
 
 @auto_docstring(
     custom_intro="""
-    Extends [~modeling_outputs.BaseModelOutputWithPooling] to include the output attention mask and
-    optional streaming caches. Caches are only populated for cache-aware models when `use_cache=True`.
+    Extends [`ParakeetEncoderModelOutput`] with optional streaming caches. Caches are only populated for
+    cache-aware models when `use_cache=True`.
     """
 )
 @dataclass
-class NemotronAsrEncoderModelOutput(BaseModelOutputWithPooling):
+class NemotronAsrEncoderModelOutput(ParakeetEncoderModelOutput):
     r"""
     attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
         Mask to avoid performing attention on padding token indices after sequence compression. Returned because the
@@ -400,37 +401,12 @@ class NemotronAsrEncoderModelOutput(BaseModelOutputWithPooling):
         Number of valid frames currently stored in `cache_last_channel`.
     """
 
-    attention_mask: torch.Tensor | None = None
     cache_last_channel: torch.Tensor | None = None
     cache_last_time: torch.Tensor | None = None
     cache_last_channel_len: torch.Tensor | None = None
 
 
-class NemotronAsrEncoderRelPositionalEncoding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: NemotronAsrEncoderConfig, device=None):
-        super().__init__()
-        self.max_position_embeddings = config.max_position_embeddings
-        self.config = config
-        inv_freq = self.compute_default_relative_positional_parameters(config, device=device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    @staticmethod
-    def compute_default_relative_positional_parameters(
-        config: NemotronAsrEncoderConfig | None = None,
-        device=None,
-    ) -> torch.Tensor:
-        base = 10000.0
-        inv_freq = 1.0 / (
-            base
-            ** (
-                torch.arange(0, config.hidden_size, 2, dtype=torch.int64).to(device=device, dtype=torch.float)
-                / config.hidden_size
-            )
-        )
-        return inv_freq
-
+class NemotronAsrEncoderRelPositionalEncoding(ParakeetEncoderRelPositionalEncoding):
     @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor, context_length: int | None = None):
         # `context_length` overrides hidden_states.shape[1] for streaming (cache + chunk).
@@ -558,18 +534,8 @@ class NemotronAsrEncoderConvolutionModule(FastSpeech2ConformerConvolutionModule)
         return hidden_states
 
 
-class NemotronAsrEncoderAttention(LlamaAttention):
+class NemotronAsrEncoderAttention(ParakeetEncoderAttention):
     """Multi-head attention with relative positional encoding. See section 3.3 of https://huggingface.co/papers/1901.02860."""
-
-    def __init__(self, config: NemotronAsrEncoderConfig, layer_idx: int):
-        super().__init__(config, layer_idx=layer_idx)
-        self.is_causal = False
-        # W_{k,R} projection
-        self.relative_k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
-        # global content bias
-        self.bias_u = nn.Parameter(torch.zeros(config.num_attention_heads, self.head_dim))
-        # global positional bias
-        self.bias_v = nn.Parameter(torch.zeros(config.num_attention_heads, self.head_dim))
 
     def forward(
         self,
@@ -641,14 +607,6 @@ class NemotronAsrEncoderAttention(LlamaAttention):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights, new_cache
-
-    def _rel_shift(self, attention_scores):
-        """Relative position shift for Shaw et al. style attention. See appendix B of https://huggingface.co/papers/1901.02860."""
-        batch_size, num_heads, query_length, position_length = attention_scores.shape
-        attention_scores = nn.functional.pad(attention_scores, pad=(1, 0))
-        attention_scores = attention_scores.view(batch_size, num_heads, -1, query_length)
-        attention_scores = attention_scores[:, :, 1:].view(batch_size, num_heads, query_length, position_length)
-        return attention_scores
 
 
 class NemotronAsrEncoderSubsamplingConv2D(nn.Module):
@@ -747,22 +705,7 @@ class NemotronAsrEncoderSubsamplingConv2D(nn.Module):
         return hidden_states
 
 
-class NemotronAsrEncoderBlock(GradientCheckpointingLayer):
-    def __init__(self, config: NemotronAsrEncoderConfig, layer_idx: int | None = None):
-        super().__init__()
-        self.gradient_checkpointing = False
-
-        self.feed_forward1 = NemotronAsrEncoderFeedForward(config)
-        self.self_attn = NemotronAsrEncoderAttention(config, layer_idx)
-        self.conv = NemotronAsrEncoderConvolutionModule(config)
-        self.feed_forward2 = NemotronAsrEncoderFeedForward(config)
-
-        self.norm_feed_forward1 = nn.LayerNorm(config.hidden_size)
-        self.norm_self_att = nn.LayerNorm(config.hidden_size)
-        self.norm_conv = nn.LayerNorm(config.hidden_size)
-        self.norm_feed_forward2 = nn.LayerNorm(config.hidden_size)
-        self.norm_out = nn.LayerNorm(config.hidden_size)
-
+class NemotronAsrEncoderBlock(ParakeetEncoderBlock):
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -804,38 +747,8 @@ class NemotronAsrEncoderBlock(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class NemotronAsrPreTrainedModel(PreTrainedModel):
+class NemotronAsrPreTrainedModel(ParakeetPreTrainedModel):
     config: NemotronAsrConfig
-    base_model_prefix = "model"
-    main_input_name = "input_features"
-    input_modalities = "audio"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["NemotronAsrEncoderBlock"]
-    _supports_flat_attention_mask = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-
-    # TODO: @eustlb, add support when flash attention supports custom attention bias
-    _supports_flash_attn = False
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": NemotronAsrEncoderBlock,
-        "attentions": NemotronAsrEncoderAttention,
-    }
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        std = getattr(self.config, "initializer_range", 0.02)
-
-        if isinstance(module, NemotronAsrEncoderAttention):
-            init.normal_(module.bias_u, mean=0.0, std=std)
-            init.normal_(module.bias_v, mean=0.0, std=std)
-        elif isinstance(module, NemotronAsrEncoderRelPositionalEncoding):
-            buffer_value = module.compute_default_relative_positional_parameters(module.config)
-            init.copy_(module.inv_freq, buffer_value)
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
         encoder_config = getattr(self.config, "encoder_config", self.config)
@@ -859,46 +772,13 @@ class NemotronAsrPreTrainedModel(PreTrainedModel):
 
         return lengths.to(dtype=torch.int)
 
-    def _get_output_attention_mask(self, attention_mask: torch.Tensor, target_length: int | None = None):
-        """
-        Convert the input attention mask to its subsampled form. `target_length` sets the desired output length, useful
-        when the attention mask length differs from `sum(-1).max()` (i.e., when the longest sequence in the batch is padded)
-        """
-        output_lengths = self._get_subsampling_output_length(attention_mask.sum(-1))
-        # Use target_length if provided, otherwise use max length in batch
-        max_length = target_length if target_length is not None else output_lengths.max()
-        attention_mask = torch.arange(max_length, device=attention_mask.device) < output_lengths[:, None]
-        return attention_mask
-
 
 @auto_docstring(
     custom_intro="""
     The NemotronAsr Encoder model, based on the [Fast Conformer architecture](https://huggingface.co/papers/2305.05084).
     """
 )
-class NemotronAsrEncoder(NemotronAsrPreTrainedModel):
-    config: NemotronAsrEncoderConfig
-    base_model_prefix = "encoder"
-
-    def __init__(self, config: NemotronAsrEncoderConfig):
-        super().__init__(config)
-        self.config = config
-        self.gradient_checkpointing = False
-
-        self.dropout = config.dropout
-        self.dropout_positions = config.dropout_positions
-        self.layerdrop = config.layerdrop
-
-        self.input_scale = math.sqrt(config.hidden_size) if config.scale_input else 1.0
-        self.subsampling = NemotronAsrEncoderSubsamplingConv2D(config)
-        self.encode_positions = NemotronAsrEncoderRelPositionalEncoding(config)
-
-        self.layers = nn.ModuleList(
-            [NemotronAsrEncoderBlock(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-
-        self.post_init()
-
+class NemotronAsrEncoder(ParakeetEncoder):
     def _resolve_att_context_size(self, att_context_size: list | None = None) -> list | None:
         """
         Resolve the effective `[left, right]` attention context for this forward pass.
@@ -1149,89 +1029,23 @@ class NemotronAsrEncoder(NemotronAsrPreTrainedModel):
         )
 
 
-class NemotronAsrDecoder(nn.Module):
+class NemotronAsrTDTDecoder(ParakeetTDTDecoder):
     """LSTM-based prediction network for RNN-T."""
 
     def __init__(self, config: NemotronAsrConfig):
-        super().__init__()
-        self.blank_token_id = config.blank_token_id
-        self.embedding = nn.Embedding(config.vocab_size, config.decoder_hidden_size)
-        self.lstm = nn.LSTM(
-            input_size=config.decoder_hidden_size,
-            hidden_size=config.decoder_hidden_size,
-            num_layers=config.num_decoder_layers,
-            batch_first=True,
-        )
-        self.decoder_projector = nn.Linear(config.decoder_hidden_size, config.decoder_hidden_size)
-
-    def forward(
-        self,
-        input_ids: torch.LongTensor,
-        cache: NemotronAsrDecoderCache | None = None,
-    ) -> torch.Tensor:
-        if cache is not None:
-            blank_mask = input_ids[:, -1] == self.blank_token_id
-            # All-blank fast path: skip decoder when all batch elements predict blank
-            if cache.is_initialized and blank_mask.all():
-                return cache.cache
-
-        embeddings = self.embedding(input_ids)
-
-        # Get cached hidden/cell states if available, otherwise initialize with NemotronAsrDecoderCache
-        if cache is not None:
-            was_initialized = cache.is_initialized
-            if not was_initialized:
-                cache.lazy_initialization(embeddings)
-            hidden_cell_states = (cache.hidden_state, cache.cell_state)
-        else:
-            hidden_cell_states = None
-
-        lstm_output, (hidden_state, cell_state) = self.lstm(embeddings, hidden_cell_states)
-        decoder_output = self.decoder_projector(lstm_output)
-
-        if cache is not None:
-            mask = ~blank_mask if was_initialized else None
-            cache.update(decoder_output, hidden_state, cell_state, mask=mask)
-            return cache.cache
-
-        return decoder_output
+        super().__init__(config)
 
 
-class NemotronAsrJointNetwork(nn.Module):
+class NemotronAsrTDTJointNetwork(ParakeetTDTJointNetwork):
     """Joint network that combines encoder and decoder outputs to predict tokens (no duration head)."""
 
     def __init__(self, config: NemotronAsrConfig):
-        super().__init__()
-        self.activation = ACT2FN[config.hidden_act]
-        self.head = nn.Linear(config.joint_hidden_size, config.vocab_size)
-
-    def forward(
-        self,
-        decoder_hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.Tensor,
-    ) -> torch.Tensor:
-        joint_output = self.activation(encoder_hidden_states + decoder_hidden_states)
-        return self.head(joint_output)
+        super().__init__(config)
 
 
 @dataclass
-class NemotronAsrOutput(BaseModelOutputWithPooling):
-    """
-    Output of the NemotronAsr RNN-T forward pass.
-
-    Args:
-        loss (`torch.FloatTensor`, *optional*):
-            RNN-T loss, returned when `labels` are provided. Currently not implemented; raises if used.
-        logits (`torch.FloatTensor`):
-            Joint token logits. Shape is `(batch, T, U+1, vocab_size)` for training or
-            `(batch, 1, 1, vocab_size)` for single-step inference.
-        decoder_cache (`NemotronAsrDecoderCache`, *optional*):
-            Decoder LSTM cache containing hidden state, cell state, and last output.
-    """
-
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    decoder_cache: NemotronAsrDecoderCache | None = None
+class NemotronAsrTDTOutput(ParakeetTDTOutput):
+    pass
 
 
 @auto_docstring(
@@ -1239,35 +1053,18 @@ class NemotronAsrOutput(BaseModelOutputWithPooling):
     NemotronAsr Encoder with an RNN-T (Recurrent Neural Network Transducer) head.
     """
 )
-class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin):
+class NemotronAsrForRNNT(ParakeetForTDT, NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin):
     config: NemotronAsrConfig
-    _no_split_modules = ["NemotronAsrDecoder"]
-    _supported_generation_modes = [GenerationMode.GREEDY_SEARCH]
 
     def __init__(self, config: NemotronAsrConfig):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
         self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.joint_hidden_size)
-        self.decoder = NemotronAsrDecoder(config)
-        self.joint = NemotronAsrJointNetwork(config)
+        self.decoder = NemotronAsrTDTDecoder(config)
+        self.joint = NemotronAsrTDTJointNetwork(config)
         self.max_symbols_per_step = config.max_symbols_per_step
 
         self.post_init()
-
-    @can_return_tuple
-    def get_audio_features(
-        self,
-        input_features: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> NemotronAsrEncoderModelOutput:
-        encoder_outputs = self.encoder(
-            input_features=input_features,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-        encoder_outputs.pooler_output = self.encoder_projector(encoder_outputs.last_hidden_state)
-        return encoder_outputs
 
     @auto_docstring
     @can_return_tuple
@@ -1276,16 +1073,16 @@ class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin)
         input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
-        decoder_cache: NemotronAsrDecoderCache | None = None,
+        decoder_cache: NemotronAsrTDTDecoderCache | None = None,
         use_decoder_cache: bool | None = None,
         encoder_outputs: NemotronAsrEncoderModelOutput | tuple[torch.FloatTensor] | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> NemotronAsrOutput:
+    ) -> NemotronAsrTDTOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
             Decoder input token ids for single-step inference.
-        decoder_cache (`NemotronAsrDecoderCache`, *optional*):
+        decoder_cache (`NemotronAsrTDTDecoderCache`, *optional*):
             Decoder LSTM cache. Reused on blank predictions to skip the LSTM step.
         use_decoder_cache (`bool`, *optional*):
             Whether to allocate and use a decoder cache when none is provided.
@@ -1325,7 +1122,7 @@ class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin)
             )
 
         if use_decoder_cache and decoder_cache is None:
-            decoder_cache = NemotronAsrDecoderCache()
+            decoder_cache = NemotronAsrTDTDecoderCache()
 
         decoder_hidden_states = self.decoder(decoder_input_ids, cache=decoder_cache)
         logits = self.joint(
@@ -1338,7 +1135,7 @@ class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin)
                 "RNN-T training loss is not yet implemented for NemotronAsrForRNNT. Inference (greedy decoding) works."
             )
 
-        return NemotronAsrOutput(
+        return NemotronAsrTDTOutput(
             loss=None,
             logits=logits,
             last_hidden_state=encoder_outputs.last_hidden_state,
@@ -1682,7 +1479,7 @@ __all__ = [
     "NemotronAsrEncoderConfig",
     "NemotronAsrFeatureExtractor",
     "NemotronAsrEncoderModelOutput",
-    "NemotronAsrOutput",
+    "NemotronAsrTDTOutput",
     "NemotronAsrCacheAwareStreamingBuffer",
     "NemotronAsrForRNNT",
     "NemotronAsrEncoder",

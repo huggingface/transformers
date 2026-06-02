@@ -40,7 +40,7 @@ from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_nemotron_asr import NemotronAsrConfig, NemotronAsrEncoderConfig
-from .generation_nemotron_asr import NemotronAsrDecoderCache, NemotronAsrGenerationMixin
+from .generation_nemotron_asr import NemotronAsrGenerationMixin, NemotronAsrTDTDecoderCache
 
 
 logger = logging.get_logger(__name__)
@@ -48,8 +48,8 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(
     custom_intro="""
-    Extends [~modeling_outputs.BaseModelOutputWithPooling] to include the output attention mask and
-    optional streaming caches. Caches are only populated for cache-aware models when `use_cache=True`.
+    Extends [`ParakeetEncoderModelOutput`] with optional streaming caches. Caches are only populated for
+    cache-aware models when `use_cache=True`.
     """
 )
 @dataclass
@@ -70,6 +70,7 @@ class NemotronAsrEncoderModelOutput(BaseModelOutputWithPooling):
     """
 
     attention_mask: torch.Tensor | None = None
+
     cache_last_channel: torch.Tensor | None = None
     cache_last_time: torch.Tensor | None = None
     cache_last_channel_len: torch.Tensor | None = None
@@ -710,84 +711,6 @@ class NemotronAsrEncoder(NemotronAsrPreTrainedModel):
 
         self.post_init()
 
-    def _resolve_att_context_size(self, att_context_size: list | None = None) -> list | None:
-        """
-        Resolve the effective `[left, right]` attention context for this forward pass.
-
-        - If the model is offline (config.att_context_size is None) → returns None.
-        - If `att_context_size` is provided by the caller → uses it (and warns once if the
-          requested context is outside the model's trained set).
-        - Otherwise → uses the first entry from config (the inference default).
-        """
-        configured = self.config.att_context_size
-        if configured is None:
-            return None
-        if att_context_size is not None:
-            if isinstance(configured[0], list) and att_context_size not in configured:
-                logger.warning_once(
-                    f"att_context_size {att_context_size} was not used during training "
-                    f"(trained contexts: {configured}). The model may still produce reasonable "
-                    f"output, but quality is not guaranteed."
-                )
-            return att_context_size
-        if isinstance(configured[0], list):
-            return configured[0]
-        return configured
-
-    def get_initial_cache_state(
-        self,
-        batch_size: int = 1,
-        dtype: torch.dtype = torch.float32,
-        device: torch.device | str | None = None,
-    ) -> dict[str, torch.Tensor]:
-        """
-        Returns zeroed cache tensors to start a streaming session.
-
-        Returns a dict with keys `cache_last_channel`, `cache_last_time`, `cache_last_channel_len`
-        that can be passed directly as `**cache` to `forward()`.
-        """
-        ctx = self._resolve_att_context_size()
-        if ctx is None:
-            raise ValueError("get_initial_cache_state() is only valid for cache-aware (streaming) models.")
-        left_ctx = ctx[0]
-        conv_ctx = self.config.conv_context_size
-        if conv_ctx is None:
-            conv_left = (self.config.conv_kernel_size - 1) // 2
-        elif conv_ctx == "causal":
-            conv_left = self.config.conv_kernel_size - 1
-        else:
-            conv_left = conv_ctx[0]
-        n = self.config.num_hidden_layers
-        d = self.config.hidden_size
-        return {
-            "cache_last_channel": torch.zeros(n, batch_size, left_ctx, d, dtype=dtype, device=device),
-            "cache_last_time": torch.zeros(n, batch_size, d, conv_left, dtype=dtype, device=device),
-            "cache_last_channel_len": torch.zeros(batch_size, dtype=torch.long, device=device),
-        }
-
-    def _build_att_window_mask(
-        self,
-        seq_len: int,
-        total_key_len: int,
-        left_ctx: int,
-        right_ctx: int,
-        device: torch.device,
-    ) -> torch.Tensor:
-        """
-        Build a boolean attention window mask of shape (1, 1, seq_len, total_key_len). Limits each
-        query at position t (within the chunk) to attend to keys in [t-left_ctx, t+right_ctx].
-        Cache frames are positioned before the chunk; key index 0 is the oldest cache frame.
-        """
-        cache_len = total_key_len - seq_len
-        q_idx = torch.arange(seq_len, device=device).unsqueeze(1)
-        k_idx = torch.arange(total_key_len, device=device).unsqueeze(0)
-        # Cache frames are at positions -(cache_len)..(-1), chunk at 0..(seq_len-1)
-        q_pos = q_idx
-        k_pos = k_idx - cache_len
-        dist = q_pos - k_pos  # positive = left of q, negative = right of q
-        mask = (dist >= -right_ctx) & (dist <= left_ctx)
-        return mask.unsqueeze(0).unsqueeze(0)  # (1, 1, seq_len, total_key_len)
-
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
@@ -959,8 +882,86 @@ class NemotronAsrEncoder(NemotronAsrPreTrainedModel):
             cache_last_channel_len=out_cache_len,
         )
 
+    def _resolve_att_context_size(self, att_context_size: list | None = None) -> list | None:
+        """
+        Resolve the effective `[left, right]` attention context for this forward pass.
 
-class NemotronAsrDecoder(nn.Module):
+        - If the model is offline (config.att_context_size is None) → returns None.
+        - If `att_context_size` is provided by the caller → uses it (and warns once if the
+          requested context is outside the model's trained set).
+        - Otherwise → uses the first entry from config (the inference default).
+        """
+        configured = self.config.att_context_size
+        if configured is None:
+            return None
+        if att_context_size is not None:
+            if isinstance(configured[0], list) and att_context_size not in configured:
+                logger.warning_once(
+                    f"att_context_size {att_context_size} was not used during training "
+                    f"(trained contexts: {configured}). The model may still produce reasonable "
+                    f"output, but quality is not guaranteed."
+                )
+            return att_context_size
+        if isinstance(configured[0], list):
+            return configured[0]
+        return configured
+
+    def get_initial_cache_state(
+        self,
+        batch_size: int = 1,
+        dtype: torch.dtype = torch.float32,
+        device: torch.device | str | None = None,
+    ) -> dict[str, torch.Tensor]:
+        """
+        Returns zeroed cache tensors to start a streaming session.
+
+        Returns a dict with keys `cache_last_channel`, `cache_last_time`, `cache_last_channel_len`
+        that can be passed directly as `**cache` to `forward()`.
+        """
+        ctx = self._resolve_att_context_size()
+        if ctx is None:
+            raise ValueError("get_initial_cache_state() is only valid for cache-aware (streaming) models.")
+        left_ctx = ctx[0]
+        conv_ctx = self.config.conv_context_size
+        if conv_ctx is None:
+            conv_left = (self.config.conv_kernel_size - 1) // 2
+        elif conv_ctx == "causal":
+            conv_left = self.config.conv_kernel_size - 1
+        else:
+            conv_left = conv_ctx[0]
+        n = self.config.num_hidden_layers
+        d = self.config.hidden_size
+        return {
+            "cache_last_channel": torch.zeros(n, batch_size, left_ctx, d, dtype=dtype, device=device),
+            "cache_last_time": torch.zeros(n, batch_size, d, conv_left, dtype=dtype, device=device),
+            "cache_last_channel_len": torch.zeros(batch_size, dtype=torch.long, device=device),
+        }
+
+    def _build_att_window_mask(
+        self,
+        seq_len: int,
+        total_key_len: int,
+        left_ctx: int,
+        right_ctx: int,
+        device: torch.device,
+    ) -> torch.Tensor:
+        """
+        Build a boolean attention window mask of shape (1, 1, seq_len, total_key_len). Limits each
+        query at position t (within the chunk) to attend to keys in [t-left_ctx, t+right_ctx].
+        Cache frames are positioned before the chunk; key index 0 is the oldest cache frame.
+        """
+        cache_len = total_key_len - seq_len
+        q_idx = torch.arange(seq_len, device=device).unsqueeze(1)
+        k_idx = torch.arange(total_key_len, device=device).unsqueeze(0)
+        # Cache frames are at positions -(cache_len)..(-1), chunk at 0..(seq_len-1)
+        q_pos = q_idx
+        k_pos = k_idx - cache_len
+        dist = q_pos - k_pos  # positive = left of q, negative = right of q
+        mask = (dist >= -right_ctx) & (dist <= left_ctx)
+        return mask.unsqueeze(0).unsqueeze(0)  # (1, 1, seq_len, total_key_len)
+
+
+class NemotronAsrTDTDecoder(nn.Module):
     """LSTM-based prediction network for RNN-T."""
 
     def __init__(self, config: NemotronAsrConfig):
@@ -978,7 +979,7 @@ class NemotronAsrDecoder(nn.Module):
     def forward(
         self,
         input_ids: torch.LongTensor,
-        cache: NemotronAsrDecoderCache | None = None,
+        cache: NemotronAsrTDTDecoderCache | None = None,
     ) -> torch.Tensor:
         if cache is not None:
             blank_mask = input_ids[:, -1] == self.blank_token_id
@@ -988,7 +989,7 @@ class NemotronAsrDecoder(nn.Module):
 
         embeddings = self.embedding(input_ids)
 
-        # Get cached hidden/cell states if available, otherwise initialize with NemotronAsrDecoderCache
+        # Get cached hidden/cell states if available, otherwise initialize with NemotronAsrTDTDecoderCache
         if cache is not None:
             was_initialized = cache.is_initialized
             if not was_initialized:
@@ -1008,41 +1009,42 @@ class NemotronAsrDecoder(nn.Module):
         return decoder_output
 
 
-class NemotronAsrJointNetwork(nn.Module):
+class NemotronAsrTDTJointNetwork(nn.Module):
     """Joint network that combines encoder and decoder outputs to predict tokens (no duration head)."""
 
     def __init__(self, config: NemotronAsrConfig):
         super().__init__()
         self.activation = ACT2FN[config.hidden_act]
-        self.head = nn.Linear(config.joint_hidden_size, config.vocab_size)
+        self.head = nn.Linear(config.decoder_hidden_size, config.vocab_size + len(config.durations))
+        self.vocab_size = config.vocab_size
 
     def forward(
         self,
         decoder_hidden_states: torch.Tensor,
         encoder_hidden_states: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         joint_output = self.activation(encoder_hidden_states + decoder_hidden_states)
         return self.head(joint_output)
 
 
 @dataclass
-class NemotronAsrOutput(BaseModelOutputWithPooling):
+class NemotronAsrTDTOutput(BaseModelOutputWithPooling):
     """
-    Output of the NemotronAsr RNN-T forward pass.
+    Output of the NemotronAsr TDT forward pass.
 
     Args:
         loss (`torch.FloatTensor`, *optional*):
-            RNN-T loss, returned when `labels` are provided. Currently not implemented; raises if used.
+            TDT loss, returned when `labels` are provided.
         logits (`torch.FloatTensor`):
-            Joint token logits. Shape is `(batch, T, U+1, vocab_size)` for training or
-            `(batch, 1, 1, vocab_size)` for single-step inference.
-        decoder_cache (`NemotronAsrDecoderCache`, *optional*):
+            Joint token and duration logits. Shape is `(batch, T, U+1, vocab+durations)` for training
+            or `(batch, 1, 1, vocab+durations)` for single-step inference.
+        decoder_cache (`NemotronAsrTDTDecoderCache`, *optional*):
             Decoder LSTM cache containing hidden state, cell state, and last output.
     """
 
     loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
-    decoder_cache: NemotronAsrDecoderCache | None = None
+    decoder_cache: NemotronAsrTDTDecoderCache | None = None
 
 
 @auto_docstring(
@@ -1052,15 +1054,15 @@ class NemotronAsrOutput(BaseModelOutputWithPooling):
 )
 class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin):
     config: NemotronAsrConfig
-    _no_split_modules = ["NemotronAsrDecoder"]
+    _no_split_modules = ["NemotronAsrTDTDecoder"]
     _supported_generation_modes = [GenerationMode.GREEDY_SEARCH]
 
     def __init__(self, config: NemotronAsrConfig):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
         self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.joint_hidden_size)
-        self.decoder = NemotronAsrDecoder(config)
-        self.joint = NemotronAsrJointNetwork(config)
+        self.decoder = NemotronAsrTDTDecoder(config)
+        self.joint = NemotronAsrTDTJointNetwork(config)
         self.max_symbols_per_step = config.max_symbols_per_step
 
         self.post_init()
@@ -1087,16 +1089,16 @@ class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin)
         input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
-        decoder_cache: NemotronAsrDecoderCache | None = None,
+        decoder_cache: NemotronAsrTDTDecoderCache | None = None,
         use_decoder_cache: bool | None = None,
         encoder_outputs: NemotronAsrEncoderModelOutput | tuple[torch.FloatTensor] | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> NemotronAsrOutput:
+    ) -> NemotronAsrTDTOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
             Decoder input token ids for single-step inference.
-        decoder_cache (`NemotronAsrDecoderCache`, *optional*):
+        decoder_cache (`NemotronAsrTDTDecoderCache`, *optional*):
             Decoder LSTM cache. Reused on blank predictions to skip the LSTM step.
         use_decoder_cache (`bool`, *optional*):
             Whether to allocate and use a decoder cache when none is provided.
@@ -1136,7 +1138,7 @@ class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin)
             )
 
         if use_decoder_cache and decoder_cache is None:
-            decoder_cache = NemotronAsrDecoderCache()
+            decoder_cache = NemotronAsrTDTDecoderCache()
 
         decoder_hidden_states = self.decoder(decoder_input_ids, cache=decoder_cache)
         logits = self.joint(
@@ -1149,7 +1151,7 @@ class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin)
                 "RNN-T training loss is not yet implemented for NemotronAsrForRNNT. Inference (greedy decoding) works."
             )
 
-        return NemotronAsrOutput(
+        return NemotronAsrTDTOutput(
             loss=None,
             logits=logits,
             last_hidden_state=encoder_outputs.last_hidden_state,
@@ -1490,7 +1492,7 @@ class NemotronAsrCacheAwareStreamingBuffer:
 
 __all__ = [
     "NemotronAsrEncoderModelOutput",
-    "NemotronAsrOutput",
+    "NemotronAsrTDTOutput",
     "NemotronAsrCacheAwareStreamingBuffer",
     "NemotronAsrForRNNT",
     "NemotronAsrEncoder",

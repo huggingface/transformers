@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2023-05-08 and contributed to Hugging Face Transformers on 2026-06-02.*
 
 # NemotronAsr
 
@@ -98,9 +99,9 @@ print(processor.batch_decode(torch.tensor([all_tokens]), skip_special_tokens=Tru
 
 [[autodoc]] NemotronAsrEncoderModelOutput
 
-## NemotronAsrOutput
+## NemotronAsrTDTOutput
 
-[[autodoc]] NemotronAsrOutput
+[[autodoc]] NemotronAsrTDTOutput
 
 ## NemotronAsrEncoder
 

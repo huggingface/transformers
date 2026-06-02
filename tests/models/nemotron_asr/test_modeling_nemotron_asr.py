@@ -228,9 +228,7 @@ class NemotronAsrForRNNTModelTester:
         config.encoder_config.att_context_size = [3, 1]
         model = NemotronAsrForRNNT(config=config)
         model.to(torch_device).eval()
-        state = model.get_initial_streaming_state(
-            batch_size=self.batch_size, device=torch_device, dtype=torch.float32
-        )
+        state = model.get_initial_streaming_state(batch_size=self.batch_size, device=torch_device, dtype=torch.float32)
         self.parent.assertIn("cache_last_channel", state)
         self.parent.assertIn("last_token", state)
         self.parent.assertEqual(state["last_token"].shape, (self.batch_size, 1))
