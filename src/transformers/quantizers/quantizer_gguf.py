@@ -179,8 +179,12 @@ class GGUFQuantizer(HfQuantizer):
             — for those the swap step skips the layer and the bytes would
             otherwise be assigned raw into a plain `nn.Linear.weight`.
         """
+        import re
+
         import torch
 
+        from ..core_model_loading import WeightConverter
+        from ..gguf_conversion_ops import SubtractOne
         from ..integrations.gguf_dequant import GGUFQuantizedTensor, dequantize_gguf_tensor
         from ..integrations.gguf_linear import gguf_linear_supports
         from ..modeling_gguf_pytorch_utils import load_gguf_checkpoint
@@ -189,20 +193,26 @@ class GGUFQuantizer(HfQuantizer):
         self.weight_mapping = list(parsed.get("weight_mapping", []) or [])
         self.gguf_tensor_types = dict(parsed.get("tensor_quant_types", {}) or {})
         tensors = parsed["tensors"]
-        # Gemma2 / Gemma3 / Nemotron store every RMSNorm weight as `w + 1`
-        # in the GGUF; the matching `SubtractOne` op in the converter chain
-        # runs *after* the loader's `.to(dtype)` cast (see `_materialize_copy`),
-        # which on fp16/bf16 loses 1 ULP near `w = 1` (the steady-state norm
-        # scale) and breaks the weights-conversion tests. Pre-apply the
-        # subtraction here on the fp32 source so the loader's cast is the only
-        # rounding step, matching the legacy `NemotronTensorProcessor.process` /
-        # `Gemma2TensorProcessor.process`.
-        arch = (parsed.get("config", {}) or {}).get("model_type")
-        if arch in ("gemma2", "gemma3", "gemma3_text", "nemotron"):
+        # Gemma2 / Gemma3 / Nemotron store every RMSNorm weight as `w + 1`. The
+        # `-1` must land on the fp32 source *before* the loader casts to the
+        # target dtype: the loader's `_materialize_copy` casts first and the
+        # converter chain runs after, so `cast(w + 1) - 1` loses ~1 ULP near
+        # `w = 1` (verified — `SubtractOne` sees fp16 there) and breaks the
+        # weights-conversion tests. So `SubtractOne` is a no-op marker in the
+        # chain and we apply the real subtraction here. Which tensors need it is
+        # *not* a hardcoded arch list — it's exactly the source patterns carried
+        # by the `SubtractOne` converters in `weight_mapping`, so new arches work
+        # for free as long as their converter graph declares the offset.
+        offset_patterns = [
+            pat
+            for entry in self.weight_mapping
+            if isinstance(entry, WeightConverter) and any(isinstance(op, SubtractOne) for op in entry.operations)
+            for pat in entry.source_patterns
+        ]
+        if offset_patterns:
+            offset_re = re.compile("|".join(offset_patterns))
             for name, t in tensors.items():
-                # Only norm *weights* are stored as `w + 1`; biases pass through
-                # unchanged.
-                if name.endswith("_norm.weight") and isinstance(t, torch.Tensor) and t.is_floating_point():
+                if isinstance(t, torch.Tensor) and t.is_floating_point() and offset_re.search(name):
                     # Detach to break any GGUFQuantizedTensor wrapping; clone to
                     # own the storage the loader will cast.
                     tensors[name] = t.detach().clone() - 1.0

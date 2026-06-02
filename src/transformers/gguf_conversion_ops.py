@@ -167,16 +167,16 @@ class Squeeze(ConversionOps):
 
 
 class SubtractOne(ConversionOps):
-    """Subtract 1 from a tensor (used for GGUF norm weight de-offset).
+    """Declarative marker for GGUF norm weights stored as `w + 1` (Gemma/Nemotron).
 
-    The `-1` must run on the fp32 source values *before* the loader casts to
-    the target dtype, otherwise the cast then subtract drops 1 ULP near
-    `w = 1` and the Gemma/Nemotron norm weights end up ~5e-4 off vs HF. The
-    loader's `_materialize_copy` casts to the target dtype *before* the
-    converter chain runs, so this op can't do it safely — `load_checkpoint_state`
-    pre-applies the subtraction in fp32 for arches that need it, and by the time
-    the converter chain runs the value is already de-offset. Make `convert` a
-    no-op pass-through.
+    The `-1` must run on the fp32 source *before* the loader casts to the target
+    dtype, otherwise `cast(w + 1) - 1` drops ~1 ULP near `w = 1` and the norm
+    weights end up ~5e-4 off vs HF. The loader's `_materialize_copy` casts
+    *before* the converter chain runs (verified: this op sees fp16), so the op
+    can't do it safely. Instead `GGUFQuantizer.load_checkpoint_state` discovers
+    which source tensors carry a `SubtractOne` and applies the subtraction on the
+    fp32 source up-front — so by the time the chain runs the value is already
+    de-offset and `convert` is a no-op pass-through.
     """
 
     def convert(

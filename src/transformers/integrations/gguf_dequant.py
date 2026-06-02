@@ -459,6 +459,15 @@ def dequantize_gguf_tensor(data, quant_type, dtype=None, device=None) -> torch.T
         dtype = torch.float32
     target_device = torch.device(device) if device is not None else None
 
+    # Dequant output must be a *plain* `torch.Tensor`, never a `GGUFQuantizedTensor`.
+    # If the subclass leaks through, the fp32 dequant values still carry `quant_type`
+    # and the subclass's `.to` / `__torch_function__` override re-wraps on the
+    # loader's device+dtype cast — on MPS this reinterprets the storage as the target
+    # dtype (raw bytes → fp16 garbage like `28512.0`; fp32 happens to survive). Unwrap
+    # up-front so every downstream view/reshape/kernel op yields base tensors.
+    if isinstance(data, GGUFQuantizedTensor):
+        data = data.as_subclass(torch.Tensor)
+
     # F32 / F16 / BF16 sources arrive as regular floating-point tensors when
     # wrapped via `GGUFQuantizedTensor(torch.from_numpy(...))` — no byte-view
     # round-trip needed. The uint8 reinterpret path below is destructive on
