@@ -352,7 +352,10 @@ class FP8GroupedLinear(FP8Linear):
             w = self.weight.view(self.n_groups, -1, hidden_dim).transpose(1, 2)
             x = x.reshape(-1, self.n_groups, hidden_dim).transpose(0, 1)
             y = torch.bmm(x, w).transpose(0, 1)
-            return y.reshape(*input_shape, self.n_groups, -1)
+            y = y.reshape(*input_shape, self.n_groups, -1)
+            if self.has_bias:
+                y.add_(self.bias.view(self.n_groups, -1))
+            return y
 
         w = to_local(self.weight)
         scale_inv = to_local(self.weight_scale_inv)
@@ -366,7 +369,7 @@ class FP8GroupedLinear(FP8Linear):
         offsets = torch.arange(1, self.n_groups + 1, device=x.device, dtype=torch.int32) * tokens_per_group
 
         finegrained_fp8 = _load_finegrained_fp8_kernel()
-        out = finegrained_fp8.grouped_matmul(
+        y = finegrained_fp8.grouped_matmul(
             x,
             w,
             scale_inv.float(),
@@ -374,7 +377,10 @@ class FP8GroupedLinear(FP8Linear):
             block_size=self.block_size,
             offsets=offsets,
         )
-        return out.reshape(self.n_groups, *input_shape, -1).movedim(0, -2)
+        y = y.reshape(self.n_groups, *input_shape, -1).movedim(0, -2)
+        if self.has_bias:
+            y.add_(self.bias.view(self.n_groups, -1))
+        return y
 
 
 def fp8_batched_mm_experts_forward(
@@ -411,7 +417,8 @@ def fp8_batched_mm_experts_forward(
     # Clamp EP sentinels so per-token weight indexing stays in-bounds. Routing weights are already
     # zero at sentinel slots (RouterParallel masks them at dispatch), so the weighted mul drops
     # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
-    expert_ids.clamp_(0, self.num_experts - 1)
+    # Out-of-place to avoid mutating the caller's routing tensor (a contiguous `reshape(-1)` aliases it).
+    expert_ids = expert_ids.clamp(0, self.num_experts - 1)
 
     weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
     weight_scale_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
@@ -556,12 +563,14 @@ def fp8_grouped_mm_experts_forward(
 
 
 class FP8Experts(nn.Module):
-    # Per-`_experts_implementation` TP/EP plan key swaps. The default
-    # `MoeTensorParalellExperts` plan is impl-agnostic; some impls need a distinct
-    # TP layer (e.g. megamoe needs no gradient-sync hooks and an EP `process_group`
-    # injection). Declared here so the quantizer doesn't have to know about
-    # impl-specific TP needs — extend this dict when adding new impls.
-    _impl_tp_plan_overrides: dict[str, dict[str, str]] = {
+    # Per-`_experts_implementation` rewrite of parallel-layer kinds in the TP/EP plan.
+    # The plan dicts store `{module-path-pattern: parallel-layer-kind}`; this maps an
+    # old kind to a new kind, and the quantizer rewrites every plan VALUE that matches.
+    # The default `MoeTensorParalellExperts` kind is impl-agnostic; some impls need a
+    # distinct TP layer (e.g. megamoe needs no gradient-sync hooks and an EP
+    # `process_group` injection). Declared here so the quantizer doesn't have to know
+    # about impl-specific TP needs — extend this dict when adding new impls.
+    _impl_tp_layer_overrides: dict[str, dict[str, str]] = {
         "deepgemm_megamoe": {
             "moe_tp_experts": "megamoe_experts",
             "ep_router": "megamoe_router",
@@ -744,8 +753,6 @@ def replace_with_fp8_linear(
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
 
-        # we need this to correctly materialize the weights during quantization
-        module_kwargs = {} if pre_quantized else {"dtype": None}
         new_module = None
         with torch.device("meta"):
             if module_name.endswith(".experts"):
@@ -765,7 +772,6 @@ def replace_with_fp8_linear(
                     scale_fmt=quantization_config.scale_fmt,
                     has_bias=has_bias,
                     has_gate=has_gate,
-                    **module_kwargs,
                 )
             elif type(module) is nn.Linear:
                 # Vanilla `nn.Linear` → standard FP8Linear swap.
@@ -776,7 +782,6 @@ def replace_with_fp8_linear(
                     activation_scheme=quantization_config.activation_scheme,
                     scale_fmt=quantization_config.scale_fmt,
                     has_bias=module.bias is not None,
-                    **module_kwargs,
                 )
             elif isinstance(module, nn.Linear) and "GroupedLinear" in type(module).__name__:
                 # Block-diagonal grouped linear (e.g. DSv4's `DeepseekV4GroupedLinear`):
@@ -793,7 +798,6 @@ def replace_with_fp8_linear(
                     activation_scheme=quantization_config.activation_scheme,
                     scale_fmt=quantization_config.scale_fmt,
                     has_bias=module.bias is not None,
-                    **module_kwargs,
                 )
             if new_module is not None:
                 model.set_submodule(module_name, new_module)
