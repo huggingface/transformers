@@ -31,6 +31,7 @@ if is_torch_available():
     import torch
 
     from transformers import VitPoseForPoseEstimation
+    from transformers.models.vitpose.modeling_vitpose import flip_back
 
 
 if is_vision_available():
@@ -327,3 +328,56 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(pose_results[0][1]["bbox"].cpu(), expected_bbox, rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(pose_results[0][1]["keypoints"][:3].cpu(), expected_keypoints, rtol=1e-2, atol=1e-2)
         torch.testing.assert_close(pose_results[0][1]["scores"][:3].cpu(), expected_scores, rtol=1e-4, atol=1e-4)
+
+
+@require_torch
+class VitPoseUtilsTest(unittest.TestCase):
+    def test_flip_back_gaussian_heatmap(self):
+        batch_size, num_keypoints, height, width = 2, 5, 8, 8
+        output = torch.randn(batch_size, num_keypoints, height, width, device=torch_device)
+        flip_pairs = torch.tensor([[1, 2], [3, 4]], device=torch_device)
+        output_clone = output.clone()
+
+        result = flip_back(output, flip_pairs)
+
+        # keypoint not in flip_pairs is horizontally flipped but not swapped
+        self.assertTrue(torch.equal(result[:, 0], output_clone[:, 0].flip(-1)))
+        # keypoints in flip_pairs are swapped and horizontally flipped
+        self.assertTrue(torch.equal(result[:, 1], output_clone[:, 2].flip(-1)))
+        self.assertTrue(torch.equal(result[:, 2], output_clone[:, 1].flip(-1)))
+        self.assertTrue(torch.equal(result[:, 3], output_clone[:, 4].flip(-1)))
+        self.assertTrue(torch.equal(result[:, 4], output_clone[:, 3].flip(-1)))
+
+    def test_flip_back_combined_target(self):
+        batch_size, num_keypoints, height, width = 2, 5, 8, 8
+        num_channels_per_keypoint = 3  # combined-target has 3 channels per keypoint: [response, offset_x, offset_y]
+        output = torch.randn(batch_size, num_keypoints * num_channels_per_keypoint, height, width, device=torch_device)
+        flip_pairs = torch.tensor([[1, 2], [3, 4]], device=torch_device)
+        output_clone = output.clone()
+
+        result = flip_back(output, flip_pairs, target_type="combined-target")
+
+        # keypoint not in flip_pairs is horizontally flipped but not swapped
+        # offset_x channel is negated for all keypoints (indices 1, 4, 7, 10, 13)
+        self.assertTrue(torch.equal(result[:, 0], output_clone[:, 0].flip(-1)))
+        self.assertTrue(torch.equal(result[:, 1], -output_clone[:, 1].flip(-1)))
+        self.assertTrue(torch.equal(result[:, 2], output_clone[:, 2].flip(-1)))
+        # keypoints in flip_pairs are swapped and horizontally flipped
+        self.assertTrue(torch.equal(result[:, 3], output_clone[:, 6].flip(-1)))
+        self.assertTrue(torch.equal(result[:, 4], -output_clone[:, 7].flip(-1)))
+        self.assertTrue(torch.equal(result[:, 5], output_clone[:, 8].flip(-1)))
+        self.assertTrue(torch.equal(result[:, 6], output_clone[:, 3].flip(-1)))
+        self.assertTrue(torch.equal(result[:, 7], -output_clone[:, 4].flip(-1)))
+        self.assertTrue(torch.equal(result[:, 8], output_clone[:, 5].flip(-1)))
+
+    def test_flip_back_invalid_target_type(self):
+        output = torch.randn(2, 2, 2, 2)
+        flip_pairs = torch.tensor([[1, 2]])
+        with self.assertRaises(ValueError):
+            flip_back(output, flip_pairs, target_type="invalid")
+
+    def test_flip_back_invalid_ndim(self):
+        output = torch.randn(2, 2, 2)
+        flip_pairs = torch.tensor([[1, 2]])
+        with self.assertRaises(ValueError):
+            flip_back(output, flip_pairs)

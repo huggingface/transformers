@@ -108,9 +108,9 @@ def flip_back(output_flipped, flip_pairs, target_type="gaussian-heatmap"):
     output_flipped_back = output_flipped.clone()
 
     # Swap left-right parts
-    for left, right in flip_pairs.tolist():
-        output_flipped_back[:, left, ...] = output_flipped[:, right, ...]
-        output_flipped_back[:, right, ...] = output_flipped[:, left, ...]
+    left_indices, right_indices = flip_pairs.unbind(-1)
+    output_flipped_back[:, left_indices, ...] = output_flipped[:, right_indices, ...]
+    output_flipped_back[:, right_indices, ...] = output_flipped[:, left_indices, ...]
     output_flipped_back = output_flipped_back.reshape((batch_size, num_keypoints, height, width))
     # Flip horizontally
     output_flipped_back = output_flipped_back.flip(-1)
