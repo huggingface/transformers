@@ -307,6 +307,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("t5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("t5gemma", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("tapas", "TapasTokenizer"),
+        ("tipsv2", "Tipsv2Tokenizer" if is_sentencepiece_available() else None),
         ("trocr", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("tvp", "BertTokenizer" if is_tokenizers_available() else None),
         ("udop", "UdopTokenizer" if is_tokenizers_available() else None),

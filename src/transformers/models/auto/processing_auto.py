@@ -174,6 +174,7 @@ else:
             ("speecht5", "SpeechT5Processor"),
             ("t5gemma2", "Gemma3Processor"),
             ("t5gemma2_encoder", "Gemma3Processor"),
+            ("tipsv2", "Tipsv2Processor"),
             ("trocr", "TrOCRProcessor"),
             ("tvp", "TvpProcessor"),
             ("udop", "UdopProcessor"),

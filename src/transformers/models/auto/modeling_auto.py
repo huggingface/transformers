@@ -472,6 +472,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("timesformer", "TimesformerModel"),
         ("timm_backbone", "TimmBackbone"),
         ("timm_wrapper", "TimmWrapperModel"),
+        ("tipsv2", "Tipsv2Model"),
+        ("tipsv2_text_model", "Tipsv2TextModel"),
+        ("tipsv2_vision_model", "Tipsv2VisionModel"),
         ("tvp", "TvpModel"),
         ("udop", "UdopModel"),
         ("umt5", "UMT5Model"),
@@ -843,6 +846,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("timesformer", "TimesformerModel"),
         ("timm_backbone", "TimmBackbone"),
         ("timm_wrapper", "TimmWrapperModel"),
+        ("tipsv2_vision_model", "Tipsv2VisionModel"),
         ("videomae", "VideoMAEModel"),
         ("vit", "ViTModel"),
         ("vit_mae", "ViTMAEModel"),
@@ -1758,6 +1762,7 @@ MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("metaclip_2", "MetaClip2Model"),
         ("siglip", "SiglipModel"),
         ("siglip2", "Siglip2Model"),
+        ("tipsv2", "Tipsv2Model"),
     ]
 )
 
@@ -1853,6 +1858,7 @@ MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertModel"),
         ("t5", "T5EncoderModel"),
         ("t5gemma", "T5GemmaEncoderModel"),
+        ("tipsv2_text_model", "Tipsv2TextModel"),
         ("umt5", "UMT5EncoderModel"),
         ("xlm", "XLMModel"),
         ("xlm-roberta", "XLMRobertaModel"),
