@@ -619,6 +619,13 @@ class WhisperEncoder(WhisperPreTrainedModel):
                 f"Whisper expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
             )
 
+        # The feature extractor always emits float32, but the model may be loaded in fp16/bf16.
+        # Match the conv1 weight dtype so we don't hit
+        # `RuntimeError: Input type (float) and bias type (c10::Half) should be the same`
+        # on the conv1 call (seen on every Whisper fp16 integration test).
+        if input_features.dtype != self.conv1.weight.dtype:
+            input_features = input_features.to(self.conv1.weight.dtype)
+
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
 
