@@ -17,7 +17,6 @@ Processor class for Bark
 
 import json
 import os
-from pathlib import Path
 
 import numpy as np
 
@@ -168,7 +167,19 @@ class BarkProcessor(ProcessorMixin):
     def _reject_path_traversal(base_dir: str, target_path: str, offending_value: str):
         # base_dir/target_path derive from the untrusted speaker_embeddings json; allow nested
         # subdirectories but reject any value that escapes base_dir (path traversal, CWE-22).
-        if not Path(target_path).resolve().is_relative_to(Path(base_dir).resolve()):
+        # The only untrusted input is the relative path string, so this is a purely lexical check:
+        # we use os.path.abspath (not realpath/Path.resolve) and must NOT follow symlinks here.
+        # When repo_or_path points at a populated HF cache, the referenced snapshot files are
+        # symlinks into a sibling blobs/ directory that sits outside base_dir, so a resolve()-based
+        # containment check would wrongly reject perfectly legitimate loads.
+        base = os.path.abspath(base_dir)
+        target = os.path.abspath(target_path)
+        try:
+            contained = os.path.commonpath([base, target]) == base
+        except ValueError:
+            # e.g. different Windows drives: definitely an escape.
+            contained = False
+        if not contained:
             raise ValueError(f"Invalid voice preset path: {offending_value!r}")
 
     def _load_voice_preset(self, voice_preset: str | None = None, **kwargs):

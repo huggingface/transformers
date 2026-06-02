@@ -181,6 +181,43 @@ class BarkProcessorTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 processor._load_voice_preset("evil")
 
+    def test_load_voice_preset_allows_symlinked_cache_files(self):
+        # The path-traversal guard must be lexical, not symlink-resolving: the HF hub cache stores each
+        # snapshot file as a symlink into a sibling `blobs/` dir (snapshots/<rev>/f -> ../../blobs/<sha>),
+        # which sits outside repo_or_path. A resolve()/realpath()-based check would follow that symlink
+        # out of repo_or_path and wrongly reject a legitimate load, so loading must still succeed here.
+        tokenizer = self.get_tokenizer()
+        seq_len = 5
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            # Mimic the hub cache layout: models--org--model/{blobs,snapshots/<rev>/...}.
+            repo_cache = os.path.join(tmp_dir_name, "models--dummy--bark")
+            blobs_dir = os.path.join(repo_cache, "blobs")
+            snapshot_dir = os.path.join(repo_cache, "snapshots", "deadbeef")
+            os.makedirs(blobs_dir)
+            os.makedirs(snapshot_dir)
+
+            arrays = {
+                "semantic_prompt": np.ones(seq_len),
+                "coarse_prompt": np.ones((2, seq_len)),
+                "fine_prompt": np.ones((8, seq_len)),
+            }
+            voice_preset_paths = {}
+            for key, array in arrays.items():
+                blob = os.path.join(blobs_dir, key)  # real content lives in blobs/
+                np.save(blob, array, allow_pickle=False)
+                # ...and the snapshot exposes it as a relative symlink, exactly like the real cache.
+                link = os.path.join(snapshot_dir, f"{key}.npy")
+                os.symlink(os.path.relpath(blob + ".npy", snapshot_dir), link)
+                voice_preset_paths[key] = f"{key}.npy"
+            self.assertTrue(os.path.islink(os.path.join(snapshot_dir, "semantic_prompt.npy")))
+
+            speaker_embeddings = {"repo_or_path": snapshot_dir, "preset": voice_preset_paths}
+            processor = BarkProcessor(tokenizer=tokenizer, speaker_embeddings=speaker_embeddings)
+
+            voice_preset = processor._load_voice_preset("preset")
+            for key, array in arrays.items():
+                self.assertTrue(np.array_equal(voice_preset[key], array))
+
     def test_tokenizer(self):
         tokenizer = self.get_tokenizer()
 
