@@ -74,7 +74,7 @@ Transformers automatically uses hardware-accelerated FP8 matmul kernels (`torch.
 | NVIDIA CUDA (SM89+) | `torch._scaled_mm` | Ada Lovelace (L4, L40), Hopper (H100), Blackwell and newer |
 | CPU / CUDA SM80 (A100) | Fallback | Dequantizes to BF16, uses standard matmul |
 
-### Supported models
+The FP8 kernel path supports these quantization layouts.
 
 - **Per-channel dynamic**: e.g. [RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic](https://huggingface.co/RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic)
 - **Per-tensor static**: e.g. [RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8](https://huggingface.co/RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8)
