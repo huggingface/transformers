@@ -134,6 +134,9 @@ result = image_processor.post_process_normal_estimation(
 normals = result[0]["normals"]
 print("Normals shape:", normals.shape)   # [3, original_height, original_width]
 
+
+### Example code for visualization
+
 # Convert L2-normalized normals in [-1, 1] to RGB in [0, 255]
 normals_rgb = ((normals + 1.0) / 2.0 * 255.0).clamp(0, 255).to(torch.uint8)
 
@@ -176,6 +179,9 @@ result = image_processor.post_process_pointmap_estimation(
 )
 pointmap = result[0]["pointmap"]
 print("Pointmap shape:", pointmap.shape)  # [3, original_height, original_width]
+
+
+### Example code for visualization
 
 # Visualize the pointmap as an RGB image using inverse-depth and the turbo colormap.
 import matplotlib.pyplot as plt
