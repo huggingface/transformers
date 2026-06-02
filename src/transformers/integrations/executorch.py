@@ -562,6 +562,8 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         input_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         cache_position: torch.Tensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
     ):
         """
         Forward pass of the module, which is compatible with the ExecuTorch runtime.
@@ -570,6 +572,10 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             input_ids (`torch.Tensor`): Tensor representing current input token id to the module.
             inputs_embeds (`torch.Tensor`): Tensor representing current input embeddings to the module.
             cache_position (`torch.Tensor`): Tensor representing current input position in the cache.
+            pixel_values (`Optional[torch.FloatTensor]`): Image pixel values for vision-language models.
+                Shape: `(batch_size, num_channels, image_height, image_width)`.
+            input_features (`Optional[torch.FloatTensor]`): Mel-spectrogram input for audio models.
+                Shape: `(batch_size, num_mel_bins, sequence_length)`.
 
         Returns:
             torch.Tensor: Logits output from the model.
@@ -592,12 +598,21 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
 
         past_key_values = self.static_cache
 
+        # Build kwargs: only include modality-specific inputs when provided so
+        # that the exported graph signature stays minimal for text-only models.
+        extra_kwargs = {}
+        if pixel_values is not None:
+            extra_kwargs["pixel_values"] = pixel_values
+        if input_features is not None:
+            extra_kwargs["input_features"] = input_features
+
         outs = self.model(
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
             attention_mask=None,
             past_key_values=past_key_values,
             use_cache=True,
+            **extra_kwargs,
         )
         if hasattr(outs, "logits"):
             # Returned outputs is `CausalLMOutputWithPast`
@@ -771,10 +786,38 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         return outputs.logits
 
 
+def _make_example_vision_inputs(model: PreTrainedModel, device: torch.device) -> dict:
+    """Build dummy `pixel_values` for vision-language models using the model's vision config."""
+    vision_cfg = model.config.vision_config
+    image_size = vision_cfg.image_size
+    num_channels = getattr(vision_cfg, "num_channels", 3)
+    return {"pixel_values": torch.zeros(1, num_channels, image_size, image_size, dtype=torch.float32, device=device)}
+
+
+def _make_example_audio_inputs(model: PreTrainedModel, device: torch.device) -> dict:
+    """Build dummy `input_features` for audio/speech models using the model's mel config."""
+    num_mel_bins = model.config.num_mel_bins
+    return {"input_features": torch.zeros(1, num_mel_bins, 3000, dtype=torch.float32, device=device)}
+
+
+def _build_example_modality_inputs(model: PreTrainedModel, device: torch.device) -> dict:
+    """Return modality-specific example inputs based on the model's config.
+
+    Returns an empty dict for text-only models, ``pixel_values`` for vision-language
+    models, and ``input_features`` for audio models.
+    """
+    if hasattr(model.config, "vision_config"):
+        return _make_example_vision_inputs(model, device)
+    if hasattr(model.config, "num_mel_bins"):
+        return _make_example_audio_inputs(model, device)
+    return {}
+
+
 def convert_and_export_with_cache(
     model: PreTrainedModel,
     example_input_ids: torch.Tensor | None = None,
     example_cache_position: torch.Tensor | None = None,
+    example_modality_inputs: dict | None = None,
     dynamic_shapes: dict | None = None,
     strict: bool | None = None,
 ):
@@ -782,10 +825,17 @@ def convert_and_export_with_cache(
     Convert a `PreTrainedModel` into an exportable module and export it using `torch.export`,
     ensuring the exported model is compatible with `ExecuTorch`.
 
+    Supports text-only, vision-language, and audio models. Modality-specific example
+    inputs (e.g. ``pixel_values``, ``input_features``) are inferred automatically from
+    the model config when not supplied explicitly.
+
     Args:
         model (`PreTrainedModel`): The pretrained model to be exported.
         example_input_ids (`Optional[torch.Tensor]`): Example input token id used by `torch.export`.
         example_cache_position (`Optional[torch.Tensor]`): Example current cache position used by `torch.export`.
+        example_modality_inputs (`Optional[dict]`): Additional modality-specific example inputs
+            (e.g. ``{"pixel_values": ...}`` for VLMs or ``{"input_features": ...}`` for audio models).
+            When ``None``, inputs are inferred automatically from the model config.
         dynamic_shapes(`Optional[dict]`): Dynamic shapes used by `torch.export`.
         strict(`Optional[bool]`): Flag to instruct `torch.export` to use `torchdynamo`.
 
@@ -796,7 +846,6 @@ def convert_and_export_with_cache(
     import torch.export._trace
 
     with torch.no_grad():
-        # TODO: The default inputs only work for text models. We need to add support for vision/audio models.
         example_input_ids = (
             example_input_ids
             if example_input_ids is not None
@@ -807,12 +856,23 @@ def convert_and_export_with_cache(
             if example_cache_position is not None
             else torch.tensor([0], dtype=torch.long, device=model.device)
         )
+        example_modality_inputs = (
+            example_modality_inputs
+            if example_modality_inputs is not None
+            else _build_example_modality_inputs(model, model.device)
+        )
+
+        export_kwargs = {
+            "input_ids": example_input_ids,
+            "cache_position": example_cache_position,
+            **example_modality_inputs,
+        }
 
         if is_torch_greater_or_equal("2.6.0"):
             exported_program = torch.export.export(
                 TorchExportableModuleWithStaticCache(model),
                 args=(),
-                kwargs={"input_ids": example_input_ids, "cache_position": example_cache_position},
+                kwargs=export_kwargs,
                 dynamic_shapes=dynamic_shapes,
                 strict=strict if strict is not None else True,
             )
@@ -830,7 +890,7 @@ def convert_and_export_with_cache(
             exported_program = torch.export._trace._export(
                 TorchExportableModuleWithStaticCache(model),
                 args=(),
-                kwargs={"input_ids": example_input_ids, "cache_position": example_cache_position},
+                kwargs=export_kwargs,
                 pre_dispatch=False,
                 strict=True,
             )
