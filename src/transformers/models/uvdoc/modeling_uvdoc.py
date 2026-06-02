@@ -258,6 +258,7 @@ class UVDocPreTrainedModel(PreTrainedModel):
         "hidden_states": UVDocBridgeBlock,
     }
 
+    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)

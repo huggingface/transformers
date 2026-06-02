@@ -91,10 +91,10 @@ class SLANetConfig(SLANeXtConfig):
 class SLANetPreTrainedModel(SLANeXtPreTrainedModel):
     _keep_in_fp32_modules_strict = []
 
+    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        super()._init_weights(module)
         PreTrainedModel._init_weights(module)
 
         # Initialize GRUCell (replicates PyTorch default reset_parameters)

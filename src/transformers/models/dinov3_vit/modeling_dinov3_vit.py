@@ -474,6 +474,20 @@ class DINOv3ViTPreTrainedModel(PreTrainedModel):
             init.zeros_(module.bias)
             init.ones_(module.weight)
         elif isinstance(module, DINOv3ViTEmbeddings):
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
+            if self.config.use_mask_token:
+                init.zeros_(module.mask_token)
+        elif isinstance(module, DINOv3ViTLayerScale):
+            init.constant_(module.lambda1, self.config.layerscale_value)
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+        elif isinstance(module, DINOv3ViTEmbeddings):
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.config.num_register_tokens > 0:
                 init.trunc_normal_(module.register_tokens, mean=0.0, std=self.config.initializer_range)

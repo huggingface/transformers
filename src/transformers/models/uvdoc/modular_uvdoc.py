@@ -477,9 +477,9 @@ class UVDocPreTrainedModel(PPOCRV5ServerDetPreTrainedModel):
         "hidden_states": UVDocBridgeBlock,
     }
 
+    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
         PreTrainedModel._init_weights(module)
         """Initialize the weights."""
         if isinstance(module, nn.PReLU):

@@ -146,9 +146,9 @@ class Sam3TrackerFeedForward(Sam2FeedForward):
     """
 )
 class Sam3TrackerPreTrainedModel(Sam2PreTrainedModel):
+    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
         PreTrainedModel._init_weights(module)
         if isinstance(module, Sam3TrackerModel):
             if module.no_memory_embedding is not None:

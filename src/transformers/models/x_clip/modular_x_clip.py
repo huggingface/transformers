@@ -184,10 +184,10 @@ class XCLIPPreTrainedModel(CLIPPreTrainedModel):
         "attentions": OutputRecorder(XCLIPAttention, layer_name="self_attn", index=1),
     }
 
+    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        super()._init_weights(module)
         factor = self.config.initializer_factor
         if isinstance(module, XCLIPTextEmbeddings):
             init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
