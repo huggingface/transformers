@@ -837,7 +837,9 @@ else:
                     logger.warning_once(
                         "Accessing `%s` from `%s`. Returning `%s` instead. Behavior may be "
                         "different and this alias will be removed in future versions.",
-                        name, target, new_name,
+                        name,
+                        target,
+                        new_name,
                     )
                     return getattr(importlib.import_module(target, __name__), new_name)
                 # Silently forward non-Fast names to target (transparent alias behavior)
