@@ -121,7 +121,7 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen2.5-7B-Instruct",
     quantization_config=ct_config,
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 ```
 
