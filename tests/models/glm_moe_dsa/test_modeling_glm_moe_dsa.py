@@ -156,6 +156,15 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_generate_with_static_cache(self):
         pass
 
+    @unittest.skip("GLM-MoE-DSA uses qk_rope_head_dim; generic rope scaling tests assume config.head_dim")
+    def test_model_rope_scaling_frequencies(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("GLM-MoE-DSA uses qk_rope_head_dim; generic rope scaling tests assume config.head_dim")
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
+
 
 @require_torch_accelerator
 @slow
