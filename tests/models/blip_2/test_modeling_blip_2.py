@@ -1608,6 +1608,14 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
                     [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
                     "a woman is playing with her dog on the beach",
                 ],
+                ("cuda", 8): [
+                    [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1],
+                    "woman playing with dog on the beach",
+                ],
+                ("cuda", 10): [
+                    [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1],
+                    "woman playing with dog on the beach",
+                ],
             }
         )
         expected_outputs = expectations.get_expectation()
