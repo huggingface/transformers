@@ -55,13 +55,13 @@ De exemplu, `annoyingly` ar putea fi împărțit în `["annoying", "ly"]` sau `[
 ("h" "ug", 10), ("p" "ug", 5), ("p" "un", 12), ("b" "un", 4), ("h" "ug" "s", 5)
 ```
 
-5. Vocabularul este acum `["b", "g", "h", "n", "p", "s", "u", "ug", "un"]`. BPE continuă să învețe reguli de îmbinare până atinge dimensiunea țintă a vocabularului, egală cu dimensiunea vocabularului de bază plus numărul de îmbinări. [GPT] folosește BPE cu un vocabular de 40.478 (478 token-uri de bază + 40.000 îmbinări).
+5. Vocabularul este acum `["b", "g", "h", "n", "p", "s", "u", "ug", "un"]`. BPE continuă să învețe reguli de îmbinare până atinge dimensiunea țintă a vocabularului, egală cu dimensiunea vocabularului de bază plus numărul de embeddings. [GPT] folosește BPE cu un vocabular de 40.478 (478 token-uri de bază + 40.000 embeddings).
 
 Orice caracter care nu se află în vocabularul de bază se mapează la un token necunoscut ca `"<unk>"`. În practică, vocabularul de bază acoperă toate caracterele văzute în antrenare, deci token-urile necunoscute sunt rare.
 
 ### BPE la nivel de byte
 
-Includerea tuturor caracterelor Unicode ar face vocabularul de bază enorm. BPE la nivel de byte folosește în schimb 256 de valori de byte ca vocabular de bază, asigurând că orice cuvânt poate fi tokenizat fără token-ul `"<unk>"`. [GPT-2] folosește BPE la nivel de byte cu un vocabular de 50.257 (256 token-uri de byte + 50.000 îmbinări + un token special de sfârșit de text).
+Includerea tuturor caracterelor Unicode ar face vocabularul de bază enorm. BPE la nivel de byte folosește în schimb 256 de valori de byte ca vocabular de bază, asigurând că orice cuvânt poate fi tokenizat fără token-ul `"<unk>"`. [GPT-2] folosește BPE la nivel de byte cu un vocabular de 50.257 (256 token-uri de byte + 50.000 embeddings + un token special de sfârșit de text).
 
 ## Unigram
 
