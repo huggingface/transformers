@@ -147,7 +147,7 @@ _deps = [
     "tomli",
     "tiktoken",
     "timm>=1.0.23",
-    "tokenizers>=0.22.0,<=0.23.0",
+    "tokenizers>=0.22.0,<=0.23.1",
     "torch>=2.4",
     "torchaudio",
     "torchvision",
