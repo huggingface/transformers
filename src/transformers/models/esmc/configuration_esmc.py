@@ -42,6 +42,8 @@ class ESMCConfig(PretrainedConfig):
             The standard deviation of the truncated normal initialiser for weight matrix initialisation.
         classifier_dropout (`float`, *optional*, defaults to 0.1):
             Dropout ratio for the classification head.
+        rope_theta (`float`, *optional*, defaults to 10000.0):
+            The base period of the rotary position embeddings (RoPE).
 
     Examples:
 
@@ -71,6 +73,7 @@ class ESMCConfig(PretrainedConfig):
         mask_token_id: int = 32,
         initializer_range: float = 0.02,
         classifier_dropout: float = 0.1,
+        rope_theta: float = 10000.0,
         **kwargs,
     ):
         super().__init__(
@@ -83,6 +86,7 @@ class ESMCConfig(PretrainedConfig):
         self.n_layers = n_layers
         self.initializer_range = initializer_range
         self.classifier_dropout = classifier_dropout
+        self.rope_theta = rope_theta
         self.tie_word_embeddings = False
 
 
