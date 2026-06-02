@@ -447,7 +447,7 @@ class GptOssForCausalLM(GptOssPreTrainedModel, GenerationMixin):
             num_experts_per_layer = []
             num_experts_per_tok_per_layer = []
             for layer_idx in range(self.config.num_hidden_layers):
-                layer_config = self.config.get_full_layer_config(layer_idx)
+                layer_config = self.config.per_layer_config[layer_idx]
                 num_experts_per_layer.append(layer_config.num_local_experts)
                 num_experts_per_tok_per_layer.append(layer_config.num_experts_per_tok)
             self.num_experts_per_layer = tuple(num_experts_per_layer)

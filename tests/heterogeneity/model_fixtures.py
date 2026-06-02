@@ -59,7 +59,7 @@ from transformers.models.nemotron_h.modeling_nemotron_h import (
 
 class SkipAwareLlamaDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config, layer_idx):
-        layer_config = config.get_full_layer_config(layer_idx)
+        layer_config = config.per_layer_config[layer_idx]
         super().__init__(layer_config, layer_idx)
         if "attention" in layer_config.skip:
             self.input_layernorm = None
@@ -111,7 +111,7 @@ class SkipAwareLlamaDecoderLayer(LlamaDecoderLayer):
 
 class SkipAwareGptOssDecoderLayer(GptOssDecoderLayer):
     def __init__(self, config, layer_idx):
-        layer_config = config.get_full_layer_config(layer_idx)
+        layer_config = config.per_layer_config[layer_idx]
         super().__init__(layer_config, layer_idx)
         if "attention" in layer_config.skip:
             self.input_layernorm = None
@@ -163,7 +163,7 @@ class SkipAwareGptOssDecoderLayer(GptOssDecoderLayer):
 
 class SkipAwareLlama4TextDecoderLayer(Llama4TextDecoderLayer):
     def __init__(self, config, layer_idx):
-        layer_config = config.get_full_layer_config(layer_idx)
+        layer_config = config.per_layer_config[layer_idx]
         super().__init__(layer_config, layer_idx)
         if "attention" in layer_config.skip:
             self.input_layernorm = None
@@ -216,7 +216,7 @@ class SkipAwareLlama4TextDecoderLayer(Llama4TextDecoderLayer):
 
 class SkipAwareNemotronHBlock(NemotronHBlock):
     def __init__(self, config, layer_idx):
-        layer_config = config.get_full_layer_config(layer_idx)
+        layer_config = config.per_layer_config[layer_idx]
         super().__init__(layer_config, layer_idx)
         if "mixer" in layer_config.skip:
             self.norm = None

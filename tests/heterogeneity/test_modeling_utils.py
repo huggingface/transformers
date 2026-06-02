@@ -42,7 +42,7 @@ if is_torch_available():
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _tiny_llama_config(per_layer_config=None, **overrides):
+def _tiny_llama_config(per_layer_overrides=None, **overrides):
     return LlamaConfig(
         hidden_size=64,
         intermediate_size=128,
@@ -52,12 +52,12 @@ def _tiny_llama_config(per_layer_config=None, **overrides):
         head_dim=16,
         vocab_size=32,
         max_position_embeddings=64,
-        per_layer_config=per_layer_config,
+        per_layer_overrides=per_layer_overrides,
         **overrides,
     )
 
 
-def _tiny_gpt_oss_config(per_layer_config=None, **overrides):
+def _tiny_gpt_oss_config(per_layer_overrides=None, **overrides):
     return GptOssConfig(
         hidden_size=64,
         intermediate_size=32,
@@ -70,12 +70,12 @@ def _tiny_gpt_oss_config(per_layer_config=None, **overrides):
         num_local_experts=4,
         num_experts_per_tok=2,
         sliding_window=32,
-        per_layer_config=per_layer_config,
+        per_layer_overrides=per_layer_overrides,
         **overrides,
     )
 
 
-def _tiny_llama4_config(per_layer_config=None, **overrides):
+def _tiny_llama4_config(per_layer_overrides=None, **overrides):
     return Llama4TextConfig(
         hidden_size=64,
         intermediate_size=32,
@@ -92,12 +92,12 @@ def _tiny_llama4_config(per_layer_config=None, **overrides):
         attention_chunk_size=32,
         use_qk_norm=False,
         attn_temperature_tuning=False,
-        per_layer_config=per_layer_config,
+        per_layer_overrides=per_layer_overrides,
         **overrides,
     )
 
 
-def _tiny_nemotron_h_config(per_layer_config=None, **overrides):
+def _tiny_nemotron_h_config(per_layer_overrides=None, **overrides):
     return NemotronHConfig(
         hidden_size=64,
         intermediate_size=128,
@@ -115,7 +115,7 @@ def _tiny_nemotron_h_config(per_layer_config=None, **overrides):
         mamba_num_heads=4,
         mamba_head_dim=16,
         n_groups=2,
-        per_layer_config=per_layer_config,
+        per_layer_overrides=per_layer_overrides,
         **overrides,
     )
 
@@ -198,7 +198,7 @@ class HeteroCase:
     model_key: str  # key into MODEL_FIXTURES
     config_factory: callable
     model_cls: type
-    per_layer_config: dict
+    per_layer_overrides: dict
     # --- Structure verification fields ---
     structure_weight_checks: list[WeightCheck] = field(default_factory=list)
 
@@ -210,7 +210,7 @@ HETERO_CASES = [
         model_key="llama",
         config_factory=_tiny_llama_config,
         model_cls=LlamaForCausalLM,
-        per_layer_config={0: {"intermediate_size": 64}, 2: {"intermediate_size": 96}},
+        per_layer_overrides={0: {"intermediate_size": 64}, 2: {"intermediate_size": 96}},
         structure_weight_checks=[
             WeightCheck(0, "mlp.gate_proj.weight", 0, 64),
             WeightCheck(1, "mlp.gate_proj.weight", 0, 128),
@@ -223,7 +223,7 @@ HETERO_CASES = [
         model_key="llama",
         config_factory=_tiny_llama_config,
         model_cls=LlamaForCausalLM,
-        per_layer_config={
+        per_layer_overrides={
             0: {"intermediate_size": 64, "num_key_value_heads": 2},
             2: {"intermediate_size": 96, "num_key_value_heads": 1},
         },
@@ -243,21 +243,21 @@ HETERO_CASES = [
         model_key="llama",
         config_factory=_tiny_llama_config,
         model_cls=LlamaForCausalLM,
-        per_layer_config={1: {"skip": ["attention"]}},
+        per_layer_overrides={1: {"skip": ["attention"]}},
     ),
     HeteroCase(
         name="llama_skip_mlp",
         model_key="llama",
         config_factory=_tiny_llama_config,
         model_cls=LlamaForCausalLM,
-        per_layer_config={2: {"skip": ["mlp"]}},
+        per_layer_overrides={2: {"skip": ["mlp"]}},
     ),
     HeteroCase(
         name="llama_skip_both",
         model_key="llama",
         config_factory=_tiny_llama_config,
         model_cls=LlamaForCausalLM,
-        per_layer_config={1: {"skip": ["attention", "mlp"]}},
+        per_layer_overrides={1: {"skip": ["attention", "mlp"]}},
     ),
     # ── GPT-OSS ──
     HeteroCase(
@@ -265,7 +265,7 @@ HETERO_CASES = [
         model_key="gpt_oss",
         config_factory=_tiny_gpt_oss_config,
         model_cls=GptOssForCausalLM,
-        per_layer_config={0: {"intermediate_size": 16}, 2: {"intermediate_size": 48}},
+        per_layer_overrides={0: {"intermediate_size": 16}, 2: {"intermediate_size": 48}},
         structure_weight_checks=[
             WeightCheck(0, "mlp.experts.down_proj", 1, 16),
             WeightCheck(1, "mlp.experts.down_proj", 1, 32),
@@ -278,21 +278,21 @@ HETERO_CASES = [
         model_key="gpt_oss",
         config_factory=_tiny_gpt_oss_config,
         model_cls=GptOssForCausalLM,
-        per_layer_config={1: {"skip": ["attention"]}},
+        per_layer_overrides={1: {"skip": ["attention"]}},
     ),
     HeteroCase(
         name="gpt_oss_skip_mlp",
         model_key="gpt_oss",
         config_factory=_tiny_gpt_oss_config,
         model_cls=GptOssForCausalLM,
-        per_layer_config={2: {"skip": ["mlp"]}},
+        per_layer_overrides={2: {"skip": ["mlp"]}},
     ),
     HeteroCase(
         name="gpt_oss_skip_both",
         model_key="gpt_oss",
         config_factory=_tiny_gpt_oss_config,
         model_cls=GptOssForCausalLM,
-        per_layer_config={1: {"skip": ["attention", "mlp"]}},
+        per_layer_overrides={1: {"skip": ["attention", "mlp"]}},
     ),
     # ── Llama4 ──
     HeteroCase(
@@ -300,7 +300,7 @@ HETERO_CASES = [
         model_key="llama4",
         config_factory=_tiny_llama4_config,
         model_cls=Llama4ForCausalLM,
-        per_layer_config={0: {"intermediate_size_mlp": 64}},
+        per_layer_overrides={0: {"intermediate_size_mlp": 64}},
         structure_weight_checks=[
             WeightCheck(0, "feed_forward.up_proj.weight", 0, 64),
             WeightCheck(2, "feed_forward.up_proj.weight", 0, 128),  # default
@@ -311,21 +311,21 @@ HETERO_CASES = [
         model_key="llama4",
         config_factory=_tiny_llama4_config,
         model_cls=Llama4ForCausalLM,
-        per_layer_config={0: {"skip": ["attention"]}},
+        per_layer_overrides={0: {"skip": ["attention"]}},
     ),
     HeteroCase(
         name="llama4_skip_mlp",
         model_key="llama4",
         config_factory=_tiny_llama4_config,
         model_cls=Llama4ForCausalLM,
-        per_layer_config={0: {"skip": ["mlp"]}},
+        per_layer_overrides={0: {"skip": ["mlp"]}},
     ),
     HeteroCase(
         name="llama4_skip_both",
         model_key="llama4",
         config_factory=_tiny_llama4_config,
         model_cls=Llama4ForCausalLM,
-        per_layer_config={0: {"skip": ["attention", "mlp"]}},
+        per_layer_overrides={0: {"skip": ["attention", "mlp"]}},
     ),
     # ── NemotronH (layers: attention, mamba, moe, attention) ──
     HeteroCase(
@@ -333,7 +333,7 @@ HETERO_CASES = [
         model_key="nemotron_h",
         config_factory=_tiny_nemotron_h_config,
         model_cls=NemotronHForCausalLM,
-        per_layer_config={0: {"num_key_value_heads": 2}},
+        per_layer_overrides={0: {"num_key_value_heads": 2}},
         structure_weight_checks=[
             WeightCheck(0, "mixer.k_proj.weight", 0, 32),  # 2 kv_heads × head_dim 16
             WeightCheck(3, "mixer.k_proj.weight", 0, 64),  # 4 kv_heads × 16 (default)
@@ -344,21 +344,21 @@ HETERO_CASES = [
         model_key="nemotron_h",
         config_factory=_tiny_nemotron_h_config,
         model_cls=NemotronHForCausalLM,
-        per_layer_config={0: {"skip": ["mixer"]}},
+        per_layer_overrides={0: {"skip": ["mixer"]}},
     ),
     HeteroCase(
         name="nemotron_h_skip_mamba",
         model_key="nemotron_h",
         config_factory=_tiny_nemotron_h_config,
         model_cls=NemotronHForCausalLM,
-        per_layer_config={1: {"skip": ["mixer"]}},
+        per_layer_overrides={1: {"skip": ["mixer"]}},
     ),
     HeteroCase(
         name="nemotron_h_skip_moe",
         model_key="nemotron_h",
         config_factory=_tiny_nemotron_h_config,
         model_cls=NemotronHForCausalLM,
-        per_layer_config={2: {"skip": ["mixer"]}},
+        per_layer_overrides={2: {"skip": ["mixer"]}},
     ),
 ]
 
@@ -374,7 +374,7 @@ def _build_hetero_and_ref(case):
     representing what the model would look like without the generic heterogeneity mechanism.
     """
     with _hetero_context(case.model_key):
-        hetero = _build_model(case.config_factory(per_layer_config=case.per_layer_config), case.model_cls)
+        hetero = _build_model(case.config_factory(per_layer_overrides=case.per_layer_overrides), case.model_cls)
 
     ref = _build_reference(hetero, case.config_factory(), case.model_cls, case.model_key)
     return hetero, ref
@@ -396,7 +396,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
     @parameterized.expand(HETERO_CASES, name_func=_case_name)
     def test_structure(self, case):
         """Verify the entire model structure: skip replacements and weight shapes."""
-        config = case.config_factory(per_layer_config=case.per_layer_config)
+        config = case.config_factory(per_layer_overrides=case.per_layer_overrides)
         with _hetero_context(case.model_key):
             model = _build_model(config, case.model_cls)
 
@@ -440,10 +440,22 @@ class TestHeterogeneousModeling(unittest.TestCase):
             )
         )
 
+    def test_layer_configs_reflect_model_init_attention_implementation(self):
+        config = _tiny_llama_config(per_layer_overrides={0: {"intermediate_size": 64}})
+        self.assertIsNone(config._attn_implementation)
+
+        with _hetero_context("llama"):
+            model = _build_model(config, LlamaForCausalLM)
+
+        expected_attn_implementation = model.config._attn_implementation
+        self.assertIsNotNone(expected_attn_implementation)
+        for layer in model.model.layers:
+            self.assertEqual(layer.self_attn.config._attn_implementation, expected_attn_implementation)
+
     def test_no_leaked_state_after_heterogeneous_init(self):
         """After heterogeneous model init, no context token should remain and non-heterogeneous models should work."""
         with _hetero_context("llama"):
-            config = _tiny_llama_config(per_layer_config={1: {"skip": ["attention"]}})
+            config = _tiny_llama_config(per_layer_overrides={1: {"skip": ["attention"]}})
             model = _build_model(config, LlamaForCausalLM)
 
         self.assertFalse(hasattr(model, "_layer_init_context_token"))
@@ -465,7 +477,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
     def test_save_pretrained_model_round_trip(self):
         """Full model save/load: config, weight shapes, and forward output should survive."""
         per_layer = {0: {"intermediate_size": 64}, 2: {"intermediate_size": 96}}
-        hetero_config = _tiny_llama_config(per_layer_config=per_layer)
+        hetero_config = _tiny_llama_config(per_layer_overrides=per_layer)
         with _hetero_context("llama"):
             hetero_model = _build_model(hetero_config, LlamaForCausalLM)
 
@@ -487,7 +499,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
 
     def test_per_layer_kv_cache_shapes(self):
         """KV cache tensors should reflect per-layer num_key_value_heads after a cached forward pass."""
-        config = _tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}, 2: {"num_key_value_heads": 1}})
+        config = _tiny_llama_config(per_layer_overrides={0: {"num_key_value_heads": 2}, 2: {"num_key_value_heads": 1}})
         with _hetero_context("llama"):
             model = _build_model(config, LlamaForCausalLM)
         input_ids = _dummy_input_ids()
@@ -501,7 +513,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
 
     def test_error_layer_cls_not_set(self):
         """Building a heterogeneous model without _layer_cls should raise ValueError."""
-        config = _tiny_llama_config(per_layer_config={0: {"intermediate_size": 64}})
+        config = _tiny_llama_config(per_layer_overrides={0: {"intermediate_size": 64}})
         orig = getattr(LlamaPreTrainedModel, "_layer_cls", None)
         if hasattr(LlamaPreTrainedModel, "_layer_cls"):
             delattr(LlamaPreTrainedModel, "_layer_cls")
@@ -514,7 +526,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
 
     def test_error_missing_skip_descriptor(self):
         """Requesting a skip type without a matching descriptor should raise ValueError."""
-        config = _tiny_llama_config(per_layer_config={1: {"skip": ["attention"]}})
+        config = _tiny_llama_config(per_layer_overrides={1: {"skip": ["attention"]}})
         fixture = MODEL_FIXTURES["llama"]
         with (
             patch.object(fixture.pretrained_cls, "_layer_cls", fixture.layer_cls, create=True),
@@ -529,8 +541,8 @@ class TestHeterogeneousModeling(unittest.TestCase):
         per_layer_b = {0: {"intermediate_size": 96}}
 
         with _hetero_context("llama"):
-            model_a = _build_model(_tiny_llama_config(per_layer_config=per_layer_a), LlamaForCausalLM)
-            model_b = _build_model(_tiny_llama_config(per_layer_config=per_layer_b), LlamaForCausalLM, seed=123)
+            model_a = _build_model(_tiny_llama_config(per_layer_overrides=per_layer_a), LlamaForCausalLM)
+            model_b = _build_model(_tiny_llama_config(per_layer_overrides=per_layer_b), LlamaForCausalLM, seed=123)
 
         self.assertEqual(model_a.model.layers[0].mlp.gate_proj.weight.shape[0], 64)
         self.assertEqual(model_b.model.layers[0].mlp.gate_proj.weight.shape[0], 96)
@@ -556,7 +568,7 @@ class TestHeterogeneousCacheAndMask(unittest.TestCase):
     def test_dynamic_cache_heterogeneous_sliding_window(self):
         """DynamicCache should create sliding layers matching per-layer sliding_window."""
         config = _tiny_llama_config(
-            sliding_window=None, per_layer_config={0: {"sliding_window": 32}, 2: {"sliding_window": 16}}
+            sliding_window=None, per_layer_overrides={0: {"sliding_window": 32}, 2: {"sliding_window": 16}}
         )
         cache = DynamicCache(config=config)
         layers = cache.layers
@@ -572,7 +584,7 @@ class TestHeterogeneousCacheAndMask(unittest.TestCase):
     def test_static_cache_heterogeneous_sliding_window(self):
         """StaticCache should create sliding layers for the right layers."""
         config = _tiny_llama_config(
-            sliding_window=None, per_layer_config={1: {"sliding_window": 24}, 3: {"sliding_window": 48}}
+            sliding_window=None, per_layer_overrides={1: {"sliding_window": 24}, 3: {"sliding_window": 48}}
         )
         cache = StaticCache(config=config, batch_size=1, max_cache_len=64)
         layers = cache.layers
@@ -590,7 +602,7 @@ class TestHeterogeneousCacheAndMask(unittest.TestCase):
         """For heterogeneous sliding_window, create_sliding_window_causal_mask should return a dict."""
         config = _tiny_llama_config(
             sliding_window=None,
-            per_layer_config={0: {"sliding_window": 32}, 1: {"sliding_window": 32}, 2: {"sliding_window": 16}},
+            per_layer_overrides={0: {"sliding_window": 32}, 1: {"sliding_window": 32}, 2: {"sliding_window": 16}},
         )
         config._attn_implementation = "sdpa"
 
@@ -605,7 +617,7 @@ class TestHeterogeneousCacheAndMask(unittest.TestCase):
     def test_chunked_attention_mask_returns_dict(self):
         """For heterogeneous attention_chunk_size, create_chunked_causal_mask should return a dict."""
         config = _tiny_llama4_config(
-            per_layer_config={
+            per_layer_overrides={
                 0: {"attention_chunk_size": 16},
                 2: {"attention_chunk_size": 16},
                 3: {"attention_chunk_size": 8},

@@ -1285,7 +1285,7 @@ class DynamicCache(Cache):
             ):
                 sliding_windows = []
                 for layer_idx in range(decoder_config.num_hidden_layers):
-                    layer_config = decoder_config.get_full_layer_config(layer_idx)
+                    layer_config = decoder_config.per_layer_config[layer_idx]
                     sliding_windows.append(
                         getattr(layer_config, "sliding_window", None)
                         or getattr(layer_config, "attention_chunk_size", None)
@@ -1310,9 +1310,7 @@ class DynamicCache(Cache):
             for layer_idx, layer_type in enumerate(layer_types):
                 cache_cls = LAYER_TYPE_CACHE_MAPPING.get(layer_type, DynamicLayer)
                 layer_decoder_config = (
-                    decoder_config.get_full_layer_config(layer_idx)
-                    if decoder_config.is_heterogeneous
-                    else decoder_config
+                    decoder_config.per_layer_config[layer_idx] if decoder_config.is_heterogeneous else decoder_config
                 )
                 layers.append(cache_cls(layer_decoder_config))
 
@@ -1403,7 +1401,7 @@ class StaticCache(Cache):
         if config.is_heterogeneous and ({"sliding_window", "attention_chunk_size"} & config.per_layer_attributes):
             sliding_windows = []
             for layer_idx in range(config.num_hidden_layers):
-                layer_config = config.get_full_layer_config(layer_idx)
+                layer_config = config.per_layer_config[layer_idx]
                 sliding_windows.append(
                     getattr(layer_config, "sliding_window", None)
                     or getattr(layer_config, "attention_chunk_size", None)

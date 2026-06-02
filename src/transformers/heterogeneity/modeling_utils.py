@@ -20,7 +20,7 @@ _LAYER_IDX_POSSIBLE_NAMES = ("layer_idx", "idx", "layer_id", "layer_number", "i"
 
 @dataclass
 class _LayerInitContext:
-    skip_types_per_layer: dict[int, set[str]]
+    per_layer_skip_types: list[list[str]]
     skip_descriptors: dict[str | tuple[str, type], type[nn.Module]]
     per_layer_attributes: set[str]
     layer_idx_variable_name: str | None
@@ -45,13 +45,13 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
 
     1. The patched ``layer_cls.__init__`` determines the current layer index (from the function
        arguments or by walking the call stack).
-    2. It calls ``config.get_full_layer_config(layer_idx)`` to merge the
-       global config with the per-layer overrides set up by
-       ``apply_heterogeneous_config``.
-    3. It passes the resolved config to the original ``__init__``.
-    4. For layers with ``skip`` attribute, the corresponding
-       sub-modules are replaced with no-op modules according to the model's
-       ``_skip_descriptors``.
+    2. It passes ``config.per_layer_config[layer_idx]`` to the original ``__init__``.
+    3. For layers with a ``skip`` attribute, the
+       corresponding sub-modules are replaced with no-op modules according to
+       the model's ``_skip_descriptors``.
+    4. For layers with layer-specific attention masks, the layer ``forward``
+       method is patched to select the mask matching that layer's configured
+       mask key.
 
     After model construction, ``clean_up_post_heterogeneous_modeling``
     resets the ``ContextVar``.
@@ -75,14 +75,12 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
     if _layer_init_context.get() is not None:
         return
 
-    skip_types_per_layer = {
-        layer_idx: getattr(layer_config, "skip", set()) for layer_idx, layer_config in model.config.per_layer_config.items()
-    }
+    per_layer_skip_types = [getattr(layer_config, "skip", []) for layer_config in model.config.per_layer_config]
     skip_descriptors = getattr(model, "_skip_descriptors", None) or {}
-    _validate_skip_descriptors(skip_types_per_layer, skip_descriptors)
+    _validate_skip_descriptors(per_layer_skip_types, skip_descriptors)
 
     ctx = _LayerInitContext(
-        skip_types_per_layer=skip_types_per_layer,
+        per_layer_skip_types=per_layer_skip_types,
         skip_descriptors=skip_descriptors,
         per_layer_attributes=model.config.per_layer_attributes,
         layer_idx_variable_name=getattr(model, "_layer_idx_variable_name", None),
@@ -132,32 +130,32 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
                 )
 
             # --- Apply per-layer config ---
-            layer_config = config.get_full_layer_config(layer_idx)
+            layer_config = config.per_layer_config[layer_idx]
             orig_layer_init(self, layer_config, *args, **kwargs)
 
             # --- Replace skipped sublayers ---
             for skip_type, skip_descriptor in ctx.skip_descriptors.items():
-                if skip_type in ctx.skip_types_per_layer.get(layer_idx, []):
+                if skip_type in ctx.per_layer_skip_types[layer_idx]:
                     _apply_skip_descriptor(
                         layer=self,
                         skip_descriptor=skip_descriptor,
                         layer_idx=layer_idx,
                     )
 
-            # --- Patch forward for heterogeneous masks ---
+            # --- Patch forward for attention mask selection ---
             sliding_window = getattr(layer_config, "sliding_window", None)
             attention_chunk_size = getattr(layer_config, "attention_chunk_size", None)
             mask_key = (
                 sliding_window or attention_chunk_size
             )  # Relies on having exclusivity validation in the heterogeneous configuration_utils
             if {"sliding_window", "attention_chunk_size"} & ctx.per_layer_attributes and mask_key:
-                _patch_layer_forward_for_heterogeneous_masks(layer=self, mask_key=mask_key)
+                _patch_layer_forward_for_attention_mask_selection(layer=self, mask_key=mask_key)
 
         _patched_layer_init._patched_by_heterogeneity = True
         layer_cls.__init__ = _patched_layer_init
 
 
-def _patch_layer_forward_for_heterogeneous_masks(
+def _patch_layer_forward_for_attention_mask_selection(
     *,
     layer: nn.Module,
     mask_key: int,
@@ -175,9 +173,9 @@ def _patch_layer_forward_for_heterogeneous_masks(
 
 
 def _validate_skip_descriptors(
-    skip_types_per_layer: dict[int, set[str]], skip_descriptors: dict[str | tuple[str, type], type[nn.Module]]
+    per_layer_skip_types: list[list[str]], skip_descriptors: dict[str | tuple[str, type], type[nn.Module]]
 ) -> None:
-    skip_types = set.union(*skip_types_per_layer.values())
+    skip_types = set(sum(per_layer_skip_types, []))
     missing_descriptors = skip_types - skip_descriptors.keys()
     if missing_descriptors:
         raise ValueError(f"No-op descriptors are missing for the following types: {missing_descriptors}")

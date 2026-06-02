@@ -699,7 +699,7 @@ def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_co
                 if layer_idx_str is None:
                     raise ValueError(f"Could not find layer index in module name: {module_name}")
                 layer_idx = int(layer_idx_str)
-                config = model.config.get_full_layer_config(layer_idx)
+                config = model.config.per_layer_config[layer_idx]
             else:
                 config = model.config
 

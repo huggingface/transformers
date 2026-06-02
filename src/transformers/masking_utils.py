@@ -1179,6 +1179,7 @@ def create_sliding_window_causal_mask(
             layer_idx=layer_idx,
         )
 
+
 def _create_sliding_window_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -1360,6 +1361,7 @@ def create_bidirectional_sliding_window_mask(
     )
     return attention_mask
 
+
 def create_chunked_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -1424,6 +1426,7 @@ def create_chunked_causal_mask(
             and_mask_function=and_mask_function,
             layer_idx=layer_idx,
         )
+
 
 def _create_chunked_causal_mask(
     config: PreTrainedConfig,
@@ -1523,7 +1526,7 @@ def _create_heterogeneous_mask_dict(
 ) -> dict[int, torch.Tensor]:
     mask_dict = {}
     for layer_idx in range(config.num_hidden_layers):
-        layer_config = config.get_full_layer_config(layer_idx)
+        layer_config = config.per_layer_config[layer_idx]
         attribute_value = getattr(layer_config, attribute_name)
         if attribute_value is None:
             continue
