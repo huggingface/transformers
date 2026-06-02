@@ -153,9 +153,13 @@ class ProcessorTesterMixin:
 
     @classmethod
     def _setup_test_attributes(cls, processor):
-        # to override in the child class to define class attributes
-        # such as image_token, video_token, audio_token, etc.
-        pass
+        # can be overriden in the child class to define more class attributes
+        if getattr(processor, "image_token", None) is not None:
+            cls.image_token = processor.image_token
+        if getattr(processor, "video_token", None) is not None:
+            cls.video_token = processor.video_token
+        if getattr(processor, "audio_token", None) is not None:
+            cls.audio_token = processor.audio_token
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
