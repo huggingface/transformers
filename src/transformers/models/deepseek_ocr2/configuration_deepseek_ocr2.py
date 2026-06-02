@@ -253,6 +253,9 @@ class DeepseekOcr2TextConfig(PreTrainedConfig):
         self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
+        if self.mlp_layer_types is None:
+            # Default DeepSeek MoE schedule: first layer dense, the rest sparse (MoE).
+            self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):

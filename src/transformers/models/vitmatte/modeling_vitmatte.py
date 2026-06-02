@@ -188,7 +188,7 @@ class VitMatteDetailCaptureModule(nn.Module):
         self.conv_chans = self.convstream.conv_chans
 
         self.fusion_blocks = nn.ModuleList()
-        self.fusion_channels = [config.hidden_size] + config.fusion_hidden_sizes
+        self.fusion_channels = [config.hidden_size] + list(config.fusion_hidden_sizes)
 
         for i in range(len(self.fusion_channels) - 1):
             self.fusion_blocks.append(

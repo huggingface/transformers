@@ -31,6 +31,9 @@ class Lfm2MoeConfig(PreTrainedConfig):
         Number of dense Lfm2MoeMLP layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
     use_expert_bias (`bool`, *optional*, defaults to `True`):
         Whether to use the expert bias on the routing weights.
+    full_attn_idxs (`list[int]`, *optional*):
+        Indices of the layers that use full attention; the remaining layers use short convolutions.
+        If unset, every layer uses full attention.
 
     ```python
     >>> from transformers import Lfm2MoeModel, Lfm2MoeConfig
@@ -74,9 +77,17 @@ class Lfm2MoeConfig(PreTrainedConfig):
     use_expert_bias: bool = True
     routed_scaling_factor: float = 1.0
     norm_topk_prob: bool = True
+    full_attn_idxs: list[int] | None = None
     layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
+        if self.layer_types is None:
+            self.full_attn_idxs = (
+                self.full_attn_idxs if self.full_attn_idxs is not None else list(range(self.num_hidden_layers))
+            )
+            self.layer_types = [
+                "full_attention" if i in self.full_attn_idxs else "conv" for i in range(self.num_hidden_layers)
+            ]
         self.tie_word_embeddings = kwargs.pop("tie_embedding", self.tie_word_embeddings)
         super().__post_init__(**kwargs)
 

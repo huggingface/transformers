@@ -199,7 +199,6 @@ class DbrxAttention(nn.Module):
         self.num_key_value_heads = attn_config.kv_n_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.scaling = self.head_dim**-0.5
-        self.rope_theta = attn_config.rope_theta
         self.is_causal = True
 
         self.Wqkv = nn.Linear(

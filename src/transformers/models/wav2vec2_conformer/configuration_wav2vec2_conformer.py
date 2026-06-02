@@ -163,7 +163,7 @@ class Wav2Vec2ConformerConfig(PreTrainedConfig):
 
     model_type = "wav2vec2-conformer"
 
-    vocab_size: int | None = None
+    vocab_size: int | None = 32
     hidden_size: int = 768
     num_hidden_layers: int = 12
     num_attention_heads: int = 12

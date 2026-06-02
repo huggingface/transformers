@@ -111,6 +111,10 @@ class BridgeTowerConfig(PreTrainedConfig):
         Type of the bridge/link layer.
     init_layernorm_from_vision_encoder (`bool`, *optional*, defaults to `False`):
         Whether to init LayerNorm from the vision encoder.
+    contrastive_hidden_size (`int`, *optional*, defaults to 512):
+        The size of the projection head used for the image-text contrastive (ITC) objective.
+    logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
+        The initial value of the logit scale used for the image-text contrastive (ITC) objective.
 
     Example:
 
@@ -141,6 +145,8 @@ class BridgeTowerConfig(PreTrainedConfig):
     num_hidden_layers: int = 6
     tie_word_embeddings: bool = False
     init_layernorm_from_vision_encoder: bool = False
+    contrastive_hidden_size: int = 512
+    logit_scale_init_value: float = 2.6592
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
 

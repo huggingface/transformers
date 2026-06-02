@@ -47,7 +47,12 @@ class PerceptionLMConfig(PreTrainedConfig):
         elif isinstance(self.vision_config, TimmWrapperConfig):
             pass
         elif self.vision_config is None:
-            self.vision_config = TimmWrapperConfig()
+            # Default to the Perception Encoder vision backbone; `model_args["embed_dim"]` is
+            # required by the multimodal projector, so a bare `TimmWrapperConfig()` is not enough.
+            self.vision_config = TimmWrapperConfig(
+                architecture="vit_pe_core_large_patch14_336",
+                model_args={"embed_dim": 1024},
+            )
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "llama")

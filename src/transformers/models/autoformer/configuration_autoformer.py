@@ -87,7 +87,7 @@ class AutoformerConfig(PreTrainedConfig):
         "num_hidden_layers": "encoder_layers",
     }
 
-    prediction_length: int | None = None
+    prediction_length: int = 1
     context_length: int | None = None
     distribution_output: str = "student_t"
     loss: str = "nll"

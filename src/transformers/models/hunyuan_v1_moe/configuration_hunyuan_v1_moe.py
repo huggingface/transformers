@@ -66,6 +66,8 @@ class HunYuanMoEV1Config(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
         super().__post_init__(**kwargs)
 
     def _rope_parameters_validation(self):

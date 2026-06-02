@@ -95,11 +95,11 @@ class Dots1Config(PreTrainedConfig):
     num_hidden_layers: int = 62
     num_attention_heads: int = 32
     num_key_value_heads: int | None = 32
-    n_shared_experts: int | None = None
-    n_routed_experts: int | None = None
+    n_shared_experts: int | None = 2
+    n_routed_experts: int | None = 128
     n_group: int | None = 1
     topk_group: int | None = 1
-    num_experts_per_tok: int | None = None
+    num_experts_per_tok: int | None = 6
     first_k_dense_replace: int | None = 0
     norm_topk_prob: bool | None = False
     hidden_act: str = "silu"

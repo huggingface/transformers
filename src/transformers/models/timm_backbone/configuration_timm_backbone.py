@@ -49,7 +49,7 @@ class TimmBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
 
     model_type = "timm_backbone"
 
-    backbone: str | None = None
+    backbone: str = "resnet50"
     num_channels: int = 3
     features_only: bool = True
     _out_indices: list[int] | None = None

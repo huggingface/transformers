@@ -818,9 +818,9 @@ class Emu3ImageVocabularyMapping:
     """
 
     def __init__(self, vocab_map):
-        self.vocab_map = vocab_map
-        self.eol_token_id = vocab_map.get("<|extra_200|>")
-        self.image_token_id = vocab_map.get("<image>")
+        self.vocab_map = vocab_map or {}
+        self.eol_token_id = self.vocab_map.get("<|extra_200|>")
+        self.image_token_id = self.vocab_map.get("<image>")
 
     @cached_property
     def image_tokens(self):

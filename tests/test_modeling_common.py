@@ -4458,6 +4458,21 @@ class ModelTesterMixin:
             with torch.device("meta"):
                 _ = model_class(copy.deepcopy(config))
 
+    def test_can_be_initialized_on_meta_with_default_config(self):
+        # The tester config is hand-tuned to be tiny and is known to build; here we additionally
+        # check that the architecture instantiates from its *default* (release-scale) config. Meta
+        # init allocates no real memory, so this is cheap and catches config-default regressions
+        # (e.g. attributes the model reads that have no sensible default) that the tiny config hides.
+        for model_class in self.all_model_classes:
+            try:
+                default_config = model_class.config_class()
+            except Exception:
+                # Composite configs (encoder-decoder, dual-encoder, ...) require sub-configs and
+                # cannot be instantiated bare; nothing to check for those here.
+                continue
+            with torch.device("meta"):
+                _ = model_class(default_config)
+
     @require_torch_accelerator
     def test_can_load_with_device_context_manager(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

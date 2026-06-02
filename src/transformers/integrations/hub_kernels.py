@@ -378,12 +378,16 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
             version = _HUB_KERNEL_MAPPING[kernel_name].get("version", None)
             kernel = get_kernel(repo_id, revision=revision, version=version)
             mapping[kernel_name] = kernel
-        except FileNotFoundError as e:
-            mapping[kernel_name] = None
-            logger.warning_once(f"Failed to load kernel {kernel_name}: {e}")
         except AssertionError:
             # Happens when torch is built without an accelerator backend; fall back to slow path.
             mapping[kernel_name] = None
+        except Exception as e:
+            # Loading a kernel is only ever an optimization: any failure to resolve/fetch it (the
+            # hub being unreachable in offline mode, a network error, an incompatible spec, a missing
+            # file, ...) must degrade gracefully to the Python implementation rather than break model
+            # instantiation. In particular this keeps `__init__` working on the `meta` device / offline.
+            mapping[kernel_name] = None
+            logger.warning_once(f"Failed to load kernel {kernel_name}, falling back to the Python path: {e}")
 
     else:
         # Try to import is_{kernel_name}_available from ..utils
