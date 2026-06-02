@@ -36,6 +36,24 @@ class CompressedTensorsTest(unittest.TestCase):
             sparsity_config={"format": "dense"},
         )
 
+    def test_sparsity_config_format_rejects_path_import(self):
+        # `sparsity_config["format"]` is an untrusted config.json value forwarded to compressed_tensors'
+        # SparsityCompressionConfig.load_from_registry. A name shaped like "<path>:<attr>" is resolved by the
+        # registry as a plugin file that is imported and executed (arbitrary code execution, CWE-94).
+        # CompressedTensorsConfig must reject such values before reaching that code path.
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            payload = os.path.join(tmp_dir, "payload.py")
+            canary = os.path.join(tmp_dir, "executed")
+            with open(payload, "w") as f:
+                f.write(f"open({canary!r}, 'w').close()\n")
+            with self.assertRaises(ValueError):
+                CompressedTensorsConfig(sparsity_config={"format": f"{payload}:x"})
+            # the payload module must not have been imported/executed
+            self.assertFalse(os.path.exists(canary))
+
     def test_config_to_from_dict(self):
         config = CompressedTensorsConfig(config_groups={"FP8": ["Linear"]}, sparsity_config={"format": "dense"})
         config_dict = config.to_dict()
