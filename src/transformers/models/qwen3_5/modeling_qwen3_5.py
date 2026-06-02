@@ -1345,7 +1345,7 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
 
-        # Separate video grid thw into multiple grids because timestamps are used to separate videos.
+        # Separate video grid thw into multiple grids because timestamps are used to seperate videos.
         if video_grid_thw is not None:
             video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
             video_grid_thw[:, 0] = 1
@@ -1535,6 +1535,7 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
             position_ids = None
         return position_ids
 
+    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1549,7 +1550,6 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        rope_deltas: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         image_outputs: BaseModelOutputWithPooling | None = None,
         video_outputs: BaseModelOutputWithPooling | None = None,
@@ -1560,8 +1560,6 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
         """
 
         if inputs_embeds is None:

@@ -577,7 +577,9 @@ class VideoLlama3Model(Qwen2VLModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_outputs = self.get_image_features(pixel_values, image_grid_thw, image_merge_sizes, return_dict=True, **kwargs)
+            image_outputs = self.get_image_features(
+                pixel_values, image_grid_thw, image_merge_sizes, return_dict=True, **kwargs
+            )
 
         if pixel_values_videos is not None:
             video_outputs = self.get_video_features(

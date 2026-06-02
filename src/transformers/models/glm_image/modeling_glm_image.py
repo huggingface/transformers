@@ -1183,7 +1183,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
 
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
-        # split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         split_sizes = (image_grid_thw.prod(-1)).tolist()
         image_embeds = torch.split(vision_outputs.last_hidden_state, split_sizes)
 
