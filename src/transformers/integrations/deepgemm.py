@@ -42,8 +42,6 @@ logger = logging.get_logger(__name__)
 
 # DeepGEMM requires M-dimension alignment to 128 for TMA-based contiguous grouped GEMM.
 _DEEPGEMM_M_ALIGNMENT = 128
-_FP8_DTYPE = torch.float8_e4m3fn
-_FP8_MAX = torch.finfo(_FP8_DTYPE).max
 
 
 # ── Kernel loading ─────────────────────────────────────────────────────────────
@@ -59,7 +57,6 @@ class DeepGEMM:
     grouped_bf16_matmul_nt: Callable
     grouped_bf16_matmul_nn: Callable
     per_token_cast_to_fp8: Callable
-    get_mn_major_tma_aligned_packed_ue8m0_tensor: Callable
     transform_sf_into_required_layout: Callable
     transform_weights_for_mega_moe: Callable
     get_symm_buffer_for_mega_moe: Callable
@@ -107,9 +104,6 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
     grouped_bf16_matmul_nt = getattr(kernel, "m_grouped_bf16_gemm_nt_contiguous", None)
     grouped_bf16_matmul_nn = getattr(kernel, "m_grouped_bf16_gemm_nn_contiguous", None)
     per_token_cast_to_fp8 = resolve_internal_import(kernel, chained_path="utils.per_token_cast_to_fp8")
-    get_mn_major_tma_aligned_packed_ue8m0_tensor = getattr(
-        kernel, "get_mn_major_tma_aligned_packed_ue8m0_tensor", None
-    )
     transform_sf_into_required_layout = getattr(kernel, "transform_sf_into_required_layout", None)
     transform_weights_for_mega_moe = getattr(kernel, "transform_weights_for_mega_moe", None)
     get_symm_buffer_for_mega_moe = getattr(kernel, "get_symm_buffer_for_mega_moe", None)
@@ -124,7 +118,6 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
             ("m_grouped_bf16_gemm_nt_contiguous", grouped_bf16_matmul_nt),
             ("m_grouped_bf16_gemm_nn_contiguous", grouped_bf16_matmul_nn),
             ("utils.per_token_cast_to_fp8", per_token_cast_to_fp8),
-            ("get_mn_major_tma_aligned_packed_ue8m0_tensor", get_mn_major_tma_aligned_packed_ue8m0_tensor),
             ("transform_sf_into_required_layout", transform_sf_into_required_layout),
             ("transform_weights_for_mega_moe", transform_weights_for_mega_moe),
             ("get_symm_buffer_for_mega_moe", get_symm_buffer_for_mega_moe),
@@ -143,7 +136,6 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
         grouped_bf16_matmul_nt=grouped_bf16_matmul_nt,
         grouped_bf16_matmul_nn=grouped_bf16_matmul_nn,
         per_token_cast_to_fp8=per_token_cast_to_fp8,
-        get_mn_major_tma_aligned_packed_ue8m0_tensor=get_mn_major_tma_aligned_packed_ue8m0_tensor,
         transform_sf_into_required_layout=transform_sf_into_required_layout,
         transform_weights_for_mega_moe=transform_weights_for_mega_moe,
         get_symm_buffer_for_mega_moe=get_symm_buffer_for_mega_moe,
@@ -167,28 +159,34 @@ _DEEPGEMM_VISITED_DEVICES: set[int] = set()
 
 def _assert_single_device(device: torch.device, context: str) -> None:
     """Reject DeepGEMM calls that span multiple CUDA devices in the same process
-    (e.g. ``device_map="auto"`` across N GPUs). The SM100 kernel has a kernel-
-    level memory-ordering bug that surfaces only in this configuration: kernels
-    on the new device can read stale tiles before prior cross-device copies are
-    visible. ``CUDA_LAUNCH_BLOCKING=1`` masks it (full serialization); NCCL-
-    sync'd distributed setups (torchrun + EP) mask it too. Single-process multi-
-    GPU has neither, and bracketing each DeepGEMM call with explicit
-    ``torch.cuda.synchronize`` empirically isn't enough to plug the race.
+    (e.g. ``device_map="auto"`` across N GPUs). DeepGEMM loads each kernel via
+    ``cuKernelGetFunction``, which binds the resulting ``CUfunction`` handle to
+    the CUDA context that was current at load time. Driving the same cached
+    handle from a different device's context launches it against the wrong
+    module/context and produces garbage. Distributed setups (torchrun + TP/EP)
+    don't trip this because each process owns exactly one device's context.
+
+    The fix is a build-time choice on the DeepGEMM side: compiling with
+    ``DG_JIT_USE_RUNTIME_API=1`` swaps the loader for the runtime API
+    (context-free ``cudaKernel_t``) and lifts the restriction — but it has to
+    be baked into the wheel, setting the env var at Python runtime won't change
+    the loader the cached ``.so`` already uses. Until the kernels-community build
+    we ship picks that up, we reject single-process multi-device by default.
 
     Raised as :class:`ImportError` from the per-linear path so :func:`fp8_linear`
-    falls back to Triton (which has no such race); raised as :class:`RuntimeError`
-    from the experts path where there's no fallback — the user explicitly chose
-    ``experts_implementation="deepgemm"`` and must switch to ``"grouped_mm"`` /
-    ``"eager"`` or run with proper distributed/EP for multi-GPU.
+    falls back to Triton (which loads through the runtime API and has no such
+    binding); raised as :class:`RuntimeError` from the experts path where there's
+    no fallback — the user explicitly chose ``experts_implementation="deepgemm"``
+    and must switch to ``"grouped_mm"`` / ``"eager"`` or run distributed.
     """
     idx = device.index if device.index is not None else torch.cuda.current_device()
     _DEEPGEMM_VISITED_DEVICES.add(idx)
     if len(_DEEPGEMM_VISITED_DEVICES) <= 1:
         return
     msg = (
-        f"DeepGEMM kernels race when driven from a single process across multiple devices "
-        f"({sorted(_DEEPGEMM_VISITED_DEVICES)}) and produce garbage. Run with a distributed "
-        f"setup (TP/EP) so each process drives one device, "
+        "DeepGEMM caches each kernel's `CUfunction` against the CUDA context it was first "
+        "loaded under, so driving it from a different device in the same process produces "
+        "garbage. Run distributed (TP/EP) so each process owns one device, "
     )
     if context == "linear":
         raise ImportError(msg + "or fall back to the Triton kernel (handled automatically).")
@@ -590,10 +588,8 @@ def deepgemm_fp8_fp4_experts_forward(
 
 def setup_megamoe_weights(module: torch.nn.Module) -> None:
     """One-shot pack + permute of an FP8Experts module's L1/L2 weights into the
-    Mega MoE UTCCP layout. Called at load time by the FP8 quantizer when
-    ``experts_implementation == 'deepgemm_megamoe'`` — megamoe is locked at load
-    time (see :meth:`PreTrainedModel.set_experts_implementation`), so this never
-    needs to re-run on a forward.
+    Mega MoE UTCCP layout. Called lazily on the first megamoe forward; idempotent
+    via the caller's ``_megamoe_transformed`` flag.
 
     Steps:
       1. Cast UE8M0 SF → FP32 and call ``transform_sf_into_required_layout`` →
