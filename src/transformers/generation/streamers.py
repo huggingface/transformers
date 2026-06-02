@@ -305,16 +305,9 @@ class AsyncTextIteratorStreamer(TextStreamer):
 
     def on_finalized_text(self, text: str, stream_end: bool = False):
         """Put the new text in the queue. If the stream is ending, also put a stop signal in the queue."""
-        try:
-            self.loop.call_soon_threadsafe(self.text_queue.put_nowait, text)
-            if stream_end:
-                self.loop.call_soon_threadsafe(self.text_queue.put_nowait, self.stop_signal)
-        except RuntimeError:
-            # The event loop has been closed (e.g. the consumer exited early or the
-            # test runner tore down the loop before the background generate() thread
-            # finished).  Silently discard the remaining tokens so the thread can
-            # exit cleanly without printing an unhandled-exception warning.
-            pass
+        self.loop.call_soon_threadsafe(self.text_queue.put_nowait, text)
+        if stream_end:
+            self.loop.call_soon_threadsafe(self.text_queue.put_nowait, self.stop_signal)
 
     def __aiter__(self):
         return self
