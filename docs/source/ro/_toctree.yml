@@ -56,3 +56,5 @@
     sections:
     - local: fast_tokenizers
       title: Tokenizere
+    - local: custom_tokenizers
+      title: Personalizarea Tokenizerelor
