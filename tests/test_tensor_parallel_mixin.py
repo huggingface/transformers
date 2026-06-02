@@ -72,14 +72,25 @@ def get_packed_grad_shard(grad, world_size, rank, dim):
     return grad.index_select(dim, torch.tensor(indices, device=grad.device))
 
 
-def _snapshot_threads(rank, traceback_dir):
-    """Snapshot all OS threads just before dist cleanup.
+def _snapshot_threads(rank, traceback_dir, suffix=""):
+    """Snapshot all OS threads.
 
-    Writes thread IDs (decimal + hex), comm names, states, and wait channels to
-    rank_{rank}_threads.txt.  Cross-reference the crashing thread's hex ID from
-    faulthandler ("Fatal Python error: Aborted / Thread 0x...") against this list
-    to identify which C++ thread (gloo transport loop, autograd worker, etc.)
-    caused the abort.
+    Writes to rank_{rank}_threads{suffix}.txt:
+      - Linux TIDs (decimal + hex), comm names, states, wait channels, current syscall
+      - Python thread pthread_t values (on CPython/Linux, Thread.ident == pthread_t)
+
+    Also writes /proc/self/maps to rank_{rank}_maps{suffix}.txt.
+
+    To cross-reference "Thread 0x..." from faulthandler:
+      - Python threads: compare against "pthread_t=0x..." lines (ident == pthread_t)
+      - C++ threads (gloo runloops, etc.): the pthread_t is a user-space address.
+        Open the maps file and find which anonymous mapping contains the address.
+        The thread whose stack spans that range is the crashing thread.
+        Alternatively, the TID → pthread_t relationship can be recovered by reading
+        4 bytes at (pthread_t_addr + offset) from /proc/<pid>/mem where 'offset' is
+        the glibc-version-specific offset of the 'tid' field in struct pthread
+        (commonly 720 / 0x2d0 for glibc 2.17-2.34; scan 0..4096 in 4-byte steps and
+        check each value against the known TID set).
     """
     import threading
     import time
@@ -93,9 +104,15 @@ def _snapshot_threads(rank, traceback_dir):
         except OSError:
             tids = []
         lines.append(f"OS threads={len(tids)}  Python threads={len(py_threads)}")
+        # On CPython/Linux, threading.Thread.ident == pthread_t (a user-space pointer).
+        # Cross-reference "Thread 0x..." from faulthandler against these values first.
+        if py_threads:
+            lines.append("Python thread pthread_t (ident) → name:")
+            for ident, name in sorted(py_threads.items()):
+                lines.append(f"  pthread_t={ident:#018x}  name={name!r}")
         for tid in tids:
             base = f"{task_dir}/{tid}"
-            comm = wchan = state = ""
+            comm = wchan = state = syscall_str = sig_str = ""
             try:
                 comm = open(f"{base}/comm").read().strip()  # noqa: SIM115
             except OSError:
@@ -105,18 +122,191 @@ def _snapshot_threads(rank, traceback_dir):
             except OSError:
                 pass
             try:
+                sig_blk = sig_cgt = ""
                 for line in open(f"{base}/status"):  # noqa: SIM115
                     if line.startswith("State:"):
                         state = line.split(":", 1)[1].strip()
-                        break
+                    elif line.startswith("SigBlk:"):
+                        sig_blk = line.split(":", 1)[1].strip()
+                    elif line.startswith("SigCgt:"):
+                        sig_cgt = line.split(":", 1)[1].strip()
+                if sig_blk or sig_cgt:
+                    sig_str = f" SigBlk={sig_blk} SigCgt={sig_cgt}"
+            except OSError:
+                pass
+            try:
+                # "running" when not in a kernel call; otherwise:
+                # "<syscall_nr> <a0> <a1> <a2> <a3> <a4> <a5> <sp> <pc>"
+                raw = open(f"{base}/syscall").read().strip()  # noqa: SIM115
+                if raw != "running":
+                    syscall_nr = raw.split()[0]
+                    syscall_str = f" syscall_nr={syscall_nr}"
             except OSError:
                 pass
             py_tag = f" [Python:{py_threads[tid]}]" if tid in py_threads else ""
-            lines.append(f"  tid={tid} ({tid:#x}){py_tag} comm={comm!r} state={state} wchan={wchan}")
+            lines.append(
+                f"  tid={tid} ({tid:#x}){py_tag} comm={comm!r} state={state} wchan={wchan}{syscall_str}{sig_str}"
+            )
+            # Kernel-space call stack — requires /proc/self/task/TID/stack to be
+            # readable (usually fine for self-threads; may need CAP_SYS_PTRACE on
+            # hardened systems).  Much more detailed than wchan alone.
+            try:
+                kstack = open(f"{base}/stack").read().strip()  # noqa: SIM115
+                if kstack:
+                    for kline in kstack.splitlines():
+                        lines.append(f"      {kline}")
+            except OSError:
+                pass
     else:
         lines.append("(/proc/self/task not available — not Linux)")
 
-    out = os.path.join(traceback_dir, f"rank_{rank}_threads.txt")
+    out = os.path.join(traceback_dir, f"rank_{rank}_threads{suffix}.txt")
+    with open(out, "w") as f:
+        f.write("\n".join(lines) + "\n")
+        f.flush()
+
+    # Dump memory maps so the pthread_t address can be looked up offline.
+    # Find the anonymous mapping whose range contains the faulthandler's
+    # "Thread 0x..." address — the TID whose stack spans that range is the
+    # crashing thread.
+    maps_out = os.path.join(traceback_dir, f"rank_{rank}_maps{suffix}.txt")
+    try:
+        with open("/proc/self/maps") as mf:
+            maps_content = mf.read()
+        with open(maps_out, "w") as mf:
+            mf.write(maps_content)
+            mf.flush()
+    except OSError:
+        pass
+
+
+def _snapshot_process_extras(rank, traceback_dir, suffix=""):
+    """Capture process-wide diagnostic state alongside the thread snapshot.
+
+    Writes rank_{rank}_process_extras{suffix}.txt containing:
+      - Python stack traces of all Python threads via faulthandler.dump_traceback()
+        (frozen at this moment, independent of the crash-time faulthandler output)
+      - Native (C-level) call stack of the current thread via backtrace_symbols_fd()
+      - PyTorch thread-pool config
+      - Python GC counts and any uncollectable objects (gc.garbage)
+      - Relevant environment variables (GLOO_*, TORCH_DISTRIBUTED_DEBUG, etc.)
+      - Open file descriptors (/proc/self/fd): shows if gloo sockets survive teardown
+
+    How each section helps:
+      Python stacks  — see which Python thread was running when gloo was crashing.
+      Native stack   — see the C++ call chain inside the Python main thread at this
+                       exact moment (interpreter eval loop, torch ops, etc.).
+      FDs after cleanup — if TCP/socket FDs remain open after destroy_process_group,
+                          gloo did not fully tear down and that is likely the root cause.
+      GC garbage     — cyclic reference involving a C-extension object can prevent
+                       proper C++ destructor ordering, triggering the abort.
+    """
+    import gc
+    import time
+
+    lines = [f"t={time.monotonic():.3f}  pid={os.getpid()}"]
+
+    # --- Python stack traces via faulthandler (NOT crash-time; snapshotted now) ---
+    lines.append("\n[Python thread stacks (faulthandler.dump_traceback, all threads)]")
+    try:
+        import faulthandler
+
+        py_stacks_path = os.path.join(traceback_dir, f"rank_{rank}_python_stacks{suffix}.txt")
+        with open(py_stacks_path, "w") as _ft:
+            faulthandler.dump_traceback(file=_ft, all_threads=True)
+            _ft.flush()
+        lines.append(f"  (written to rank_{rank}_python_stacks{suffix}.txt)")
+    except Exception as e:
+        lines.append(f"  (failed: {e})")
+
+    # --- Native (C-level) call stack of the current thread via backtrace() ---
+    # This shows the C++ / CPython interpreter call chain at this exact moment,
+    # which is useful to see what torch/gloo C++ code the Python main thread was
+    # inside when we snapshotted.  backtrace_symbols_fd() writes human-readable
+    # "module(symbol+offset) [addr]" lines directly to the file descriptor.
+    lines.append("\n[Native stack of current thread (backtrace_symbols_fd)]")
+    native_path = os.path.join(traceback_dir, f"rank_{rank}_native_stack{suffix}.txt")
+    try:
+        import ctypes
+        import ctypes.util
+
+        libc_name = ctypes.util.find_library("c")
+        if libc_name:
+            libc = ctypes.CDLL(libc_name, use_errno=True)
+            MAX_FRAMES = 128
+            addr_buf = (ctypes.c_void_p * MAX_FRAMES)()
+            libc.backtrace.restype = ctypes.c_int
+            libc.backtrace.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            libc.backtrace_symbols_fd.restype = None
+            libc.backtrace_symbols_fd.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+            n = libc.backtrace(addr_buf, MAX_FRAMES)
+            with open(native_path, "w") as _nf:
+                _nf.write(f"Native stack ({n} frames, current thread):\n")
+                _nf.flush()
+                libc.backtrace_symbols_fd(addr_buf, ctypes.c_int(n), _nf.fileno())
+            lines.append(f"  ({n} frames, written to rank_{rank}_native_stack{suffix}.txt)")
+        else:
+            lines.append("  (libc not found via ctypes.util.find_library)")
+    except Exception as e:
+        lines.append(f"  (failed: {e})")
+
+    # --- PyTorch thread pool config ---
+    lines.append("\n[PyTorch thread config]")
+    try:
+        import torch
+
+        lines.append(f"  get_num_threads={torch.get_num_threads()}")
+        lines.append(f"  get_num_interop_threads={torch.get_num_interop_threads()}")
+    except Exception as e:
+        lines.append(f"  (failed: {e})")
+
+    # --- Python GC state ---
+    # Cyclic references that prevent C++ destructor ordering can cause abort().
+    lines.append("\n[Python GC state]")
+    try:
+        lines.append(f"  gc.isenabled={gc.isenabled()}")
+        lines.append(f"  gc.get_count={gc.get_count()}")
+        garbage = gc.garbage
+        lines.append(f"  len(gc.garbage)={len(garbage)}")
+        for i, obj in enumerate(garbage[:10]):
+            lines.append(f"  gc.garbage[{i}] type={type(obj).__name__!r}  repr={repr(obj)[:120]}")
+    except Exception as e:
+        lines.append(f"  (failed: {e})")
+
+    # --- Relevant environment variables ---
+    lines.append("\n[Relevant environment variables]")
+    for key in (
+        "RANK", "LOCAL_RANK", "WORLD_SIZE", "MASTER_ADDR", "MASTER_PORT",
+        "GLOO_LOG_LEVEL", "GLOO_SOCKET_IFNAME",
+        "TORCH_DISTRIBUTED_DEBUG", "TORCH_CPP_LOG_LEVEL",
+        "OMP_NUM_THREADS", "MKL_NUM_THREADS",
+        "TORCHELASTIC_RESTART_COUNT",
+    ):
+        val = os.environ.get(key)
+        if val is not None:
+            lines.append(f"  {key}={val!r}")
+
+    # --- Open file descriptors ---
+    # After destroy_process_group, gloo TCP/socket FDs should all be closed.
+    # Any surviving socket FD here means gloo did NOT finish tearing down.
+    lines.append("\n[Open file descriptors (/proc/self/fd)]")
+    fd_dir = "/proc/self/fd"
+    if os.path.isdir(fd_dir):
+        try:
+            entries = []
+            for fd_name in sorted(os.listdir(fd_dir), key=int):
+                try:
+                    target = os.readlink(f"{fd_dir}/{fd_name}")
+                    entries.append(f"  fd={fd_name:>4}  {target}")
+                except OSError:
+                    pass
+            lines.extend(entries)
+        except OSError as e:
+            lines.append(f"  (listdir failed: {e})")
+    else:
+        lines.append("  (/proc/self/fd not available)")
+
+    out = os.path.join(traceback_dir, f"rank_{rank}_process_extras{suffix}.txt")
     with open(out, "w") as f:
         f.write("\n".join(lines) + "\n")
         f.flush()
@@ -209,6 +399,7 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs, trace
     # from faulthandler / SIGABRT handler can be resolved to a C++ thread name.
     if traceback_dir is not None:
         _snapshot_threads(rank, traceback_dir)
+        _snapshot_process_extras(rank, traceback_dir)
 
     _crumb("barrier:start")
     dist.barrier()
@@ -216,6 +407,14 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs, trace
     _crumb("destroy_process_group:start")
     dist.destroy_process_group()
     _crumb("destroy_process_group:done")
+
+    # Second snapshot after gloo teardown.  Many SIGABRT crashes happen *after*
+    # destroy_process_group returns (during Python interpreter shutdown while C++
+    # destructors run), so this snapshot captures the surviving thread set and
+    # their states at the point closest to the actual crash.
+    if traceback_dir is not None:
+        _snapshot_threads(rank, traceback_dir, suffix="_post_cleanup")
+        _snapshot_process_extras(rank, traceback_dir, suffix="_post_cleanup")
 
 
 def _init_distributed(tp: int, max_retries: int = 5, backend: str = "gloo"):
@@ -251,6 +450,15 @@ def _init_distributed(tp: int, max_retries: int = 5, backend: str = "gloo"):
                             for suffix, label in (
                                 ("_exception.txt", "Python exception"),
                                 ("_threads.txt", "Thread snapshot (before dist cleanup)"),
+                                ("_maps.txt", "Memory maps (before dist cleanup)"),
+                                ("_process_extras.txt", "Process extras (before dist cleanup)"),
+                                ("_python_stacks.txt", "Python stacks at snapshot (before dist cleanup)"),
+                                ("_native_stack.txt", "Native stack at snapshot (before dist cleanup)"),
+                                ("_threads_post_cleanup.txt", "Thread snapshot (after dist cleanup)"),
+                                ("_maps_post_cleanup.txt", "Memory maps (after dist cleanup)"),
+                                ("_process_extras_post_cleanup.txt", "Process extras (after dist cleanup)"),
+                                ("_python_stacks_post_cleanup.txt", "Python stacks at snapshot (after dist cleanup)"),
+                                ("_native_stack_post_cleanup.txt", "Native stack at snapshot (after dist cleanup)"),
                                 ("_faulthandler.txt", "faulthandler"),
                             ):
                                 path = os.path.join(tb_dir, f"rank_{r}{suffix}")
