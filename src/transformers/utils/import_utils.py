@@ -138,6 +138,7 @@ XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.15.0"
+COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
 KERNELS_MIN_VERSION = "0.10.2"
@@ -1170,8 +1171,9 @@ def is_qutlass_available():
 
 
 @lru_cache
-def is_compressed_tensors_available() -> bool:
-    return _is_package_available("compressed_tensors")[0]
+def is_compressed_tensors_available(min_version: str = COMPRESSED_TENSORS_MIN_VERSION) -> bool:
+    is_available, compressed_tensors_version = _is_package_available("compressed_tensors", return_version=True)
+    return is_available and version.parse(compressed_tensors_version) >= version.parse(min_version)
 
 
 @lru_cache
