@@ -1641,6 +1641,14 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
                     [0, 3, 7, 152, 2515, 11389, 3523, 1],
                     "san francisco",
                 ],
+                ("cuda", 8): [
+                    [0, 3, 7, 152, 67, 839, 1],
+                    "san diego",
+                ],
+                ("cuda", 10): [
+                    [0, 3, 7, 152, 67, 839, 1],
+                    "san diego",
+                ],
             }
         )
         expected_outputs = expectations.get_expectation()
