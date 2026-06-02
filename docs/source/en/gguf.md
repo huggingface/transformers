@@ -55,7 +55,7 @@ model.save_pretrained("directory")
 
 ## Metal fast paths
 
-Transformers ships two optional Metal fast paths for GGUF on Apple Silicon. Both require the [kernels](https://github.com/huggingface/kernels) package. Unsupported quant types and non-MPS devices fall back to the pure PyTorch path.
+Transformers has two optional Metal fast paths for GGUF on Apple Silicon and both require the [kernels](https://github.com/huggingface/kernels) package. Unsupported quant types and non-MPS devices fall back to the pure PyTorch path.
 
 Use native quantized inference for serving on MPS and the dequant fast path for training, finetuning, or any non-MPS device.
 
@@ -65,9 +65,9 @@ pip install kernels
 
 ### Native quantized inference
 
-Loading a GGUF checkpoint without an explicit `dtype` keeps weights at their native quant and runs each `nn.Linear` through `GgufLinear`. On Apple Silicon, `GgufLinear` dispatches to the Metal kernels and decode is 1.37x faster under `torch.compile` on Llama-3.2-3B Q4_K_M, M3 Max. Packed weights cut resident memory ~3x — Qwen1.5-MoE-A2.7B Q4_K_M loads at 8.8 GB versus 28.6 GB when dequantized to `bfloat16`.
+Loading a GGUF checkpoint without an explicit `dtype` keeps weights in their native quant and runs each `nn.Linear` through `GgufLinear`. On Apple Silicon, `GgufLinear` dispatches to the Metal kernels and decode is 1.37x faster under `torch.compile` on Llama-3.2-3B Q4_K_M, M3 Max. Packed weights cut resident memory ~3x. For example, Qwen1.5-MoE-A2.7B Q4_K_M loads at 8.8 GB versus 28.6 GB when dequantized to `bfloat16`.
 
-Pass `gguf_linear=True` in [`~AutoModelForCausalLM.from_pretrained`] to enable but passing an explicit `dtype` switches back to dequantize-on-load even if `gguf_linear=True`.
+Pass `gguf_linear=True` in [`~AutoModelForCausalLM.from_pretrained`] to enable it. Passing an explicit `dtype` switches back to dequantize-on-load even if `gguf_linear=True`.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -81,10 +81,45 @@ model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename, gguf_
 
 Supported quant types are `Q4_0`, `Q5_0`, `Q5_1`, `Q8_0`, `Q4_K`, `Q5_K`, `Q6_K`, `IQ4_NL`, and `IQ4_XS`.
 
+### On-the-fly quantization
+
+Pass a [`GgufQuantizeConfig`] to quantize an unquantized fp16/bf16 model into GGUF weights at load time, without a `.gguf` file. The converted `nn.Linear` modules run through `GgufLinear` and the Metal kernels exactly like a loaded GGUF checkpoint, so this path also requires the [kernels](https://github.com/huggingface/kernels) package and an MPS device.
+
+```py
+from transformers import AutoModelForCausalLM, GgufQuantizeConfig
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen1.5-MoE-A2.7B",
+    quantization_config=GgufQuantizeConfig(quant_type="Q4_0"),
+)
+```
+
+Every quantizable `nn.Linear` is converted by default. Use `modules_to_convert` (glob patterns) to restrict the conversion to specific modules, or `modules_to_not_convert` (substring match) to skip some.
+
+```py
+from transformers import AutoModelForCausalLM, GgufQuantizeConfig
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen1.5-MoE-A2.7B",
+    quantization_config=GgufQuantizeConfig(
+        quant_type="Q4_0",
+        # only quantize the attention projections
+        modules_to_convert=["model.layers.*.self_attn.*_proj"],
+        # leave any module whose name contains "shared_expert" in full precision
+        modules_to_not_convert=["shared_expert"],
+    ),
+)
+```
+
+> [!WARNING]
+> The on-the-fly quantize path only supports `Q4_0` and `Q8_0`. The K-quants (`Q4_K`, `Q5_K`, `Q6_K`) and `IQ4_NL`/`IQ4_XS` are read-only in gguf-py, so they're only available when loading an existing GGUF checkpoint.
+
+Save the result with [`~PreTrainedModel.save_pretrained`]. The per-module quant types are recorded in `config.json`, so reloading with [`~PreTrainedModel.from_pretrained`] rebuilds the same GGUF modules straight from the safetensors weights without needing the original `.gguf` file.
+
 ### Metal dequant fast path
 
 The dequant path (used for training, finetuning, and non-MPS devices) routes each tensor through a single Metal compute kernel. The kernel ships in [kernels-community/gguf-dequant](https://huggingface.co/kernels-community/gguf-dequant) and runs 2-7x faster than the chained PyTorch path on M3 Max.
 
 Supported quant types are `Q4_0`, `Q8_0`, `Q4_K`, `Q5_K`, `Q6_K`, `IQ4_NL`, and `IQ4_XS`.
 
-The fast path is enabled by default when the [kernels](https://github.com/huggingface/kernels) package is installed. Set the `TRANSFORMERS_GGUF_USE_METAL_KERNELS=0` environment variable to disable it.
+The fast path is enabled by default when the [kernels](https://github.com/huggingface/kernels) package is installed. Set the `TRANSFORMERS_GGUF_USE_METAL_KERNELS=0` environment variable to disable it, or `TRANSFORMERS_GGUF_METAL_KERNELS_REPO` to load the kernels from a different repository.
