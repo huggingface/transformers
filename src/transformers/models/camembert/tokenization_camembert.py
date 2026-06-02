@@ -13,7 +13,7 @@
 # limitations under the License
 """Tokenization classes for Camembert model."""
 
-from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors, Regex
 from tokenizers.models import Unigram
 
 from ...tokenization_python import AddedToken
@@ -130,13 +130,20 @@ class CamembertTokenizer(TokenizersBackend):
 
         self._tokenizer.normalizer = normalizers.Sequence(
             [
-                normalizers.Replace(Regex(r"\s{2,}|[\n\r\t]"), " "),
-                normalizers.Strip(left=False, right=True),
+                normalizers.NFKC(),
+                normalizers.Replace(Regex("[​‌‍‎‏﻿]"), " "),
+                normalizers.Replace(Regex("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]"), ""),
+                normalizers.Replace(Regex(r"[\n\r\t]"), " "),
             ]
         )
 
         prepend_scheme = "always" if add_prefix_space else "never"
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.WhitespaceSplit(),
+                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme),
+            ]
+        )
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
 
         super().__init__(
