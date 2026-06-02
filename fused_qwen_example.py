@@ -25,14 +25,15 @@ print("Loading fused model...")
 
 # kernel_repo_id = "michaelbenayoun/dummy-rmsnorm-mlp:RMSNormMLP"
 # kernel_repo_id = "michaelbenayoun/dummy-rmsnorm-mlp-with-transformations:RMSNormMLP"
-kernel_repo_id = "michaelbenayoun/dummy-rmsnorm-kernel-with-init:CustomRMSNorm"
+kernel_repo_id = "michaelbenayoun/dummy-rmsnorm-mlp-with-transformations-and-init:RMSNormMLP"
+# kernel_repo_id = "michaelbenayoun/dummy-rmsnorm-kernel-with-init:CustomRMSNorm"
 kernel_config = KernelConfig(
     {
-        # (
-        #     ("RMSNorm", "model.layers.*.post_attention_layernorm"),
-        #     ("MLP",     "model.layers.*.mlp"),
-        # ): kernel_repo_id,
-        "RMSNorm": kernel_repo_id,
+        (
+            ("RMSNorm", "model.layers.*.post_attention_layernorm"),
+            ("MLP",     "model.layers.*.mlp"),
+        ): kernel_repo_id,
+        # "RMSNorm": kernel_repo_id,
     },
 )
 

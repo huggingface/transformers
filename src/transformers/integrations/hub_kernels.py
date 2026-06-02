@@ -23,7 +23,6 @@ from typing import TYPE_CHECKING
 from packaging import version as pkg_version
 
 from ..conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
-from ..core_model_loading import WeightRenaming
 from ..monkey_patching import register_patch_mapping
 from ..utils import ENV_VARS_TRUE_VALUES, logging
 from ..utils.import_utils import is_kernels_available, is_torch_available
@@ -625,59 +624,36 @@ def make_fused_parent_class(
     return fused_cls
 
 
-def infer_kernel_fusion_transforms(
-    patterns_with_names: list[tuple[str, str]],
-) -> list[WeightRenaming]:
+def make_kernel_init_parent_class(
+    parent_cls: type,
+    child_names: list[str],
+    kernel_cls: type,
+) -> type:
     """
-    Auto-infer WeightRenaming transforms for the path changes caused by FusedModuleBase wrapping.
+    Create a patched parent class whose ``__init__`` passes the already-constructed child
+    modules to ``kernel_cls.__init__``.
 
-    For each fusion (source_name, glob_path) pair:
-        - The first module's weights get source_name inserted between the module path and the weight suffix.
-        - Each subsequent module's weights are relocated from their original path to under the first module.
-
-    For example, given
-        [
-            ("RMSNorm", "model.layers.*.post_attention_layernorm"),
-            ("MLP", "model.layers.*.mlp")
-        ]
-    the inferred transforms would be:
-        - model.layers.0.post_attention_layernorm.weight -> model.layers.0.post_attention_layernorm.RMSNorm.weight
-        - model.layers.0.mlp.gate_proj.weight -> model.layers.0.post_attention_layernorm.MLP.gate_proj.weight
+    After the original parent ``__init__`` runs (building all children normally), the patched
+    init instantiates ``kernel_cls(*children)`` and places the result at the first child's
+    attribute.  Remaining child attributes are replaced with ``nn.Identity()`` so the parent's
+    ``forward`` can still call them without error — they become no-ops once the kernel at the
+    first position has consumed their inputs.
     """
+    original_init = parent_cls.__init__
+    _child_names = list(child_names)
+    _kernel_cls = kernel_cls
 
-    def segment_to_regex(seg: str) -> str:
-        """
-        Convert a glob segment to a regex segment.
-        The wildcard "*" matches any non-empty sequence of characters that does not include a dot.
-        Otherwise, the segment is escaped.
-        """
-        return r"[^.]+" if seg == "*" else re.escape(seg)
+    def patched_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        children = [getattr(self, name) for name in _child_names]
+        kernel_instance = _kernel_cls(*children)
+        setattr(self, _child_names[0], kernel_instance)
+        for name in _child_names[1:]:
+            setattr(self, name, nn.Identity())
 
-    _, first_glob = patterns_with_names[0]
-    parent_path, first_child = first_glob.rsplit(".", 1)
-
-    # Convert parent_path to a regex pattern, capturing it as a group for reuse in the target pattern.
-    parent_regex = r"\.".join(segment_to_regex(s) for s in parent_path.split("."))
-
-    transforms: list[WeightRenaming] = []
-
-    # We must not match the moved child modules under the first child, so we add a negative lookahead.
-    child_regexes = "|".join(rf"{name}\." for name, _ in patterns_with_names)
-    moved_child_lookahead = f"(?!{child_regexes})"
-
-    for i, (source_name, glob) in enumerate(patterns_with_names):
-        child = glob.rsplit(".", 1)[1]
-        child_re = segment_to_regex(child)
-        guard = moved_child_lookahead if i == 0 else ""
-        transforms.append(
-            WeightRenaming(
-                source_patterns=rf"({parent_regex}\.){child_re}\.{guard}",
-                # \1 refers to the captured parent path
-                target_patterns=rf"\1{first_child}.{source_name}\.",
-            )
-        )
-
-    return transforms
+    patched_cls = type(f"Fused{parent_cls.__name__}", (parent_cls,), {"__init__": patched_init})
+    patched_cls.__qualname__ = f"Fused{parent_cls.__qualname__}"
+    return patched_cls
 
 
 def _first_str_leaf(obj) -> str | None:
@@ -719,7 +695,6 @@ def register_kernel_replacements(
     cls: "type[PreTrainedModel]",
     kernel_config: "KernelConfig",
 ) -> None:
-
     if not hasattr(cls, "config_class") or not hasattr(cls.config_class, "model_type"):
         raise ValueError(f"Model {cls.__name__} has no config_class or model_type.")
     model_type = cls.config_class.model_type
@@ -767,22 +742,6 @@ def register_kernel_fusions(
     config: "PretrainedConfig",
     kernel_config: "KernelConfig",
 ) -> None:
-    """
-    Pre-register hub kernel n-to-1 fusions (tuple keys in KernelConfig) before model instantiation.
-
-    For each inline tuple key `(("Name", "glob.path"), ...)` in `kernel_config.kernel_mapping`:
-
-        1. Meta-instantiate the model to discover parent classes containing all target children.
-
-        2. Register a monkey patch mapping each parent class to a fused subclass whose `__init__`
-           wraps the target children in a `FusedModuleBase` with the resolved `kernel_layer_name`.
-
-        3. Load or infer conversion mapping to handle the weight transformations caused by the kernel fusion.
-
-        4. Replace the tuple key with the scalar kernel_layer_name in kernel_config so the
-           downstream pipeline (sanitize, create_compatible_mapping, kernelize) is unchanged.
-    """
-
     if not hasattr(cls, "config_class") or not hasattr(cls.config_class, "model_type"):
         raise ValueError(f"Model {cls.__name__} has no config_class or model_type.")
     model_type = cls.config_class.model_type
@@ -795,31 +754,29 @@ def register_kernel_fusions(
             new_mapping[layer_name] = hub_repo
             continue
 
-        source_names = [item[0] for item in layer_name]
         glob_patterns = [item[1] for item in layer_name]
         child_names = [p.rsplit(".", 1)[1] for p in glob_patterns]
 
-        # Resolve kernel_layer_name from "org/repo:ClassName" or a device/mode-nested dict.
-        # All leaf strings in the nested dict point to the same kernel class, so any will do.
-        repo_str = _first_str_leaf(hub_repo)
-        if repo_str is None:
-            raise ValueError(f"Cannot resolve a repo string from hub_repo={hub_repo!r}")
-        kernel_layer_name = repo_str.split(":")[1] if ":" in repo_str else repo_str.split("/")[-1]
+        # 1. Resolve the kernel class — accept a direct class reference or a repo string.
+        if isinstance(hub_repo, type) and issubclass(hub_repo, nn.Module):
+            kernel_cls = hub_repo
+        else:
+            repo_str = _first_str_leaf(hub_repo)
+            if repo_str is None:
+                raise ValueError(f"Cannot resolve a repo string from hub_repo={hub_repo!r}")
+            kernel_cls = _try_load_kernel_class(repo_str, use_local=kernel_config.use_local_kernel)
 
-        # 1. Load the kernel class to get any conversion_mapping it declares.
-        kernel_cls = _try_load_kernel_class(repo_str, use_local=kernel_config.use_local_kernel)
-        kernel_conversion_mapping = (
-            list(kernel_cls.conversion_mapping)
-            if kernel_cls is not None and hasattr(kernel_cls, "conversion_mapping")
-            else []
-        )
+        if kernel_cls is None or kernel_cls.__init__ is nn.Module.__init__:
+            raise ValueError(
+                f"Fused kernel for {layer_name!r} must define __init__ accepting the child "
+                f"modules as positional arguments (got {kernel_cls!r} with no custom __init__)."
+            )
 
-        # 2. Meta-device scan — find parent classes that contain all target children.
+        # 2. Meta-device scan — find parent classes that own all target children.
         with torch.device("meta"):
             meta_model = cls(config)
 
         seen: set[type] = set()
-        seen_children: set[type] = set()
         patch_mapping: dict[str, type] = {}
         for module in meta_model.modules():
             module_cls = type(module)
@@ -828,30 +785,12 @@ def register_kernel_fusions(
             if not all(hasattr(module, name) for name in child_names):
                 continue
             seen.add(module_cls)
-
-            if kernel_conversion_mapping:
-                for source_name, child_name in zip(source_names, child_names):
-                    child_cls = type(getattr(module, child_name))
-                    if child_cls in seen_children:
-                        continue
-                    seen_children.add(child_cls)
-                    prefix_dot = source_name + "."
-                    relevant = [
-                        c
-                        for c in kernel_conversion_mapping
-                        if any(p.startswith(prefix_dot) for p in c._original_source_patterns)
-                    ]
-                    if relevant:
-                        stripped = [_strip_converter_prefix(c, source_name) for c in relevant]
-                        patch_mapping[child_cls.__name__] = _make_converted_child_class(child_cls, stripped)
-
-            fused_parent_cls = make_fused_parent_class(module_cls, child_names, source_names, kernel_layer_name)
-            patch_mapping[module_cls.__name__] = fused_parent_cls
+            patch_mapping[module_cls.__name__] = make_kernel_init_parent_class(module_cls, child_names, kernel_cls)
 
         if not patch_mapping:
             logger.warning(
-                f"No parent modules found containing children {child_names} for kernel fusion "
-                f"'{kernel_layer_name}'. Skipping tuple key."
+                f"No parent modules found containing children {child_names} for kernel fusion. "
+                f"Skipping tuple key {layer_name!r}."
             )
             new_mapping[layer_name] = hub_repo
             continue
@@ -859,20 +798,15 @@ def register_kernel_fusions(
         # 3. Register class-level monkey patches.
         register_patch_mapping(patch_mapping, overwrite=True)
 
-        # 4. Infer weight renaming mapping for the loader.
-        transforms = infer_kernel_fusion_transforms(list(zip(source_names, glob_patterns)))
-        if kernel_conversion_mapping:
-            transforms = transforms + kernel_conversion_mapping
+        # 4. Register the kernel's conversion_mapping if it declares one.
+        if hasattr(kernel_cls, "conversion_mapping"):
+            existing = get_checkpoint_conversion_mapping(model_type)
+            transforms = list(kernel_cls.conversion_mapping)
+            if existing is not None:
+                transforms = existing + transforms
+            register_checkpoint_conversion_mapping(model_type, transforms, overwrite=True)
 
-        # 5. Load existing conversion mapping for this model type.
-        existing = get_checkpoint_conversion_mapping(model_type)
-        if existing is not None:
-            transforms = existing + transforms
-
-        # 6. Register the combined mappings.
-        register_checkpoint_conversion_mapping(model_type, transforms, overwrite=True)
-
-        new_mapping[kernel_layer_name] = hub_repo
+        # The tuple key is fully handled here — do not forward to kernelize.
 
     kernel_config.kernel_mapping = new_mapping
 
