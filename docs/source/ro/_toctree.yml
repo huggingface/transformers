@@ -38,3 +38,5 @@
         title: Componente de procesare vizuală
       - local: add_audio_processing_components
         title: Componente de procesare audio
+      - local: modeling_rules
+        title: Regulile de structură a modelului
