@@ -58,3 +58,5 @@
       title: Tokenizere
     - local: custom_tokenizers
       title: Personalizarea Tokenizerelor
+    - local: tokenizer_summary
+      title: Algoritmi de Tokenization
