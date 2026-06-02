@@ -215,7 +215,7 @@ class RADIOModel(nn.Module):
             bb_summary = all_summary
         else:
             all_summary = y[:, : self.num_cls_tokens]
-            if self.summary_idxs is not None and all_summary.shape[1] > 1:
+            if self.summary_idxs is not None:
                 if all_summary.shape[1] == 1:
                     # Create dummy duplicates
                     all_summary = all_summary.expand(-1, 128, -1)

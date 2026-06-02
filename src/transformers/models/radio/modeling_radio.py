@@ -44,15 +44,15 @@ class RADIOModel(PreTrainedModel):
     """
 
     config_class = RADIOConfig
+    main_input_name = "x"
+    _no_split_modules = []
+    supports_gradient_checkpointing = False
 
     def __init__(self, config: RADIOConfig):
         super().__init__(config)
-        if hasattr(super(), "post_init"):
-            super().post_init()
 
         RADIOArgs = namedtuple("RADIOArgs", config.args.keys())
         args = RADIOArgs(**config.args)
-        self.config = config
 
         model = create_model_from_args(args)
         input_conditioner: InputConditioner = get_default_conditioner()
@@ -105,6 +105,8 @@ class RADIOModel(PreTrainedModel):
             feature_normalizer=feature_normalizer,
             inter_feature_normalizer=inter_feature_normalizer,
         )
+
+        self.post_init()
 
     @property
     def adaptors(self) -> nn.ModuleDict:

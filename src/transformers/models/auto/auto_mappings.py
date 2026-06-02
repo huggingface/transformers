@@ -502,6 +502,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("qwen3_vl_moe_vision", "Qwen3VLMoeVisionConfig"),
         ("qwen3_vl_text", "Qwen3VLTextConfig"),
         ("qwen3_vl_vision", "Qwen3VLVisionConfig"),
+        ("radio", "RADIOConfig"),
         ("rag", "RagConfig"),
         ("recurrent_gemma", "RecurrentGemmaConfig"),
         ("reformer", "ReformerConfig"),
