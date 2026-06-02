@@ -99,6 +99,7 @@ def flip_back(output_flipped, flip_pairs, target_type="gaussian-heatmap"):
 
     if output_flipped.ndim != 4:
         raise ValueError("output_flipped should be [batch_size, num_keypoints, height, width]")
+    output_flipped = output_flipped.clone()
     batch_size, num_keypoints, height, width = output_flipped.shape
     channels = 1
     if target_type == "combined-target":
