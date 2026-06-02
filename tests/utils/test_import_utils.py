@@ -28,36 +28,23 @@ def test_clear_import_cache():
     assert modeling_auto.__name__ == "transformers.models.auto.modeling_auto"
 
 
-def test_is_package_available_namespace_shadow_marked_unavailable():
+def test_is_package_available_edge_cases():
     pkg_name = "definitely_not_a_real_pkg_xyz"
-    fake_module = ModuleType(pkg_name)
 
-    with (
-        patch("transformers.utils.import_utils.importlib.util.find_spec", return_value=object()),
-        patch("transformers.utils.import_utils.importlib.import_module", return_value=fake_module),
-    ):
-        assert _is_package_available(pkg_name, return_version=True) == (False, "N/A")
+    namespace_shadow = ModuleType(pkg_name)
+    versionless_install = ModuleType(pkg_name)
+    versionless_install.__file__ = f"/path/to/site-packages/{pkg_name}/__init__.py"
+    with_version = ModuleType(pkg_name)
+    with_version.__version__ = "1.2.3"
 
-
-def test_is_package_available_versionless_install_marked_available():
-    pkg_name = "definitely_not_a_real_pkg_xyz"
-    fake_module = ModuleType(pkg_name)
-    fake_module.__file__ = "/path/to/site-packages/definitely_not_a_real_pkg_xyz/__init__.py"
-
-    with (
-        patch("transformers.utils.import_utils.importlib.util.find_spec", return_value=object()),
-        patch("transformers.utils.import_utils.importlib.import_module", return_value=fake_module),
-    ):
-        assert _is_package_available(pkg_name, return_version=True) == (True, "N/A")
-
-
-def test_is_package_available_frozen_install_marked_available():
-    pkg_name = "definitely_not_a_real_pkg_xyz"
-    fake_module = ModuleType(pkg_name)
-    fake_module.__version__ = "1.2.3"
-
-    with (
-        patch("transformers.utils.import_utils.importlib.util.find_spec", return_value=object()),
-        patch("transformers.utils.import_utils.importlib.import_module", return_value=fake_module),
-    ):
-        assert _is_package_available(pkg_name, return_version=True) == (True, "1.2.3")
+    cases = [
+        (namespace_shadow, (False, "N/A")),
+        (versionless_install, (True, "N/A")),
+        (with_version, (True, "1.2.3")),
+    ]
+    for fake_module, expected in cases:
+        with (
+            patch("transformers.utils.import_utils.importlib.util.find_spec", return_value=object()),
+            patch("transformers.utils.import_utils.importlib.import_module", return_value=fake_module),
+        ):
+            assert _is_package_available(pkg_name, return_version=True) == expected
