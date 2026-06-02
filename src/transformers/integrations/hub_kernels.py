@@ -524,16 +524,6 @@ def make_kernel_init_parent_class(
     child_names: list[str],
     kernel_cls: type,
 ) -> type:
-    """
-    Create a patched parent class whose ``__init__`` passes the already-constructed child
-    modules to ``kernel_cls.__init__``.
-
-    After the original parent ``__init__`` runs (building all children normally), the patched
-    init instantiates ``kernel_cls(*children)`` and places the result at the first child's
-    attribute.  Remaining child attributes are replaced with ``nn.Identity()`` so the parent's
-    ``forward`` can still call them without error — they become no-ops once the kernel at the
-    first position has consumed their inputs.
-    """
     original_init = parent_cls.__init__
     _child_names = list(child_names)
     _kernel_cls = kernel_cls
@@ -589,7 +579,7 @@ def _try_load_kernel_class(repo_str: str, use_local: bool = False) -> type | Non
 def _find_layout_class(kernel_cls: type) -> type | None:
     """
     Look for a companion layout class named ``{kernel_cls.__name__}Layout`` in the
-    same module as *kernel_cls*.
+    same module as kernel_cls.
     """
     module = sys.modules.get(kernel_cls.__module__)
     if module is None:
