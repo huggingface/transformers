@@ -687,8 +687,11 @@ class PythonBackend(PreTrainedTokenizerBase):
         raise NotImplementedError
 
     def _convert_token_to_id_with_added_voc(self, token):
-        if token in self.added_tokens_encoder:
-            return self.added_tokens_encoder[token]
+        # Use the cached _added_tokens_encoder directly instead of the property
+        # to avoid O(N·logN) sorting overhead on every token lookup.
+        # See: https://github.com/huggingface/transformers/issues/46315
+        if token in self._added_tokens_encoder:
+            return self._added_tokens_encoder[token]
         return self._convert_token_to_id(token)
 
     def _convert_token_to_id(self, token):
