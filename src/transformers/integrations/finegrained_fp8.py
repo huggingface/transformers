@@ -556,6 +556,18 @@ def fp8_grouped_mm_experts_forward(
 
 
 class FP8Experts(nn.Module):
+    # Per-`_experts_implementation` TP/EP plan key swaps. The default
+    # `MoeTensorParalellExperts` plan is impl-agnostic; some impls need a distinct
+    # TP layer (e.g. megamoe needs no gradient-sync hooks and an EP `process_group`
+    # injection). Declared here so the quantizer doesn't have to know about
+    # impl-specific TP needs — extend this dict when adding new impls.
+    _impl_tp_plan_overrides: dict[str, dict[str, str]] = {
+        "deepgemm_megamoe": {
+            "moe_tp_experts": "megamoe_experts",
+            "ep_router": "megamoe_router",
+        },
+    }
+
     def __init__(
         self,
         config,

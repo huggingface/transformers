@@ -112,18 +112,16 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         )
 
     def update_tp_plan(self, config):
-        # TODO: standardize the API so megamoe (and any future impl-specific TP layer)
-        # owns its own plan-swap logic, e.g. via an attribute on the experts class or
-        # a registry. For now we hard-code the swap here — fine while megamoe is the
-        # only experts impl that needs a distinct TP layer, won't scale otherwise.
-        # When the MoE experts impl is locked to MegaMoE at load time, swap the
-        # experts plan key to the MegaMoE-specific TP layer (no gradient sync hooks,
-        # appends EP `process_group`). Done at load time so the runtime
-        # `MoeTensorParalellExperts` plan stays clean of impl-aware branches.
-        # Some models (e.g. V4) ship the experts mapping under `base_model_ep_plan`
-        # instead of `base_model_tp_plan` — swap both.
-        if getattr(config, "_experts_implementation", None) == "deepgemm_megamoe":
-            swap = {"moe_tp_experts": "megamoe_experts", "ep_router": "megamoe_router"}
+        # Apply per-impl TP plan key swaps declared on the experts class. The default
+        # `MoeTensorParalellExperts` plan is impl-agnostic; impls that need a distinct
+        # TP layer (currently megamoe — see `FP8Experts._impl_tp_plan_overrides`) get
+        # their plan keys rewritten here. Models may carry the experts mapping under
+        # `base_model_tp_plan` or `base_model_ep_plan` — swap both.
+        from ..integrations.finegrained_fp8 import FP8Experts
+
+        impl = getattr(config, "_experts_implementation", None)
+        swap = FP8Experts._impl_tp_plan_overrides.get(impl)
+        if swap:
             for plan_attr in ("base_model_tp_plan", "base_model_ep_plan"):
                 base_plan = getattr(config, plan_attr, None) or {}
                 updated_plan = {k: swap.get(v, v) for k, v in base_plan.items()}
