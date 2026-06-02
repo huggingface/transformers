@@ -1643,6 +1643,7 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
             position_ids = None
         return position_ids
 
+    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1657,7 +1658,6 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        rope_deltas: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         image_outputs: BaseModelOutputWithPooling | None = None,
         video_outputs: BaseModelOutputWithPooling | None = None,
@@ -1668,8 +1668,6 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
         """
 
         if inputs_embeds is None:
