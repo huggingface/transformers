@@ -4223,10 +4223,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             register_fusion_patches(cls, config, fusion_config)
 
-        # Fusion patches related to kernels
+        # Kernel patches: single-layer replacement (stateful __init__) then fusions.
         if kernel_config is not None and use_kernels:
-            from .integrations.hub_kernels import register_kernel_fusions
+            from .integrations.hub_kernels import register_kernel_fusions, register_kernel_replacements
 
+            register_kernel_replacements(cls, kernel_config)
             register_kernel_fusions(cls, config, kernel_config)
 
         model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called, allow_all_kernels)

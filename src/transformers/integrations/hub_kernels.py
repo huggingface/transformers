@@ -17,7 +17,6 @@ import os
 import re
 from collections.abc import Callable
 from contextlib import contextmanager
-from copy import deepcopy
 from types import ModuleType
 from typing import TYPE_CHECKING
 
@@ -598,236 +597,6 @@ def make_fused_module_class(source_layer_names: tuple[str, ...], kernel_layer_na
     )
 
 
-def _get_or_create_submodule(
-    root: "nn.Module",
-    mod_path: str,
-    original_module: "nn.Module | None",
-    future_weight: "torch.Tensor",
-) -> "nn.Module":
-    if not mod_path:
-        return root
-    parent, _, mod_name = mod_path.rpartition(".")
-    parent_mod = root.get_submodule(parent) if parent else root
-    if mod_name not in parent_mod._modules:
-        parent_mod.add_module(mod_name, _create_typed_module(original_module, future_weight))
-    return parent_mod._modules[mod_name]
-
-
-def _apply_weight_conversions(module: "nn.Module", conversion_mapping: list) -> None:
-    """Apply WeightConverter transforms to a module via state-dict walk. Handles glob patterns."""
-    from ..core_model_loading import dot_natural_key, rename_source_key
-
-    state_dict = module.state_dict()
-    pattern_to_converter = {k: c for c in conversion_mapping for k in c.source_patterns}
-    param_name_to_transform: dict = {}
-
-    for param_name in sorted(state_dict, key=dot_natural_key):
-        renamed_key, source_pattern = rename_source_key(param_name, [], conversion_mapping)
-        if source_pattern is None:
-            continue
-        transform = param_name_to_transform.setdefault(renamed_key, deepcopy(pattern_to_converter[source_pattern]))
-        transform.add_tensor(renamed_key, param_name, source_pattern, state_dict[param_name])
-
-    for layer_name, transform in param_name_to_transform.items():
-        source_names = list(transform.layer_targets.get(layer_name, []))
-        if not source_names:
-            continue
-
-        original_mod = None
-        for sname in source_names:
-            smod_path = sname.rpartition(".")[0]
-            try:
-                original_mod = module.get_submodule(smod_path) if smod_path else module
-                break
-            except AttributeError:
-                pass
-
-        result = transform.convert(layer_name)
-
-        for sname in source_names:
-            mod_path, _, attr = sname.rpartition(".")
-            try:
-                source_mod = module.get_submodule(mod_path) if mod_path else module
-            except AttributeError:
-                continue
-            source_mod._parameters.pop(attr, None)
-            source_mod._buffers.pop(attr, None)
-
-        for target_key, meta_val in result.items():
-            meta_tensor = meta_val[0] if isinstance(meta_val, list) else meta_val
-            t_mod_path, _, t_attr = target_key.rpartition(".")
-            target_mod = _get_or_create_submodule(module, t_mod_path, original_mod, meta_tensor)
-            if not isinstance(meta_tensor, nn.Parameter):
-                meta_tensor = nn.Parameter(meta_tensor, requires_grad=meta_tensor.is_floating_point())
-            target_mod.register_parameter(t_attr, meta_tensor)
-
-        for source_name in source_names:
-            mod_path = source_name.rpartition(".")[0]
-            if not mod_path:
-                continue
-            try:
-                source_mod = module.get_submodule(mod_path)
-            except AttributeError:
-                continue
-            if (
-                all(p is None for p in source_mod._parameters.values())
-                and all(b is None for b in source_mod._buffers.values())
-                and not source_mod._modules
-            ):
-                parent_path, _, mod_name = mod_path.rpartition(".")
-                parent_mod = module.get_submodule(parent_path) if parent_path else module
-                parent_mod._modules.pop(mod_name, None)
-
-
-def _strip_converter_prefix(converter, prefix: str):
-    """Return a new WeightConverter with `prefix.` stripped from all source and target patterns."""
-    from ..core_model_loading import WeightConverter
-
-    prefix_dot = prefix + "."
-    new_src = [p.removeprefix(prefix_dot) for p in converter._original_source_patterns]
-    new_tgt = [p.removeprefix(prefix_dot) for p in converter._original_target_patterns]
-    return WeightConverter(new_src, new_tgt, operations=converter.operations)
-
-
-def _apply_converter_to_module(module: "nn.Module", converter) -> None:
-    """
-    Apply a single WeightConverter to any nn.Module.
-
-    For literal (non-glob) patterns: locates source submodules directly by path, runs the
-    converter operations to infer the output shape, then creates the target submodule with
-    the proper typed class (nn.Linear, nn.Embedding, …) and prunes empty source submodules.
-    For glob patterns (containing *): falls back to _apply_weight_conversions which does a
-    full state-dict walk and registers the result parameter explicitly.
-    """
-    src_patterns = converter._original_source_patterns
-
-    # Glob patterns require a state-dict walk to expand wildcards.
-    if any("*" in p for p in src_patterns):
-        _apply_weight_conversions(module, [converter])
-        return
-
-    from copy import deepcopy
-
-    from ..core_model_loading import dot_natural_key, rename_source_key
-
-    # Collect source tensors directly from the module — bail if any are missing.
-    src_tensors: dict[str, torch.Tensor] = {}
-    for pattern in src_patterns:
-        mod_path, _, attr = pattern.rpartition(".")
-        try:
-            src_mod = module.get_submodule(mod_path) if mod_path else module
-        except AttributeError:
-            return
-        t = src_mod._parameters.get(attr)
-        if t is None:
-            t = src_mod._buffers.get(attr)
-        if t is None:
-            return
-        src_tensors[pattern] = t
-
-    # Feed the source tensors into a converter copy and run the operation to get the
-    # result meta tensor (shape inference is free on meta device).
-    conv = deepcopy(converter)
-    for param_name in sorted(src_tensors, key=dot_natural_key):
-        renamed_key, source_pattern = rename_source_key(param_name, [], [conv])
-        if source_pattern is not None:
-            conv.add_tensor(renamed_key, param_name, source_pattern, src_tensors[param_name])
-
-    target_keys = list(conv.layer_targets)
-    if not target_keys:
-        return
-
-    # Collect results from all target keys; a converter may produce more than one output tensor.
-    result: dict = {}
-    for target_key in target_keys:
-        result.update(conv.convert(target_key))
-
-    # Infer the typed module class from the first source submodule.
-    first_src_path = src_patterns[0].rpartition(".")[0]
-    try:
-        first_src_mod = module.get_submodule(first_src_path) if first_src_path else module
-    except AttributeError:
-        first_src_mod = None
-
-    # Remove source parameters before creating the target so shape queries stay clean.
-    for pattern in src_patterns:
-        mod_path, _, attr = pattern.rpartition(".")
-        try:
-            src_mod = module.get_submodule(mod_path) if mod_path else module
-        except AttributeError:
-            continue
-        src_mod._parameters.pop(attr, None)
-        src_mod._buffers.pop(attr, None)
-
-    # Create the target submodule with the correct shape inferred from the result.
-    # The module is initialised with the right in/out dimensions — no parameter replacement needed.
-    for result_key, meta_val in result.items():
-        meta_tensor = meta_val[0] if isinstance(meta_val, list) else meta_val
-        t_mod_path, _, _ = result_key.rpartition(".")
-
-        if t_mod_path:
-            parent_path, _, mod_name = t_mod_path.rpartition(".")
-            parent_mod = module.get_submodule(parent_path) if parent_path else module
-            if mod_name not in parent_mod._modules:
-                parent_mod.add_module(mod_name, _create_typed_module(first_src_mod, meta_tensor))
-
-    # Prune source submodules that are now completely empty.
-    for pattern in src_patterns:
-        mod_path = pattern.rpartition(".")[0]
-        if not mod_path:
-            continue
-        try:
-            src_mod = module.get_submodule(mod_path)
-        except AttributeError:
-            continue
-        # _parameters and _buffers may hold None-valued entries (e.g. bias=False in nn.Linear
-        # registers _parameters['bias'] = None), so check all-None rather than emptiness.
-        # _modules entries are always non-None module objects, so use emptiness there.
-        if (
-            all(p is None for p in src_mod._parameters.values())
-            and all(b is None for b in src_mod._buffers.values())
-            and not src_mod._modules
-        ):
-            parent_path, _, mod_name = mod_path.rpartition(".")
-            parent_mod = module.get_submodule(parent_path) if parent_path else module
-            parent_mod._modules.pop(mod_name, None)
-
-
-def _create_typed_module(source_mod: "nn.Module | None", weight: "torch.Tensor") -> "nn.Module":
-    """Instantiate a properly-typed nn.Module whose shape matches weight, inferred from source_mod."""
-    cls_ = type(source_mod) if source_mod is not None else nn.Module
-    if issubclass(cls_, nn.Linear):
-        out_features, in_features = weight.shape
-        return cls_(in_features=in_features, out_features=out_features, bias=source_mod.bias is not None)
-    if issubclass(cls_, nn.Embedding):
-        num_embeddings, embedding_dim = weight.shape
-        return cls_(
-            num_embeddings=num_embeddings,
-            embedding_dim=embedding_dim,
-            padding_idx=source_mod.padding_idx,
-            max_norm=source_mod.max_norm,
-            norm_type=source_mod.norm_type,
-            scale_grad_by_freq=source_mod.scale_grad_by_freq,
-            sparse=source_mod.sparse,
-        )
-    raise ValueError(f"Cannot create target module: unsupported source class {cls_.__name__!r}")
-
-
-def _make_converted_child_class(child_cls: type, stripped_converters: list) -> type:
-    """Return a subclass of child_cls whose __init__ applies weight conversions after construction."""
-    original_init = child_cls.__init__
-    _converters = list(stripped_converters)
-
-    def converted_init(self, *args, **kwargs):
-        original_init(self, *args, **kwargs)
-        for converter in _converters:
-            _apply_converter_to_module(self, converter)
-
-    converted_cls = type(f"Converted{child_cls.__name__}", (child_cls,), {"__init__": converted_init})
-    converted_cls.__qualname__ = f"Converted{child_cls.__qualname__}"
-    return converted_cls
-
-
 def make_fused_parent_class(
     parent_cls: type,
     child_names: list[str],
@@ -944,6 +713,53 @@ def _try_load_kernel_class(repo_str: str, use_local: bool = False) -> type | Non
         return repo.load()
     except Exception:
         return None
+
+
+def register_kernel_replacements(
+    cls: "type[PreTrainedModel]",
+    kernel_config: "KernelConfig",
+) -> None:
+
+    if not hasattr(cls, "config_class") or not hasattr(cls.config_class, "model_type"):
+        raise ValueError(f"Model {cls.__name__} has no config_class or model_type.")
+    model_type = cls.config_class.model_type
+
+    patch_mapping: dict[str, type] = {}
+    new_mapping: dict = {}
+
+    for layer_name, hub_repo in kernel_config.kernel_mapping.items():
+        # Fusion case: handled by register_kernel_fusions, leave it alone.
+        if isinstance(layer_name, tuple):
+            new_mapping[layer_name] = hub_repo
+            continue
+
+        if isinstance(hub_repo, type) and issubclass(hub_repo, nn.Module):
+            kernel_cls = hub_repo
+        else:
+            repo_str = _first_str_leaf(hub_repo)
+            if repo_str is None:
+                new_mapping[layer_name] = hub_repo
+                continue
+            kernel_cls = _try_load_kernel_class(repo_str, use_local=kernel_config.use_local_kernel)
+
+        if kernel_cls is None or kernel_cls.__init__ is nn.Module.__init__:
+            # Stateless kernel: leave it for kernels.kernelize.
+            new_mapping[layer_name] = hub_repo
+            continue
+
+        patch_mapping[layer_name] = kernel_cls
+
+        if hasattr(kernel_cls, "conversion_mapping"):
+            existing = get_checkpoint_conversion_mapping(model_type)
+            transforms = list(kernel_cls.conversion_mapping)
+            if existing is not None:
+                transforms = existing + transforms
+            register_checkpoint_conversion_mapping(model_type, transforms, overwrite=True)
+
+    if patch_mapping:
+        register_patch_mapping(patch_mapping, overwrite=True)
+
+    kernel_config.kernel_mapping = new_mapping
 
 
 def register_kernel_fusions(
@@ -1067,6 +883,7 @@ __all__ = [
     "get_kernel",
     "make_fused_module_class",
     "register_kernel_fusions",
+    "register_kernel_replacements",
     "lazy_load_kernel",
     "register_kernel_mapping",
     "register_kernel_mapping_transformers",
