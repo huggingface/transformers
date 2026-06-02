@@ -24,11 +24,9 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from transformers.backbone_utils import filter_output_hidden_states
-
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -470,13 +468,16 @@ class Sapiens2Attention(nn.Module):
         """Input shape: Batch x Time x Channel"""
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
+
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         query_states = self.q_norm(query_states)
         key_states = self.k_norm(key_states)
+
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
@@ -490,6 +491,7 @@ class Sapiens2Attention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
+
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
@@ -1025,8 +1027,6 @@ class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
         self.decode_head = Sapiens2Head(config)
         self.post_init()
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1141,8 +1141,6 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
         self.decode_head = Sapiens2Head(config)
         self.post_init()
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1221,8 +1219,6 @@ class Sapiens2ForNormalEstimation(Sapiens2PreTrainedModel):
         self.decode_head = Sapiens2Head(config)
         self.post_init()
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1297,8 +1293,6 @@ class Sapiens2ForPointmapEstimation(Sapiens2PreTrainedModel):
         )
         self.post_init()
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1370,8 +1364,6 @@ class Sapiens2ForImageMatting(Sapiens2PreTrainedModel):
         self.decode_head = Sapiens2Head(config)  # config.num_labels = 4
         self.post_init()
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
