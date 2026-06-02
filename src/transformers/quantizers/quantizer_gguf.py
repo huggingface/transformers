@@ -48,18 +48,30 @@ class GGUFQuantizer(HfQuantizer):
     requires_calibration = False
 
     def __init__(self, quantization_config, **kwargs):
+        """Distinguish the three sources a GGUF-quantized model can come from and
+        set ``pre_quantized`` accordingly. The source is inferred from the config,
+        not passed explicitly:
+
+        * **safetensors reload** — the config carries ``module_quant_types``, the
+          per-module swap plan recorded by a prior ``save_pretrained``. The
+          quantized bytes already live in the model's own safetensors shards, so
+          no ``.gguf`` file is involved; we only need to replay the swap. This is a
+          pre-quantized load (``pre_quantized=True``).
+        * **external gguf file** — the config has ``gguf_file=``. The source bytes
+          come from that ``.gguf`` and are read by :meth:`load_checkpoint_state`.
+          Also pre-quantized (``pre_quantized=True``).
+        * **on-the-fly quantization** — neither of the above. The checkpoint is a
+          regular fp16/bf16 model and the :class:`GGUFQuantize` conversion op packs
+          each matching weight into GGUF bytes at load time, so the model is *not*
+          pre-quantized (``pre_quantized=False``).
+
+        The first two are mutually exclusive with the third; ``on_the_fly`` is
+        simply "neither a saved swap plan nor a gguf file was given".
+        """
         from ..utils.quantization_config import GgufQuantizeConfig
 
         if quantization_config is None:
             quantization_config = GgufQuantizeConfig()
-        # Three load paths:
-        #   - safetensors reload: `module_quant_types` carries the swap plan
-        #     from a prior `save_pretrained` — bytes live in the model's own
-        #     safetensors, no .gguf file needed. pre_quantized=True.
-        #   - gguf_file=: source bytes come from an external .gguf — quantizer
-        #     loads them via `load_checkpoint_state`. pre_quantized=True.
-        #   - on-the-fly: live fp16/bf16 checkpoint, GGUFQuantize op packs at
-        #     load time. pre_quantized=False.
         has_module_map = bool(getattr(quantization_config, "module_quant_types", None))
         has_gguf_file = getattr(quantization_config, "gguf_file", None) is not None
         on_the_fly = not (has_module_map or has_gguf_file)
@@ -68,20 +80,35 @@ class GGUFQuantizer(HfQuantizer):
         # Re-annotate with the concrete type so attribute accesses type-check.
         self.quantization_config: GgufQuantizeConfig = quantization_config
         self.on_the_fly = on_the_fly
-        # `linear_mode` is the on-the-fly default and the gguf_file default on
-        # MPS without explicit dequant; `_process_model_before_weight_loading`
-        # finalizes it once it can see the live `device_map`.
-        self.linear_mode = on_the_fly
+        # `keep_quantized`: True ⇒ the model keeps GGUF byte modules (GgufLinear /
+        # GgufExperts, the Metal-kernel path); False ⇒ weights are dequantized to
+        # plain float `nn.Linear`. Resolved for real in
+        # `_process_model_before_weight_loading` via `_resolve_keep_quantized`; this
+        # is just the default for the on-the-fly case.
+        self.keep_quantized = on_the_fly
         # GGUF file state — populated by :meth:`load_checkpoint_state` when the
         # gguf_file path is active. Empty for the on-the-fly path.
         self.weight_mapping: list = []
         self.gguf_tensors: dict = {}
-        self.gguf_kv: dict = {}
-        # Reverse rename map (hf_target -> gguf_source), filled during
-        # `_build_quant_info_from_gguf_file`. Consumed by `save_gguf`.
-        self.hf_to_gguf: dict[str, str] = {}
+        # `{gguf_name: ggml_quant_type}` metadata read off the GGUF header (no
+        # tensor data). The module-swap plan is built from this — see
+        # :meth:`_build_quant_info`.
+        self.gguf_tensor_types: dict = {}
 
     # ---- HfQuantizer hooks ----------------------------------------------------
+
+    def validate_environment(self, *args, **kwargs):
+        """Disk offload writes dequantized fp shards to disk and reloads them as
+        plain tensors — incompatible with the GGUF byte-passthrough / kernel path.
+        Reject a `device_map` that sends any module to ``"disk"``."""
+        device_map = kwargs.get("device_map")
+        if device_map is not None and (
+            (isinstance(device_map, dict) and "disk" in device_map.values()) or "disk" in device_map
+        ):
+            raise RuntimeError(
+                "One or more modules is configured to be mapped to disk. Disk offload is not supported for models "
+                "loaded from GGUF files."
+            )
 
     def update_weight_conversions(self, weight_conversions):
         """Prepend the GGUF rename / merge / reverse-permute converters
@@ -155,20 +182,21 @@ class GGUFQuantizer(HfQuantizer):
         import torch
 
         from ..integrations.gguf_dequant import GGUFQuantizedTensor, dequantize_gguf_tensor
-        from ..integrations.gguf_kernels import metal_kernels_available
         from ..integrations.gguf_linear import gguf_linear_supports
         from ..modeling_gguf_pytorch_utils import load_gguf_checkpoint
 
         parsed = load_gguf_checkpoint(gguf_path, return_tensors=True)
         self.weight_mapping = list(parsed.get("weight_mapping", []) or [])
+        self.gguf_tensor_types = dict(parsed.get("tensor_quant_types", {}) or {})
         tensors = parsed["tensors"]
         # Gemma2 / Gemma3 / Nemotron store every RMSNorm weight as `w + 1`
         # in the GGUF; the matching `SubtractOne` op in the converter chain
-        # runs *after* the loader's `.to(dtype)` cast, which on fp16/bf16
-        # loses 1 ULP near `w = 1` (the steady-state norm scale) and breaks
-        # the weights-conversion tests. Pre-apply the subtraction here on
-        # the fp32 source so the loader's cast is the only rounding step,
-        # matching the legacy `NemotronTensorProcessor.process` / `Gemma2TensorProcessor.process`.
+        # runs *after* the loader's `.to(dtype)` cast (see `_materialize_copy`),
+        # which on fp16/bf16 loses 1 ULP near `w = 1` (the steady-state norm
+        # scale) and breaks the weights-conversion tests. Pre-apply the
+        # subtraction here on the fp32 source so the loader's cast is the only
+        # rounding step, matching the legacy `NemotronTensorProcessor.process` /
+        # `Gemma2TensorProcessor.process`.
         arch = (parsed.get("config", {}) or {}).get("model_type")
         if arch in ("gemma2", "gemma3", "gemma3_text", "nemotron"):
             for name, t in tensors.items():
@@ -178,14 +206,12 @@ class GGUFQuantizer(HfQuantizer):
                     # Detach to break any GGUFQuantizedTensor wrapping; clone to
                     # own the storage the loader will cast.
                     tensors[name] = t.detach().clone() - 1.0
-        # Linear-mode (byte passthrough → GgufLinear) requires MPS + the metal
-        # kernels package; without either, fall back to dequant-at-load so the
-        # model can still run as plain `nn.Linear` weights.
-        dequant_all = (
-            self.quantization_config.dequantize
-            or not torch.backends.mps.is_available()
-            or not metal_kernels_available()
-        )
+        # Linear-mode (byte passthrough → GgufLinear) requires MPS; off-MPS we
+        # fall back to dequant-at-load so the model still runs as plain
+        # `nn.Linear` weights. On MPS we commit to the kernel path — if the
+        # metal kernels can't load, `GgufLinear.__init__` raises a clear error
+        # rather than silently degrading.
+        dequant_all = self.quantization_config.dequantize or not torch.backends.mps.is_available()
         # GGUF tensor names whose HF target is an `nn.Embedding` need fp values
         # at assignment time. `token_embd` is universal; extend as more archs land.
         embedding_prefixes = ("token_embd",)
@@ -206,40 +232,37 @@ class GGUFQuantizer(HfQuantizer):
             if needs_dequant:
                 tensors[name] = dequantize_gguf_tensor(t, t.quant_type, device=t.device)
         self.gguf_tensors = tensors
-        self.gguf_kv = parsed.get("raw_kv", {}) or {}
         return tensors
 
-    def _process_model_before_weight_loading(self, model, **kwargs):
-        """Swap nn.Linear / fused-expert modules in place at meta time.
+    def _resolve_keep_quantized(self) -> bool:
+        """Decide whether the model keeps GGUF byte modules (GgufLinear /
+        GgufExperts, the Metal-kernel path) or is dequantized to plain float
+        `nn.Linear`. Single source of truth for the three load paths:
 
-        Three paths converge here:
-          * safetensors reload (`module_quant_types` non-empty): swap from
-            the saved plan unconditionally — the bytes are already uint8 in
-            safetensors and only GgufLinear/GgufExperts have buffers shaped
-            to receive them.
-          * gguf_file= load: finalize `linear_mode` from MPS availability
-            and the caller's `dtype=` choice. The plan comes from
-            `_build_quant_info_from_gguf_file` walking `gguf_tensors`.
-          * on-the-fly: swap unconditionally (the config asked for it).
-
-        Records the swap plan on `quantization_config.module_quant_types`
-        so it survives `save_pretrained` → `from_pretrained`.
+          * safetensors reload (`module_quant_types` present) → always keep:
+            the saved uint8 bytes only fit the swapped buffers.
+          * on-the-fly (`GgufQuantizeConfig` without a file) → always keep:
+            the config explicitly asked to quantize.
+          * gguf_file= → keep only on MPS without an explicit `dequantize`
+            (the byte path needs the Metal kernels; otherwise dequant to float).
         """
         import torch
 
-        from ..integrations.gguf_kernels import metal_kernels_available
+        if bool(getattr(self.quantization_config, "module_quant_types", None)):
+            return True
+        if self.on_the_fly:
+            return True
+        return torch.backends.mps.is_available() and not self.quantization_config.dequantize
 
-        has_module_map = bool(getattr(self.quantization_config, "module_quant_types", None))
-        if has_module_map:
-            self.linear_mode = True
-        elif not self.on_the_fly:
-            # Byte-passthrough swap requires MPS + the metal kernels package.
-            self.linear_mode = (
-                torch.backends.mps.is_available()
-                and not self.quantization_config.dequantize
-                and metal_kernels_available()
-            )
-        if not self.linear_mode:
+    def _process_model_before_weight_loading(self, model, **kwargs):
+        """Swap nn.Linear / fused-expert modules to GgufLinear / GgufExperts in
+        place at meta time, when `_resolve_keep_quantized` selects the byte path.
+        The swap plan comes from `_build_quant_info` and is recorded on
+        `quantization_config.module_quant_types` so it survives
+        `save_pretrained` → `from_pretrained`.
+        """
+        self.keep_quantized = self._resolve_keep_quantized()
+        if not self.keep_quantized:
             return
         from ..integrations.gguf_linear import replace_with_gguf_linear
 
@@ -257,16 +280,9 @@ class GGUFQuantizer(HfQuantizer):
         any merge / permute. Kernel ops are resolved in each module's
         `__init__` (no post-load bind step)."""
         super().postprocess_model(model, **kwargs)
-        if self.linear_mode:
+        if self.keep_quantized:
             self._apply_generation_defaults(model)
         return model
-
-    def save_gguf(self, model, path: str, *, quant_config: dict | None = None) -> str:
-        """Write the model back to a .gguf file via the thin reverse-rename
-        driver in :mod:`integrations.gguf_writer`."""
-        from ..integrations.gguf_writer import save_pretrained_gguf
-
-        return save_pretrained_gguf(model, path, quant_config=quant_config, quantizer=self)
 
     @property
     def is_trainable(self):
@@ -292,10 +308,11 @@ class GGUFQuantizer(HfQuantizer):
         :class:`nn.Linear` matching `modules_to_convert` gets the config's
         single `quant_type`.
 
-        gguf_file path: per-tensor quant types come from :attr:`gguf_tensors`
-        after renaming the GGUF source names through `self.weight_mapping`.
-        :attr:`hf_to_gguf` is filled here as a side effect (consumed by
-        `save_gguf`).
+        gguf_file path: per-tensor quant types come from the GGUF header
+        metadata (:attr:`gguf_tensor_types`, name → quant type, no tensor data),
+        with the GGUF source names renamed to HF targets through
+        `self.weight_mapping`. Deciding the swap only needs the quant type, so we
+        never touch the materialized `gguf_tensors` here.
         """
         import torch.nn as nn
 
@@ -318,7 +335,8 @@ class GGUFQuantizer(HfQuantizer):
                 and not any(skip in name for skip in exclude)
             }
 
-        # gguf_file path: rename gguf sources → hf targets → record quant_type.
+        # gguf_file path: rename gguf sources → hf targets → record quant_type,
+        # all from the lightweight header metadata.
         from ..core_model_loading import WeightConverter, WeightRenaming, rename_source_key
         from ..integrations.gguf_linear import gguf_linear_supports
 
@@ -328,17 +346,12 @@ class GGUFQuantizer(HfQuantizer):
         prefix = getattr(model, "base_model_prefix", "") or ""
 
         hf_quant: dict[str, str] = {}
-        for gguf_name, tensor in self.gguf_tensors.items():
-            qt = getattr(tensor, "quant_type", None)
+        for gguf_name, qt in self.gguf_tensor_types.items():
             if qt is None or not gguf_linear_supports(qt):
                 continue
-            try:
-                hf_name, _ = rename_source_key(
-                    gguf_name, renamings, converters, prefix=prefix, meta_state_dict=meta_state_dict
-                )
-            except Exception:
-                continue
-            self.hf_to_gguf[hf_name] = gguf_name
+            hf_name, _ = rename_source_key(
+                gguf_name, renamings, converters, base_model_prefix=prefix, meta_state_dict=meta_state_dict
+            )
             hf_quant[hf_name] = qt.name if hasattr(qt, "name") else str(qt)
 
         experts_cls = MODEL_TYPE_TO_GGUF_EXPERTS.get(getattr(model.config, "model_type", None))

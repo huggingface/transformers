@@ -5,6 +5,12 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 from __future__ import annotations
 
 
@@ -56,16 +62,3 @@ def ensure_metal_kernels(repo: str = "ArthurZ/gguf-kernels"):
             f"once migrated this path Just Works."
         ) from exc
     return _GGUF_METAL_KERNELS
-
-
-def metal_kernels_available() -> bool:
-    """Probe whether `ensure_metal_kernels()` would succeed, without raising.
-    Used by the quantizer to gate the GgufLinear swap path — if the kernels
-    can't load, the safer choice is to fall back to dequant-on-load instead
-    of installing modules whose forward will raise.
-    """
-    try:
-        ensure_metal_kernels()
-        return True
-    except Exception:
-        return False

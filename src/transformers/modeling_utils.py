@@ -4105,10 +4105,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         allow_all_kernels = kwargs.pop("allow_all_kernels", False)
-        # ``use_kernels`` defaults to True implicitly for the GGUF path (see
-        # below) — the metal kernels are the only fast inference path, so the
-        # default should match the typical user intent.
-        use_kernels = kwargs.pop("use_kernels", None)
+        use_kernels = kwargs.pop("use_kernels", False)
         kernel_config = kwargs.pop("kernel_config", None)
         key_mapping = kwargs.pop("key_mapping", None)
 
@@ -4219,29 +4216,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             config._experts_implementation = kwargs.pop("experts_implementation")
 
         # ``gguf_file=`` is shorthand for ``quantization_config=GgufQuantizeConfig(gguf_file=...)``.
-        # Building that config here lets the standard ``get_hf_quantizer`` dispatch
-        # below own quantizer construction — no GGUF special-case after this point.
+        # Building that config here lets the standard ``get_hf_quantizer`` dispatch below own
+        # quantizer construction (and its `validate_environment`) — no GGUF special-case after this.
         if gguf_file is not None:
             from .utils.quantization_config import GgufQuantizeConfig
 
-            if quantization_config is None:
-                quantization_config = GgufQuantizeConfig(gguf_file=gguf_file, dequantize=dtype_was_explicit)
-            elif isinstance(quantization_config, GgufQuantizeConfig):
-                if quantization_config.gguf_file is None:
-                    quantization_config.gguf_file = gguf_file
-                if dtype_was_explicit:
-                    quantization_config.dequantize = True
-            else:
-                raise ValueError(
-                    "Cannot combine `gguf_file=` with a non-GGUF `quantization_config=`. Drop one of them."
-                )
-            if device_map is not None and (
-                (isinstance(device_map, dict) and "disk" in device_map.values()) or "disk" in device_map
-            ):
-                raise RuntimeError(
-                    "One or more modules is configured to be mapped to disk. Disk offload is not supported for models "
-                    "loaded from GGUF files."
-                )
+            quantization_config = GgufQuantizeConfig.from_gguf_file(
+                gguf_file, quantization_config, dequantize=dtype_was_explicit
+            )
 
         hf_quantizer, config, device_map = get_hf_quantizer(
             config, quantization_config, device_map, weights_only, user_agent
@@ -4250,10 +4232,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # ``use_kernels`` controls the model-wide kernel resolver (attention /
         # RMSNorm / ...); it's independent from the GGUF kernels, which load
         # via ``integrations.gguf_kernels.ensure_metal_kernels`` regardless.
-        # Default to False unless the caller asked for it explicitly.
-        if use_kernels is None:
-            use_kernels = False
-
         if kernel_config is not None and not use_kernels:
             logger.warning_once(
                 "A kernel_config was provided but use_kernels is False; setting use_kernels=True automatically. To suppress this warning, explicitly set use_kernels to True."

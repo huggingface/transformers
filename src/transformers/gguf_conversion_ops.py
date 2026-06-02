@@ -171,10 +171,12 @@ class SubtractOne(ConversionOps):
 
     The `-1` must run on the fp32 source values *before* the loader casts to
     the target dtype, otherwise the cast then subtract drops 1 ULP near
-    `w = 1` and the Gemma/Nemotron norm weights end up ~5e-4 off vs HF.
-    `load_checkpoint_state` pre-applies the subtraction in fp32 for arches
-    that need it, so by the time the converter chain runs the value is
-    already de-offset — make `convert` a no-op pass-through.
+    `w = 1` and the Gemma/Nemotron norm weights end up ~5e-4 off vs HF. The
+    loader's `_materialize_copy` casts to the target dtype *before* the
+    converter chain runs, so this op can't do it safely — `load_checkpoint_state`
+    pre-applies the subtraction in fp32 for arches that need it, and by the time
+    the converter chain runs the value is already de-offset. Make `convert` a
+    no-op pass-through.
     """
 
     def convert(
@@ -264,9 +266,10 @@ class ReversePermuteAttnQ(ConversionOps):
 
 
 class PermuteAttnQ(ConversionOps):
-    """Forward Q-projection GGUF permutation — inverse of :class:`ReversePermuteAttnQ`.
-    Used by :func:`save_pretrained_gguf` when re-emitting Q weights into llama.cpp's
-    expected layout. Reads `config.num_attention_heads` at convert time."""
+    """Forward Q-projection GGUF permutation — inverse of :class:`ReversePermuteAttnQ`,
+    exposed as its :attr:`reverse_op` so the conversion is invertible. Re-emits Q
+    weights in llama.cpp's expected layout; reads `config.num_attention_heads` at
+    convert time."""
 
     def convert(
         self,

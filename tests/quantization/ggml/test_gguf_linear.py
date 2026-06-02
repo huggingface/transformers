@@ -203,9 +203,11 @@ class GenerationDefaultsTest(unittest.TestCase):
     def test_defaults_applied(self):
         if not torch.backends.mps.is_available():
             self.skipTest("GgufLinear swap only triggers on MPS")
-        from transformers.integrations.gguf_kernels import metal_kernels_available
+        from transformers.integrations.gguf_kernels import ensure_metal_kernels
 
-        if not metal_kernels_available():
+        try:
+            ensure_metal_kernels()
+        except Exception:
             self.skipTest("GgufLinear swap also requires the `ArthurZ/gguf-kernels` package")
         from transformers import AutoModelForCausalLM
         from transformers.generation.configuration_utils import CompileConfig

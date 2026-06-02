@@ -1189,6 +1189,33 @@ class GgufQuantizeConfig(QuantizationConfigMixin):
         out.pop("gguf_file", None)
         return out
 
+    @classmethod
+    def from_gguf_file(cls, gguf_file: str, quantization_config=None, *, dequantize: bool = False):
+        """Resolve the config backing a ``from_pretrained(..., gguf_file=...)`` load.
+
+        ``gguf_file=`` is just shorthand for
+        ``quantization_config=GgufQuantizeConfig(gguf_file=...)``; centralising the
+        construction here keeps `from_pretrained` free of GGUF special-cases. Three
+        inputs are accepted:
+
+        * ``quantization_config is None`` → build a fresh config pointing at ``gguf_file``.
+        * an existing :class:`GgufQuantizeConfig` → fill in ``gguf_file`` / ``dequantize``
+          where the caller left them unset (an explicit config wins otherwise).
+        * any other quant config → error; the two can't be combined.
+
+        ``dequantize`` forces the dequantize-on-load path. `from_pretrained` passes
+        ``dtype is not None`` here so an explicit ``dtype=`` overrides the native kernels.
+        """
+        if quantization_config is None:
+            return cls(gguf_file=gguf_file, dequantize=dequantize)
+        if isinstance(quantization_config, cls):
+            if quantization_config.gguf_file is None:
+                quantization_config.gguf_file = gguf_file
+            if dequantize:
+                quantization_config.dequantize = True
+            return quantization_config
+        raise ValueError("Cannot combine `gguf_file=` with a non-GGUF `quantization_config=`. Drop one of them.")
+
 
 class CompressedTensorsConfig(QuantizationConfigMixin):
     """

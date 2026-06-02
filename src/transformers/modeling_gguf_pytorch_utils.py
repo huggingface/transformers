@@ -500,18 +500,6 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     reader_keys = list(fields.keys())
 
     parsed_parameters: dict = {k: {} for k in GGUF_TO_TRANSFORMERS_MAPPING}
-    # Snapshot every raw GGUF kv field as (typed_value, gguf_value_type) so
-    # `save_pretrained_gguf` can replay the metadata bit-for-bit on round-trip.
-    raw_kv: dict[str, tuple[object, int]] = {}
-    for k, field in fields.items():
-        try:
-            v = [_gguf_parse_value(field.parts[i], field.types) for i in field.data]
-            if len(v) == 1:
-                v = v[0]
-            raw_kv[k] = (v, int(field.types[0]))
-        except Exception:
-            continue
-    parsed_parameters["raw_kv"] = raw_kv
 
     architecture = read_field(reader, "general.architecture")[0]
     # NOTE: Some GGUF checkpoints may miss `general.name` field in metadata
@@ -703,6 +691,16 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
         # casts (especially on MPS) treat the storage as scratch and corrupt it.
         parsed_parameters["tensors"] = {
             tensor.name: GGUFQuantizedTensor(torch.from_numpy(np.copy(tensor.data)), quant_type=tensor.tensor_type)
+            for tensor in reader.tensors
+            if tensor.name not in _GGUF_RUNTIME_AUX_TENSORS
+        }
+        # Lightweight `{gguf_name: ggml_quant_type}` metadata, read straight off the
+        # reader without touching tensor data. The quantizer builds its module-swap
+        # plan from this (see `GGUFQuantizer._build_quant_info`) instead of walking
+        # the materialized `tensors` dict — deciding the swap needs the quant type,
+        # not the weights.
+        parsed_parameters["tensor_quant_types"] = {
+            tensor.name: tensor.tensor_type
             for tensor in reader.tensors
             if tensor.name not in _GGUF_RUNTIME_AUX_TENSORS
         }

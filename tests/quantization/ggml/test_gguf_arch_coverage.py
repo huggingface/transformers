@@ -277,14 +277,12 @@ class GgufLoadCheckpointStateDequantDecisionTests(unittest.TestCase):
         }
 
         def fake_load_gguf_checkpoint(_path, return_tensors=True):
-            return {"tensors": dict(fake_tensors), "weight_mapping": [], "raw_kv": {}}
+            return {"tensors": dict(fake_tensors), "weight_mapping": []}
 
         # Patch the loader + the dequant kernel so we don't need a real GGUF file
         # or torch ops.
         import transformers.integrations.gguf_dequant as _dq
-        import transformers.integrations.gguf_kernels as _kern
         import transformers.modeling_gguf_pytorch_utils as _mod
-        import transformers.quantizers.quantizer_gguf as _qgguf
 
         monkeypatch(_mod, "load_gguf_checkpoint", fake_load_gguf_checkpoint)
         called = {"n": 0}
@@ -294,16 +292,10 @@ class GgufLoadCheckpointStateDequantDecisionTests(unittest.TestCase):
             return torch.zeros(8, 16, dtype=torch.float32)
 
         monkeypatch(_dq, "dequantize_gguf_tensor", fake_dequantize)
+        # `load_checkpoint_state` gates the byte-passthrough path purely on MPS
+        # availability (the Metal kernels are resolved later, when GgufLinear /
+        # GgufExperts are built), so simulating MPS is enough here.
         monkeypatch(torch.backends.mps, "is_available", lambda: mps_available)
-        # `load_checkpoint_state` gates the byte-passthrough path on
-        # `metal_kernels_available()` (fast-path) — pretend kernels exist so
-        # the MPS branch keeps quantized targets as bytes. The module-level
-        # name is imported inside `load_checkpoint_state` from `gguf_kernels`,
-        # so patch both spots to be safe.
-        monkeypatch(_kern, "metal_kernels_available", lambda: True)
-        monkeypatch(_qgguf, "metal_kernels_available", lambda: True) if hasattr(
-            _qgguf, "metal_kernels_available"
-        ) else None
 
         q = GGUFQuantizer(GgufQuantizeConfig(dequantize=dequantize))
         out = q.load_checkpoint_state("/does/not/exist")
@@ -345,6 +337,52 @@ class GgufLoadCheckpointStateDequantDecisionTests(unittest.TestCase):
 
         for key in ("token_embd.weight", "blk.0.attn_q.weight"):
             self.assertNotIsInstance(out[key], GGUFQuantizedTensor, key)
+
+
+@require_torch
+@require_gguf
+class GgufBuildQuantInfoFromMetadataTests(unittest.TestCase):
+    """The gguf_file swap plan is built from GGUF header *metadata*
+    (`gguf_tensor_types`: name → quant type), renamed through `weight_mapping`
+    — it never touches the materialized `gguf_tensors`. Pin that contract."""
+
+    def _tiny_model(self):
+        import torch.nn as nn
+
+        class _Tiny(nn.Module):
+            base_model_prefix = ""
+
+            def __init__(self):
+                super().__init__()
+                self.q_proj = nn.Linear(32, 32, bias=False)
+                self.k_proj = nn.Linear(32, 32, bias=False)
+
+                from types import SimpleNamespace
+
+                self.config = SimpleNamespace(model_type="llama")
+
+        return _Tiny()
+
+    def test_plan_built_from_metadata_not_tensors(self):
+        import gguf
+
+        from transformers import GgufQuantizeConfig
+        from transformers.quantizers.quantizer_gguf import GGUFQuantizer
+
+        q = GGUFQuantizer(GgufQuantizeConfig(gguf_file="some.gguf"))
+        self.assertFalse(q.on_the_fly)
+        # Identity rename (gguf name == hf weight key). Q4_K is kernel-supported;
+        # Q2_K is not, so it must be dropped from the swap plan.
+        q.weight_mapping = []
+        q.gguf_tensor_types = {
+            "q_proj.weight": gguf.GGMLQuantizationType.Q4_K,
+            "k_proj.weight": gguf.GGMLQuantizationType.Q2_K,
+        }
+        # Deliberately empty — proves the plan comes from metadata, not tensor data.
+        q.gguf_tensors = {}
+
+        info = q._build_quant_info(self._tiny_model())
+        self.assertEqual(info, {"q_proj": {"quant_type": "Q4_K"}})
 
 
 if __name__ == "__main__":

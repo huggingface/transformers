@@ -5,7 +5,15 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 from __future__ import annotations
+
+import re
 
 import torch
 import torch.nn as nn
@@ -65,14 +73,12 @@ class GgufLinear(nn.Module):
             self.register_parameter("bias", None)
 
         # We want to support all quant types in a single layer, here we fetch the corresponding
-        # operations
-        try:
-            ops = ensure_metal_kernels()._ops
-            fmt = _KERNEL_FMT[quant_type]
-            self._mv_op = getattr(ops, f"mul_mat_vec_{fmt}_f32").default
-            self._mat_op = getattr(ops, f"mul_mat_{fmt}_f32").default
-        except Exception:
-            self._mv_op = self._mat_op = None
+        # operations. `ensure_metal_kernels()` raises a clear RuntimeError if the kernels can't be
+        # loaded — there is no fallback, so let it propagate rather than installing a dead module.
+        ops = ensure_metal_kernels()._ops
+        fmt = _KERNEL_FMT[quant_type]
+        self._mv_op = getattr(ops, f"mul_mat_vec_{fmt}_f32").default
+        self._mat_op = getattr(ops, f"mul_mat_{fmt}_f32").default
 
     def extra_repr(self) -> str:
         return (
@@ -84,7 +90,7 @@ class GgufLinear(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.shape[-1] != self.in_features:
             raise ValueError(f"Last dim of x must be {self.in_features}, got {x.shape[-1]}")
-        if x.device.type != "mps" or self._mv_op is None:
+        if x.device.type != "mps":
             raise RuntimeError(
                 "GgufLinear runs only on MPS with the metal kernels loaded. Re-load with "
                 "`dtype=torch.bfloat16` (or any explicit dtype) to dequantize to a normal nn.Linear."
@@ -177,15 +183,18 @@ class GgufExperts(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
         # Same as linear layers, we record the specific quant-type op names.
-        try:
-            ops = ensure_metal_kernels()._ops
-            self._id_op_gate_up = getattr(ops, f"mul_mat_id_{_KERNEL_FMT[gate_up_quant]}_f32").default
-            self._id_op_down = getattr(ops, f"mul_mat_id_{_KERNEL_FMT[down_quant]}_f32").default
-        except Exception:
-            self._id_op_gate_up = self._id_op_down = None
+        # `ensure_metal_kernels()` raises a clear RuntimeError when the kernels can't be loaded;
+        # there is no fallback, so let it propagate instead of building a module that can't run.
+        ops = ensure_metal_kernels()._ops
+        self._id_op_gate_up = getattr(ops, f"mul_mat_id_{_KERNEL_FMT[gate_up_quant]}_f32").default
+        self._id_op_down = getattr(ops, f"mul_mat_id_{_KERNEL_FMT[down_quant]}_f32").default
 
         decode_size = getattr(config, "num_experts_per_tok", None) or 4
-        # Decode-shape scratch — keeps the forward compile-friendly.
+        # Pre-allocated scratch for the decode hot path. At decode there is a single token, so the
+        # kernels always see the same `(num_experts_per_tok, ...)` shapes; allocating the gate/up/out
+        # buffers once at init (instead of `torch.empty` inside `forward`) keeps the forward graph
+        # static so torch.compile / dynamo does not re-trace on every step. Prefill (variable token
+        # counts) falls back to fresh allocations — see `gguf_bmm_experts_forward`.
         self.register_buffer(
             "_gate_buf", torch.empty(decode_size, self.intermediate_dim, dtype=torch.float32), persistent=False
         )
@@ -256,9 +265,6 @@ def gguf_bmm_experts_forward(
     # num_top_k work items). The mul_mat_id kernel writes one output row per pair.
     S = num_tokens * num_top_k
 
-    if self._id_op_gate_up is None or self._id_op_down is None:
-        raise RuntimeError("GgufExperts requires the GGUF metal kernels (install `kernels`, run on MPS).")
-
     selected = hidden_states.repeat_interleave(num_top_k, dim=0).to(torch.float32).contiguous()
     ids32 = top_k_index.reshape(-1).to(torch.int32)
     sample_weights = top_k_weights.reshape(-1).to(torch.float32)
@@ -289,25 +295,13 @@ def gguf_bmm_experts_forward(
     return weighted.view(num_tokens, num_top_k, hidden_dim).sum(dim=1).to(hidden_states.dtype)
 
 
-def _gguf_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights):
-    """Prefill alias — currently delegates to the bmm path (one mul_mat_id kernel
-    per projection is the right shape for both decode and prefill on MPS; a
-    proper grouped_mm impl would land here when CUDA kernels arrive)."""
-    return gguf_bmm_experts_forward(self, hidden_states, top_k_index, top_k_weights)
-
-
 class GgufExpertsInterface(ExpertsInterface):
     _global_mapping = {
         "bmm": gguf_bmm_experts_forward,
-        "grouped_mm": _gguf_grouped_mm_experts_forward,
     }
 
 
 ALL_GGUF_EXPERTS_FUNCTIONS = GgufExpertsInterface()
-
-
-def _should_convert(name: str, modules_to_not_convert: set[str]) -> bool:
-    return not any(skip in name for skip in modules_to_not_convert)
 
 
 def replace_with_gguf_linear(
@@ -315,11 +309,14 @@ def replace_with_gguf_linear(
     quant_info_by_target: dict[str, dict],
     modules_to_not_convert: set[str] | None = None,
 ) -> int:
-    modules_to_not_convert = modules_to_not_convert or set()
+    # Compile the skip patterns into a single regex once, then test every module name against it
+    # (instead of an `any(skip in name ...)` scan per module). A module is skipped when any pattern
+    # occurs anywhere in its name; an empty set matches nothing.
+    skip_re = re.compile("|".join(re.escape(p) for p in modules_to_not_convert)) if modules_to_not_convert else None
     swapped = 0
     experts_cls = MODEL_TYPE_TO_GGUF_EXPERTS.get(getattr(model.config, "model_type", None))
     for name, mod in list(model.named_modules()):
-        if not _should_convert(name, modules_to_not_convert):
+        if skip_re is not None and skip_re.search(name):
             continue
         info = quant_info_by_target.get(name)
         if info is None:
@@ -346,9 +343,7 @@ def replace_with_gguf_linear(
         if new_module is None:
             continue
 
-        parent_path, _, leaf = name.rpartition(".")
-        parent = model.get_submodule(parent_path) if parent_path else model
-        setattr(parent, leaf, new_module)
+        model.set_submodule(name, new_module)
         swapped += 1
     return swapped
 
