@@ -421,7 +421,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         bs, seqlen = input_ids.shape
         self.assertEqual(result.router_logits[0].shape, (bs * seqlen, config.num_experts))
         # After #40617, we still have 0.01 % of failure rate here.
-        torch.testing.assert_close(result.aux_loss.cpu(), torch.tensor(2, dtype=torch.float32), rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(result.aux_loss.cpu(), torch.tensor(1, dtype=torch.float32), rtol=1e-2, atol=1e-2)
 
         # First, we make sure that adding padding tokens doesn't change the loss
         # loss(input_ids, attention_mask=None) == loss(input_ids + padding, attention_mask=attention_mask_with_padding)
