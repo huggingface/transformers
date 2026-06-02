@@ -10,7 +10,7 @@ inputs = tokenizer("Hello, how are you?", return_tensors="pt")
 # --- baseline: plain model, no fusion ---
 print("=" * 60)
 print("Loading baseline model (no fusion)...")
-baseline = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda")
+baseline = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", use_kernels=True)
 baseline.eval()
 inputs = {k: v.to(baseline.device) for k, v in inputs.items()}
 
