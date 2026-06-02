@@ -14,17 +14,11 @@
 """Testing suite for the PyTorch Zamba model."""
 
 import math
-import tempfile
 import unittest
 
-import pytest
-
-from transformers import AutoTokenizer, BitsAndBytesConfig, ZambaConfig, is_torch_available
+from transformers import AutoTokenizer, ZambaConfig, is_torch_available
 from transformers.testing_utils import (
-    require_bitsandbytes,
-    require_flash_attn,
     require_torch,
-    require_torch_accelerator,
     slow,
     torch_device,
 )
