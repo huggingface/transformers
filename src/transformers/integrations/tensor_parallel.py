@@ -46,8 +46,9 @@ def to_local(t):
     path: backward rewraps the gradient as a DTensor matching each parameter's
     placements.
     """
-    if is_torch_available() and isinstance(t, torch.distributed.tensor.DTensor):
-        return t.to_local()
+    if hasattr(torch.distributed, "tensor") and hasattr(torch.distributed.tensor, "DTensor"):
+        if isinstance(t, torch.distributed.tensor.DTensor):
+            return t.to_local()
     return t
 
 

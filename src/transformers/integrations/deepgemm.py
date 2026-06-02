@@ -40,10 +40,6 @@ from .tensor_parallel import to_local
 
 logger = logging.get_logger(__name__)
 
-# DeepGEMM requires M-dimension alignment to 128 for TMA-based contiguous grouped GEMM.
-_DEEPGEMM_M_ALIGNMENT = 128
-
-
 # ── Kernel loading ─────────────────────────────────────────────────────────────
 
 
@@ -61,6 +57,13 @@ class DeepGEMM:
     transform_weights_for_mega_moe: Callable
     get_symm_buffer_for_mega_moe: Callable
     fp8_fp4_mega_moe: Callable
+    # M/K-dimension alignment for TMA-based contiguous grouped GEMM. Sourced from
+    # `get_mk_alignment_for_contiguous_layout()` at load time. The kernel exposes a
+    # `set_mk_alignment_for_contiguous_layout` setter, but we don't call it: the
+    # build-time default (128) was empirically the best across MoE workloads
+    # (bench showed kernel-recommended 240 is slower and 256 doesn't even compile).
+    # Same stance as vLLM, which caches and never sets it.
+    m_alignment: int
 
 
 @functools.cache
@@ -107,6 +110,7 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
     transform_sf_into_required_layout = getattr(kernel, "transform_sf_into_required_layout", None)
     transform_weights_for_mega_moe = getattr(kernel, "transform_weights_for_mega_moe", None)
     get_symm_buffer_for_mega_moe = getattr(kernel, "get_symm_buffer_for_mega_moe", None)
+    get_mk_alignment = getattr(kernel, "get_mk_alignment_for_contiguous_layout", None)
     fp8_fp4_mega_moe = getattr(kernel, "fp8_fp4_mega_moe", None)
 
     missing = [
@@ -121,6 +125,7 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
             ("transform_sf_into_required_layout", transform_sf_into_required_layout),
             ("transform_weights_for_mega_moe", transform_weights_for_mega_moe),
             ("get_symm_buffer_for_mega_moe", get_symm_buffer_for_mega_moe),
+            ("get_mk_alignment_for_contiguous_layout", get_mk_alignment),
             ("fp8_fp4_mega_moe", fp8_fp4_mega_moe),
         ]
         if attr is None
@@ -140,6 +145,7 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
         transform_weights_for_mega_moe=transform_weights_for_mega_moe,
         get_symm_buffer_for_mega_moe=get_symm_buffer_for_mega_moe,
         fp8_fp4_mega_moe=fp8_fp4_mega_moe,
+        m_alignment=int(get_mk_alignment()),
     )
 
 
@@ -211,7 +217,11 @@ def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> t
     (`stride(-2) == 1`) and TMA-aligned (`stride(-1) == align(mn, 16/esize)`).
 
     Inputs come in three flavors:
-      - `float8_e8m0fnu`: raw UE8M0 bytes — pack 4 K-bytes → int32 (last dim /4).
+      - `float8_e8m0fnu` on SM100: raw UE8M0 bytes — pack 4 K-bytes → int32
+        (last dim /4) for the kernel's `(INT, 1, gran_k)` path.
+      - `float8_e8m0fnu` on SM90: SM90 dispatch only accepts FP32 SFs, so cast
+        UE8M0 → FP32 (exact upcast — UE8M0 is the biased-exponent half of a
+        pow-of-2 FP32, so `.float()` rebuilds the original FP32 scale exactly).
       - `float32`: per-token / per-block SFs from `per_token_cast_to_fp8` or
         on-disk weights — round to UE8M0 on SM100 (see `_ceil_to_ue8m0`).
       - `int32`: already-packed UE8M0 — pass through.
@@ -222,12 +232,16 @@ def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> t
     DeepGEMM kernel branch is the only UE8M0 path on SM100; for `gran_mn > 1`
     the kernel only handles FP32 SFs and would otherwise reject our INT SF here.
     """
+    is_sm100 = _is_sm100(sf.device)
     if sf.dtype == torch.float8_e8m0fnu:
         if expected_mn is not None and sf.size(-2) < expected_mn:
             gran_mn = expected_mn // sf.size(-2)
             sf = sf.repeat_interleave(gran_mn, dim=-2)
-        sf = sf.contiguous().view(torch.int32)
-    elif sf.dtype == torch.float32 and torch.cuda.get_device_capability(sf.device)[0] >= 10:
+        if is_sm100:
+            sf = sf.contiguous().view(torch.int32)
+        else:
+            sf = sf.float()
+    elif sf.dtype == torch.float32 and is_sm100:
         sf = _ceil_to_ue8m0(sf)
 
     if sf.dim() not in (2, 3):
@@ -247,13 +261,16 @@ def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> t
 
 
 def _select_fp8_cast_kwargs(
-    weight: torch.Tensor, weight_scale_inv: torch.Tensor, block_size: tuple | None, device: torch.device
+    weight: torch.Tensor, weight_scale_inv: torch.Tensor, block_size: tuple | None, is_sm100: bool
 ) -> dict:
-    """Pick the `per_token_cast_to_fp8` kwargs from weight dtype + SF dtype.
+    """Pick the `per_token_cast_to_fp8` kwargs from weight dtype + SF dtype + arch.
 
-    Three cases mirror the kernel's recipes:
+    Cases mirror the kernel's recipes:
       - FP4 weights (`int8`): gran_k=32 packed-UE8M0 SF. SM100+ only.
-      - FP8 weights + UE8M0 SF: gran_k=128 packed-UE8M0 SF (DSv4).
+      - FP8 weights + UE8M0 SF on SM100: gran_k=128 packed-UE8M0 SF (DSv4).
+      - FP8 weights + UE8M0 SF on SM90: gran_k=128 FP32 SF — the SM90 dispatch in
+        `layout.hpp` only matches FP32 SFs, so we keep act SFs as FP32 (and float
+        the weight SF in `_coerce_sf_for_kernel`; UE8M0 → FP32 is an exact upcast).
       - FP8 weights + float SF: gran_k=128 float SF (DSv3).
     """
     if weight.dtype == torch.int8:  # FP4
@@ -266,7 +283,7 @@ def _select_fp8_cast_kwargs(
     block_size = tuple(block_size)
     if block_size not in ((128, 128), (1, 128)):
         raise ValueError(f"DeepGEMM requires `block_size` ∈ {{(128, 128), (1, 128)}}, got {block_size}.")
-    if weight_scale_inv.dtype == torch.float8_e8m0fnu:
+    if weight_scale_inv.dtype == torch.float8_e8m0fnu and is_sm100:
         return {"use_ue8m0": True, "gran_k": 128, "use_packed_ue8m0": True}
     return {"use_ue8m0": False, "gran_k": 128}
 
@@ -327,6 +344,7 @@ def _dispatch_routed_input(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
     num_experts: int,
+    m_alignment: int,
     use_psum_layout: bool,
 ) -> tuple:
     """Sort tokens by expert id and build the M-grouped padded layout.
@@ -346,10 +364,10 @@ def _dispatch_routed_input(
     sample_weights_g = sample_weights[perm]
 
     # Build the M-grouped padded layout (DeepGEMM contract: each expert's rows
-    # start on a `_DEEPGEMM_M_ALIGNMENT` boundary, sentinels routed past valid
+    # start on the kernel's M-alignment boundary, sentinels routed past valid
     # expert blocks).
     sorted_to_padded, grouped_layout, total_padded_rows = _build_deepgemm_contiguous_layout(
-        expert_ids_g, num_experts, _DEEPGEMM_M_ALIGNMENT, use_psum_layout
+        expert_ids_g, num_experts, m_alignment, use_psum_layout
     )
 
     # EP sentinel mask is captured before the in-place clamp; used by the post-mask in
@@ -419,7 +437,7 @@ def deepgemm_fp8_fp4_linear(
         raise ValueError(f"DeepGEMM linear requires FP16 or BF16 activations, got {input.dtype}")
 
     deepgemm = _load_deepgemm_kernel(requires_sm100=weight.dtype == torch.int8)
-    cast_kwargs = _select_fp8_cast_kwargs(weight, weight_scale_inv, block_size=block_size, device=input.device)
+    cast_kwargs = _select_fp8_cast_kwargs(weight, weight_scale_inv, block_size, _is_sm100(input.device))
 
     input_2d = input.view(-1, input.shape[-1])
     qinput_2d, scale_2d = deepgemm.per_token_cast_to_fp8(input_2d, **cast_kwargs)
@@ -458,7 +476,6 @@ def deepgemm_bf16_experts_forward(
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
 
-    use_psum_layout = _is_sm100(device)
     (
         sorted_hidden,
         sorted_weights,
@@ -468,7 +485,9 @@ def deepgemm_bf16_experts_forward(
         sorted_to_padded,
         grouped_layout,
         total_padded_rows,
-    ) = _dispatch_routed_input(hidden_states, top_k_index, top_k_weights, self.num_experts, use_psum_layout)
+    ) = _dispatch_routed_input(
+        hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, _is_sm100(device)
+    )
 
     weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
     weight_down = to_local(self.down_proj)
@@ -479,7 +498,7 @@ def deepgemm_bf16_experts_forward(
     up_out_dim = weight_up.shape[-1] if self.is_transposed else weight_up.shape[1]
     act = _pad_for_deepgemm(sorted_hidden, sorted_to_padded, total_padded_rows)
     proj_out = torch.empty(total_padded_rows, up_out_dim, device=device, dtype=hidden_states.dtype)
-    grouped_bf16_matmul(act, weight_up, proj_out, grouped_layout, use_psum_layout=use_psum_layout)
+    grouped_bf16_matmul(act, weight_up, proj_out, grouped_layout, use_psum_layout=_is_sm100(device))
     if self.has_bias:
         proj_out.index_add_(0, sorted_to_padded, up_bias[expert_ids_g])
 
@@ -487,7 +506,7 @@ def deepgemm_bf16_experts_forward(
 
     # Down projection.
     out = torch.empty(total_padded_rows, hidden_dim, device=device, dtype=hidden_states.dtype)
-    grouped_bf16_matmul(proj_out, weight_down, out, grouped_layout, use_psum_layout=use_psum_layout)
+    grouped_bf16_matmul(proj_out, weight_down, out, grouped_layout, use_psum_layout=_is_sm100(device))
     if self.has_bias:
         out.index_add_(0, sorted_to_padded, down_bias[expert_ids_g])
 
@@ -532,8 +551,7 @@ def deepgemm_fp8_fp4_experts_forward(
     weight_down = to_local(self.down_proj)
     weight_scale_down = to_local(self.down_proj_scale_inv)
 
-    cast_kwargs = _select_fp8_cast_kwargs(weight_up, weight_scale_up, getattr(self, "block_size", None), device)
-    use_psum_layout = _is_sm100(device)
+    cast_kwargs = _select_fp8_cast_kwargs(weight_up, weight_scale_up, self.block_size, _is_sm100(device))
     (
         sorted_hidden,
         sorted_weights,
@@ -543,7 +561,9 @@ def deepgemm_fp8_fp4_experts_forward(
         sorted_to_padded,
         grouped_layout,
         total_padded_rows,
-    ) = _dispatch_routed_input(hidden_states, top_k_index, top_k_weights, self.num_experts, use_psum_layout)
+    ) = _dispatch_routed_input(
+        hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, _is_sm100(device)
+    )
     sf_recipe = (1, 1, cast_kwargs["gran_k"]) if cast_kwargs.get("use_packed_ue8m0") else None
 
     # Up projection.
@@ -557,7 +577,7 @@ def deepgemm_fp8_fp4_experts_forward(
         proj_out,
         grouped_layout,
         recipe=sf_recipe,
-        use_psum_layout=use_psum_layout,
+        use_psum_layout=_is_sm100(device),
     )
     proj_out = self._apply_gate(proj_out) if self.has_gate else self.act_fn(proj_out)
 
@@ -570,7 +590,7 @@ def deepgemm_fp8_fp4_experts_forward(
         out,
         grouped_layout,
         recipe=sf_recipe,
-        use_psum_layout=use_psum_layout,
+        use_psum_layout=_is_sm100(device),
     )
 
     return _combine_routed_output(
