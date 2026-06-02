@@ -124,18 +124,21 @@ class AlbertTokenizer(TokenizersBackend):
         list_normalizers = [
             normalizers.Replace("``", '"'),
             normalizers.Replace("''", '"'),
-            normalizers.NFKD(),
-            normalizers.StripAccents(),
-            normalizers.Lowercase(),
+            normalizers.Replace(Regex("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]"), ""),
             normalizers.Replace(Regex(" {2,}"), " "),
+            normalizers.Replace(Regex("[\u200b\u200c\u200d\u200e\u200f]"), " "),
         ]
         if not self.keep_accents:
             list_normalizers.append(normalizers.NFKD())
             list_normalizers.append(normalizers.StripAccents())
         if self.do_lower_case:
             list_normalizers.append(normalizers.Lowercase())
-
-        list_normalizers.append(normalizers.Replace(Regex(" {2,}"), " "))
+        list_normalizers.extend(
+            [
+                normalizers.Replace(Regex(r"[\n\r\t]"), " "),
+                normalizers.NFKC(),
+            ]
+        )
         self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
 
         prepend_scheme = "always" if add_prefix_space else "never"
@@ -174,3 +177,4 @@ class AlbertTokenizer(TokenizersBackend):
 
 
 __all__ = ["AlbertTokenizer"]
+

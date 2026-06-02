@@ -445,7 +445,6 @@ Hey how are you doing"""  # noqa: W293
             if _type.__name__ == "BPE" or _type.__name__ == "WordPiece":
                 vocab = vocab_ids
 
-        # Extract precompiled SentencePiece charsmap from tokenizer.json normalizer
         extra_kwargs = {}
         normalizer_config = extractor.tokenizer_data.get("normalizer")
         if normalizer_config:
@@ -465,8 +464,6 @@ Hey how are you doing"""  # noqa: W293
         tokenizer_from_extractor = self.tokenizer_class(
             vocab=vocab,
             merges=merges,
-            do_lower_case=False,
-            keep_accents=True,
             added_tokens_decoder=added_tokens_decoder,
             **extra_kwargs,
             **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
@@ -850,8 +847,6 @@ Hey how are you doing"""  # noqa: W293
 
         tokenizer_original = self.tokenizer_class.from_pretrained(
             self.from_pretrained_id[0],
-            do_lower_case=False,
-            keep_accents=True,
             **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
         )
         self._run_integration_checks(tokenizer_original, "original")
@@ -876,8 +871,6 @@ Hey how are you doing"""  # noqa: W293
 
         tokenizer_original = self.tokenizer_class.from_pretrained(
             self.from_pretrained_id[0],
-            do_lower_case=False,
-            keep_accents=True,
             **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
         )
         tokenizer_from_extractor = self.get_extracted_tokenizer(reference_tokenizer=tokenizer_original)
