@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 import unittest
 
 import numpy as np
@@ -36,6 +35,9 @@ if is_torch_available():
 class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3VLProcessor
     model_id = "Qwen/Qwen3-VL-235B-A22B-Instruct"
+    video_unstructured_max_length = 870
+    video_text_kwargs_max_length = 870
+    video_text_kwargs_override_max_length = 870
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
@@ -44,6 +46,7 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
+        cls.video_token = processor.video_token
 
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
@@ -168,27 +171,10 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
 
     @require_av
-    @unittest.skip("qwen3_vl can't sample frames from image frames directly, user can use `qwen-vl-utils`")
-    def test_apply_chat_template_video_1(self):
-        pass
-
-    @require_av
-    @unittest.skip("qwen3_vl can't sample frames from image frames directly, user can use `qwen-vl-utils`")
-    def test_apply_chat_template_video_2(self):
-        pass
-
-    @require_av
     def test_apply_chat_template_video_frame_sampling(self):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
-
-        signature = inspect.signature(processor.__call__)
-        if "videos" not in {*signature.parameters.keys()} or (
-            signature.parameters.get("videos") is not None
-            and signature.parameters["videos"].annotation == inspect._empty
-        ):
-            self.skipTest("Processor doesn't accept videos at input")
 
         messages = [
             [
@@ -288,3 +274,11 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs[self.images_input_name].shape[0], 612)
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(inputs[self.images_input_name].shape[0], 100)
+
+    @unittest.skip("qwen3_vl can't sample frames from image frames directly, user can use `qwen-vl-utils`")
+    def test_apply_chat_template_video_1(self):
+        pass
+
+    @unittest.skip("qwen3_vl can't sample frames from image frames directly, user can use `qwen-vl-utils`")
+    def test_apply_chat_template_video_2(self):
+        pass
