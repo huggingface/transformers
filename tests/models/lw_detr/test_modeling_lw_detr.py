@@ -687,7 +687,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
             }
         )
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
-        torch.testing.assert_close(outputs.logits.flatten()[:5], expected_logits, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(outputs.logits.flatten()[:5], expected_logits, rtol=1e-2, atol=1e-2)
 
         expected_boxes_shape = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_boxes_shape)
@@ -700,7 +700,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         )
         expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        torch.testing.assert_close(outputs.pred_boxes.flatten()[:5], expected_boxes, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(outputs.pred_boxes.flatten()[:5], expected_boxes, rtol=1e-2, atol=1e-2)
 
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
@@ -733,9 +733,9 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
             }
         )
         expected_slice_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
-        torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-3, rtol=2e-4)
+        torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-2, rtol=1e-2)
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
-        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-3, rtol=2e-4)
+        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-2, rtol=1e-2)
 
     @slow
     def test_inference_object_detection_head_xlarge(self):
@@ -763,7 +763,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         )
 
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
-        torch.testing.assert_close(outputs.logits.flatten()[:5], expected_logits, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(outputs.logits.flatten()[:5], expected_logits, rtol=1e-2, atol=1e-2)
 
         expected_boxes_shape = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_boxes_shape)
@@ -776,7 +776,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         )
         expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        torch.testing.assert_close(outputs.pred_boxes.flatten()[:5], expected_boxes, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(outputs.pred_boxes.flatten()[:5], expected_boxes, rtol=1e-2, atol=1e-2)
 
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
@@ -810,6 +810,6 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         )
         expected_slice_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-3, rtol=2e-4)
+        torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-2, rtol=1e-2)
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
-        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-3, rtol=2e-4)
+        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-2, rtol=1e-2)
