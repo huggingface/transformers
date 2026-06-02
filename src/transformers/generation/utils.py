@@ -1493,6 +1493,13 @@ class GenerationMixin(ContinuousMixin):
     def _validate_generation_mode(
         self: "GenerativePreTrainedModel", generation_mode, generation_config, generation_mode_kwargs
     ):
+        supported_modes = getattr(self, "_supported_generation_modes", None)
+        if supported_modes is not None and generation_mode not in supported_modes:
+            raise ValueError(
+                f"{self.__class__.__name__} only supports {supported_modes}, but got "
+                f"generation mode '{generation_mode}'."
+            )
+
         if generation_mode == GenerationMode.BEAM_SEARCH and "streamer" in generation_mode_kwargs:
             raise ValueError(
                 "`streamer` cannot be used with beam search (yet!). Make sure that `num_beams` is set to 1."
@@ -2755,6 +2762,13 @@ class GenerationMixin(ContinuousMixin):
         batch_size = input_ids.shape[0]
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
+
+        # `pad_token_id` is created on `inputs_tensor.device` in `_prepare_special_tokens`. For multimodal models
+        # (e.g. BLIP-2, LLaVA) sharded across devices via `device_map="auto"`, `inputs_tensor` (e.g. `pixel_values`
+        # on the vision encoder) and `input_ids` (on the language model) can live on different devices, so we need to
+        # realign `pad_token_id` with `input_ids` to avoid cross-device ops below.
+        if pad_token_id is not None:
+            pad_token_id = pad_token_id.to(input_ids.device)
 
         model_forward = (
             self.get_compiled_call(generation_config.compile_config)

@@ -1653,6 +1653,8 @@ class ContinuousBatchingConfig:
             Scheduler type to use.
         return_logprobs (`bool`, *optional*, defaults to `False`):
             Whether to return log probabilities along with the generated tokens.
+        seed (`int | None`, *optional*):
+            An optional seed for generation. If not specified, the internal seed will be set to a random value.
         cpu_offload_space (`float`, *optional*, defaults to 0.0):
             CPU swap space in GiB for KV cache offloading. A pre-allocated pinned CPU buffer of this size is
             created at initialization. When the GPU cache is full, evicted requests' KV caches are copied here
@@ -1666,6 +1668,11 @@ class ContinuousBatchingConfig:
             Enable per-request logits processor parameters. Default is False.
         drop_unsupported_processors (`bool`, *optional*, defaults to `True`):
             Remove unsupported logits processors instead of erroring. Default is True.
+        disable_nccl_graph_mixing (`bool`, *optional*, defaults to `True`):
+            Disable NCCL's safety net for parallel graph-captured comms. Never happens in CB and gives TP a perf boost.
+        cpu_group_timeout (`float`, *optional*, defaults to 300.0):
+            The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None
+            for no timeout. Default is 300 seconds.
     """
 
     # Size of each KV cache block
@@ -1719,6 +1726,9 @@ class ContinuousBatchingConfig:
     # probabilities will be returned along with the generated tokens in the generation output.
     return_logprobs: bool = False
 
+    # An optional seed for generation. If not specified, the internal seed will be set to a random value.
+    seed: int | None = None
+
     # CPU swap space in GiB for KV cache offloading. When the GPU cache is full and a request must be evicted, its KV
     # cache is copied to this pre-allocated pinned CPU buffer instead of being discarded. Default to 0.0 GiB. You can
     # also set this to None to dimension the pool using only the safety threshold, but this will error out if psutil is
@@ -1739,44 +1749,23 @@ class ContinuousBatchingConfig:
     # are kept but warnings are logged for unsupported/unknown ones.
     drop_unsupported_processors: bool = True
 
-    def account_for_cb_deprecated_arguments(
-        self,
-        max_queue_size: int = 0,
-        q_padding_interval_size: int = 0,
-        kv_padding_interval_size: int = 0,
-        allow_block_sharing: bool = True,
-        use_async_batching: bool | None = None,
-        max_cached_graphs: int = 0,
-    ) -> None:
-        """Some arguments given to `generate_batch`, `init_continuous_batching` or `continuous_batching_context_manager`
-        are now deprecated and are expected inside the continuous batching config. This method checks if any were
-        passed and accounts for them in the continuous batching config. It raises a deprecation warning if any were
-        passed.
-        """
-        kwargs_to_warn = []
-        if max_queue_size > 0:
-            kwargs_to_warn.append("max_queue_size")
-            self.max_queue_size = max_queue_size
-        if q_padding_interval_size > 0:
-            kwargs_to_warn.append("q_padding_interval_size")
-            self.q_padding_interval_size = q_padding_interval_size
-        if kv_padding_interval_size > 0:
-            kwargs_to_warn.append("kv_padding_interval_size")
-            self.kv_padding_interval_size = kv_padding_interval_size
-        if not allow_block_sharing:  # config default is True, so False means the user explicitly set it to False
-            kwargs_to_warn.append("allow_block_sharing")
-            self.allow_block_sharing = allow_block_sharing
-        if use_async_batching is not None:
-            kwargs_to_warn.append("use_async_batching")
-            self.use_async_batching = use_async_batching
-        if max_cached_graphs > 0:
-            kwargs_to_warn.append("max_cached_graphs")
-            self.max_cached_graphs = max_cached_graphs
-        if kwargs_to_warn:
+    # Disable NCCL's safety net for parallel graph-captured communications. This means it is no longer safe to replay a
+    # CUDA graph with NCCL communication at the same time as 1. another CUDA graph with captured comms 2. an eager comm.
+    # This is turned on by default because the above never happens in CB and this gives a nice perf boost.
+    disable_nccl_graph_mixing: bool = True
+
+    # The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None for
+    # no timeout. Default is 300 seconds. This exists because dist has a gloo timeout of 30 minutes, which is way too
+    # long for almost all use cases.
+    cpu_group_timeout: float | None = 300.0
+
+    def __post_init__(self):
+        # Only turn off graph mixing support if TP is on
+        if self.disable_nccl_graph_mixing and int(os.environ.get("WORLD_SIZE", "1")) > 1:
             logger.warning(
-                "The following arguments were provided to a continuous batching entry point instead of being passed "
-                "through the continuous_batching_config: " + ", ".join(kwargs_to_warn)
+                "Setting NCCL_GRAPH_MIXING_SUPPORT = 0 because disable_nccl_graph_mixing is True and WORLD_SIZE > 1."
             )
+            os.environ.setdefault("NCCL_GRAPH_MIXING_SUPPORT", "0")
 
     @property
     def cuda_graph_booleans(self) -> tuple[bool, bool]:
@@ -1789,5 +1778,5 @@ class ContinuousBatchingConfig:
 
     @property
     def fallback_max_blocks_per_request(self) -> int:
-        """Returns the max blocks per request."""
+        """Fallback if no user-hint is given and decode path is available."""
         return 32
