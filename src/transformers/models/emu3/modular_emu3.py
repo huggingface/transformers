@@ -1170,6 +1170,8 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            pixel_values=pixel_values,
+            image_sizes=image_sizes,
             image_outputs=image_outputs,
             **kwargs,
         )
