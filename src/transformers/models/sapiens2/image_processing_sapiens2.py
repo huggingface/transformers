@@ -74,7 +74,7 @@ def boxes_to_crop_params(
     output_size: tuple[int, int],
     padding: float = 1.25,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Compute crop center and scale from bboxes, applying padding and aspect ratio correction.
+    """Compute crop center and scale from bounding boxes, applying padding and aspect ratio correction.
 
     Accepts either a single box `(4,)` or multiple boxes `(num_boxes, 4)` and returns center/scale with a matching
     leading dimension.
@@ -113,7 +113,7 @@ def crop_and_resize(
     output_size: tuple[int, int],
     padding: float = 1.25,
 ) -> torch.Tensor:
-    """Crops and resizes bbox regions from the input image to the target output size.
+    """Crops and resizes bounding box regions from the input image to the target output size.
 
     Applies padding and aspect ratio correction to each crop before resizing.
     Uses bilinear interpolation for downscaling and bicubic for upscaling.
@@ -136,10 +136,10 @@ def crop_and_resize(
     num_channels, input_height, input_width = image.shape
     center, scale = boxes_to_crop_params(boxes, output_size=output_size, padding=padding)
     center_x, center_y = center.unbind(-1)
-    bbox_w, bbox_h = scale.unbind(-1)
+    boxes_width, boxes_height = scale.unbind(-1)
 
-    scale_x = (output_width - 1) / bbox_w  # (num_boxes,)
-    scale_y = (output_height - 1) / bbox_h  # (num_boxes,)
+    scale_x = (output_width - 1) / boxes_width  # (num_boxes,)
+    scale_y = (output_height - 1) / boxes_height  # (num_boxes,)
     is_bilinear = torch.minimum(scale_x, scale_y) < 1.0  # (num_boxes,)
 
     grid_y, grid_x = torch.meshgrid(
@@ -147,8 +147,8 @@ def crop_and_resize(
         torch.arange(output_width, dtype=torch.float32, device=image.device),
         indexing="ij",
     )
-    in_x = grid_x / scale_x[:, None, None] + center_x[:, None, None] - 0.5 * bbox_w[:, None, None]
-    in_y = grid_y / scale_y[:, None, None] + center_y[:, None, None] - 0.5 * bbox_h[:, None, None]
+    in_x = grid_x / scale_x[:, None, None] + center_x[:, None, None] - 0.5 * boxes_width[:, None, None]
+    in_y = grid_y / scale_y[:, None, None] + center_y[:, None, None] - 0.5 * boxes_height[:, None, None]
     # (num_boxes, output_height, output_width, 2)
     grids = torch.stack([2.0 * in_x / (input_width - 1) - 1.0, 2.0 * in_y / (input_height - 1) - 1.0], dim=-1)
 
@@ -574,7 +574,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
 
         # (num_total_persons, 4)
         boxes_tensor = torch.tensor(
-            [bbox for image_boxes in boxes for bbox in image_boxes], dtype=torch.float32, device=device
+            [box for image_boxes in boxes for box in image_boxes], dtype=torch.float32, device=device
         )
 
         heatmaps = heatmaps.float()  # For consistency with original numpy/cv2 implementation which uses float32.
