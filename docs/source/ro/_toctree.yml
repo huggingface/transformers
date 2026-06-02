@@ -44,3 +44,5 @@
         title: Urmărirea output-urilor intermediare ale modelului
       - local: auto_docstring
         title: Auto-generarea docstring-urilor
+      - local: testing
+        title: Scrierea testelor pentru modele
