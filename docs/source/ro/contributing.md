@@ -438,7 +438,7 @@ Vei avea nevoie de **[Python 3.9](https://github.com/huggingface/transformers/bl
 
    Dacă ai deschis deja un pull request, va trebui să forțezi push-ul cu flag-ul `--force`. Altfel, dacă pull request-ul nu a fost încă deschis, poți pur și simplu să trimiți modificările în mod normal.
 
-6. Acum poți merge la fork-ul tău al repository-ului pe GitHub și da click pe **Pull Request** pentru a deschide un pull request. Asigură-te că bifezi toate căsuțele din [lista noastră de verificare](#pull-request-checklist) de mai jos. Când ești gata, poți trimite modificările tale maintainerilor proiectului pentru revizuire.
+6. Acum poți merge la fork-ul tău al repository-ului pe GitHub și da click pe **Pull Request** pentru a deschide un pull request. Asigură-te că bifezi toate căsuțele din [lista noastră de verificare](#lista-de-verificare-pentru-pull-request) de mai jos. Când ești gata, poți trimite modificările tale maintainerilor proiectului pentru revizuire.
 
 7. Este în regulă dacă maintainerii solicită modificări, se întâmplă și contribuitorilor noștri de bază!
    Pentru ca toți să poată vedea modificările în pull request, lucrează în branch-ul tău local

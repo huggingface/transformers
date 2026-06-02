@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 Când deschizi un pull request, CI-ul Hugging Face rulează mai multe verificări care trebuie să treacă înainte ca PR-ul tău să poată fi integrat.
 
 - [Remedierea CI-ului](#remedierea-ci-ului) listează comenzile de rulat local ca să treci verificările.
-- Secțiunile care urmează descriu ce validează fiecare verificare, cum ar fi [calitatea codului](#calitatea-codului) și [consistența repository-ului](#consistenta-repository-ului).
+- Secțiunile care urmează descriu ce validează fiecare verificare, cum ar fi [calitatea codului](#calitatea-codului) și [consistența repository-ului](#consistența-repository-ului).
 - [Teste](#teste) descrie ce teste sunt rulate, categoriile de teste și testele slow.
 
 ## Remedierea CI-ului
