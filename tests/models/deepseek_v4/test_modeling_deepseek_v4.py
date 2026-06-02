@@ -517,7 +517,7 @@ def _run_distributed_worker(
 @require_torch
 @require_torch_n_accelerators(8)
 @require_torch_large_accelerator(memory=64)
-@require_cuda_capability_at_least(9, 0)
+@require_cuda_capability_at_least(10, 0)
 @slow
 class DeepseekV4FlashIntegrationTest(unittest.TestCase):
     """Multi-device native FP4 generation on DSv4-Flash, via `torchrun` + EP=8.
@@ -562,7 +562,7 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
 @require_torch
 @require_torch_n_accelerators(8)
 @require_torch_large_accelerator(memory=64)
-@require_cuda_capability_at_least(10, 0)
+@require_cuda_capability_at_least(9, 0)
 @slow
 class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
     """Multi-device native FP8 generation on DSv4-Flash-Base.
