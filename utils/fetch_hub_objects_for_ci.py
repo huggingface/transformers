@@ -56,6 +56,7 @@ URLS_FOR_TESTING_DATA = [
     "http://images.cocodataset.org/val2017/000000000785.jpg",
     "http://images.cocodataset.org/val2017/000000000802.jpg",
     "http://images.cocodataset.org/val2017/000000000872.jpg",
+    "http://images.cocodataset.org/val2017/000000001000.jpg",
     "http://images.cocodataset.org/val2017/000000039769.jpg",
     "http://images.cocodataset.org/val2017/000000077595.jpg",
     "http://images.cocodataset.org/val2017/000000136466.jpg",
@@ -80,6 +81,8 @@ URLS_FOR_TESTING_DATA = [
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png",
 ]
 
 

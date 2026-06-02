@@ -273,11 +273,125 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
         # under ``do_sample=False`` for a fixed prompt — if this snapshot drifts,
         # something in the V4 forward / RoPE / Q-rescale / HC stack changed.
         expected = (
-            "Pipeline parallelism in ai is  driven by three key factors: the exponential increase in data "
-            "size, the development of increasingly powerful computational techniques (especially deep "
-            "learning), to handle this data, and the availability of massive computational resources on "
-            "which to run these methods, all of which are are  well aligned with  trends in  industry, "
-            " academia and  research"
+            "Pipeline parallelism in ai is  a technique where a model is split across multiple devices, "
+            "with each device responsible for a subset of layers. This allows for training of larger "
+            "models that cannot fit on a single device. However, it introduces idle time (bubbles) due to "
+            "sequential dependencies between stages. Techniques like micro-batching and gradient "
+            "accumulation are used"
         )
         decoded = tokenizer.decode(output_ids[0], skip_special_tokens=False)
         self.assertEqual(decoded, expected)
+
+    def test_v4_flash_fp8_chat_seven_prompts(self):
+        """Chat-templated greedy generation across 7 prompts of varying length.
+
+        Covers: short factual recall (1, 2), translation (3), code generation (4),
+        out-of-distribution recall (5), open-ended creative writing (6), and a
+        long-context summarisation (7, 234 input tokens — exercises the HCA path
+        since input >> ``compress_rates['heavily_compressed_attention']`` = 128).
+        Each completion is a fixed snapshot of the current greedy output. If any
+        snapshot drifts, something changed in: per-layer-type RoPE selection
+        (sliding ``main`` vs CSA / HCA ``compress``), the CSA / HCA per-query
+        ``block_bias`` causal mask, the Hyper-Connection Sinkhorn projection or
+        the residual mixing direction, or the fp32 promotion in the MoE path.
+        """
+
+        def _chat(prompt: str) -> str:
+            # V4-Flash chat-mode template (canonical form in ``encoding/encoding_dsv4.py``
+            # on the model repo). ``</think>`` after ``<｜Assistant｜>`` skips the
+            # reasoning block and goes straight to the answer.
+            return f"<｜begin▁of▁sentence｜><｜User｜>{prompt}<｜Assistant｜></think>"
+
+        long_prompt = (
+            "Please read the following extended passage carefully and then provide a concise "
+            "three-sentence summary that captures the main themes and the most important details. "
+            'Be precise and avoid restating the wording; paraphrase. Passage: "It is a truth '
+            "universally acknowledged, that a single man in possession of a good fortune, must be "
+            "in want of a wife. However little known the feelings or views of such a man may be "
+            "on his first entering a neighbourhood, this truth is so well fixed in the minds of "
+            "the surrounding families, that he is considered the rightful property of some one or "
+            "other of their daughters. 'My dear Mr. Bennet,' said his lady to him one day, 'have "
+            "you heard that Netherfield Park is let at last?' Mr. Bennet replied that he had not. "
+            "'But it is,' returned she; 'for Mrs. Long has just been here, and she told me all "
+            "about it.' Mr. Bennet made no answer. 'Do not you want to know who has taken it?' "
+            "cried his wife impatiently. 'You want to tell me, and I have no objection to hearing "
+            "it.' This was invitation enough.\""
+        )
+
+        cases: list[tuple[str, str]] = [
+            (
+                "The capital of France is",
+                "The capital of France is Paris.",
+            ),
+            (
+                "List the first ten prime numbers:",
+                "The first ten prime numbers are:\n\n2, 3, 5, 7, 11, 13, 17, 19, 23, 29",
+            ),
+            (
+                "Translate to French: 'The quick brown fox jumps over the lazy dog.'",
+                '"Le rapide renard brun saute par-dessus le chien paresseux."',
+            ),
+            (
+                "Write a Python function fibonacci(n) that returns the nth Fibonacci number.",
+                (
+                    "Here's a Python function that returns the nth Fibonacci number:\n\n"
+                    "## Method 1: Iterative (Most Efficient)\n\n"
+                    '```python\ndef fibonacci(n):\n    """\n    Returns the nth Fibonacci number.\n    \n'
+                    "    Args:\n        n: Non-negative integer (0-indexed: fib(0)=0, fib(1)="
+                ),
+            ),
+            (
+                "What are the three properties of the UE8M0 scale factor format?",
+                (
+                    "Based on the standard naming convention for fixed-point data types, the **UE8M0** "
+                    "format has the following three properties:\n\n"
+                    "1.  **Unsigned (U):** The value is an unsigned integer. It cannot represent negative "
+                    "numbers.\n2.  **8 Integer Bits (E8):** The integer part"
+                ),
+            ),
+            (
+                'Write a short story that begins with: "Once upon a time, in a forest far away, there lived a..."',
+                (
+                    "Once upon a time, in a forest far away, there lived a squirrel named Pip who could "
+                    "not store nuts. While every other squirrel in the Great Wood spent the golden autumn "
+                    "days frantically burying acorns and hazelnuts, Pip simply… forgot. He’d find a "
+                    "perfect, glossy acorn, hold"
+                ),
+            ),
+            (
+                long_prompt,
+                (
+                    "The opening establishes a societal assumption that wealthy single men are naturally "
+                    "seeking wives, making them prime targets for local families with eligible daughters. "
+                    "Mrs. Bennet eagerly informs her indifferent husband that Netherfield Park has been "
+                    "leased, hoping to spark his interest in the new, presumably wealthy, tenant. Their "
+                    "exchange highlights the central theme"
+                ),
+            ),
+        ]
+
+        quantization_config = FineGrainedFP8Config(dequantize=True)
+        config = AutoConfig.from_pretrained(self.model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id,
+            config=config,
+            dtype="auto",
+            device_map="auto",
+            attn_implementation="eager",
+            quantization_config=quantization_config,
+        )
+
+        for i, (prompt, expected) in enumerate(cases, start=1):
+            with self.subTest(prompt_index=i):
+                inputs = tokenizer(_chat(prompt), return_tensors="pt", add_special_tokens=False).to(model.device)
+                with torch.no_grad():
+                    output_ids = model.generate(
+                        **inputs,
+                        max_new_tokens=64,
+                        do_sample=False,
+                        pad_token_id=tokenizer.eos_token_id,
+                    )
+                new_tokens = output_ids[0, inputs.input_ids.size(1) :]
+                completion = tokenizer.decode(new_tokens, skip_special_tokens=True)
+                self.assertEqual(completion, expected)

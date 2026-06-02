@@ -49,13 +49,22 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_moonshine_streaming import MoonshineStreamingConfig, MoonshineStreamingEncoderConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Extends [~modeling_outputs.BaseModelOutput] to include the output attention mask since sequence length is not preserved in the model's forward.
     """
 )
+@dataclass
 class MoonshineStreamingEncoderModelOutput(BaseModelOutput):
+    r"""
+    attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Mask to avoid performing attention on padding token indices after sequence compression. Returned because the
+        sequence length may differ from the input sequence length. Mask values selected in `[0, 1]`:
+
+        - 1 for tokens that are **not masked**,
+        - 0 for tokens that are **masked**.
+    """
+
     attention_mask: torch.Tensor | None = None
 
 

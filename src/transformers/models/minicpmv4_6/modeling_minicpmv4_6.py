@@ -39,6 +39,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
@@ -184,6 +185,7 @@ class MiniCPMV4_6VisionAttention(nn.Module):
         self.q_proj = nn.Linear(self.dim, self.dim)
         self.out_proj = nn.Linear(self.dim, self.dim)
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -644,12 +646,6 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         self.language_model = AutoModel.from_config(config.text_config)
         self.merger = MiniCPMV4_6Merger(config)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring(custom_intro="Extract image features: vision encoder, insert merger, then MLP merger.")

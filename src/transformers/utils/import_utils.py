@@ -519,6 +519,26 @@ def is_torch_neuron_available(check_device: bool = False) -> bool:
 
 
 @lru_cache
+def is_torch_tpu_available(check_device: bool = False) -> bool:
+    import torch
+
+    if importlib.util.find_spec("torch_tpu") is None:
+        return False
+
+    if check_device:
+        try:
+            import torch_tpu  # noqa: F401
+
+            if hasattr(torch, "tpu") and torch.tpu.is_available():
+                return torch.tpu.device_count() >= 1
+            return False
+        except RuntimeError:
+            return False
+
+    return hasattr(torch, "tpu") and torch.tpu.is_available()
+
+
+@lru_cache
 def is_torch_bf16_gpu_available() -> bool:
     if not is_torch_available():
         return False
@@ -542,6 +562,9 @@ def is_torch_bf16_gpu_available() -> bool:
         return torch.mlu.is_bf16_supported()
     if is_torch_neuron_available() and hasattr(torch, "neuron"):
         return torch.neuron.is_bf16_supported()
+    if is_torch_tpu_available():
+        # bfloat16 is always supported on TPUs; torch.tpu has no is_bf16_supported()
+        return True
     return False
 
 
@@ -962,7 +985,7 @@ def is_flash_attn_2_available() -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
     # FA4 is also distributed under "flash_attn", hence we need to check the naming here
     is_available = is_available and "flash-attn" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])
     ]
 
     if not is_available or not (is_torch_cuda_available() or is_torch_mlu_available()):
@@ -981,7 +1004,7 @@ def is_flash_attn_3_available() -> bool:
     is_available = _is_package_available("flash_attn_interface")[0]
     # Resolving and ensuring the proper name of FA3 being associated
     is_available = is_available and "flash-attn-3" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn_interface"]
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn_interface", [])
     ]
     return is_available and is_torch_cuda_available()
 
@@ -993,7 +1016,7 @@ def is_flash_attn_4_available() -> bool:
     # NOTE: FA2 seems to distribute the `cute` subdirectory even if only FA2 has been installed
     #       -> check for the proper (normalized) distribution name
     is_available = is_available and "flash-attn-4" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])
     ]
 
     return is_available and is_torch_cuda_available()
@@ -1004,7 +1027,7 @@ def is_flash_attn_greater_or_equal(library_version: str) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
     # FA4 is also distributed under "flash_attn", hence we need to check the naming here
     is_available = is_available and "flash-attn" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])
     ]
 
     if not is_available:
@@ -1352,16 +1375,6 @@ def is_mistral_common_available() -> bool:
 
 
 @lru_cache
-def is_opentelemetry_available() -> bool:
-    try:
-        return _is_package_available("opentelemetry")[0] and version.parse(
-            importlib.metadata.version("opentelemetry-api")
-        ) >= version.parse("1.30.0")
-    except Exception as _:
-        return False
-
-
-@lru_cache
 def is_pynvml_available() -> bool:
     return _is_package_available("pynvml")[0]
 
@@ -1535,6 +1548,16 @@ def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: 
         return
 
     import torch
+
+    # When tracing, msg may be an f-string with tensor values that dynamo can't trace
+    # (callable/isinstance on it breaks). Check compilation first and use torch._check
+    # without msg (it only serves as a compiler hint in that case).
+    if is_tracing():
+        if isinstance(cond, torch.Tensor):
+            torch._check_tensor_all(cond)
+        else:
+            torch._check(cond)
+        return
 
     if not callable(msg):
         # torch._check requires msg to be a callable but we want to keep the API simple for users

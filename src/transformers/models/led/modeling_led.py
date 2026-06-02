@@ -1073,12 +1073,12 @@ class LEDPreTrainedModel(PreTrainedModel):
             init.zeros_(module.final_logits_bias)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for LEDEncoder's outputs, with potential hidden states, local and global attentions.
     """
 )
+@dataclass
 # Copied from transformers.models.longformer.modeling_longformer.LongformerBaseModelOutput with Longformer->LEDEncoder
 class LEDEncoderBaseModelOutput(ModelOutput):
     r"""
