@@ -305,7 +305,10 @@ diff = '''
 [rules.TRF018]
 description = "_init_weights overrides should call super()._init_weights(module)."
 default_enabled = true
-allowlist_models = []
+# segformer: `_init_weights` is the `raise NotImplementedError("No need to override this method")`
+# sentinel, which the modular converter drops from the generated file. An inline `# trf-ignore`
+# comment defeats that sentinel (the converter then emits the method), so allowlist it instead.
+allowlist_models = ["segformer"]
 
 [rules.TRF018.explanation]
 what_it_does = "Checks that every PreTrainedModel subclass that overrides `_init_weights(self, module, ...)` chains the call up via `super()._init_weights(...)`. If a model intentionally fully overrides initialization, suppress with `# trf-ignore: TRF018` on the line above the method."

@@ -25,7 +25,6 @@ from typing import Optional
 import torch
 from torch import nn
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import CompileConfig, GenerationMixin
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
@@ -411,56 +410,6 @@ class LasrEncoderBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-class LasrEncoderRelPositionalEncoding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: LasrEncoderConfig, device=None):
-        super().__init__()
-        self.max_position_embeddings = config.max_position_embeddings
-        self.config = config
-        inv_freq = self.compute_default_relative_positional_parameters(config, device=device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    @staticmethod
-    def compute_default_relative_positional_parameters(
-        config: LasrEncoderConfig | None = None,
-        device=None,
-    ) -> torch.Tensor:
-        base = 10000.0
-        inv_freq = 1.0 / (
-            base
-            ** (
-                torch.arange(0, config.hidden_size, 2, dtype=torch.int64).to(device=device, dtype=torch.float)
-                / config.hidden_size
-            )
-        )
-        return inv_freq
-
-    @torch.no_grad()
-    def forward(self, hidden_states: torch.Tensor):
-        seq_length = hidden_states.shape[1]
-        position_ids = torch.arange(seq_length - 1, -seq_length, -1, device=hidden_states.device)
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].float().expand(hidden_states.shape[0], -1, 1).to(hidden_states.device)
-        )
-        position_ids_expanded = position_ids[None, None, :].float()
-
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            sin = freqs.sin()
-            cos = freqs.cos()
-            # interleave sin and cos
-            pos_embed = torch.stack([sin, cos], dim=-1)
-            pos_embed = pos_embed.reshape(*pos_embed.shape[:-2], -1)
-
-        return pos_embed.to(dtype=hidden_states.dtype)
-
-
 @auto_docstring
 class LasrPreTrainedModel(PreTrainedModel):
     config: LasrCTCConfig
@@ -487,15 +436,6 @@ class LasrPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        std = getattr(self.config, "initializer_range", 0.02)
-
-        if isinstance(module, LasrEncoderAttention):
-            init.normal_(module.bias_u, mean=0.0, std=std)
-            init.normal_(module.bias_v, mean=0.0, std=std)
-        elif isinstance(module, LasrEncoderRelPositionalEncoding):
-            buffer_value = module.compute_default_relative_positional_parameters(module.config)
-            init.copy_(module.inv_freq, buffer_value)
-        PreTrainedModel._init_weights(module)
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
         encoder_config = self.config.encoder_config if isinstance(self.config, LasrCTCConfig) else self.config

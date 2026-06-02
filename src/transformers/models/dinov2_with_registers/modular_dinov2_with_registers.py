@@ -205,10 +205,10 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
 
 
 class Dinov2WithRegistersPreTrainedModel(Dinov2PreTrainedModel):
+    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
         """Initialize the weights"""
-        super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:

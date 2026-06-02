@@ -521,10 +521,10 @@ class PPDocLayoutV3MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAtten
 
 @auto_docstring
 class PPDocLayoutV3PreTrainedModel(RTDetrPreTrainedModel):
+    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        super()._init_weights(module)
         if isinstance(module, PPDocLayoutV3MultiscaleDeformableAttention):
             init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
