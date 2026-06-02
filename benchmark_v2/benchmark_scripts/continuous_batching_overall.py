@@ -175,12 +175,9 @@ class BenchmarkResults:
 
     def _get_model(self) -> Any:
         self.cleanup()
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_id,
-            attn_implementation=self.attn_impl,
-            device_map=None if self.tp_size > 1 else 0,
-            distributed_config=DistributedConfig(tp_size=self.tp_size) if self.tp_size > 1 else None,
-        )
+        # tp_plan and device_map are mutually exclusive — TP uses its own placement.
+        placement = {"tp_plan": "auto"} if self.tp_size > 1 else {"device_map": 0}
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, attn_implementation=self.attn_impl, **placement)
         return model.eval()
 
     def add_benchmark(
