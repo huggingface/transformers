@@ -607,6 +607,10 @@ class Sapiens2Layer(GradientCheckpointingLayer):
 
 
 class Sapiens2ConvLayer(nn.Module):
+    """
+    A basic wrapper for Convolution-BatchNorm-Activation, typically used for head components.
+    """
+
     def __init__(
         self,
         in_channels: int,
@@ -622,6 +626,25 @@ class Sapiens2ConvLayer(nn.Module):
         scale_factor: int = 2,
     ):
         super().__init__()
+        if convolution_transpose:
+            self.convolution = nn.ConvTranspose2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+            )
+        else:
+            self.convolution = nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                groups=groups,
+                bias=bias,
+            )
+        self.norm = nn.InstanceNorm2d(out_channels)
+        self.act_fn = ACT2FN[activation]
         if convolution_transpose:
             self.convolution = nn.ConvTranspose2d(
                 in_channels,
@@ -643,8 +666,6 @@ class Sapiens2ConvLayer(nn.Module):
                 groups=groups,
             )
         self.pixel_shuffle = nn.PixelShuffle(scale_factor) if pixel_shuffle else nn.Identity()
-        self.norm = nn.InstanceNorm2d(out_channels)
-        self.act_fn = ACT2FN[activation]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.convolution(hidden_states)

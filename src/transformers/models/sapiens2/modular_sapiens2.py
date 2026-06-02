@@ -60,6 +60,7 @@ from ..dinov3_vit.modeling_dinov3_vit import (
 from ..gemma2.modeling_gemma2 import eager_attention_forward
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..mask2former.modeling_mask2former import Mask2FormerPredictionBlock
+from ..pp_ocrv5_server_det.modeling_pp_ocrv5_server_det import PPOCRV5ServerDetConvBatchnormLayer
 from ..sam3.processing_sam3 import box_xywh_to_cxcywh, box_xywh_to_xyxy
 from ..vitmatte.modeling_vitmatte import ImageMattingOutput
 from ..vitpose.modeling_vitpose import VitPoseEstimatorOutput, flip_back
@@ -1255,7 +1256,7 @@ class Sapiens2Layer(DINOv3ViTLayer):
         self.layer_scale2 = nn.Identity()
 
 
-class Sapiens2ConvLayer(nn.Module):
+class Sapiens2ConvLayer(PPOCRV5ServerDetConvBatchnormLayer):
     def __init__(
         self,
         in_channels: int,
