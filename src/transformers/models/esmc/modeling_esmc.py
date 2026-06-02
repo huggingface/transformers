@@ -43,31 +43,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ESMCConfig"
 
-# Transformer Engine: fused LayerNorm+Linear / LayerNorm+MLP kernels with
-# fp32 reduction inside the LayerNorm. Recommended on GPU for accurate bf16
-# inference; without it the pure-PyTorch fallback drifts ~O(10) in fp32 and
-# ~O(100) in bf16 on the unnormalized residual stream (perplexity stays
-# within rounding noise).
-try:
-    import transformer_engine.pytorch as te  # type: ignore[import-untyped]
-
-    _te_available = True
-except ImportError:
-    te = None  # type: ignore[assignment]
-    _te_available = False
-
-if not _te_available:
-    logger.warning(
-        "ESMC: transformer_engine is not installed; falling back to "
-        "pure-PyTorch LayerNorm+Linear / LayerNorm+MLP. Outputs will differ "
-        "numerically — measured on the unnormalized residual stream (before "
-        "the final LayerNorm), ~O(10) max-diff in fp32 and ~O(100) in bf16; "
-        "after the final LayerNorm these shrink to a few ULP and perplexity "
-        "stays within rounding noise. Install with "
-        "`pip install transformer-engine[pytorch]` to enable fused fp32-"
-        "reduction LayerNorm."
-    )
-
 # ---------------------------------------------------------------------------
 # Output dataclasses
 # ---------------------------------------------------------------------------
@@ -381,18 +356,11 @@ def _swiglu_hidden_dim(expansion_ratio: float, d_model: int) -> int:
     return int(((expansion_ratio * d_model) + 255) // 256 * 256)
 
 
-class _SwiGLU(nn.Module):
-    """SwiGLU activation: ``silu(x1) * x2`` where ``x`` is split along the last dim."""
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x1, x2 = x.chunk(2, dim=-1)
-        return F.silu(x1) * x2
-
-
 class _PyTorchLayerNormLinear(nn.Module):
-    """LayerNorm followed by a Linear projection, sharing the parameter
-    names ``layer_norm_weight``, ``layer_norm_bias`` and ``weight`` so the
-    state-dict layout matches the accelerated TE module loaded on GPU.
+    """LayerNorm followed by a Linear projection.
+
+    Parameters are named ``layer_norm_weight``, ``layer_norm_bias`` and
+    ``weight`` to match the published ESMC checkpoint layout.
     """
 
     def __init__(self, d_in: int, d_out: int, eps: float = 1e-5) -> None:
@@ -412,10 +380,11 @@ class _PyTorchLayerNormLinear(nn.Module):
 
 
 class _PyTorchLayerNormMLP(nn.Module):
-    """LayerNorm + SwiGLU MLP, sharing the parameter names
-    ``layer_norm_weight``, ``layer_norm_bias``, ``fc1_weight``,
-    ``fc2_weight`` so the state-dict layout matches the accelerated TE
-    module loaded on GPU.
+    """LayerNorm + SwiGLU MLP.
+
+    Parameters are named ``layer_norm_weight``, ``layer_norm_bias``,
+    ``fc1_weight`` and ``fc2_weight`` to match the published ESMC checkpoint
+    layout.
     """
 
     def __init__(
@@ -447,41 +416,20 @@ class _PyTorchLayerNormMLP(nn.Module):
 
 
 def _swiglu_ln_ffn(d_model: int, expansion_ratio: float, bias: bool) -> nn.Module:
-    """LayerNorm + SwiGLU MLP. Uses Transformer Engine's fused LN+MLP when
-    available; otherwise returns the pure-PyTorch fallback with matching
-    state-dict layout."""
+    """LayerNorm + SwiGLU MLP."""
     assert not bias, "ESMC was trained with bias=False; bias=True not supported"
     hidden = _swiglu_hidden_dim(expansion_ratio, d_model)
-    if _te_available:
-        return te.LayerNormMLP(  # type: ignore[union-attr]
-            hidden_size=d_model,
-            ffn_hidden_size=hidden,
-            bias=bias,
-            activation="swiglu",
-            init_method=None,
-            output_layer_init_method=None,
-        )
     return _PyTorchLayerNormMLP(hidden_size=d_model, ffn_hidden_size=hidden)
 
 
 def _make_attn_layernorm_qkv(d_model: int, bias: bool) -> nn.Module:
-    """LayerNorm + fused QKV projection. Uses Transformer Engine when
-    available; pure-PyTorch fallback otherwise."""
+    """LayerNorm + fused QKV projection."""
     assert not bias, "ESMC was trained with bias=False; bias=True not supported"
-    if _te_available:
-        return te.LayerNormLinear(  # type: ignore[union-attr]
-            d_model, d_model * 3, bias=bias, init_method=None
-        )
     return _PyTorchLayerNormLinear(d_model, d_model * 3)
 
 
 def _make_attn_out_proj(d_model: int, bias: bool) -> nn.Module:
-    """Attention output projection. Uses Transformer Engine when available;
-    pure-PyTorch ``nn.Linear`` otherwise."""
-    if _te_available:
-        return te.Linear(  # type: ignore[union-attr]
-            d_model, d_model, bias=bias, init_method=None
-        )
+    """Attention output projection."""
     return nn.Linear(d_model, d_model, bias=bias)
 
 
