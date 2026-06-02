@@ -369,6 +369,7 @@ if TYPE_CHECKING:
     from .qwen3_omni_moe import *
     from .qwen3_vl import *
     from .qwen3_vl_moe import *
+    from .radio import *
     from .rag import *
     from .recurrent_gemma import *
     from .reformer import *
