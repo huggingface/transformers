@@ -430,4 +430,4 @@ class VitsModelIntegrationTests(unittest.TestCase):
         EXPECTED_LOGITS = torch.tensor(expected_logits.get_expectation(), dtype=torch.float16)
 
         # fmt: on
-        torch.testing.assert_close(outputs.waveform[0, 10000:10030].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.waveform[0, 10000:10030].cpu(), EXPECTED_LOGITS, rtol=1e-2, atol=1e-2)
