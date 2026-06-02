@@ -81,7 +81,7 @@ Transformers automatically uses hardware-accelerated FP8 matmul kernels (`torch.
 
 ### Loading a pre-quantized FP8 model
 
-No extra configuration is needed — the FP8 kernel path is automatically activated when the model's config specifies FP8 quantization and a supported GPU is available.
+Transformers activates the FP8 kernel path automatically when the model's config specifies FP8 quantization and a supported GPU is available.
 
 ```python
 import torch
