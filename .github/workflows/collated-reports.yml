@@ -17,14 +17,19 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   collated_reports:
     name: Collated reports
     runs-on: ubuntu-22.04
     if: always()
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
 
       - name: Collated reports
         shell: bash
@@ -32,12 +37,16 @@ jobs:
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           CI_SHA: ${{ github.sha }}
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+          MACHINE_TYPE: ${{ inputs.machine_type }}
+          JOB: ${{ inputs.job }}
+          REPORT_REPO_ID: ${{ inputs.report_repo_id }}
+          GPU_NAME: ${{ inputs.gpu_name }}
         run: |
           pip install huggingface_hub
-          python3 utils/collated_reports.py                  \
-            --path .                                         \
-            --machine-type ${{ inputs.machine_type }}        \
-            --commit-hash ${{ env.CI_SHA }}                  \
-            --job ${{ inputs.job }}                          \
-            --report-repo-id ${{ inputs.report_repo_id }}    \
-            --gpu-name ${{ inputs.gpu_name }}
+          python3 utils/collated_reports.py \
+            --path . \
+            --machine-type "$MACHINE_TYPE" \
+            --commit-hash "$CI_SHA" \
+            --job "$JOB" \
+            --report-repo-id "$REPORT_REPO_ID" \
+            --gpu-name "$GPU_NAME"

@@ -313,7 +313,7 @@ Essas implementações foram testadas em vários conjuntos de dados (veja os scr
 
 ## Citação
 
-Agora temos um [artigo](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) que você pode citar para a biblioteca 🤗 Transformers:
+Agora temos um [artigo](https://aclanthology.org/2020.emnlp-demos.6/) que você pode citar para a biblioteca 🤗 Transformers:
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
@@ -323,7 +323,7 @@ Agora temos um [artigo](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) qu
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://aclanthology.org/2020.emnlp-demos.6/",
     pages = "38--45"
 }
 ```

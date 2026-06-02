@@ -32,8 +32,12 @@
         title: Contribute to Transformers
       - local: modular_transformers
         title: Add a model with modular transformers
+      - local: multimodal_processing
+        title: Multimodal processors
       - local: add_vision_processing_components
-        title: Add vision processing components
+        title: Vision processing components
+      - local: add_audio_processing_components
+        title: Audio processing components
       - local: modeling_rules
         title: Model structure rules
       - local: model_output_tracing
@@ -539,6 +543,8 @@
         title: Cohere
       - local: model_doc/cohere2
         title: Cohere2
+      - local: model_doc/cohere2_moe
+        title: Cohere2Moe
       - local: model_doc/convbert
         title: ConvBERT
       - local: model_doc/cpm
@@ -553,6 +559,8 @@
         title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
+      - local: model_doc/deepseek_ocr2
+        title: DeepSeek-OCR-2
       - local: model_doc/deepseek_v2
         title: DeepSeek-V2
       - local: model_doc/deepseek_v3
@@ -661,6 +669,8 @@
         title: Helium
       - local: model_doc/herbert
         title: HerBERT
+      - local: model_doc/hrm_text
+        title: HRM-Text
       - local: model_doc/hunyuan_v1_dense
         title: HunYuanDenseV1
       - local: model_doc/hunyuan_v1_moe
@@ -719,6 +729,8 @@
         title: MegatronBERT
       - local: model_doc/megatron_gpt2
         title: MegatronGPT2
+      - local: model_doc/mellum
+        title: Mellum
       - local: model_doc/minimax
         title: MiniMax
       - local: model_doc/minimax_m2
@@ -1239,6 +1251,8 @@
         title: glm4v
       - local: model_doc/glm4v_moe
         title: glm4v_moe
+      - local: model_doc/glmga
+        title: Glmga
       - local: model_doc/glm_ocr
         title: GlmOcr
       - local: model_doc/got_ocr2
@@ -1357,12 +1371,22 @@
         title: PP-OCRv5_server_det
       - local: model_doc/pp_ocrv5_server_rec
         title: PP-OCRv5_server_rec
+      - local: model_doc/pp_ocrv6_medium_det
+        title: PP-OCRv6_medium_det
+      - local: model_doc/pp_ocrv6_small_det
+        title: PP-OCRv6_small_det
+      - local: model_doc/pp_ocrv6_small_rec
+        title: PP-OCRv6_small_rec
+      - local: model_doc/pp_ocrv6_tiny_rec
+        title: PP-OCRv6_tiny_rec
       - local: model_doc/pp_chart2table
         title: PPChart2Table
       - local: model_doc/pp_lcnet
         title: PPLCNet
       - local: model_doc/pp_lcnet_v3
         title: PPLCNetV3
+      - local: model_doc/pp_lcnet_v4
+        title: PPLCNetV4
       - local: model_doc/qianfan_ocr
         title: QianfanOCR
       - local: model_doc/qwen2_5_omni
