@@ -34,7 +34,6 @@ from transformers.utils import PaddingStrategy, is_mistral_common_available
 
 if is_mistral_common_available():
     import mistral_common.tokens.tokenizers
-    from mistral_common.exceptions import InvalidMessageStructureException
     from mistral_common.protocol.instruct.request import ChatCompletionRequest
     from mistral_common.protocol.instruct.validator import (
         ValidationMode,
