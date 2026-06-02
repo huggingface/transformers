@@ -17,7 +17,6 @@ limitations under the License.
 
 -->
 *This model was published in HF papers on 2026-04-23 and contributed to Hugging Face Transformers on 2026-06-01.*
-*This model was released on 2026-04-23 and added to Hugging Face Transformers on 2026-06-01.*
 
 
 # Sapiens2
