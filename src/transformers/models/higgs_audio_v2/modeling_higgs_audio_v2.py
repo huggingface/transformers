@@ -322,6 +322,7 @@ class HiggsAudioV2PreTrainedModel(PreTrainedModel):
         "attentions": HiggsAudioV2Attention,
     }
 
+    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)

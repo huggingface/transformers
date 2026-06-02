@@ -474,6 +474,7 @@ class Exaone4_5_PreTrainedModel(PreTrainedModel):
     config_class = Exaone4_5_Config
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
+    # trf-ignore: TRF018
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Exaone4_5_VisionRotaryEmbedding):

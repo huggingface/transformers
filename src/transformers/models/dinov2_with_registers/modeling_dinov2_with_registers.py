@@ -433,6 +433,20 @@ class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Dinov2WithRegistersEmbeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
+            if self.config.use_mask_token:
+                init.zeros_(module.mask_token)
+        elif isinstance(module, Dinov2WithRegistersLayerScale):
+            init.constant_(module.lambda1, self.config.layerscale_value)
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+        elif isinstance(module, Dinov2WithRegistersEmbeddings):
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.mask_token)
             init.zeros_(module.register_tokens)
         elif isinstance(module, Dinov2WithRegistersLayerScale):  # noqa: F821

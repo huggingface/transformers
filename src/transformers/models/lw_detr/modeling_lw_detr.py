@@ -287,6 +287,67 @@ class LwDetrViTEmbeddings(nn.Module):
         return embeddings
 
 
+class LwDetrViTLayerNorm(nn.Module):
+    """
+    A LayerNorm variant, popularized by Transformers, that performs point-wise mean and variance normalization over the
+    channel dimension for inputs that have shape (batch_size, channels, height, width).
+    https://github.com/facebookresearch/ConvNeXt/blob/d1fa8f6fef0a165b27399986cc2bdacc92777e40/models/convnext.py#L119
+    """
+
+    def __init__(self, normalized_shape, eps=1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(normalized_shape))
+        self.bias = nn.Parameter(torch.zeros(normalized_shape))
+        self.eps = eps
+        self.normalized_shape = (normalized_shape,)
+
+    def forward(self, x):
+        u = x.mean(1, keepdim=True)
+        s = (x - u).pow(2).mean(1, keepdim=True)
+        x = (x - u) / torch.sqrt(s + self.eps)
+        x = self.weight[:, None, None] * x + self.bias[:, None, None]
+        return x
+
+
+class LwDetrViTResBottleneckBlock(nn.Module):
+    """
+    The standard bottleneck residual block without the last activation layer. It contains 3 conv layers with kernels
+    1x1, 3x3, 1x1.
+    """
+
+    def __init__(self, config, in_channels, out_channels, bottleneck_channels):
+        """
+        Args:
+            config (`LwDetrViTConfig`):
+                Model configuration.
+            in_channels (`int`):
+                Number of input channels.
+            out_channels (`int`):
+                Number of output channels.
+            bottleneck_channels (`int`):
+                Number of output channels for the 3x3 "bottleneck" conv layers.
+        """
+        super().__init__()
+        self.conv1 = nn.Conv2d(in_channels, bottleneck_channels, 1, bias=False)
+        self.norm1 = LwDetrViTLayerNorm(bottleneck_channels)
+        self.act1 = ACT2FN[config.hidden_act]
+
+        self.conv2 = nn.Conv2d(bottleneck_channels, bottleneck_channels, 3, padding=1, bias=False)
+        self.norm2 = LwDetrViTLayerNorm(bottleneck_channels)
+        self.act2 = ACT2FN[config.hidden_act]
+
+        self.conv3 = nn.Conv2d(bottleneck_channels, out_channels, 1, bias=False)
+        self.norm3 = LwDetrViTLayerNorm(out_channels)
+
+    def forward(self, x):
+        out = x
+        for layer in self.children():
+            out = layer(out)
+
+        out = x + out
+        return out
+
+
 @auto_docstring
 class LwDetrViTPreTrainedModel(PreTrainedModel):
     config: LwDetrViTConfig
@@ -308,6 +369,29 @@ class LwDetrViTPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
         super()._init_weights(module)
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+        elif isinstance(module, LwDetrViTEmbeddings):
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, LwDetrViTAttention) and self.config.use_relative_position_embeddings:
+            init.trunc_normal_(module.rel_pos_h, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.rel_pos_w, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, LwDetrViTResBottleneckBlock):
+            for layer in [module.conv1, module.conv2, module.conv3]:
+                init.kaiming_normal_(layer.weight, mode="fan_out", nonlinearity="relu")
+                if layer.bias is not None:
+                    init.constant_(layer.bias, 0)
+            for layer in [module.norm1, module.norm2]:
+                init.ones_(layer.weight)
+                init.zeros_(layer.bias)
+            # zero init last norm layer.
+            init.zeros_(module.norm3.weight)
+            init.zeros_(module.norm3.bias)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
