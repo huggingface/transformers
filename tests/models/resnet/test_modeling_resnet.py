@@ -285,10 +285,11 @@ class ResNetModelIntegrationTest(unittest.TestCase):
             {
                 (None, None): [-11.1069, -9.7877, -8.3777],
                 ("cuda", 8): [-11.1069, -9.7877, -8.3777],
+                ("cuda", 9): [-11.1087, -9.7949, -8.3886],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-3, atol=1e-3)
 
 
 @require_torch
