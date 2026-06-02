@@ -60,3 +60,5 @@
       title: Personalizarea Tokenizerelor
     - local: tokenizer_summary
       title: Algoritmi de Tokenization
+    - local: image_processors
+      title: Procesatoare de imagini
