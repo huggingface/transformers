@@ -444,16 +444,17 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
             self.assertEqual(segmentation[0].shape, target_sizes[0])
 
-            # return_logits=True: returns list of dicts
-            segmentation = feature_extractor.post_process_semantic_segmentation(outputs, return_logits=True)
+            # return_segmentation_scores=True: returns list of SemanticSegmentationPostProcessOutput
+            segmentation = feature_extractor.post_process_semantic_segmentation(
+                outputs, return_segmentation_scores=True
+            )
             self.assertEqual(len(segmentation), self.image_processor_tester.batch_size)
-            self.assertIsInstance(segmentation[0], dict)
             self.assertEqual(
-                segmentation[0]["segmentation"].shape,
+                segmentation[0].segmentation.shape,
                 (self.image_processor_tester.height, self.image_processor_tester.width),
             )
             self.assertEqual(
-                segmentation[0]["logits"].shape,
+                segmentation[0].segmentation_scores.shape,
                 (
                     self.image_processor_tester.num_classes,
                     self.image_processor_tester.height,
@@ -461,14 +462,13 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 ),
             )
 
-            # return_logits=True with target_sizes
+            # return_segmentation_scores=True with target_sizes
             segmentation = feature_extractor.post_process_semantic_segmentation(
-                outputs, target_sizes=target_sizes, return_logits=True
+                outputs, target_sizes=target_sizes, return_segmentation_scores=True
             )
-            self.assertIsInstance(segmentation[0], dict)
-            self.assertEqual(segmentation[0]["segmentation"].shape, target_sizes[0])
+            self.assertEqual(segmentation[0].segmentation.shape, target_sizes[0])
             self.assertEqual(
-                segmentation[0]["logits"].shape,
+                segmentation[0].segmentation_scores.shape,
                 (self.image_processor_tester.num_classes,) + target_sizes[0],
             )
 

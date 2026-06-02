@@ -332,6 +332,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["image_processing_backends"] = ["PilBackend"]
     _import_structure["image_processing_base"] = ["ImageProcessingMixin"]
+    _import_structure["image_processing_outputs"] = ["SemanticSegmentationPostProcessOutput"]
     _import_structure["image_processing_utils"] = ["BaseImageProcessor"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
 
@@ -608,6 +609,9 @@ if TYPE_CHECKING:
     from .image_processing_backends import PilBackend as PilBackend
     from .image_processing_backends import TorchvisionBackend as TorchvisionBackend
     from .image_processing_base import ImageProcessingMixin as ImageProcessingMixin
+    from .image_processing_outputs import (
+        SemanticSegmentationPostProcessOutput as SemanticSegmentationPostProcessOutput,
+    )
     from .image_processing_utils import BaseImageProcessor as BaseImageProcessor
     from .image_utils import ImageFeatureExtractionMixin as ImageFeatureExtractionMixin
 

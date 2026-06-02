@@ -22,6 +22,7 @@ from torch import nn
 from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_outputs import SemanticSegmentationPostProcessOutput
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import get_size_with_aspect_ratio, group_images_by_shape, reorder_images
 from ...image_utils import (
@@ -544,8 +545,8 @@ class MaskFormerImageProcessor(TorchvisionBackend):
         return encoded_inputs
 
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: list[tuple[int, int]] | None = None, return_logits: bool = False
-    ) -> "list[torch.Tensor] | list[dict[str, torch.Tensor]]":
+        self, outputs, target_sizes: list[tuple[int, int]] | None = None, return_segmentation_scores: bool = False
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessOutput]":
         """
         Converts the output of [`MaskFormerForInstanceSegmentation`] into semantic segmentation maps. Only supports
         PyTorch.
@@ -556,17 +557,17 @@ class MaskFormerImageProcessor(TorchvisionBackend):
             target_sizes (`list[tuple[int, int]]`, *optional*):
                 List of length (batch_size), where each list item (`tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
-            return_logits (`bool`, *optional*, defaults to `False`):
-                Whether to return the pre-argmax logits alongside the segmentation map. When `True`, each element of
-                the returned list is a dict with keys `"segmentation"` (argmax map, shape `(height, width)`) and
-                `"logits"` (pre-argmax tensor of shape `(num_classes, height, width)`), where the logits are the
-                result of the einsum combination of class and mask predictions.
+            return_segmentation_scores (`bool`, *optional*, defaults to `False`):
+                Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
+                the returned list is a [`SemanticSegmentationPostProcessOutput`] with fields `segmentation`
+                (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
 
         Returns:
-            `list[torch.Tensor]` or `list[dict]`: When `return_logits=False` (default), a list of length
-            `batch_size` where each item is a semantic segmentation map of shape `(height, width)` with class IDs.
-            When `return_logits=True`, a list of dicts, each with keys `"segmentation"` (shape `(height, width)`)
-            and `"logits"` (shape `(num_classes, height, width)`).
+            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessOutput]`: When
+            `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
+            segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
+            a list of [`SemanticSegmentationPostProcessOutput`] with fields `segmentation` (class IDs, shape
+            `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
         """
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
@@ -586,26 +587,28 @@ class MaskFormerImageProcessor(TorchvisionBackend):
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
 
-            semantic_segmentation = []
+            post_process_outputs = []
             for idx in range(batch_size):
                 resized_logits = torch.nn.functional.interpolate(
                     segmentation[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
-                if return_logits:
-                    semantic_segmentation.append({"segmentation": semantic_map, "logits": resized_logits[0]})
-                else:
-                    semantic_segmentation.append(semantic_map)
+                post_process_outputs.append(
+                    SemanticSegmentationPostProcessOutput(
+                        segmentation=semantic_map, segmentation_scores=resized_logits[0]
+                    )
+                )
         else:
             seg_maps = segmentation.argmax(dim=1)
-            if return_logits:
-                semantic_segmentation = [
-                    {"segmentation": seg_maps[i], "logits": segmentation[i]} for i in range(batch_size)
-                ]
-            else:
-                semantic_segmentation = [seg_maps[i] for i in range(batch_size)]
+            post_process_outputs = [
+                SemanticSegmentationPostProcessOutput(segmentation=seg_maps[i], segmentation_scores=segmentation[i])
+                for i in range(batch_size)
+            ]
 
-        return semantic_segmentation
+        if not return_segmentation_scores:
+            post_process_outputs = [item.segmentation for item in post_process_outputs]
+
+        return post_process_outputs
 
     # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.post_process_instance_segmentation
     def post_process_instance_segmentation(

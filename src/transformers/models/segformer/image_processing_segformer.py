@@ -25,6 +25,7 @@ import torch.nn.functional as F
 import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_outputs import SemanticSegmentationPostProcessOutput
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
@@ -189,8 +190,8 @@ class SegformerImageProcessor(TorchvisionBackend):
         return processed_images
 
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: list[tuple] | None = None, return_logits: bool = False
-    ) -> "list[torch.Tensor] | list[dict[str, torch.Tensor]]":
+        self, outputs, target_sizes: list[tuple] | None = None, return_segmentation_scores: bool = False
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessOutput]":
         """
         Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps.
 
@@ -200,16 +201,17 @@ class SegformerImageProcessor(TorchvisionBackend):
             target_sizes (`list[Tuple]` of length `batch_size`, *optional*):
                 List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
                 predictions will not be resized.
-            return_logits (`bool`, *optional*, defaults to `False`):
-                Whether to return the pre-argmax logits alongside the segmentation map. When `True`, each element of
-                the returned list is a dict with keys `"segmentation"` (argmax map, shape `(height, width)`) and
-                `"logits"` (pre-argmax tensor, shape `(num_classes, height, width)`).
+            return_segmentation_scores (`bool`, *optional*, defaults to `False`):
+                Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
+                the returned list is a [`SemanticSegmentationPostProcessOutput`] with fields `segmentation`
+                (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
 
         Returns:
-            `list[torch.Tensor]` or `list[dict]`: When `return_logits=False` (default), a list of length
-            `batch_size` where each item is a semantic segmentation map of shape `(height, width)` with class IDs.
-            When `return_logits=True`, a list of dicts, each with keys `"segmentation"` (shape `(height, width)`)
-            and `"logits"` (shape `(num_classes, height, width)`).
+            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessOutput]`: When
+            `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
+            segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
+            a list of [`SemanticSegmentationPostProcessOutput`] with fields `segmentation` (class IDs, shape
+            `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
         """
         if not is_torch_available():
             raise ImportError("PyTorch is required for post_process_semantic_segmentation")
@@ -226,27 +228,29 @@ class SegformerImageProcessor(TorchvisionBackend):
             if isinstance(target_sizes, torch.Tensor):
                 target_sizes = target_sizes.numpy()
 
-            semantic_segmentation = []
+            post_process_outputs = []
 
             for idx in range(len(logits)):
                 resized_logits = F.interpolate(
                     logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
-                if return_logits:
-                    semantic_segmentation.append({"segmentation": semantic_map, "logits": resized_logits[0]})
-                else:
-                    semantic_segmentation.append(semantic_map)
+                post_process_outputs.append(
+                    SemanticSegmentationPostProcessOutput(
+                        segmentation=semantic_map, segmentation_scores=resized_logits[0]
+                    )
+                )
         else:
             seg_maps = logits.argmax(dim=1)
-            if return_logits:
-                semantic_segmentation = [
-                    {"segmentation": seg_maps[i], "logits": logits[i]} for i in range(logits.shape[0])
-                ]
-            else:
-                semantic_segmentation = [seg_maps[i] for i in range(logits.shape[0])]
+            post_process_outputs = [
+                SemanticSegmentationPostProcessOutput(segmentation=seg_maps[i], segmentation_scores=logits[i])
+                for i in range(logits.shape[0])
+            ]
 
-        return semantic_segmentation
+        if not return_segmentation_scores:
+            post_process_outputs = [item.segmentation for item in post_process_outputs]
+
+        return post_process_outputs
 
 
 __all__ = ["SegformerImageProcessor"]
