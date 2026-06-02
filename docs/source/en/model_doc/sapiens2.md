@@ -63,8 +63,8 @@ from transformers.image_utils import load_image
 
 image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
 
-image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision="refs/pr/1")
-model = AutoModel.from_pretrained("facebook/sapiens2-pretrain-0.4b", device_map="auto", revision="refs/pr/1")
+image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b")
+model = AutoModel.from_pretrained("facebook/sapiens2-pretrain-0.4b", device_map="auto")
 
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 with torch.inference_mode():
@@ -88,8 +88,8 @@ from transformers.image_utils import load_image
 
 image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
 
-image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision="refs/pr/1")
-model = AutoBackbone.from_pretrained("facebook/sapiens2-pretrain-0.4b", device_map="auto", revision="refs/pr/1")
+image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b")
+model = AutoBackbone.from_pretrained("facebook/sapiens2-pretrain-0.4b", device_map="auto")
 
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 with torch.inference_mode():
@@ -116,8 +116,8 @@ from transformers.image_utils import load_image
 
 image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
 
-image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-normal-0.4b", revision="refs/pr/1")
-model = AutoModelForNormalEstimation.from_pretrained("facebook/sapiens2-normal-0.4b", device_map="auto", revision="refs/pr/1")
+image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-normal-0.4b")
+model = AutoModelForNormalEstimation.from_pretrained("facebook/sapiens2-normal-0.4b", device_map="auto")
 
 inputs = image_processor(image, return_tensors="pt").to(model.device)
 with torch.inference_mode():
@@ -162,8 +162,8 @@ from transformers.image_utils import load_image
 
 image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
 
-image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pointmap-0.4b", revision="refs/pr/1")
-model = AutoModelForPointmapEstimation.from_pretrained("facebook/sapiens2-pointmap-0.4b", device_map="auto", revision="refs/pr/1")
+image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pointmap-0.4b")
+model = AutoModelForPointmapEstimation.from_pretrained("facebook/sapiens2-pointmap-0.4b", device_map="auto")
 
 inputs = image_processor(image, return_tensors="pt").to(model.device)
 with torch.inference_mode():
@@ -219,8 +219,8 @@ from transformers.image_utils import load_image
 
 image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
 
-image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pose-0.4b", revision="refs/pr/1")
-model = AutoModelForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", device_map="auto", revision="refs/pr/1")
+image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pose-0.4b")
+model = AutoModelForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", device_map="auto")
 
 # Provide bounding boxes in COCO format (x, y, width, height) for each person
 boxes = [[[270.8, 0.6, 294.1, 379.5]]]
@@ -254,8 +254,8 @@ from transformers.image_utils import load_image
 
 image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
 
-image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pose-0.4b", revision="refs/pr/1")
-model = AutoModelForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", device_map="auto", revision="refs/pr/1")
+image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pose-0.4b")
+model = AutoModelForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", device_map="auto")
 
 boxes = [[[270.8, 0.6, 294.1, 379.5]]]
 inputs = image_processor(image, boxes=boxes, return_tensors="pt").to(model.device)
@@ -285,8 +285,8 @@ from transformers.image_utils import load_image
 
 image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
 
-image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-seg-0.4b", revision="refs/pr/1")
-model = AutoModelForSemanticSegmentation.from_pretrained("facebook/sapiens2-seg-0.4b", device_map="auto", revision="refs/pr/1")
+image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-seg-0.4b")
+model = AutoModelForSemanticSegmentation.from_pretrained("facebook/sapiens2-seg-0.4b", device_map="auto")
 
 inputs = image_processor(image, return_tensors="pt").to(model.device)
 with torch.inference_mode():
@@ -319,8 +319,8 @@ from transformers.image_utils import load_image
 
 image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
 
-image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-matting-1b", revision="refs/pr/1")
-model = AutoModelForImageMatting.from_pretrained("facebook/sapiens2-matting-1b", device_map="auto", revision="refs/pr/1")
+image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-matting-1b")
+model = AutoModelForImageMatting.from_pretrained("facebook/sapiens2-matting-1b", device_map="auto")
 
 inputs = image_processor(image, return_tensors="pt").to(model.device)
 with torch.inference_mode():

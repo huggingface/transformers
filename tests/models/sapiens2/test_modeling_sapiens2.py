@@ -47,9 +47,6 @@ if is_torch_available():
     )
 
 
-REVISION = "refs/pr/1"
-
-
 class Sapiens2ModelTester:
     def __init__(
         self,
@@ -399,13 +396,11 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
     @cached_property
     def default_image_processor(self):
-        return Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision=REVISION)
+        return Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b")
 
     @slow
     def test_inference_no_head(self):
-        model = (
-            Sapiens2Model.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision=REVISION).eval().to(torch_device)
-        )
+        model = Sapiens2Model.from_pretrained("facebook/sapiens2-pretrain-0.4b").eval().to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -440,11 +435,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_semantic_segmentation(self):
-        model = (
-            Sapiens2ForSemanticSegmentation.from_pretrained("facebook/sapiens2-seg-0.4b", revision=REVISION)
-            .eval()
-            .to(torch_device)
-        )
+        model = Sapiens2ForSemanticSegmentation.from_pretrained("facebook/sapiens2-seg-0.4b").eval().to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -484,11 +475,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
     @require_cv2
     @slow
     def test_inference_pose_estimation(self):
-        model = (
-            Sapiens2ForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b", revision=REVISION)
-            .eval()
-            .to(torch_device)
-        )
+        model = Sapiens2ForPoseEstimation.from_pretrained("facebook/sapiens2-pose-0.4b").eval().to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -595,13 +582,9 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_normal_estimation(self):
-        model = (
-            Sapiens2ForNormalEstimation.from_pretrained("facebook/sapiens2-normal-0.4b", revision=REVISION)
-            .eval()
-            .to(torch_device)
-        )
+        model = Sapiens2ForNormalEstimation.from_pretrained("facebook/sapiens2-normal-0.4b").eval().to(torch_device)
 
-        image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-normal-0.4b", revision=REVISION)
+        image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-normal-0.4b")
         image = prepare_img()
         image_height, image_width = image.shape[-2:]
         inputs = image_processor(image, return_tensors="pt").to(torch_device)
@@ -636,12 +619,10 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_pointmap_estimation(self):
         model = (
-            Sapiens2ForPointmapEstimation.from_pretrained("facebook/sapiens2-pointmap-0.4b", revision=REVISION)
-            .eval()
-            .to(torch_device)
+            Sapiens2ForPointmapEstimation.from_pretrained("facebook/sapiens2-pointmap-0.4b").eval().to(torch_device)
         )
 
-        image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-pointmap-0.4b", revision=REVISION)
+        image_processor = Sapiens2ImageProcessor.from_pretrained("facebook/sapiens2-pointmap-0.4b")
         image = prepare_img()
         image_height, image_width = image.shape[-2:]
         inputs = image_processor(image, return_tensors="pt").to(torch_device)
@@ -682,11 +663,7 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_matting(self):
-        model = (
-            Sapiens2ForImageMatting.from_pretrained("facebook/sapiens2-matting-1b", revision=REVISION)
-            .eval()
-            .to(torch_device)
-        )
+        model = Sapiens2ForImageMatting.from_pretrained("facebook/sapiens2-matting-1b").eval().to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

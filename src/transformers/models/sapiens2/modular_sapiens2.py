@@ -1472,8 +1472,8 @@ class Sapiens2Model(DINOv3ViTModel):
         >>> import torch
 
         >>> image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision="refs/pr/1")
-        >>> model = AutoModel.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision="refs/pr/1")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b")
+        >>> model = AutoModel.from_pretrained("facebook/sapiens2-pretrain-0.4b")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> with torch.inference_mode():
@@ -1506,8 +1506,8 @@ class Sapiens2Backbone(DINOv3ViTBackbone):
         >>> import torch
 
         >>> image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision="refs/pr/1")
-        >>> model = AutoBackbone.from_pretrained("facebook/sapiens2-pretrain-0.4b", revision="refs/pr/1")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pretrain-0.4b")
+        >>> model = AutoBackbone.from_pretrained("facebook/sapiens2-pretrain-0.4b")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> with torch.inference_mode():
@@ -1596,8 +1596,8 @@ class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
         >>> import torch
 
         >>> image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-seg-0.4b", revision="refs/pr/1")
-        >>> model = AutoModel.from_pretrained("facebook/sapiens2-seg-0.4b", revision="refs/pr/1")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-seg-0.4b")
+        >>> model = AutoModel.from_pretrained("facebook/sapiens2-seg-0.4b")
 
         >>> inputs = image_processor(image, return_tensors="pt")
         >>> with torch.inference_mode():
@@ -1676,8 +1676,8 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
         >>> import torch
 
         >>> image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pose-0.4b", revision="refs/pr/1")
-        >>> model = AutoModel.from_pretrained("facebook/sapiens2-pose-0.4b", revision="refs/pr/1")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pose-0.4b")
+        >>> model = AutoModel.from_pretrained("facebook/sapiens2-pose-0.4b")
 
         >>> boxes = [[[270.8, 0.6, 294.1, 379.5]]]
         >>> inputs = image_processor(image, boxes=boxes, return_tensors="pt")
@@ -1750,8 +1750,8 @@ class Sapiens2ForNormalEstimation(Sapiens2PreTrainedModel):
         >>> import torch
 
         >>> image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-normal-0.4b", revision="refs/pr/1")
-        >>> model = AutoModel.from_pretrained("facebook/sapiens2-normal-0.4b", revision="refs/pr/1")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-normal-0.4b")
+        >>> model = AutoModel.from_pretrained("facebook/sapiens2-normal-0.4b")
 
         >>> inputs = image_processor(image, return_tensors="pt")
         >>> with torch.inference_mode():
@@ -1826,8 +1826,8 @@ class Sapiens2ForPointmapEstimation(Sapiens2PreTrainedModel):
         >>> import torch
 
         >>> image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pointmap-0.4b", revision="refs/pr/1")
-        >>> model = AutoModel.from_pretrained("facebook/sapiens2-pointmap-0.4b", revision="refs/pr/1")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-pointmap-0.4b")
+        >>> model = AutoModel.from_pretrained("facebook/sapiens2-pointmap-0.4b")
 
         >>> inputs = image_processor(image, return_tensors="pt")
         >>> with torch.inference_mode():
@@ -1899,8 +1899,8 @@ class Sapiens2ForImageMatting(Sapiens2PreTrainedModel):
         >>> import torch
 
         >>> image = load_image("http://images.cocodataset.org/val2017/000000004016.jpg")
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-matting-1b", revision="refs/pr/1")
-        >>> model = AutoModel.from_pretrained("facebook/sapiens2-matting-1b", revision="refs/pr/1")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens2-matting-1b")
+        >>> model = AutoModel.from_pretrained("facebook/sapiens2-matting-1b")
 
         >>> inputs = image_processor(image, return_tensors="pt")
         >>> with torch.inference_mode():
