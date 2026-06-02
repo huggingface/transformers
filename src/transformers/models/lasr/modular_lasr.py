@@ -445,8 +445,8 @@ class LasrPreTrainedModel(ParakeetPreTrainedModel):
     # padding is incompatible with flex attention as the resulting mask cannot be used to apply padding
     _supports_flex_attn = False
 
+    # trf-ignore: TRF018
     def _init_weights(self, module):
-        super()._init_weights(module)
         PreTrainedModel._init_weights(module)
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):

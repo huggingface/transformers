@@ -316,9 +316,9 @@ class LwDetrViTPreTrainedModel(VitDetPreTrainedModel):
         "attentions": LwDetrViTAttention,
     }
 
+    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module) -> None:
-        super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:

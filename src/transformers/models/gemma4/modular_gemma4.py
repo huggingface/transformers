@@ -1231,9 +1231,9 @@ class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
     input_modalities = ("image", "text", "video", "audio")
     _can_record_outputs = None  # override
 
+    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
         PreTrainedModel._init_weights(module)
         if isinstance(module, Gemma4VisionPatchEmbedder):
             init.ones_(module.position_embedding_table)
