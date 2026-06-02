@@ -5,7 +5,7 @@ Every model's `forward()` method used to manually resolve `None` flags like `out
 - `@capture_outputs` resolves output flags, collects intermediate values, and handles `return_dict` conversion.
 - `@merge_with_config_defaults` resolves `use_cache` from config. Omit it for models that don't cache, like [`CLIPModel`].
 
-You'll mostly encounter these decorators when integrating a new model. See [adding a model to 🤗 Transformers]./modular_transformers) for a step-by-step guide.
+You'll mostly encounter these decorators when integrating a new model. See [adding a model to 🤗 Transformers](./modular_transformers) for a step-by-step guide.
 
 ## Declare which submodules to capture
 

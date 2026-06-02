@@ -26,3 +26,28 @@
       title: Distribuire
     - local: serialization
       title: Exportarea pentru producție
+    - isExpanded: false
+      sections:
+      - local: contributing
+        title: Contribuie la Transformers
+      - local: modular_transformers
+        title: Adaugă un model cu transformers modulare
+      - local: multimodal_processing
+        title: Procesatoare multimodale
+      - local: add_vision_processing_components
+        title: Componente de procesare vizuală
+      - local: add_audio_processing_components
+        title: Componente de procesare audio
+      - local: modeling_rules
+        title: Regulile de structură a modelului
+      - local: model_output_tracing
+        title: Urmărirea output-urilor intermediare ale modelului
+      - local: auto_docstring
+        title: Auto-generarea docstring-urilor
+      - local: testing
+        title: Scrierea testelor pentru modele
+      - local: pr_checks
+        title: Verificările pentru pull request
+      - local: add_new_model
+        title: Contribuția legacy la modele
+      title: Contribuie
