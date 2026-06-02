@@ -1662,10 +1662,15 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
                 position_ids = position_ids.repeat_interleave(expand_size, dim=1)
             model_kwargs["position_ids"] = position_ids
 
-        if expand_size != 1 and (image_outputs := model_kwargs.get("image_outputs")):
-            image_outputs["deepstack_features"] = [
-                item.repeat_interleave(expand_size, dim=0) for item in image_outputs["deepstack_features"]
-            ]
+        if expand_size != 1:
+            if image_outputs := model_kwargs.get("image_outputs"):
+                image_outputs["deepstack_features"] = [
+                    item.repeat_interleave(expand_size, dim=0) for item in image_outputs["deepstack_features"]
+                ]
+            if video_outputs := model_kwargs.get("video_outputs"):
+                video_outputs["deepstack_features"] = [
+                    item.repeat_interleave(expand_size, dim=0) for item in video_outputs["deepstack_features"]
+                ]
 
         return input_ids, model_kwargs
 
