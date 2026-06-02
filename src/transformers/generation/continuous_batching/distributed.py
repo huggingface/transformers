@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any, TypeVar
 
 import torch
@@ -37,23 +38,31 @@ T = TypeVar("T")
 class DistributedHelper:
     """A helper class to handle distributed-related operations. Notably, it does not crash when distributed is off."""
 
-    def __init__(self, device_mesh: DeviceMesh | None) -> None:
-        self.device_mesh = device_mesh
+    def __init__(self, device_mesh: DeviceMesh | None, cpu_group_timeout: float | None) -> None:
         self.dist_on = dist.is_available() and dist.is_initialized()
+        self.device_mesh = device_mesh
+
+        # Check validity of the device mesh
+        self.check_device_mesh_for_cb(self.device_mesh)
+        # Extract a non-trivial TP mesh if it exists
+        tp_mesh = self.extract_tp_mesh(self.device_mesh)
+        if tp_mesh is not None and not self.dist_on:
+            raise ValueError(f"Distributed is off but received {device_mesh = }.")
 
         # These attributes depend on the global dist state
         self.global_rank = dist.get_rank() if self.dist_on else 0
         self.world_size = dist.get_world_size() if self.dist_on else 1
 
         # These attributes depend on the TP state
-        if self.dist_on and self.device_mesh is not None:
-            self.tp_size = self.device_mesh.size()
-            self.tp_group = self.device_mesh.get_group()
+        if tp_mesh is not None:
+            self.tp_size = tp_mesh.size()
+            self.tp_group = tp_mesh.get_group()
             self.tp_root_global_rank = dist.get_global_rank(self.tp_group, 0)
-            self.tp_local_rank = self.device_mesh.get_local_rank()
-            # If TP is on, we create a dedicate CPU group
+            self.tp_local_rank = tp_mesh.get_local_rank()
+            # If TP is on, we create a dedicated CPU group, with an eventual timeout
             tp_ranks = dist.get_process_group_ranks(self.tp_group)
-            self.cpu_comm_group = dist.new_group(ranks=tp_ranks, backend="gloo")
+            timeout = None if cpu_group_timeout is None else timedelta(seconds=cpu_group_timeout)
+            self.cpu_comm_group = dist.new_group(ranks=tp_ranks, backend="gloo", timeout=timeout)
         else:
             self.tp_size = 1
             self.tp_group = None
@@ -70,7 +79,33 @@ class DistributedHelper:
         self.dp_size = self.world_size // self.tp_size
 
         # Accumulator to CPU integer comm
-        self._cpu_int_acc = torch.tensor([0], dtype=torch.int64, device="cpu")
+        self._cpu_int_acc = torch.tensor([0, 0], dtype=torch.int64, device="cpu")
+
+    @staticmethod
+    def check_device_mesh_for_cb(device_mesh: DeviceMesh | None) -> None:
+        """Checks the validity of the device mesh for continuous batching."""
+        # No device mesh = no distributed = life is good
+        if device_mesh is None:
+            return None
+        # If there are no named dims, we assume it is a TP mesh  # TODO (remi): this might change after distrib rework
+        if device_mesh.mesh_dim_names is None:
+            return None
+        # FSDP is not compatible with continuous batching, so we raise an error if it is used
+        if "fsdp" in device_mesh.mesh_dim_names and device_mesh["fsdp"].size() > 1:
+            raise ValueError(f"FSDP is not compatible with continuous batching but got {device_mesh = }.")
+
+    @staticmethod
+    def extract_tp_mesh(device_mesh: DeviceMesh | None) -> DeviceMesh | None:
+        """Extracts the TP mesh from the device mesh if it exists and is non-trivial."""
+        if device_mesh is None:
+            return None
+        # Case: device mesh with no named dims => assumed TP mesh
+        if device_mesh.mesh_dim_names is None:
+            return device_mesh if device_mesh.size() > 1 else None
+        # Case: device mesh with named dims => extract the TP mesh
+        if "tp" in device_mesh.mesh_dim_names and device_mesh["tp"].size() > 1:
+            return device_mesh["tp"]
+        return None
 
     def infer_if_tp_driver(self) -> bool:
         return self.tp_local_rank == 0
@@ -87,13 +122,15 @@ class DistributedHelper:
             dist.broadcast(value, src=self.tp_root_global_rank, async_op=False, group=self.tp_group)
         return value
 
-    def tp_broadcast_int(self, value: int) -> int:
-        """Inside each TP group, broadcasts an integer from rank 0 over the gloo CPU comm group."""
+    def tp_all_reduce_state(self, payload_size: int, stop_status: int) -> tuple[int, int]:
+        """Broadcasts two information: 1. the size of the payload held by the TP driver (all other rank broadcast 0) and
+        2. the requested stop status (all to all). These information are broadcasted through a MAX-reduce operation."""
         if self.tp_size > 1:
-            self._cpu_int_acc[0] = value
-            dist.broadcast(self._cpu_int_acc, src=self.tp_root_global_rank, async_op=False, group=self.cpu_comm_group)
-            value = self._cpu_int_acc[0].item()
-        return value
+            self._cpu_int_acc[0] = payload_size
+            self._cpu_int_acc[1] = stop_status
+            dist.all_reduce(self._cpu_int_acc, op=dist.ReduceOp.MAX, async_op=False, group=self.cpu_comm_group)
+            payload_size, stop_status = self._cpu_int_acc.tolist()
+        return payload_size, stop_status
 
     def tp_all_reduce_min(self, value: torch.Tensor) -> torch.Tensor:
         """Inside each TP group, all-reduces a tensor with the MIN op. No-op when TP is off."""
@@ -101,7 +138,7 @@ class DistributedHelper:
             dist.all_reduce(value, op=dist.ReduceOp.MIN, group=self.tp_group)
         return value
 
-    def tp_broadcast_object(self, obj: T) -> T:
+    def tp_broadcast_object_from_rank_0(self, obj: T) -> T:
         """Inside each TP group, broadcasts an arbitrary picklable Python object from TP-rank 0 to all other ranks.
         Used to keep request ingress and cancellations consistent across TP workers without requiring all ranks to
         receive the same external request stream. Uses a dedicated CPU (gloo) `cpu_comm_group` for broadcast."""
