@@ -310,7 +310,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # Propagate hidden-states capture to sub-configs when requested on parent config.
         if self.output_hidden_states:
             for subconfig_key in self.sub_configs:
-                self.sub_configs[subconfig_key].output_hidden_states = True
+                subconfig = getattr(self, subconfig_key)
+                subconfig.output_hidden_states = True
 
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
