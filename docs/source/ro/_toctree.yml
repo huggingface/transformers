@@ -62,3 +62,5 @@
       title: Algoritmi de Tokenization
     - local: image_processors
       title: Procesatoare de imagini
+    - local: video_processors
+      title: Procesatoare video
