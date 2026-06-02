@@ -67,7 +67,6 @@ print(f"{mem_params/2**30:.4f} GB")
 
 Transformers automatically uses hardware-accelerated FP8 matmul kernels (`torch._scaled_mm`) when you load an FP8 compressed-tensors model on a supported GPU, instead of dequantizing weights back to BF16. Keeping weights in FP8 throughout inference lowers memory usage and speeds up computation.
 
-### Supported devices
 
 | Device | Kernel | Notes |
 |--------|--------|-------|
