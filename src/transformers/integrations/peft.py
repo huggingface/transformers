@@ -623,6 +623,13 @@ class PeftAdapterMixin:
             # Create and add fresh new adapters into the model, unless the weights are hotswapped
             inject_adapter_in_model(peft_config, self, adapter_name)
 
+        adapter_key_markers = {adapter_name}
+        if peft_config is not None and getattr(peft_config, "peft_type", None) is not None:
+            adapter_key_markers.add(peft_config.peft_type.value.lower())
+
+        def is_adapter_key(key: str) -> bool:
+            return any(marker in key for marker in adapter_key_markers)
+
         if not self._hf_peft_config_loaded:
             self._hf_peft_config_loaded = True
 
@@ -729,20 +736,13 @@ class PeftAdapterMixin:
             state_dict=adapter_state_dict,
             checkpoint_files=checkpoint_files,
             load_config=load_config,
-            # pass expected keys explicitly, otherwise they are determined from the state_dict, which can contain
-            # unexpected entries, like "layer.SCB" from a bnb layer.
-            expected_keys=[n for n, _ in self.named_parameters()],
+            # Pass expected keys explicitly while excluding non-adapter parameters.
+            # Otherwise `caching_allocator_warmup` sizes for the full base model.
+            expected_keys=[n for n, _ in self.named_parameters() if is_adapter_key(n)],
         )
 
         if peft_config.inference_mode:
             self._set_peft_inference_mode()
-
-        adapter_key_markers = {adapter_name}
-        if peft_config is not None and getattr(peft_config, "peft_type", None) is not None:
-            adapter_key_markers.add(peft_config.peft_type.value.lower())
-
-        def is_adapter_key(key: str) -> bool:
-            return any(marker in key for marker in adapter_key_markers)
 
         loading_info.missing_keys = {k for k in loading_info.missing_keys if is_adapter_key(k)}
 

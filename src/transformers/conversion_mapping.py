@@ -52,6 +52,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "glm4v_moe": "qwen2_moe",
     "longcat_flash": "qwen2_moe",
     "solar_open": "qwen2_moe",
+    "mellum": "qwen2_moe",
     "qwen3_moe": "qwen2_moe",
     "qwen3_omni_moe": "qwen2_moe",
     "qwen3_omni_moe_thinker": "qwen2_moe",
@@ -60,6 +61,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "flex_olmo": "qwen2_moe",
     "olmoe": "qwen2_moe",
     "exaone_moe": "qwen2_moe",
+    "cohere2_moe": "qwen2_moe",
     "rt_detr_v2": "rt_detr",
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
@@ -86,6 +88,14 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "vipllava": "llava",
     "mistral3": "llava",
     "pp_chart2table": "llava",
+    "voxtral": "qwen2_audio",
+    "voxtral_realtime": "qwen2_audio",
+    "audioflamingo3": "qwen2_audio",
+    "glmasr": "qwen2_audio",
+    "musicflamingo": "qwen2_audio",
+    "granite_speech_plus": "granite_speech",
+    "gemma3n_text": "qwen3_5_text",
+    "qwen3_5_moe_text": "qwen3_5_text",
     "llava_next_video": "llava_next",
     "llava_onevision": "llava_next",
     # class-based mappings
@@ -102,6 +112,12 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "LlavaOnevisionModel": "LlavaModel",
     "FuyuModel": "LlavaModel",
     "MllamaModel": "LlavaModel",
+    "VoxtralModel": "Qwen2AudioModel",
+    "VoxtralRealtimeModel": "Qwen2AudioModel",
+    "AudioFlamingo3Model": "Qwen2AudioModel",
+    "GlmAsrModel": "Qwen2AudioModel",
+    "MusicFlamingoModel": "Qwen2AudioModel",
+    "GraniteSpeechPlusModel": "GraniteSpeechModel",
     "MaskFormerDetrDecoder": "DetrModel",
     "Qwen2_5_VLForConditionalGeneration": "Qwen2VLForConditionalGeneration",
     # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
@@ -117,6 +133,24 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "hrm_text": [
+            WeightConverter(
+                source_patterns="mlp.gate_up_proj.weight",
+                target_patterns=["mlp.gate_proj.weight", "mlp.up_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="attn.gqkv_proj.weight",
+                target_patterns=[
+                    "self_attn.gate_proj.weight",
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming(source_patterns=r"\.attn\.o_proj\.", target_patterns=".self_attn.o_proj."),
+        ],
         "ViTModel": [
             WeightRenaming(r"encoder\.layer\.", "layers."),
             WeightRenaming("attention.query", "q_proj"),
@@ -401,6 +435,38 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
+        "qwen2_audio": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
+            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
+        ],
+        "Qwen2AudioModel": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
+        ],
+        "granite_speech": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^encoder", target_patterns="model.encoder"),
+            WeightRenaming(source_patterns=r"^projector", target_patterns="model.projector"),
+        ],
+        "GraniteSpeechModel": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
+        ],
+        "vibevoice_asr": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(
+                source_patterns=r"^acoustic_tokenizer_encoder", target_patterns="model.acoustic_tokenizer_encoder"
+            ),
+            WeightRenaming(
+                source_patterns=r"^semantic_tokenizer_encoder", target_patterns="model.semantic_tokenizer_encoder"
+            ),
+            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
+        ],
+        "VibeVoiceAsrModel": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
+        ],
         "llava_next": [
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
             WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
@@ -451,6 +517,96 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),
             WeightRenaming(
                 source_patterns=r"^model(?!\.(language_model|visual))", target_patterns="model.language_model"
+            ),
+        ],
+        "deepseek_ocr2": [
+            WeightRenaming(
+                source_patterns=r"sam_model\.blocks\.(\d+)\.norm1\.",
+                target_patterns=r"vision_tower.sam_encoder.layers.\1.layer_norm1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.blocks\.(\d+)\.norm2\.",
+                target_patterns=r"vision_tower.sam_encoder.layers.\1.layer_norm2.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.blocks\.(\d+)\.attn\.",
+                target_patterns=r"vision_tower.sam_encoder.layers.\1.attn.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.blocks\.(\d+)\.mlp\.",
+                target_patterns=r"vision_tower.sam_encoder.layers.\1.mlp.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.patch_embed\.proj\.",
+                target_patterns="vision_tower.sam_encoder.patch_embed.projection.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.pos_embed",
+                target_patterns="vision_tower.sam_encoder.pos_embed",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.neck\.0\.",
+                target_patterns="vision_tower.sam_encoder.neck.conv1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.neck\.1\.",
+                target_patterns="vision_tower.sam_encoder.neck.layer_norm1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.neck\.2\.",
+                target_patterns="vision_tower.sam_encoder.neck.conv2.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.neck\.3\.",
+                target_patterns="vision_tower.sam_encoder.neck.layer_norm2.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.net_2\.",
+                target_patterns="vision_tower.sam_encoder.proj.conv1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.net_3\.",
+                target_patterns="vision_tower.sam_encoder.proj.conv2.",
+            ),
+            WeightRenaming(
+                source_patterns=r"qwen2_model\.model\.model\.layers\.",
+                target_patterns="vision_tower.vision_encoder.layers.",
+            ),
+            WeightRenaming(
+                source_patterns=r"qwen2_model\.model\.model\.norm\.",
+                target_patterns="vision_tower.vision_encoder.norm.",
+            ),
+            WeightRenaming(
+                source_patterns=r"qwen2_model\.query_768\.",
+                target_patterns="vision_tower.query_768_resolution.",
+            ),
+            WeightRenaming(
+                source_patterns=r"qwen2_model\.query_1024\.",
+                target_patterns="vision_tower.query_1024_resolution.",
+            ),
+            WeightRenaming(
+                source_patterns=r"projector\.layers\.",
+                target_patterns="multi_modal_projector.",
+            ),
+            WeightRenaming(source_patterns=r"view_seperator", target_patterns="view_separator"),
+            WeightRenaming(
+                source_patterns=r"(^|model\.)embed_tokens\.",
+                target_patterns=r"\1language_model.embed_tokens.",
+            ),
+            WeightRenaming(source_patterns=r"(^|model\.)layers\.", target_patterns=r"\1language_model.layers."),
+            WeightRenaming(source_patterns=r"(^|model\.)norm\.", target_patterns=r"\1language_model.norm."),
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight",
+                    "mlp.experts.*.up_proj.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
             ),
         ],
         "colqwen2": [PrefixChange(prefix_to_remove="model", model_prefix="vlm")],
@@ -1060,6 +1216,8 @@ def get_model_conversion_mapping(
     seen to prevent `XForY` / `XModel` pairs from applying the same mapping
     twice via different lookup paths.
     """
+    from .modeling_utils import PreTrainedModel
+
     # note: this function is used in PEFT, so changing the API requires coordination
     weight_conversions = []
 
@@ -1075,8 +1233,11 @@ def get_model_conversion_mapping(
     # prevents a parent's transforms from being duplicated with a scoped copy for the child.
     seen_identifiers: defaultdict[str, list[str]] = defaultdict(list)
 
-    named_pretrained = model._named_pretrained_submodules
-    for module_name, submodule in named_pretrained:
+    for module_name, submodule in model.named_modules():
+        # Skip if it's not a submodel
+        if not isinstance(submodule, PreTrainedModel):
+            continue
+
         class_name = type(submodule).__name__
         model_type = submodule.config.model_type
 
@@ -1104,9 +1265,14 @@ def get_model_conversion_mapping(
 
         is_root_model = module_name == ""
         if not is_root_model:
-            # Scope each transform so it only matches keys under this sub-module's prefix.
+            # Scope each transform so it only matches keys under this sub-module's prefix - but we still allow to
+            # arbitrary add/remove base_model_prefix to load ForXXX model from BaseModel and the opposite
+            # Note that we need 2 removeprefix calls here, as only one level of nesting would not have the ending dot to module_name
+            scope_prefix = module_name.removeprefix(model.base_model_prefix)
+            scope_prefix = module_name.removeprefix(".")
             for transform in conversions:
-                transform.scope_prefix = module_name
+                transform.scope_prefix = scope_prefix
+                transform.base_model_prefix = model.base_model_prefix
         weight_conversions.extend(conversions)
 
         seen_identifiers[class_name].append(module_name)

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-07-15 and added to Hugging Face Transformers on 2024-08-08.*
+*This model was published in HF papers on 2024-07-15 and contributed to Hugging Face Transformers on 2024-08-08.*
 
 # Qwen2Audio
 
@@ -249,6 +249,11 @@ response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_
 ## Qwen2AudioEncoder
 
 [[autodoc]] Qwen2AudioEncoder
+    - forward
+
+## Qwen2AudioModel
+
+[[autodoc]] Qwen2AudioModel
     - forward
 
 ## Qwen2AudioForConditionalGeneration

@@ -313,6 +313,71 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             compute_loss_func=partial(compute_loss, vocab_size=vocab_size),
         )
 
+    def test_num_items_in_batch_causal_lm(self):
+        """
+        For a causal LM, `_get_num_items_in_batch` must count over `labels[..., 1:]` because
+        ForCausalLMLoss shifts labels (position 0 is never a prediction target). When the
+        batch already exposes `shift_labels`, that tensor must be used as-is.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = AutoModelForCausalLM.from_pretrained(self._ga_model_name, dtype=torch.float32)
+            trainer = Trainer(
+                model=model,
+                args=TrainingArguments(output_dir=tmp_dir, per_device_train_batch_size=2),
+                train_dataset=self._ga_dataset,
+                data_collator=self._ga_data_collator,
+            )
+            self.assertTrue(trainer._loss_shifts_labels)
+
+            # batch[0]: 5 valid label positions, 3 padding (-100) → 5 - 1 = 4 after the shift.
+            # batch[1]: 8 valid label positions, 0 padding         → 8 - 1 = 7 after the shift.
+            # Trainer must not count position 0 of each row → expected total = 4 + 7 = 11.
+            batch_samples = [
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, -100, -100, -100]])},
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]])},
+            ]
+            num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(int(num_items), 11)
+
+            # If the collator already pre-shifts labels (`shift_labels` present), use it as-is and
+            # do NOT slice again. Each row here has 4 valid positions → expected total = 8.
+            batch_samples = [
+                {
+                    "labels": torch.tensor([[1, 2, 3, 4, 5]]),
+                    "shift_labels": torch.tensor([[2, 3, 4, 5, -100]]),
+                },
+                {
+                    "labels": torch.tensor([[1, 2, 3, 4, 5]]),
+                    "shift_labels": torch.tensor([[2, 3, 4, 5, -100]]),
+                },
+            ]
+            num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(int(num_items), 8)
+
+    def test_num_items_in_batch_non_causal_lm(self):
+        """For non-causal-LM losses, `_get_num_items_in_batch` must count the full label tensor."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = LlamaConfig(
+                vocab_size=64, hidden_size=16, intermediate_size=32, num_hidden_layers=2, num_attention_heads=2
+            )
+            # ForTokenClassification → LOSS_MAPPING entry is not ForCausalLMLoss → no shift.
+            from transformers import LlamaForTokenClassification
+
+            model = LlamaForTokenClassification(config)
+            trainer = Trainer(
+                model=model,
+                args=TrainingArguments(output_dir=tmp_dir, per_device_train_batch_size=2),
+            )
+            self.assertFalse(trainer._loss_shifts_labels)
+
+            # 5 valid + 8 valid = 13 (no shift).
+            batch_samples = [
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, -100, -100, -100]])},
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]])},
+            ]
+            num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(int(num_items), 13)
+
     @require_torch_multi_accelerator
     def test_num_batches_in_training_with_gradient_accumulation(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
