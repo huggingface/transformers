@@ -183,6 +183,44 @@ def test_get_cached_module_file_local_cache_key_includes_relative_import_sources
     assert cached_helper_b.read_text(encoding="utf-8") == 'MAGIC = "B"\n'
 
 
+def test_get_cached_module_file_local_copies_transitive_relative_imports(monkeypatch, tmp_path):
+    modules_cache = tmp_path / "hf_modules_cache"
+    monkeypatch.setattr(dynamic_module_utils, "HF_MODULES_CACHE", str(modules_cache))
+
+    model_dir = tmp_path / "pretrained" / "subdir"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    # A → B → C: only A is the entry point; C is a transitive dep that must still be copied
+    (model_dir / "custom_model.py").write_text("from .helper import VALUE\n", encoding="utf-8")
+    (model_dir / "helper.py").write_text("from .base import BASE\nVALUE = BASE\n", encoding="utf-8")
+    (model_dir / "base.py").write_text('BASE = "transitive"\n', encoding="utf-8")
+
+    cached_module = get_cached_module_file(str(model_dir), "custom_model.py")
+    cache_dir = modules_cache / Path(cached_module).parent
+
+    assert (cache_dir / "helper.py").exists(), "direct import must be copied"
+    assert (cache_dir / "base.py").exists(), "transitive import must be copied"
+
+
+def test_get_cached_module_file_local_cache_key_includes_transitive_import_sources(monkeypatch, tmp_path):
+    modules_cache = tmp_path / "hf_modules_cache"
+    monkeypatch.setattr(dynamic_module_utils, "HF_MODULES_CACHE", str(modules_cache))
+
+    for model_dir, base_val in [
+        (tmp_path / "pretrained_a" / "subdir", '"X"'),
+        (tmp_path / "pretrained_b" / "subdir", '"Y"'),
+    ]:
+        model_dir.mkdir(parents=True, exist_ok=True)
+        (model_dir / "custom_model.py").write_text("from .helper import VALUE\n", encoding="utf-8")
+        (model_dir / "helper.py").write_text("from .base import BASE\nVALUE = BASE\n", encoding="utf-8")
+        (model_dir / "base.py").write_text(f"BASE = {base_val}\n", encoding="utf-8")
+
+    cached_a = get_cached_module_file(str(tmp_path / "pretrained_a" / "subdir"), "custom_model.py")
+    cached_b = get_cached_module_file(str(tmp_path / "pretrained_b" / "subdir"), "custom_model.py")
+
+    # Different content in transitive dep → different hash → different cache dirs
+    assert cached_a != cached_b
+
+
 def test_get_cached_module_file_local_cache_key_keeps_hash_stable_with_different_basenames(monkeypatch, tmp_path):
     modules_cache = tmp_path / "hf_modules_cache"
     monkeypatch.setattr(dynamic_module_utils, "HF_MODULES_CACHE", str(modules_cache))
