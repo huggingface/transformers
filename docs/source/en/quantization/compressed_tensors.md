@@ -50,7 +50,7 @@ pip install -e .
 
 Search using the compressed-tensors [tag](https://huggingface.co/models?other=compressed-tensors) to find a compatible model on the Hugging Face Hub.
 
-Only models that have already been quantized can be loaded at the moment, and once a model is loaded, it cannot be saved. To quantize a model into the compressed-tensors format, see [llm-compressor](https://github.com/vllm-project/llm-compressor). Alternatively, models can be created independently and serizlied with a compressed-tensors config.
+Pre-quantized models can be loaded directly, or BF16 models can be quantized to FP8 on-the-fly during loading (see [Online FP8 quantization](#online-fp8-quantization)). To quantize a model into the compressed-tensors format, see [llm-compressor](https://github.com/vllm-project/llm-compressor). Alternatively, models can be created independently and serialized with a compressed-tensors config.
 
 ```python
 from transformers import AutoModelForCausalLM
@@ -76,8 +76,10 @@ Transformers automatically uses hardware-accelerated FP8 matmul kernels (`torch.
 
 The FP8 kernel path supports these quantization layouts.
 
-- **Per-channel dynamic**: e.g. [RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic](https://huggingface.co/RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic)
-- **Per-tensor static**: e.g. [RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8](https://huggingface.co/RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8)
+| Strategy | Example model |
+|----------|---------------|
+| Per-channel dynamic | [RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic](https://huggingface.co/RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic) |
+| Per-tensor static | [RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8](https://huggingface.co/RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8) |
 
 ### Loading a pre-quantized FP8 model
 
