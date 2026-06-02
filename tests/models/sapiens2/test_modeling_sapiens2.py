@@ -368,29 +368,6 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_pointmap_estimation()
         self.model_tester.create_and_check_for_matting(*config_and_inputs)
 
-    def test_output_hidden_states(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**inputs_dict, output_hidden_states=True)
-
-            self.assertIsNotNone(outputs.hidden_states)
-            expected_num_hidden_states = config.num_hidden_layers + 1
-            self.assertEqual(len(outputs.hidden_states), expected_num_hidden_states)
-
-            for hidden_state in outputs.hidden_states:
-                expected_shape = (
-                    self.model_tester.batch_size,
-                    self.model_tester.seq_length,
-                    self.model_tester.hidden_size,
-                )
-                self.assertEqual(hidden_state.shape, expected_shape)
-
     def test_batching_equivalence(self, atol=1e-4, rtol=1e-4):
         # InstanceNorm2d in the decoder heads computes per-instance statistics; different batch
         # sizes can trigger different parallelisation paths on CPU, producing O(1e-5) FP differences.
