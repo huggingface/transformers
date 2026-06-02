@@ -182,7 +182,12 @@ class AutoHfQuantizer:
     """
 
     @classmethod
-    def from_config(cls, quantization_config: QuantizationConfigMixin | dict, **kwargs):
+    def resolve(cls, quantization_config: QuantizationConfigMixin | dict):
+        """Resolve a (possibly dict) quantization config to its `(config_object, HfQuantizer subclass)`.
+
+        Does not instantiate the quantizer, so callers can inspect class-level attributes (e.g.
+        `requires_calibration`) without triggering backend imports or `__init__` side effects.
+        """
         # Convert it to a QuantizationConfig if the q_config is a dict
         if isinstance(quantization_config, dict):
             quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
@@ -207,7 +212,11 @@ class AutoHfQuantizer:
                 f" {list(AUTO_QUANTIZER_MAPPING.keys())}"
             )
 
-        target_cls = AUTO_QUANTIZER_MAPPING[quant_method]
+        return quantization_config, AUTO_QUANTIZER_MAPPING[quant_method]
+
+    @classmethod
+    def from_config(cls, quantization_config: QuantizationConfigMixin | dict, **kwargs):
+        quantization_config, target_cls = cls.resolve(quantization_config)
         return target_cls(quantization_config, **kwargs)
 
     @classmethod

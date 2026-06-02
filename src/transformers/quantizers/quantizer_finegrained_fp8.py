@@ -22,7 +22,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
-    supports_quantize_on_init = True
     quantization_config: "FineGrainedFP8Config"
 
     def __init__(self, quantization_config, **kwargs):

@@ -81,15 +81,9 @@ class HfQuantizer(ABC):
             The quantization config that defines the quantization parameters of your model that you want to quantize.
         requires_calibration (`bool`):
             Whether the quantization method requires to calibrate the model before using it.
-        supports_quantize_on_init (`bool`):
-            Whether the quantization method can quantize a freshly-constructed model in-place (i.e. directly from
-            `cls(config)` / `AutoModel.from_config`, with no checkpoint), by quantizing the randomly-initialized
-            weights. Quantizers that need calibration data or otherwise assume a pre-quantized checkpoint should
-            leave this `False`. See `PreTrainedModel._maybe_quantize_on_init`.
     """
 
     requires_calibration = False
-    supports_quantize_on_init = False
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
