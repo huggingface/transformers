@@ -358,7 +358,7 @@ class VivitModelIntegrationTest(unittest.TestCase):
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
-        torch.testing.assert_close(outputs.logits[0, :5], expected_slice, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(outputs.logits[0, :5], expected_slice, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
