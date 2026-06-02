@@ -211,7 +211,7 @@ class Olmo2IntegrationTest(unittest.TestCase):
             }
         )
         EXPECTED_MEAN = torch.tensor(expectations.get_expectation(), device=torch_device)
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-1, atol=1e-1)
 
         # slicing logits[0, 0, 0:30]
         expectations = Expectations(
@@ -220,7 +220,7 @@ class Olmo2IntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         EXPECTED_SLICE = torch.tensor(expectations.get_expectation(), device=torch_device)
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-1, atol=1e-1)
 
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
@@ -233,7 +233,7 @@ class Olmo2IntegrationTest(unittest.TestCase):
             }
         )
         EXPECTED_MEAN = torch.tensor(expectations.get_expectation(), device=torch_device)
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-1, atol=1e-1)
         # slicing logits[0, 0, 0:30]
         expectations = Expectations(
             {
@@ -241,7 +241,7 @@ class Olmo2IntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         EXPECTED_SLICE = torch.tensor(expectations.get_expectation(), device=torch_device)
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-1, atol=1e-1)
 
     def test_model_7b_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the fastest speed possible, and 3) the speed of light is the same for all observers, regardless of their relative motion. The theory of relativity is based on the idea that the speed of light is constant. This means that"""

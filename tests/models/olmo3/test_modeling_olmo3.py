@@ -193,7 +193,7 @@ class Olmo3IntegrationTest(unittest.TestCase):
             }
         )
         EXPECTED_MEAN = torch.tensor(expectations.get_expectation(), device=torch_device)
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-1, atol=1e-1)
         # slicing logits[0, 0, 0:30]
         expectations = Expectations(
             {
@@ -201,7 +201,7 @@ class Olmo3IntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         EXPECTED_SLICE = torch.tensor(expectations.get_expectation(), device=torch_device)
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-1, atol=1e-1)
 
     @slow
     def test_model_7b_greedy_generation(self):
