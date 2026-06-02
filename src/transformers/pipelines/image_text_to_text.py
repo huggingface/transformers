@@ -441,7 +441,7 @@ class ImageTextToTextPipeline(Pipeline):
             generated_texts = new_generated_texts
         if return_type == ReturnType.FULL_TEXT:
             full_texts = []
-            for prompt_text, generated_text in zip(input_texts, generated_texts):
+            for prompt_text, generated_text, decoded_input in zip(input_texts, generated_texts, decoded_inputs):
                 if isinstance(prompt_text, str):
                     generated_text = prompt_text + generated_text
                 elif isinstance(prompt_text, Chat):
@@ -461,9 +461,13 @@ class ImageTextToTextPipeline(Pipeline):
                         ]
                     else:
                         # When we're not starting from a prefill, the output is a new assistant message
-                        if getattr(self.tokenizer, "response_template", None) or getattr(
-                            self.tokenizer, "response_schema", None
-                        ):
+                        if getattr(self.tokenizer, "response_template", None) is not None:
+                            # New-style templates need to see the prompt as `prefix`, because chat
+                            # templates often pre-write part of the assistant message (e.g. an
+                            # opening <think> tag), which affects parsing.
+                            assistant_message = self.tokenizer.parse_response(generated_text, prefix=decoded_input)
+                        elif getattr(self.tokenizer, "response_schema", None) is not None:
+                            # Legacy schemas parse the generated text alone and don't support `prefix`
                             assistant_message = self.tokenizer.parse_response(generated_text)
                         else:
                             assistant_message = {"role": "assistant", "content": generated_text}

@@ -485,9 +485,18 @@ class TextGenerationPipeline(Pipeline):
                             ]
                         else:
                             # When we're not starting from a prefill, the output is a new assistant message
-                            if getattr(self.tokenizer, "response_template", None) or getattr(
-                                self.tokenizer, "response_schema", None
-                            ):
+                            if getattr(self.tokenizer, "response_template", None) is not None:
+                                # New-style templates need to see the prompt as `prefix`, because chat
+                                # templates often pre-write part of the assistant message (e.g. an
+                                # opening <think> tag), which affects parsing.
+                                prompt_prefix = self.tokenizer.decode(
+                                    sequence[:prompt_token_length],
+                                    skip_special_tokens=skip_special_tokens,
+                                    clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                                )
+                                assistant_message = self.tokenizer.parse_response(all_text, prefix=prompt_prefix)
+                            elif getattr(self.tokenizer, "response_schema", None) is not None:
+                                # Legacy schemas parse the generated text alone and don't support `prefix`
                                 assistant_message = self.tokenizer.parse_response(all_text)
                             else:
                                 # If there's no schema, then we have to assume it's all content

@@ -3388,14 +3388,27 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             )
 
         if not isinstance(response, str):
-            response = self.decode(response)
+            try:
+                response = self.decode(response)
+            except TypeError as e:
+                # e.g. a list of strings or list of token-id lists, which `decode` can't handle
+                raise ValueError(
+                    "`parse_response` currently accepts a single sequence only. "
+                    "For batched inputs, call `parse_response` per item."
+                ) from e
         if not isinstance(response, str):
             raise ValueError(
                 "`parse_response` currently accepts a single sequence only. "
                 "For batched inputs, call `parse_response` per item."
             )
         if prefix is not None and not isinstance(prefix, str):
-            prefix = self.decode(prefix)
+            try:
+                prefix = self.decode(prefix)
+            except TypeError as e:
+                raise ValueError(
+                    "`prefix=` currently accepts a single sequence only. "
+                    "For batched inputs, call `parse_response` per item."
+                ) from e
             if not isinstance(prefix, str):
                 raise ValueError(
                     "`prefix=` currently accepts a single sequence only. "
