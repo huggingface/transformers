@@ -24,7 +24,6 @@ from lighteval.tasks.requests import Doc
 from tabulate import tabulate
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, ContinuousBatchingConfig, GenerationConfig
-from transformers.distributed import DistributedConfig
 
 
 # Defaults
