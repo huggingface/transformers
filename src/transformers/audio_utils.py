@@ -19,9 +19,11 @@ and remove unnecessary dependencies.
 import base64
 import importlib
 import io
+import math
 import os
 import warnings
 from collections.abc import Sequence
+from dataclasses import dataclass, field, fields
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, Union
 
@@ -33,6 +35,7 @@ from .utils import (
     is_librosa_available,
     is_numpy_array,
     is_soundfile_available,
+    is_torch_available,
     is_torch_tensor,
     is_torchcodec_available,
     requires_backends,
@@ -56,6 +59,123 @@ if is_torchcodec_available():
     TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
 
 AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]
+
+
+@dataclass(frozen=True)
+class StftConfig:
+    """Configuration for Short-Time Fourier Transform.
+
+    Uses torchaudio parameter naming conventions. See
+    `torchaudio.transforms.MelSpectrogram` for reference.
+    """
+
+    n_fft: int = 400
+    win_length: int | None = None
+    hop_length: int | None = None
+    window_fn: str = "hann_window"
+    wkwargs: dict | None = None
+    power: float = 2.0
+    center: bool = True
+    pad_mode: str = "reflect"
+    normalized: bool = False
+    onesided: bool | None = None
+    periodic: bool = True
+    left_align_fft: bool = False
+    window_dtype: str | None = None
+
+    def to_dict(self) -> dict:
+        return {f.name: getattr(self, f.name) for f in fields(self) if getattr(self, f.name) is not None}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "StftConfig":
+        valid_keys = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in d.items() if k in valid_keys})
+
+
+@dataclass(frozen=True)
+class MelScaleConfig:
+    """Configuration for mel filterbank.
+
+    Uses torchaudio parameter naming conventions. See
+    `torchaudio.transforms.MelSpectrogram` for reference.
+    """
+
+    n_mels: int = 128
+    f_min: float = 0.0
+    f_max: float | None = None
+    mel_scale: str = "htk"
+    norm: str | None = None
+    triangularize_in_mel_space: bool = False
+    frequency_bin_mode: str = "rfft"
+    computation_dtype: str | None = None
+    bands_to_zero: int = 0
+    matmul_order: str = "filters_first"
+
+    def to_dict(self) -> dict:
+        return {f.name: getattr(self, f.name) for f in fields(self) if getattr(self, f.name) is not None}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "MelScaleConfig":
+        valid_keys = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in d.items() if k in valid_keys})
+
+
+@dataclass(frozen=True)
+class SpectrogramConfig:
+    """Configuration for spectrogram extraction, composed of STFT and mel scale sub-configs."""
+
+    stft_config: StftConfig = field(default_factory=StftConfig)
+    mel_scale_config: MelScaleConfig | None = None
+    log_mode: str = "log10"
+    chunk_length: int | None = None
+    preemphasis: float | None = None
+    remove_dc_offset: bool = False
+    mel_floor: float = 1e-10
+    waveform_scale: float | None = None
+    computation_dtype: str | None = None
+    skip_last_frame: bool = False
+
+    def __getitem__(self, key):
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(f"Key {key} not found in SpectrogramConfig.")
+
+    def __iter__(self):
+        for f in fields(self):
+            val = getattr(self, f.name)
+            if val is not None:
+                if hasattr(val, "to_dict"):
+                    yield f.name, val.to_dict()
+                else:
+                    yield f.name, val
+
+    def __eq__(self, other):
+        if isinstance(other, dict):
+            return dict(self) == other
+        if isinstance(other, SpectrogramConfig):
+            return tuple(getattr(self, f.name) for f in fields(self)) == tuple(
+                getattr(other, f.name) for f in fields(self)
+            )
+        return NotImplemented
+
+    def to_dict(self) -> dict:
+        return dict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "SpectrogramConfig":
+        stft_config = StftConfig.from_dict(d["stft_config"]) if "stft_config" in d else StftConfig()
+        mel_scale_config = MelScaleConfig.from_dict(d["mel_scale_config"]) if "mel_scale_config" in d else None
+        return cls(
+            stft_config=stft_config,
+            mel_scale_config=mel_scale_config,
+            log_mode=d.get("log_mode", "log10"),
+            chunk_length=d.get("chunk_length"),
+            preemphasis=d.get("preemphasis"),
+            remove_dc_offset=d.get("remove_dc_offset", False),
+            mel_floor=d.get("mel_floor", 1e-10),
+            waveform_scale=d.get("waveform_scale"),
+            skip_last_frame=d.get("skip_last_frame", False),
+        )
 
 
 @retry(exceptions=(httpx.HTTPError,))
@@ -281,78 +401,6 @@ def make_list_of_audio(
     raise ValueError("Invalid input type. Must be a single audio or a list of audio")
 
 
-def hertz_to_mel(freq: float | np.ndarray, mel_scale: str = "htk") -> float | np.ndarray:
-    """
-    Convert frequency from hertz to mels.
-
-    Args:
-        freq (`float` or `np.ndarray`):
-            The frequency, or multiple frequencies, in hertz (Hz).
-        mel_scale (`str`, *optional*, defaults to `"htk"`):
-            The mel frequency scale to use, `"htk"`, `"kaldi"` or `"slaney"`.
-
-    Returns:
-        `float` or `np.ndarray`: The frequencies on the mel scale.
-    """
-
-    if mel_scale not in ["slaney", "htk", "kaldi"]:
-        raise ValueError('mel_scale should be one of "htk", "slaney" or "kaldi".')
-
-    if mel_scale == "htk":
-        return 2595.0 * np.log10(1.0 + (freq / 700.0))
-    elif mel_scale == "kaldi":
-        return 1127.0 * np.log(1.0 + (freq / 700.0))
-
-    min_log_hertz = 1000.0
-    min_log_mel = 15.0
-    logstep = 27.0 / np.log(6.4)
-    mels = 3.0 * freq / 200.0
-
-    if isinstance(freq, np.ndarray):
-        log_region = freq >= min_log_hertz
-        mels[log_region] = min_log_mel + np.log(freq[log_region] / min_log_hertz) * logstep
-    elif freq >= min_log_hertz:
-        mels = min_log_mel + np.log(freq / min_log_hertz) * logstep
-
-    return mels
-
-
-def mel_to_hertz(mels: float | np.ndarray, mel_scale: str = "htk") -> float | np.ndarray:
-    """
-    Convert frequency from mels to hertz.
-
-    Args:
-        mels (`float` or `np.ndarray`):
-            The frequency, or multiple frequencies, in mels.
-        mel_scale (`str`, *optional*, `"htk"`):
-            The mel frequency scale to use, `"htk"`, `"kaldi"` or `"slaney"`.
-
-    Returns:
-        `float` or `np.ndarray`: The frequencies in hertz.
-    """
-
-    if mel_scale not in ["slaney", "htk", "kaldi"]:
-        raise ValueError('mel_scale should be one of "htk", "slaney" or "kaldi".')
-
-    if mel_scale == "htk":
-        return 700.0 * (np.power(10, mels / 2595.0) - 1.0)
-    elif mel_scale == "kaldi":
-        return 700.0 * (np.exp(mels / 1127.0) - 1.0)
-
-    min_log_hertz = 1000.0
-    min_log_mel = 15.0
-    logstep = np.log(6.4) / 27.0
-    freq = 200.0 * mels / 3.0
-
-    if isinstance(mels, np.ndarray):
-        log_region = mels >= min_log_mel
-        freq[log_region] = min_log_hertz * np.exp(logstep * (mels[log_region] - min_log_mel))
-    elif mels >= min_log_mel:
-        freq = min_log_hertz * np.exp(logstep * (mels - min_log_mel))
-
-    return freq
-
-
 def hertz_to_octave(freq: float | np.ndarray, tuning: float = 0.0, bins_per_octave: int = 12):
     """
     Convert frequency from hertz to fractional octave numbers.
@@ -372,28 +420,6 @@ def hertz_to_octave(freq: float | np.ndarray, tuning: float = 0.0, bins_per_octa
     stuttgart_pitch = 440.0 * 2.0 ** (tuning / bins_per_octave)
     octave = np.log2(freq / (float(stuttgart_pitch) / 16))
     return octave
-
-
-def _create_triangular_filter_bank(fft_freqs: np.ndarray, filter_freqs: np.ndarray) -> np.ndarray:
-    """
-    Creates a triangular filter bank.
-
-    Adapted from *torchaudio* and *librosa*.
-
-    Args:
-        fft_freqs (`np.ndarray` of shape `(num_frequency_bins,)`):
-            Discrete frequencies of the FFT bins in Hz.
-        filter_freqs (`np.ndarray` of shape `(num_mel_filters,)`):
-            Center frequencies of the triangular filters to create, in Hz.
-
-    Returns:
-        `np.ndarray` of shape `(num_frequency_bins, num_mel_filters)`
-    """
-    filter_diff = np.diff(filter_freqs)
-    slopes = np.expand_dims(filter_freqs, 0) - np.expand_dims(fft_freqs, 1)
-    down_slopes = -slopes[:, :-2] / filter_diff[:-1]
-    up_slopes = slopes[:, 2:] / filter_diff[1:]
-    return np.maximum(np.zeros(1), np.minimum(down_slopes, up_slopes))
 
 
 def chroma_filter_bank(
@@ -469,100 +495,6 @@ def chroma_filter_bank(
 
     # remove aliasing columns, copy to ensure row-contiguity
     return np.ascontiguousarray(chroma_filters[:, : int(1 + num_frequency_bins / 2)])
-
-
-def mel_filter_bank(
-    num_frequency_bins: int,
-    num_mel_filters: int,
-    min_frequency: float,
-    max_frequency: float,
-    sampling_rate: int,
-    norm: str | None = None,
-    mel_scale: str = "htk",
-    triangularize_in_mel_space: bool = False,
-) -> np.ndarray:
-    """
-    Creates a frequency bin conversion matrix used to obtain a mel spectrogram. This is called a *mel filter bank*, and
-    various implementation exist, which differ in the number of filters, the shape of the filters, the way the filters
-    are spaced, the bandwidth of the filters, and the manner in which the spectrum is warped. The goal of these
-    features is to approximate the non-linear human perception of the variation in pitch with respect to the frequency.
-
-    Different banks of mel filters were introduced in the literature. The following variations are supported:
-
-    - MFCC FB-20: introduced in 1980 by Davis and Mermelstein, it assumes a sampling frequency of 10 kHz and a speech
-      bandwidth of `[0, 4600]` Hz.
-    - MFCC FB-24 HTK: from the Cambridge HMM Toolkit (HTK) (1995) uses a filter bank of 24 filters for a speech
-      bandwidth of `[0, 8000]` Hz. This assumes sampling rate ≥ 16 kHz.
-    - MFCC FB-40: from the Auditory Toolbox for MATLAB written by Slaney in 1998, assumes a sampling rate of 16 kHz and
-      speech bandwidth of `[133, 6854]` Hz. This version also includes area normalization.
-    - HFCC-E FB-29 (Human Factor Cepstral Coefficients) of Skowronski and Harris (2004), assumes a sampling rate of
-      12.5 kHz and speech bandwidth of `[0, 6250]` Hz.
-
-    This code is adapted from *torchaudio* and *librosa*. Note that the default parameters of torchaudio's
-    `melscale_fbanks` implement the `"htk"` filters while librosa uses the `"slaney"` implementation.
-
-    Args:
-        num_frequency_bins (`int`):
-            Number of frequency bins (should be the same as `n_fft // 2 + 1` where `n_fft` is the size of the Fourier Transform used to compute the spectrogram).
-        num_mel_filters (`int`):
-            Number of mel filters to generate.
-        min_frequency (`float`):
-            Lowest frequency of interest in Hz.
-        max_frequency (`float`):
-            Highest frequency of interest in Hz. This should not exceed `sampling_rate / 2`.
-        sampling_rate (`int`):
-            Sample rate of the audio waveform.
-        norm (`str`, *optional*):
-            If `"slaney"`, divide the triangular mel weights by the width of the mel band (area normalization).
-        mel_scale (`str`, *optional*, defaults to `"htk"`):
-            The mel frequency scale to use, `"htk"`, `"kaldi"` or `"slaney"`.
-        triangularize_in_mel_space (`bool`, *optional*, defaults to `False`):
-            If this option is enabled, the triangular filter is applied in mel space rather than frequency space. This
-            should be set to `true` in order to get the same results as `torchaudio` when computing mel filters.
-
-    Returns:
-        `np.ndarray` of shape (`num_frequency_bins`, `num_mel_filters`): Triangular filter bank matrix. This is a
-        projection matrix to go from a spectrogram to a mel spectrogram.
-    """
-    if norm is not None and norm != "slaney":
-        raise ValueError('norm must be one of None or "slaney"')
-
-    if num_frequency_bins < 2:
-        raise ValueError(f"Require num_frequency_bins: {num_frequency_bins} >= 2")
-
-    if min_frequency > max_frequency:
-        raise ValueError(f"Require min_frequency: {min_frequency} <= max_frequency: {max_frequency}")
-
-    # center points of the triangular mel filters
-    mel_min = hertz_to_mel(min_frequency, mel_scale=mel_scale)
-    mel_max = hertz_to_mel(max_frequency, mel_scale=mel_scale)
-    mel_freqs = np.linspace(mel_min, mel_max, num_mel_filters + 2)
-    filter_freqs = mel_to_hertz(mel_freqs, mel_scale=mel_scale)
-
-    if triangularize_in_mel_space:
-        # frequencies of FFT bins in Hz, but filters triangularized in mel space
-        fft_bin_width = sampling_rate / ((num_frequency_bins - 1) * 2)
-        fft_freqs = hertz_to_mel(fft_bin_width * np.arange(num_frequency_bins), mel_scale=mel_scale)
-        filter_freqs = mel_freqs
-    else:
-        # frequencies of FFT bins in Hz
-        fft_freqs = np.linspace(0, sampling_rate // 2, num_frequency_bins)
-
-    mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs)
-
-    if norm is not None and norm == "slaney":
-        # Slaney-style mel is scaled to be approx constant energy per channel
-        enorm = 2.0 / (filter_freqs[2 : num_mel_filters + 2] - filter_freqs[:num_mel_filters])
-        mel_filters *= np.expand_dims(enorm, 0)
-
-    if (mel_filters.max(axis=0) == 0.0).any():
-        warnings.warn(
-            "At least one mel filter has all zero values. "
-            f"The value for `num_mel_filters` ({num_mel_filters}) may be set too high. "
-            f"Or, the value for `num_frequency_bins` ({num_frequency_bins}) may be set too low."
-        )
-
-    return mel_filters
 
 
 def optimal_fft_length(window_length: int) -> int:
@@ -641,435 +573,284 @@ def window_function(
     return padded_window
 
 
-# Note: This method processes a single waveform. For batch processing, use spectrogram_batch().
-def spectrogram(
-    waveform: np.ndarray,
-    window: np.ndarray,
-    frame_length: int,
-    hop_length: int,
-    fft_length: int | None = None,
-    power: float | None = 1.0,
-    center: bool = True,
-    pad_mode: str = "reflect",
-    onesided: bool = True,
-    dither: float = 0.0,
-    preemphasis: float | None = None,
-    mel_filters: np.ndarray | None = None,
-    mel_floor: float = 1e-10,
-    log_mel: str | None = None,
-    reference: float = 1.0,
-    min_value: float = 1e-10,
-    db_range: float | None = None,
-    remove_dc_offset: bool = False,
-    dtype: np.dtype = np.float32,
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Audio math helpers (numpy/torch agnostic)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _array_namespace(x):
+    """Return the array module (``numpy`` or ``torch``) matching ``x``.
+
+    Raises ``TypeError`` for unknown types. Use :func:`_xp_or_math` instead when
+    Python scalars are also valid input.
+    """
+    if isinstance(x, np.ndarray):
+        return np
+    if is_torch_available():
+        import torch
+
+        if isinstance(x, torch.Tensor):
+            return torch
+    raise TypeError(f"Unsupported array type: {type(x)}")
+
+
+def _xp_or_math(x):
+    """Like :func:`_array_namespace` but returns ``math`` for Python scalars.
+
+    Lets scalar-or-array math be written once: ``math.log10`` has the right
+    signature for Python floats; numpy and torch use the same names on arrays.
+    """
+    if isinstance(x, (int, float)):
+        return math
+    return _array_namespace(x)
+
+
+def _clamp_min(x, min_value):
+    """Element-wise ``max(x, min_value)`` for numpy arrays or torch tensors.
+
+    Needed because ``np.maximum(arr, scalar)`` accepts a Python scalar but
+    ``torch.maximum(tensor, scalar)`` does not — and ``torch.clamp(x, min=)``
+    has a different kwarg name than ``np.clip(x, a_min=)``.
+    """
+    if isinstance(x, np.ndarray):
+        return np.maximum(x, min_value)
+    return x.clamp(min=min_value)
+
+
+def hertz_to_mel(freq: float | np.ndarray, mel_scale: str = "htk"):
+    """
+    Convert frequency from hertz to mels.
+
+    Args:
+        freq (`float`, `np.ndarray`, or `torch.Tensor`):
+            The frequency, or multiple frequencies, in hertz (Hz).
+        mel_scale (`str`, *optional*, defaults to `"htk"`):
+            The mel frequency scale to use, `"htk"`, `"kaldi"` or `"slaney"`.
+
+    Returns:
+        The frequencies on the mel scale, in the same form as the input.
+    """
+    if mel_scale not in ("htk", "kaldi", "slaney"):
+        raise ValueError('mel_scale should be one of "htk", "slaney" or "kaldi".')
+
+    xp = _xp_or_math(freq)
+
+    if mel_scale == "htk":
+        return 2595.0 * xp.log10(1.0 + freq / 700.0)
+    if mel_scale == "kaldi":
+        return 1127.0 * xp.log(1.0 + freq / 700.0)
+
+    # slaney: linear below 1000 Hz, logarithmic above. The constants are written
+    # differently per backend to preserve bit-exact parity with librosa (numpy) and
+    # torchaudio (torch) — they use different float32 rounding paths.
+    min_log_hertz = 1000.0
+    min_log_mel = 15.0
+
+    if xp is math:
+        if freq >= min_log_hertz:
+            return min_log_mel + math.log(freq / min_log_hertz) * 27.0 / math.log(6.4)
+        return 3.0 * freq / 200.0
+
+    if xp is np:
+        linear = 3.0 * freq / 200.0
+        logstep = 27.0 / np.log(6.4)
+    else:  # torch — float32-tensor logstep matches torchaudio
+        import torch
+
+        linear = freq / (200.0 / 3.0)
+        logstep = 27.0 / torch.log(torch.tensor(6.4))
+
+    # Guard log against discarded-branch values; xp.where evaluates both branches.
+    safe = _clamp_min(freq, min_log_hertz)
+    log_branch = min_log_mel + xp.log(safe / min_log_hertz) * logstep
+    return xp.where(freq >= min_log_hertz, log_branch, linear)
+
+
+def mel_to_hertz(mels: float | np.ndarray, mel_scale: str = "htk"):
+    """
+    Convert frequency from mels to hertz.
+
+    Args:
+        mels (`float`, `np.ndarray`, or `torch.Tensor`):
+            The frequency, or multiple frequencies, in mels.
+        mel_scale (`str`, *optional*, defaults to `"htk"`):
+            The mel frequency scale to use, `"htk"`, `"kaldi"` or `"slaney"`.
+
+    Returns:
+        The frequencies in hertz, in the same form as the input.
+    """
+    if mel_scale not in ("htk", "kaldi", "slaney"):
+        raise ValueError('mel_scale should be one of "htk", "slaney" or "kaldi".')
+
+    xp = _xp_or_math(mels)
+
+    if mel_scale == "htk":
+        return 700.0 * (10.0 ** (mels / 2595.0) - 1.0)
+    if mel_scale == "kaldi":
+        return 700.0 * (xp.exp(mels / 1127.0) - 1.0)
+
+    # slaney — see note in hertz_to_mel; constants are written per-backend for
+    # bit-exact parity with librosa (numpy) and torchaudio (torch).
+    min_log_hertz = 1000.0
+    min_log_mel = 15.0
+
+    if xp is math:
+        if mels >= min_log_mel:
+            return min_log_hertz * math.exp(math.log(6.4) / 27.0 * (mels - min_log_mel))
+        return 200.0 * mels / 3.0
+
+    if xp is np:
+        linear = 200.0 * mels / 3.0
+        logstep = np.log(6.4) / 27.0
+    else:  # torch — match old per-backend precision (Python-float logstep here,
+        # though the reciprocal in hertz_to_mel uses a float32 tensor — old code
+        # was inconsistent and we preserve that for bit-exact parity).
+        linear = (200.0 / 3.0) * mels
+        logstep = math.log(6.4) / 27.0
+
+    log_branch = min_log_hertz * xp.exp(logstep * (mels - min_log_mel))
+    return xp.where(mels >= min_log_mel, log_branch, linear)
+
+
+def _create_triangular_filter_bank(fft_freqs, filter_freqs):
+    """
+    Triangular filter bank from FFT bin frequencies and filter center frequencies.
+
+    Adapted from *torchaudio* and *librosa*. Works on numpy or torch inputs.
+
+    Args:
+        fft_freqs (array of shape `(num_frequency_bins,)`):
+            Discrete frequencies of the FFT bins (in Hz, or in mel space when
+            ``triangularize_in_mel_space=True``).
+        filter_freqs (array of shape `(num_mel_filters + 2,)`):
+            Edges and center frequencies of the triangular filters.
+
+    Returns:
+        Filter bank of shape `(num_frequency_bins, num_mel_filters)`.
+    """
+    xp = _array_namespace(fft_freqs)
+    filter_diff = filter_freqs[1:] - filter_freqs[:-1]
+    slopes = filter_freqs[None, :] - fft_freqs[:, None]
+    down_slopes = -slopes[:, :-2] / filter_diff[:-1]
+    up_slopes = slopes[:, 2:] / filter_diff[1:]
+    return _clamp_min(xp.minimum(down_slopes, up_slopes), 0)
+
+
+def mel_filter_bank(
+    num_frequency_bins: int,
+    num_mel_filters: int,
+    min_frequency: float,
+    max_frequency: float,
+    sampling_rate: int,
+    norm: str | None = None,
+    mel_scale: str = "htk",
+    triangularize_in_mel_space: bool = False,
+    dtype: np.dtype | None = None,
 ) -> np.ndarray:
     """
-    Calculates a spectrogram over one waveform using the Short-Time Fourier Transform.
+    Creates a frequency bin conversion matrix used to obtain a mel spectrogram. This is called a *mel filter bank*, and
+    various implementation exist, which differ in the number of filters, the shape of the filters, the way the filters
+    are spaced, the bandwidth of the filters, and the manner in which the spectrum is warped. The goal of these
+    features is to approximate the non-linear human perception of the variation in pitch with respect to the frequency.
 
-    This function can create the following kinds of spectrograms:
+    Different banks of mel filters were introduced in the literature. The following variations are supported:
 
-      - amplitude spectrogram (`power = 1.0`)
-      - power spectrogram (`power = 2.0`)
-      - complex-valued spectrogram (`power = None`)
-      - log spectrogram (use `log_mel` argument)
-      - mel spectrogram (provide `mel_filters`)
-      - log-mel spectrogram (provide `mel_filters` and `log_mel`)
+    - MFCC FB-20: introduced in 1980 by Davis and Mermelstein, it assumes a sampling frequency of 10 kHz and a speech
+      bandwidth of `[0, 4600]` Hz.
+    - MFCC FB-24 HTK: from the Cambridge HMM Toolkit (HTK) (1995) uses a filter bank of 24 filters for a speech
+      bandwidth of `[0, 8000]` Hz. This assumes sampling rate ≥ 16 kHz.
+    - MFCC FB-40: from the Auditory Toolbox for MATLAB written by Slaney in 1998, assumes a sampling rate of 16 kHz and
+      speech bandwidth of `[133, 6854]` Hz. This version also includes area normalization.
+    - HFCC-E FB-29 (Human Factor Cepstral Coefficients) of Skowronski and Harris (2004), assumes a sampling rate of
+      12.5 kHz and speech bandwidth of `[0, 6250]` Hz.
 
-    How this works:
-
-      1. The input waveform is split into frames of size `frame_length` that are partially overlapping by `frame_length
-         - hop_length` samples.
-      2. Each frame is multiplied by the window and placed into a buffer of size `fft_length`.
-      3. The DFT is taken of each windowed frame.
-      4. The results are stacked into a spectrogram.
-
-    We make a distinction between the following "blocks" of sample data, each of which may have a different lengths:
-
-      - The analysis frame. This is the size of the time slices that the input waveform is split into.
-      - The window. Each analysis frame is multiplied by the window to avoid spectral leakage.
-      - The FFT input buffer. The length of this determines how many frequency bins are in the spectrogram.
-
-    In this implementation, the window is assumed to be zero-padded to have the same size as the analysis frame. A
-    padded window can be obtained from `window_function()`. The FFT input buffer may be larger than the analysis frame,
-    typically the next power of two.
-
-    Note: This function is not optimized for speed yet. It should be mostly compatible with `librosa.stft` and
-    `torchaudio.functional.transforms.Spectrogram`, although it is more flexible due to the different ways spectrograms
-    can be constructed.
+    This code is adapted from *torchaudio* and *librosa*. Note that the default parameters of torchaudio's
+    `melscale_fbanks` implement the `"htk"` filters while librosa uses the `"slaney"` implementation.
 
     Args:
-        waveform (`np.ndarray` of shape `(length,)`):
-            The input waveform. This must be a single real-valued, mono waveform.
-        window (`np.ndarray` of shape `(frame_length,)`):
-            The windowing function to apply, including zero-padding if necessary. The actual window length may be
-            shorter than `frame_length`, but we're assuming the array has already been zero-padded.
-        frame_length (`int`):
-            The length of the analysis frames in samples. With librosa this is always equal to `fft_length` but we also
-            allow smaller sizes.
-        hop_length (`int`):
-            The stride between successive analysis frames in samples.
-        fft_length (`int`, *optional*):
-            The size of the FFT buffer in samples. This determines how many frequency bins the spectrogram will have.
-            For optimal speed, this should be a power of two. If `None`, uses `frame_length`.
-        power (`float`, *optional*, defaults to 1.0):
-            If 1.0, returns the amplitude spectrogram. If 2.0, returns the power spectrogram. If `None`, returns
-            complex numbers.
-        center (`bool`, *optional*, defaults to `True`):
-            Whether to pad the waveform so that frame `t` is centered around time `t * hop_length`. If `False`, frame
-            `t` will start at time `t * hop_length`.
-        pad_mode (`str`, *optional*, defaults to `"reflect"`):
-            Padding mode used when `center` is `True`. Possible values are: `"constant"` (pad with zeros), `"edge"`
-            (pad with edge values), `"reflect"` (pads with mirrored values).
-        onesided (`bool`, *optional*, defaults to `True`):
-            If True, only computes the positive frequencies and returns a spectrogram containing `fft_length // 2 + 1`
-            frequency bins. If False, also computes the negative frequencies and returns `fft_length` frequency bins.
-        dither (`float`, *optional*, defaults to 0.0):
-            Adds dithering. In other words, adds a small Gaussian noise to each frame.
-            E.g. use 4.0 to add dithering with a normal distribution centered
-            around 0.0 with standard deviation 4.0, 0.0 means no dithering.
-            Dithering has similar effect as `mel_floor`. It reduces the high log_mel_fbank
-            values for signals with hard-zero sections, when VAD cutoff is present in the signal.
-        preemphasis (`float`, *optional*)
-            Coefficient for a low-pass filter that applies pre-emphasis before the DFT.
-        mel_filters (`np.ndarray` of shape `(num_freq_bins, num_mel_filters)`, *optional*):
-            The mel filter bank. If supplied, applies a this filter bank to create a mel spectrogram.
-        mel_floor (`float`, *optional*, defaults to 1e-10):
-            Minimum value of mel frequency banks.
-        log_mel (`str`, *optional*):
-            How to convert the spectrogram to log scale. Possible options are: `None` (don't convert), `"log"` (take
-            the natural logarithm) `"log10"` (take the base-10 logarithm), `"dB"` (convert to decibels). Can only be
-            used when `power` is not `None`.
-        reference (`float`, *optional*, defaults to 1.0):
-            Sets the input spectrogram value that corresponds to 0 dB. For example, use `np.max(spectrogram)` to set
-            the loudest part to 0 dB. Must be greater than zero.
-        min_value (`float`, *optional*, defaults to `1e-10`):
-            The spectrogram will be clipped to this minimum value before conversion to decibels, to avoid taking
-            `log(0)`. For a power spectrogram, the default of `1e-10` corresponds to a minimum of -100 dB. For an
-            amplitude spectrogram, the value `1e-5` corresponds to -100 dB. Must be greater than zero.
-        db_range (`float`, *optional*):
-            Sets the maximum dynamic range in decibels. For example, if `db_range = 80`, the difference between the
-            peak value and the smallest value will never be more than 80 dB. Must be greater than zero.
-        remove_dc_offset (`bool`, *optional*):
-            Subtract mean from waveform on each frame, applied before pre-emphasis. This should be set to `true` in
-            order to get the same results as `torchaudio.compliance.kaldi.fbank` when computing mel filters.
-        dtype (`np.dtype`, *optional*, defaults to `np.float32`):
-            Data type of the spectrogram tensor. If `power` is None, this argument is ignored and the dtype will be
-            `np.complex64`.
+        num_frequency_bins (`int`):
+            Number of frequency bins (should be the same as `n_fft // 2 + 1` where `n_fft` is the size of the Fourier Transform used to compute the spectrogram).
+        num_mel_filters (`int`):
+            Number of mel filters to generate.
+        min_frequency (`float`):
+            Lowest frequency of interest in Hz.
+        max_frequency (`float`):
+            Highest frequency of interest in Hz. This should not exceed `sampling_rate / 2`.
+        sampling_rate (`int`):
+            Sample rate of the audio waveform.
+        norm (`str`, *optional*):
+            If `"slaney"`, divide the triangular mel weights by the width of the mel band (area normalization).
+        mel_scale (`str`, *optional*, defaults to `"htk"`):
+            The mel frequency scale to use, `"htk"`, `"kaldi"` or `"slaney"`.
+        triangularize_in_mel_space (`bool`, *optional*, defaults to `False`):
+            If this option is enabled, the triangular filter is applied in mel space rather than frequency space. This
+            should be set to `true` in order to get the same results as `torchaudio` when computing mel filters.
 
     Returns:
-        `nd.array` containing a spectrogram of shape `(num_frequency_bins, length)` for a regular spectrogram or shape
-        `(num_mel_filters, length)` for a mel spectrogram.
+        `np.ndarray` of shape (`num_frequency_bins`, `num_mel_filters`): Triangular filter bank matrix. This is a
+        projection matrix to go from a spectrogram to a mel spectrogram.
     """
-    window_length = len(window)
+    if norm is not None and norm != "slaney":
+        raise ValueError('norm must be one of None or "slaney"')
 
-    if fft_length is None:
-        fft_length = frame_length
+    if num_frequency_bins < 2:
+        raise ValueError(f"Require num_frequency_bins: {num_frequency_bins} >= 2")
 
-    if frame_length > fft_length:
-        raise ValueError(f"frame_length ({frame_length}) may not be larger than fft_length ({fft_length})")
+    if min_frequency > max_frequency:
+        raise ValueError(f"Require min_frequency: {min_frequency} <= max_frequency: {max_frequency}")
 
-    if window_length != frame_length:
-        raise ValueError(f"Length of the window ({window_length}) must equal frame_length ({frame_length})")
+    # center points of the triangular mel filters
+    mel_min = hertz_to_mel(min_frequency, mel_scale=mel_scale)
+    mel_max = hertz_to_mel(max_frequency, mel_scale=mel_scale)
+    mel_freqs = np.linspace(mel_min, mel_max, num_mel_filters + 2)
+    filter_freqs = mel_to_hertz(mel_freqs, mel_scale=mel_scale)
 
-    if hop_length <= 0:
-        raise ValueError("hop_length must be greater than zero")
+    if triangularize_in_mel_space:
+        # frequencies of FFT bins in Hz, but filters triangularized in mel space
+        fft_bin_width = sampling_rate / ((num_frequency_bins - 1) * 2)
+        fft_freqs = hertz_to_mel(fft_bin_width * np.arange(num_frequency_bins), mel_scale=mel_scale)
+        filter_freqs = mel_freqs
+    else:
+        # frequencies of FFT bins in Hz
+        fft_freqs = np.linspace(0, sampling_rate // 2, num_frequency_bins)
 
-    if waveform.ndim != 1:
-        raise ValueError(f"Input waveform must have only one dimension, shape is {waveform.shape}")
+    if dtype is not None:
+        # Per-band computation matching librosa's precision path: compute slopes in float64,
+        # cast each band to dtype immediately. This replicates librosa's per-row assignment
+        # to a dtype-initialized array, which produces different rounding than computing all
+        # bands in float64 and casting at the end.
+        filter_diff = np.diff(filter_freqs)
+        ramps = np.subtract.outer(filter_freqs, fft_freqs)  # (num_mel_filters+2, num_frequency_bins)
+        mel_filters = np.zeros((num_frequency_bins, num_mel_filters), dtype=dtype)
+        for i in range(num_mel_filters):
+            lower = -ramps[i] / filter_diff[i]
+            upper = ramps[i + 2] / filter_diff[i + 1]
+            mel_filters[:, i] = np.maximum(0, np.minimum(lower, upper)).astype(dtype)
+    else:
+        mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs)
 
-    if np.iscomplexobj(waveform):
-        raise ValueError("Complex-valued input waveforms are not currently supported")
+    if norm is not None and norm == "slaney":
+        # Slaney-style mel is scaled to be approx constant energy per channel
+        enorm = 2.0 / (filter_freqs[2 : num_mel_filters + 2] - filter_freqs[:num_mel_filters])
+        mel_filters *= np.expand_dims(enorm, 0)
 
-    if power is None and mel_filters is not None:
-        raise ValueError(
-            "You have provided `mel_filters` but `power` is `None`. Mel spectrogram computation is not yet supported for complex-valued spectrogram."
-            "Specify `power` to fix this issue."
+    if (mel_filters.max(axis=0) == 0.0).any():
+        warnings.warn(
+            "At least one mel filter has all zero values. "
+            f"The value for `num_mel_filters` ({num_mel_filters}) may be set too high. "
+            f"Or, the value for `num_frequency_bins` ({num_frequency_bins}) may be set too low."
         )
 
-    # center pad the waveform
-    if center:
-        padding = [(int(frame_length // 2), int(frame_length // 2))]
-        waveform = np.pad(waveform, padding, mode=pad_mode)
-
-    # promote to float64, since np.fft uses float64 internally
-    waveform = waveform.astype(np.float64)
-    window = window.astype(np.float64)
-
-    # split waveform into frames of frame_length size
-    num_frames = int(1 + np.floor((waveform.size - frame_length) / hop_length))
-
-    num_frequency_bins = (fft_length // 2) + 1 if onesided else fft_length
-    spectrogram = np.empty((num_frames, num_frequency_bins), dtype=np.complex64)
-
-    # rfft is faster than fft
-    fft_func = np.fft.rfft if onesided else np.fft.fft
-    buffer = np.zeros(fft_length)
-
-    timestep = 0
-    for frame_idx in range(num_frames):
-        buffer[:frame_length] = waveform[timestep : timestep + frame_length]
-
-        if dither != 0.0:
-            buffer[:frame_length] += dither * np.random.randn(frame_length)
-
-        if remove_dc_offset:
-            buffer[:frame_length] = buffer[:frame_length] - buffer[:frame_length].mean()
-
-        if preemphasis is not None:
-            buffer[1:frame_length] -= preemphasis * buffer[: frame_length - 1]
-            buffer[0] *= 1 - preemphasis
-
-        buffer[:frame_length] *= window
-
-        spectrogram[frame_idx] = fft_func(buffer)
-        timestep += hop_length
-
-    # note: ** is much faster than np.power
-    if power is not None:
-        spectrogram = np.abs(spectrogram, dtype=np.float64) ** power
-
-    spectrogram = spectrogram.T
-
-    if mel_filters is not None:
-        spectrogram = np.maximum(mel_floor, np.dot(mel_filters.T, spectrogram))
-
-    if power is not None and log_mel is not None:
-        if log_mel == "log":
-            spectrogram = np.log(spectrogram)
-        elif log_mel == "log10":
-            spectrogram = np.log10(spectrogram)
-        elif log_mel == "dB":
-            if power == 1.0:
-                spectrogram = amplitude_to_db(spectrogram, reference, min_value, db_range)
-            elif power == 2.0:
-                spectrogram = power_to_db(spectrogram, reference, min_value, db_range)
-            else:
-                raise ValueError(f"Cannot use log_mel option '{log_mel}' with power {power}")
-        else:
-            raise ValueError(f"Unknown log_mel option: {log_mel}")
-
-        spectrogram = np.asarray(spectrogram, dtype)
-
-    return spectrogram
-
-
-def spectrogram_batch(
-    waveform_list: list[np.ndarray],
-    window: np.ndarray,
-    frame_length: int,
-    hop_length: int,
-    fft_length: int | None = None,
-    power: float | None = 1.0,
-    center: bool = True,
-    pad_mode: str = "reflect",
-    onesided: bool = True,
-    dither: float = 0.0,
-    preemphasis: float | None = None,
-    mel_filters: np.ndarray | None = None,
-    mel_floor: float = 1e-10,
-    log_mel: str | None = None,
-    reference: float = 1.0,
-    min_value: float = 1e-10,
-    db_range: float | None = None,
-    remove_dc_offset: bool = False,
-    dtype: np.dtype = np.float32,
-) -> list[np.ndarray]:
-    """
-    Calculates spectrograms for a list of waveforms using the Short-Time Fourier Transform, optimized for batch processing.
-    This function extends the capabilities of the `spectrogram` function to handle multiple waveforms efficiently by leveraging broadcasting.
-
-    It supports generating various types of spectrograms:
-
-        - amplitude spectrogram (`power = 1.0`)
-        - power spectrogram (`power = 2.0`)
-        - complex-valued spectrogram (`power = None`)
-        - log spectrogram (use `log_mel` argument)
-        - mel spectrogram (provide `mel_filters`)
-        - log-mel spectrogram (provide `mel_filters` and `log_mel`)
-
-    How this works:
-
-        1. The input waveform is split into frames of size `frame_length` that are partially overlapping by `frame_length
-            - hop_length` samples.
-        2. Each frame is multiplied by the window and placed into a buffer of size `fft_length`.
-        3. The DFT is taken of each windowed frame.
-        4. The results are stacked into a spectrogram.
-
-    We make a distinction between the following "blocks" of sample data, each of which may have a different lengths:
-
-      - The analysis frame. This is the size of the time slices that the input waveform is split into.
-      - The window. Each analysis frame is multiplied by the window to avoid spectral leakage.
-      - The FFT input buffer. The length of this determines how many frequency bins are in the spectrogram.
-
-    In this implementation, the window is assumed to be zero-padded to have the same size as the analysis frame. A
-    padded window can be obtained from `window_function()`. The FFT input buffer may be larger than the analysis frame,
-    typically the next power of two.
-
-    Note: This function is designed for efficient batch processing of multiple waveforms but retains compatibility with individual waveform processing methods like `librosa.stft`.
-
-    Args:
-        waveform_list (`list[np.ndarray]` with arrays of shape `(length,)`):
-            The list of input waveforms, each a single-channel (mono) signal.
-        window (`np.ndarray` of shape `(frame_length,)`):
-            The windowing function to apply, including zero-padding if necessary.
-        frame_length (`int`):
-            The length of each frame for analysis.
-        hop_length (`int`):
-            The step size between successive frames.
-        fft_length (`int`, *optional*):
-            The size of the FFT buffer, defining frequency bin resolution.
-        power (`float`, *optional*, defaults to 1.0):
-            Determines the type of spectrogram: 1.0 for amplitude, 2.0 for power, None for complex.
-        center (`bool`, *optional*, defaults to `True`):
-            Whether to center-pad the waveform frames.
-        pad_mode (`str`, *optional*, defaults to `"reflect"`):
-            The padding strategy when `center` is `True`.
-        onesided (`bool`, *optional*, defaults to `True`):
-            If True, returns a one-sided spectrogram for real input signals.
-        dither (`float`, *optional*, defaults to 0.0):
-            Adds dithering. In other words, adds a small Gaussian noise to each frame.
-            E.g. use 4.0 to add dithering with a normal distribution centered
-            around 0.0 with standard deviation 4.0, 0.0 means no dithering.
-        preemphasis (`float`, *optional*):
-            Applies a pre-emphasis filter to each frame.
-        mel_filters (`np.ndarray`, *optional*):
-            Mel filter bank for converting to mel spectrogram.
-        mel_floor (`float`, *optional*, defaults to 1e-10):
-            Floor value for mel spectrogram to avoid log(0).
-        log_mel (`str`, *optional*):
-            Specifies log scaling strategy; options are None, "log", "log10", "dB".
-        reference (`float`, *optional*, defaults to 1.0):
-            Reference value for dB conversion in log_mel.
-        min_value (`float`, *optional*, defaults to 1e-10):
-            Minimum floor value for log scale conversions.
-        db_range (`float`, *optional*):
-            Dynamic range for dB scale spectrograms.
-        remove_dc_offset (`bool`, *optional*):
-            Whether to remove the DC offset from each frame.
-        dtype (`np.dtype`, *optional*, defaults to `np.float32`):
-            Data type of the output spectrogram.
-
-    Returns:
-        list[`np.ndarray`]: A list of spectrogram arrays, one for each input waveform.
-    """
-    window_length = len(window)
-
-    if fft_length is None:
-        fft_length = frame_length
-
-    if frame_length > fft_length:
-        raise ValueError(f"frame_length ({frame_length}) may not be larger than fft_length ({fft_length})")
-
-    if window_length != frame_length:
-        raise ValueError(f"Length of the window ({window_length}) must equal frame_length ({frame_length})")
-
-    if hop_length <= 0:
-        raise ValueError("hop_length must be greater than zero")
-
-    # Check the dimensions of the waveform , and if waveform is complex
-    for waveform in waveform_list:
-        if waveform.ndim != 1:
-            raise ValueError(f"Input waveform must have only one dimension, shape is {waveform.shape}")
-        if np.iscomplexobj(waveform):
-            raise ValueError("Complex-valued input waveforms are not currently supported")
-    # Center pad the waveform
-    if center:
-        padding = [(int(frame_length // 2), int(frame_length // 2))]
-        waveform_list = [
-            np.pad(
-                waveform,
-                padding,
-                mode=pad_mode,
-            )
-            for waveform in waveform_list
-        ]
-    original_waveform_lengths = [
-        len(waveform) for waveform in waveform_list
-    ]  # these lengths will be used to remove padding later
-
-    # Batch pad the waveform
-    max_length = max(original_waveform_lengths)
-    padded_waveform_batch = np.array(
-        [
-            np.pad(waveform, (0, max_length - len(waveform)), mode="constant", constant_values=0)
-            for waveform in waveform_list
-        ],
-        dtype=dtype,
-    )
-
-    # Promote to float64, since np.fft uses float64 internally
-    padded_waveform_batch = padded_waveform_batch.astype(np.float64)
-    window = window.astype(np.float64)
-
-    # Split waveform into frames of frame_length size
-    num_frames = int(1 + np.floor((padded_waveform_batch.shape[1] - frame_length) / hop_length))
-    # these lengths will be used to remove padding later
-    true_num_frames = [int(1 + np.floor((length - frame_length) / hop_length)) for length in original_waveform_lengths]
-    num_batches = padded_waveform_batch.shape[0]
-
-    num_frequency_bins = (fft_length // 2) + 1 if onesided else fft_length
-    spectrogram = np.empty((num_batches, num_frames, num_frequency_bins), dtype=np.complex64)
-
-    # rfft is faster than fft
-    fft_func = np.fft.rfft if onesided else np.fft.fft
-    buffer = np.zeros((num_batches, fft_length))
-
-    for frame_idx in range(num_frames):
-        timestep = frame_idx * hop_length
-        buffer[:, :frame_length] = padded_waveform_batch[:, timestep : timestep + frame_length]
-
-        if dither != 0.0:
-            buffer[:, :frame_length] += dither * np.random.randn(*buffer[:, :frame_length].shape)
-
-        if remove_dc_offset:
-            buffer[:, :frame_length] -= buffer[:, :frame_length].mean(axis=1, keepdims=True)
-
-        if preemphasis is not None:
-            buffer[:, 1:frame_length] -= preemphasis * buffer[:, : frame_length - 1]
-            buffer[:, 0] *= 1 - preemphasis
-
-        buffer[:, :frame_length] *= window
-
-        spectrogram[:, frame_idx] = fft_func(buffer)
-
-    # Note: ** is much faster than np.power
-    if power is not None:
-        spectrogram = np.abs(spectrogram, dtype=np.float64) ** power
-
-    # Apply mel filters if provided
-    if mel_filters is not None:
-        result = np.tensordot(spectrogram, mel_filters.T, axes=([2], [1]))
-        spectrogram = np.maximum(mel_floor, result)
-
-    # Convert to log scale if specified
-    if power is not None and log_mel is not None:
-        if log_mel == "log":
-            spectrogram = np.log(spectrogram)
-        elif log_mel == "log10":
-            spectrogram = np.log10(spectrogram)
-        elif log_mel == "dB":
-            if power == 1.0:
-                spectrogram = amplitude_to_db_batch(spectrogram, reference, min_value, db_range)
-            elif power == 2.0:
-                spectrogram = power_to_db_batch(spectrogram, reference, min_value, db_range)
-            else:
-                raise ValueError(f"Cannot use log_mel option '{log_mel}' with power {power}")
-        else:
-            raise ValueError(f"Unknown log_mel option: {log_mel}")
-
-        spectrogram = np.asarray(spectrogram, dtype)
-
-    spectrogram_list = [spectrogram[i, : true_num_frames[i], :].T for i in range(len(true_num_frames))]
-
-    return spectrogram_list
+    return mel_filters
 
 
 def power_to_db(
-    spectrogram: np.ndarray,
+    spectrogram,
     reference: float = 1.0,
     min_value: float = 1e-10,
     db_range: float | None = None,
-) -> np.ndarray:
+):
     """
     Converts a power spectrogram to the decibel scale. This computes `10 * log10(spectrogram / reference)`, using basic
     logarithm properties for numerical stability.
@@ -1079,10 +860,10 @@ def power_to_db(
     This means that large variations in energy may not sound all that different if the sound is loud to begin with.
     This compression operation makes the (mel) spectrogram features match more closely what humans actually hear.
 
-    Based on the implementation of `librosa.power_to_db`.
+    Based on the implementation of `librosa.power_to_db`. Works on numpy or torch inputs.
 
     Args:
-        spectrogram (`np.ndarray`):
+        spectrogram (`np.ndarray` or `torch.Tensor`):
             The input power (mel) spectrogram. Note that a power spectrogram has the amplitudes squared!
         reference (`float`, *optional*, defaults to 1.0):
             Sets the input spectrogram value that corresponds to 0 dB. For example, use `np.max(spectrogram)` to set
@@ -1095,7 +876,7 @@ def power_to_db(
             peak value and the smallest value will never be more than 80 dB. Must be greater than zero.
 
     Returns:
-        `np.ndarray`: the spectrogram in decibels
+        The spectrogram in decibels, same array type as the input.
     """
     if reference <= 0.0:
         raise ValueError("reference must be greater than zero")
@@ -1104,72 +885,23 @@ def power_to_db(
 
     reference = max(min_value, reference)
 
-    spectrogram = np.clip(spectrogram, a_min=min_value, a_max=None)
-    spectrogram = 10.0 * (np.log10(spectrogram) - np.log10(reference))
+    spectrogram = _clamp_min(spectrogram, min_value)
+    spectrogram = 10.0 * (_array_namespace(spectrogram).log10(spectrogram) - math.log10(reference))
 
     if db_range is not None:
         if db_range <= 0.0:
             raise ValueError("db_range must be greater than zero")
-        spectrogram = np.clip(spectrogram, a_min=spectrogram.max() - db_range, a_max=None)
-
-    return spectrogram
-
-
-def power_to_db_batch(
-    spectrogram: np.ndarray,
-    reference: float = 1.0,
-    min_value: float = 1e-10,
-    db_range: float | None = None,
-) -> np.ndarray:
-    """
-    Converts a batch of power spectrograms to the decibel scale. This computes `10 * log10(spectrogram / reference)`,
-    using basic logarithm properties for numerical stability.
-
-    This function supports batch processing, where each item in the batch is an individual power (mel) spectrogram.
-
-    Args:
-        spectrogram (`np.ndarray`):
-            The input batch of power (mel) spectrograms. Expected shape is (batch_size, *spectrogram_shape).
-            Note that a power spectrogram has the amplitudes squared!
-        reference (`float`, *optional*, defaults to 1.0):
-            Sets the input spectrogram value that corresponds to 0 dB. For example, use `np.max(spectrogram)` to set
-            the loudest part to 0 dB. Must be greater than zero.
-        min_value (`float`, *optional*, defaults to `1e-10`):
-            The spectrogram will be clipped to this minimum value before conversion to decibels, to avoid taking
-            `log(0)`. The default of `1e-10` corresponds to a minimum of -100 dB. Must be greater than zero.
-        db_range (`float`, *optional*):
-            Sets the maximum dynamic range in decibels. For example, if `db_range = 80`, the difference between the
-            peak value and the smallest value will never be more than 80 dB. Must be greater than zero.
-
-    Returns:
-        `np.ndarray`: the batch of spectrograms in decibels
-    """
-    if reference <= 0.0:
-        raise ValueError("reference must be greater than zero")
-    if min_value <= 0.0:
-        raise ValueError("min_value must be greater than zero")
-
-    reference = max(min_value, reference)
-
-    spectrogram = np.clip(spectrogram, a_min=min_value, a_max=None)
-    spectrogram = 10.0 * (np.log10(spectrogram) - np.log10(reference))
-
-    if db_range is not None:
-        if db_range <= 0.0:
-            raise ValueError("db_range must be greater than zero")
-        # Apply db_range clipping per batch item
-        max_values = spectrogram.max(axis=(1, 2), keepdims=True)
-        spectrogram = np.clip(spectrogram, a_min=max_values - db_range, a_max=None)
+        spectrogram = _clamp_min(spectrogram, spectrogram.max() - db_range)
 
     return spectrogram
 
 
 def amplitude_to_db(
-    spectrogram: np.ndarray,
+    spectrogram,
     reference: float = 1.0,
     min_value: float = 1e-5,
     db_range: float | None = None,
-) -> np.ndarray:
+):
     """
     Converts an amplitude spectrogram to the decibel scale. This computes `20 * log10(spectrogram / reference)`, using
     basic logarithm properties for numerical stability.
@@ -1179,8 +911,10 @@ def amplitude_to_db(
     This means that large variations in energy may not sound all that different if the sound is loud to begin with.
     This compression operation makes the (mel) spectrogram features match more closely what humans actually hear.
 
+    Works on numpy or torch inputs.
+
     Args:
-        spectrogram (`np.ndarray`):
+        spectrogram (`np.ndarray` or `torch.Tensor`):
             The input amplitude (mel) spectrogram.
         reference (`float`, *optional*, defaults to 1.0):
             Sets the input spectrogram value that corresponds to 0 dB. For example, use `np.max(spectrogram)` to set
@@ -1193,7 +927,7 @@ def amplitude_to_db(
             peak value and the smallest value will never be more than 80 dB. Must be greater than zero.
 
     Returns:
-        `np.ndarray`: the spectrogram in decibels
+        The spectrogram in decibels, same array type as the input.
     """
     if reference <= 0.0:
         raise ValueError("reference must be greater than zero")
@@ -1202,57 +936,14 @@ def amplitude_to_db(
 
     reference = max(min_value, reference)
 
-    spectrogram = np.clip(spectrogram, a_min=min_value, a_max=None)
-    spectrogram = 20.0 * (np.log10(spectrogram) - np.log10(reference))
+    spectrogram = _clamp_min(spectrogram, min_value)
+    spectrogram = 20.0 * (_array_namespace(spectrogram).log10(spectrogram) - math.log10(reference))
 
     if db_range is not None:
         if db_range <= 0.0:
             raise ValueError("db_range must be greater than zero")
-        spectrogram = np.clip(spectrogram, a_min=spectrogram.max() - db_range, a_max=None)
+        spectrogram = _clamp_min(spectrogram, spectrogram.max() - db_range)
 
     return spectrogram
 
 
-def amplitude_to_db_batch(
-    spectrogram: np.ndarray, reference: float = 1.0, min_value: float = 1e-5, db_range: float | None = None
-) -> np.ndarray:
-    """
-    Converts a batch of amplitude spectrograms to the decibel scale. This computes `20 * log10(spectrogram / reference)`,
-    using basic logarithm properties for numerical stability.
-
-    The function supports batch processing, where each item in the batch is an individual amplitude (mel) spectrogram.
-
-    Args:
-        spectrogram (`np.ndarray`):
-            The input batch of amplitude (mel) spectrograms. Expected shape is (batch_size, *spectrogram_shape).
-        reference (`float`, *optional*, defaults to 1.0):
-            Sets the input spectrogram value that corresponds to 0 dB. For example, use `np.max(spectrogram)` to set
-            the loudest part to 0 dB. Must be greater than zero.
-        min_value (`float`, *optional*, defaults to `1e-5`):
-            The spectrogram will be clipped to this minimum value before conversion to decibels, to avoid taking
-            `log(0)`. The default of `1e-5` corresponds to a minimum of -100 dB. Must be greater than zero.
-        db_range (`float`, *optional*):
-            Sets the maximum dynamic range in decibels. For example, if `db_range = 80`, the difference between the
-            peak value and the smallest value will never be more than 80 dB. Must be greater than zero.
-
-    Returns:
-        `np.ndarray`: the batch of spectrograms in decibels
-    """
-    if reference <= 0.0:
-        raise ValueError("reference must be greater than zero")
-    if min_value <= 0.0:
-        raise ValueError("min_value must be greater than zero")
-
-    reference = max(min_value, reference)
-
-    spectrogram = np.clip(spectrogram, a_min=min_value, a_max=None)
-    spectrogram = 20.0 * (np.log10(spectrogram) - np.log10(reference))
-
-    if db_range is not None:
-        if db_range <= 0.0:
-            raise ValueError("db_range must be greater than zero")
-        # Apply db_range clipping per batch item
-        max_values = spectrogram.max(axis=(1, 2), keepdims=True)
-        spectrogram = np.clip(spectrogram, a_min=max_values - db_range, a_max=None)
-
-    return spectrogram
