@@ -308,7 +308,11 @@ class WhisperAttention(nn.Module):
         # and enforce no scaling (1.0) in the attention call below.
         query_states = (self.q_proj(hidden_states) * self.scaling).view(hidden_shape).transpose(1, 2).contiguous()
 
-        # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
+        # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`.
+        # `is_updated` defaults to False so the cross-attention path below cannot raise
+        # `UnboundLocalError` when `past_key_values` is None or not an `EncoderDecoderCache`
+        # (e.g. when an assistant/speculative-decoding wrapper hands us a `DynamicCache`).
+        is_updated = False
         if past_key_values is not None and isinstance(past_key_values, EncoderDecoderCache):
             is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:

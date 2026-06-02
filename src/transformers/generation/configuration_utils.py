@@ -656,6 +656,13 @@ class GenerationConfig(PushToHubMixin):
             )
         # 1.4. Watermarking attributes
         if self.watermarking_config is not None:
+            # `watermarking_config` can be a dict when it was set via
+            # `generation_config.update(watermarking_config={...})` (e.g. as a
+            # `model.generate()` kwarg); only `__init__` runs the dict →
+            # WatermarkingConfig conversion. Mirror that conversion here so
+            # `.validate()` works regardless of how the value was set.
+            if isinstance(self.watermarking_config, dict):
+                self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
             self.watermarking_config.validate()
 
         # 2. Validation of attribute combinations
