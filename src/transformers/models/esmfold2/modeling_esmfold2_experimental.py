@@ -123,9 +123,6 @@ class ConfidenceHead(nn.Module):
     # Kernel / chunking configuration
     # ------------------------------------------------------------------
 
-    def set_kernel_backend(self, backend: str | None) -> None:
-        self.folding_trunk.set_kernel_backend(backend)
-
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self.folding_trunk.set_chunk_size(chunk_size)
 
@@ -571,13 +568,6 @@ class ESMFold2ExperimentalModel(PreTrainedModel):
             self.msa_encoder = None
 
         self.post_init()
-
-    def set_kernel_backend(self, backend: str | None) -> None:
-        """Select kernel backend (None / "fused" / "cuequivariance")."""
-        self.folding_trunk.set_kernel_backend(backend)
-        if self.confidence_head is not None:
-            self.confidence_head.set_kernel_backend(backend)
-        self.structure_head.set_kernel_backend(backend)
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         """Set chunk size for memory-efficient triangle multiplicative updates."""
