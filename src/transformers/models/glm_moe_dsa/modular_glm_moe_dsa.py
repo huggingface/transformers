@@ -140,7 +140,6 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
     indexer_types: list[str] | None = None
     attribute_map = {
         "num_local_experts": "n_routed_experts",
-        "head_dim": "qk_rope_head_dim",
     }
 
     def __post_init__(self, **kwargs):
