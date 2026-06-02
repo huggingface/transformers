@@ -676,7 +676,8 @@ class FP8Experts(nn.Module):
         if self.has_gate:
             gu_proj_out, gu_proj_in = 2 * self.intermediate_dim, self.hidden_dim
             self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, gu_proj_out, gu_proj_in, dtype=dtype))
-            gu_scale_out = _cdiv(gu_proj_out, self.block_size[0]) if self.block_size is not None else 1
+            # By construction both the weight and the scale need at least 2 weights
+            gu_scale_out = max(_cdiv(gu_proj_out, self.block_size[0]), 2) if self.block_size is not None else 2
             gu_scale_in = _cdiv(gu_proj_in, self.block_size[1]) if self.block_size is not None else 1
             self.gate_up_proj_scale_inv = nn.Parameter(
                 torch.empty(self.num_experts, gu_scale_out, gu_scale_in, dtype=torch.float32)
@@ -989,7 +990,11 @@ class Fp8Dequantize(ConversionOps):
         # Derive block size from the scale grid rather than the global config: MoE experts
         # ship MXFP4 with a ``[1, 32]`` block, dense linears ship FP8 with ``[128, 128]``,
         # and the same dequant has to handle both within one checkpoint.
-        scale_rows, scale_cols = scales.shape[-2:]
+        try:
+            scale_rows, scale_cols = scales.shape[-2:]
+        except Exception:
+            # scale can be a single tensor in extreme cases where it was not wrapped properly but is [1,0].
+            scale_rows, scale_cols = 1, 1
         if rows % scale_rows or cols % scale_cols:
             raise ValueError(
                 f"Weight shape ({rows}, {cols}) not divisible by scale grid ({scale_rows}, {scale_cols})."

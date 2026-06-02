@@ -70,6 +70,7 @@ else:
             ("colpali", "ColPaliProcessor"),
             ("colqwen2", "ColQwen2Processor"),
             ("cosmos3_omni", "Qwen3VLProcessor"),
+            ("deepseek_ocr2", "DeepseekOcr2Processor"),
             ("deepseek_vl", "DeepseekVLProcessor"),
             ("deepseek_vl_hybrid", "DeepseekVLHybridProcessor"),
             ("dia", "DiaProcessor"),
