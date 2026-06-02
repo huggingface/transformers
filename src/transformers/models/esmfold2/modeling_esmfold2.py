@@ -146,9 +146,6 @@ class ConfidenceHead(nn.Module):
             torch.zeros(max_atoms_per_token, d_single, 2)
         )
 
-    def set_kernel_backend(self, backend: str | None) -> None:
-        self.folding_trunk.set_kernel_backend(backend)
-
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self.folding_trunk.set_chunk_size(chunk_size)
 
@@ -508,8 +505,6 @@ class ESMFold2Model(PreTrainedModel):
     * ``model.set_chunk_size(int|None)``: caps L² ops (triangle / OPM /
       pair transition) at this token-axis chunk. Default 64 — fits
       L≈2k on an 80 GB GPU. Pass ``None`` for faster inference at L<600.
-    * ``model.set_kernel_backend(None | "fused" | "cuequivariance")``:
-      select kernel backend (None = reference path).
     """
 
     config_class = ESMFold2Config
@@ -651,29 +646,10 @@ class ESMFold2Model(PreTrainedModel):
             model.load_esmc(model.config.esmc_id, precision=esmc_precision)
         return model
 
-    def set_kernel_backend(self, backend: str | None) -> None:
-        """Select kernel backend.
-
-        Args:
-            backend: ``None`` (reference path), ``"fused"`` (vendored Triton
-                kernels), or ``"cuequivariance"`` (cuequivariance kernels
-                where applicable; vanilla python fallback otherwise).
-        """
-        self.folding_trunk.set_kernel_backend(backend)
-        if self.lm_encoder is not None:
-            self.lm_encoder.set_kernel_backend(backend)
-        self.parcae_coda.set_kernel_backend(backend)
-        self.confidence_head.set_kernel_backend(backend)
-        self.structure_head.set_kernel_backend(backend)
-
     def apply_torch_compile(
         self, mode: str = "fixed_seqlen", dynamic: bool | None = None
     ) -> None:
-        """Compile L²-heavy blocks. ``mode='fixed_seqlen'`` recompiles per L; ``'dynamic_seqlen'`` compiles once.
-
-        Does NOT stack with our Triton kernels — call ``set_kernel_backend(None)``
-        before compiling.
-        """
+        """Compile L²-heavy blocks. ``mode='fixed_seqlen'`` recompiles per L; ``'dynamic_seqlen'`` compiles once."""
         import torch._dynamo
 
         torch._dynamo.config.cache_size_limit = 512  # type: ignore[attr-defined]

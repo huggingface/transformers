@@ -399,13 +399,11 @@ class TrunkCPWrapper(nn.Module):
                 f"expected DistributedManager, got {type(dist_manager).__name__}"
             )
 
-        # ``FoldingTrunkDistributed`` requires the serial trunk's tri-mul
-        # kernels off and chunking disabled (it composes its own ring loop).
-        # ``serial_trunk`` is typed ``nn.Module`` (the SerialFoldingTrunk
-        # symbol is imported lazily inside the function to avoid a circular
-        # import with pairformer.py); pyright can't narrow through the
-        # lazy-import isinstance check.
-        serial_trunk.set_kernel_backend(None)  # type: ignore[operator]
+        # ``FoldingTrunkDistributed`` requires the serial trunk's chunking
+        # disabled (it composes its own ring loop). ``serial_trunk`` is typed
+        # ``nn.Module`` (the SerialFoldingTrunk symbol is imported lazily inside
+        # the function to avoid a circular import with pairformer.py); pyright
+        # can't narrow through the lazy-import isinstance check.
         serial_trunk.set_chunk_size(None)  # type: ignore[operator]
 
         self.dist_trunk = FoldingTrunkDistributed(serial_trunk, dist_manager)
@@ -416,13 +414,9 @@ class TrunkCPWrapper(nn.Module):
         self.cp_axis_1 = self.device_mesh.size(2)
         self.shard_factor = lcm(self.cp_axis_0, self.cp_axis_1)
 
-    # The serial trunk exposes these knobs to the parent model. The
-    # distributed path doesn't support kernels/chunking, but the parent
-    # ``set_kernel_backend`` / ``set_chunk_size`` calls still need a no-op
-    # hook so they don't blow up.
-    def set_kernel_backend(self, _backend: str | None) -> None:
-        return
-
+    # The serial trunk exposes this knob to the parent model. The distributed
+    # path doesn't support chunking, but the parent ``set_chunk_size`` call
+    # still needs a no-op hook so it doesn't blow up.
     def set_chunk_size(self, _chunk_size: int | None) -> None:
         return
 
