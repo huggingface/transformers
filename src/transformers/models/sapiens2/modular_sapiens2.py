@@ -1088,9 +1088,8 @@ class Sapiens2Config(DINOv3ViTConfig):
     rms_norm_eps (`float`, *optional*, defaults to 1e-6):
         Epsilon for the RMS normalization layers.
     normalize_backbone_outputs (`bool`, *optional*, defaults to `True`):
-        Whether to apply RMSNorm to the backbone outputs before returning them from the forward pass.
-        Feature maps, class tokens, and hidden states are all normalized when this is `True`.
-        Only applies when the model is used as a backbone.
+        Whether to apply RMSNorm to the backbone `feature_maps` and `cls_tokens` outputs before
+        returning them from the forward pass. Only applies when the model is used as a backbone.
     use_qk_norm (`bool`, *optional*, defaults to `True`):
         Whether to apply RMSNorm to queries and keys before RoPE in attention layers.
     num_key_value_heads_per_layer (`list[int]`, *optional*):
@@ -1538,38 +1537,31 @@ class Sapiens2Backbone(DINOv3ViTBackbone):
         return_class_token = getattr(self.config, "return_class_token", False)
 
         feature_maps, cls_tokens = [], []
-        sequence_output = None
-        last_stage_idx = len(self.stage_names) - 1
         for idx, (stage_name, hidden_state) in enumerate(zip(self.stage_names, stage_hidden_states)):
             if self.config.normalize_backbone_outputs:
                 hidden_state = self.norm(hidden_state)
-            if idx == last_stage_idx:
-                sequence_output = hidden_state
 
             if stage_name in self.out_features:
                 if return_class_token:
                     cls_tokens.append(hidden_state[:, 0, :])
                 patch_tokens = hidden_state[:, num_prefix:, :]
                 if self.config.reshape_hidden_states:
-                    fmap = (
+                    feature_map = (
                         patch_tokens.reshape(batch_size, num_patches_height, num_patches_width, patch_tokens.shape[-1])
                         .permute(0, 3, 1, 2)
                         .contiguous()
                     )
                 else:
-                    fmap = patch_tokens
+                    feature_map = patch_tokens
 
-                feature_maps.append(fmap)
+                feature_maps.append(feature_map)
 
-        output = Sapiens2BackboneOutput(
+        return Sapiens2BackboneOutput(
             feature_maps=tuple(feature_maps),
             cls_tokens=tuple(cls_tokens) if return_class_token else None,
             hidden_states=output.hidden_states,
             attentions=output.attentions,
         )
-        output.last_hidden_state = sequence_output
-
-        return output
 
 
 @auto_docstring(checkpoint="facebook/sapiens2-seg-0.4b")

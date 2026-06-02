@@ -147,9 +147,8 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     rms_norm_eps (`float`, *optional*, defaults to 1e-6):
         Epsilon for the RMS normalization layers.
     normalize_backbone_outputs (`bool`, *optional*, defaults to `True`):
-        Whether to apply RMSNorm to the backbone outputs before returning them from the forward pass.
-        Feature maps, class tokens, and hidden states are all normalized when this is `True`.
-        Only applies when the model is used as a backbone.
+        Whether to apply RMSNorm to the backbone `feature_maps` and `cls_tokens` outputs before
+        returning them from the forward pass. Only applies when the model is used as a backbone.
     use_qk_norm (`bool`, *optional*, defaults to `True`):
         Whether to apply RMSNorm to queries and keys before RoPE in attention layers.
     num_key_value_heads_per_layer (`list[int]`, *optional*):

@@ -350,7 +350,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""
-        kwargs["boxes"] = boxes
+        kwargs["boxes"] = boxes  # modular trick
         images = self._prepare_image_like_inputs(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )

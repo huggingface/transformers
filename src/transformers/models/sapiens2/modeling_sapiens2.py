@@ -970,38 +970,31 @@ class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
         return_class_token = getattr(self.config, "return_class_token", False)
 
         feature_maps, cls_tokens = [], []
-        sequence_output = None
-        last_stage_idx = len(self.stage_names) - 1
         for idx, (stage_name, hidden_state) in enumerate(zip(self.stage_names, stage_hidden_states)):
             if self.config.normalize_backbone_outputs:
                 hidden_state = self.norm(hidden_state)
-            if idx == last_stage_idx:
-                sequence_output = hidden_state
 
             if stage_name in self.out_features:
                 if return_class_token:
                     cls_tokens.append(hidden_state[:, 0, :])
                 patch_tokens = hidden_state[:, num_prefix:, :]
                 if self.config.reshape_hidden_states:
-                    fmap = (
+                    feature_map = (
                         patch_tokens.reshape(batch_size, num_patches_height, num_patches_width, patch_tokens.shape[-1])
                         .permute(0, 3, 1, 2)
                         .contiguous()
                     )
                 else:
-                    fmap = patch_tokens
+                    feature_map = patch_tokens
 
-                feature_maps.append(fmap)
+                feature_maps.append(feature_map)
 
-        output = Sapiens2BackboneOutput(
+        return Sapiens2BackboneOutput(
             feature_maps=tuple(feature_maps),
             cls_tokens=tuple(cls_tokens) if return_class_token else None,
             hidden_states=output.hidden_states,
             attentions=output.attentions,
         )
-        output.last_hidden_state = sequence_output
-
-        return output
 
 
 @auto_docstring(checkpoint="facebook/sapiens2-seg-0.4b")
