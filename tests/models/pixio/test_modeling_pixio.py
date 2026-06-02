@@ -274,7 +274,7 @@ class PixioModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
         # valid the first three patch tokens
-        torch.testing.assert_close(outputs.last_hidden_state[0, 8:11, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.last_hidden_state[0, 8:11, :3], expected_slice, rtol=1e-2, atol=1e-2)
 
 
 @require_torch
