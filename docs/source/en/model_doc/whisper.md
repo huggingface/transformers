@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # Whisper
 
-[Whisper](https://huggingface.co/papers/2212.04356) is a encoder-decoder (sequence-to-sequence) transformer pretrained on 680,000 hours of labeled audio data. This amount of pretraining data enables zero-shot performance on audio tasks in English and many other languages. The decoder allows Whisper to map the encoders learned speech representations to useful outputs, such as text, without additional fine-tuning. Whisper just works out of the box.
+[Whisper](https://huggingface.co/papers/2212.04356) is an encoder-decoder (sequence-to-sequence) transformer pretrained on 680,000 hours of labeled audio data. This amount of pretraining data enables zero-shot performance on audio tasks in English and many other languages. The decoder allows Whisper to map the encoders learned speech representations to useful outputs, such as text, without additional fine-tuning. Whisper just works out of the box.
 
 You can find all the original Whisper checkpoints under the [Whisper](https://huggingface.co/collections/openai/whisper-release-6501bba2cf999715fd953013) collection.
 
@@ -87,7 +87,7 @@ transcription[0]
 
 ## Notes
 
-- Whisper relies a custom [`generate`] for inference, make sure to check the docs below.
+- Whisper relies on a custom [`generate`] for inference, make sure to check the docs below.
 - The [`WhisperProcessor`] can be used for preparing audio and decoding predicted ids back into text.
 
 ## WhisperConfig
