@@ -1033,6 +1033,26 @@ class Sapiens2HeadConfig(PreTrainedConfig):
             self.scale_conv_kernel_sizes = [self.scale_conv_kernel_size] * len(self.scale_conv_out_channels)
         super().__post_init__(**kwargs)
 
+    def _init_scale_final_input_size(
+        self, image_size: int | list[int] | tuple[int, int], patch_size: int | list[int] | tuple[int, int]
+    ) -> None:
+        if (
+            self.scale_final_input_size is not None
+            or self.scale_conv_out_channels is None
+            or self.scale_conv_kernel_sizes is None
+        ):
+            return
+        image_height, image_width = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
+        patch_height = patch_size if isinstance(patch_size, int) else patch_size[0]
+        patch_width = patch_size if isinstance(patch_size, int) else patch_size[1]
+        features_height = image_height // patch_height
+        features_width = image_width // patch_width
+        for kernel_size in self.scale_conv_kernel_sizes:
+            padding = (kernel_size - 1) // 2
+            features_height = (features_height + 2 * padding - kernel_size) // 2 + 1
+            features_width = (features_width + 2 * padding - kernel_size) // 2 + 1
+        self.scale_final_input_size = features_height * features_width * self.scale_conv_out_channels[-1]
+
 
 @auto_docstring(checkpoint="facebook/sapiens2-pretrain-0.4b")
 @strict
@@ -1139,28 +1159,8 @@ class Sapiens2Config(DINOv3ViTConfig):
             ]
         if isinstance(self.head_config, dict):
             self.head_config = Sapiens2HeadConfig(**self.head_config)
-        if (
-            self.head_config is not None
-            and self.head_config.scale_final_input_size is None
-            and self.head_config.scale_conv_out_channels is not None
-            and self.head_config.scale_conv_kernel_sizes is not None
-        ):
-            image_size = self.image_size
-            image_height, image_width = (
-                image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
-            )
-            patch_size = self.patch_size
-            patch_height = patch_size if isinstance(patch_size, int) else patch_size[0]
-            patch_width = patch_size if isinstance(patch_size, int) else patch_size[1]
-            features_height = image_height // patch_height
-            features_width = image_width // patch_width
-            for kernel_size in self.head_config.scale_conv_kernel_sizes:
-                padding = (kernel_size - 1) // 2
-                features_height = (features_height + 2 * padding - kernel_size) // 2 + 1
-                features_width = (features_width + 2 * padding - kernel_size) // 2 + 1
-            self.head_config.scale_final_input_size = (
-                features_height * features_width * self.head_config.scale_conv_out_channels[-1]
-            )
+        if self.head_config is not None:
+            self.head_config._init_scale_final_input_size(image_size=self.image_size, patch_size=self.patch_size)
         super().__post_init__(**kwargs)
 
 
