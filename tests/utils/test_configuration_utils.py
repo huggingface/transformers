@@ -397,3 +397,47 @@ class ConfigSubclassKwOnlyTest(unittest.TestCase):
         cfg = BertWithPooling(pooling="mean", hidden_size=256)
         self.assertEqual(cfg.pooling, "mean")
         self.assertEqual(cfg.hidden_size, 256)
+
+
+class ConfigSubConfigOutputHiddenStatesPropagationTest(unittest.TestCase):
+    def test_output_hidden_states_propagates_to_subconfigs(self):
+        class ChildConfig(PreTrainedConfig):
+            pass
+
+        class ParentConfig(PreTrainedConfig):
+            sub_configs = {"child_a": ChildConfig, "child_b": ChildConfig}
+
+            child_a: PreTrainedConfig | None = None
+            child_b: PreTrainedConfig | None = None
+
+            def __post_init__(self, **kwargs):
+                if self.child_a is None:
+                    self.child_a = ChildConfig()
+                if self.child_b is None:
+                    self.child_b = ChildConfig()
+                super().__post_init__(**kwargs)
+
+        config = ParentConfig(output_hidden_states=True)
+        self.assertTrue(config.child_a.output_hidden_states)
+        self.assertTrue(config.child_b.output_hidden_states)
+
+    def test_output_hidden_states_false_does_not_force_subconfigs(self):
+        class ChildConfig(PreTrainedConfig):
+            pass
+
+        class ParentConfig(PreTrainedConfig):
+            sub_configs = {"child_a": ChildConfig, "child_b": ChildConfig}
+
+            child_a: PreTrainedConfig | None = None
+            child_b: PreTrainedConfig | None = None
+
+            def __post_init__(self, **kwargs):
+                if self.child_a is None:
+                    self.child_a = ChildConfig(output_hidden_states=True)
+                if self.child_b is None:
+                    self.child_b = ChildConfig(output_hidden_states=False)
+                super().__post_init__(**kwargs)
+
+        config = ParentConfig()
+        self.assertTrue(config.child_a.output_hidden_states)
+        self.assertFalse(config.child_b.output_hidden_states)

@@ -307,6 +307,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                     logger.error(f"Can't set {key} with value {value} for {self}")
                     raise err
 
+        # Propagate hidden-states capture to sub-configs when requested on parent config.
+        if self.output_hidden_states:
+            for subconfig_key in self.sub_configs:
+                self.sub_configs[subconfig_key].output_hidden_states = True
+
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
         cls_has_custom_init = "__init__" in cls.__dict__
