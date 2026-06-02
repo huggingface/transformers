@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import functools
 import importlib.metadata
 import os
 import re
@@ -519,111 +518,6 @@ def allow_all_hub_kernels():
         ALLOW_ALL_KERNELS = False
 
 
-class FusedModuleBase(nn.Module):
-    def __init__(
-        self,
-        modules_to_fuse: list["nn.Module"],
-        fused_module_names: list[str] | None = None,
-    ):
-        """
-        Args:
-            modules_to_fuse: The source modules to fuse together.
-            fused_module_names: The names under which each source module is registered as a
-                child of this container (i.e. `self.<name>`). When `None`, the
-                `kernel_layer_name` attribute of each source module is used. Pass this
-                explicitly when the source modules do not carry `@use_kernel_forward_from_hub`.
-        """
-        super().__init__()
-        if len(modules_to_fuse) == 0:
-            raise ValueError("At least one module must be provided for fusion.")
-
-        if fused_module_names is not None:
-            if len(fused_module_names) != len(modules_to_fuse):
-                raise ValueError("Length of fused_module_names and modules_to_fuse must match.")
-            for module, name in zip(modules_to_fuse, fused_module_names):
-                self.add_module(name, module)
-            self._fused_module_names = list(fused_module_names)
-        else:
-            for module in modules_to_fuse:
-                attr_name = getattr(module, "kernel_layer_name", None)
-                if attr_name is None:
-                    raise ValueError(
-                        f"Module {module} does not have a 'kernel_layer_name' attribute. "
-                        f"Either decorate it with @use_kernel_forward_from_hub or provide "
-                        f"explicit names via the inline pattern format: "
-                        f'(("<name>", "<glob_path>"), ...).'
-                    )
-                self.add_module(attr_name, module)
-            self._fused_module_names = [m.kernel_layer_name for m in modules_to_fuse]
-
-        # `kernelize` validates the kernel's forward signature against the class being replaced.
-        # Since the fused container sits at the position of the first module in the chain, the
-        # kernel's forward must match that module's signature. We patch the class-level forward
-        # here (via `functools.wraps`) so the signature is correct when `kernelize` inspects it.
-        # The body raises because this forward is always replaced by the kernel before any call.
-        @functools.wraps(type(modules_to_fuse[0]).forward)
-        def forward(self, *args, **kwargs):
-            raise NotImplementedError("FusedModule is a placeholder and should not be called directly.")
-
-        self.__class__.forward = forward
-
-    def __repr__(self):
-        names = ", ".join(self._fused_module_names)
-        return f"{self.__class__.__name__}(fused=({names}))"
-
-
-@functools.cache
-def make_fused_module_class(source_layer_names: tuple[str, ...], kernel_layer_name: str) -> type:
-    """
-    Dynamically create and cache a `FusedModuleBase` subclass for a given fusion combination.
-
-    Args:
-        source_layer_names (`tuple[str, ...]`):
-            Ordered tuple of `kernel_layer_name` values of the modules being fused
-            (e.g. `("RMSNorm", "MLP")`). Used as the cache key — the same combination
-            always returns the same class object.
-        kernel_layer_name (`str`):
-            The name assigned to the fused class, used by `kernelize` to look up the
-            kernel in the mapping (e.g. `"RMSNormMLP"`).
-
-    Returns:
-        A subclass of `FusedModuleBase` with `kernel_layer_name` set as a class attribute.
-    """
-    return type(
-        f"Fused_{'_'.join(source_layer_names)}",
-        (FusedModuleBase,),
-        {"kernel_layer_name": kernel_layer_name},
-    )
-
-
-def make_fused_parent_class(
-    parent_cls: type,
-    child_names: list[str],
-    source_names: list[str],
-    kernel_layer_name: str,
-) -> type:
-    original_init = parent_cls.__init__
-    _child_names = list(child_names)
-    _source_names = list(source_names)
-
-    fused_module_cls = make_fused_module_class(tuple(_source_names), kernel_layer_name)
-
-    def fused_init(self, *args, **kwargs):
-        original_init(self, *args, **kwargs)
-        modules_to_fuse = [getattr(self, name) for name in _child_names]
-        fused = fused_module_cls(
-            modules_to_fuse,
-            fused_module_names=list(_source_names),
-        )
-        setattr(self, _child_names[0], fused)
-        for name in _child_names[1:]:
-            setattr(self, name, nn.Identity())
-
-    fused_cls = type(f"Fused{parent_cls.__name__}", (parent_cls,), {"__init__": fused_init})
-    fused_cls.__qualname__ = f"Fused{parent_cls.__qualname__}"
-    return fused_cls
-
-
 def make_kernel_init_parent_class(
     parent_cls: type,
     child_names: list[str],
@@ -812,10 +706,8 @@ def register_kernel_fusions(
 
 
 __all__ = [
-    "FusedModuleBase",
     "LayerRepository",
     "get_kernel",
-    "make_fused_module_class",
     "register_kernel_fusions",
     "register_kernel_replacements",
     "lazy_load_kernel",
