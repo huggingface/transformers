@@ -203,20 +203,19 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         :meth:`get_weight_conversions` is still appended at the end as a fallback for
         plain ``nn.Linear`` weights with no model-specific converter.
         """
-        if not (self.pre_quantized and self.quantization_config.dequantize):
-            return weight_conversions + self.get_weight_conversions()
-
         from ..core_model_loading import WeightConverter, WeightRenaming
         from ..integrations.finegrained_fp8 import Fp8Dequantize
 
-        # Some upstream FP8 checkpoints (e.g. DeepSeek-V4-Flash) ship per-block scales
-        # under a ``.scale`` suffix instead of HF's canonical ``.weight_scale_inv``.
-        # Prepending the rename here (instead of in each model's conversion_mapping)
-        # keeps the model-side mapping clean — the rename only kicks in when FP8 dequant
-        # is actually active, so a non-FP8 save / load round-trip doesn't see a stray
-        # rule that ``test_reverse_loading_mapping`` can't match.
+        # `*.scale` → `*.weight_scale_inv`. Some FP8 checkpoints (e.g. DeepSeek-V4-Flash)
+        # ship per-block scales under `.scale`; the model expects `.weight_scale_inv`.
+        # Lives here (not in each model's `conversion_mapping`) so non-FP8 round-trips
+        # don't see a stray rule. Needed in both dequantize modes — `dequantize=False`
+        # loads scales as parameters, `dequantize=True` feeds them into `Fp8Dequantize`.
         scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale$", target_patterns=r"\1.weight_scale_inv")
         weight_conversions = [scale_rename] + list(weight_conversions)
+
+        if not (self.pre_quantized and self.quantization_config.dequantize):
+            return weight_conversions + self.get_weight_conversions()
 
         updated: list = []
         for conv in weight_conversions:
