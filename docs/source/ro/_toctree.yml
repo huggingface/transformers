@@ -51,3 +51,8 @@
       - local: add_new_model
         title: Contribuția legacy la modele
       title: Contribuie
+    title: Models
+  - isExpanded: false
+    sections:
+    - local: fast_tokenizers
+      title: Tokenizere
