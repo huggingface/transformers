@@ -1361,7 +1361,9 @@ class Sapiens2Head(nn.Module):
 
 
 class Sapiens2PointmapFinalLayerBlock(Mask2FormerPredictionBlock):
-    pass
+    def __init__(self, in_dim: int, out_dim: int, activation: nn.Module) -> None:
+        nn.Module.__init__(self)
+        self.layers = nn.ModuleList([nn.Linear(in_dim, out_dim), activation])
 
 
 class Sapiens2PointmapFinalLayer(nn.Module):

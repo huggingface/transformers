@@ -734,10 +734,7 @@ class Sapiens2Head(nn.Module):
 class Sapiens2PointmapFinalLayerBlock(nn.Module):
     def __init__(self, in_dim: int, out_dim: int, activation: nn.Module) -> None:
         super().__init__()
-        self.layers = [nn.Linear(in_dim, out_dim), activation]
-        # Maintain submodule indexing as if part of a Sequential block
-        for i, layer in enumerate(self.layers):
-            self.add_module(str(i), layer)
+        self.layers = nn.ModuleList([nn.Linear(in_dim, out_dim), activation])
 
     def forward(self, input: Tensor) -> Tensor:
         hidden_state = input
