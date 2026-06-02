@@ -90,7 +90,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 model = AutoModelForCausalLM.from_pretrained(
     "RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 tokenizer = AutoTokenizer.from_pretrained("RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic")
 inputs = tokenizer("Hello, how are you?", return_tensors="pt").to(model.device)
