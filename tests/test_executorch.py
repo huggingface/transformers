@@ -28,7 +28,7 @@ from transformers.integrations.executorch import (
     _make_example_audio_inputs,
     _make_example_vision_inputs,
 )
-from transformers.testing_utils import require_torch, slow
+from transformers.testing_utils import require_torch
 
 
 @require_torch
@@ -137,9 +137,7 @@ class ExampleModalityInputsTest(unittest.TestCase):
     def _make_model_with_vision_config(self, image_size=32, num_channels=3):
         model = MagicMock()
         model.device = torch.device("cpu")
-        model.config = SimpleNamespace(
-            vision_config=SimpleNamespace(image_size=image_size, num_channels=num_channels)
-        )
+        model.config = SimpleNamespace(vision_config=SimpleNamespace(image_size=image_size, num_channels=num_channels))
         return model
 
     def _make_model_with_audio_config(self, num_mel_bins=80):
