@@ -14,6 +14,7 @@
 import importlib.metadata
 import os
 import re
+import sys
 from collections.abc import Callable
 from contextlib import contextmanager
 from types import ModuleType
@@ -585,6 +586,17 @@ def _try_load_kernel_class(repo_str: str, use_local: bool = False) -> type | Non
         return None
 
 
+def _find_layout_class(kernel_cls: type) -> type | None:
+    """
+    Look for a companion layout class named ``{kernel_cls.__name__}Layout`` in the
+    same module as *kernel_cls*.
+    """
+    module = sys.modules.get(kernel_cls.__module__)
+    if module is None:
+        return None
+    return getattr(module, f"{kernel_cls.__name__}Layout", None)
+
+
 def register_kernel_replacements(
     cls: "type[PreTrainedModel]",
     kernel_config: "KernelConfig",
@@ -611,16 +623,27 @@ def register_kernel_replacements(
                 continue
             kernel_cls = _try_load_kernel_class(repo_str, use_local=kernel_config.use_local_kernel)
 
-        if kernel_cls is None or kernel_cls.__init__ is nn.Module.__init__:
-            # Stateless kernel: leave it for kernels.kernelize.
+        if kernel_cls is None:
             new_mapping[layer_name] = hub_repo
             continue
 
-        patch_mapping[layer_name] = kernel_cls
+        # Look for a companion layout class named "{kernel_cls.__name__}Layout".
+        # If found, it handles __init__ (weight layout); kernel_cls handles forward.
+        layout_cls = _find_layout_class(kernel_cls)
+        if layout_cls is None:
+            # No layout class: stateless kernel, leave for kernels.kernelize.
+            new_mapping[layer_name] = hub_repo
+            continue
 
-        if hasattr(kernel_cls, "conversion_mapping"):
+        layout_cls.kernel_layer_name = kernel_cls.__name__
+        patch_mapping[layer_name] = layout_cls
+
+        # Keep the original repo string so kernelize can replace the layout's forward.
+        new_mapping[kernel_cls.__name__] = hub_repo
+
+        if hasattr(layout_cls, "conversion_mapping"):
             existing = get_checkpoint_conversion_mapping(model_type)
-            transforms = list(kernel_cls.conversion_mapping)
+            transforms = list(layout_cls.conversion_mapping)
             if existing is not None:
                 transforms = existing + transforms
             register_checkpoint_conversion_mapping(model_type, transforms, overwrite=True)
@@ -660,11 +683,19 @@ def register_kernel_fusions(
                 raise ValueError(f"Cannot resolve a repo string from hub_repo={hub_repo!r}")
             kernel_cls = _try_load_kernel_class(repo_str, use_local=kernel_config.use_local_kernel)
 
-        if kernel_cls is None or kernel_cls.__init__ is nn.Module.__init__:
+        if kernel_cls is None:
+            raise ValueError(f"Could not load kernel class from hub_repo={hub_repo!r}")
+
+        layout_cls = _find_layout_class(kernel_cls)
+        if layout_cls is None:
             raise ValueError(
-                f"Fused kernel for {layer_name!r} must define __init__ accepting the child "
-                f"modules as positional arguments (got {kernel_cls!r} with no custom __init__)."
+                f"Fused kernel {kernel_cls.__name__!r} requires a companion layout class "
+                f"named '{kernel_cls.__name__}Layout' in the same module. "
+                f"Define it with __init__(self, {', '.join(child_names)}) to set up the "
+                f"fused parameter layout."
             )
+
+        layout_cls.kernel_layer_name = kernel_cls.__name__
 
         # 2. Meta-device scan — find parent classes that own all target children.
         with torch.device("meta"):
@@ -679,7 +710,7 @@ def register_kernel_fusions(
             if not all(hasattr(module, name) for name in child_names):
                 continue
             seen.add(module_cls)
-            patch_mapping[module_cls.__name__] = make_kernel_init_parent_class(module_cls, child_names, kernel_cls)
+            patch_mapping[module_cls.__name__] = make_kernel_init_parent_class(module_cls, child_names, layout_cls)
 
         if not patch_mapping:
             logger.warning(
@@ -692,15 +723,17 @@ def register_kernel_fusions(
         # 3. Register class-level monkey patches.
         register_patch_mapping(patch_mapping, overwrite=True)
 
-        # 4. Register the kernel's conversion_mapping if it declares one.
-        if hasattr(kernel_cls, "conversion_mapping"):
+        # 4. Register the layout's conversion_mapping if it declares one.
+        if hasattr(layout_cls, "conversion_mapping"):
             existing = get_checkpoint_conversion_mapping(model_type)
-            transforms = list(kernel_cls.conversion_mapping)
+            transforms = list(layout_cls.conversion_mapping)
             if existing is not None:
                 transforms = existing + transforms
             register_checkpoint_conversion_mapping(model_type, transforms, overwrite=True)
 
-        # The tuple key is fully handled here — do not forward to kernelize.
+        # 5. Keep the original repo string: kernelize loads the forward-only kernel_cls
+        #    and replaces the layout instances' forward via kernel_layer_name.
+        new_mapping[kernel_cls.__name__] = hub_repo
 
     kernel_config.kernel_mapping = new_mapping
 
