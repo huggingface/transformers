@@ -46,3 +46,5 @@
         title: Auto-generarea docstring-urilor
       - local: testing
         title: Scrierea testelor pentru modele
+      - local: pr_checks
+        title: Verificările pentru pull request
