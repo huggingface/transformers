@@ -16,32 +16,26 @@ rendered properly in your Markdown viewer.
 
 # Padding-free training
 
-Padding-free training (also called packing) concatenates several samples into a single sequence instead of padding each one to a fixed length. The model needs to know where each sample ends so attention doesn't mix tokens across samples.
+Padding-free training (also called packing) concatenates several samples into a single sequence instead of padding each one to a fixed length. The model needs to know where each sample ends so (linear) attention doesn't mix tokens across samples.
 
 There are two ways to provide those boundaries.
 
-- Infer them from `position_ids` at runtime.
 - Prepare them ahead of time with a data collator.
+- Infer them from `position_ids` at runtime.
 
 The recommended approach is the data collator. This guide explains why and covers the caveats of the `position_ids` path.
 
-> [!TIP]
-> Padding-free relies on a FlashAttention implementation. Install [flash-attn](https://github.com/Dao-AILab/flash-attention) and load the model with `attn_implementation="flash_attention_2"` (or `"flash_attention_3"`), since only the FlashAttention kernels expose the variable-length path that a flattened batch needs.
-
-## Infer boundaries from position_ids
-
-FlashAttention can detect padding-free batches from `position_ids` alone and remains for backward compatibility, because downstream frameworks such as TRL depend on it.
-
-Relying on `position_ids` has two problems.
-
-- Detecting packed sequences from `position_ids` is a dynamic, data-dependent check. It works without compilation, but under `torch.compile` it causes graph breaks. The check is currently restricted to `batch_size == 1` to limit how often it runs, since real batch sizes are usually larger.
-- Compiled FlashAttention forces some kwargs to be plain Python `int`s. Inferring them from `position_ids` at runtime forces device-to-host syncs, and on older PyTorch versions an extra graph break from the tensor-to-int conversion.
+> [!WARNING]
+> Inferring boundaries from `position_ids` is not the preferred approach, and it only works for standard attention models. Linear-attention models such as Qwen3-Next and Qwen3.5 (Gated DeltaNet) and convolution-based models ignore `position_ids` boundaries and require the data collator. See [Linear attention and convolution models](#linear-attention-and-convolution-models).
 
 ## Prepare boundaries with a data collator
 
 Preparing the boundary kwargs up front removes the problems above and behaves identically whether or not you compile.
 
 Use [`DataCollatorWithFlattening`] to flatten each batch and return the boundary information. Set `return_flash_attn_kwargs=True` so the collator precomputes the boundaries instead of leaving them to be inferred from `position_ids` at runtime. Pass it to [`Trainer`] and don't add an `attention_mask`, since the flattened batch already encodes the boundaries and a mask conflicts with the packed layout.
+
+> [!TIP]
+> Padding-free relies on a FlashAttention implementation for standard attention models. Install [flash-attn](https://github.com/Dao-AILab/flash-attention) and load the model with `attn_implementation="flash_attention_2"` (or `"flash_attention_3"`), since only the FlashAttention kernels expose the variable-length path that a flattened batch needs.
 
 ```python
 import torch
@@ -53,7 +47,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
     attn_implementation="flash_attention_2",
-    device_map="cuda",
+    device_map="auto",
 )
 
 dataset = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="train")
@@ -74,6 +68,15 @@ trainer = Trainer(
 trainer.train()
 ```
 
+## Infer boundaries from position_ids
+
+FlashAttention can detect padding-free batches from `position_ids` alone and remains for backward compatibility, because downstream frameworks such as TRL depend on it.
+
+Relying on `position_ids` has two problems.
+
+- Detecting packed sequences from `position_ids` is a dynamic, data-dependent check. It works without compilation, but under `torch.compile` it causes graph breaks. The check is currently restricted to `batch_size == 1` to limit how often it runs, since real batch sizes are usually larger.
+- Compiled FlashAttention forces some kwargs to be plain Python `int`s. Inferring them from `position_ids` at runtime forces device-to-host syncs, and on older PyTorch versions an extra graph break from the tensor-to-int conversion.
+
 ## Linear attention and convolution models
 
 Gated DeltaNet (GDN), other linear-attention layers, and causal convolutions have no `position_ids`-only path, by design. Preparing the data with the collator is the only supported option for these models.
@@ -92,7 +95,10 @@ data_collator = DataCollatorWithFlattening(
 )
 ```
 
-These models also need their kernels installed, [flash-linear-attention](https://github.com/fla-org/flash-linear-attention) for the linear-attention recurrence and [causal-conv1d](https://github.com/Dao-AILab/causal-conv1d) for the convolution. Without them, the model falls back to reference implementations that ignore the boundary kwargs and mix tokens across samples.
+The exact kernel packages depend on the model's original implementation. Gated DeltaNet models such as Qwen3-Next and Qwen3.5 use [flash-linear-attention](https://github.com/fla-org/flash-linear-attention), and Mamba-based models such as Bamba use [mamba-ssm](https://github.com/state-spaces/mamba). Both rely on [causal-conv1d](https://github.com/Dao-AILab/causal-conv1d) for the convolution. Without the right kernels, the model falls back to reference implementations that ignore the boundary kwargs and mix tokens across samples.
+
+> [!TIP]
+> Many of these kernels are also available through the [kernels](./kernels) library, which can fetch a compatible build for you. flash-linear-attention typically still needs a direct install.
 
 When the boundary kwargs are missing, the kernels quietly treat the whole batch as one sequence. Nothing raises an error or warning, because a runtime check would add a data-dependent branch that conflicts with `torch.compile`.
 
