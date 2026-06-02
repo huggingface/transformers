@@ -322,6 +322,8 @@ def _verify_tp_sharding(rank, model_tp, model_ref):
 
 def _test_tp_forward_impl(_rank, model_path, model_class, atol, rtol):
     """Implementation for comparing TP and non-TP model outputs."""
+    assert torch.get_num_threads() == 1
+
     set_seed(0)
 
     model_tp, model, device = _load_tp_and_reference_models(model_path, model_class)
@@ -349,6 +351,8 @@ def _test_tp_forward_impl(_rank, model_path, model_class, atol, rtol):
 
 def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
     """Implementation for comparing TP and non-TP model backward passes."""
+    assert torch.get_num_threads() == 1
+
     set_seed(0)
 
     model_tp, model, device = _load_tp_and_reference_models(model_path, model_class)
@@ -408,6 +412,8 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
 
 def _test_tp_generation_impl(_rank, model_path, model_class, atol, rtol, max_new_tokens):
     """Implementation for comparing TP and non-TP model generation outputs (direct load path)."""
+    assert torch.get_num_threads() == 1
+
     set_seed(0)
 
     model_tp, model, device = _load_tp_and_reference_models(model_path, model_class)
@@ -451,6 +457,8 @@ def _test_tp_generation_impl(_rank, model_path, model_class, atol, rtol, max_new
 
 def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_tokens):
     """Implementation for comparing TP+quantized and non-TP quantized generation (sequence equality)."""
+    assert torch.get_num_threads() == 1
+
     set_seed(0)
 
     quantization_config = TorchAoConfig(Float8WeightOnlyConfig())
@@ -520,6 +528,8 @@ def _load_ep_and_reference_models(model_path, model_class):
 
 def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol):
     """Implementation for comparing EP and non-EP model outputs."""
+    assert torch.get_num_threads() == 1
+
     set_seed(0)
 
     model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class)
@@ -544,6 +554,8 @@ def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol):
 
 def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol):
     """Implementation for comparing EP and non-EP model backward passes."""
+    assert torch.get_num_threads() == 1
+
     set_seed(0)
 
     model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class)
