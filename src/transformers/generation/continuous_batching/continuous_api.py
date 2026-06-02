@@ -176,12 +176,12 @@ class BackgroundThreadStatus:
             self._local_status = max(self._local_status, tp_status)
 
     @property
-    def local(self) -> int:
+    def local_status(self) -> int:
         """The locally requested status, possibly ahead of the value agreed upon by the TP group."""
         return self._local_status
 
     @property
-    def tp(self) -> int:
+    def tp_status(self) -> int:
         """The status last agreed upon by the TP group through a MAX-reduce operation."""
         return self._tp_status
 
@@ -322,13 +322,13 @@ class ContinuousBatchProcessor:
         payload_size = len(payload[0]) + len(payload[1])
 
         # Cheap 2 ints broadcast of payload size (from rank 0) and requested stop status (all to all)
-        local_requested_status = self.background_thread_status.local
+        local_requested_status = self.background_thread_status.local_status
         payload_size, tp_status = self.distributed_helper.tp_all_reduce_state(payload_size, local_requested_status)
         # Update the local stop status with the new one
         self.background_thread_status.update_with_tp_status(tp_status)
 
         # Exit early if the TP group is hard-stopping
-        if self.background_thread_status.tp == BackgroundThreadStatus.HARD_STOP:
+        if self.background_thread_status.tp_status == BackgroundThreadStatus.HARD_STOP:
             return True
         # Same if there is no payload
         if payload_size == 0:
@@ -692,7 +692,8 @@ class ContinuousBatchingManager:
         # Early return if the thread is not running
         if self._generation_thread is None:
             return None
-        # Join with a potential timeout and check if the thread is still alive afterwards (best if not)
+        # Join (maybe w/ timeout) and check if the thread is still alive afterwards. If it is, then it means the thread
+        # is still running despite the stop signal, so we warn the user who might expect otherwise.
         self._generation_thread.join(timeout=timeout)
         if self._generation_thread.is_alive():
             logger.warning(f"Generation thread did not exit after join timeout ({timeout}).")
@@ -738,7 +739,7 @@ class ContinuousBatchingManager:
         if not self.is_tp_driver:
             return None
         # If the manager is not accepting new requests, throw a warning and return None
-        if self.background_thread_status.local >= BackgroundThreadStatus.FLUSH_AND_STOP:
+        if self.background_thread_status.local_status >= BackgroundThreadStatus.FLUSH_AND_STOP:
             preview = f"{input_ids[:3]}"[:-1] + ", ..., " + f"{input_ids[-3:]}"[1:]
             logger.warning(f"Background thread is stopping. Request with ids {preview} will be dropped.")
             return None
@@ -899,11 +900,11 @@ class ContinuousBatchingManager:
                     self.current_batch += 1
 
                 # Stop the loop if the TP group is hard-stopping
-                elif self.background_thread_status.tp == BackgroundThreadStatus.HARD_STOP:
+                elif self.background_thread_status.tp_status == BackgroundThreadStatus.HARD_STOP:
                     break
                 # Stop the loop if the TP group is flushing and there are no pending requests
                 elif (
-                    self.background_thread_status.tp == BackgroundThreadStatus.FLUSH_AND_STOP
+                    self.background_thread_status.tp_status == BackgroundThreadStatus.FLUSH_AND_STOP
                     and not batch_processor.has_pending_requests()
                 ):
                     break
@@ -921,7 +922,7 @@ class ContinuousBatchingManager:
 
             # This should be a no-op unless a user asked for a hard stop
             error = RuntimeError(
-                f"Generation loop finished before this request completed w/ {self.background_thread_status.tp = }"
+                f"Generation loop finished before this request completed w/ {self.background_thread_status.tp_status = }"
             )
             self._fail_all_remaining_requests(error, batch_processor)
 

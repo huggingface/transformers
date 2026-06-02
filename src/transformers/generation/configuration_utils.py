@@ -1755,7 +1755,8 @@ class ContinuousBatchingConfig:
     disable_nccl_graph_mixing: bool = True
 
     # The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None for
-    # no timeout. Default is 300 seconds.
+    # no timeout. Default is 300 seconds. This exists because dist has a gloo timeout of 30 minutes, which is way too
+    # long for almost all use cases.
     cpu_group_timeout: float | None = 300.0
 
     def __post_init__(self):
