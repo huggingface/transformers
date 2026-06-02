@@ -144,6 +144,10 @@ class Qwen3VLConfig(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"]()
 
+        if self.output_hidden_states:
+            self.text_config.output_hidden_states = True
+            self.vision_config.output_hidden_states = True
+
         super().__post_init__(**kwargs)
 
 
