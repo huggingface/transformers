@@ -806,6 +806,8 @@ class Sapiens2PreTrainedModel(PreTrainedModel):
 
     # Ignore periods as we use inv_freq instead which is automatically calculated from the config.
     _keys_to_ignore_on_load_unexpected = [r"periods"]
+    # mask_token is only used for masked image modeling pretraining and is absent in most checkpoints.
+    _keys_to_ignore_on_load_missing = [r"mask_token"]
 
     @torch.no_grad()
     def _init_weights(self, module) -> None:
