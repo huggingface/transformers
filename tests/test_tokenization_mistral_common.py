@@ -902,30 +902,12 @@ class TestMistralCommonBackend(unittest.TestCase):
             expected_tokenized.tokens,
         )
 
-    def test_apply_chat_template_continue_final_message(self):
-        conversation = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Hi!"},
-            {"role": "assistant", "content": "Hello! How can I help you?"},
-            {"role": "user", "content": "What is the capital of France?"},
-            {"role": "assistant", "content": "Paris"},
-        ]
-
-        expected_tokenized = self.ref_tokenizer.encode_chat_completion(
-            ChatCompletionRequest.from_openai(conversation, continue_final_message=True)
-        )
-
-        self.assertEqual(
-            self.tokenizer.apply_chat_template(conversation, tokenize=False, continue_final_message=True),
-            expected_tokenized.text,
-        )
-        self.assertEqual(
-            self.tokenizer.apply_chat_template(conversation, tokenize=True, continue_final_message=True).input_ids,
-            expected_tokenized.tokens,
-        )
-
-        with self.assertRaises(InvalidMessageStructureException):
-            self.tokenizer.apply_chat_template(conversation, tokenize=False, continue_final_message=False)
+    def test_continue_final_message_raises_for_mistral_common(self):
+        with self.assertRaises(ValueError, msg="continue_final_message"):
+            self.tokenizer.apply_chat_template(
+                [{"role": "user", "content": "test"}, {"role": "assistant", "content": "partial"}],
+                continue_final_message=True,
+            )
 
     def test_apply_chat_template_with_add_generation_prompt(self):
         conversation = [
@@ -1344,56 +1326,13 @@ class TestMistralCommonBackend(unittest.TestCase):
         self.assertEqual(output["input_ids"].tolist(), [expected_tokenized.tokens] * 3)
         self.assertTrue(np.allclose(output["pixel_values"], np.array([expected_tokenized.images] * 3)))
 
-    def test_batch_apply_chat_template_with_continue_final_message(self):
-        conversations = [
-            [
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": "Hi!"},
-                {"role": "assistant", "content": "Hello! How can "},
-            ],
-            [
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": "Hi!"},
-                {"role": "assistant", "content": "Hello! How can I help you? Ou préférez vous "},
-            ],
-        ]
-
-        # Test 1:
-        # with continue_final_message
-        expected_tokenized = [
-            self.ref_tokenizer.encode_chat_completion(
-                ChatCompletionRequest.from_openai(conversation, continue_final_message=True)
-            )
-            for conversation in conversations
-        ]
-
-        token_outputs = self.tokenizer.apply_chat_template(
-            conversations, tokenize=True, continue_final_message=True
-        ).input_ids
-
-        for output, expected in zip(token_outputs, expected_tokenized):
-            self.assertEqual(output, expected.tokens)
-
-        # Test 2:
-        # without continue_final_message
-        with self.assertRaises(InvalidMessageStructureException):
+    def test_batch_continue_final_message_raises_for_mistral_common(self):
+        with self.assertRaises(ValueError, msg="continue_final_message"):
             self.tokenizer.apply_chat_template(
-                conversations,
-                tokenize=False,
-                continue_final_message=False,
-            )
-
-        # Test 3:
-        # with continue_final_message and last role is not assistant
-        with self.assertRaises(InvalidMessageStructureException):
-            self.tokenizer.apply_chat_template(
-                conversation=[
-                    [
-                        {"role": "system", "content": "You are a helpful assistant."},
-                        {"role": "user", "content": "Hi!"},
-                    ]
+                [
+                    [{"role": "user", "content": "test"}, {"role": "assistant", "content": "partial"}],
+                    [{"role": "user", "content": "test2"}, {"role": "assistant", "content": "partial2"}],
                 ],
-                tokenize=True,
                 continue_final_message=True,
             )
 

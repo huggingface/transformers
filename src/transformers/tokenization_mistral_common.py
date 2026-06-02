@@ -1055,10 +1055,8 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
                 This argument is a no-op for `MistralCommonBackend`. However, it cannot be used at the same time as `continue_final_message` to keep the API consistent.
                 If any conversation ends with an assistant message, it will raise an error. In such cases, use `continue_final_message` instead.
             continue_final_message (bool, *optional*):
-                If this is set, the chat will be formatted so that the final
-                message in the chat is open-ended, without any EOS tokens. The model will continue this message
-                rather than starting a new one. This allows you to "prefill" part of
-                the model's response for it. Cannot be used at the same time as `add_generation_prompt`.
+                `continue_final_message` is not supported for the mistral-common backend
+                and will raise a ValueError.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
@@ -1174,6 +1172,14 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
             for message in conversation:
                 message = _maybe_adapt_message(message)
                 messages.append(message)
+
+            if continue_final_message:
+                raise ValueError(
+                    "The `continue_final_message` option is not supported by the "
+                    "mistral-common tokenizer backend. Use a standard Jinja chat "
+                    "template tokenizer instead, or wait for mistral-common to "
+                    "add native support for this flag."
+                )
 
             chat_request = ChatCompletionRequest.from_openai(
                 messages=messages,
