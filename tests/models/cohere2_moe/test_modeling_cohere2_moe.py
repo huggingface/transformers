@@ -66,6 +66,23 @@ class Cohere2MoeModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Cohere2MoeForCausalLM if is_torch_available() else None
 
+    def setUp(self):
+        super().setUp()
+        self.skip_device_placement_tests()
+
+    def skip_device_placement_tests(self):
+        # The tiny test config has a single sparse MoE decoder layer that accounts for ~70% of the model. Since a
+        # decoder layer is a non-splittable block, `accelerate` cannot balance the model across devices, so these
+        # offload/parallelism tests cannot produce a multi-device `hf_device_map`.
+        skippable_tests = [
+            "test_cpu_offload",
+            "test_disk_offload_bin",
+            "test_disk_offload_safetensors",
+            "test_model_parallelism",
+        ]
+        if self._testMethodName in skippable_tests:
+            self.skipTest(reason="Sparse MoE layer dominates model size; cannot be split across devices.")
+
 
 @slow
 @require_torch_large_accelerator
