@@ -165,6 +165,12 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("attention.attention.value", "attention.v_proj"),
             WeightRenaming("attention.output.dense", "attention.o_proj"),
         ],
+        "Dinov2WithRegistersModel": [
+            WeightRenaming("attention.attention.query", "attention.q_proj"),
+            WeightRenaming("attention.attention.key", "attention.k_proj"),
+            WeightRenaming("attention.attention.value", "attention.v_proj"),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+        ],
         "ViTMSNForImageClassification": [
             WeightRenaming(r"^encoder\.", "vit.encoder."),
         ],
