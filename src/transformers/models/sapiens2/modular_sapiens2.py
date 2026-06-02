@@ -42,6 +42,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput, Semanti
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple
 from ..beit.image_processing_beit import BeitImageProcessor, BeitImageProcessorKwargs
 from ..dinov3_vit.configuration_dinov3_vit import DINOv3ViTConfig
 from ..dinov3_vit.modeling_dinov3_vit import (
@@ -1580,6 +1581,8 @@ class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
         self.decode_head = Sapiens2Head(config)
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1654,6 +1657,8 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
         self.decode_head = Sapiens2Head(config)
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1732,6 +1737,8 @@ class Sapiens2ForNormalEstimation(Sapiens2PreTrainedModel):
         self.decode_head = Sapiens2Head(config)
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1806,6 +1813,8 @@ class Sapiens2ForPointmapEstimation(Sapiens2PreTrainedModel):
         )
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1877,6 +1886,8 @@ class Sapiens2ForImageMatting(Sapiens2PreTrainedModel):
         self.decode_head = Sapiens2Head(config)  # config.num_labels = 4
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,

@@ -1013,6 +1013,8 @@ class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
         self.decode_head = Sapiens2Head(config)
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1127,6 +1129,8 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
         self.decode_head = Sapiens2Head(config)
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1205,6 +1209,8 @@ class Sapiens2ForNormalEstimation(Sapiens2PreTrainedModel):
         self.decode_head = Sapiens2Head(config)
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1279,6 +1285,8 @@ class Sapiens2ForPointmapEstimation(Sapiens2PreTrainedModel):
         )
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1350,6 +1358,8 @@ class Sapiens2ForImageMatting(Sapiens2PreTrainedModel):
         self.decode_head = Sapiens2Head(config)  # config.num_labels = 4
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
