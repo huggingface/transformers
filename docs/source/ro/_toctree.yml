@@ -48,3 +48,6 @@
         title: Scrierea testelor pentru modele
       - local: pr_checks
         title: Verificările pentru pull request
+      - local: add_new_model
+        title: Contribuția legacy la modele
+      title: Contribuie
