@@ -134,7 +134,8 @@ def batched_mm_experts_forward(
     # Clamp EP sentinels so `gate_up_proj[expert_ids]` stays in-bounds. Routing weights are already
     # zero at sentinel slots (RouterParallel masks them at dispatch), so the weighted mul drops
     # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
-    expert_ids.clamp_(0, self.num_experts - 1)
+    # Out-of-place to avoid mutating the caller's routing tensor (a contiguous `reshape(-1)` aliases it).
+    expert_ids = expert_ids.clamp(0, self.num_experts - 1)
 
     # Select gate_up or just up projection weights and biases
     if self.has_gate:

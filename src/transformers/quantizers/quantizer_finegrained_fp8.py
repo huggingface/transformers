@@ -76,10 +76,11 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 )
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        from ..integrations.finegrained_fp8 import FP8Experts, FP8GroupedLinear, FP8Linear
+        # `FP8GroupedLinear` is a subclass of `FP8Linear`, so the tuple covers it implicitly.
+        from ..integrations.finegrained_fp8 import FP8Experts, FP8Linear
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, (FP8Linear, FP8Experts, FP8GroupedLinear)):
+        if isinstance(module, (FP8Linear, FP8Experts)):
             if self.pre_quantized or tensor_name == "bias":
                 return False
             else:
@@ -112,22 +113,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         )
 
     def update_tp_plan(self, config):
-        # Apply per-impl TP plan key swaps declared on the experts class. The default
-        # `MoeTensorParalellExperts` plan is impl-agnostic; impls that need a distinct
-        # TP layer (currently megamoe — see `FP8Experts._impl_tp_plan_overrides`) get
-        # their plan keys rewritten here. Models may carry the experts mapping under
-        # `base_model_tp_plan` or `base_model_ep_plan` — swap both.
-        from ..integrations.finegrained_fp8 import FP8Experts
-
-        impl = getattr(config, "_experts_implementation", None)
-        swap = FP8Experts._impl_tp_plan_overrides.get(impl)
-        if swap:
-            for plan_attr in ("base_model_tp_plan", "base_model_ep_plan"):
-                base_plan = getattr(config, plan_attr, None) or {}
-                updated_plan = {k: swap.get(v, v) for k, v in base_plan.items()}
-                if updated_plan != base_plan:
-                    setattr(config, plan_attr, updated_plan)
-
         if "Qwen3" in config.__class__.__name__:
             text_plan = {
                 "layers.*.self_attn.q_proj.weight": "colwise",
@@ -147,6 +132,21 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             }
 
             config.base_model_tp_plan = text_plan
+
+        # Per-impl rewrite of the experts parallel-layer kind. Applied LAST so it composes
+        # on top of any plan written above (e.g. the Qwen3 dense plan). Models carry the
+        # experts mapping under `base_model_tp_plan` and/or `base_model_ep_plan` — rewrite
+        # both. See `FP8Experts._impl_tp_layer_overrides`.
+        from ..integrations.finegrained_fp8 import FP8Experts
+
+        impl = getattr(config, "_experts_implementation", None)
+        layer_overrides = FP8Experts._impl_tp_layer_overrides.get(impl)
+        if layer_overrides:
+            for plan_attr in ("base_model_tp_plan", "base_model_ep_plan"):
+                base_plan = getattr(config, plan_attr, None) or {}
+                updated_plan = {k: layer_overrides.get(v, v) for k, v in base_plan.items()}
+                if updated_plan != base_plan:
+                    setattr(config, plan_attr, updated_plan)
 
         return config
 

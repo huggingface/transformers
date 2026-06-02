@@ -2213,7 +2213,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         )
 
         # MegaMoE is locked at load time: its TP plan is baked into `base_model_tp_plan`
-        # by `update_tp_plan` (and isn't re-evaluated) and `_megamoe_setup_weights`
+        # by `update_tp_plan` (and isn't re-evaluated) and `setup_megamoe_weights`
         # mutates the expert weights into UTCCP layout on first forward. Either side of
         # a switch would silently produce garbage, so reject it with a clear pointer.
         current = self.config._experts_implementation
