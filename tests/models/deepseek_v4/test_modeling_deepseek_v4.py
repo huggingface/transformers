@@ -499,7 +499,11 @@ def _run_distributed_worker(
         add_special_tokens=add_special_tokens,
     )
     num_gpus = torch.cuda.device_count()
-    redirects = ",".join(f"{r}:3" for r in range(1, num_gpus))
+    # Redirect only stdout (`:1`) for ranks 1..N-1 to suppress duplicated generation chatter.
+    # Stderr is left attached so worker tracebacks (OOM, NCCL, kernel crash) surface in the
+    # subprocess stderr and the test failure message — `:3` would file-log both and turn any
+    # rank>0 crash into a bare non-zero return code with no diagnostic.
+    redirects = ",".join(f"{r}:1" for r in range(1, num_gpus))
     with tempfile.NamedTemporaryFile("w", suffix="_distributed_worker.py") as f:
         f.write(script)
         f.flush()
@@ -513,7 +517,7 @@ def _run_distributed_worker(
 @require_torch
 @require_torch_n_accelerators(8)
 @require_torch_large_accelerator(memory=64)
-@require_cuda_capability_at_least(10, 0)
+@require_cuda_capability_at_least(9, 0)
 @slow
 class DeepseekV4FlashIntegrationTest(unittest.TestCase):
     """Multi-device native FP4 generation on DSv4-Flash, via `torchrun` + EP=8.
