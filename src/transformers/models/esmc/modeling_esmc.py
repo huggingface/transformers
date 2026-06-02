@@ -164,186 +164,83 @@ class ESMCSequenceClassifierOutput(SequenceClassifierOutput):
 # ---------------------------------------------------------------------------
 
 
-def _rotate_half(x: torch.Tensor, interleaved: bool = False) -> torch.Tensor:
-    if not interleaved:
-        x1, x2 = x.chunk(2, dim=-1)
-        return torch.cat((-x2, x1), dim=-1)
-    x1, x2 = x[..., ::2], x[..., 1::2]
-    return torch.stack((-x2, x1), dim=-1).flatten(-2, -1)
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
-def _apply_rotary_emb_torch(
-    x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, interleaved: bool = False
-) -> torch.Tensor:
-    """Apply rotary position embeddings (pure PyTorch, no Triton dependency).
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Apply Rotary Position Embedding to the query and key tensors.
 
-    Args:
-        x: ``(batch, seqlen, n_heads, head_dim)``
-        cos: ``(seqlen, rotary_dim / 2)``
-        sin: ``(seqlen, rotary_dim / 2)``
+    ``q`` / ``k`` are ``(batch, n_heads, seq_len, head_dim)`` and ``cos`` /
+    ``sin`` are ``(batch, seq_len, head_dim)``; ``unsqueeze_dim=1`` broadcasts
+    them over the head axis. Computed in fp32, then cast back to the input dtype.
     """
-    ro_dim = cos.shape[-1] * 2
-    seqlen = x.size(1)
-    cos = cos[:seqlen].unsqueeze(1).repeat(1, 1, 2)
-    sin = sin[:seqlen].unsqueeze(1).repeat(1, 1, 2)
-    return torch.cat(
-        [
-            x[..., :ro_dim] * cos + _rotate_half(x[..., :ro_dim], interleaved) * sin,
-            x[..., ro_dim:],
-        ],
-        dim=-1,
-    )
+    original_dtype = q.dtype
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q.float() * cos) + (rotate_half(q.float()) * sin)
+    k_embed = (k.float() * cos) + (rotate_half(k.float()) * sin)
+    return q_embed.to(original_dtype), k_embed.to(original_dtype)
 
 
-class RotaryEmbedding(nn.Module):
-    """Rotary position embeddings (RoPE) as described in `RoFormer`_.
+class ESMCRotaryEmbedding(nn.Module):
+    """Rotary position embeddings (RoPE), config-driven, returning ``(cos, sin)``.
 
-    .. _RoFormer: https://arxiv.org/abs/2104.09864
-
-    Args:
-        dim: Size of a single attention head.
-        base: Frequency base for the sinusoidal positions.
-        interleaved: If ``True`` rotate adjacent pairs (GPT-J style) instead of
-            splitting the head dimension in half (GPT-NeoX style).
-        scaling_factor: Linear scaling factor applied to position indices.
-        pos_idx_in_fp32: Compute position indices in float32 to avoid bf16
-            rounding errors at large sequence lengths.
+    Follows the standard Transformers rotary convention (cf.
+    ``EsmRotaryEmbedding`` / ``LlamaRotaryEmbedding``): ``inv_freq`` is a
+    non-persistent fp32 buffer and ``forward`` builds full-head-dim ``cos`` /
+    ``sin`` in fp32 before casting to the input dtype.
     """
 
-    def __init__(
-        self,
-        dim: int,
-        base: float = 10000.0,
-        interleaved: bool = False,
-        scale_base: float | None = None,
-        scaling_factor: float = 1.0,
-        pos_idx_in_fp32: bool = True,
-        device=None,
-    ):
+    inv_freq: torch.Tensor
+
+    def __init__(self, config: ESMCConfig, device=None):
         super().__init__()
-        self.dim = dim
-        self.base = base
-        self.interleaved = interleaved
-        self.scale_base = scale_base
-        self.scaling_factor = scaling_factor
-        self.pos_idx_in_fp32 = pos_idx_in_fp32
-
-        self._seq_len_cached = 0
-        self._cos_cached: torch.Tensor | None = None
-        self._sin_cached: torch.Tensor | None = None
-        self._cos_k_cached: torch.Tensor | None = None
-        self._sin_k_cached: torch.Tensor | None = None
-
-        self.reset_parameters(device=device)
-
-    def reset_parameters(self, device=None):
-        inv_freq = self._compute_inv_freq(device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        arange = torch.arange(0, self.dim, 2, device=device, dtype=torch.float32)
-        scale = (
-            (arange + 0.4 * self.dim) / (1.4 * self.dim)
-            if self.scale_base is not None
-            else None
+        self.config = config
+        self.register_buffer(
+            "inv_freq", self._compute_inv_freq(config, device), persistent=False
         )
-        self.register_buffer("scale", scale, persistent=False)
 
-    def _compute_inv_freq(self, device=None) -> torch.Tensor:
+    @staticmethod
+    def _compute_inv_freq(config: ESMCConfig, device=None) -> torch.Tensor:
+        dim = config.d_model // config.n_heads
         return 1.0 / (
-            self.base
+            config.rope_theta
             ** (
-                torch.arange(0, self.dim, 2, device=device, dtype=torch.float32)
-                / self.dim
+                torch.arange(0, dim, 2, dtype=torch.int64).to(
+                    device=device, dtype=torch.float32
+                )
+                / dim
             )
         )
 
-    def _update_cos_sin_cache(self, seqlen: int, device=None, dtype=None):
-        if self.inv_freq.is_meta:
-            self.reset_parameters(device=device)
-        if (
-            seqlen > self._seq_len_cached
-            or self._cos_cached is None
-            or self._cos_cached.device != device
-            or self._cos_cached.dtype != dtype
-            or (self.training and self._cos_cached.is_inference())
-        ):
-            self._seq_len_cached = seqlen
-            if self.pos_idx_in_fp32:
-                t = (
-                    torch.arange(seqlen, device=device, dtype=torch.float32)
-                    / self.scaling_factor
-                )
-                inv_freq = (
-                    self.inv_freq.to(torch.float32)
-                    if self.inv_freq.dtype != torch.float32
-                    else self.inv_freq
-                )
-            else:
-                t = (
-                    torch.arange(seqlen, device=device, dtype=self.inv_freq.dtype)  # type: ignore[call-overload]
-                    / self.scaling_factor
-                )
-                inv_freq = self.inv_freq
-            freqs = torch.outer(t, inv_freq)  # type: ignore[arg-type]
-
-            if self.scale is None:
-                self._cos_cached = torch.cos(freqs).to(dtype)
-                self._sin_cached = torch.sin(freqs).to(dtype)
-            else:
-                _scale: torch.Tensor = self.scale  # type: ignore[assignment]
-                power = (
-                    torch.arange(seqlen, dtype=_scale.dtype, device=_scale.device)
-                    - seqlen // 2
-                ) / self.scale_base  # type: ignore[operator]
-                scale = _scale.to(device=power.device) ** power.unsqueeze(-1)
-                self._cos_cached = (torch.cos(freqs) * scale).to(dtype)
-                self._sin_cached = (torch.sin(freqs) * scale).to(dtype)
-                self._cos_k_cached = (torch.cos(freqs) / scale).to(dtype)
-                self._sin_k_cached = (torch.sin(freqs) / scale).to(dtype)
-
-    def _apply(self, fn, recurse=True):
-        if self.inv_freq.is_meta:
-            self.reset_parameters(device="cpu")
-        result = super()._apply(fn, recurse=recurse)
-        # Recompute inv_freq on the new device: CPU vs CUDA ``pow`` differ by
-        # ~1 fp32 ULP, which compounds across attention layers. Keep this
-        # buffer fp32 even when the module is cast to bf16/fp16; otherwise the
-        # rounded RoPE frequencies drift from the internal ESMC path.
-        new_inv_freq = self._compute_inv_freq(device=self.inv_freq.device)
-        self.register_buffer("inv_freq", new_inv_freq, persistent=False)
-        self._seq_len_cached = 0
-        self._cos_cached = None
-        self._sin_cached = None
-        self._cos_k_cached = None
-        self._sin_k_cached = None
-        return result
-
+    @torch.no_grad()
     def forward(
-        self, q: torch.Tensor, k: torch.Tensor, seqlen_offset: int = 0
+        self, x: torch.Tensor, position_ids: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Apply RoPE to query and key tensors.
-
-        Args:
-            q: ``(batch, seqlen, n_heads, head_dim)``
-            k: ``(batch, seqlen, n_heads, head_dim)``
-            seqlen_offset: Offset used in incremental decoding.
-
-        Returns:
-            Tuple of rotated ``(q, k)`` tensors with the same shape as the inputs.
-        """
-        self._update_cos_sin_cache(
-            q.shape[1] + seqlen_offset, device=q.device, dtype=q.dtype
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None]
+            .float()
+            .expand(position_ids.shape[0], -1, 1)
+            .to(x.device)
         )
-        assert self._cos_cached is not None and self._sin_cached is not None
-
-        if self.scale is not None:
-            raise NotImplementedError("XPos scaling is not supported in this path.")
-
-        cos = self._cos_cached[seqlen_offset:]
-        sin = self._sin_cached[seqlen_offset:]
-
-        q_rot = _apply_rotary_emb_torch(q, cos, sin, self.interleaved)
-        k_rot = _apply_rotary_emb_torch(k, cos, sin, self.interleaved)
-        return q_rot, k_rot
+        position_ids_expanded = position_ids[:, None, :].float()
+        device_type = (
+            x.device.type
+            if isinstance(x.device.type, str) and x.device.type != "mps"
+            else "cpu"
+        )
+        with torch.autocast(device_type=device_type, enabled=False):  # force fp32
+            freqs = (
+                inv_freq_expanded.float() @ position_ids_expanded.float()
+            ).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos()
+            sin = emb.sin()
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 # ---------------------------------------------------------------------------
@@ -515,22 +412,11 @@ class MultiHeadAttention(nn.Module):
             self.q_ln = nn.Identity()
             self.k_ln = nn.Identity()
 
-        self.rotary = RotaryEmbedding(d_model // n_heads)
-
-    def _apply_rotary(
-        self, q: torch.Tensor, k: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        q = q.unflatten(-1, (self.n_heads, self.d_head))
-        k = k.unflatten(-1, (self.n_heads, self.d_head))
-        q, k = self.rotary(q, k)
-        q = q.flatten(-2, -1)
-        k = k.flatten(-2, -1)
-        return q, k
-
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         output_attentions: bool = False,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -538,22 +424,26 @@ class MultiHeadAttention(nn.Module):
 
         Attention is computed by the backend selected through
         ``config._attn_implementation`` (``eager`` / ``sdpa`` /
-        ``flash_attention_2`` / ...). RoPE and QK-LayerNorm are applied here; the
-        backend only computes ``softmax(QKᵀ)V``. ``attn_weights`` is ``None``
-        unless the backend exposes the probabilities — ``output_attentions=True``
-        forces the ``eager`` interface so they are observable.
+        ``flash_attention_2`` / ...). QK-LayerNorm and RoPE (via
+        ``position_embeddings``) are applied here; the backend only computes
+        ``softmax(QKᵀ)V``. ``attn_weights`` is ``None`` unless the backend
+        exposes the probabilities — ``output_attentions=True`` forces the
+        ``eager`` interface so they are observable.
         """
         b, s, _ = hidden_states.shape
         qkv = self.layernorm_qkv(hidden_states)
         q, k, v = torch.chunk(qkv, 3, dim=-1)
         q = self.q_ln(q).to(q.dtype)
         k = self.k_ln(k).to(q.dtype)
-        q, k = self._apply_rotary(q, k)
 
         # (B, S, D) -> (B, H, S, Dh)
         q = q.view(b, s, self.n_heads, self.d_head).transpose(1, 2)
         k = k.view(b, s, self.n_heads, self.d_head).transpose(1, 2)
         v = v.view(b, s, self.n_heads, self.d_head).transpose(1, 2)
+
+        if position_embeddings is not None:
+            cos, sin = position_embeddings
+            q, k = apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1)
 
         attention_interface: Callable = eager_attention_forward
         if not output_attentions:
@@ -627,6 +517,7 @@ class UnifiedTransformerBlock(nn.Module):
         self,
         x: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         output_attentions: bool = False,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -645,7 +536,11 @@ class UnifiedTransformerBlock(nn.Module):
             ``(batch, num_heads, seq_len, seq_len)`` or ``None``.
         """
         attn_out, attn_weights = self.attn(
-            x, attention_mask, output_attentions=output_attentions, **kwargs
+            x,
+            attention_mask,
+            position_embeddings=position_embeddings,
+            output_attentions=output_attentions,
+            **kwargs,
         )
         x = x + attn_out / self.scaling_factor
         x = x + self.ffn(x) / self.scaling_factor
@@ -704,6 +599,7 @@ class TransformerStack(nn.Module):
         self,
         x: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         layers_to_collect: list[int] | None = None,
         output_attentions: bool = False,
         **kwargs,
@@ -740,7 +636,11 @@ class TransformerStack(nn.Module):
             if layer_idx in layers_to_collect:
                 collected.append(x)
             x, attn_weights = block(
-                x, attention_mask, output_attentions=output_attentions, **kwargs
+                x,
+                attention_mask,
+                position_embeddings=position_embeddings,
+                output_attentions=output_attentions,
+                **kwargs,
             )
             if output_attentions and attn_weights is not None:
                 all_attentions.append(attn_weights)
@@ -780,8 +680,8 @@ class ESMCPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, RotaryEmbedding):
-            module.reset_parameters(device=self.device)
+        elif isinstance(module, ESMCRotaryEmbedding):
+            module.inv_freq = module._compute_inv_freq(module.config, device=self.device)
 
 
 # ---------------------------------------------------------------------------
@@ -805,6 +705,7 @@ class ESMCModel(ESMCPreTrainedModel):
     def __init__(self, config: ESMCConfig):
         super().__init__(config)
         self.embed = nn.Embedding(config.vocab_size, config.d_model)
+        self.rotary_emb = ESMCRotaryEmbedding(config)
         self.transformer = TransformerStack(
             config,
             config.d_model,
@@ -997,6 +898,8 @@ class ESMCModel(ESMCPreTrainedModel):
             bool_mask = attention_mask.bool()
 
         x = self.embed(input_ids)
+        position_ids = torch.arange(x.shape[1], device=x.device).unsqueeze(0)
+        position_embeddings = self.rotary_emb(x, position_ids)
 
         if user_supplied_sequence_id:
             if self.config._attn_implementation == "flash_attention_2" and (
@@ -1026,6 +929,7 @@ class ESMCModel(ESMCPreTrainedModel):
         last_hidden_state, _, collected, attentions = self.transformer(
             x,
             attention_mask=attn_bias,
+            position_embeddings=position_embeddings,
             layers_to_collect=layers_to_collect,
             output_attentions=output_attentions,
         )
