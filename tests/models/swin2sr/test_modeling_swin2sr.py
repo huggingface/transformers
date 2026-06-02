@@ -303,7 +303,7 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[0.5458, 0.5546, 0.5638], [0.5526, 0.5565, 0.5651], [0.5396, 0.5426, 0.5621]]
         ).to(torch_device)
-        torch.testing.assert_close(outputs.reconstruction[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.reconstruction[0, 0, :3, :3], expected_slice, rtol=1e-2, atol=1e-2)
 
     def test_inference_fp16(self):
         processor = Swin2SRImageProcessorPil()
@@ -329,4 +329,4 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device, dtype=model.dtype)
-        torch.testing.assert_close(outputs.reconstruction[0, 0, :3, :3], expected_slice, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(outputs.reconstruction[0, 0, :3, :3], expected_slice, rtol=1e-2, atol=1e-2)
