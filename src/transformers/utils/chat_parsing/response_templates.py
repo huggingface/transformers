@@ -65,9 +65,7 @@ class ResponseTemplate:
         return text[last_end:]
 
 
-def _compile_anchor(
-    scope: str, field: dict, lit_key: str, pat_key: str
-) -> tuple[Any, list[str] | None, bool]:
+def _compile_anchor(scope: str, field: dict, lit_key: str, pat_key: str) -> tuple[Any, list[str] | None, bool]:
     """The start and end anchors for a region can be either regexes, a single literal string, or a list of
     literal strings (an "any of these" alternation). Although all forms get compiled to a regex for matching,
     we keep the literal strings around too - when present, the parser can emit regions more quickly, since it
