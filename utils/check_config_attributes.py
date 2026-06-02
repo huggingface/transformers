@@ -87,6 +87,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "TimeSeriesTransformerConfig": ["num_static_real_features", "num_time_features"],
     "AutoformerConfig": ["num_static_real_features", "num_time_features"],
     "SamVisionConfig": ["mlp_ratio"],
+    "DeepseekOcr2SamVisionConfig": ["mlp_ratio"],
     "Sam3VisionConfig": ["backbone_feature_sizes"],
     "SamHQVisionConfig": ["mlp_ratio"],
     "ClapAudioConfig": ["num_classes"],
