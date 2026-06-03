@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 Biohub. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -75,9 +74,7 @@ XYZ_DIMS: int = 3
 MAX_ATOMIC_NUMBER: int = 128
 
 # Input feature dim = 3 + 1 + 1 + 128 + 64*4 = 389
-ATOM_FEATURE_DIM: int = (
-    XYZ_DIMS + 1 + 1 + MAX_ATOMIC_NUMBER + CHAR_VOCAB_SIZE * MAX_CHARS
-)
+ATOM_FEATURE_DIM: int = XYZ_DIMS + 1 + 1 + MAX_ATOMIC_NUMBER + CHAR_VOCAB_SIZE * MAX_CHARS
 
 
 NUM_RES_TYPES: int = 33
@@ -135,12 +132,8 @@ def scatter_atom_to_token(
         idx = torch.where(atom_mask, atom_to_token_idx, n_tokens)
         n_out = n_tokens + 1
     idx_expanded = idx.unsqueeze(-1).expand(B, A, d)
-    out = torch.zeros(
-        B, n_out, d, device=atom_features.device, dtype=atom_features.dtype
-    )
-    out.scatter_reduce_(
-        1, idx_expanded, atom_features, reduce="mean", include_self=False
-    )
+    out = torch.zeros(B, n_out, d, device=atom_features.device, dtype=atom_features.dtype)
+    out.scatter_reduce_(1, idx_expanded, atom_features, reduce="mean", include_self=False)
     return out[:, :n_tokens, :]
 
 
@@ -170,9 +163,7 @@ def _compute_intra_token_idx(atom_to_token: Tensor) -> Tensor:
     Returns:
         [B, A] tensor with values in [0, max_atoms_per_token - 1].
     """
-    same_as_prev = F.pad(
-        atom_to_token[:, 1:] == atom_to_token[:, :-1], (1, 0), value=False
-    )
+    same_as_prev = F.pad(atom_to_token[:, 1:] == atom_to_token[:, :-1], (1, 0), value=False)
     ones = torch.ones_like(atom_to_token)
     cumsum = torch.cumsum(ones, dim=-1)
     group_start = cumsum.masked_fill(same_as_prev, 0)
@@ -194,9 +185,7 @@ def _categorical_mean(logits: Tensor, start: float, end: float) -> Tensor:
         [...] expected value
     """
     n_bins = logits.shape[-1]
-    edges = torch.linspace(
-        start, end, n_bins + 1, device=logits.device, dtype=torch.float32
-    )
+    edges = torch.linspace(start, end, n_bins + 1, device=logits.device, dtype=torch.float32)
     v_bins = (edges[:-1] + edges[1:]) / 2  # [n_bins]
     return (logits.float().softmax(-1) @ v_bins.unsqueeze(1)).squeeze(-1)
 
@@ -266,9 +255,7 @@ class FourierEmbedding(nn.Module):
 
     def forward(self, t_hat: Tensor) -> Tensor:
         t = torch.as_tensor(t_hat, device=self.w.device, dtype=self.w.dtype).reshape(-1)
-        return torch.cos(
-            2.0 * torch.pi * (t[:, None] * self.w[None, :] + self.b[None, :])
-        )
+        return torch.cos(2.0 * torch.pi * (t[:, None] * self.w[None, :] + self.b[None, :]))
 
 
 # ===========================================================================
@@ -306,13 +293,9 @@ class SwiGLU(nn.Module):
 class SwiGLUMLP(SwiGLU):
     """SwiGLU MLP with packed weights, no bias."""
 
-    def __init__(
-        self, d_model: int, expansion_ratio: int = 4, bias: bool = False
-    ) -> None:
+    def __init__(self, d_model: int, expansion_ratio: int = 4, bias: bool = False) -> None:
         hidden = _compute_swiglu_hidden_size(d_model, expansion_ratio)
-        super().__init__(
-            in_features=d_model, hidden_features=hidden, out_features=d_model, bias=bias
-        )
+        super().__init__(in_features=d_model, hidden_features=hidden, out_features=d_model, bias=bias)
 
 
 # ===========================================================================
@@ -360,17 +343,10 @@ def build_3d_rope(
 
     spatial_inv_freq = 1.0 / (
         spatial_base_freq
-        ** (
-            torch.arange(0, n_spatial_per_axis, dtype=torch.float32, device=device)
-            / n_spatial_per_axis
-        )
+        ** (torch.arange(0, n_spatial_per_axis, dtype=torch.float32, device=device) / n_spatial_per_axis)
     )
     uid_inv_freq = 1.0 / (
-        uid_base_freq
-        ** (
-            torch.arange(0, n_uid_pairs, dtype=torch.float32, device=device)
-            / n_uid_pairs
-        )
+        uid_base_freq ** (torch.arange(0, n_uid_pairs, dtype=torch.float32, device=device) / n_uid_pairs)
     )
 
     pos_f32 = ref_pos.float()
@@ -384,9 +360,7 @@ def build_3d_rope(
     freqs = torch.cat([spatial_freqs, uid_freqs], dim=-1)
 
     if n_active < half_dim:
-        padding = torch.zeros(
-            B, N, half_dim - n_active, device=device, dtype=torch.float32
-        )
+        padding = torch.zeros(B, N, half_dim - n_active, device=device, dtype=torch.float32)
         freqs = torch.cat([freqs, padding], dim=-1)
 
     cos = freqs.cos().to(torch.bfloat16)
@@ -441,12 +415,8 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
-        query.dtype
-    )
-    attn_weights = nn.functional.dropout(
-        attn_weights, p=dropout, training=module.training
-    )
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
@@ -499,9 +469,7 @@ class SWA3DRoPEAttention(nn.Module):
         if q.dtype not in (torch.float16, torch.bfloat16):
             q, k, v = q.bfloat16(), k.bfloat16(), v.bfloat16()
 
-        attn_impl = (
-            self.config._attn_implementation if self.config is not None else "sdpa"
-        )
+        attn_impl = self.config._attn_implementation if self.config is not None else "sdpa"
         use_flash = attn_impl == "flash_attention_2" and FLASH_ATTN_AVAILABLE
 
         if use_flash and len(attention_params) > 2:
@@ -552,15 +520,11 @@ class SWA3DRoPEAttention(nn.Module):
             allowed |= torch.eye(N, dtype=torch.bool, device=q.device)
             # Sliding window as an additive bias: 0 where allowed, -inf elsewhere.
             attn_mask = torch.zeros(B, 1, N, N, dtype=q.dtype, device=q.device)
-            attn_mask = attn_mask.masked_fill(
-                ~allowed.unsqueeze(1), torch.finfo(q.dtype).min
-            )
+            attn_mask = attn_mask.masked_fill(~allowed.unsqueeze(1), torch.finfo(q.dtype).min)
 
             attention_interface: Callable = eager_attention_forward
             if attn_impl != "eager":
-                attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-                    attn_impl, eager_attention_forward
-                )
+                attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(attn_impl, eager_attention_forward)
             out, _ = attention_interface(
                 self,
                 q.transpose(1, 2),
@@ -615,14 +579,8 @@ class SWAAtomBlock(nn.Module):
         self.attn = SWA3DRoPEAttention(d_atom, n_heads, half_window=half_window)
         self.ffn = SwiGLUFFN(d_atom, expansion_ratio)
 
-        self._rms_adaln = (
-            torch.compile(_rms_adaln_raw) if use_compile_fusions else _rms_adaln_raw
-        )
-        self._gated_residual = (
-            torch.compile(_gated_residual_raw)
-            if use_compile_fusions
-            else _gated_residual_raw
-        )
+        self._rms_adaln = torch.compile(_rms_adaln_raw) if use_compile_fusions else _rms_adaln_raw
+        self._gated_residual = torch.compile(_gated_residual_raw) if use_compile_fusions else _gated_residual_raw
 
     def forward(self, x: Tensor, c_l: Tensor, attention_params: tuple) -> Tensor:
         mod = self.adaln_modulation(c_l)
@@ -675,9 +633,7 @@ class SWAAtomTransformer(nn.Module):
             ]
         )
 
-    def _build_3d_rope(
-        self, ref_pos: Tensor, ref_space_uid: Tensor
-    ) -> tuple[Tensor, Tensor]:
+    def _build_3d_rope(self, ref_pos: Tensor, ref_space_uid: Tensor) -> tuple[Tensor, Tensor]:
         return build_3d_rope(
             ref_pos=ref_pos,
             ref_space_uid=ref_space_uid,
@@ -818,9 +774,7 @@ class ESMFold2AtomEncoder(nn.Module):
                 layer_cache["attention_params"] = attention_params
                 layer_cache["mask_exp"] = mask_exp
                 layer_cache["n_tokens"] = n_tokens
-                layer_cache["atom_to_token_exp"] = atom_to_token.repeat_interleave(
-                    num_diffusion_samples, 0
-                )
+                layer_cache["atom_to_token_exp"] = atom_to_token.repeat_interleave(num_diffusion_samples, 0)
         else:
             c_base = layer_cache["c_base"]
             attention_params = layer_cache["attention_params"]
@@ -857,12 +811,8 @@ class ESMFold2AtomEncoder(nn.Module):
         if layer_cache is not None and "atom_to_token_exp" in layer_cache:
             atom_to_token_exp = layer_cache["atom_to_token_exp"]
         else:
-            atom_to_token_exp = atom_to_token.repeat_interleave(
-                num_diffusion_samples, 0
-            )
-        a = scatter_atom_to_token(
-            q_to_a, atom_to_token_exp, n_tokens, atom_mask=mask_exp.bool()
-        )
+            atom_to_token_exp = atom_to_token.repeat_interleave(num_diffusion_samples, 0)
+        a = scatter_atom_to_token(q_to_a, atom_to_token_exp, n_tokens, atom_mask=mask_exp.bool())
 
         return a, q, c, attention_params, intermediates
 
@@ -1006,19 +956,11 @@ class AttentionPairBias(nn.Module):
         # Expand z for num_diffusion_samples
         if z.dim() == 4 and z.shape[0] != bsz and num_diffusion_samples > 1:
             z = z.repeat_interleave(num_diffusion_samples, dim=0)
-        if (
-            attention_mask is not None
-            and attention_mask.shape[0] != bsz
-            and num_diffusion_samples > 1
-        ):
-            attention_mask = attention_mask.repeat_interleave(
-                num_diffusion_samples, dim=0
-            )
+        if attention_mask is not None and attention_mask.shape[0] != bsz and num_diffusion_samples > 1:
+            attention_mask = attention_mask.repeat_interleave(num_diffusion_samples, dim=0)
 
         # Standard attention with pair bias
-        g = torch.sigmoid(self.g_proj(x)).view(
-            bsz, n_queries, self.num_heads, self.head_dim
-        )
+        g = torch.sigmoid(self.g_proj(x)).view(bsz, n_queries, self.num_heads, self.head_dim)
 
         logits = torch.einsum("... i h d, ... j h d -> ... i j h", q, k) * self.scale
 
@@ -1030,9 +972,7 @@ class AttentionPairBias(nn.Module):
 
         if attention_mask is not None:
             min_val = torch.finfo(logits.dtype).min
-            mask_bias = torch.where(
-                attention_mask.bool()[:, None, :, None], 0.0, min_val
-            )
+            mask_bias = torch.where(attention_mask.bool()[:, None, :, None], 0.0, min_val)
             logits = logits + mask_bias.to(dtype=logits.dtype)
 
         attn = torch.softmax(logits, dim=-2).to(dtype=v.dtype)
@@ -1189,10 +1129,7 @@ class DiffusionConditioning(nn.Module):
         self.z_input_norm = nn.LayerNorm(2 * c_z, eps=layer_norm_eps)
         self.z_proj = nn.Linear(2 * c_z, c_z, bias=False)
         self.z_transitions = nn.ModuleList(
-            [
-                TransitionLayer(c_z, n=transition_multiplier, eps=layer_norm_eps)
-                for _ in range(2)
-            ]
+            [TransitionLayer(c_z, n=transition_multiplier, eps=layer_norm_eps) for _ in range(2)]
         )
 
         self.s_input_norm = nn.LayerNorm(c_s_inputs, eps=layer_norm_eps)
@@ -1201,10 +1138,7 @@ class DiffusionConditioning(nn.Module):
         self.noise_norm = nn.LayerNorm(fourier_dim, eps=layer_norm_eps)
         self.noise_proj = nn.Linear(fourier_dim, c_s, bias=False)
         self.s_transitions = nn.ModuleList(
-            [
-                TransitionLayer(c_s, n=transition_multiplier, eps=layer_norm_eps)
-                for _ in range(2)
-            ]
+            [TransitionLayer(c_s, n=transition_multiplier, eps=layer_norm_eps) for _ in range(2)]
         )
 
     def forward(
@@ -1373,9 +1307,7 @@ class DiffusionModule(nn.Module):
     ) -> dict[str, Tensor | None]:
         bsz = x_noisy.shape[0]
         sigma = self.sigma_data if sigma_data is None else float(sigma_data)
-        t = torch.as_tensor(t_hat, dtype=torch.float32, device=x_noisy.device).reshape(
-            -1
-        )
+        t = torch.as_tensor(t_hat, dtype=torch.float32, device=x_noisy.device).reshape(-1)
         if t.numel() == 1:
             t = t.expand(bsz)
 
@@ -1507,9 +1439,7 @@ class DiffusionStructureHead(nn.Module):
     # Helpers
     # ------------------------------------------------------------------
 
-    def inference_noise_schedule(
-        self, num_steps: int | None = None, device: torch.device | None = None
-    ) -> Tensor:
+    def inference_noise_schedule(self, num_steps: int | None = None, device: torch.device | None = None) -> Tensor:
         """Karras power-law noise schedule."""
         steps = self.inference_num_steps if num_steps is None else int(num_steps)
         if steps == 1:
@@ -1574,9 +1504,7 @@ class DiffusionStructureHead(nn.Module):
         return x, second_coords
 
     @staticmethod
-    def _weighted_rigid_align(
-        x: Tensor, x_gt: Tensor, w: Tensor, mask: Tensor
-    ) -> Tensor:
+    def _weighted_rigid_align(x: Tensor, x_gt: Tensor, w: Tensor, mask: Tensor) -> Tensor:
         """Kabsch alignment: align x to x_gt with weights w."""
         w = (mask * w).unsqueeze(-1)  # [B, N, 1]
         denom = w.sum(dim=-2, keepdim=True).clamp(min=1e-8)
@@ -1589,9 +1517,7 @@ class DiffusionStructureHead(nn.Module):
         U, _, Vh = torch.linalg.svd(H32, driver="gesvd" if H32.is_cuda else None)
         det = torch.linalg.det(U @ Vh)
         ones = torch.ones_like(det)
-        R = (U @ torch.diag_embed(torch.stack([ones, ones, det], dim=-1)) @ Vh).to(
-            H.dtype
-        )
+        R = (U @ torch.diag_embed(torch.stack([ones, ones, det], dim=-1)) @ Vh).to(H.dtype)
         return x_c @ R.transpose(-1, -2) + mu_gt
 
     # ------------------------------------------------------------------
@@ -1641,11 +1567,7 @@ class DiffusionStructureHead(nn.Module):
 
         inference_cache: dict[str, Tensor] | None = {} if use_inference_cache else None
 
-        steps = (
-            self.inference_num_steps
-            if num_sampling_steps is None
-            else int(num_sampling_steps)
-        )
+        steps = self.inference_num_steps if num_sampling_steps is None else int(num_sampling_steps)
 
         schedule = self.inference_noise_schedule(steps, device)
         if max_inference_sigma is not None:
@@ -1655,9 +1577,7 @@ class DiffusionStructureHead(nn.Module):
         lam = self.noise_scale if noise_scale is None else float(noise_scale)
         eta = self.step_scale if step_scale is None else float(step_scale)
 
-        x = schedule[0] * torch.randn(
-            target_batch, n_atoms, 3, device=device, dtype=torch.float32
-        )
+        x = schedule[0] * torch.randn(target_batch, n_atoms, 3, device=device, dtype=torch.float32)
         atom_mask = ref_mask.repeat_interleave(num_diffusion_samples, 0).float()
 
         gammas = torch.where(
@@ -1674,9 +1594,7 @@ class DiffusionStructureHead(nn.Module):
         num_steps = len(step_pairs)
 
         for step_idx, (sigma_tm, sigma_t, gamma) in enumerate(step_pairs):
-            x, x_denoised_prev = self._center_random_augmentation(
-                x, atom_mask, second_coords=x_denoised_prev
-            )
+            x, x_denoised_prev = self._center_random_augmentation(x, atom_mask, second_coords=x_denoised_prev)
 
             sigma_tm_val = float(sigma_tm.item())
             t_hat_val = sigma_tm_val * (1.0 + float(gamma.item()))
@@ -1684,15 +1602,11 @@ class DiffusionStructureHead(nn.Module):
             x_noisy = x + eps_std * torch.randn_like(x)
 
             is_last_step = step_idx == num_steps - 1
-            request_atom_repr = return_atom_repr and (
-                is_last_step or denoising_early_exit_rmsd is not None
-            )
+            request_atom_repr = return_atom_repr and (is_last_step or denoising_early_exit_rmsd is not None)
 
             dm_out = self.diffusion_module(
                 x_noisy=x_noisy,
-                t_hat=torch.full(
-                    (target_batch,), t_hat_val, device=device, dtype=torch.float32
-                ),
+                t_hat=torch.full((target_batch,), t_hat_val, device=device, dtype=torch.float32),
                 ref_pos=ref_pos,
                 ref_charge=ref_charge,
                 ref_mask=ref_mask,
@@ -1723,9 +1637,7 @@ class DiffusionStructureHead(nn.Module):
 
             # Reverse diffusion alignment (Kabsch)
             with torch.autocast(device_type="cuda", enabled=False):
-                x_noisy = self._weighted_rigid_align(
-                    x_noisy.float(), x_denoised.float(), atom_mask, atom_mask
-                )
+                x_noisy = self._weighted_rigid_align(x_noisy.float(), x_denoised.float(), atom_mask, atom_mask)
             x_noisy = x_noisy.to(dtype=x_denoised.dtype)
 
             # ODE/SDE step
@@ -1734,11 +1646,7 @@ class DiffusionStructureHead(nn.Module):
             x = x_noisy + eta * (sigma_t_val - t_hat_val) * denoised_over_sigma
 
             # Denoising early-exit: stop when consecutive predictions converge
-            if (
-                denoising_early_exit_rmsd is not None
-                and x_denoised_prev is not None
-                and step_idx >= 1
-            ):
+            if denoising_early_exit_rmsd is not None and x_denoised_prev is not None and step_idx >= 1:
                 with torch.autocast(device_type="cuda", enabled=False):
                     aligned = self._weighted_rigid_align(
                         x_denoised_prev.float(),
@@ -1747,9 +1655,7 @@ class DiffusionStructureHead(nn.Module):
                         atom_mask,
                     )
                 diff = (x_denoised.float() - aligned) * atom_mask.unsqueeze(-1)
-                per_sample_rmsd = (
-                    diff.pow(2).sum(dim=(-1, -2)) / atom_mask.sum(dim=-1).clamp(min=1)
-                ).sqrt()
+                per_sample_rmsd = (diff.pow(2).sum(dim=(-1, -2)) / atom_mask.sum(dim=-1).clamp(min=1)).sqrt()
                 if per_sample_rmsd.max().item() < denoising_early_exit_rmsd:
                     x = x_denoised
                     x_denoised_prev = x_denoised
@@ -1875,9 +1781,7 @@ class ResIdxAsymIdSymIdEntityIdEncoding(nn.Module):
         n_feats_token = 2 * n_relative_residx_bins + 2
         n_feats_chain = 2 * n_relative_chain_bins + 2
         n_feats_same_entity = 1
-        total_feats = (
-            n_feats_residue + n_feats_token + n_feats_chain + n_feats_same_entity
-        )
+        total_feats = n_feats_residue + n_feats_token + n_feats_chain + n_feats_same_entity
         self.embed = nn.Linear(total_feats, d_pair, bias=False)
 
     def forward(
@@ -1898,15 +1802,11 @@ class ResIdxAsymIdSymIdEntityIdEncoding(nn.Module):
             0,
             2 * self.n_relative_residx_bins,
         )
-        dij_residue = torch.where(
-            bij_same_chain, dij_residue, 2 * self.n_relative_residx_bins + 1
-        )
+        dij_residue = torch.where(bij_same_chain, dij_residue, 2 * self.n_relative_residx_bins + 1)
         aij_rel_pos = F.one_hot(dij_residue, 2 * self.n_relative_residx_bins + 2)
 
         dij_token = torch.clip(
-            token_index.unsqueeze(2)
-            - token_index.unsqueeze(1)
-            + self.n_relative_residx_bins,
+            token_index.unsqueeze(2) - token_index.unsqueeze(1) + self.n_relative_residx_bins,
             0,
             2 * self.n_relative_residx_bins,
         )
@@ -1922,9 +1822,7 @@ class ResIdxAsymIdSymIdEntityIdEncoding(nn.Module):
             0,
             2 * self.n_relative_chain_bins,
         )
-        dij_chain = torch.where(
-            bij_same_chain, 2 * self.n_relative_chain_bins + 1, dij_chain
-        )
+        dij_chain = torch.where(bij_same_chain, 2 * self.n_relative_chain_bins + 1, dij_chain)
         aij_rel_chain = F.one_hot(dij_chain, 2 * self.n_relative_chain_bins + 2)
 
         feats = torch.cat(
@@ -1980,15 +1878,11 @@ class LanguageModelShim(nn.Module):
     - base_z_mlp: Sequential(SingleToPair(d_z, d_z, d_z), LayerNorm(d_z))
     """
 
-    def __init__(
-        self, d_z: int = 256, d_model: int = 2560, num_layers: int = 80
-    ) -> None:
+    def __init__(self, d_z: int = 256, d_model: int = 2560, num_layers: int = 80) -> None:
         super().__init__()
 
         self.base_z_mlp = nn.Sequential(SingleToPair(d_z, d_z, d_z), nn.LayerNorm(d_z))
-        self.base_z_linear = nn.Sequential(
-            nn.LayerNorm(d_model), nn.Linear(d_model, d_z, bias=False)
-        )
+        self.base_z_linear = nn.Sequential(nn.LayerNorm(d_model), nn.Linear(d_model, d_z, bias=False))
         self.base_z_combine = nn.Parameter(torch.zeros(num_layers + 1))
 
     def forward(self, hidden_states: Tensor, *, lm_dropout: float = 0.0) -> Tensor:
@@ -2025,9 +1919,7 @@ def _seed_context(seed: int | None, *, cuda: bool = True):
     py_state = random.getstate()
     np_state = np.random.get_state()
     torch_state = torch.get_rng_state()
-    cuda_states = (
-        torch.cuda.get_rng_state_all() if cuda and torch.cuda.is_available() else None
-    )
+    cuda_states = torch.cuda.get_rng_state_all() if cuda and torch.cuda.is_available() else None
     seed = int(seed) % (2**32)
     random.seed(seed)
     np.random.seed(seed)
@@ -2087,12 +1979,8 @@ def compute_lm_hidden_states(
         unique_keys, inverse = torch.unique(keys, dim=0, return_inverse=True)
         n_unique = unique_keys.size(0)
         token_positions = torch.arange(keys.size(0), device=device, dtype=torch.long)
-        first_pos = torch.full(
-            (n_unique,), keys.size(0), device=device, dtype=torch.long
-        )
-        first_pos.scatter_reduce_(
-            0, inverse, token_positions, reduce="amin", include_self=True
-        )
+        first_pos = torch.full((n_unique,), keys.size(0), device=device, dtype=torch.long)
+        first_pos.scatter_reduce_(0, inverse, token_positions, reduce="amin", include_self=True)
         ordered = torch.argsort(first_pos)
         first_pos_ordered = first_pos[ordered]
         ids_collapsed = ids_b[first_pos_ordered]
@@ -2146,9 +2034,7 @@ def compute_lm_hidden_states(
     sequence_id = sequence_id.masked_fill(lm_input_ids == 1, -1)  # PAD=1
 
     with torch.inference_mode():
-        esmc_out = esmc(
-            input_ids=lm_input_ids, sequence_id=sequence_id, output_hidden_states=True
-        )
+        esmc_out = esmc(input_ids=lm_input_ids, sequence_id=sequence_id, output_hidden_states=True)
 
     hs = esmc_out.hidden_states  # [n_layers+1, B, max_len, D]
     n_layers_plus_1, _, _, D = hs.shape
@@ -2175,9 +2061,7 @@ class TriangleMultiplicativeBlock(nn.Module):
     def __init__(self, input_channels: int, latent_channels: int, flow: str) -> None:
         super().__init__()
         if flow not in self._FLOW_TO_EINSUM:
-            raise ValueError(
-                f"Invalid flow={flow!r}. Expected one of {self._VALID_FLOWS}."
-            )
+            raise ValueError(f"Invalid flow={flow!r}. Expected one of {self._VALID_FLOWS}.")
 
         self.input_channels = input_channels
         self.latent_channels = latent_channels
@@ -2185,12 +2069,8 @@ class TriangleMultiplicativeBlock(nn.Module):
         self._einsum_equation = self._FLOW_TO_EINSUM[flow]
         self.norm_start = nn.LayerNorm(self.input_channels, eps=_EPS)
         self.norm_mix = nn.LayerNorm(self.latent_channels, eps=_EPS)
-        self.proj_bundle = nn.Linear(
-            self.input_channels, 4 * self.latent_channels, bias=False
-        )
-        self.proj_emit = nn.Linear(
-            self.latent_channels, self.input_channels, bias=False
-        )
+        self.proj_bundle = nn.Linear(self.input_channels, 4 * self.latent_channels, bias=False)
+        self.proj_emit = nn.Linear(self.latent_channels, self.input_channels, bias=False)
         self.proj_gate = nn.Linear(self.input_channels, self.input_channels, bias=False)
 
         # Default chunked for memory on long sequences; tests override with
@@ -2204,22 +2084,16 @@ class TriangleMultiplicativeBlock(nn.Module):
     def _triangular_contract(self, left_stream: Tensor, right_stream: Tensor) -> Tensor:
         return torch.einsum(self._einsum_equation, left_stream, right_stream)
 
-    def _triangular_contract_chunked(
-        self, left_stream: Tensor, right_stream: Tensor, chunk_size: int
-    ) -> Tensor:
+    def _triangular_contract_chunked(self, left_stream: Tensor, right_stream: Tensor, chunk_size: int) -> Tensor:
         """Compute the triangular einsum in chunks along the output i-dimension."""
         L = left_stream.shape[1] if self.flow == "outgoing" else left_stream.shape[2]
         chunks = []
         for start in range(0, L, chunk_size):
             end = min(start + chunk_size, L)
             if self.flow == "outgoing":
-                chunk = torch.einsum(
-                    self._einsum_equation, left_stream[:, start:end], right_stream
-                )
+                chunk = torch.einsum(self._einsum_equation, left_stream[:, start:end], right_stream)
             else:
-                chunk = torch.einsum(
-                    self._einsum_equation, left_stream[:, :, start:end], right_stream
-                )
+                chunk = torch.einsum(self._einsum_equation, left_stream[:, :, start:end], right_stream)
             chunks.append(chunk)
         return torch.cat(chunks, dim=1)
 
@@ -2235,9 +2109,7 @@ class TriangleMultiplicativeBlock(nn.Module):
 
         left_stream, right_stream = routed.float().chunk(2, dim=-1)
         if self._chunk_size is not None:
-            contracted = self._triangular_contract_chunked(
-                left_stream, right_stream, self._chunk_size
-            )
+            contracted = self._triangular_contract_chunked(left_stream, right_stream, self._chunk_size)
         else:
             contracted = self._triangular_contract(left_stream, right_stream)
         mixed = self.proj_emit(self.norm_mix(contracted))
@@ -2251,9 +2123,7 @@ class TriangleMultiplicativeUpdate(nn.Module):
     def __init__(self, dim: int = 128, _outgoing: bool = True) -> None:
         super().__init__()
         flow = "outgoing" if _outgoing else "incoming"
-        self._engine = TriangleMultiplicativeBlock(
-            input_channels=dim, latent_channels=dim, flow=flow
-        )
+        self._engine = TriangleMultiplicativeBlock(input_channels=dim, latent_channels=dim, flow=flow)
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self._engine.set_chunk_size(chunk_size)
@@ -2307,9 +2177,7 @@ class PairUpdateBlock(nn.Module):
         self.tri_mul_in.set_chunk_size(chunk_size)
         self.pair_transition.set_chunk_size(chunk_size)
 
-    def forward(
-        self, pair: Tensor, pair_attention_mask: Tensor | None = None
-    ) -> Tensor:
+    def forward(self, pair: Tensor, pair_attention_mask: Tensor | None = None) -> Tensor:
         pair = self.row_drop(pair, self.tri_mul_out(pair, mask=pair_attention_mask))
         pair = self.row_drop(pair, self.tri_mul_in(pair, mask=pair_attention_mask))
         pair = self.pair_transition(pair)
@@ -2319,24 +2187,17 @@ class PairUpdateBlock(nn.Module):
 class FoldingTrunk(nn.Module):
     """ModuleList of PairUpdateBlocks."""
 
-    def __init__(
-        self, n_layers: int = 24, d_pair: int = 256, expansion_ratio: int = 4
-    ) -> None:
+    def __init__(self, n_layers: int = 24, d_pair: int = 256, expansion_ratio: int = 4) -> None:
         super().__init__()
         self.blocks = nn.ModuleList(
-            [
-                PairUpdateBlock(d_pair=d_pair, expansion_ratio=expansion_ratio)
-                for _ in range(n_layers)
-            ]
+            [PairUpdateBlock(d_pair=d_pair, expansion_ratio=expansion_ratio) for _ in range(n_layers)]
         )
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         for block in self.blocks:
             cast(PairUpdateBlock, block).set_chunk_size(chunk_size)
 
-    def forward(
-        self, pair: Tensor, pair_attention_mask: Tensor | None = None
-    ) -> Tensor:
+    def forward(self, pair: Tensor, pair_attention_mask: Tensor | None = None) -> Tensor:
         for block in self.blocks:
             fn = partial(block, pair_attention_mask=pair_attention_mask)
             if torch.is_grad_enabled():
@@ -2411,23 +2272,17 @@ class OuterProductMean(nn.Module):
 class MSAPairWeightedAveraging(nn.Module):
     """Pair-biased MSA row update (AF3 Supplement Algorithm 10)."""
 
-    def __init__(
-        self, d_msa: int, d_pair: int, n_heads: int = 8, head_width: int = 32
-    ) -> None:
+    def __init__(self, d_msa: int, d_pair: int, n_heads: int = 8, head_width: int = 32) -> None:
         super().__init__()
         self.n_heads = n_heads
         self.head_width = head_width
         self.norm_single = nn.LayerNorm(d_msa)
-        self.compute_bias = nn.Sequential(
-            nn.LayerNorm(d_pair), nn.Linear(d_pair, n_heads, bias=False)
-        )
+        self.compute_bias = nn.Sequential(nn.LayerNorm(d_pair), nn.Linear(d_pair, n_heads, bias=False))
         self.Wv = nn.Linear(d_msa, n_heads * head_width, bias=False)
         self.Wgate = nn.Linear(d_msa, n_heads * head_width, bias=False)
         self.Wout = nn.Linear(n_heads * head_width, d_msa, bias=False)
 
-    def forward(
-        self, msa_repr: Tensor, pair_repr: Tensor, pair_attention_mask: Tensor
-    ) -> Tensor:
+    def forward(self, msa_repr: Tensor, pair_repr: Tensor, pair_attention_mask: Tensor) -> Tensor:
         """
         Args:
             msa_repr:           [B, L, M, d_msa]

@@ -106,21 +106,15 @@ class ConfidenceHead(nn.Module):
         self.s_inputs_norm = nn.LayerNorm(d_inputs)
         self.z_norm = nn.LayerNorm(d_pair)
 
-        self.row_attention_pooling = RowAttentionPooling(
-            d_pair=d_pair, d_single=d_single
-        )
+        self.row_attention_pooling = RowAttentionPooling(d_pair=d_pair, d_single=d_single)
 
         pf = ch.folding_trunk
-        self.folding_trunk = FoldingTrunk(
-            n_layers=pf.n_layers, d_pair=d_pair, expansion_ratio=4
-        )
+        self.folding_trunk = FoldingTrunk(n_layers=pf.n_layers, d_pair=d_pair, expansion_ratio=4)
 
         # Heads.
         self.plddt_ln = nn.LayerNorm(d_single)
         max_atoms_per_token = 23
-        self.plddt_weight = nn.Parameter(
-            torch.zeros(max_atoms_per_token, d_single, ch.num_plddt_bins)
-        )
+        self.plddt_weight = nn.Parameter(torch.zeros(max_atoms_per_token, d_single, ch.num_plddt_bins))
 
         self.pae_ln = nn.LayerNorm(d_pair)
         self.pae_head = nn.Linear(d_pair, ch.num_pae_bins, bias=False)
@@ -130,20 +124,14 @@ class ConfidenceHead(nn.Module):
 
         self.resolved_ln = nn.LayerNorm(d_single)
         # 2 = resolved logits ([unresolved, resolved]).
-        self.resolved_weight = nn.Parameter(
-            torch.zeros(max_atoms_per_token, d_single, 2)
-        )
+        self.resolved_weight = nn.Parameter(torch.zeros(max_atoms_per_token, d_single, 2))
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self.folding_trunk.set_chunk_size(chunk_size)
 
     @staticmethod
     def _repeat_batch(x: Tensor, num_diffusion_samples: int) -> Tensor:
-        return (
-            x
-            if num_diffusion_samples == 1
-            else x.repeat_interleave(num_diffusion_samples, 0)
-        )
+        return x if num_diffusion_samples == 1 else x.repeat_interleave(num_diffusion_samples, 0)
 
     @staticmethod
     def _flatten_sample_axis(x: Tensor) -> Tensor:
@@ -177,8 +165,7 @@ class ConfidenceHead(nn.Module):
         z_base = z_base + self.s_to_z(s_inputs_normed).unsqueeze(2)
         z_base = z_base + self.s_to_z_transpose(s_inputs_normed).unsqueeze(1)
         z_base = z_base + self.s_to_z_prod_out(
-            self.s_to_z_prod_in1(s_inputs_normed)[:, :, None, :]
-            * self.s_to_z_prod_in2(s_inputs_normed)[:, None, :, :]
+            self.s_to_z_prod_in1(s_inputs_normed)[:, :, None, :] * self.s_to_z_prod_in2(s_inputs_normed)[:, None, :, :]
         )
 
         pair = self._repeat_batch(z_base, num_diffusion_samples)
@@ -190,12 +177,8 @@ class ConfidenceHead(nn.Module):
         Bm = pair.shape[0]
 
         rep_coords = gather_rep_atom_coords(x_pred_flat, rep_idx_m)
-        rep_distances = torch.cdist(
-            rep_coords, rep_coords, compute_mode="donot_use_mm_for_euclid_dist"
-        )
-        distogram_bins = (
-            (rep_distances.unsqueeze(-1) > self.boundaries).sum(dim=-1).long()
-        )
+        rep_distances = torch.cdist(rep_coords, rep_coords, compute_mode="donot_use_mm_for_euclid_dist")
+        distogram_bins = (rep_distances.unsqueeze(-1) > self.boundaries).sum(dim=-1).long()
         pair = pair + self.dist_bin_pairwise_embed(distogram_bins)
 
         pair_mask = mask[:, :, None].float() * mask[:, None, :].float()
@@ -221,40 +204,28 @@ class ConfidenceHead(nn.Module):
 
         L = single.shape[1]
         plddt_sum = torch.zeros(Bm, L, device=single.device, dtype=plddt_per_atom.dtype)
-        atom_count = torch.zeros(
-            Bm, L, device=single.device, dtype=plddt_per_atom.dtype
-        )
+        atom_count = torch.zeros(Bm, L, device=single.device, dtype=plddt_per_atom.dtype)
         atom_mask_t = atom_mask_f.to(plddt_per_atom.dtype)
         plddt_sum.scatter_add_(1, atom_to_token_m, plddt_per_atom * atom_mask_t)
         atom_count.scatter_add_(1, atom_to_token_m, atom_mask_t)
         plddt = plddt_sum / atom_count.clamp(min=1e-6)
 
-        complex_plddt = (plddt_per_atom * atom_mask_f).sum(dim=-1) / (
-            atom_mask_f.sum(dim=-1) + _EPS
-        )
+        complex_plddt = (plddt_per_atom * atom_mask_f).sum(dim=-1) / (atom_mask_f.sum(dim=-1) + _EPS)
 
         expanded_type = self._repeat_batch(mol_type, num_diffusion_samples)
         expanded_asym = self._repeat_batch(asym_id, num_diffusion_samples)
         is_ligand = (expanded_type == _NONPOLYMER_ID).float()
-        inter_chain = (
-            expanded_asym.unsqueeze(-1) != expanded_asym.unsqueeze(-2)
-        ).float()
+        inter_chain = (expanded_asym.unsqueeze(-1) != expanded_asym.unsqueeze(-2)).float()
         near_contact = (rep_distances < 8).float()
-        interface_per_token = (
-            near_contact * inter_chain * (1.0 - is_ligand).unsqueeze(-1)
-        ).amax(dim=-1)
+        interface_per_token = (near_contact * inter_chain * (1.0 - is_ligand).unsqueeze(-1)).amax(dim=-1)
         iplddt_weight = torch.where(
             is_ligand.bool(),
             torch.full_like(interface_per_token, 2.0),
             interface_per_token,
         )
-        iplddt_weight_atoms = gather_token_to_atom(
-            iplddt_weight.unsqueeze(-1), atom_to_token_m
-        ).squeeze(-1)
+        iplddt_weight_atoms = gather_token_to_atom(iplddt_weight.unsqueeze(-1), atom_to_token_m).squeeze(-1)
         atom_iplddt_w = atom_mask_f * iplddt_weight_atoms
-        complex_iplddt = (plddt_per_atom * atom_iplddt_w).sum(dim=-1) / (
-            atom_iplddt_w.sum(dim=-1) + _EPS
-        )
+        complex_iplddt = (plddt_per_atom * atom_iplddt_w).sum(dim=-1) / (atom_iplddt_w.sum(dim=-1) + _EPS)
 
         plddt_ca = plddt_per_atom.gather(1, rep_idx_m)
 
@@ -274,9 +245,7 @@ class ConfidenceHead(nn.Module):
         # pTM / ipTM from pae_logits.
         n_bins = pae_logits.shape[-1]
         bin_width = 32.0 / n_bins
-        bin_centers = torch.arange(
-            0.5 * bin_width, 32.0, bin_width, device=pae_logits.device
-        )
+        bin_centers = torch.arange(0.5 * bin_width, 32.0, bin_width, device=pae_logits.device)
         mask_f = mask.float()
         N_res = mask_f.sum(dim=-1, keepdim=True)
         d0 = 1.24 * (N_res.clamp(min=19) - 15) ** (1 / 3) - 1.8
@@ -285,24 +254,16 @@ class ConfidenceHead(nn.Module):
         tm_expected = (pae_probs * tm_per_bin[:, None, None, :]).sum(dim=-1)
 
         pair_mask_2d = mask_f.unsqueeze(-1) * mask_f.unsqueeze(-2)
-        ptm_per_row = (tm_expected * pair_mask_2d).sum(dim=-1) / (
-            pair_mask_2d.sum(dim=-1) + _EPS
-        )
+        ptm_per_row = (tm_expected * pair_mask_2d).sum(dim=-1) / (pair_mask_2d.sum(dim=-1) + _EPS)
         ptm = ptm_per_row.max(dim=-1).values
 
-        inter_chain_mask = (
-            expanded_asym.unsqueeze(-1) != expanded_asym.unsqueeze(-2)
-        ).float() * pair_mask_2d
-        iptm_per_row = (tm_expected * inter_chain_mask).sum(dim=-1) / (
-            inter_chain_mask.sum(dim=-1) + _EPS
-        )
+        inter_chain_mask = (expanded_asym.unsqueeze(-1) != expanded_asym.unsqueeze(-2)).float() * pair_mask_2d
+        iptm_per_row = (tm_expected * inter_chain_mask).sum(dim=-1) / (inter_chain_mask.sum(dim=-1) + _EPS)
         iptm = iptm_per_row.max(dim=-1).values
 
         max_chain_id = int(expanded_asym.max().item()) if Bm > 0 else 0
         n_chains = max_chain_id + 1
-        pair_chains_iptm = torch.zeros(
-            Bm, n_chains, n_chains, device=tm_expected.device, dtype=tm_expected.dtype
-        )
+        pair_chains_iptm = torch.zeros(Bm, n_chains, n_chains, device=tm_expected.device, dtype=tm_expected.dtype)
         for c1 in range(n_chains):
             chain_c1 = (expanded_asym == c1).float() * mask_f
             if chain_c1.sum() == 0:
@@ -311,9 +272,7 @@ class ConfidenceHead(nn.Module):
                 chain_c2 = (expanded_asym == c2).float() * mask_f
                 pair_m = chain_c1.unsqueeze(-1) * chain_c2.unsqueeze(-2)
                 denom = pair_m.sum(dim=(-1, -2)) + _EPS
-                pair_chains_iptm[:, c1, c2] = (tm_expected * pair_m).sum(
-                    dim=(-1, -2)
-                ) / denom
+                pair_chains_iptm[:, c1, c2] = (tm_expected * pair_m).sum(dim=(-1, -2)) / denom
 
         return {
             "plddt_logits": plddt_logits,
@@ -387,15 +346,11 @@ class ESMFold2Model(PreTrainedModel):
             d_pair=d_pair,
         )
         self.token_bonds = nn.Linear(1, d_pair, bias=False)
-        self.language_model = LanguageModelShim(
-            d_z=d_pair, d_model=config.lm_d_model, num_layers=config.lm_num_layers
-        )
+        self.language_model = LanguageModelShim(d_z=d_pair, d_model=config.lm_d_model, num_layers=config.lm_num_layers)
         self._esmc: nn.Module | None = None
 
         pf = config.folding_trunk
-        self.folding_trunk = FoldingTrunk(
-            n_layers=pf.n_layers, d_pair=d_pair, expansion_ratio=4
-        )
+        self.folding_trunk = FoldingTrunk(n_layers=pf.n_layers, d_pair=d_pair, expansion_ratio=4)
         if config.lm_encoder.enabled:
             self.lm_encoder: FoldingTrunk | None = FoldingTrunk(
                 n_layers=config.lm_encoder.n_layers, d_pair=d_pair, expansion_ratio=4
@@ -408,22 +363,16 @@ class ESMFold2Model(PreTrainedModel):
         parcae_decay_init = math.sqrt(1.0 / 5.0)
         parcae_delta_init = -math.log(parcae_decay_init)
         self.parcae_log_delta = nn.Parameter(
-            torch.full(
-                (d_pair,), _inverse_softplus(parcae_delta_init), dtype=torch.float32
-            )
+            torch.full((d_pair,), _inverse_softplus(parcae_delta_init), dtype=torch.float32)
         )
         self.parcae_b_cont = nn.Parameter(torch.eye(d_pair))
         self.parcae_readout = nn.Linear(d_pair, d_pair, bias=False)
         nn.init.eye_(self.parcae_readout.weight)
-        self.parcae_coda = FoldingTrunk(
-            n_layers=config.parcae.coda_n_layers, d_pair=d_pair, expansion_ratio=4
-        )
+        self.parcae_coda = FoldingTrunk(n_layers=config.parcae.coda_n_layers, d_pair=d_pair, expansion_ratio=4)
 
         # Heads --------------------------------------------------------------
         self.structure_head = DiffusionStructureHead(config)
-        self.distogram_head = nn.Linear(
-            d_pair, config.structure_head.distogram_bins, bias=True
-        )
+        self.distogram_head = nn.Linear(d_pair, config.structure_head.distogram_bins, bias=True)
         self.confidence_head = ConfidenceHead(config)
 
         msa_cfg = config.msa_encoder
@@ -462,29 +411,19 @@ class ESMFold2Model(PreTrainedModel):
             "fp32": torch.float32,
         }
         if precision not in dtype_map:
-            raise ValueError(
-                f"precision must be one of {list(dtype_map)}, got {precision!r}"
-            )
+            raise ValueError(f"precision must be one of {list(dtype_map)}, got {precision!r}")
         dtype = dtype_map[precision]
 
-        esmc = (
-            AutoModel.from_pretrained(esmc_model_path)
-            .to(device=self.device, dtype=dtype)
-            .eval()
-        )
+        esmc = AutoModel.from_pretrained(esmc_model_path).to(device=self.device, dtype=dtype).eval()
         for p in esmc.parameters():
             p.requires_grad_(False)
 
         self._esmc = esmc
 
     @classmethod
-    def from_pretrained(
-        cls, pretrained_model_name_or_path, *args, load_esmc: bool = True, **kwargs
-    ):
+    def from_pretrained(cls, pretrained_model_name_or_path, *args, load_esmc: bool = True, **kwargs):
         if cls is ESMFold2Model and "config" not in kwargs:
-            config = ESMFold2Config.from_pretrained(
-                pretrained_model_name_or_path, **kwargs
-            )
+            config = ESMFold2Config.from_pretrained(pretrained_model_name_or_path, **kwargs)
             kwargs["config"] = config
         # Pop the precision knob before forwarding to the HF loader.
         esmc_precision = kwargs.pop("esmc_precision", "bf16")
@@ -493,9 +432,7 @@ class ESMFold2Model(PreTrainedModel):
             model.load_esmc(model.config.esmc_id, precision=esmc_precision)
         return model
 
-    def apply_torch_compile(
-        self, mode: str = "fixed_seqlen", dynamic: bool | None = None
-    ) -> None:
+    def apply_torch_compile(self, mode: str = "fixed_seqlen", dynamic: bool | None = None) -> None:
         """Compile L²-heavy blocks. ``mode='fixed_seqlen'`` recompiles per L; ``'dynamic_seqlen'`` compiles once."""
         import torch._dynamo
 
@@ -600,23 +537,15 @@ class ESMFold2Model(PreTrainedModel):
 
             refined_lm_z: Tensor | None = None
             if lm_z_i is not None and self.lm_encoder is not None:
-                refined_lm_z = self.lm_encoder(
-                    lm_z_i.to(z_init.dtype), pair_attention_mask=pair_mask
-                )
+                refined_lm_z = self.lm_encoder(lm_z_i.to(z_init.dtype), pair_attention_mask=pair_mask)
 
             z_inject_pair = z_init
             if lm_z_i is not None and self.lm_encoder is None:
                 z_inject_pair = z_inject_pair + lm_z_i.to(z_inject_pair.dtype)
 
             if self.msa_encoder is not None and _msa_kwargs is not None:
-                msa_pair = self.msa_encoder(x_pair=z_inject_pair, **_msa_kwargs).to(
-                    z_inject_pair.dtype
-                )
-                z_inject_pair = (
-                    msa_pair
-                    if self.config.msa_encoder_overwrite
-                    else (z_inject_pair + msa_pair)
-                )
+                msa_pair = self.msa_encoder(x_pair=z_inject_pair, **_msa_kwargs).to(z_inject_pair.dtype)
+                z_inject_pair = msa_pair if self.config.msa_encoder_overwrite else (z_inject_pair + msa_pair)
 
             if refined_lm_z is not None:
                 z_inject_pair = z_inject_pair + refined_lm_z.to(z_inject_pair.dtype)
@@ -665,9 +594,7 @@ class ESMFold2Model(PreTrainedModel):
 
         n_loops: int = num_loops if num_loops is not None else self.config.num_loops
         n_samples: int = (
-            num_diffusion_samples
-            if num_diffusion_samples is not None
-            else self.config.num_diffusion_samples
+            num_diffusion_samples if num_diffusion_samples is not None else self.config.num_diffusion_samples
         )
         total_steps = max(1, n_loops + 1)
 
@@ -690,22 +617,14 @@ class ESMFold2Model(PreTrainedModel):
             profile = res_type_oh
 
         if deletion_mean is None:
-            deletion_mean = torch.zeros(
-                res_type.shape[0], res_type.shape[1], device=res_type.device
-            )
+            deletion_mean = torch.zeros(res_type.shape[0], res_type.shape[1], device=res_type.device)
 
-        ref_element_oh = F.one_hot(
-            ref_element.long(), num_classes=MAX_ATOMIC_NUMBER
-        ).float()
-        ref_atom_name_chars_oh = F.one_hot(
-            ref_atom_name_chars.long(), num_classes=CHAR_VOCAB_SIZE
-        ).float()
+        ref_element_oh = F.one_hot(ref_element.long(), num_classes=MAX_ATOMIC_NUMBER).float()
+        ref_atom_name_chars_oh = F.one_hot(ref_atom_name_chars.long(), num_classes=CHAR_VOCAB_SIZE).float()
         # Bias-free downstream Linears require zeroed padding.
         atm_mask_f = atm_mask.float()
         ref_element_oh = ref_element_oh * atm_mask_f.unsqueeze(-1)
-        ref_atom_name_chars_oh = ref_atom_name_chars_oh * atm_mask_f.unsqueeze(
-            -1
-        ).unsqueeze(-1)
+        ref_atom_name_chars_oh = ref_atom_name_chars_oh * atm_mask_f.unsqueeze(-1).unsqueeze(-1)
         atom_to_token = atom_to_token * atm_mask.long()
 
         use_amp = ref_pos.device.type == "cuda"
@@ -723,9 +642,7 @@ class ESMFold2Model(PreTrainedModel):
                 atom_to_token=atom_to_token,
             )
 
-            z_init = self.z_init_1(x_inputs).unsqueeze(2) + self.z_init_2(
-                x_inputs
-            ).unsqueeze(1)
+            z_init = self.z_init_1(x_inputs).unsqueeze(2) + self.z_init_2(x_inputs).unsqueeze(1)
 
             relative_position_encoding = self.rel_pos(
                 residue_index=residue_index,
@@ -737,11 +654,7 @@ class ESMFold2Model(PreTrainedModel):
             token_bonds_encoding = self.token_bonds(token_bonds.float())
             z_init = z_init + relative_position_encoding + token_bonds_encoding
 
-            if (
-                lm_hidden_states is None
-                and input_ids is not None
-                and self._esmc is not None
-            ):
+            if lm_hidden_states is None and input_ids is not None and self._esmc is not None:
                 lm_hidden_states = self._compute_lm_hidden_states(
                     input_ids, asym_id, residue_index, mol_type, tok_mask
                 )
@@ -761,9 +674,7 @@ class ESMFold2Model(PreTrainedModel):
             _msa_kwargs: dict | None = None
             if self.msa_encoder is not None and msa is not None:
                 B_msa, M, L_msa = msa.shape
-                msa_oh = F.one_hot(
-                    msa.permute(0, 2, 1).long(), num_classes=NUM_RES_TYPES
-                ).float()
+                msa_oh = F.one_hot(msa.permute(0, 2, 1).long(), num_classes=NUM_RES_TYPES).float()
                 msa_attn = (
                     msa_attention_mask.permute(0, 2, 1).float()
                     if msa_attention_mask is not None
@@ -781,13 +692,13 @@ class ESMFold2Model(PreTrainedModel):
                     if deletion_value is not None
                     else torch.zeros(B_msa, L_msa, M, device=msa.device)
                 )
-                _msa_kwargs = dict(
-                    x_inputs=x_inputs,
-                    msa_oh=msa_oh,
-                    has_deletion=hd,
-                    deletion_value=dv,
-                    msa_attention_mask=msa_attn,
-                )
+                _msa_kwargs = {
+                    "x_inputs": x_inputs,
+                    "msa_oh": msa_oh,
+                    "has_deletion": hd,
+                    "deletion_value": dv,
+                    "msa_attention_mask": msa_attn,
+                }
 
             # Method call (not inline loop) frees per-iter L²×c_z locals.
             z = self._run_one_loop(
@@ -852,9 +763,7 @@ class ESMFold2Model(PreTrainedModel):
             token_bonds_encoding=token_bonds_encoding.detach(),
         )
         output.update(confidence_output)
-        output["atom_pad_mask"] = (
-            atm_mask.unsqueeze(0) if atm_mask.dim() == 1 else atm_mask
-        )
+        output["atom_pad_mask"] = atm_mask.unsqueeze(0) if atm_mask.dim() == 1 else atm_mask
         output["residue_index"] = residue_index
         output["entity_id"] = entity_id
         return output
@@ -896,9 +805,7 @@ class MSAEncoderBlock(nn.Module):
         self.is_final_block = is_final_block
         self.outer_product_mean = OuterProductMean(d_msa, d_hidden, d_pair)
         if not is_final_block:
-            self.msa_pair_weighted_averaging = MSAPairWeightedAveraging(
-                d_msa, d_pair, n_heads_msa, msa_head_width
-            )
+            self.msa_pair_weighted_averaging = MSAPairWeightedAveraging(d_msa, d_pair, n_heads_msa, msa_head_width)
             self.msa_transition = PairTransition(d_msa, expansion_ratio=4)
         self.tri_mul_out = TriangleMultiplicativeUpdate(dim=d_pair, _outgoing=True)
         self.tri_mul_in = TriangleMultiplicativeUpdate(dim=d_pair, _outgoing=False)
@@ -973,9 +880,7 @@ class MSAEncoder(nn.Module):
         msa_attention_mask: Tensor,
     ) -> Tensor:
         # All inputs are pre-transposed to [B, L, M, ...] before calling.
-        m_feat = torch.cat(
-            [msa_oh, has_deletion.unsqueeze(-1), deletion_value.unsqueeze(-1)], dim=-1
-        )
+        m_feat = torch.cat([msa_oh, has_deletion.unsqueeze(-1), deletion_value.unsqueeze(-1)], dim=-1)
         m = self.embed(m_feat) + self.project_inputs(x_inputs).unsqueeze(2)
         tok_mask = msa_attention_mask[:, :, 0].bool()
         pair_attention_mask = tok_mask.unsqueeze(2) & tok_mask.unsqueeze(1)
