@@ -933,12 +933,6 @@ class PaddleOCRVLModel(Qwen2VLModel):
 
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.language_model.embed_tokens = value
-
     def get_video_features(self):
         raise AttributeError("PaddleOCRVLModel does not support video.")
 
@@ -989,7 +983,6 @@ class PaddleOCRVLModel(Qwen2VLModel):
         )
         return special_image_mask
 
-    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1001,14 +994,11 @@ class PaddleOCRVLModel(Qwen2VLModel):
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        rope_deltas: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | PaddleOCRVLModelOutputWithPast:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
         """
         if inputs_embeds is None:
             inputs_embeds = self.language_model.embed_tokens(input_ids)
@@ -1058,8 +1048,6 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
     def get_video_features(self):
         raise AttributeError("PaddleOCRVLForConditionalGeneration does not support video.")
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1071,7 +1059,6 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
-        rope_deltas: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
@@ -1083,8 +1070,6 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
 
         Example:
 
@@ -1131,7 +1116,6 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             pixel_values=pixel_values,
-            rope_deltas=rope_deltas,
             mm_token_type_ids=mm_token_type_ids,
             **kwargs,
         )
