@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import random
+from collections.abc import Callable
 from contextlib import contextmanager
 from functools import partial
 from typing import cast
@@ -21,6 +22,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from torch.utils.checkpoint import checkpoint
+
 
 try:
     from flash_attn import (  # type: ignore[import]
@@ -40,6 +42,7 @@ except ImportError:
     pad_input = None  # type: ignore[assignment]
     FLASH_ATTN_AVAILABLE = False
 
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS  # type: ignore[import]
 from .configuration_esmfold2 import ESMFold2Config
 
 
@@ -420,15 +423,60 @@ class SwiGLUFFN(nn.Module):
 # ===========================================================================
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: Tensor,
+    key: Tensor,
+    value: Tensor,
+    attention_mask: Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+) -> tuple[Tensor, Tensor]:
+    """Reference attention used as the eager backend / fallback for the v5
+    attention interface. Inputs/outputs follow the ``ALL_ATTENTION_FUNCTIONS``
+    convention: ``query``/``key``/``value`` are ``[B, H, S, Dh]`` and the
+    returned context is ``[B, S, H, Dh]``. ESMFold2 has no grouped-query
+    attention, so there is no ``repeat_kv``."""
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
+        query.dtype
+    )
+    attn_weights = nn.functional.dropout(
+        attn_weights, p=dropout, training=module.training
+    )
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
+
+
 class SWA3DRoPEAttention(nn.Module):
-    """Sliding window attention with 3D RoPE. Has Wqkv, gate_proj, out_proj."""
+    """Sliding window self-attention with 3D RoPE. Has Wqkv, gate_proj, out_proj.
+
+    The plain ``softmax(QKᵀ)V`` core is dispatched through the v5 attention
+    interface (``config._attn_implementation``: ``eager`` / ``sdpa`` / ...),
+    with the sliding window expressed as an additive attention mask. The custom
+    flash-attention path (native bidirectional ``window_size``, plus varlen for
+    packed inputs) is kept as an opt-in backend, selected when
+    ``_attn_implementation == "flash_attention_2"``. ``config`` is attached by
+    the parent ``ESMFold2Model`` after construction; it is ``None`` (→ ``sdpa``)
+    when the module is used standalone.
+    """
 
     def __init__(self, d_model: int, n_heads: int, half_window: int = 64) -> None:
         super().__init__()
+        self.config = None
         self.n_heads = n_heads
         self.head_dim = d_model // n_heads
         self.scale = self.head_dim**-0.5
         self.half_window = half_window
+        # No grouped-query attention; identity repeat keeps the interface happy.
+        self.num_key_value_groups = 1
+        # Bidirectional encoder: never let the sdpa/flash interface default to
+        # causal masking when attention_mask happens to be None.
+        self.is_causal = False
 
         self.Wqkv = nn.Linear(d_model, 3 * d_model, bias=False)
         self.out_proj = nn.Linear(d_model, d_model, bias=False)
@@ -451,7 +499,12 @@ class SWA3DRoPEAttention(nn.Module):
         if q.dtype not in (torch.float16, torch.bfloat16):
             q, k, v = q.bfloat16(), k.bfloat16(), v.bfloat16()
 
-        if len(attention_params) > 2 and FLASH_ATTN_AVAILABLE:
+        attn_impl = (
+            self.config._attn_implementation if self.config is not None else "sdpa"
+        )
+        use_flash = attn_impl == "flash_attention_2" and FLASH_ATTN_AVAILABLE
+
+        if use_flash and len(attention_params) > 2:
             indices, cu_seqlens, max_seqlen = (
                 attention_params[2],
                 attention_params[3],
@@ -478,7 +531,7 @@ class SWA3DRoPEAttention(nn.Module):
                 window_size=(self.half_window, self.half_window),
             )
             out = pad_input(out_unpad, indices, B, N)  # type: ignore[misc]
-        elif FLASH_ATTN_AVAILABLE:
+        elif use_flash:
             out = flash_attn_func(  # type: ignore[misc]
                 q,
                 k,
@@ -497,13 +550,26 @@ class SWA3DRoPEAttention(nn.Module):
             within = (rank.unsqueeze(2) - rank.unsqueeze(1)).abs() <= self.half_window
             allowed = within & valid.unsqueeze(1) & valid.unsqueeze(2)
             allowed |= torch.eye(N, dtype=torch.bool, device=q.device)
-            out = F.scaled_dot_product_attention(
+            # Sliding window as an additive bias: 0 where allowed, -inf elsewhere.
+            attn_mask = torch.zeros(B, 1, N, N, dtype=q.dtype, device=q.device)
+            attn_mask = attn_mask.masked_fill(
+                ~allowed.unsqueeze(1), torch.finfo(q.dtype).min
+            )
+
+            attention_interface: Callable = eager_attention_forward
+            if attn_impl != "eager":
+                attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+                    attn_impl, eager_attention_forward
+                )
+            out, _ = attention_interface(
+                self,
                 q.transpose(1, 2),
                 k.transpose(1, 2),
                 v.transpose(1, 2),
-                attn_mask=allowed.unsqueeze(1),
-                scale=self.scale,
-            ).transpose(1, 2)
+                attn_mask,
+                dropout=0.0,
+                scaling=self.scale,
+            )
             out = out * valid.unsqueeze(-1).unsqueeze(-1)
 
         out = out.to(input_dtype).reshape(B, N, -1)  # type: ignore[union-attr]
