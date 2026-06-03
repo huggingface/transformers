@@ -192,29 +192,10 @@ jobs:
             const modified = files.some(f => UTIL_SCRIPTS.has(f.filename));
             core.setOutput('util_scripts_modified', modified ? 'true' : 'false');
 
-      - name: Copy trusted scripts from main branch
+      - name: Install editable transformers from PR branch
         if: steps.check_util_scripts.outputs.util_scripts_modified != 'true'
         run: |
-          # Security: Copy trusted scripts from main branch and run commands explicitly (not via make)
-          # to avoid executing potentially malicious Makefile or scripts from the PR
-          cp setup.py pr-repo/setup.py
-          cp utils/custom_init_isort.py pr-repo/utils/custom_init_isort.py
-          cp utils/sort_auto_mappings.py pr-repo/utils/sort_auto_mappings.py
-          cp utils/check_doc_toc.py pr-repo/utils/check_doc_toc.py
-          cp utils/check_copies.py pr-repo/utils/check_copies.py
-          cp utils/check_modular_conversion.py pr-repo/utils/check_modular_conversion.py
-          cp utils/check_dummies.py pr-repo/utils/check_dummies.py
-          cp utils/check_pipeline_typing.py pr-repo/utils/check_pipeline_typing.py
-          cp utils/check_doctest_list.py pr-repo/utils/check_doctest_list.py
-          cp utils/check_docstrings.py pr-repo/utils/check_docstrings.py
-          cp utils/add_dates.py pr-repo/utils/add_dates.py
-
-      - name: Install editable transformers from PR branch with copied scripts
-        if: steps.check_util_scripts.outputs.util_scripts_modified != 'true'
-        run: |
-          # Run commands in PR directory (with the copied trusted scripts)
           cd pr-repo
-
           pip install -e .
 
       - name: Run repo consistency checks with trusted script
@@ -382,7 +363,7 @@ jobs:
           fi
 
           if [ "$UTIL_SCRIPTS_MODIFIED" = 'true' ]; then
-            echo "final_comment=${MESSAGE_PREFIX}: some script files under the \`utils\` directory are modified in this PR. Please run style/repo. checks/fixes locally." >> $GITHUB_OUTPUT
+            echo "final_comment=${MESSAGE_PREFIX}: \`setup.py\` or some script files under the \`utils/\` directory are modified in this PR. Please run style/repo. checks/fixes locally." >> $GITHUB_OUTPUT
           elif [ "$CHANGES_DETECTED" = 'true' ]; then
             echo "final_comment=${MESSAGE_PREFIX} bot fixed some files and pushed the changes." >> $GITHUB_OUTPUT
           else
