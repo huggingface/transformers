@@ -133,6 +133,21 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "gemma4_unified": [
+            WeightRenaming(source_patterns=r"vision_embedder\.patch_ln1", target_patterns="embed_vision.patch_ln1"),
+            WeightRenaming(
+                source_patterns=r"vision_embedder\.patch_dense", target_patterns="embed_vision.patch_dense"
+            ),
+            WeightRenaming(source_patterns=r"vision_embedder\.patch_ln2", target_patterns="embed_vision.patch_ln2"),
+            WeightRenaming(
+                source_patterns=r"vision_embedder\.pos_embedding", target_patterns="embed_vision.pos_embedding"
+            ),
+            WeightRenaming(source_patterns=r"vision_embedder\.pos_norm", target_patterns="embed_vision.pos_norm"),
+            WeightRenaming(
+                source_patterns=r"embed_vision\.embedding_projection",
+                target_patterns="embed_vision.multimodal_embedder.embedding_projection",
+            ),
+        ],
         "hrm_text": [
             WeightConverter(
                 source_patterns="mlp.gate_up_proj.weight",
