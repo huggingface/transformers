@@ -24,6 +24,7 @@ import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
+from ... import initialization as init
 from ...masking_utils import create_bidirectional_mask  # type: ignore[import]
 from ...modeling_outputs import (  # type: ignore[import]
     MaskedLMOutput,
@@ -331,6 +332,10 @@ class MultiHeadAttention(nn.Module):
         self.d_head = d_model // n_heads
         self.scaling = self.d_head**-0.5
         self.attention_dropout = 0.0
+        # ESMC is a bidirectional encoder: never apply causal masking. Without
+        # this, the sdpa/flash interfaces default `is_causal` to True when no
+        # attention_mask is passed (unpadded inputs), silently masking causally.
+        self.is_causal = False
 
         assert not bias, "ESMC was trained with bias=False; bias=True not supported"
         self.layernorm_qkv = _make_attn_layernorm_qkv(d_model, bias)
@@ -602,11 +607,11 @@ class ESMCPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, ESMCRotaryEmbedding):
-            module.inv_freq = module._compute_inv_freq(module.config, device=self.device)
+            init.copy_(module.inv_freq, module._compute_inv_freq(module.config))
 
 
 # ---------------------------------------------------------------------------
