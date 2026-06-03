@@ -601,6 +601,8 @@
         title: Ernie4_5_MoE
       - local: model_doc/esm
         title: ESM
+      - local: model_doc/esmc
+        title: ESMC
       - local: model_doc/eurobert
         title: EuroBERT
       - local: model_doc/exaone4
