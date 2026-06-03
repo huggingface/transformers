@@ -36,6 +36,7 @@ from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, t
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
+from ..clip.modeling_clip import _get_vector_norm, image_text_contrastive_loss
 from ..dinov2_with_registers.configuration_dinov2_with_registers import Dinov2WithRegistersConfig
 from ..dinov2_with_registers.modeling_dinov2_with_registers import (
     Dinov2WithRegistersEmbeddings,
@@ -259,23 +260,6 @@ class Tipsv2Config(PreTrainedConfig):
             self.vision_config = Tipsv2VisionConfig(**self.vision_config)
 
         super().__post_init__(**kwargs)
-
-
-def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
-    return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
-
-
-def image_text_contrastive_loss(similarity: torch.Tensor) -> torch.Tensor:
-    caption_loss = contrastive_loss(similarity)
-    image_loss = contrastive_loss(similarity.T)
-    return (caption_loss + image_loss) / 2.0
-
-
-def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
-    square_tensor = torch.pow(tensor, 2)
-    sum_tensor = torch.sum(square_tensor, dim=-1, keepdim=True)
-    normed_tensor = torch.pow(sum_tensor, 0.5)
-    return normed_tensor
 
 
 @auto_docstring
