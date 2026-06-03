@@ -408,7 +408,11 @@ TOKENIZER_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TOKENIZER_MAPPING_NAM
 
 CONFIG_TO_TYPE = {v: k for k, v in CONFIG_MAPPING_NAMES.items()}
 
-MODEL_IDS_TO_TOKENIZERS_BACKEND = ["deepseek-ai/deepseek-r1-distill-llama-8b"]
+MODEL_IDS_TO_TOKENIZERS_BACKEND = [
+    "deepseek-ai/deepseek-r1-distill-llama-8b",
+    "allenai/dolma2-tokenizer",
+    "google/umt5-small",
+]
 
 
 def load_vocab(vocab_file):
@@ -747,7 +751,7 @@ class AutoTokenizer:
             else:
                 tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
-        # deepseek-r1 distills use model_type="llama" and tokenizer_class="LlamaTokenizer" but need TokenizersBackend. Hub really needs to be updated
+        # Some specific checkpoints need TokenizersBackend because their config on the Hub really needs to be updated.
         _config_name_or_path = (
             name.lower() if isinstance((name := getattr(config, "_name_or_path", None)), str) else ""
         )
