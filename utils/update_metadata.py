@@ -130,6 +130,9 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("any-to-any", "MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES", "AutoModelForMultimodalLM"),
 ]
 
+# Pipeline tags that do not necessarily have to be in the above list
+PIPELINES_TO_IGNORE = ["image-text-to-text"]
+
 
 def camel_case_split(identifier: str) -> list[str]:
     """
@@ -330,7 +333,7 @@ def check_pipeline_tags():
     pipeline_tasks = transformers_module.pipelines.SUPPORTED_TASKS
     missing = []
     for key in pipeline_tasks:
-        if key not in in_table:
+        if key not in in_table and key not in PIPELINES_TO_IGNORE:
             model = pipeline_tasks[key]["pt"]
             if isinstance(model, (list, tuple)):
                 model = model[0]
