@@ -20,6 +20,8 @@ class ESMCConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`ESMCModel`]. It is used to
     instantiate an ESMC model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    [Biohub/ESMC-600M-2024-12](https://huggingface.co/Biohub/ESMC-600M-2024-12) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
     outputs. Read the documentation from [`PretrainedConfig`] for more information.
