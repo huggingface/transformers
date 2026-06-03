@@ -955,7 +955,8 @@ class PaddleOCRVLModel(Qwen2VLModel):
         vision_outputs = self.visual(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = vision_outputs.last_hidden_state
         image_embeds = self.projector(image_embeds, image_grid_thw)
-        vision_outputs.pooler_output = image_embeds
+        split_sizes = (image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2).tolist()
+        vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
 
         return vision_outputs
 
@@ -1007,7 +1008,7 @@ class PaddleOCRVLModel(Qwen2VLModel):
             image_embeds = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             ).pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 

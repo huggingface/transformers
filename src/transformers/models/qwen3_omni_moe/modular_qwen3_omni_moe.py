@@ -1212,7 +1212,11 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        return self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = list(image_embeds)
+        return vision_outputs
 
     @can_return_tuple
     @auto_docstring
@@ -1289,7 +1293,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             image_outputs: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
-            image_embeds = image_outputs.pooler_output
+            image_embeds = torch.cat(image_outputs.pooler_output, dim=0)
             image_embeds_multiscale = image_outputs.deepstack_features
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _, _ = self.get_placeholder_mask(
