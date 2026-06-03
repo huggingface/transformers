@@ -886,7 +886,24 @@ def get_checkpoint_shard_files(
 
     # First, let's deal with local folder.
     if os.path.isdir(pretrained_model_name_or_path):
+        # Validate shard filenames to prevent path traversal attacks.
+        # Reject any filename that contains path traversal sequences or absolute paths.
+        for filename in shard_filenames:
+            if ".." in filename or filename.startswith("/") or filename.startswith("\\"):
+                raise ValueError(
+                    f"Invalid shard filename '{filename}' in checkpoint index. "
+                    "Filenames must not contain '..' or start with a path separator."
+                )
         shard_filenames = [os.path.join(pretrained_model_name_or_path, subfolder, f) for f in shard_filenames]
+        # Resolve and verify each path stays within the model directory.
+        base_path = os.path.realpath(os.path.join(pretrained_model_name_or_path, subfolder))
+        for shard_path in shard_filenames:
+            resolved_path = os.path.realpath(shard_path)
+            if not resolved_path.startswith(base_path + os.sep) and resolved_path != base_path:
+                raise ValueError(
+                    f"Shard file path '{shard_path}' resolves outside the model directory. "
+                    "This may indicate a path traversal attempt in the checkpoint index."
+                )
         return shard_filenames, sharded_metadata
 
     # At this stage pretrained_model_name_or_path is a model identifier on the Hub. Try to get everything from cache,
