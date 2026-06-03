@@ -117,28 +117,28 @@ def build_server(
 
     # ---- Routes ----
 
-    @_apply_zerogpu
     @app.post("/v1/chat/completions")
+    @_apply_zerogpu
     async def chat_completions(request: Request, body: dict):
         return await chat_handler.handle_request(body, request.state.request_id)
 
-    @_apply_zerogpu
     @app.post("/v1/completions")
+    @_apply_zerogpu
     async def completions(request: Request, body: dict):
         return await completion_handler.handle_request(body, request.state.request_id)
 
-    @_apply_zerogpu
     @app.post("/v1/responses")
+    @_apply_zerogpu
     async def responses(request: Request, body: dict):
         return await response_handler.handle_request(body, request.state.request_id)
 
-    @_apply_zerogpu
     @app.post("/v1/audio/transcriptions")
+    @_apply_zerogpu
     async def audio_transcriptions(request: Request):
         return await transcription_handler.handle_request(request)
 
-    @_apply_zerogpu
     @app.post("/load_model")
+    @_apply_zerogpu
     async def load_model(body: dict):
         from fastapi import HTTPException
 
