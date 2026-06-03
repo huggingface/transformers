@@ -78,3 +78,5 @@
     sections:
     - local: pipeline_tutorial
       title: Pipeline
+    - local: pipeline_gradio
+      title: Aplicații de Machine learning
