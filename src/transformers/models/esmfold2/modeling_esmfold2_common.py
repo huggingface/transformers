@@ -1979,7 +1979,7 @@ def _seed_context(seed: int | None, *, cuda: bool = True):
 
 
 # ===========================================================================
-# ESMFold2ExperimentalModel — the top-level PreTrainedModel
+# ESMFold2 — language-model backbone helpers
 # ===========================================================================
 
 

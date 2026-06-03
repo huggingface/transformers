@@ -371,7 +371,7 @@ def _encode_atom_name(name: str) -> list[int]:
 
 
 def prepare_protein_features(sequence: str) -> dict[str, Tensor]:
-    """Featurize a single protein sequence for ESMFold2ExperimentalModel.forward.
+    """Featurize a single protein sequence for ESMFold2Model.forward.
 
     Returns the same keys with the same dtypes/shapes as
     ``ESMFold2InputBuilder.prepare_input(StructurePredictionInput(...))``
