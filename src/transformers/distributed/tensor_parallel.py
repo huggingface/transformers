@@ -171,6 +171,7 @@ def verify_tp_sp_ep_plan(
     if ep_plan is not None:
         _verify_plan_weight_sharding(expected_keys, ep_plan, "EP", check_unsharded=False)
 
+
 class ColwiseParallel(TensorParallelLayer):
     """Column-wise: weight & bias → Shard(0) (Embedding: Shard(1)); input replicated, output Shard(-1)."""
 
