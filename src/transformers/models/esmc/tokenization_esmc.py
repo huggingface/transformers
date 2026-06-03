@@ -20,6 +20,7 @@ from tokenizers.processors import TemplateProcessing
 from ...tokenization_utils_fast import PreTrainedTokenizerFast  # type: ignore[import]
 from ...utils import logging  # type: ignore[import]
 
+
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
@@ -92,7 +93,7 @@ class ESMCTokenizer(PreTrainedTokenizerFast):
 
     >>> tokenizer = ESMCTokenizer()
     >>> tokenizer("ACDEFGHIKLMNPQRSTVWY")["input_ids"]
-    [0, 5, 23, 13, 18, 9, 6, 21, 12, 15, 20, 17, 14, 16, 10, 8, 11, 7, 22, 19, 2]
+    [0, 5, 23, 13, 9, 18, 6, 21, 12, 15, 4, 20, 17, 14, 16, 10, 8, 11, 7, 22, 19, 2]
     ```
     """
 
