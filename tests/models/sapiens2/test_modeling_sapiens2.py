@@ -24,6 +24,7 @@ from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -376,7 +377,11 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
 
 def prepare_img():
-    image = load_image_as_tensor("./tests/fixtures/tests_samples/COCO/000000004016.png")
+    image = load_image_as_tensor(
+        url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000004016.png"
+        )
+    )
     return image
 
 
