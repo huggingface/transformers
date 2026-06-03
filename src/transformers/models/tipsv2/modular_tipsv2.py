@@ -144,7 +144,7 @@ class Tipsv2VisionConfig(Dinov2WithRegistersConfig):
     interpolate_antialias (`bool`, *optional*, defaults to `True`):
         Whether to use antialiasing when interpolating vision position embeddings.
     interpolate_offset (`float`, *optional*, defaults to `0.0`):
-        Offset used by the original TIPSv2 implementation when resizing vision position embeddings.
+        Offset to use when resizing vision position embeddings.
 
     Example:
 
@@ -159,22 +159,7 @@ class Tipsv2VisionConfig(Dinov2WithRegistersConfig):
     model_type = "tipsv2_vision_model"
     base_config_key = "vision_config"
 
-    hidden_size: int = 768
-    num_hidden_layers: int = 12
-    num_attention_heads: int = 12
-    mlp_ratio: float | int = 4.0
-    hidden_act: str = "gelu"
-    hidden_dropout_prob: float | int = 0.0
-    attention_probs_dropout_prob: float | int = 0.0
-    initializer_range: float = 0.02
-    layer_norm_eps: float = 1e-6
     image_size: int | list[int] | tuple[int, int] = 448
-    patch_size: int | list[int] | tuple[int, int] = 14
-    num_channels: int = 3
-    qkv_bias: bool = True
-    layerscale_value: float = 1.0
-    drop_path_rate: float | int = 0.0
-    use_swiglu_ffn: bool = False
     num_register_tokens: int = 1
     interpolate_antialias: bool = True
     interpolate_offset: float = 0.0
