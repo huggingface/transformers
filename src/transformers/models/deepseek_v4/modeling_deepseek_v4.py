@@ -26,7 +26,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowLayer
+from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowLayer, StaticSlidingWindowLayer
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_sliding_window_causal_mask
@@ -36,7 +36,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_deepseek_v4 import DeepseekV4Config
@@ -298,6 +298,241 @@ class DeepseekV4CSACache(DeepseekV4HCACache):
         self.overlap_kv[name] = chunk_kv[:, -1, :, :head_dim].clone()
         self.overlap_gate[name] = chunk_gate[:, -1, :, :head_dim].clone()
         return prior_kv, prior_gate
+
+
+class DeepseekV4HCAStaticCache(StaticSlidingWindowLayer):
+    r"""Static counterpart to :class:`DeepseekV4HCACache` — same compressor-state API
+    on top of pre-allocated buffers so the whole forward is dynamo-traceable.
+
+    Three additions over :class:`StaticSlidingWindowLayer` (sliding-window K=V):
+
+      * `buffer_kv[name]` / `buffer_gate[name]` — fixed-shape ``(B, compress_rate, head_dim)``
+        rolling buffer holding the most recent ``compress_rate`` source tokens (zero-padded
+        on the left for early steps). ``store_compression_weights`` shifts left by
+        ``new_n`` and appends, so a decode step (``new_n=1``) always returns a buffer
+        of size ``compress_rate``.
+      * `compressed_kv[name]` — fixed-shape ``(B, ceil(max_cache_len / compress_rate),
+        head_dim)`` storage for emitted compressed entries. ``update_compressor_states``
+        writes the new candidate entry at slot ``cumulative_position // compress_rate``
+        and returns the full buffer.
+      * `cumulative_position[name]` — int counter (per name; HCA only has ``"compressor"``).
+
+    Why "candidate" entries: in decode, the cache returns the buffer (zero-padded
+    when the window isn't full yet), the compressor computes one compressed entry
+    for it, and writes it to slot ``cum // compress_rate``. The same slot is
+    overwritten on every step until the window closes at position
+    ``(slot + 1) * compress_rate - 1`` — at that moment the buffer holds the true
+    window and the write commits the real entry. The attention's existing
+    ``causal_threshold = (position_ids + 1) // compress_rate`` mask ensures queries
+    only see slots that have closed, so the "candidate" overwrites are never read.
+
+    No ``layer_type`` is set: ``__init_subclass__`` would register it in
+    ``LAYER_TYPE_CACHE_MAPPING`` and clobber the dynamic counterpart. Dispatch is
+    instead via explicit branches in ``StaticCache.__init__``.
+    """
+
+    def __init__(self, config: "DeepseekV4Config", max_cache_len: int):
+        super().__init__(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
+        self.config = config
+        self.compress_rate = config.compress_rates["heavily_compressed_attention"]
+        self.head_dim = config.head_dim
+        # Ceil so the final partial window has a slot reserved.
+        self._max_compressed_entries = (max_cache_len + self.compress_rate - 1) // self.compress_rate
+        # Per-name feature dims — V4's compressors don't agree on these. HCA has only the
+        # ``"compressor"`` entry, at ``head_dim`` for both the rolling source-token buffer
+        # and the compressed-entry storage. CSA adds an ``"indexer"`` entry with different
+        # widths (see :class:`DeepseekV4CSAStaticCache` which overrides these tables).
+        self._buffer_feat_by_name: dict[str, int] = {"compressor": config.head_dim}
+        self._compressed_feat_by_name: dict[str, int] = {"compressor": config.head_dim}
+        self.buffer_kv: dict[str, torch.Tensor | None] = dict.fromkeys(self._buffer_feat_by_name)
+        self.buffer_gate: dict[str, torch.Tensor | None] = dict.fromkeys(self._buffer_feat_by_name)
+        self.compressed_kv: dict[str, torch.Tensor | None] = dict.fromkeys(self._compressed_feat_by_name)
+        self.cumulative_position: dict[str, int] = dict.fromkeys(self._buffer_feat_by_name, 0)
+
+    @property
+    def _compressor_names(self) -> tuple[str, ...]:
+        return tuple(self._buffer_feat_by_name)
+
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
+        """Pre-allocate compressor-state buffers alongside the parent's sliding K=V
+        buffers. Called once on the first ``update`` (which fires before the
+        compressor's first ``store_compression_weights``), so all per-name buffers
+        exist before any dynamo trace runs. Feature dims come from the class tables
+        — subclasses override the tables in ``__init__`` and inherit this method."""
+        super().lazy_initialization(key_states, value_states)
+        batch, dtype, device = key_states.shape[0], self.dtype, self.device
+        for name, feat in self._buffer_feat_by_name.items():
+            self.buffer_kv[name] = torch.zeros(batch, self.compress_rate, feat, dtype=dtype, device=device)
+            self.buffer_gate[name] = torch.zeros(batch, self.compress_rate, feat, dtype=dtype, device=device)
+        for name, feat in self._compressed_feat_by_name.items():
+            self.compressed_kv[name] = torch.zeros(
+                batch, self._max_compressed_entries, feat, dtype=dtype, device=device
+            )
+        if not is_torchdynamo_compiling():
+            for t in self.buffer_kv.values():
+                torch._dynamo.mark_static_address(t)
+            for t in self.buffer_gate.values():
+                torch._dynamo.mark_static_address(t)
+            for t in self.compressed_kv.values():
+                torch._dynamo.mark_static_address(t)
+
+    def store_compression_weights(
+        self, name: str, kv: torch.Tensor, gate: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, int]:
+        """Static analogue of :meth:`DeepseekV4HCACache.store_compression_weights`.
+
+        Decode (``new_n == 1``): shifts the rolling buffer left by 1, appends the new
+        token at the rightmost slot, returns the full ``(B, compress_rate, head_dim)``
+        buffer — always one window's worth, even when the window isn't yet full
+        (left slots are zeros). The compressor emits one candidate entry; the
+        attention mask hides it until the window actually closes.
+
+        Prefill (``new_n > 1``): re-uses the dynamic logic — concat buffer's real tail
+        with the new kv, peel off the window-aligned prefix, and refresh the rolling
+        buffer with the last ``compress_rate`` tokens of the combined stream.
+        """
+        new_n = kv.shape[1]
+        cum_before = self.cumulative_position[name]
+        first_window_position = (cum_before // self.compress_rate) * self.compress_rate
+
+        if new_n == 1:
+            # Shift-and-append on a (B, compress_rate, head_dim) buffer.
+            new_buffer_kv = torch.cat([self.buffer_kv[name][:, 1:], kv], dim=1)
+            new_buffer_gate = torch.cat([self.buffer_gate[name][:, 1:], gate], dim=1)
+            self.buffer_kv[name].copy_(new_buffer_kv)
+            self.buffer_gate[name].copy_(new_buffer_gate)
+            self.cumulative_position[name] = cum_before + 1
+            return self.buffer_kv[name], self.buffer_gate[name], first_window_position
+
+        # Prefill: combine the buffer's "real" tail with the new kv, peel windows.
+        real_in_buffer = min(cum_before, self.compress_rate)
+        if real_in_buffer > 0:
+            prior_kv = self.buffer_kv[name][:, -real_in_buffer:]
+            prior_gate = self.buffer_gate[name][:, -real_in_buffer:]
+            full_kv = torch.cat([prior_kv, kv], dim=1)
+            full_gate = torch.cat([prior_gate, gate], dim=1)
+        else:
+            full_kv = kv
+            full_gate = gate
+        usable = (full_kv.shape[1] // self.compress_rate) * self.compress_rate
+        chunk_kv = full_kv[:, :usable]
+        chunk_gate = full_gate[:, :usable]
+
+        # Refresh the rolling buffer in place: zero, then write the last `compress_rate`
+        # tokens of the stream (left slots stay zero if the stream is shorter).
+        self.buffer_kv[name].zero_()
+        self.buffer_gate[name].zero_()
+        tail = min(full_kv.shape[1], self.compress_rate)
+        if tail > 0:
+            self.buffer_kv[name][:, -tail:].copy_(full_kv[:, -tail:])
+            self.buffer_gate[name][:, -tail:].copy_(full_gate[:, -tail:])
+        self.cumulative_position[name] = cum_before + new_n
+        return chunk_kv, chunk_gate, first_window_position
+
+    def update_compressor_states(self, name: str, compressed: torch.Tensor) -> torch.Tensor:
+        """Static analogue of :meth:`DeepseekV4HCACache.update_compressor_states`.
+
+        Writes the new compressed entries at fixed slots inside the pre-allocated
+        ``compressed_kv[name]`` buffer and returns the *full* buffer (shape
+        ``(B, max_compressed_entries, head_dim)``). The attention's existing
+        ``causal_threshold`` mask hides slots whose underlying window hasn't closed yet,
+        so the rest of the buffer (zeros or stale candidates) is never queried.
+
+        Slot index of the first new entry: ``(cumulative_position - new_n) //
+        compress_rate``. In decode (one candidate per step) this is the slot of the
+        currently-in-progress window — re-written on every step until the window
+        closes. In prefill the slots advance with each newly closed window.
+        """
+        n_new = compressed.shape[1]
+        if n_new == 0:
+            return self.compressed_kv[name]
+        # Span = 1 in decode (one candidate per token), compress_rate in prefill (one
+        # entry per closed window). `cumulative_position` already advanced in `store_*`,
+        # so back out by `n_new * span` to recover the slot of the first new entry.
+        cum_after = self.cumulative_position[name]
+        span = 1 if n_new == 1 else self.compress_rate
+        start_slot = (cum_after - n_new * span) // self.compress_rate
+        buf = self.compressed_kv[name]
+        buf[:, start_slot : start_slot + n_new].copy_(compressed.to(buf.dtype))
+        return buf
+
+    def reset(self) -> None:
+        super().reset()
+        for name in self._compressor_names:
+            if self.buffer_kv[name] is not None:
+                self.buffer_kv[name].zero_()
+                self.buffer_gate[name].zero_()
+                self.compressed_kv[name].zero_()
+            self.cumulative_position[name] = 0
+
+
+class DeepseekV4CSAStaticCache(DeepseekV4HCAStaticCache):
+    r"""Static counterpart to :class:`DeepseekV4CSACache`: adds the ``"indexer"`` name
+    and per-name overlap state (Ca slice of the previous window's chunk) on top of
+    the HCA static buffers.
+
+    Overlap state is fixed-shape ``(B, compress_rate, head_dim)`` per name and starts
+    as zeros — the existing consumer ``new_kv[:, 0, :ratio] = prior_kv`` is a write,
+    not an add, so handing back zeros on the first call is observationally identical
+    to the dynamic cache's ``None`` (the slot was already zeros from ``new_zeros``).
+
+    Note: no ``layer_type`` is set on this class — see :class:`DeepseekV4HCAStaticCache`.
+    """
+
+    def __init__(self, config: "DeepseekV4Config", max_cache_len: int):
+        super().__init__(config=config, max_cache_len=max_cache_len)
+        self.compress_rate = config.compress_rates["compressed_sparse_attention"]
+        self._max_compressed_entries = (max_cache_len + self.compress_rate - 1) // self.compress_rate
+        # CSA feature dims differ from HCA's per name:
+        #   * outer "compressor": `kv_proj` projects to ``2 * head_dim`` (Ca + Cb halves),
+        #     but the softmax-gated combine emits ``head_dim``-wide entries.
+        #   * "indexer": same Ca/Cb structure but at ``index_head_dim``.
+        h, ih = config.head_dim, config.index_head_dim
+        self._buffer_feat_by_name = {"compressor": 2 * h, "indexer": 2 * ih}
+        self._compressed_feat_by_name = {"compressor": h, "indexer": ih}
+        self._overlap_feat_by_name = {"compressor": h, "indexer": ih}
+        # Re-init dicts under the new names (parent only set up ``"compressor"``).
+        self.buffer_kv = dict.fromkeys(self._buffer_feat_by_name)
+        self.buffer_gate = dict.fromkeys(self._buffer_feat_by_name)
+        self.compressed_kv = dict.fromkeys(self._compressed_feat_by_name)
+        self.cumulative_position = dict.fromkeys(self._buffer_feat_by_name, 0)
+        self.overlap_kv: dict[str, torch.Tensor | None] = dict.fromkeys(self._overlap_feat_by_name)
+        self.overlap_gate: dict[str, torch.Tensor | None] = dict.fromkeys(self._overlap_feat_by_name)
+
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
+        super().lazy_initialization(key_states, value_states)
+        batch, dtype, device = key_states.shape[0], self.dtype, self.device
+        for name, feat in self._overlap_feat_by_name.items():
+            self.overlap_kv[name] = torch.zeros(batch, self.compress_rate, feat, dtype=dtype, device=device)
+            self.overlap_gate[name] = torch.zeros(batch, self.compress_rate, feat, dtype=dtype, device=device)
+        if not is_torchdynamo_compiling():
+            for t in self.overlap_kv.values():
+                torch._dynamo.mark_static_address(t)
+            for t in self.overlap_gate.values():
+                torch._dynamo.mark_static_address(t)
+
+    def update_overlap_state(
+        self, name: str, chunk_kv: torch.Tensor, chunk_gate: torch.Tensor, head_dim: int
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Static analogue of :meth:`DeepseekV4CSACache.update_overlap_state`. Always
+        returns a tensor (zeros on the first call) so the consumer's ``is not None``
+        branch specializes to ``True`` under dynamo — the dynamic-mode "no prior"
+        case is recovered by the zeros, since the consumer writes ``new_kv[:, 0,
+        :ratio] = prior_kv`` over slots that were already ``new_zeros``-initialized.
+        """
+        prior_kv = self.overlap_kv[name].clone()
+        prior_gate = self.overlap_gate[name].clone()
+        # Persist the current call's last-window Ca slice for the next call.
+        self.overlap_kv[name].copy_(chunk_kv[:, -1, :, :head_dim])
+        self.overlap_gate[name].copy_(chunk_gate[:, -1, :, :head_dim])
+        return prior_kv, prior_gate
+
+    def reset(self) -> None:
+        super().reset()
+        for name in self._compressor_names:
+            if self.overlap_kv[name] is not None:
+                self.overlap_kv[name].zero_()
+                self.overlap_gate[name].zero_()
 
 
 class DeepseekV4GroupedLinear(nn.Linear):
@@ -1175,14 +1410,8 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
-    # The compressor's rolling-window buffer / compressed-entries / overlap state
-    # lives on the per-layer cache (:class:`DeepseekV4HCACache` /
-    # :class:`DeepseekV4CSACache`) and isn't compatible with :class:`StaticCache`
-    # — that path would hand the compressor a :class:`StaticSlidingWindowLayer`
-    # with no `store_compression_weights` method. Disabling fullgraph compile
-    # keeps generation tests on the dynamic cache build that does dispatch to
-    # V4's own cache layers.
-    _can_compile_fullgraph = False
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(DeepseekV4TopKRouter, index=0),

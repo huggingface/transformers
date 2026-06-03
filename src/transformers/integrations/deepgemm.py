@@ -57,12 +57,11 @@ class DeepGEMM:
     transform_weights_for_mega_moe: Callable
     get_symm_buffer_for_mega_moe: Callable
     fp8_fp4_mega_moe: Callable
-    # M/K-dimension alignment for TMA-based contiguous grouped GEMM. Sourced from
-    # `get_mk_alignment_for_contiguous_layout()` at load time. The kernel exposes a
-    # `set_mk_alignment_for_contiguous_layout` setter, but we don't call it: the
-    # build-time default (128) was empirically the best across MoE workloads
-    # (bench showed kernel-recommended 240 is slower and 256 doesn't even compile).
-    # Same stance as vLLM, which caches and never sets it.
+    # M/K-dimension alignment for TMA-based contiguous grouped GEMM. The kernel
+    # exposes a `set_mk_alignment_for_contiguous_layout` setter but we don't call
+    # it: 128 was empirically the best across MoE workloads (bench showed the
+    # kernel-recommended 240 is slower and 256 doesn't compile). Same stance as
+    # vLLM, which caches and never sets it.
     m_alignment: int
 
 
@@ -73,27 +72,35 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
     `requires_sm100` raises a Blackwell-specific error for callers (FP4 / Mega MoE)
     that won't work on Hopper, instead of the generic SM90+ message.
     """
-    if not is_kernels_available():
-        raise ImportError("DeepGEMM kernel requires the `kernels` package. Install it with `pip install -U kernels`.")
-    if not torch.cuda.is_available():
-        raise ImportError("DeepGEMM kernel requires CUDA, but CUDA is not available.")
+    # Env-/arch-/version validation skipped during dynamo tracing — `is_kernels_available()`
+    # calls `find_spec`, `get_cuda_runtime_version()` calls `ctypes.CDLL`, both untraceable.
+    # The friendly errors fire the first time the kernel loads eagerly; the function is
+    # `@functools.cache`d so subsequent calls (incl. trace-time re-runs by dynamo) skip
+    # straight to the kernel-handle materialization below.
+    if not torch.compiler.is_compiling():
+        if not is_kernels_available():
+            raise ImportError(
+                "DeepGEMM kernel requires the `kernels` package. Install it with `pip install -U kernels`."
+            )
+        if not torch.cuda.is_available():
+            raise ImportError("DeepGEMM kernel requires CUDA, but CUDA is not available.")
 
-    major, minor = torch.cuda.get_device_capability()
-    # DeepGEMM ships kernels only for SM90 (Hopper) and SM100 (Blackwell); anything
-    # else — Ada (SM89), Ampere (SM80), or future archs (SM110+) — has no build.
-    allowed = (10,) if requires_sm100 else (9, 10)
-    if major not in allowed:
-        arch = "Blackwell (SM100)" if requires_sm100 else "Hopper (SM90) or Blackwell (SM100)"
-        raise ImportError(f"DeepGEMM requires {arch}; current device is SM{major}{minor}.")
+        major, minor = torch.cuda.get_device_capability()
+        # DeepGEMM ships kernels only for SM90 (Hopper) and SM100 (Blackwell); anything
+        # else — Ada (SM89), Ampere (SM80), or future archs (SM110+) — has no build.
+        allowed = (10,) if requires_sm100 else (9, 10)
+        if major not in allowed:
+            arch = "Blackwell (SM100)" if requires_sm100 else "Hopper (SM90) or Blackwell (SM100)"
+            raise ImportError(f"DeepGEMM requires {arch}; current device is SM{major}{minor}.")
 
-    # Per the DeepGEMM README: SM90 needs CUDA 12.3+, SM100 needs CUDA 12.9+.
-    cuda_major, cuda_minor = get_cuda_runtime_version()
-    min_cuda = (12, 9) if major == 10 else (12, 3)
-    if (cuda_major, cuda_minor) < min_cuda:
-        raise ImportError(
-            f"DeepGEMM on SM{major}{minor} requires CUDA runtime ≥ {min_cuda[0]}.{min_cuda[1]}, "
-            f"found {cuda_major}.{cuda_minor}."
-        )
+        # Per the DeepGEMM README: SM90 needs CUDA 12.3+, SM100 needs CUDA 12.9+.
+        cuda_major, cuda_minor = get_cuda_runtime_version()
+        min_cuda = (12, 9) if major == 10 else (12, 3)
+        if (cuda_major, cuda_minor) < min_cuda:
+            raise ImportError(
+                f"DeepGEMM on SM{major}{minor} requires CUDA runtime ≥ {min_cuda[0]}.{min_cuda[1]}, "
+                f"found {cuda_major}.{cuda_minor}."
+            )
 
     kernel = lazy_load_kernel("deep-gemm")
     if kernel is None:
@@ -134,6 +141,41 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
         raise ImportError(
             f"DeepGEMM kernel is missing required symbols: {', '.join(missing)}. Update with `pip install -U kernels`."
         )
+
+    # FIXME(dirty patch): drop the GPU-syncing assert inside `pack_ue8m0_to_int`.
+    # Upstream `kernels-community/deep-gemm` ships:
+    #
+    #     def pack_ue8m0_to_int(x):
+    #         assert x.dtype == torch.float and x.size(-1) % 4 == 0       # CPU-side, OK
+    #         assert (x.view(torch.int) & ((1 << 23) - 1) == 0).all()     # GPU.all() + bool() → SYNC
+    #         return (x.view(torch.int) >> 23).to(torch.uint8).view(torch.int)
+    #
+    # The second assert forces a GPU→CPU readback per call — kills cudagraph capture
+    # and creates an unbacked symbol that breaks `torch.compile(fullgraph=True)`'s
+    # fake-tensor pass. The check is debug-only (validates UE8M0 mantissas are zero,
+    # which `ceil_to_ue8m0` upstream of it already guarantees). Drop it locally until
+    # the upstream patch lands. Module-level rebind so callers inside
+    # `deep_gemm.utils.math` (e.g. `per_token_cast_to_fp8`) pick it up via globals.
+    math_mod = getattr(getattr(kernel, "utils", None), "math", None)
+    if math_mod is not None and hasattr(math_mod, "pack_ue8m0_to_int"):
+
+        def _pack_ue8m0_to_int_no_sync(x: torch.Tensor) -> torch.Tensor:
+            # CPU-side checks kept (dtype + shape int compare — no GPU sync, no
+            # data-dependent guards). Only the second upstream assert is dropped:
+            # `(x.view(int) & 0x7FFFFF == 0).all()` forces a GPU→CPU readback.
+            assert x.dtype == torch.float and x.size(-1) % 4 == 0
+            return (x.view(torch.int) >> 23).to(torch.uint8).view(torch.int)
+
+        math_mod.pack_ue8m0_to_int = _pack_ue8m0_to_int_no_sync
+
+    # Resolve eagerly when possible. `get_mk_alignment()` is a torch op returning a
+    # Python int — `fullgraph=True` rejects non-Tensor returns — so if first load
+    # happens under dynamo we fall back to 128. `@functools.cache` on this loader
+    # means the eager-resolved value is reused on later traced calls.
+    m_alignment = 128
+    if not torch.compiler.is_compiling():
+        m_alignment = get_mk_alignment()
+
     return DeepGEMM(
         fp8_fp4_matmul=fp8_fp4_matmul,
         grouped_fp8_fp4_matmul_nt=grouped_fp8_fp4_matmul_nt,
@@ -145,7 +187,7 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
         transform_weights_for_mega_moe=transform_weights_for_mega_moe,
         get_symm_buffer_for_mega_moe=get_symm_buffer_for_mega_moe,
         fp8_fp4_mega_moe=fp8_fp4_mega_moe,
-        m_alignment=int(get_mk_alignment()),
+        m_alignment=m_alignment,
     )
 
 
@@ -222,8 +264,7 @@ def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> t
       - `float8_e8m0fnu` on SM90: SM90 dispatch only accepts FP32 SFs, so cast
         UE8M0 → FP32 (exact upcast — UE8M0 is the biased-exponent half of a
         pow-of-2 FP32, so `.float()` rebuilds the original FP32 scale exactly).
-      - `float32`: per-token / per-block SFs from `per_token_cast_to_fp8` or
-        on-disk weights — round to UE8M0 on SM100 (see `_ceil_to_ue8m0`).
+      - `float32`: per-token / per-block SFs — round to UE8M0 on SM100.
       - `int32`: already-packed UE8M0 — pass through.
 
     When `expected_mn` is set and the SF's M-dim is smaller (block-quantized
