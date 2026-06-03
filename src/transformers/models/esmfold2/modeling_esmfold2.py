@@ -34,6 +34,7 @@ from .modeling_esmfold2_common import (
     OuterProductMean,
     ResIdxAsymIdSymIdEntityIdEncoding,
     RowAttentionPooling,
+    SWA3DRoPEAttention,
     SwiGLUMLP,
     TriangleMultiplicativeUpdate,
     _categorical_mean,
@@ -368,6 +369,9 @@ class ESMFold2Model(PreTrainedModel):
 
     config_class = ESMFold2Config
     _keys_to_ignore_on_load_unexpected = [r"\._extra_state$"]
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_attention_backend = True
 
     def __init__(self, config: ESMFold2Config) -> None:
         super().__init__(config)
@@ -434,6 +438,15 @@ class ESMFold2Model(PreTrainedModel):
                 n_heads_msa=msa_cfg.n_heads_msa,
                 msa_head_width=msa_cfg.msa_head_width,
             )
+
+        # SWA3DRoPEAttention modules live deep in the atom encoders/decoders and
+        # are built from explicit dims, so give each a handle to the model config:
+        # their forward dispatches the plain-attention core through the v5
+        # attention interface (config._attn_implementation), staying live under
+        # set_attn_implementation() since the config object is shared.
+        for module in self.modules():
+            if isinstance(module, SWA3DRoPEAttention):
+                module.config = self.config
 
         self.post_init()
 
