@@ -461,9 +461,6 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
         self.encoder = GraniteSpeechNarCTCEncoder(config.encoder_config)
         self.projector = GraniteSpeechNarProjector(config.projector_config)
 
-        text_config = config.text_config
-        if hasattr(config, "_attn_implementation"):
-            text_config._attn_implementation = config._attn_implementation
         self.language_model = GraniteSpeechNarLanguageModel(config.text_config)
 
         self.post_init()
