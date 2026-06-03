@@ -23,6 +23,7 @@ from typing import Annotated
 
 import typer
 
+from transformers.cli import serve_zerogpu
 from transformers.utils import logging
 from transformers.utils.import_utils import is_serve_available
 
@@ -95,6 +96,22 @@ class Serve:
         cb_use_cuda_graph: Annotated[
             bool | None, typer.Option(help="Enable CUDA graphs for continuous batching.")
         ] = None,
+        # ZeroGPU options
+        zerogpu: Annotated[
+            bool,
+            typer.Option(
+                help=(
+                    "Enable ZeroGPU mode. In a Hugging Face ZeroGPU Space, GPU resources "
+                    "are dynamically allocated per request via @spaces.GPU. "
+                    "In non-ZeroGPU environments, this flag is a no-op and the server "
+                    "runs normally with persistent GPU allocation."
+                )
+            ),
+        ] = False,
+        gpu_size: Annotated[
+            str,
+            typer.Option(help='ZeroGPU size: "large" (half RTX Pro 6000, default) or "xlarge" (full RTX Pro 6000).'),
+        ] = "large",
         # Server options
         host: Annotated[str, typer.Option(help="Server listen address.")] = "localhost",
         port: Annotated[int, typer.Option(help="Server listen port.")] = 8000,
@@ -121,6 +138,17 @@ class Serve:
         # Seed
         if default_seed is not None:
             set_torch_seed(default_seed)
+
+        # ZeroGPU configuration
+        self._zerogpu_enabled = zerogpu or serve_zerogpu.is_zerogpu()
+        self._gpu_size = gpu_size
+        serve_zerogpu._zerogpu_size = gpu_size
+        serve_zerogpu._zerogpu_enabled = self._zerogpu_enabled
+        if self._zerogpu_enabled:
+            logger.info(
+                f"ZeroGPU mode enabled (size={gpu_size}). "
+                f"GPU resources will be dynamically allocated per request via @spaces.GPU."
+            )
 
         # Logging
         transformers_logger = logging.get_logger("transformers")
@@ -225,6 +253,15 @@ class Serve:
         self.server.should_exit = True
         self._thread.join(timeout=2)
 
+    @property
+    def zerogpu_config(self) -> dict:
+        """Return the current ZeroGPU configuration.
+
+        Returns:
+            `dict`: Configuration dict with ``enabled``, ``size``, and ``space_id``.
+        """
+        return serve_zerogpu.get_zerogpu_config()
+
 
 Serve.__doc__ = """
 Run a FastAPI server to serve models on-demand with an OpenAI compatible API.
@@ -236,6 +273,13 @@ Endpoints:
     POST /v1/completions      — Legacy text completions from a prompt.
     GET  /v1/models           — Lists available models.
     GET  /health              — Health check.
+
+\b
+ZeroGPU:
+    Use ``--zerogpu`` to enable ZeroGPU mode for Hugging Face Spaces.
+    In ZeroGPU Spaces, GPU resources are dynamically allocated per request.
+    Set ``--gpu-size`` to "large" (default, half RTX Pro 6000) or "xlarge"
+    (full RTX Pro 6000 Blackwell).
 
 Requires FastAPI and Uvicorn: pip install transformers[serving]
 """

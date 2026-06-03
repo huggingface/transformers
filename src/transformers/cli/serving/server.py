@@ -1,7 +1,7 @@
 # Copyright 2026 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
+# you may not be able to use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
@@ -36,6 +36,26 @@ from .utils import X_REQUEST_ID, CBWorkerDeadError, GenerationState
 
 
 logger = logging.get_logger(__name__)
+
+
+def _apply_zerogpu(endpoint):
+    """Wrap an endpoint with ``@spaces.GPU`` if ZeroGPU is active.
+
+    The ``@spaces.GPU`` decorator from the ``spaces`` package only supports
+    sync functions. This function checks whether ZeroGPU is enabled and,
+    if so, applies the decorator. In non-ZeroGPU mode it returns the
+    function unchanged (effect-free).
+
+    Args:
+        endpoint: The FastAPI endpoint function to wrap.
+
+    Returns:
+        The wrapped (or unchanged) endpoint.
+    """
+    from ...cli import serve_zerogpu
+
+    decorator = serve_zerogpu.zerogpu_decorator(size=serve_zerogpu.zerogpu_size())
+    return decorator(endpoint)
 
 
 def build_server(
@@ -97,22 +117,27 @@ def build_server(
 
     # ---- Routes ----
 
+    @_apply_zerogpu
     @app.post("/v1/chat/completions")
     async def chat_completions(request: Request, body: dict):
         return await chat_handler.handle_request(body, request.state.request_id)
 
+    @_apply_zerogpu
     @app.post("/v1/completions")
     async def completions(request: Request, body: dict):
         return await completion_handler.handle_request(body, request.state.request_id)
 
+    @_apply_zerogpu
     @app.post("/v1/responses")
     async def responses(request: Request, body: dict):
         return await response_handler.handle_request(body, request.state.request_id)
 
+    @_apply_zerogpu
     @app.post("/v1/audio/transcriptions")
     async def audio_transcriptions(request: Request):
         return await transcription_handler.handle_request(request)
 
+    @_apply_zerogpu
     @app.post("/load_model")
     async def load_model(body: dict):
         from fastapi import HTTPException
