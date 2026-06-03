@@ -102,7 +102,7 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 ### Online FP8 quantization
 
-Quantize a BF16 model to FP8 during loading by passing a [`CompressedTensorsConfig`] with an FP8 quantization scheme. Online quantization doesn't require the `compressed-tensors` library.
+Quantize a BF16 model to FP8 during loading by passing a [`CompressedTensorsConfig`] with an FP8 quantization scheme.
 
 ```python
 import torch
