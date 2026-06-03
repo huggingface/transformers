@@ -18,10 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any
-
-import sentencepiece as spm
-
 from ...tokenization_utils_sentencepiece import SentencePieceBackend
 from ...utils.import_utils import requires
 
@@ -43,24 +39,15 @@ class Tipsv2Tokenizer(SentencePieceBackend):
     def __init__(
         self,
         vocab_file,
-        unk_token: str | None = None,
-        pad_token: str | None = None,
+        unk_token: str | None = "<unk>",
+        pad_token: str | None = "<pad>",
         bos_token: str | None = None,
         eos_token: str | None = None,
-        sp_model_kwargs: dict[str, Any] | None = None,
         model_max_length: int = 64,
         do_lower_case: bool = True,
+        token_type_ids_pattern: str = "all_zeros",
         **kwargs,
     ) -> None:
-        sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-        sp_model = spm.SentencePieceProcessor(**sp_model_kwargs)
-        sp_model.Load(vocab_file)
-
-        if unk_token is None and sp_model.unk_id() >= 0:
-            unk_token = sp_model.id_to_piece(sp_model.unk_id())
-        if pad_token is None:
-            pad_token = sp_model.id_to_piece(max(sp_model.pad_id(), 0))
-
         self.do_lower_case = do_lower_case
 
         super().__init__(
@@ -69,48 +56,19 @@ class Tipsv2Tokenizer(SentencePieceBackend):
             pad_token=pad_token,
             bos_token=bos_token,
             eos_token=eos_token,
-            sp_model_kwargs=sp_model_kwargs,
             model_max_length=model_max_length,
             do_lower_case=do_lower_case,
+            token_type_ids_pattern=token_type_ids_pattern,
             **kwargs,
         )
 
         if self.pad_token_id != 0:
-            raise ValueError(
-                f"TIPSv2 expects the SentencePiece padding token to have id 0, but got {self.pad_token_id}."
-            )
+            raise ValueError(f"Expected the SentencePiece padding token to have id 0, but got {self.pad_token_id}.")
 
     def _tokenize(self, text, **kwargs):
         if self.do_lower_case:
             text = text.lower()
         return self.sp_model.encode(text, out_type=str)
-
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
-    ) -> list[int]:
-        if token_ids_1 is None:
-            return token_ids_0
-        return token_ids_0 + token_ids_1
-
-    def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
-    ) -> list[int]:
-        if already_has_special_tokens:
-            return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0,
-                token_ids_1=token_ids_1,
-                already_has_special_tokens=True,
-            )
-        if token_ids_1 is None:
-            return [0] * len(token_ids_0)
-        return [0] * (len(token_ids_0) + len(token_ids_1))
-
-    def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
-    ) -> list[int]:
-        if token_ids_1 is None:
-            return [0] * len(token_ids_0)
-        return [0] * (len(token_ids_0) + len(token_ids_1))
 
 
 __all__ = ["Tipsv2Tokenizer"]
