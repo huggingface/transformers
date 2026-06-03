@@ -263,6 +263,7 @@ if TYPE_CHECKING:
     from .minicpmv4_6 import *
     from .minimax import *
     from .minimax_m2 import *
+    from .minimax_m3_vl import *
     from .ministral import *
     from .ministral3 import *
     from .mistral import *

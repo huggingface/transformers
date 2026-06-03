@@ -125,6 +125,7 @@ else:
             ("metaclip_2", "CLIPProcessor"),
             ("mgp-str", "MgpstrProcessor"),
             ("minicpmv4_6", "MiniCPMV4_6Processor"),
+            ("minimax_m3_vl", "MiniMaxM3VLProcessor"),
             ("mistral3", "PixtralProcessor"),
             ("mllama", "MllamaProcessor"),
             ("mm-grounding-dino", "GroundingDinoProcessor"),
