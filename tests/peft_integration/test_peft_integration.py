@@ -1154,7 +1154,13 @@ class PeftHotswapIntegrationTest(unittest.TestCase):
             model.load_adapter(path_1, adapter_name="adapter_1", is_trainable=False)
             if do_compile:
                 # compile the model after loading the first adapter
-                model = torch.compile(model, mode="reduce-overhead")
+                if "mixtral" not in model_id.lower():
+                    model = torch.compile(model, mode="reduce-overhead")
+                else:
+                    # The tiny mixtral model is incompatible with 'reduce-overhead', resulting in:
+                    # > torch.AcceleratorError: CUDA error: operation failed due to a previous error during capture
+                    # For the purpose of this test, 'reduce-overhead' is not material, so we drop it here.
+                    model = torch.compile(model)
 
             with torch.inference_mode():
                 lora_1_output_loaded = model(input).logits

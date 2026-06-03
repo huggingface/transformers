@@ -34,6 +34,7 @@ from ..core_model_loading import (
     Transpose,
     WeightConverter,
     WeightRenaming,
+    dot_natural_key,
     rename_source_key,
 )
 from ..utils import (
@@ -689,14 +690,32 @@ class PeftAdapterMixin:
 
             adapter_state_dict = self._resolve_adapter_state_dict(adapter_state_dict, checkpoint_files)
 
-            # need to apply conversions manually as we don't use _load_pretrained_model
+            # Need to apply conversions manually as we don't use _load_pretrained_model. Same logic as in:
+            # https://github.com/huggingface/transformers/blob/a8f150d35d5863971db1e5c1dbc2a1c265f27f96/src/transformers/core_model_loading.py#L1222
             renamings = [r for r in peft_weight_conversions if isinstance(r, WeightRenaming)]
             converters = [c for c in peft_weight_conversions if isinstance(c, WeightConverter)]
+            pattern_to_converter = {p: c for c in converters for p in c.source_patterns}
             meta_state_dict = self.state_dict()
+            conversion_mapping: dict[str, WeightConverter] = {}
             processed_state_dict = {}
-            for key, value in adapter_state_dict.items():
-                renamed_key, _ = rename_source_key(key, renamings, converters, self.base_model_prefix, meta_state_dict)
-                processed_state_dict[renamed_key] = value
+            # Sort by `dot_natural_key` so converters such as MergeModulelist collect experts in numeric order.
+            for key, value in sorted(adapter_state_dict.items(), key=lambda kv: dot_natural_key(kv[0])):
+                renamed_key, source_pattern = rename_source_key(
+                    key, renamings, converters, self.base_model_prefix, meta_state_dict
+                )
+                if source_pattern is not None:
+                    # A WeightConverter matched: bucket the tensor so its operations can run over all siblings.
+                    mapping = conversion_mapping.setdefault(
+                        renamed_key, copy.deepcopy(pattern_to_converter[source_pattern])
+                    )
+                    mapping.add_tensor(renamed_key, key, source_pattern, value)
+                else:
+                    processed_state_dict[renamed_key] = value
+
+            for layer_name, mapping in conversion_mapping.items():
+                realized = mapping.convert(layer_name, model=self, config=self.config)
+                for target_name, param in realized.items():
+                    processed_state_dict[target_name] = param[0] if isinstance(param, list) else param
 
             check_hotswap_configs_compatible(self.peft_config[adapter_name], peft_config)
             try:
