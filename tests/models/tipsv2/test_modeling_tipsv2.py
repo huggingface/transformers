@@ -16,11 +16,20 @@
 import inspect
 import tempfile
 import unittest
+from functools import cached_property
 
 from parameterized import parameterized
 
 from transformers import Tipsv2Config, Tipsv2TextConfig, Tipsv2VisionConfig
-from transformers.testing_utils import is_flaky, require_sentencepiece, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    is_flaky,
+    require_sentencepiece,
+    require_torch,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
@@ -32,6 +41,7 @@ from ...test_modeling_common import (
     random_attention_mask,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -43,11 +53,14 @@ if is_torch_available():
         AutoModel,
         AutoModelForTextEncoding,
         AutoModelForZeroShotImageClassification,
+        Tipsv2ImageProcessor,
         Tipsv2Model,
+        Tipsv2Processor,
         Tipsv2TextModel,
         Tipsv2Tokenizer,
         Tipsv2VisionModel,
     )
+    from transformers.image_utils import load_image_as_tensor
 
 
 class Tipsv2ModelTesterMixin(ModelTesterMixin):
@@ -601,3 +614,77 @@ class Tipsv2ModelTest(Tipsv2ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
         for name, expected_diff in expected_alignment_max_diffs.items():
             self.assertLessEqual(actual_diffs[name], max(expected_diff * 2, 1e-7), name)
+
+
+def prepare_img():
+    image = load_image_as_tensor(
+        url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
+    )
+    return image
+
+
+@require_torch
+@require_vision
+class Tipsv2ModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_processor(self):
+        # Hub repo does not ship a processor config yet — instantiate both components explicitly.
+        image_processor = Tipsv2ImageProcessor()
+        tokenizer = Tipsv2Tokenizer.from_pretrained("google/tipsv2-b14")
+        return Tipsv2Processor(image_processor=image_processor, tokenizer=tokenizer)
+
+    @slow
+    @require_sentencepiece
+    def test_inference(self):
+        model = Tipsv2Model.from_pretrained("google/tipsv2-b14", device_map=torch_device).eval()
+
+        text_queries = ["two cats on a sofa", "a cat lying down", "a dog on a couch", "an empty room"]
+        processor = self.default_processor
+        inputs = processor(images=prepare_img(), text=text_queries, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        vision_cfg = model.config.vision_config
+        _, _, height, width = inputs["pixel_values"].shape
+        num_patches = (height // vision_cfg.patch_size) * (width // vision_cfg.patch_size)
+        self.assertEqual(outputs.image_embeds.shape, torch.Size([1, vision_cfg.hidden_size]))
+        self.assertEqual(outputs.patch_tokens.shape, torch.Size([1, num_patches, vision_cfg.hidden_size]))
+        self.assertEqual(outputs.text_embeds.shape, torch.Size([4, model.config.text_config.hidden_size]))
+        self.assertEqual(outputs.logits_per_image.shape, torch.Size([1, 4]))
+        self.assertEqual(outputs.logits_per_text.shape, torch.Size([4, 1]))
+
+        # Tolerance of 1e-3 for vision outputs because of difference in PIL vs. torch preprocessing.
+        EXPECTED_IMAGE_EMBEDS = Expectations({("cuda", None): [0.03267, 0.02216, 0.00546, 0.01890, -0.05426]})
+        expected_image_embeds = torch.tensor(EXPECTED_IMAGE_EMBEDS.get_expectation(), device=torch_device)
+        torch.testing.assert_close(outputs.image_embeds[0, :5], expected_image_embeds, rtol=1e-3, atol=1e-3)
+
+        EXPECTED_PATCH_TOKENS = Expectations({("cuda", None): [0.25287, -0.01092, -0.57542, 0.09660, -0.04010]})
+        expected_patch_tokens = torch.tensor(EXPECTED_PATCH_TOKENS.get_expectation(), device=torch_device)
+        torch.testing.assert_close(outputs.patch_tokens[0, 0, :5], expected_patch_tokens, rtol=1e-3, atol=1e-3)
+
+        EXPECTED_TEXT_EMBEDS = Expectations({("cuda", None): [0.69319, 0.03710, 0.01194, 0.02136, -0.04281]})
+        expected_text_embeds = torch.tensor(EXPECTED_TEXT_EMBEDS.get_expectation(), device=torch_device)
+        torch.testing.assert_close(outputs.text_embeds[0, :5], expected_text_embeds, rtol=1e-4, atol=1e-4)
+
+        EXPECTED_LOGITS_PER_IMAGE = Expectations({("cuda", None): [31.12190, 26.99341, 20.26748, 17.55544]})
+        expected_logits_per_image = torch.tensor(EXPECTED_LOGITS_PER_IMAGE.get_expectation(), device=torch_device)
+        torch.testing.assert_close(outputs.logits_per_image[0], expected_logits_per_image, rtol=1e-3, atol=1e-3)
+
+        EXPECTED_LOGITS_PER_TEXT = Expectations({("cuda", None): [31.12190, 26.99341, 20.26748, 17.55544]})
+        expected_logits_per_text = torch.tensor(EXPECTED_LOGITS_PER_TEXT.get_expectation(), device=torch_device)
+        torch.testing.assert_close(outputs.logits_per_text[..., 0], expected_logits_per_text, rtol=1e-3, atol=1e-3)
+
+        EXPECTED_VISION_POOLER_OUTPUT = Expectations({("cuda", None): [0.22055, 0.14960, 0.03689, 0.12756, -0.36632]})
+        expected_vision_pooler_output = torch.tensor(EXPECTED_VISION_POOLER_OUTPUT.get_expectation(), device=torch_device)
+        torch.testing.assert_close(
+            outputs.vision_model_output.pooler_output[0, :5], expected_vision_pooler_output, rtol=1e-3, atol=1e-3
+        )
+
+        EXPECTED_TEXT_POOLER_OUTPUT = Expectations({("cuda", None): [12.07207, 0.64612, 0.20788, 0.37204, -0.74551]})
+        expected_text_pooler_output = torch.tensor(EXPECTED_TEXT_POOLER_OUTPUT.get_expectation(), device=torch_device)
+        torch.testing.assert_close(
+            outputs.text_model_output.pooler_output[0, :5], expected_text_pooler_output, rtol=1e-4, atol=1e-4
+        )
