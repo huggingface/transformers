@@ -472,8 +472,6 @@ def eager_attention_forward(
 class GraniteSpeechNarAttention(nn.Module):
     """GraniteAttention with is_causal=False for bidirectional attention."""
 
-    is_causal = False
-
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.config = config
@@ -576,9 +574,7 @@ class GraniteSpeechNarMLP(nn.Module):
 
 
 class GraniteSpeechNarDecoderLayer(GradientCheckpointingLayer):
-    """GraniteDecoderLayer using bidirectional attention."""
-
-    def __init__(self, config, layer_idx: int):
+    def __init__(self, config: GraniteSpeechNarConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = GraniteSpeechNarAttention(config=config, layer_idx=layer_idx)
@@ -715,7 +711,7 @@ class GraniteSpeechNarLanguageModel(GraniteSpeechNarPreTrainedModel):
     attention backends (SDPA, FA2, eager, flex) get a proper non-causal mask.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: GraniteSpeechNarConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size

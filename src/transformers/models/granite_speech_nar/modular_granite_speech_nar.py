@@ -29,7 +29,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
 from ...utils.output_capturing import capture_outputs
-from ..granite.modeling_granite import GraniteAttention, GraniteDecoderLayer, GraniteModel
+from ..granite.modeling_granite import GraniteAttention, GraniteModel
 from ..granite_speech.modeling_granite_speech import GraniteSpeechConformerBlock
 from .configuration_granite_speech_nar import (
     GraniteSpeechNarConfig,
