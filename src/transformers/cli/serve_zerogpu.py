@@ -136,9 +136,28 @@ def zerogpu_decorator(size: str = "large") -> Callable:
         ```
     """
     spaces_gpu = _get_spaces_gpu_decorator()
+    _in_zerogpu = spaces_gpu is not None and is_zerogpu()
 
     def decorator(func: Callable) -> Callable:
-        if spaces_gpu is not None and is_zerogpu():
+        if logger is not None:
+            if _in_zerogpu:
+                logger.warning(
+                    "ZeroGPU enabled for '%s' — @spaces.GPU(size='%s') will allocate a GPU per request",
+                    func.__name__,
+                    size,
+                )
+            else:
+                reason = []
+                if spaces_gpu is None:
+                    reason.append("'spaces' package not installed")
+                if not is_zerogpu():
+                    reason.append("not running in a ZeroGPU Space")
+                logger.warning(
+                    "ZeroGPU NOT applied for '%s' — %s (effect-free pass-through)",
+                    func.__name__,
+                    "; ".join(reason),
+                )
+        if _in_zerogpu:
             # ZeroGPU mode: apply @spaces.GPU to allocate GPU per function call
             if inspect.iscoroutinefunction(func):
                 # Create a sync wrapper that runs the async function.

@@ -144,8 +144,9 @@ class Serve:
         self._gpu_size = gpu_size
         serve_zerogpu._zerogpu_size = gpu_size
         serve_zerogpu._zerogpu_enabled = self._zerogpu_enabled
+        serve_zerogpu.logger = logger
         if self._zerogpu_enabled:
-            logger.info(
+            logger.warning(
                 f"ZeroGPU mode enabled (size={gpu_size}). "
                 f"GPU resources will be dynamically allocated per request via @spaces.GPU."
             )
