@@ -837,9 +837,7 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
         self.layers = nn.ModuleList([GraniteSpeechNarConformerBlock(config) for _ in range(config.num_layers)])
         self.out = nn.Linear(config.hidden_dim, config.output_dim, bias=True)
         self.out_mid = nn.Linear(config.output_dim, config.hidden_dim, bias=True)
-        self.out_bpe = None
-        if config.bpe_output_dim is not None:
-            self.out_bpe = nn.Linear(config.hidden_dim, config.bpe_output_dim, bias=True)
+        self.out_bpe = nn.Linear(config.hidden_dim, config.bpe_output_dim, bias=True)
         self.dropout = nn.Dropout(config.pred_dropout)
         self.post_init()
 
@@ -857,7 +855,6 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
 
         hidden_states = self.input_linear(input_features.to(self.dtype))
         all_hidden_states = (hidden_states,) if output_hidden_states else None
-        blank_probs = None
 
         context_size = self.config.context_size
         seq = torch.arange(context_size, device=hidden_states.device)
@@ -878,23 +875,19 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
 
         hidden_states = self.dropout(hidden_states)
 
-        logits = None
-        loss = None
-        if self.out_bpe is not None and blank_probs is not None:
-            pool_window = self.config.bpe_pooling_window
-            importance = 1.0 - blank_probs
-            pooled = _posterior_weighted_pool(hidden_states.float(), importance, window_size=pool_window).to(
-                hidden_states.dtype
-            )
-            encoder_lengths = attention_mask.sum(dim=1)
-            lengths = -(encoder_lengths // -pool_window)
-            lengths_list = lengths.tolist()
-            logits = self.out_bpe(torch.cat([pooled[i, :length] for i, length in enumerate(lengths_list)]))
+        pool_window = self.config.bpe_pooling_window
+        importance = 1.0 - blank_probs
+        pooled = _posterior_weighted_pool(hidden_states.float(), importance, window_size=pool_window).to(
+            hidden_states.dtype
+        )
+        encoder_lengths = attention_mask.sum(dim=1)
+        lengths = -(encoder_lengths // -pool_window)
+        lengths_list = lengths.tolist()
+        logits = self.out_bpe(torch.cat([pooled[i, :length] for i, length in enumerate(lengths_list)]))
 
-            if labels is not None:
-                loss = _ctc_loss_from_flat_logits(
-                    logits, lengths_list, labels, label_lengths, self.config.blank_token_id
-                )
+        loss = None
+        if labels is not None:
+            loss = _ctc_loss_from_flat_logits(logits, lengths_list, labels, label_lengths, self.config.blank_token_id)
 
         return GraniteSpeechNarEncoderOutput(
             loss=loss,
@@ -923,10 +916,7 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
         self.encoder = GraniteSpeechNarCTCEncoder(config.encoder_config)
         self.projector = GraniteSpeechNarProjector(config.projector_config)
 
-        text_config = config.text_config
-        if hasattr(config, "_attn_implementation"):
-            text_config._attn_implementation = config._attn_implementation
-        self.language_model = GraniteSpeechNarLanguageModel._from_config(text_config)
+        self.language_model = GraniteSpeechNarLanguageModel(config.text_config)
 
         self.post_init()
 

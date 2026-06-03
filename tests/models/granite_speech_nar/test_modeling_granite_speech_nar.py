@@ -101,7 +101,7 @@ class TestConfiguration:
         assert config.num_layers == 16
         assert config.hidden_dim == 1024
         assert config.self_conditioning_layer == 8
-        assert config.bpe_output_dim is None
+        assert config.bpe_output_dim == 49153
 
     def test_projector_config_defaults(self):
         config = GraniteSpeechNarProjectorConfig()
@@ -160,26 +160,6 @@ class TestEncoder:
         assert out.logits.shape[1] == 100
         assert out.all_hidden_states is not None
         assert len(out.all_hidden_states) == 5  # input + 4 layers
-
-    def test_no_bpe_head(self):
-        config = GraniteSpeechNarEncoderConfig(
-            num_layers=2,
-            hidden_dim=64,
-            num_heads=4,
-            dim_head=16,
-            input_dim=160,
-            output_dim=348,
-            context_size=50,
-            self_conditioning_layer=1,
-            bpe_output_dim=None,
-        )
-        encoder = GraniteSpeechNarCTCEncoder(config).eval()
-
-        features = torch.randn(1, 50, 160)
-        out = encoder(features, output_hidden_states=False)
-
-        assert out.logits is None
-        assert out.all_hidden_states is None
 
 
 # === Projector tests ===
