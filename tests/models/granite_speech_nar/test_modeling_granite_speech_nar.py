@@ -270,7 +270,7 @@ class GraniteSpeechNarEncoderModelTest(ModelTesterMixin, unittest.TestCase):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
         if return_labels:
             batch_size = self.model_tester.batch_size
-            inputs_dict["labels"] = torch.randint(0, self.model_tester.bpe_output_dim, (batch_size, 5))
+            inputs_dict["labels"] = torch.arange(1, 6).unsqueeze(0).expand(batch_size, -1)
             inputs_dict["label_lengths"] = torch.tensor([5] * batch_size)
         return inputs_dict
 
