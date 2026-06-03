@@ -24,6 +24,7 @@ from transformers import (
 )
 from transformers.models.minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6VisionConfig
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_torch,
     require_torch_accelerator,
@@ -448,10 +449,15 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        self.assertEqual(
-            "The video shows two tennis players engaged in a match or practice session on an indoor tennis court. The player in the foreground is positioned at the net,",
-            decoded_text,
-        )
+
+        expected_texts = Expectations(
+            {
+                ("cuda", None): "The video shows two tennis players engaged in a match or practice session on an indoor tennis court. The player in the foreground is positioned at the net,",
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = expected_texts.get_expectation()
+
+        self.assertEqual(EXPECTED_TEXT, decoded_text)
 
     @slow
     def test_small_model_vision_generation_batch(self):
@@ -488,11 +494,16 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_texts = processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
-        expectation = [
-            "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
-            "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
-        ]
-        self.assertListEqual(decoded_texts, expectation)
+        expected_texts = Expectations(
+            {
+                ("cuda", None): [
+                    "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
+                    "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = expected_texts.get_expectation()
+        self.assertListEqual(decoded_texts, EXPECTED_TEXT)
 
     @slow
     def test_small_model_vision_generation_batch_mixed(self):
@@ -530,8 +541,13 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_texts = processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
-        expectation = [
-            "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
-            "I'm a model from the MiniCPM series, developed by Modelbest and OpenBMB. For more details, you can visit https://github",
-        ]
-        self.assertListEqual(decoded_texts, expectation)
+        expected_texts = Expectations(
+            {
+                ("cuda", None): [
+                    "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
+                    "I'm a model from the MiniCPM series, developed by Modelbest and OpenBMB. For more details, you can visit https://github",
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = expected_texts.get_expectation()
+        self.assertListEqual(decoded_texts, EXPECTED_TEXT)
