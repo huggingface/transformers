@@ -1403,11 +1403,6 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
-        if pixel_values is not None and image_outputs is not None:
-            raise ValueError("You mush pass only one: `pixel_values` or `image_outputs`")
-
-        if pixel_values_videos is not None and video_outputs is not None:
-            raise ValueError("You mush pass only one: `pixel_values_videos` or `video_outputs`")
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)

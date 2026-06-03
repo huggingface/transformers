@@ -320,9 +320,6 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         if pixel_values is not None and high_res_pixel_values is None:
             raise ValueError("Both pixel_values and high_res_pixel_values should be specified at the same time")
 
-        if pixel_values is not None and image_outputs is not None:
-            raise ValueError("You mush pass only one: `pixel_values` or `image_outputs`")
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 

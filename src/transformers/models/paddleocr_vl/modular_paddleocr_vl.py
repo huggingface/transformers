@@ -1001,8 +1001,6 @@ class PaddleOCRVLModel(Qwen2VLModel):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        if pixel_values is not None and image_outputs is not None:
-            raise ValueError("You mush pass only one: `pixel_values` or `image_outputs`")
 
         if inputs_embeds is None:
             inputs_embeds = self.language_model.embed_tokens(input_ids)

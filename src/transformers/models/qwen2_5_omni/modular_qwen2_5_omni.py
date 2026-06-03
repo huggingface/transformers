@@ -1921,12 +1921,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         >>> response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         ```"""
 
-        if pixel_values is not None and image_outputs is not None:
-            raise ValueError("You mush pass only one: `pixel_values` or `image_outputs`")
-
-        if pixel_values_videos is not None and video_outputs is not None:
-            raise ValueError("You mush pass only one: `pixel_values_videos` or `video_outputs`")
-
         if inputs_embeds is None:
             # 1. Extract the input embeddings
             inputs_embeds = self.get_input_embeddings()(input_ids)

@@ -649,9 +649,6 @@ class Gemma3Model(PaliGemmaModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if pixel_values is not None and image_outputs is not None:
-            raise ValueError("You mush pass only one: `pixel_values` or `image_outputs`")
-
         # Replace image id with PAD if the image token if OOV, to avoid index-errors
         if input_ids is not None and self.config.image_token_id >= self.vocab_size:
             special_image_mask = input_ids == self.config.image_token_id

@@ -950,6 +950,8 @@ class GenerationMixin(ContinuousMixin):
 
         model_kwargs = _expand_dict_for_generation(model_kwargs)
 
+        # This expands the hidden-states, attentions and other intermediate tensors, even tho we don't
+        # need it. TODO: should repeat/expand only `last_hidden_state/pooler_outputs`
         if is_encoder_decoder:
             if model_kwargs.get("encoder_outputs") is None:
                 raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")

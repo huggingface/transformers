@@ -761,12 +761,6 @@ class Qwen3VLModel(Qwen2VLModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None and image_outputs is not None:
-            raise ValueError("You mush pass only one: `pixel_values` or `image_outputs`")
-
-        if pixel_values_videos is not None and video_outputs is not None:
-            raise ValueError("You mush pass only one: `pixel_values_videos` or `video_outputs`")
-
         image_mask = None
         video_mask = None
 

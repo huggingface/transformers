@@ -1673,12 +1673,6 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None and image_outputs is not None:
-            raise ValueError("You mush pass only one: `pixel_values` or `image_outputs`")
-
-        if pixel_values_videos is not None and video_outputs is not None:
-            raise ValueError("You mush pass only one: `pixel_values_videos` or `video_outputs`")
-
         if image_outputs is None and pixel_values is not None:
             image_outputs = self.get_image_features(pixel_values, image_grid_thw, return_dict=True, **kwargs)
 

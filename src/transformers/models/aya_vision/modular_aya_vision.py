@@ -157,9 +157,6 @@ class AyaVisionModel(LlavaModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if pixel_values is not None and image_outputs is not None:
-            raise ValueError("You mush pass only one: `pixel_values` or `image_outputs`")
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
