@@ -20,6 +20,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...masking_utils import (
     create_bidirectional_mask,
     find_packed_sequence_indices,
@@ -291,6 +292,14 @@ class GraniteSpeechNarPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["GraniteSpeechNarConformerBlock", "GraniteDecoderLayer"]
     input_modalities = ("audio",)
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, GraniteSpeechNarProjector):
+            std = module.config.hidden_size**-0.5
+            init.normal_(module.query, mean=0.0, std=std)
+            init.normal_(module.window_positions, mean=0.0, std=std)
+
 
 class GraniteSpeechNarAttention(GraniteAttention):
     """GraniteAttention with is_causal=False for bidirectional attention."""
@@ -298,8 +307,6 @@ class GraniteSpeechNarAttention(GraniteAttention):
     def __init__(self, config, layer_idx=None):
         super().__init__(config, layer_idx=layer_idx)
         self.is_causal = False
-
-
 
 
 class GraniteSpeechNarLanguageModel(GraniteModel):

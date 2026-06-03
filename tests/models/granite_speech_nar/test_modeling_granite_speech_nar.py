@@ -359,15 +359,13 @@ class GraniteSpeechNarForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     def test_enable_input_require_grads_with_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="Projector query/window_positions nn.Parameters need _init_weights handling — TODO")
     def test_can_init_all_missing_weights(self):
-        pass
+        super().test_can_init_all_missing_weights()
 
     def setUp(self):
         self.model_tester = GraniteSpeechNarForCTCModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GraniteSpeechNarConfig, has_text_modality=False)
 
-    @unittest.skip(reason="ConfigTester composite sub_config resolution incompatible with AutoConfig string ref")
     def test_config(self):
         self.config_tester.run_common_tests()
 

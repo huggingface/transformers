@@ -17,7 +17,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-4.1-2b-nar")
@@ -182,7 +182,7 @@ class GraniteSpeechNarConfig(PreTrainedConfig):
     sub_configs = {
         "encoder_config": GraniteSpeechNarEncoderConfig,
         "projector_config": GraniteSpeechNarProjectorConfig,
-        "text_config": "AutoConfig",
+        "text_config": AutoConfig,
     }
 
     encoder_config: dict | PreTrainedConfig | None = None

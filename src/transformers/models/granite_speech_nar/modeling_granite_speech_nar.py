@@ -27,6 +27,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
@@ -396,6 +397,14 @@ class GraniteSpeechNarPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _no_split_modules = ["GraniteSpeechNarConformerBlock", "GraniteDecoderLayer"]
     input_modalities = ("audio",)
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, GraniteSpeechNarProjector):
+            std = module.config.hidden_size**-0.5
+            init.normal_(module.query, mean=0.0, std=std)
+            init.normal_(module.window_positions, mean=0.0, std=std)
 
 
 def rotate_half(x):
