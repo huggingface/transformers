@@ -19,7 +19,6 @@ from ...utils.import_utils import define_import_structure  # type: ignore[import
 if TYPE_CHECKING:
     from .configuration_esmfold2 import *  # noqa: F403
     from .modeling_esmfold2 import *  # noqa: F403
-    from .modeling_esmfold2_experimental import *  # noqa: F403
 else:
     import sys
 
