@@ -498,7 +498,16 @@ def _run_distributed_worker(
         expected=expected,
         add_special_tokens=add_special_tokens,
     )
-    num_gpus = torch.cuda.device_count()
+    # Prefer CUDA if available, otherwise fall back to XPU. This lets the
+    # distributed worker run on either backend depending on the environment.
+    if torch.cuda.is_available():
+        num_gpus = torch.cuda.device_count()
+    elif hasattr(torch, "xpu") and getattr(torch.xpu, "is_available", lambda: False)():
+        num_gpus = torch.xpu.device_count()
+    else:
+        # No supported accelerator available; raise a clear error so callers see
+        # the problem instead of silently getting a numeric rc.
+        raise RuntimeError("No supported accelerator available: CUDA or XPU required to run distributed worker")
     # Redirect only stdout (`:1`) for ranks 1..N-1 to suppress duplicated generation chatter.
     # Stderr is left attached so worker tracebacks (OOM, NCCL, kernel crash) surface in the
     # subprocess stderr and the test failure message — `:3` would file-log both and turn any
@@ -512,6 +521,31 @@ def _run_distributed_worker(
             check=False,
         )
     return result.returncode
+
+
+def require_cuda_capability_or_xpu(major: int, minor: int):
+    """Decorator to require either CUDA with a minimum capability or XPU.
+
+    Usage: @require_cuda_capability_or_xpu(9, 0)
+    """
+
+    def decorator(test_case):
+        import torch
+
+        from transformers import is_torch_xpu_available
+        from transformers.testing_utils import require_cuda_capability_at_least, require_torch_xpu
+
+        # Prefer CUDA when available and check capability.
+        if torch.cuda.is_available():
+            return require_cuda_capability_at_least(major, minor)(test_case)
+
+        # Fall back to XPU when available.
+        if is_torch_xpu_available():
+            return require_torch_xpu(test_case)
+
+        return unittest.skip(reason=f"test requires CUDA >= {major}.{minor} or XPU")(test_case)
+
+    return decorator
 
 
 @require_torch
@@ -561,8 +595,8 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
 
 @require_torch
 @require_torch_n_accelerators(8)
-@require_torch_large_accelerator(memory=64)
-@require_cuda_capability_at_least(9, 0)
+@require_torch_large_accelerator(memory=60)
+@require_cuda_capability_or_xpu(9, 0)
 @slow
 class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
     """Multi-device native FP8 generation on DSv4-Flash-Base.
@@ -583,9 +617,12 @@ class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
     expected_primes = "2, 3, 5, 7, 11, 13, 17, 19, 23, 29"
 
     def test_v4_flash_base_fp8_generation(self):
+        runtime_dispatches = (
+            ("eager", "grouped_mm", "deepgemm") if torch.cuda.is_available() else ("eager", "grouped_mm")
+        )
         rc = _run_distributed_worker(
             loadtime_dispatch=None,
-            runtime_dispatches=("eager", "grouped_mm", "deepgemm"),
+            runtime_dispatches=runtime_dispatches,
             model_id=self.model_id,
             prompt=self.prompt,
             expected=self.expected_primes,
