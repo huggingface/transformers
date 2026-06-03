@@ -199,8 +199,9 @@ class GetFromCacheTests(unittest.TestCase):
 
 class OfflineModeTests(unittest.TestCase):
     def test_list_repo_templates_w_offline(self):
-        with mock.patch("transformers.utils.hub.list_repo_tree", side_effect=OfflineModeIsEnabled()):
+        with mock.patch("transformers.utils.hub.HfApi.list_repo_tree", side_effect=OfflineModeIsEnabled()):
             with mock.patch(
-                "transformers.utils.hub.snapshot_download", side_effect=LocalEntryNotFoundError("no snapshot found")
+                "transformers.utils.hub.HfApi.snapshot_download",
+                side_effect=LocalEntryNotFoundError("no snapshot found"),
             ):
                 self.assertEqual(list_repo_templates(RANDOM_BERT, local_files_only=False), [])

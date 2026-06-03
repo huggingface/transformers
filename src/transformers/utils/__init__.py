@@ -90,6 +90,7 @@ from .hub import (
     define_sagemaker_information,
     extract_commit_hash,
     has_file,
+    hf_api,
     http_user_agent,
     list_repo_templates,
     try_to_load_from_cache,

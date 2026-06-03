@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any, Literal, Union, overload
 
 import numpy as np
-from huggingface_hub import create_repo
 
 from transformers.audio_utils import load_audio_as
 from transformers.image_utils import get_image_size
@@ -34,7 +33,7 @@ from transformers.tokenization_utils_base import (
     TextInput,
     TruncationStrategy,
 )
-from transformers.utils import PaddingStrategy, TensorType, add_end_docstrings, logging, to_py_obj
+from transformers.utils import PaddingStrategy, TensorType, add_end_docstrings, hf_api, logging, to_py_obj
 from transformers.utils.import_utils import is_mistral_common_available, is_torch_available, requires
 
 
@@ -1574,7 +1573,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
         if push_to_hub:
             repo_id = repo_id or str(save_directory).split(os.path.sep)[-1]
-            repo_id = create_repo(repo_id, token=token, private=private, exist_ok=True).repo_id
+            repo_id = hf_api().create_repo(repo_id, token=token, private=private, exist_ok=True).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
             self._upload_modified_files(
