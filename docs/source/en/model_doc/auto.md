@@ -150,6 +150,18 @@ The following auto classes are available for the following computer vision tasks
 
 [[autodoc]] AutoModelForDepthEstimation
 
+### AutoModelForNormalEstimation
+
+[[autodoc]] AutoModelForNormalEstimation
+
+### AutoModelForPointmapEstimation
+
+[[autodoc]] AutoModelForPointmapEstimation
+
+### AutoModelForImageMatting
+
+[[autodoc]] AutoModelForImageMatting
+
 ### AutoModelForTextRecognition
 
 [[autodoc]] AutoModelForTextRecognition
@@ -165,6 +177,10 @@ The following auto classes are available for the following computer vision tasks
 ### AutoModelForVideoClassification
 
 [[autodoc]] AutoModelForVideoClassification
+
+### AutoModelForPoseEstimation
+
+[[autodoc]] AutoModelForPoseEstimation
 
 ### AutoModelForKeypointDetection
 
