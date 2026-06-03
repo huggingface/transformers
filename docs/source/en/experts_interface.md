@@ -20,13 +20,14 @@ All Mixture-of-Experts (MoE) implementations perform the same high-level computa
 The [`ExpertsInterface`] provides optimized experts backends. It decouples the experts implementation from the model code to simplify experimentation with different functions. Add new backends through the same interface.
 
 
-| experts backend | description                                                                                                                                                                                                                                                 | GPU                                                                                                                    | CPU                                                         |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `"eager"`       | Reference implementation that loops over selected experts and applies projections on their tokens.                                                                                                                                                          | Reasonable baseline performance without requiring compilation.                                                         | Slower than `grouped_mm` but faster than `batched_mm`.      |
-| `"batched_mm"`  | Duplicates selected expert parameters for each token and projects all tokens in a single batched GEMM using [torch.bmm](https://docs.pytorch.org/docs/stable/generated/torch.bmm.html).                                                                   | Fastest for small inputs, especially with compilation. Uses more memory due to parameter duplication.                  | Not recommended (significantly slower than other backends). |
-| `"grouped_mm"`  | Orders tokens by selected experts and uses [torch.nn.functional.grouped_mm](https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.grouped_mm.html) to project all tokens in a single grouped GEMM (requires PyTorch 2.9+).                   | Best for larger inputs and more memory efficient as it avoids duplicating expert parameters. Fast with compilation.    | Most efficient backend for all input sizes.                 |
-| `"deepgemm"`    | Sorts tokens by selected expert and projects all tokens in a single TMA-aligned grouped GEMM using the [DeepGEMM](https://github.com/deepseek-ai/DeepGEMM) kernels from [kernels-community/deep-gemm](https://huggingface.co/kernels-community/deep-gemm).  | Highest throughput on Hopper (SM90+) and Blackwell (SM100+) for both `bfloat16` experts and FP8/FP4-quantized experts. | Not supported (CUDA-only).                                  |
-| `"sonicmoe"`    | Fused `bfloat16` MoE forward (router dispatch, gated up projection, activation, and down projection) using the [CuteDSL](https://github.com/NVIDIA/cutlass) kernels from [kernels-community/sonic-moe](https://huggingface.co/kernels-community/sonic-moe). | High throughput on Hopper (SM90+) for `bfloat16` experts with a gated activation (SwiGLU/GeGLU/ReGLU).                 | Not supported (CUDA-only).                                  |
+| experts backend | description | GPU | CPU |
+| --- | --- | --- | --- |
+| `"eager"` | Reference implementation that loops over selected experts and applies projections on their tokens. | Reasonable baseline performance without requiring compilation. | Slower than `grouped_mm` but faster than `batched_mm`. |
+| `"batched_mm"` | Duplicates selected expert parameters for each token and projects all tokens in a single batched GEMM using [torch.bmm](https://docs.pytorch.org/docs/stable/generated/torch.bmm.html). | Fastest for small inputs, especially with compilation. Uses more memory due to parameter duplication. | Not recommended (significantly slower than other backends). |
+| `"grouped_mm"` | Orders tokens by selected experts and uses [torch.nn.functional.grouped_mm](https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.grouped_mm.html) to project all tokens in a single grouped GEMM (requires PyTorch 2.9+). | Best for larger inputs and more memory efficient as it avoids duplicating expert parameters. Fast with compilation. | Most efficient backend for all input sizes. |
+| `"deepgemm"` | Sorts tokens by selected expert and projects all tokens in a single TMA-aligned grouped GEMM using the [DeepGEMM](https://github.com/deepseek-ai/DeepGEMM) kernels from [kernels-community/deep-gemm](https://huggingface.co/kernels-community/deep-gemm). | Native backend for DeepSeek models on Hopper (SM90+) and Blackwell (SM100+); supports `bfloat16` and FP8/FP4-quantized experts. | Not supported (CUDA-only). |
+| `"deepgemm_megamoe"` | Fuses expert-parallel dispatch, the gated MLP (up projection, SwiGLU, down projection), and the EP combine into a single DeepGEMM Mega MoE kernel, overlapping NVLink transfers with tensor-core compute. | Blackwell (SM100+) only, for FP4-quantized experts run with expert parallelism. | Not supported (CUDA-only). |
+| `"sonicmoe"` | Fuses the routed `bfloat16` MoE forward (router dispatch, gated up projection, activation, down projection) into CuteDSL grouped-GEMM kernels (from the [quack](https://github.com/Dao-AILab/quack) library) from [kernels-community/sonic-moe](https://huggingface.co/kernels-community/sonic-moe). | State-of-the-art throughput on Hopper (SM90+) for `bfloat16` experts with a gated activation (SwiGLU/GeGLU/ReGLU), especially for training. | Not supported (CUDA-only). |
 
 
 > [!NOTE]
@@ -88,7 +89,8 @@ The `"deepgemm"` backend routes expert matmuls through the [DeepGEMM](https://gi
 The `"deepgemm"` backend requires:
 
 - CUDA GPU with compute capability ≥ 9.0 (Hopper or newer).
-- CUDA runtime 12.3 or later.
+- CUDA runtime 12.3 or later on Hopper, 12.9 or later on Blackwell.
+- `nvcc`/`nvrtc` available on the system for the kernel's JIT compilation.
 - The [kernels](https://github.com/huggingface/kernels) package.
 
 ```py
@@ -105,17 +107,27 @@ The kernel is loaded lazily on the first forward.
 
 ### FP8 and FP4 quantized experts
 
-When the model is loaded with [`FineGrainedFP8Config`], the `"deepgemm"` backend automatically picks the FP8 (or FP4 on Blackwell) grouped-GEMM kernel. Set `activation_scheme="dynamic"` on the quantization config. DeepGEMM requires per-row activation scales and rejects static (per-tensor) activation quantization.
+DeepSeek-style checkpoints are usually pre-quantized and carry their own quantization config, so you don't need to pass a [`FineGrainedFP8Config`]. The `"deepgemm"` backend automatically picks the FP8 (or FP4 on Blackwell) grouped-GEMM kernel. DeepGEMM requires dynamic per-row activation scales (`activation_scheme="dynamic"`) and rejects static (per-tensor) activation quantization.
 
-For FP4-packed expert weights (DeepSeek V4-style), the GPU must be SM100+ (Blackwell). The checkpoint config typically sets `expert_dtype="fp4"`, and the quantization config sets `scale_fmt="ue8m0"`.
+```py
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "deepseek-ai/DeepSeek-V3",
+    experts_implementation="deepgemm",
+)
+```
+
+For FP4-packed expert weights (DeepSeek V4-style), the GPU must be SM100+ (Blackwell). The checkpoint config typically sets `expert_dtype="fp4"` and `scale_fmt="ue8m0"`.
+
+The main reason to pass a [`FineGrainedFP8Config`] for a pre-quantized checkpoint is to dequantize it back to `bfloat16`, in which case the experts run in `bfloat16` rather than on the FP8/FP4 DeepGEMM path.
 
 ```py
 from transformers import AutoModelForCausalLM, FineGrainedFP8Config
 
-quantization_config = FineGrainedFP8Config(activation_scheme="dynamic")
 model = AutoModelForCausalLM.from_pretrained(
     "deepseek-ai/DeepSeek-V3",
-    quantization_config=quantization_config,
+    quantization_config=FineGrainedFP8Config(dequantize=True),
     experts_implementation="deepgemm",
 )
 ```
@@ -127,16 +139,14 @@ On Blackwell (SM100+), set `experts_implementation="deepgemm_megamoe"` to run a 
 This backend requires:
 
 - A Blackwell GPU (compute capability ≥ 10.0) with CUDA runtime 12.9 or later.
-- FP4-packed expert weights paired with UE8M0 weight scales (typically `expert_dtype="fp4"` and `scale_fmt="ue8m0"` on the loaded checkpoint).
+- FP4-packed expert weights paired with UE8M0 weight scales (the pre-quantized checkpoint typically declares `expert_dtype="fp4"` and `scale_fmt="ue8m0"` in its config).
 - A `torch.distributed` process group for the expert-parallel group, which the tensor-parallel wrapping supplies automatically.
 
 ```py
-from transformers import AutoModelForCausalLM, FineGrainedFP8Config
+from transformers import AutoModelForCausalLM
 
-quantization_config = FineGrainedFP8Config(scale_fmt="ue8m0")
 model = AutoModelForCausalLM.from_pretrained(
     "deepseek-ai/DeepSeek-V4",
-    quantization_config=quantization_config,
     experts_implementation="deepgemm_megamoe",
     tp_plan="auto",
 )
@@ -144,7 +154,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ## SonicMoE
 
-The `"sonicmoe"` backend fuses the routed MoE forward (dispatch, gated up projection, activation, down projection) into one CuteDSL kernel from [kernels-community/sonic-moe](https://huggingface.co/kernels-community/sonic-moe).
+The `"sonicmoe"` backend fuses the routed MoE forward (dispatch, gated up projection, activation, down projection) into a set of highly optimized CuteDSL grouped-GEMM kernels, built on the [quack](https://github.com/Dao-AILab/quack) library and distributed by [kernels-community/sonic-moe](https://huggingface.co/kernels-community/sonic-moe).
 
 The `"sonicmoe"` backend requires:
 
@@ -166,7 +176,7 @@ If the requirements aren't met, the forward raises `ImportError` and you should 
 
 ## torch.compile
 
-The `"eager"`, `"batched_mm"`, and `"grouped_mm"` backends are compatible with `torch.compile` to varying degrees. The following table summarizes their compatibility. The `"deepgemm"` and `"sonicmoe"` backends route through external CUDA kernels and aren't covered by this table.
+The `"eager"`, `"batched_mm"`, and `"grouped_mm"` backends are compatible with `torch.compile` to varying degrees. The following table summarizes their compatibility. The `"deepgemm"`, `"deepgemm_megamoe"`, and `"sonicmoe"` backends route through external CUDA kernels and aren't covered by this table.
 
 
 | Implementation          | compilation modes                    | dtypes                           | `fullgraph=True` |
@@ -199,17 +209,3 @@ model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
 ## Benchmarks
 
 This [benchmark](https://github.com/user-attachments/files/24125816/bench.py) compares different input sizes and experts implementations with and without `torch.compile`.
-
-<iframe
-	src="https://huggingface-moe-experts-benchmarks.static.hf.space"
-	frameborder="0"
-	width="100%"
-	height="800"
-></iframe>
-
-<iframe
-  src="https://huggingface.co/datasets/docs-benchmarks/experts-backends/embed/viewer/bs1-seq16/train"
-  frameborder="0"
-  width="100%"
-  height="560px"
-></iframe>
