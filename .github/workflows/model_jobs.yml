@@ -201,7 +201,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
@@ -210,7 +210,7 @@ jobs:
     name: Collated Reports
     if: ${{ always() && inputs.runner_type != '' }}
     needs: run_models_gpu
-    uses: huggingface/transformers/.github/workflows/collated-reports.yml@6abd9725ee7d809dc974991f8ff6c958afb63a3a  # main
+    uses: huggingface/transformers/.github/workflows/collated-reports.yml@74464e8c49c91b574c30cc3cb3c5a44000237299  # main
     with:
       job: run_models_gpu
       report_repo_id: ${{ inputs.report_repo_id }}
