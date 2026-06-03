@@ -117,9 +117,12 @@ jobs:
   run-repo-consistency-checks:
     runs-on: ubuntu-22.04
     needs: [get-pr-info, check-timestamps, init_comment_with_url]
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       changes_detected: ${{ steps.run_repo_checks.outputs.changes_detected || steps.run_style_checks.outputs.changes_detected }}
-      util_scripts_modified: ${{ steps.check_trusted_scripts.outputs.util_scripts_modified }}
+      util_scripts_modified: ${{ steps.check_util_scripts.outputs.util_scripts_modified }}
     steps:
       # Checkout the trusted base repository (main branch) - this is safe
       - name: Checkout base repository
@@ -159,31 +162,38 @@ jobs:
           git remote add upstream https://github.com/${{ github.repository }}.git
           git fetch upstream main:main
 
-      - name: Check if trusted scripts are modified in PR
-        id: check_trusted_scripts
-        run: |
-          cd pr-repo
-          COPIED_FILES=(
-            setup.py
-            utils/custom_init_isort.py
-            utils/sort_auto_mappings.py
-            utils/check_doc_toc.py
-            utils/check_copies.py
-            utils/check_modular_conversion.py
-            utils/check_dummies.py
-            utils/check_pipeline_typing.py
-            utils/check_doctest_list.py
-            utils/check_docstrings.py
-            utils/add_dates.py
-          )
-          if git diff --name-only main HEAD -- "${COPIED_FILES[@]}" | grep -q .; then
-            echo "util_scripts_modified=true" >> $GITHUB_OUTPUT
-          else
-            echo "util_scripts_modified=false" >> $GITHUB_OUTPUT
-          fi
+      - name: Check if util scripts are modified in PR
+        id: check_util_scripts
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
+        with:
+          script: |
+            // Re-fetch the PR file list from the API rather than using get-pr-info's PR_FILES
+            // output, to avoid template injection and E2BIG issues (see pr_slow_ci_suggestion.yml).
+            const UTIL_SCRIPTS = new Set([
+              'setup.py',
+              'utils/custom_init_isort.py',
+              'utils/sort_auto_mappings.py',
+              'utils/check_doc_toc.py',
+              'utils/check_copies.py',
+              'utils/check_modular_conversion.py',
+              'utils/check_dummies.py',
+              'utils/check_pipeline_typing.py',
+              'utils/check_doctest_list.py',
+              'utils/check_docstrings.py',
+              'utils/add_dates.py',
+            ]);
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.issue.number,
+            });
+
+            const modified = files.some(f => UTIL_SCRIPTS.has(f.filename));
+            core.setOutput('util_scripts_modified', modified ? 'true' : 'false');
 
       - name: Copy trusted scripts from main branch
-        if: steps.check_trusted_scripts.outputs.util_scripts_modified != 'true'
+        if: steps.check_util_scripts.outputs.util_scripts_modified != 'true'
         run: |
           # Security: Copy trusted scripts from main branch and run commands explicitly (not via make)
           # to avoid executing potentially malicious Makefile or scripts from the PR
@@ -200,7 +210,7 @@ jobs:
           cp utils/add_dates.py pr-repo/utils/add_dates.py
 
       - name: Install editable transformers from PR branch with copied scripts
-        if: steps.check_trusted_scripts.outputs.util_scripts_modified != 'true'
+        if: steps.check_util_scripts.outputs.util_scripts_modified != 'true'
         run: |
           # Run commands in PR directory (with the copied trusted scripts)
           cd pr-repo
@@ -209,7 +219,7 @@ jobs:
 
       - name: Run repo consistency checks with trusted script
         id: run_repo_checks
-        if: steps.check_trusted_scripts.outputs.util_scripts_modified != 'true' && startsWith(github.event.comment.body, '@bot /repo')
+        if: steps.check_util_scripts.outputs.util_scripts_modified != 'true' && startsWith(github.event.comment.body, '@bot /repo')
         run: |
           # Continue on errors (like Makefile's - prefix)
           set +e
@@ -243,7 +253,7 @@ jobs:
 
       - name: Run style checks with trusted script
         id: run_style_checks
-        if: steps.check_trusted_scripts.outputs.util_scripts_modified != 'true' && startsWith(github.event.comment.body, '@bot /style')
+        if: steps.check_util_scripts.outputs.util_scripts_modified != 'true' && startsWith(github.event.comment.body, '@bot /style')
         run: |
           # Continue on errors (like Makefile's - prefix)
           set +e
@@ -269,7 +279,7 @@ jobs:
           fi
 
       - name: Save modified files
-        if: steps.check_trusted_scripts.outputs.util_scripts_modified != 'true' && (steps.run_repo_checks.outputs.changes_detected == 'true' || steps.run_style_checks.outputs.changes_detected == 'true')
+        if: steps.check_util_scripts.outputs.util_scripts_modified != 'true' && (steps.run_repo_checks.outputs.changes_detected == 'true' || steps.run_style_checks.outputs.changes_detected == 'true')
         run: |
           cd pr-repo
           mkdir -p ../artifact-staging
@@ -281,7 +291,7 @@ jobs:
           done < ../artifact-staging/modified-files.txt
 
       - name: Upload modified files
-        if: steps.check_trusted_scripts.outputs.util_scripts_modified != 'true' && (steps.run_repo_checks.outputs.changes_detected == 'true' || steps.run_style_checks.outputs.changes_detected == 'true')
+        if: steps.check_util_scripts.outputs.util_scripts_modified != 'true' && (steps.run_repo_checks.outputs.changes_detected == 'true' || steps.run_style_checks.outputs.changes_detected == 'true')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: modified-files
