@@ -357,6 +357,13 @@ def is_torch_hpu_available() -> bool:
     if not hasattr(torch, "hpu") or not torch.hpu.is_available():
         return False
 
+    logger.warning_once(
+        "Detected an available HPU device: transformers will patch selected torch functions "
+        "globally to work around Gaudi-specific limitations. This affects torch.gather, "
+        "torch.Tensor.gather, torch.take_along_dim, torch.linalg.cholesky, torch.scatter, "
+        "torch.Tensor.scatter, and torch.compile."
+    )
+
     # We patch torch.gather for int64 tensors to avoid a bug on Gaudi
     # Graph compile failed with synStatus 26 [Generic failure]
     # This can be removed once bug is fixed but for now we need it.
