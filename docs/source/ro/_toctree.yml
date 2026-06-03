@@ -71,3 +71,10 @@
     - local: processors
       title: Procesatoare
     title: Preprocesatoare
+  title: Clase de bază
+- isExpanded: true
+  sections:
+  - isExpanded: false
+    sections:
+    - local: pipeline_tutorial
+      title: Pipeline
