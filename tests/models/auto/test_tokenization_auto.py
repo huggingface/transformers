@@ -25,6 +25,7 @@ import pytest
 from parameterized import parameterized
 
 import transformers
+from tests.test_tokenization_common import input_string
 from transformers import (
     AutoTokenizer,
     BertConfig,
@@ -862,13 +863,12 @@ class NopConfig(PreTrainedConfig):
             mock_tb.assert_not_called()
             self.assertIs(result, mock_tokenizer)
 
+    MODELS_WITHOUT_TOKENIZER_CLASS_CHECKPOINTS = ["deepseek-ai/DeepSeek-R1-Distill-Llama-8B"]
 
-    MODELS_WITHOUT_TOKENIZER_CLASS_CHECKPOINTS = [
-        "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
-    ]
     @require_tokenizers
-    @parameterized.expand(TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS)
+    @parameterized.expand(MODELS_WITHOUT_TOKENIZER_CLASS_CHECKPOINTS)
     def test_models_without_tokenizer_class(self, repo_id):
-        text = "hello world"
         tokenizer_auto = AutoTokenizer.from_pretrained(repo_id)
-        self.assertEqual(tokenizer_auto.decode(tokenizer_auto.encode(text, add_special_tokens=False)), text)
+        self.assertEqual(
+            tokenizer_auto.decode(tokenizer_auto.encode(input_string, add_special_tokens=False)), input_string
+        )
