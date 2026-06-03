@@ -1715,13 +1715,6 @@ Hey how are you doing"""  # noqa: W293
 
             self.assertEqual(len(truncated_sequence), total_length - 2)
             self.assertEqual(truncated_sequence, sequence[:-2])
-
-            # tokenizers >= 0.23.1 early-exits right-truncation (huggingface/tokenizers#1990) and may
-            # omit the trailing overflow segment when it is shorter than the truncation window.
-            if len(information["input_ids"]) > 1:
-                overflowing_tokens = information["input_ids"][1]
-                self.assertEqual(len(overflowing_tokens), 2 + stride)
-                self.assertEqual(overflowing_tokens, sequence[-(2 + stride) :])
         else:
             truncated_sequence = information["input_ids"]
             overflowing_tokens = information["overflowing_tokens"]
@@ -1752,8 +1745,6 @@ Hey how are you doing"""  # noqa: W293
         seq1_tokens = tokenizer.encode(seq_1, add_special_tokens=False)
 
         self.assertGreater(len(seq1_tokens), 2 + stride)
-
-        smallest = seq1_tokens if len(seq0_tokens) > len(seq1_tokens) else seq0_tokens
 
         # We are not using the special tokens - a bit too hard to test all the tokenizers with this
         # TODO try this again later
@@ -1836,9 +1827,6 @@ Hey how are you doing"""  # noqa: W293
             tokenizer.encode(seq_0, add_special_tokens=False)
             + tokenizer.encode(seq_1, add_special_tokens=False)[-(2 + stride) :]
         )
-        overflow_longest_sequence = (
-            overflow_first_sequence if len(seq0_tokens) > len(seq1_tokens) else overflow_second_sequence
-        )
 
         # Overflowing tokens are handled quite differently in slow and fast tokenizers
         if isinstance(tokenizer, TokenizersBackend):
@@ -1856,13 +1844,6 @@ Hey how are you doing"""  # noqa: W293
 
             self.assertEqual(len(truncated_sequence), len(sequence) - 2)
             self.assertEqual(truncated_sequence, truncated_longest_sequence)
-
-            # tokenizers >= 0.23.1 early-exits right-truncation (huggingface/tokenizers#1990) and may
-            # omit the trailing overflow segment when it is shorter than the truncation window.
-            if len(information["input_ids"]) > 1:
-                overflowing_tokens = information["input_ids"][1]
-                self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
-                self.assertEqual(overflowing_tokens, overflow_longest_sequence)
         else:
             # No overflowing tokens when using 'longest' in python tokenizers
             with self.assertRaises(ValueError) as context:
@@ -1901,13 +1882,6 @@ Hey how are you doing"""  # noqa: W293
 
             self.assertEqual(len(truncated_sequence), len(sequence) - 2)
             self.assertEqual(truncated_sequence, truncated_longest_sequence)
-
-            # tokenizers >= 0.23.1 early-exits right-truncation (huggingface/tokenizers#1990) and may
-            # omit the trailing overflow segment when it is shorter than the truncation window.
-            if len(information["input_ids"]) > 1:
-                overflowing_tokens = information["input_ids"][1]
-                self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
-                self.assertEqual(overflowing_tokens, overflow_longest_sequence)
         else:
             # No overflowing tokens when using 'longest' in python tokenizers
             with self.assertRaises(ValueError) as context:
