@@ -59,6 +59,7 @@ class LongcatFlashConfig(PreTrainedConfig):
         "layers.*.self_attn.*.o_proj": "rowwise_allreduce",
         "layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
         "layers.*.mlp.experts.down_proj": "moe_tp_down_rowwise",
+        "layers.*.mlp.experts.identity_expert": "moe_identity_expert",
         "layers.*.mlp.experts": "moe_experts_allreduce",
         "layers.*.mlps.*.gate_proj": "colwise",
         "layers.*.mlps.*.up_proj": "colwise",

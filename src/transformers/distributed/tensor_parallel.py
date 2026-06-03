@@ -507,11 +507,7 @@ class MoEExpertsParallel(TensorParallelLayer):
         if not isinstance(hidden_states, DTensor):
             hidden_states = DTensor.from_local(hidden_states, mesh, [Replicate()], run_check=False)
         hidden_states = hidden_states.to_local()
-        if is_expert_parallel:
-            # Under EP each rank computes only its local experts' contribution from the
-            # same replicated hidden_states. Sum those local input gradients in backward
-            # before propagating to upstream replicated layers.
-            hidden_states = _AllReduceBackward.apply(hidden_states, tp_group)
+        hidden_states = _AllReduceBackward.apply(hidden_states, tp_group)
 
         if isinstance(top_k_weights, DTensor):
             top_k_weights = top_k_weights.to_local()
@@ -562,6 +558,21 @@ class MoEExpertsParallel(TensorParallelLayer):
         if output.placements != (target,):
             output = output.redistribute(placements=(target,))
         return output.to_local()
+
+
+class MoeIdentityParallel(TensorParallelLayer):
+    """
+    TP class for zero/identity experts in MoE layers.
+
+    Under TP, the parent `MoEExpertsParallel` all-reduces the expert module
+    output by summation. Identity experts produce the same output on every
+    rank, so the sum gives `world_size * output`. This class divides the input
+    by `world_size` to compensate.
+    """
+
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
+        input_tensor = args[0]
+        return (input_tensor / mesh.size(), *args[1:]), kwargs
 
 
 class EpRouterParallel(TensorParallelLayer):
@@ -658,6 +669,7 @@ class ParallelInterface(GeneralInterface):
             # entry only installs the forward hook that all-reduces the partial per-rank
             # expert outputs. Used for both TP and EP.
             "moe_experts_allreduce": MoEExpertsParallel(output_layouts=Replicate()),
+            "moe_identity_expert": MoeIdentityParallel(),
             # EP router — forward-only slicing of router outputs to local experts.
             "ep_router": EpRouterParallel(),
         }
