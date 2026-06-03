@@ -27,6 +27,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, DynamicLayer
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
@@ -34,6 +35,7 @@ from ...integrations import use_experts_implementation, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
+    BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     ModelOutput,
@@ -55,9 +57,9 @@ from .configuration_minimax_m3_vl import MiniMaxM3VLConfig, MiniMaxM3VLTextConfi
 
 
 class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
-    """Cache layer for M3 sparse-attention layers: standard DynamicLayer for the
-    main attention plus ``idx_keys`` / ``idx_values`` slots for the lightning
-    indexer's K/V (one head, ``sparse_index_dim`` per token).
+    """Cache layer for M3 sparse-attention layers: a standard ``DynamicLayer``
+    for the main attention plus an ``idx_keys`` slot holding the lightning
+    indexer's keys (one head, ``sparse_index_dim`` per token).
 
     Same dispatch story as DeepSeek-V4's ``DeepseekV4CSACache``: the class
     registers itself via ``layer_type = "minimax_m3_sparse"`` so
@@ -70,48 +72,26 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
     def __init__(self, config: PreTrainedConfig | None = None):
         super().__init__(config)
         self.idx_keys: torch.Tensor | None = None
-        self.idx_values: torch.Tensor | None = None
 
-    def update_index(
-        self, idx_k: torch.Tensor, idx_v: torch.Tensor | None
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Append the new token's ``idx_k`` / ``idx_v`` to the cache and return
-        the full cached history. ``idx_v`` is ``None`` for layers with
-        ``disable_index_value`` set; we keep it ``None`` end-to-end.
-        """
-        if self.idx_keys is None:
-            self.idx_keys = idx_k
-        else:
-            self.idx_keys = torch.cat([self.idx_keys, idx_k], dim=-2)
-
-        if idx_v is None:
-            return self.idx_keys, None
-        if self.idx_values is None:
-            self.idx_values = idx_v
-        else:
-            self.idx_values = torch.cat([self.idx_values, idx_v], dim=-2)
-        return self.idx_keys, self.idx_values
+    def update_index(self, idx_k: torch.Tensor) -> torch.Tensor:
+        """Append the new token's ``idx_k`` to the cache and return the full history."""
+        self.idx_keys = idx_k if self.idx_keys is None else torch.cat([self.idx_keys, idx_k], dim=-2)
+        return self.idx_keys
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         super().reorder_cache(beam_idx)
         if self.idx_keys is not None:
             self.idx_keys = self.idx_keys.index_select(0, beam_idx.to(self.idx_keys.device))
-        if self.idx_values is not None:
-            self.idx_values = self.idx_values.index_select(0, beam_idx.to(self.idx_values.device))
 
     def batch_repeat_interleave(self, repeats: int) -> None:
         super().batch_repeat_interleave(repeats)
         if self.idx_keys is not None:
             self.idx_keys = self.idx_keys.repeat_interleave(repeats, dim=0)
-        if self.idx_values is not None:
-            self.idx_values = self.idx_values.repeat_interleave(repeats, dim=0)
 
     def batch_select_indices(self, indices: torch.Tensor) -> None:
         super().batch_select_indices(indices)
         if self.idx_keys is not None:
             self.idx_keys = self.idx_keys[indices, ...]
-        if self.idx_values is not None:
-            self.idx_values = self.idx_values[indices, ...]
 
     def crop(self, max_length: int) -> None:
         super().crop(max_length)
@@ -119,8 +99,6 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
             max_length = self.get_seq_length() - abs(max_length)
         if self.idx_keys is not None and self.idx_keys.shape[-2] > max_length:
             self.idx_keys = self.idx_keys[..., :max_length, :]
-        if self.idx_values is not None and self.idx_values.shape[-2] > max_length:
-            self.idx_values = self.idx_values[..., :max_length, :]
 
 
 class MiniMaxM3VLRMSNorm(nn.Module):
@@ -182,12 +160,15 @@ class MiniMaxM3VLDenseMLP(nn.Module):
 
 @use_experts_implementation
 class MiniMaxM3VLExperts(nn.Module):
-    """M3 experts: packed Mixtral layout + swigluoai gate."""
+    """M3 experts: packed Mixtral layout, gated by the SwiGLU-OAI activation.
+
+    The only architectural difference from [`MiniMaxM2Experts`] is the gate: M3
+    fuses gate and up with the clamped SwiGLU-OAI activation, which needs both
+    halves at once, so we route through the ``_apply_gate`` hook (also used by
+    the kernelized expert implementations) instead of a plain ``act_fn``.
+    """
 
     def __init__(self, config: MiniMaxM3VLTextConfig):
-        # We can't reuse the M2 init because it calls ACT2FN[config.hidden_act],
-        # and ``swigluoai`` is not registered there (the alpha/limit clamp makes
-        # it stateful enough that bundling it into the experts is cleaner).
         super().__init__()
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
@@ -198,28 +179,21 @@ class MiniMaxM3VLExperts(nn.Module):
         self.swiglu_limit = config.swiglu_limit
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        top_k_index: torch.Tensor,
-        top_k_weights: torch.Tensor,
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
-            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
         for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+            current_state = self._apply_gate(F.linear(current_state, self.gate_up_proj[expert_idx]))
+            current_state = F.linear(current_state, self.down_proj[expert_idx])
+            current_state = current_state * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_state.to(final_hidden_states.dtype))
 
         return final_hidden_states
 
@@ -509,27 +483,24 @@ class MiniMaxM3VLAttention(nn.Module):
 class MiniMaxM3VLIndexer(nn.Module):
     r"""Lightning Indexer for MiniMax M3 sparse attention.
 
-    Picks the top-``sparse_topk_blocks`` key blocks of size ``sparse_block_size``
-    per query, plus the first ``sparse_init_block`` blocks and the
-    ``sparse_local_block`` blocks immediately preceding the query block, which
-    are always visible. Returns:
+    Scores key *blocks* of size ``sparse_block_size`` against each query with a
+    small ``sparse_num_index_heads``-head dot-product branch, then keeps, per
+    query, the top-``sparse_topk_blocks`` blocks plus the first
+    ``sparse_init_block`` blocks and the ``sparse_local_block`` blocks
+    immediately preceding the query (always visible). It returns a
+    ``[B, 1, S_q, S_k]`` additive ``block_bias`` that is ``0`` at every allowed
+    (query, key) pair and ``-inf`` elsewhere, to be summed onto the main
+    attention mask — the same scatter-into-``-inf``-bias trick as
+    [`DeepseekV4Indexer`].
 
-      * ``idx_output`` — projection of the index branch's own SDPA over
-        ``(idx_q, idx_k, idx_v)``, to be added to the main attention output.
-      * ``block_bias`` — ``[B, 1, S, S]`` mask with ``0`` at every (query, key)
-        pair allowed under the top-k + init + local rule, ``-inf`` elsewhere,
-        ready to add onto ``attention_mask`` before the main SDPA (same trick
-        as [`DeepseekV4Indexer`]).
-
-    When ``disable_index_value`` is set for this layer, the indexer still
-    scores blocks (with ``idx_q``/``idx_k``) but skips the value branch, so
-    ``idx_output`` is ``None``.
+    Like DeepSeek-V4's indexer this is purely a *selection* branch: it has no
+    value projection and produces no residual output of its own (the upstream
+    checkpoint disables the index-value path on every sparse layer).
     """
 
-    def __init__(self, config: MiniMaxM3VLTextConfig, disable_index_value: bool = False):
+    def __init__(self, config: MiniMaxM3VLTextConfig):
         super().__init__()
         sparse_cfg = config.sparse_attention_config
-        self.disable_index_value = bool(disable_index_value)
         self.num_heads = int(sparse_cfg["sparse_num_index_heads"])
         self.head_dim = int(sparse_cfg["sparse_index_dim"])
         self.block_size = int(sparse_cfg["sparse_block_size"])
@@ -542,9 +513,6 @@ class MiniMaxM3VLIndexer(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
         self.q_norm = MiniMaxM3VLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = MiniMaxM3VLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        if not self.disable_index_value:
-            self.v_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
-            self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
 
     def _block_bias(self, idx_q: torch.Tensor, idx_k: torch.Tensor, q_positions: torch.Tensor) -> torch.Tensor:
         r"""Build the ``[B, 1, S_q, S_k]`` top-k + init + local additive mask.
@@ -554,44 +522,42 @@ class MiniMaxM3VLIndexer(nn.Module):
         ``q_positions``: ``[S_q]`` absolute positions of the queries, so the
         causal block threshold lines up with the cached history during decode.
         """
-        B, H, Sq, _ = idx_q.shape
-        Sk = idx_k.shape[2]
+        batch, heads, q_len, _ = idx_q.shape
+        k_len = idx_k.shape[2]
         block = self.block_size
-        pad = (-Sk) % block
+        n_blocks = -(-k_len // block)  # ceil-div
+        pad = n_blocks * block - k_len
+
+        # Per-(head, query) block score = pool over the block's key tokens, then
+        # reduce over index heads. Pad keys with ``-inf`` so the trailing partial
+        # block never wins a top-k slot on padding.
+        scores = torch.matmul(idx_q.float(), idx_k.expand(-1, heads, -1, -1).float().transpose(-1, -2))
         if pad:
-            idx_k = F.pad(idx_k, (0, 0, 0, pad))
-        n_blocks = (Sk + pad) // block
+            scores = F.pad(scores, (0, pad), value=float("-inf"))
+        scores = scores.view(batch, heads, q_len, n_blocks, block)
+        block_scores = scores.amax(dim=-1) if self.score_type == "max" else scores.softmax(dim=-1).sum(dim=-1)
+        block_scores = block_scores.amax(dim=1)  # -> [B, S_q, n_blocks]
 
-        # Inner-product scores: ``[B, H, Sq, n_blocks * block]`` -> max over block.
-        idx_k_h = idx_k.expand(-1, H, -1, -1)
-        scores_qk = torch.matmul(idx_q.float(), idx_k_h.float().transpose(-1, -2))
-        scores_qk = scores_qk.view(B, H, Sq, n_blocks, block)
-        if self.score_type == "max":
-            block_scores = scores_qk.amax(dim=-1)
-        else:
-            block_scores = scores_qk.softmax(dim=-1).sum(dim=-1)
-        block_scores = block_scores.amax(dim=1)  # max over index heads -> [B, Sq, n_blocks]
+        # Block-level causality on absolute positions.
+        q_block = q_positions // block  # [S_q]
+        future = torch.arange(n_blocks, device=idx_q.device).view(1, 1, -1) > q_block.view(1, -1, 1)
+        block_scores = block_scores.masked_fill(future, float("-inf"))
 
-        # Causality on absolute positions.
-        q_block = q_positions // block  # [Sq]
-        block_idx = torch.arange(n_blocks, device=idx_q.device)
-        future_mask = block_idx.view(1, 1, -1) > q_block.view(1, -1, 1)
-        block_scores = block_scores.masked_fill(future_mask, float("-inf"))
-
-        topk = min(self.topk_blocks, n_blocks)
-        topk_idx = block_scores.topk(topk, dim=-1).indices  # [B, Sq, topk]
-
-        block_keep = torch.zeros((B, Sq, n_blocks), dtype=torch.bool, device=idx_q.device)
-        block_keep.scatter_(-1, topk_idx, True)
+        # Same scatter-into-``-inf``-bias idea as deepseek_v4: start all-masked,
+        # punch ``0`` at the selected blocks (top-k, then the always-on init and
+        # local windows), then re-mask the future so a short history can't leak.
+        bias = block_scores.new_full((batch, q_len, n_blocks), float("-inf"))
+        bias.scatter_(-1, block_scores.topk(min(self.topk_blocks, n_blocks), dim=-1).indices, 0.0)
         if self.init_blocks > 0:
-            block_keep[..., : self.init_blocks] = True
+            bias[..., : self.init_blocks] = 0.0
         if self.local_blocks > 0:
-            local_offset = torch.arange(self.local_blocks, device=idx_q.device)
-            local_idx = (q_block.view(-1, 1) - local_offset.view(1, -1)).clamp(min=0)
-            block_keep.scatter_(-1, local_idx.unsqueeze(0).expand(B, -1, -1), True)
+            local = torch.arange(self.local_blocks, device=idx_q.device)
+            local = (q_block.view(-1, 1) - local.view(1, -1)).clamp(min=0)  # [S_q, local]
+            bias.scatter_(-1, local.unsqueeze(0).expand(batch, -1, -1), 0.0)
+        bias = bias.masked_fill(future, float("-inf"))
 
-        token_keep = block_keep.repeat_interleave(block, dim=-1)[..., :Sk]
-        return torch.zeros_like(token_keep, dtype=idx_q.dtype).masked_fill_(~token_keep, float("-inf")).unsqueeze(1)
+        token_bias = bias.repeat_interleave(block, dim=-1)[..., :k_len]
+        return token_bias.to(idx_q.dtype).unsqueeze(1)
 
     def forward(
         self,
@@ -600,7 +566,7 @@ class MiniMaxM3VLIndexer(nn.Module):
         position_ids: torch.Tensor | None,
         past_key_values: Cache | None,
         layer_idx: int,
-    ) -> tuple[torch.Tensor | None, torch.Tensor]:
+    ) -> torch.Tensor:
         bsz, slen, _ = hidden_states.shape
         idx_q = self.q_proj(hidden_states).view(bsz, slen, self.num_heads, self.head_dim)
         idx_k = self.k_proj(hidden_states).view(bsz, slen, 1, self.head_dim)
@@ -609,64 +575,30 @@ class MiniMaxM3VLIndexer(nn.Module):
         cos, sin = position_embeddings
         idx_q, idx_k = apply_rotary_pos_emb(idx_q, idx_k, cos[..., : self.head_dim], sin[..., : self.head_dim])
 
-        idx_v = None
-        if not self.disable_index_value:
-            idx_v = self.v_proj(hidden_states).view(bsz, slen, 1, self.head_dim).transpose(1, 2)
-
-        # Append to cache (or run stateless if no cache is provided).
+        # Cache the indexer keys (one head, ``sparse_index_dim`` per token) so a
+        # decode-step query scores against the full history.
         cache_layer: MiniMaxM3VLSparseCacheLayer | None = (
             past_key_values.layers[layer_idx] if past_key_values is not None else None
         )
-        if cache_layer is not None:
-            idx_k_full, idx_v_full = cache_layer.update_index(idx_k, idx_v)
-        else:
-            idx_k_full, idx_v_full = idx_k, idx_v
+        idx_k = cache_layer.update_index(idx_k) if cache_layer is not None else idx_k
 
-        # Absolute query positions; default to ``arange`` if the model didn't pass them.
-        if position_ids is None:
-            q_positions = torch.arange(slen, device=idx_q.device)
-        else:
-            q_positions = position_ids[0]
-
-        block_bias = self._block_bias(idx_q, idx_k_full, q_positions)
-
-        idx_output: torch.Tensor | None = None
-        if not self.disable_index_value:
-            idx_k_e = idx_k_full.expand(-1, self.num_heads, -1, -1)
-            idx_v_e = idx_v_full.expand(-1, self.num_heads, -1, -1)
-            # Build the index-branch causal mask explicitly (Sq < Sk during decode,
-            # so ``is_causal=True`` would mis-align the diagonal).
-            Sq, Sk = idx_q.shape[2], idx_k_e.shape[2]
-            causal = torch.full((Sq, Sk), float("-inf"), device=idx_q.device, dtype=idx_q.dtype)
-            k_pos = torch.arange(Sk, device=idx_q.device)
-            causal = causal.masked_fill(k_pos.view(1, -1) <= q_positions.view(-1, 1), 0.0)
-            idx_attn = F.scaled_dot_product_attention(idx_q, idx_k_e, idx_v_e, attn_mask=causal, is_causal=False)
-            idx_attn = idx_attn.transpose(1, 2).reshape(bsz, slen, self.num_heads * self.head_dim)
-            idx_output = self.o_proj(idx_attn)
-
-        return idx_output, block_bias
+        q_positions = torch.arange(slen, device=idx_q.device) if position_ids is None else position_ids[0]
+        return self._block_bias(idx_q, idx_k, q_positions)
 
 
 class MiniMaxM3VLSparseAttention(MiniMaxM3VLAttention):
-    """Sparse-attention layer: main attention masked to top-k key blocks by the
-    [`MiniMaxM3VLIndexer`], plus the indexer's own attention output added as a
-    residual (when ``disable_index_value`` is False).
+    """Sparse-attention layer: standard M3 attention restricted to the key
+    blocks selected by the [`MiniMaxM3VLIndexer`].
 
-    The block-selection follows the same scatter-into-block-bias pattern as
-    [`DeepseekV4Indexer`]: build a ``[B, 1, S, S]`` additive mask that is ``0``
-    where each query is allowed to attend (top-k + init + local blocks) and
-    ``-inf`` elsewhere, then add it onto the standard ``attention_mask``
-    before SDPA.
+    The indexer returns a ``[B, 1, S, S]`` additive ``block_bias`` (``0`` where a
+    query may attend, ``-inf`` elsewhere); we sum it onto the regular causal
+    ``attention_mask`` so SDPA already excludes every key outside the top-k
+    blocks — the same approach as [`DeepseekV4Attention`].
     """
 
-    def __init__(
-        self,
-        config: MiniMaxM3VLTextConfig,
-        layer_idx: int,
-        disable_index_value: bool = False,
-    ):
+    def __init__(self, config: MiniMaxM3VLTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.indexer = MiniMaxM3VLIndexer(config, disable_index_value=disable_index_value)
+        self.indexer = MiniMaxM3VLIndexer(config)
 
     def forward(
         self,
@@ -677,32 +609,23 @@ class MiniMaxM3VLSparseAttention(MiniMaxM3VLAttention):
         position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        idx_output, block_bias = self.indexer(
+        block_bias = self.indexer(
             hidden_states,
             position_embeddings,
             position_ids=position_ids,
             past_key_values=past_key_values,
             layer_idx=self.layer_idx,
         )
+        if attention_mask is not None:
+            block_bias = block_bias + attention_mask.to(block_bias.dtype)
 
-        # Same trick as deepseek_v4: encode top-k block visibility as a `-inf`
-        # additive mask, sum it onto the regular causal mask. SDPA then sees a
-        # mask that already excludes every key outside the top-k blocks.
-        if attention_mask is None:
-            merged_mask = block_bias
-        else:
-            merged_mask = attention_mask.to(block_bias.dtype) + block_bias
-
-        attn_output, attn_weights = super().forward(
+        return super().forward(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
-            attention_mask=merged_mask,
+            attention_mask=block_bias,
             past_key_values=past_key_values,
             **kwargs,
         )
-        if idx_output is not None:
-            attn_output = attn_output + idx_output
-        return attn_output, attn_weights
 
 
 # ---------------------------------------------------------------------------
@@ -717,15 +640,9 @@ class MiniMaxM3VLDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         eps = config.rms_norm_eps
-        sparse_cfg = config.sparse_attention_config
 
-        is_sparse_attn = bool(sparse_cfg["sparse_attention_freq"][layer_idx])
-        if is_sparse_attn:
-            self.self_attn = MiniMaxM3VLSparseAttention(
-                config,
-                layer_idx,
-                disable_index_value=bool(sparse_cfg["sparse_disable_index_value"][layer_idx]),
-            )
+        if config.layer_types[layer_idx] == "minimax_m3_sparse":
+            self.self_attn = MiniMaxM3VLSparseAttention(config, layer_idx)
         else:
             self.self_attn = MiniMaxM3VLAttention(config, layer_idx)
 
@@ -814,12 +731,6 @@ class MiniMaxM3VLTextModel(MiniMaxM3VLPreTrainedModel):
 
     def __init__(self, config: MiniMaxM3VLTextConfig):
         super().__init__(config)
-        # Derive layer_types from sparse_attention_freq so DynamicCache(config=...)
-        # dispatches the per-layer sparse cache for sparse-attention layers.
-        if config.layer_types is None and config.sparse_attention_config is not None:
-            freq = config.sparse_attention_config.get("sparse_attention_freq")
-            if freq is not None:
-                config.layer_types = ["minimax_m3_sparse" if f else "full_attention" for f in freq]
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
@@ -1161,61 +1072,198 @@ def _apply_vision_rope(q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin:
 
 
 class MiniMaxM3VLVisionAttention(nn.Module):
-    def __init__(self, config: MiniMaxM3VLVisionConfig):
+    """CLIP-style vision attention; the only difference from [`CLIPAttention`] is
+    that queries and keys are rotated by the tower's 3D RoPE before the
+    (interface-dispatched) scaled dot-product attention."""
+
+    def __init__(self, config: MiniMaxM3VLVisionConfig | MiniMaxM3VLTextConfig):
         super().__init__()
+        self.config = config
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
+        self.is_causal = False
+
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        bsz, seq, _ = hidden_states.shape
-        q = self.q_proj(hidden_states).view(bsz, seq, self.num_heads, self.head_dim)
-        k = self.k_proj(hidden_states).view(bsz, seq, self.num_heads, self.head_dim)
-        v = self.v_proj(hidden_states).view(bsz, seq, self.num_heads, self.head_dim)
-        q, k = _apply_vision_rope(q, k, *position_embeddings)
-        q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
-        out = F.scaled_dot_product_attention(q, k, v, attn_mask=attention_mask, dropout_p=self.dropout)
-        return self.out_proj(out.transpose(1, 2).reshape(bsz, seq, self.embed_dim))
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Input shape: Batch x Time x Channel"""
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+        queries = self.q_proj(hidden_states).view(hidden_shape)
+        keys = self.k_proj(hidden_states).view(hidden_shape)
+        values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        queries, keys = _apply_vision_rope(queries, keys, *position_embeddings)
+        queries, keys = queries.transpose(1, 2), keys.transpose(1, 2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+            **kwargs,
+        )
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        return self.out_proj(attn_output), attn_weights
 
 
 class MiniMaxM3VLVisionMLP(nn.Module):
-    def __init__(self, config: MiniMaxM3VLVisionConfig):
+    def __init__(self, config):
         super().__init__()
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=True)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=True)
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.fc2(F.gelu(self.fc1(x)))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+class MiniMaxM3VLMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
 class MiniMaxM3VLVisionEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: MiniMaxM3VLVisionConfig):
+    def __init__(self, config: MiniMaxM3VLVisionConfig | MiniMaxM3VLTextConfig):
         super().__init__()
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.self_attn = MiniMaxM3VLVisionAttention(config)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = MiniMaxM3VLVisionMLP(config)
+        self.embed_dim = config.hidden_size
+        self.self_attn = MiniMaxM3VLAttention(config)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = MiniMaxM3VLMLP(config)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        hidden_states = hidden_states + self.self_attn(
-            self.layer_norm1(hidden_states), position_embeddings, attention_mask
+        residual = hidden_states
+        hidden_states, _ = self.self_attn(
+            self.layer_norm1(hidden_states), position_embeddings, attention_mask, **kwargs
         )
+        hidden_states = residual + hidden_states
         return hidden_states + self.mlp(self.layer_norm2(hidden_states))
+
+
+class MiniMaxM3VLEncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: MiniMaxM3VLVisionConfig | MiniMaxM3VLTextConfig):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.self_attn = MiniMaxM3VLAttention(config)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = MiniMaxM3VLMLP(config)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.FloatTensor:
+        residual = hidden_states
+
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        return hidden_states
+
+
+class MiniMaxM3VLVisionEncoder(nn.Module):
+    """
+    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
+    [`MiniMaxM3VLVisionEncoderLayer`].
+
+    Args:
+        config: MiniMaxM3VLVisionConfig
+    """
+
+    def __init__(self, config: MiniMaxM3VLConfig):
+        super().__init__()
+        self.config = config
+        self.layers = nn.ModuleList([MiniMaxM3VLEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
+
+    def forward(
+        self,
+        inputs_embeds: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        hidden_states = inputs_embeds
+        for encoder_layer in self.layers:
+            hidden_states = encoder_layer(hidden_states, position_embeddings, attention_mask, **kwargs)
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
+class MiniMaxM3VLVisionTransformer(nn.Module):
+    """CLIP-style vision transformer with a Conv3d patch embed and 3D RoPE.
+
+    No post-encoder norm: the last encoder layer feeds the projector directly.
+    ``pre_layrnorm`` keeps the upstream CLIP spelling.
+    """
+
+    def __init__(self, config: MiniMaxM3VLVisionConfig):
+        super().__init__()
+        self.embeddings = MiniMaxM3VLVisionEmbeddings(config)
+        self.pre_layrnorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.encoder = MiniMaxM3VLVisionEncoder(config)
+        head_dim = config.hidden_size // config.num_attention_heads
+        self.rotary_emb = MiniMaxM3VL3DRotaryEmbedding(head_dim, theta=config.rope_theta)
+
+    def forward(
+        self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> BaseModelOutputWithPooling:
+        embeds = self.embeddings(pixel_values)
+        cos, sin = self.rotary_emb(image_grid_thw, device=embeds.device, dtype=torch.float32)
+        hidden_states = self.pre_layrnorm(embeds).unsqueeze(0)
+        cos, sin = cos.to(hidden_states.dtype), sin.to(hidden_states.dtype)
+        encoder_outputs = self.encoder(inputs_embeds=hidden_states, position_embeddings=(cos, sin), **kwargs)
+        last_hidden_state = encoder_outputs.last_hidden_state
+        return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state, pooler_output=last_hidden_state[:, 0])
 
 
 @auto_docstring
@@ -1224,37 +1272,23 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
 
     config: MiniMaxM3VLVisionConfig
     main_input_name = "pixel_values"
+    _can_record_outputs = {
+        "hidden_states": MiniMaxM3VLVisionEncoderLayer,
+        "attentions": MiniMaxM3VLVisionAttention,
+    }
 
     def __init__(self, config: MiniMaxM3VLVisionConfig):
         super().__init__(config)
-        self.embeddings = MiniMaxM3VLVisionEmbeddings(config)
-        head_dim = config.hidden_size // config.num_attention_heads
-        self.rotary_emb = MiniMaxM3VL3DRotaryEmbedding(head_dim, theta=config.rope_theta)
-        # Snapshot keeps the CLIP-style ``pre_layrnorm`` (yes, that's the upstream
-        # spelling) applied to patch embeddings before the encoder stack. There is
-        # *no* post-encoder norm — the last encoder layer feeds the projector
-        # directly.
-        self.pre_layrnorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layers = nn.ModuleList([MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.vision_model = MiniMaxM3VLVisionTransformer(config)
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.Tensor,
-        **kwargs,
+        self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithPooling:
-        embeds = self.embeddings(pixel_values)
-        cos, sin = self.rotary_emb(image_grid_thw, device=embeds.device, dtype=torch.float32)
-        hidden_states = self.pre_layrnorm(embeds).unsqueeze(0)
-        cos = cos.to(hidden_states.dtype)
-        sin = sin.to(hidden_states.dtype)
-        for layer in self.layers:
-            hidden_states = layer(hidden_states, position_embeddings=(cos, sin))
-        return BaseModelOutputWithPooling(
-            last_hidden_state=hidden_states,
-            pooler_output=hidden_states[:, 0],
-        )
+        return self.vision_model(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -1293,6 +1327,7 @@ class MiniMaxM3VLMultiModalProjector(nn.Module):
 @dataclass
 @auto_docstring(custom_intro="MiniMax M3 VL model output (without LM head).")
 class MiniMaxM3VLModelOutputWithPast(BaseModelOutputWithPast):
+    r"""image_hidden_states: Image features from the vision tower after projection."""
 
     image_hidden_states: torch.FloatTensor | None = None
 
@@ -1317,7 +1352,7 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         self.vision_tower = MiniMaxM3VLVisionModel(config.vision_config)
         self.multi_modal_projector = MiniMaxM3VLMultiModalProjector(config)
         self.language_model = MiniMaxM3VLTextModel(config.text_config)
-        self.patch_merge_mlp = MiniMaxM3VLPatchMerger(config)
+        self.patch_merge = MiniMaxM3VLPatchMerger(config)
         self.post_init()
 
     @merge_with_config_defaults
@@ -1330,16 +1365,19 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.Tensor,
         **kwargs,
-    ) -> torch.Tensor:
+    ) -> BaseModelOutputWithPooling:
         r"""
         image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
             and to merge patch features.
         """
-        vision_out = self.vision_tower(pixel_values=pixel_values, image_grid_thw=image_grid_thw)
-        # vision_out is [1, seq, vision_hidden] -> project -> spatial merge.
-        hidden_states = self.multi_modal_projector(vision_out.last_hidden_state.squeeze(0))
-        return self.patch_merge_mlp(hidden_states)
+        # Return the raw vision-tower output (so callers can inspect hidden states /
+        # attentions) while stashing the projected + spatially-merged features —
+        # ready to scatter into the text embeddings — in ``pooler_output``.
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
+        hidden_states = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
+        vision_outputs.pooler_output = self.patch_merge(hidden_states)
+        return vision_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -1391,9 +1429,9 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
 
         image_features = None
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = self.get_image_features(
+                pixel_values=pixel_values, image_grid_thw=image_grid_thw
+            ).pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
 

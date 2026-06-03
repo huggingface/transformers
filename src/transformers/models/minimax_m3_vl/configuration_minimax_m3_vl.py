@@ -107,6 +107,20 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
     layer_types: list[str] | None = None
     num_mtp_modules: int = 0
 
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
+        # ``layer_types`` is the canonical per-layer attention dispatch: it tells
+        # ``DynamicCache(config=...)`` which layers want the sparse cache and lets
+        # the decoder pick ``MiniMaxM3VLSparseAttention`` vs. plain attention. We
+        # derive it once here from ``sparse_attention_freq`` so model code never
+        # has to re-read the sparse-attention frequency list.
+        if self.layer_types is None and self.sparse_attention_config is not None:
+            freq = self.sparse_attention_config.get("sparse_attention_freq")
+            if freq is not None:
+                self.layer_types = ["minimax_m3_sparse" if f else "full_attention" for f in freq]
+        if self.layer_types is None:
+            self.layer_types = ["full_attention"] * self.num_hidden_layers
+
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
 @strict
@@ -128,6 +142,7 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     patch_size: int = 14
     temporal_patch_size: int = 2
     spatial_merge_size: int = 2
+    hidden_act: str = "gelu"
     layer_norm_eps: float = 1e-05
     attention_dropout: float = 0.0
     rope_theta: float = 10000.0
@@ -137,6 +152,7 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
 @strict
 class MiniMaxM3VLConfig(PreTrainedConfig):
+    r"""Composite config for MiniMax M3 VL (vision tower + M3 LLM)."""
 
     model_type = "minimax_m3_vl"
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}

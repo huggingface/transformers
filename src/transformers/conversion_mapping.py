@@ -441,9 +441,9 @@ def _build_checkpoint_conversion_mapping():
         # for the lightning-index branch (``self_attn.index_<x>`` →
         # ``self_attn.indexer.<x>``), the MoE-block rename (``block_sparse_moe``
         # → ``mlp`` — our decoder layer always exposes the MLP at ``self.mlp``),
-        # the vision tower's ``vision_tower.vision_model.<X>`` → ``vision_tower.<X>``
-        # path strip, and the expert / dense-MLP packing rules that mirror
-        # ``deepseek_v4``'s.
+        # and the expert / dense-MLP packing rules that mirror ``deepseek_v4``'s.
+        # The vision tower mirrors CLIP's nesting (``vision_tower.vision_model.``)
+        # so it needs no extra rename beyond the top-level prefix above.
         "MiniMaxM3VLModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
@@ -453,16 +453,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
-            WeightRenaming(source_patterns=r"^patch_merge_mlp", target_patterns="model.patch_merge_mlp"),
-            # ---- vision tower: strip the inner ``vision_model.`` wrapper ----
-            WeightRenaming(
-                source_patterns=r"^model\.vision_tower\.vision_model\.",
-                target_patterns="model.vision_tower.",
-            ),
-            WeightRenaming(
-                source_patterns=r"^model\.vision_tower\.encoder\.layers",
-                target_patterns="model.vision_tower.layers",
-            ),
+            WeightRenaming(source_patterns=r"^patch_merge_mlp\.", target_patterns="model.patch_merge."),
             # ---- text decoder: MoE block path + lightning index branch ----
             WeightRenaming(
                 source_patterns=r"\.block_sparse_moe\.",
@@ -475,14 +466,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 source_patterns=r"\.self_attn\.index_k_proj\.",
                 target_patterns=".self_attn.indexer.k_proj.",
-            ),
-            WeightRenaming(
-                source_patterns=r"\.self_attn\.index_v_proj\.",
-                target_patterns=".self_attn.indexer.v_proj.",
-            ),
-            WeightRenaming(
-                source_patterns=r"\.self_attn\.index_o_proj\.",
-                target_patterns=".self_attn.indexer.o_proj.",
             ),
             WeightRenaming(
                 source_patterns=r"\.self_attn\.index_q_norm\.",

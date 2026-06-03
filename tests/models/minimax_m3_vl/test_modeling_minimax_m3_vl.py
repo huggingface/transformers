@@ -194,6 +194,9 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         else {}
     )
     _is_composite = True
+    # The vision tower packs every image's patches into a single sequence (batch dim 1),
+    # so ``last_hidden_state`` does not carry a per-image batch axis to shape-check.
+    skip_test_image_features_output_shape = True
 
     def setUp(self):
         self.model_tester = MiniMaxM3VLVisionText2TextModelTester(self)
