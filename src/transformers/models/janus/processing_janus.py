@@ -55,13 +55,14 @@ class JanusProcessor(ProcessorMixin):
     valid_processor_kwargs = JanusProcessorKwargs
 
     def __init__(
-            self,
-            image_processor,
-            tokenizer,
-            chat_template: str | None = None,
-            use_default_system_prompt: bool = False,
-            num_image_tokens: int = 576,
-            **kwargs):
+        self,
+        image_processor,
+        tokenizer,
+        chat_template: str | None = None,
+        use_default_system_prompt: bool = False,
+        num_image_tokens: int = 576,
+        **kwargs,
+    ):
         r"""
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Use default system prompt for Text Generation.

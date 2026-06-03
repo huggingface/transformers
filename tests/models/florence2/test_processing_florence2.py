@@ -33,7 +33,7 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         image_processor = image_processor_class.from_pretrained("florence-community/Florence-2-base")
-        image_processor.image_seq_length = 0
+        image_processor.image_seq_length = 2
         return image_processor
 
     @classmethod
@@ -43,6 +43,11 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer.image_token = "<image>"
         tokenizer.image_token_id = tokenizer.encode(tokenizer.image_token, add_special_tokens=False)[0]
         return tokenizer
+
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        # override: Florence shouldn't have any image-token in input text
+        pass
 
     @unittest.skip("Florence2Processor adds prefix and suffix tokens to the text")
     def test_tokenizer_defaults(self):
