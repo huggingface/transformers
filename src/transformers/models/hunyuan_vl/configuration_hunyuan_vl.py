@@ -24,12 +24,15 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="tencent/HunyuanOCR")
+@auto_docstring(
+    custom_intro="""
+    Vision backbone configuration for the dense-only, image-text HunYuanVL open-source variant.
+    """,
+    checkpoint="tencent/HunyuanOCR",
+)
 @strict
 class HunYuanVLVisionConfig(PreTrainedConfig):
     r"""
-    Vision backbone configuration for the dense-only, image-text HunYuanVL open-source variant.
-
     interpolate_mode (`str`, *optional*, defaults to `"bilinear"`):
         Interpolation mode used when resizing learned patch positional embeddings to match the current image grid.
     learnable_mlp_pooling_size (`int`, *optional*, defaults to 0):
@@ -96,28 +99,31 @@ class HunYuanVLVisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="tencent/HunyuanOCR")
-@strict
-class HunYuanVLTextConfig(PreTrainedConfig):
-    r"""
+@auto_docstring(
+    custom_intro="""
     Text backbone configuration for the dense-only, image-text HunYuanVL open-source variant.
 
     Inherits the standard fields from [`HunYuanDenseV1Config`] and adds a few legacy aliases that some Tencent
     checkpoints persist on disk (`pad_id`, `attention_head_dim`, `rope_scaling`, `rope_theta`). Those legacy fields are
     normalized into the canonical `pad_token_id` / `head_dim` / `rope_parameters` slots in `__post_init__` so the rest
     of the model only ever needs to read the canonical fields.
-
+    """,
+    checkpoint="tencent/HunyuanOCR",
+)
+@strict
+class HunYuanVLTextConfig(PreTrainedConfig):
+    r"""
     eod_token_id (`int`, *optional*, defaults to 3):
         Token id representing the end-of-document marker. Inherited from [`HunYuanDenseV1Config`] and re-documented
         here so the auto-generated docstring stays in sync.
     sep_token_id (`int`, *optional*, defaults to 4):
         Token id used as a separator marker by HunYuan tokenizers.
-    rope_theta (`float`, *optional*, defaults to 10000.0):
-        Legacy alias preserved for compatibility with checkpoints that persist a top-level rope theta. The value is
-        merged into `rope_parameters` during normalization.
     rope_scaling (`dict`, *optional*):
         Legacy RoPE scaling payload from Tencent checkpoints. When provided, it is normalized into `rope_parameters`
         (and the equivalent `xdrope` rope type is rewritten to `dynamic`).
+    rope_theta (`float`, *optional*, defaults to 10000.0):
+        Legacy alias preserved for compatibility with checkpoints that persist a top-level rope theta. The value is
+        merged into `rope_parameters` during normalization.
     pad_id (`int`, *optional*):
         Legacy padding token field. When `pad_token_id` is unset or `-1`, this value is normalized into `pad_token_id`.
     attention_head_dim (`int`, *optional*):
@@ -232,16 +238,20 @@ class HunYuanVLTextConfig(PreTrainedConfig):
         self.validate_rope()
 
 
-@auto_docstring(checkpoint="tencent/HunyuanOCR")
-class HunYuanVLConfig(PreTrainedConfig):
-    r"""
+@auto_docstring(
+    custom_intro="""
     Top-level configuration for the open-source HunYuanVL integration.
 
     This configuration describes the dense-only, image-text-only variant used for OCR and document-understanding style
     workloads. It mirrors the `Qwen2_5_VL` / `Qwen3_VL` family layout: the top-level config simply composes a
     [`HunYuanVLTextConfig`] (text backbone) and a [`HunYuanVLVisionConfig`] (vision tower) plus a few token ids that
     delimit image spans in multimodal prompts.
-
+    """,
+    checkpoint="tencent/HunyuanOCR",
+)
+@strict
+class HunYuanVLConfig(PreTrainedConfig):
+    r"""
     text_config (`HunYuanVLTextConfig` or `dict`, *optional*):
         Configuration of the text backbone. When `None`, default values are used.
     vision_config (`HunYuanVLVisionConfig` or `dict`, *optional*):
@@ -269,41 +279,29 @@ class HunYuanVLConfig(PreTrainedConfig):
     sub_configs = {"vision_config": HunYuanVLVisionConfig, "text_config": HunYuanVLTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id: int = 120120,
-        im_start_id: int = 120118,
-        im_end_id: int = 120119,
-        im_newline_id: int = 120121,
-        **kwargs,
-    ):
-        if isinstance(vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-        else:
-            self.vision_config = vision_config
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 120120
+    im_start_id: int = 120118
+    im_end_id: int = 120119
+    im_newline_id: int = 120121
 
+    def __post_init__(self, **kwargs):
         # When loading legacy "flat" Tencent checkpoints (where text fields live at the top level instead of inside a
         # nested `text_config` block) we fold the recognized text-side keys into the text config payload. This keeps
         # ``HunYuanVLConfig.from_pretrained(...)`` working with both the upstream nested layout and the existing
         # public OCR checkpoints.
         text_kwargs = self._extract_text_kwargs(kwargs)
 
-        if text_config is None:
-            self.text_config = self.sub_configs["text_config"](**text_kwargs)
-        elif isinstance(text_config, dict):
-            text_config = {**text_config, **text_kwargs}
-            self.text_config = self.sub_configs["text_config"](**text_config)
-        else:
-            self.text_config = text_config
+        if isinstance(self.vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"]()
 
-        self.image_token_id = image_token_id
-        self.im_start_id = im_start_id
-        self.im_end_id = im_end_id
-        self.im_newline_id = im_newline_id
+        if isinstance(self.text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**{**self.text_config, **text_kwargs})
+        elif self.text_config is None:
+            self.text_config = self.sub_configs["text_config"](**text_kwargs)
 
         # Keep the vision tower in sync with the consuming text backbone size.
         self.vision_config.text_hidden_size = self.text_config.hidden_size
@@ -314,7 +312,7 @@ class HunYuanVLConfig(PreTrainedConfig):
         kwargs.setdefault("eos_token_id", self.text_config.eos_token_id)
         kwargs.setdefault("tie_word_embeddings", self.text_config.tie_word_embeddings)
 
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
     @classmethod
     def _extract_text_kwargs(cls, kwargs: dict) -> dict:

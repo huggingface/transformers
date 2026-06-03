@@ -869,7 +869,7 @@ HUNYUAN_VL_TEXT_FORWARD_CUSTOM_ARGS = r"""
 
 @auto_docstring
 class HunYuanVLTextModel(HunYuanVLPreTrainedModel):
-    """Dense text backbone used inside [`HunYuanVLModel`]."""
+    """Dense text backbone used inside [`HunYuanVLForCausalLM`]."""
 
     config: HunYuanVLTextConfig
     _no_split_modules = ["HunYuanVLDenseV1DecoderLayer"]
@@ -933,7 +933,6 @@ class HunYuanVLTextModel(HunYuanVLPreTrainedModel):
             self.config,
             inputs_embeds,
             attention_mask,
-            cache_position,
             past_key_values=past_key_values,
             position_ids=causal_position_ids,
         )

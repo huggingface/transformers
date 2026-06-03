@@ -27,6 +27,19 @@ logger = logging.get_logger(__name__)
 
 
 class HunYuanVLImagesKwargs(ImagesKwargs):
+    """
+    min_pixels (`int`, *optional*):
+        Minimum number of pixels used when resizing images.
+    max_pixels (`int`, *optional*):
+        Maximum number of pixels used when resizing images.
+    patch_size (`int`, *optional*):
+        Patch size used to split images into vision tokens.
+    temporal_patch_size (`int`, *optional*):
+        Temporal patch size used by the image processor.
+    merge_size (`int`, *optional*):
+        Spatial merge size used to group vision tokens.
+    """
+
     min_pixels: int | None
     max_pixels: int | None
     patch_size: int | None
