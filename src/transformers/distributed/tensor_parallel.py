@@ -101,31 +101,35 @@ class TensorParallelLayer:
         return module
 
 
-def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
+def _verify_plan_weight_sharding(
+    expected_keys: list[str], plan: dict[str, str] | None, plan_label: str, *, check_unsharded: bool
+) -> None:
     """
-    Verify the TP plan of the model, log a warning if the layers that were not sharded and the rules that were not applied.
-
-    Only weight-sharding rules (colwise, rowwise, vocab, grouped_gemm, moe_tp_gate_up_*,
-    moe_tp_down_*, packed_colwise) are checked. Module/forward entries (PrepareModuleInput,
-    SequenceParallel, moe_experts_allreduce, ep_router) set up communication hooks rather
-    than weight sharding, so they are excluded.
+    Log warnings when weight-sharding rules in ``plan`` do not match any parameter, and optionally
+    when parameters have no matching rule. Forward-comm-only styles are excluded.
     """
-
-    if tp_plan is None:
+    if plan is None:
         return
 
-    # Keep only weight-sharding rules — forward-comm entries don't shard weights.
+    # Keep only entries whose style overrides shard_param (actual weight sharding).
     weight_plan = {
         k: v
-        for k, v in tp_plan.items()
+        for k, v in plan.items()
         if v in ALL_PARALLEL_STYLES and type(ALL_PARALLEL_STYLES[v]).shard_param is not TensorParallelLayer.shard_param
     }
+    if not weight_plan:
+        return
 
     generic_keys = {replace_layer_number_by_wildcard(key) for key in expected_keys}
-    unsharded_layers = set(generic_keys)
+    unsharded_layers = set(generic_keys) if check_unsharded else set()
     unused_rules = weight_plan.copy()
 
     for key in generic_keys:
+        if key in weight_plan:
+            unused_rules.pop(key, None)
+            unsharded_layers.discard(key)
+            continue
+
         param_name = key.rsplit(".", 1)[0] if "." in key else key
         generic_param_name = re.sub(r"\d+", "*", param_name)
 
@@ -137,10 +141,35 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
             unsharded_layers.discard(key)
 
     if len(unused_rules) > 0:
-        logger.warning(f"The following TP rules were not applied on any of the layers: {unused_rules}")
-    if len(unsharded_layers) > 0:
-        logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
+        logger.warning(f"The following {plan_label} rules were not applied on any of the layers: {unused_rules}")
+    if check_unsharded and len(unsharded_layers) > 0:
+        logger.warning(
+            f"The following layers were not sharded by the {plan_label} plan: {', '.join(unsharded_layers)}"
+        )
 
+
+def verify_tp_sp_ep_plan(
+    expected_keys: list[str],
+    tp_plan: dict[str, str] | None = None,
+    sp_plan: dict[str, str] | None = None,
+    ep_plan: dict[str, str] | None = None,
+) -> None:
+    """
+    Verify TP, SP, and/or EP plan entries against model parameters.
+
+    Each non-None plan is checked independently for unused weight-sharding rules
+    (colwise, grouped_gemm, packed_colwise, etc.). Module/forward-only entries
+    (activation, ep_router, moe_experts_allreduce, …) are skipped.
+
+    The "unsharded parameter" warning is emitted only for tp_plan, since SP/EP recipes
+    intentionally cover subsets of the model.
+    """
+    if tp_plan is not None:
+        _verify_plan_weight_sharding(expected_keys, tp_plan, "TP", check_unsharded=True)
+    if sp_plan is not None:
+        _verify_plan_weight_sharding(expected_keys, sp_plan, "SP", check_unsharded=False)
+    if ep_plan is not None:
+        _verify_plan_weight_sharding(expected_keys, ep_plan, "EP", check_unsharded=False)
 
 class ColwiseParallel(TensorParallelLayer):
     """Column-wise: weight & bias → Shard(0) (Embedding: Shard(1)); input replicated, output Shard(-1)."""

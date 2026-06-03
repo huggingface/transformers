@@ -57,7 +57,7 @@ from .distributed.fsdp import is_fsdp_enabled
 from .distributed.sharding_utils import _dtensor_from_local_like
 from .distributed.tensor_parallel import (
     _get_parameter_tp_plan,
-    verify_tp_plan,
+    verify_tp_sp_ep_plan,
 )
 from .distributed.utils import (
     _distributed_barrier,
@@ -4437,7 +4437,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
 
         if logger.level >= logging.WARNING:
-            verify_tp_plan(expected_keys, load_config.tp_plan)
+            verify_tp_sp_ep_plan(
+                expected_keys,
+                tp_plan=load_config.tp_plan,
+                sp_plan=getattr(model, "_sp_plan", None) or None,
+                ep_plan=getattr(model, "_ep_plan", None) or None,
+            )
 
         # This offload index if for params explicitly on the "disk" in the device_map
         disk_offload_index = None
