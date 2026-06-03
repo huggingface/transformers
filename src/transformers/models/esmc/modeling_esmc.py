@@ -726,6 +726,7 @@ class ESMCModel(ESMCPreTrainedModel):
             Forces a manual-SDPA path inside :class:`MultiHeadAttention` so the
             attention probabilities are observable; raises on the
             ``flash_attention_2`` path.
+
         Examples:
 
         ```python
@@ -868,12 +869,12 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
         sequence_id (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Integer chain-ID tensor forwarded to the encoder for chain-aware
             attention masking. See :meth:`ESMCModel.forward` for the encoding.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for masked language modelling loss.  Positions with label ``-100``
-            are ignored.  Other positions must be in ``[0, config.vocab_size)``.
         output_attentions (`bool`, *optional*):
             Whether to return per-block attention weights. Forwarded to the
             backbone; raises on the ``flash_attention_2`` path.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for masked language modelling loss.  Positions with label ``-100``
+            are ignored.  Other positions must be in ``[0, config.vocab_size)``.
 
         Examples:
 
@@ -983,13 +984,13 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
         labels: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, ...] | ESMCSequenceClassifierOutput:
         r"""
+        output_attentions (`bool`, *optional*):
+            Whether to return per-block attention weights. Forwarded to the
+            backbone; raises on the ``flash_attention_2`` path.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for sequence classification loss.  Indices must be in
             ``[0, config.num_labels - 1]``.  For regression pass a float
             tensor of shape ``(batch_size,)``.
-        output_attentions (`bool`, *optional*):
-            Whether to return per-block attention weights. Forwarded to the
-            backbone; raises on the ``flash_attention_2`` path.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1080,12 +1081,12 @@ class ESMCForTokenClassification(ESMCPreTrainedModel):
         labels: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, ...] | ESMCTokenClassifierOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Per-token labels.  Indices must be in ``[0, config.num_labels - 1]``.
-            Positions with index ``-100`` are ignored in the loss.
         output_attentions (`bool`, *optional*):
             Whether to return per-block attention weights. Forwarded to the
             backbone; raises on the ``flash_attention_2`` path.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Per-token labels.  Indices must be in ``[0, config.num_labels - 1]``.
+            Positions with index ``-100`` are ignored in the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

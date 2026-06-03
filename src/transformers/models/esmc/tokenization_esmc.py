@@ -73,17 +73,17 @@ class ESMCTokenizer(PreTrainedTokenizerFast):
     token for multi-chain inputs.
 
     Args:
-        unk_token (`str`, *optional*, defaults to ``"<unk>"``):
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token.
-        cls_token (`str`, *optional*, defaults to ``"<cls>"``):
+        cls_token (`str`, *optional*, defaults to `"<cls>"`):
             The classification token (prepended to every sequence).
-        pad_token (`str`, *optional*, defaults to ``"<pad>"``):
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The padding token.
-        mask_token (`str`, *optional*, defaults to ``"<mask>"``):
+        mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The mask token, used for masked language modelling.
-        eos_token (`str`, *optional*, defaults to ``"<eos>"``):
+        eos_token (`str`, *optional*, defaults to `"<eos>"`):
             The end-of-sequence token (appended to every sequence).
-        chain_break_token (`str`, *optional*, defaults to ``"|"``):
+        chain_break_token (`str`, *optional*, defaults to `"|"`):
             Token inserted between chains in multi-chain protein inputs.
 
     Examples:
