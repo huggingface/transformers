@@ -17,8 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Literal
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -33,9 +31,9 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
     r"""Text-side config for MiniMax M3 VL.
 
     Extends [`MiniMaxM2Config`] with the M3-specific knobs: shared experts,
-    swiglu-with-limit activation, partial rotary embeddings, per-head QK
-    normalization, dense MLP layers for the first ``len([f for f in moe_layer_freq if f == 0])``
-    layers, and the optional ``sparse_attention_config`` lightning-index branch.
+    swiglu-with-limit activation parameters, partial rotary embeddings,
+    per-layer ``moe_layer_freq`` selecting dense vs MoE MLP, and the lightning
+    sparse-attention config.
     """
 
     model_type = "minimax_m3_vl_text"
@@ -66,7 +64,7 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
     num_attention_heads: int = 64
     num_key_value_heads: int = 4
     head_dim: int = 128
-    hidden_act: str = "swigluoai"
+    hidden_act: str = "silu"
     max_position_embeddings: int = 524288
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-06
@@ -87,14 +85,8 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
     shared_intermediate_size: int = 3072
     n_shared_experts: int = 1
     use_routing_bias: bool = True
-    scoring_func: Literal["sigmoid", "softmax"] = "sigmoid"
     routed_scaling_factor: float = 2.0
-    use_qk_norm: bool = True
-    qk_norm_type: Literal["per_layer", "per_head", "multi_head"] = "per_head"
-    use_gemma_norm: bool = True
-    attention_output_gate: bool = False
     rotary_dim: int = 64
-    partial_rotary_factor: float = 0.5
     swiglu_alpha: float = 1.702
     swiglu_limit: float = 7.0
     moe_layer_freq: list[int] | None = None
@@ -107,8 +99,7 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
 class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     r"""Vision-side config for MiniMax M3 VL.
 
-    CLIP-style ViT with 3D RoPE on the (T, H, W) patch grid and a Conv3d
-    patch embedding. Used by [`MiniMaxM3VLVisionModel`].
+    CLIP-style ViT with 3D RoPE over (T, H, W) and Conv3d patch embedding.
     """
 
     model_type = "minimax_m3_vl_vision"
@@ -123,12 +114,9 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     patch_size: int = 14
     temporal_patch_size: int = 2
     spatial_merge_size: int = 2
-    hidden_act: str = "gelu"
     layer_norm_eps: float = 1e-05
     attention_dropout: float = 0.0
     rope_theta: float = 10000.0
-    rope_mode: str = "3d"
-    vision_segment_max_frames: int = 4
     initializer_range: float = 0.02
 
 
@@ -148,15 +136,7 @@ class MiniMaxM3VLConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     image_token_index: int = 200025
     video_token_index: int = 200026
-    image_seq_length: int = 576
-    process_image_mode: str = "dynamic_res"
-    projector_hidden_act: str = "gelu"
-    projector_hidden_size: int | None = 6144
-    multimodal_projector_bias: bool = True
-    vision_feature_layer: int = -1
-    vision_feature_select_strategy: Literal["default", "full"] = "full"
-    img_token_compression_config: dict | None = None
-    image_grid_pinpoints: str | None = None
+    projector_hidden_size: int = 6144
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
@@ -174,13 +154,6 @@ class MiniMaxM3VLConfig(PreTrainedConfig):
 
         if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
             self.tie_word_embeddings = self.text_config.tie_word_embeddings
-
-        if self.img_token_compression_config is None:
-            self.img_token_compression_config = {
-                "image_token_compression_method": "patch_merge",
-                "spatial_merge_size": 2,
-                "temporal_patch_size": 2,
-            }
 
         super().__post_init__(**kwargs)
 
