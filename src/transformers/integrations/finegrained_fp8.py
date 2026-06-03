@@ -30,6 +30,7 @@ from .deepgemm import (
     deepgemm_fp8_fp4_experts_forward,
     deepgemm_fp8_fp4_linear,
     deepgemm_fp8_fp4_megamoe_experts_forward,
+    is_deepgemm_available,
 )
 from .hub_kernels import lazy_load_kernel
 from .moe import ExpertsInterface, use_experts_implementation
@@ -82,18 +83,18 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
             "has a build matching the current torch/CUDA."
         )
 
-    matmul = getattr(kernel, "w8a8_fp8_matmul", None)
+    matmul = getattr(kernel, "fp8_matmul", None)
     act_quant = getattr(kernel, "fp8_act_quant", None)
-    batched_matmul = getattr(kernel, "w8a8_fp8_matmul_batched", None)
-    grouped_matmul = getattr(kernel, "w8a8_fp8_matmul_grouped", None)
+    batched_matmul = getattr(kernel, "fp8_matmul_batched", None)
+    grouped_matmul = getattr(kernel, "fp8_matmul_grouped", None)
 
     missing = [
         name
         for name, attr in [
-            ("w8a8_fp8_matmul", matmul),
+            ("fp8_matmul", matmul),
             ("fp8_act_quant", act_quant),
-            ("w8a8_fp8_matmul_batched", batched_matmul),
-            ("w8a8_fp8_matmul_grouped", grouped_matmul),
+            ("fp8_matmul_batched", batched_matmul),
+            ("fp8_matmul_grouped", grouped_matmul),
         ]
         if attr is None
     ]
@@ -173,7 +174,7 @@ def finegrained_fp8_linear(
         qinput,
         weight,
         scale,
-        weight_scale_inv.float(),
+        weight_scale_inv.float() if weight.dtype != torch.int8 else weight_scale_inv,
         block_size,
         output_dtype,
     )
@@ -226,7 +227,7 @@ def fp8_linear(
         or (block_size is not None and block_size[0] == block_size[1] == 128)
     )
 
-    if deepgemm_compatible:
+    if is_deepgemm_available() and deepgemm_compatible:
         try:
             return deepgemm_fp8_fp4_linear(
                 input,
@@ -242,7 +243,7 @@ def fp8_linear(
             # (env/build issue) or refused this specific input (e.g. multi-device on SM100).
             logger.warning_once(f"DeepGEMM unavailable for this call, falling back to Triton. Reason: {e}")
 
-    if deepgemm_required:
+    if is_deepgemm_available() and deepgemm_required:
         if activation_scale is not None:
             raise RuntimeError(
                 "Static (per-tensor) activation quantization is not supported with FP4 weights — "
@@ -396,11 +397,6 @@ def fp8_batched_mm_experts_forward(
         )
 
     weight_up = self.gate_up_proj if self.has_gate else self.up_proj
-    if weight_up.dtype == torch.int8:
-        raise NotImplementedError(
-            "'batched_mm' experts dispatch is Triton-only and does not support FP4 (int8-packed) "
-            "expert weights. Use experts_implementation='deepgemm' instead."
-        )
 
     finegrained_fp8 = _load_finegrained_fp8_kernel()
 
@@ -429,7 +425,7 @@ def fp8_batched_mm_experts_forward(
     proj_out = finegrained_fp8.batched_matmul(
         selected_hidden_states,
         weight_up,
-        weight_scale_up.float(),
+        weight_scale_up.float() if weight_up.dtype != torch.int8 else weight_scale_up,
         block_size=self.block_size,
         expert_ids=expert_ids,
     )  # (S, 2 * intermediate_dim) or (S, intermediate_dim) depending on gating
@@ -446,7 +442,7 @@ def fp8_batched_mm_experts_forward(
     proj_out = finegrained_fp8.batched_matmul(
         proj_out,
         weight_down,
-        weight_scale_down.float(),
+        weight_scale_down.float() if weight_down.dtype != torch.int8 else weight_scale_down,
         block_size=self.block_size,
         expert_ids=expert_ids,
     )  # (S, hidden_dim)
@@ -474,11 +470,6 @@ def fp8_grouped_mm_experts_forward(
         )
 
     weight_up = self.gate_up_proj if self.has_gate else self.up_proj
-    if weight_up.dtype == torch.int8:
-        raise NotImplementedError(
-            "'grouped_mm' experts dispatch is Triton-only and does not support FP4 (int8-packed) "
-            "expert weights. Use experts_implementation='deepgemm' instead."
-        )
 
     finegrained_fp8 = _load_finegrained_fp8_kernel()
 
@@ -520,7 +511,7 @@ def fp8_grouped_mm_experts_forward(
     proj_out = finegrained_fp8.grouped_matmul(
         selected_hidden_states_g,
         weight_up,
-        weight_scale_up.float(),
+        weight_scale_up.float() if weight_up.dtype != torch.int8 else weight_scale_up,
         tokens_per_expert=tokens_per_expert,
         block_size=self.block_size,
         offsets=offsets,
@@ -538,7 +529,7 @@ def fp8_grouped_mm_experts_forward(
     proj_out = finegrained_fp8.grouped_matmul(
         proj_out,
         weight_down,
-        weight_scale_down.float(),
+        weight_scale_down.float() if weight_down.dtype != torch.int8 else weight_scale_down,
         tokens_per_expert=tokens_per_expert,
         block_size=self.block_size,
         offsets=offsets,
