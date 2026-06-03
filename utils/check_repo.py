@@ -306,6 +306,7 @@ IGNORE_NON_TESTED = (
 # trigger the common tests.
 TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/decision_transformer/test_modeling_decision_transformer.py",
+    "models/esmfold2/test_modeling_esmfold2.py",
     "models/camembert/test_modeling_camembert.py",
     "models/mbart/test_modeling_mbart.py",
     "models/mt5/test_modeling_mt5.py",
@@ -653,6 +654,8 @@ def get_model_modules() -> list[str]:
     _ignore_modules = [
         "modeling_auto",
         "modeling_encoder_decoder",
+        # Shared ESMFold2 building blocks; the public model is in modeling_esmfold2.
+        "modeling_esmfold2_common",
         "modeling_marian",
         "modeling_retribert",
         "modeling_speech_encoder_decoder",
