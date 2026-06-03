@@ -460,6 +460,9 @@ class CtsmPreTrainedModel(PreTrainedModel):
             init.normal_(module.special_token, mean=0.0, std=self.config.initializer_range)
 
 
+_STREAM_NORM_EPS = 1e-8
+
+
 @auto_docstring
 class CtsmModel(CtsmPreTrainedModel):
     r"""
@@ -554,11 +557,9 @@ class CtsmModel(CtsmPreTrainedModel):
         )
 
         coarse_normalized, loc_coarse, scale_coarse = self._normalize_with_pad(
-            past_values_coarse, past_values_coarse_padding, tolerance=self.config.tolerance
+            past_values_coarse, past_values_coarse_padding
         )
-        fine_normalized, loc_fine, scale_fine = self._normalize_with_pad(
-            past_values_fine, past_values_fine_padding, tolerance=self.config.tolerance
-        )
+        fine_normalized, loc_fine, scale_fine = self._normalize_with_pad(past_values_fine, past_values_fine_padding)
 
         coarse_embeddings, coarse_patch_padding, _ = self._patchify(coarse_normalized, past_values_coarse_padding)
         fine_embeddings, fine_patch_padding, (fine_patch_mu, fine_patch_sigma) = self._patchify(
@@ -774,25 +775,40 @@ class CtsmModel(CtsmPreTrainedModel):
 
     @staticmethod
     def _normalize_with_pad(
-        context: torch.Tensor, padding: torch.Tensor, tolerance: float = 1e-8
+        context: torch.Tensor, padding: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Stream-level normalization that matches the original CTSM reference.
 
         Normalizes ``context`` using the mean and standard deviation computed over the
         non-padded positions (``padding == 0``) across the whole context, rather than
         TimesFM's per-first-patch statistics. The normalized tensor has padded positions
-        zeroed out and is clamped to a safe range.
+        zeroed out and is clamped to a safe range. Falls back to fp64 when the fp32 stats
+        are non-finite.
         """
         valid = 1.0 - padding
         count = valid.sum(dim=1, keepdim=True).clamp_min(1.0)
         mu = (context * valid).sum(dim=1, keepdim=True) / count
 
         seq_len_float = context.new_tensor(float(context.shape[1]))
-        filled = torch.where(padding.to(dtype=torch.bool), mu, context)
+        pad_bool = padding.to(dtype=torch.bool)
+        filled = torch.where(pad_bool, mu, context)
         sigma = filled.std(dim=1, keepdim=True, unbiased=False) * torch.sqrt(seq_len_float / count)
+
+        if not torch.isfinite(mu).all() or not torch.isfinite(sigma).all():
+            context64 = context.to(dtype=torch.float64)
+            valid64 = valid.to(dtype=torch.float64)
+            count64 = valid64.sum(dim=1, keepdim=True).clamp_min(1.0)
+            mu64 = (context64 * valid64).sum(dim=1, keepdim=True) / count64
+            filled64 = torch.where(pad_bool, mu64, context64)
+            sigma64 = filled64.std(dim=1, keepdim=True, unbiased=False) * torch.sqrt(
+                seq_len_float.to(torch.float64) / count64
+            )
+            mu = mu64.to(dtype=context.dtype)
+            sigma = sigma64.to(dtype=context.dtype)
+
         sigma = sigma.clamp_min(1e-2)
 
-        normalized = (context - mu) / (sigma + tolerance)
+        normalized = (context - mu) / (sigma + _STREAM_NORM_EPS)
         normalized = normalized * valid
         normalized = normalized.clamp(-1000.0, 1000.0)
         return normalized, mu.squeeze(-1), sigma.squeeze(-1)
@@ -1145,7 +1161,7 @@ class CtsmModelForPrediction(CtsmPreTrainedModel):
             head = head * sigma_fp + mu_fp
 
         loc = outputs.loc[:, None, None]
-        scale = outputs.scale[:, None, None]
+        scale = outputs.scale[:, None, None] + _STREAM_NORM_EPS
         mean_patch = head[..., 0] * scale[..., 0] + loc[..., 0]
         quant_patch = head[..., 1:] * scale + loc
         mean_patch = torch.nan_to_num(mean_patch, nan=0.0, posinf=0.0, neginf=0.0)
