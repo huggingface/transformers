@@ -606,10 +606,11 @@ class TrainerMetricsTest(TestCasePlus):
                 data_collator=data_collator,
                 processing_class=tokenizer,
             )
-            trainer.train()
+            train_output = trainer.train()
             attention_mask = tokenized_dataset_with_mask["attention_mask"]
             non_padded_tokens_with_mask = attention_mask.sum().item()
             self.assertEqual(trainer.state.num_input_tokens_seen, non_padded_tokens_with_mask)
+            self.assertIn("train_tokens_per_second", train_output.metrics)
 
             # Test case 2: "non_padding" without attention_mask (fallback to pad_token_id)
             trainer = Trainer(
@@ -619,10 +620,11 @@ class TrainerMetricsTest(TestCasePlus):
                 data_collator=data_collator,
                 processing_class=tokenizer,
             )
-            trainer.train()
+            train_output = trainer.train()
             input_ids = tokenized_dataset_with_mask["input_ids"]  # use original to compute expected
             non_padded_tokens_no_mask = (input_ids != tokenizer.pad_token_id).sum().item()
             self.assertEqual(trainer.state.num_input_tokens_seen, non_padded_tokens_no_mask)
+            self.assertIn("train_tokens_per_second", train_output.metrics)
 
             # Test case 3: "non_padding" with no padding info (fallback to numel)
             with self.assertLogs("transformers.trainer", level="WARNING") as cm:
@@ -633,12 +635,13 @@ class TrainerMetricsTest(TestCasePlus):
                     data_collator=data_collator,
                     processing_class=tokenizer_no_pad,  # tokenizer without pad token
                 )
-                trainer.train()
+                train_output = trainer.train()
                 self.assertTrue(
                     any("Could not determine method to count non-padding tokens" in log for log in cm.output)
                 )
             total_tokens = input_ids.numel()
             self.assertEqual(trainer.state.num_input_tokens_seen, total_tokens)
+            self.assertIn("train_tokens_per_second", train_output.metrics)
 
             # Test case 4: "all"
             args.include_num_input_tokens_seen = "all"
@@ -649,8 +652,9 @@ class TrainerMetricsTest(TestCasePlus):
                 data_collator=data_collator,
                 processing_class=tokenizer,
             )
-            trainer.train()
+            train_output = trainer.train()
             self.assertEqual(trainer.state.num_input_tokens_seen, total_tokens)
+            self.assertIn("train_tokens_per_second", train_output.metrics)
 
             # Test case 5: True (backward compatibility)
             args.include_num_input_tokens_seen = True
@@ -661,8 +665,9 @@ class TrainerMetricsTest(TestCasePlus):
                 data_collator=data_collator,
                 processing_class=tokenizer,
             )
-            trainer.train()
+            train_output = trainer.train()
             self.assertEqual(trainer.state.num_input_tokens_seen, total_tokens)
+            self.assertIn("train_tokens_per_second", train_output.metrics)
 
     def test_get_num_trainable_parameters(self):
         model = nn.Sequential(nn.Linear(128, 64), nn.Linear(64, 32))

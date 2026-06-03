@@ -1827,11 +1827,17 @@ class Trainer:
         effective_global_step = max(self.state.global_step, 0.001)  # Avoid ZeroDivisionError
         train_loss = self._total_loss_scalar / effective_global_step
 
+        num_train_tokens = None
+        if self.args.include_num_input_tokens_seen != "no":
+            initial_tokens = getattr(self, "_initial_num_input_tokens_seen", 0)
+            num_train_tokens = self.state.num_input_tokens_seen - initial_tokens
+
         metrics = speed_metrics(
             "train",
             start_time,
             num_samples=num_train_samples,
             num_steps=self.state.max_steps,
+            num_tokens=num_train_tokens,
         )
         self.store_flos()
         metrics["total_flos"] = self.state.total_flos
