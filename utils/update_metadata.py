@@ -77,7 +77,6 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("automatic-speech-recognition", "MODEL_FOR_CTC_MAPPING_NAMES", "AutoModelForCTC"),
     ("image-classification", "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES", "AutoModelForImageClassification"),
     ("image-segmentation", "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES", "AutoModelForImageSegmentation"),
-    ("any-to-any", "MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES", "AutoModelForMultimodalLM"),
     ("fill-mask", "MODEL_FOR_MASKED_LM_MAPPING_NAMES", "AutoModelForMaskedLM"),
     ("object-detection", "MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES", "AutoModelForObjectDetection"),
     (
@@ -128,6 +127,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("text-to-audio", "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING_NAMES", "AutoModelForTextToSpectrogram"),
     ("text-to-audio", "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES", "AutoModelForTextToWaveform"),
     ("keypoint-matching", "MODEL_FOR_KEYPOINT_MATCHING_MAPPING_NAMES", "AutoModelForKeypointMatching"),
+    ("any-to-any", "MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES", "AutoModelForMultimodalLM"),
 ]
 
 
