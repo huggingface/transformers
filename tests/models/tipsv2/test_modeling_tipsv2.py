@@ -104,7 +104,7 @@ class Tipsv2VisionModelTester:
         hidden_size=16,
         num_hidden_layers=2,
         num_attention_heads=4,
-        mlp_ratio=2.0,
+        mlp_ratio=2,
         num_register_tokens=1,
         initializer_range=0.02,
         is_training=True,
