@@ -68,12 +68,18 @@ class Llama4TextExperts(nn.Module):
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
         num_tokens = hidden_states.size(0)
+        # Use the physical weight shape so this works under expert parallelism, where
+        # gate_up_proj is sharded to the local expert count. Under EP the router remaps
+        # indices to local ids and uses num_experts as a sentinel for non-local experts,
+        # so we add one extra column to absorb it before dropping it.
+        num_experts = self.gate_up_proj.shape[0]
         router_scores = torch.zeros(
-            num_tokens, self.num_experts, device=hidden_states.device, dtype=top_k_weights.dtype
+            num_tokens, num_experts + 1, device=hidden_states.device, dtype=top_k_weights.dtype
         )
         router_scores.scatter_(1, top_k_index, top_k_weights)
-        routed_in = hidden_states.repeat(self.num_experts, 1) * router_scores.T.reshape(-1, 1)
-        routed_in = routed_in.view(self.num_experts, -1, self.hidden_size)
+        router_scores = router_scores[:, :num_experts]
+        routed_in = hidden_states.repeat(num_experts, 1) * router_scores.T.reshape(-1, 1)
+        routed_in = routed_in.view(num_experts, -1, self.hidden_size)
         gate_up = torch.bmm(routed_in, self.gate_up_proj)
         gate, up = gate_up.chunk(2, dim=-1)
         next_states = torch.bmm((up * self.act_fn(gate)), self.down_proj)
