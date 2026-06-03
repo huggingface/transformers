@@ -68,3 +68,6 @@
       title: Backbone-uri
     - local: feature_extractors
       title: Feature extractors
+    - local: processors
+      title: Procesatoare
+    title: Preprocesatoare
