@@ -168,10 +168,10 @@ class RobertaTokenizer(TokenizersBackend):
             **kwargs,
         )
         self._tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(str(sep_token), self.sep_token_id),
-            cls=(str(cls_token), self.cls_token_id),
-            add_prefix_space=add_prefix_space,
-            trim_offsets=trim_offsets,
+            (str(sep_token), self.sep_token_id),
+            (str(cls_token), self.cls_token_id),
+            trim_offsets,
+            add_prefix_space,
         )
 
 

@@ -552,10 +552,10 @@ class RobertaConverter(Converter):
         tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=ot.add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()
         tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(ot.sep_token, ot.sep_token_id),
-            cls=(ot.cls_token, ot.cls_token_id),
-            add_prefix_space=ot.add_prefix_space,
-            trim_offsets=True,  # True by default on Roberta (historical)
+            (ot.sep_token, ot.sep_token_id),
+            (ot.cls_token, ot.cls_token_id),
+            True,  # trim_offsets: True by default on Roberta (historical)
+            ot.add_prefix_space,
         )
 
         return tokenizer
@@ -1454,10 +1454,10 @@ class CLIPConverter(Converter):
 
         # Hack to have a ByteLevel and TemplateProcessor
         tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(self.original_tokenizer.eos_token, self.original_tokenizer.eos_token_id),
-            cls=(self.original_tokenizer.bos_token, self.original_tokenizer.bos_token_id),
-            add_prefix_space=False,
-            trim_offsets=False,
+            (self.original_tokenizer.eos_token, self.original_tokenizer.eos_token_id),
+            (self.original_tokenizer.bos_token, self.original_tokenizer.bos_token_id),
+            False,  # trim_offsets
+            False,  # add_prefix_space
         )
         return tokenizer
 

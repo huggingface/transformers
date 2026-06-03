@@ -226,10 +226,10 @@ class LayoutLMv3Tokenizer(TokenizersBackend):
         sep_token_id = self.sep_token_id
 
         self._tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(sep, sep_token_id),
-            cls=(cls, cls_token_id),
-            add_prefix_space=add_prefix_space,
-            trim_offsets=True,
+            (sep, sep_token_id),
+            (cls, cls_token_id),
+            True,  # trim_offsets
+            add_prefix_space,
         )
         self.cls_token_box = cls_token_box
         self.sep_token_box = sep_token_box
