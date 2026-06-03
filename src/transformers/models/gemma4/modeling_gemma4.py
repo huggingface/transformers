@@ -2274,7 +2274,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
             per_layer_inputs = self.language_model.get_per_layer_inputs(llm_input_ids, llm_inputs_embeds)
 
         # Merge text and images
-        if pixel_values is not None:
+        if image_outputs is None and pixel_values is not None:
             image_outputs = self.get_image_features(pixel_values, image_position_ids, return_dict=True)
 
         if image_outputs is not None:
@@ -2293,7 +2293,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
                 image_mask.to(inputs_embeds.device), image_features.to(inputs_embeds.device)
             )
 
-        if pixel_values_videos is not None:
+        if video_outputs is None and pixel_values_videos is not None:
             video_outputs = self.get_video_features(pixel_values_videos, video_position_ids, return_dict=True)
 
         if video_outputs is not None:

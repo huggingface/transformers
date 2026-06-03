@@ -1294,7 +1294,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.language_model.embed_tokens(input_ids)
 
-        if pixel_values is not None:
+        if image_outputs is None and pixel_values is not None:
             image_outputs = self.get_image_features(pixel_values, image_grid_thw, return_dict=True, **kwargs)
 
         if image_outputs is not None:

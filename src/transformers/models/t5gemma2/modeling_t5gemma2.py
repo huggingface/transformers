@@ -938,7 +938,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.text_model.embed_tokens(input_ids)
 
-        if pixel_values is not None:
+        if image_outputs is None and pixel_values is not None:
             image_outputs = self.get_image_features(pixel_values, return_dict=True)
 
         if image_outputs is not None:

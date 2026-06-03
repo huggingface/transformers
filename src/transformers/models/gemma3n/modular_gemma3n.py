@@ -2245,7 +2245,7 @@ class Gemma3nModel(PaliGemmaModel):
             per_layer_inputs = None
 
         # Merge text and images
-        if pixel_values is not None:
+        if image_outputs is None and pixel_values is not None:
             image_outputs = self.get_image_features(pixel_values, return_dict=True)
 
         if image_outputs is not None:

@@ -238,7 +238,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
             position_ids = position_ids.unsqueeze(0) + 1  # Paligemma positions are 1-indexed
 
         # Merge text and images
-        if pixel_values is not None:
+        if image_outputs is None and pixel_values is not None:
             image_outputs = self.get_image_features(pixel_values)
 
         if image_outputs is not None:

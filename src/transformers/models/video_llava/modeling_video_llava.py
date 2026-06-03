@@ -324,7 +324,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values_images is not None:
+        if image_outputs is None and pixel_values_images is not None:
             image_outputs = self.get_image_features(
                 pixel_values_images,
                 vision_feature_layer=vision_feature_layer,
@@ -339,7 +339,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
-        if pixel_values_videos is not None:
+        if video_outputs is None and pixel_values_videos is not None:
             video_outputs = self.get_video_features(
                 pixel_values_videos=pixel_values_videos, vision_feature_layer=vision_feature_layer, return_dict=True
             )
@@ -365,8 +365,8 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values_images is not None else None,
-            video_hidden_states=video_features if pixel_values_videos is not None else None,
+            image_hidden_states=image_features if image_outputs is not None else None,
+            video_hidden_states=video_features if video_outputs is not None else None,
         )
 
 

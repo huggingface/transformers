@@ -826,7 +826,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         # Merge text and images
-        if pixel_values is not None:
+        if image_outputs is None and pixel_values is not None:
             image_outputs = self.get_image_features(pixel_values, return_dict=True)
 
         if image_outputs is not None:

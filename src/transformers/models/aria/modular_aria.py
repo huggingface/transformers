@@ -896,7 +896,7 @@ class AriaModel(LlavaModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         # 2. Merge text and images
-        if pixel_values is not None and inputs_embeds.shape[1] != 1:
+        if image_outputs is None and pixel_values is not None and inputs_embeds.shape[1] != 1:
             image_outputs = self.get_image_features(
                 pixel_values=pixel_values,
                 pixel_mask=pixel_mask,

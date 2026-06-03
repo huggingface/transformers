@@ -739,10 +739,10 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None and self.config.image_token_id is not None:
+        if image_outputs is None and pixel_values is not None and self.config.image_token_id is not None:
             image_outputs = self.get_image_features(pixel_values[:1], target_sizes, downsample_mode=downsample_mode)
 
-        if pixel_values_videos is not None and self.config.video_token_id is not None:
+        if video_outputs is None and pixel_values_videos is not None and self.config.video_token_id is not None:
             video_outputs = self.get_video_features(
                 pixel_values_videos[:1], target_sizes_videos, downsample_mode=downsample_mode
             )

@@ -212,7 +212,7 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
+        if image_outputs is None and pixel_values is not None:
             image_outputs = self.get_image_features(pixel_values, return_dict=True)
 
         if image_outputs is not None:

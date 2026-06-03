@@ -842,7 +842,7 @@ class GlmImageModel(Glm4vModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if pixel_values is not None:
+        if image_outputs is None and pixel_values is not None:
             source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
             image_outputs = self.get_image_features(pixel_values, source_grids, return_dict=True, **kwargs)
 

@@ -181,7 +181,7 @@ class FuyuModel(FuyuPreTrainedModel):
             )
             position_ids = position_ids.unsqueeze(0)
 
-        if image_patches is not None:
+        if image_outputs is None and image_patches is not None:
             image_outputs = self.get_image_features(image_patches, return_dict=True)
 
         if image_outputs is not None:

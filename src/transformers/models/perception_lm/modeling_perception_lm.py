@@ -257,7 +257,7 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         image_features = None
-        if pixel_values is not None:
+        if image_outputs is None and pixel_values is not None:
             image_outputs = self.get_image_features(pixel_values=pixel_values, return_dict=True)
 
         if image_outputs is not None:
@@ -268,7 +268,7 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         video_features = None
-        if pixel_values_videos is not None:
+        if video_outputs is None and pixel_values_videos is not None:
             video_outputs = self.get_image_features(pixel_values=pixel_values_videos, return_dict=True)
 
         if video_outputs is not None:

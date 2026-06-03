@@ -320,7 +320,7 @@ class LightOnOcrModel(Mistral3Model):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
+        if image_outputs is None and pixel_values is not None:
             image_outputs = self.get_image_features(
                 pixel_values=pixel_values, image_sizes=image_sizes, return_dict=True
             )

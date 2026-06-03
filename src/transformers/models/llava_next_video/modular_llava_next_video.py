@@ -420,8 +420,7 @@ class LlavaNextVideoModel(LlavaNextModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        image_features = None
-        if pixel_values is not None:
+        if image_outputs is None and pixel_values is not None:
             image_outputs = self.get_image_features(
                 pixel_values,
                 image_sizes,
@@ -439,8 +438,7 @@ class LlavaNextVideoModel(LlavaNextModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
-        video_features = None
-        if pixel_values_videos is not None:
+        if video_outputs is None and pixel_values_videos is not None:
             video_outputs = self.get_video_features(
                 pixel_values_videos,
                 vision_feature_layer=vision_feature_layer,

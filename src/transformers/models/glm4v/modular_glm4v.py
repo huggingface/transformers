@@ -925,10 +925,10 @@ class Glm4vModel(Qwen2VLModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
+        if image_outputs is None and pixel_values is not None:
             image_outputs = self.get_image_features(pixel_values, image_grid_thw, return_dict=True, **kwargs)
 
-        if pixel_values_videos is not None:
+        if video_outputs is None and pixel_values_videos is not None:
             video_outputs = self.get_video_features(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
         if image_outputs is not None:

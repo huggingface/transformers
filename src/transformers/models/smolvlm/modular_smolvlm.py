@@ -244,7 +244,7 @@ class SmolVLMModel(Idefics3Model):
         if pixel_values is not None and image_outputs is not None:
             raise ValueError("You cannot specify both pixel_values and image_outputs at the same time")
 
-        if pixel_values is not None:
+        if image_outputs is None and pixel_values is not None:
             image_outputs = self.get_image_features(pixel_values, pixel_attention_mask, return_dict=True)
 
         if image_outputs is not None:

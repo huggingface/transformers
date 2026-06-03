@@ -1325,12 +1325,12 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         image_mask = None
         video_mask = None
 
-        if pixel_values is not None:
+        if image_outputs is None and pixel_values is not None:
             image_outputs: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
-        if pixel_values_videos is not None:
+        if video_outputs is None and pixel_values_videos is not None:
             video_outputs: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
