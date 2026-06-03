@@ -586,7 +586,10 @@ class ESMFold2Model(PreTrainedModel):
         ``"fp8"`` requires H100 + TransformerEngine ≥ 2.x and quantizes
         every TE module's weights to fp8 storage.
         """
-        from ..esmc.modeling_esmc import ESMCModel
+        # Resolve the ESMC backbone through the Auto registry (model_type "esmc"
+        # -> ESMCModel) rather than a hard cross-model import. ESMC is a shared,
+        # frozen backbone loaded from its own repo (`esmc_id`), not bundled here.
+        from ...models.auto.modeling_auto import AutoModel
 
         dtype_map = {
             "bf16": torch.bfloat16,
@@ -600,7 +603,7 @@ class ESMFold2Model(PreTrainedModel):
         dtype = dtype_map[precision]
 
         esmc = (
-            ESMCModel.from_pretrained(esmc_model_path)
+            AutoModel.from_pretrained(esmc_model_path)
             .to(device=self.device, dtype=dtype)
             .eval()
         )
@@ -1137,3 +1140,6 @@ class MSAEncoder(nn.Module):
         for block in self.blocks:
             m, x_pair = block(m, x_pair, msa_attention_mask, pair_attention_mask)
         return x_pair
+
+
+__all__ = ["ESMFold2Model"]
