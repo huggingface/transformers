@@ -279,6 +279,21 @@ def get_last_checkpoint(folder):
     return os.path.join(folder, max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])))
 
 
+def download_checkpoint_from_bucket(checkpoint_uri: str, output_dir: str, token: str | None = None) -> str:
+    """Download a specific bucket checkpoint into `output_dir` and return its local path.
+
+    `checkpoint_uri` is a full bucket handle, e.g. `hf://buckets/namespace/name/checkpoint-500`. The
+    checkpoint is placed at `output_dir/<last path component>` (e.g. `output_dir/checkpoint-500`) so the
+    step is recovered on resume.
+    """
+    from .utils.hub import hf_api
+
+    dest = os.path.join(output_dir, os.path.basename(checkpoint_uri.rstrip("/")))
+    os.makedirs(dest, exist_ok=True)
+    hf_api().sync_bucket(checkpoint_uri, dest, token=token, quiet=True)
+    return dest
+
+
 def download_latest_checkpoint_from_bucket(bucket_id: str, output_dir: str, token: str | None = None) -> str | None:
     """Download the latest `checkpoint-<step>` from `bucket_id` into `output_dir`.
 
@@ -287,9 +302,8 @@ def download_latest_checkpoint_from_bucket(bucket_id: str, output_dir: str, toke
     """
     from .utils.hub import hf_api
 
-    api = hf_api()
     steps = set()
-    for item in api.list_bucket_tree(bucket_id, token=token):
+    for item in hf_api().list_bucket_tree(bucket_id, token=token):
         top = item.path.strip("/").split("/", 1)[0]  # first path component, e.g. "checkpoint-500"
         suffix = top[len(PREFIX_CHECKPOINT_DIR) + 1 :]
         if top.startswith(f"{PREFIX_CHECKPOINT_DIR}-") and suffix.isdigit():
@@ -298,10 +312,7 @@ def download_latest_checkpoint_from_bucket(bucket_id: str, output_dir: str, toke
         return None
 
     leaf = f"{PREFIX_CHECKPOINT_DIR}-{max(steps)}"
-    dest = os.path.join(output_dir, leaf)
-    os.makedirs(dest, exist_ok=True)
-    api.sync_bucket(f"hf://buckets/{bucket_id}/{leaf}", dest, token=token, quiet=True)
-    return dest
+    return download_checkpoint_from_bucket(f"hf://buckets/{bucket_id}/{leaf}", output_dir, token=token)
 
 
 def sort_checkpoints(

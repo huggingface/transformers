@@ -131,6 +131,7 @@ from .trainer_utils import (
     compare_trainer_and_checkpoint_args,
     default_compute_objective,
     denumpify_detensorize,
+    download_checkpoint_from_bucket,
     download_latest_checkpoint_from_bucket,
     enable_full_determinism,
     find_executable_batch_size,
@@ -579,9 +580,13 @@ class Trainer:
         if self.args.push_to_hub:
             self.init_hf_repo()
         if self.args.push_to_bucket and self.is_world_process_zero():
-            self._bucket_id = hf_api().create_bucket(
-                self.args.bucket_id, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True
-            ).bucket_id
+            self._bucket_id = (
+                hf_api()
+                .create_bucket(
+                    self.args.bucket_id, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True
+                )
+                .bucket_id
+            )
         if self.args.should_save:
             os.makedirs(self.args.output_dir, exist_ok=True)
 
@@ -1346,11 +1351,12 @@ class Trainer:
 
         Args:
             resume_from_checkpoint (`str` or `bool`, *optional*):
-                If a `str`, local path to a saved checkpoint as saved by a previous instance of [`Trainer`]. The
-                special value `"bucket"` instead downloads the latest checkpoint from the checkpoint bucket (see
-                `bucket_id`). If a `bool` and equals `True`, load the last checkpoint in *args.output_dir* as saved by
-                a previous instance of [`Trainer`]. If present, training will resume from the model/optimizer/scheduler
-                states loaded here.
+                If a `str`, local path to a saved checkpoint as saved by a previous instance of [`Trainer`]. A bucket
+                handle resumes from a [bucket](https://huggingface.co/docs/huggingface_hub/guides/buckets) instead:
+                `"hf://buckets/namespace/name"` downloads the latest checkpoint in that bucket, and
+                `"hf://buckets/namespace/name/checkpoint-500"` downloads that specific one. If a `bool` and equals
+                `True`, load the last checkpoint in *args.output_dir* as saved by a previous instance of [`Trainer`].
+                If present, training will resume from the model/optimizer/scheduler states loaded here.
             trial (`optuna.Trial` or `dict[str, Any]`, *optional*):
                 The trial run or the hyperparameter dictionary for hyperparameter search.
             ignore_keys_for_eval (`list[str]`, *optional*)
@@ -1416,18 +1422,26 @@ class Trainer:
             else:
                 DebugUnderflowOverflow(self.model)
 
-        # Load potential model checkpoint
-        if resume_from_checkpoint == "bucket":
-            # Resume from the checkpoint bucket (uses `bucket_id`). Only the main process downloads (ranks
-            # share the filesystem); the others wait at the barrier, then all resolve the local checkpoint.
+        # Load potential model checkpoint. Resume from a bucket via its handle:
+        #   - "hf://buckets/<ns>/<name>"                     -> latest checkpoint in that bucket
+        #   - "hf://buckets/<ns>/<name>/checkpoint-<step>"   -> that specific checkpoint
+        # Only the main process downloads (ranks share the filesystem); the others wait at the barrier.
+        if isinstance(resume_from_checkpoint, str) and resume_from_checkpoint.startswith("hf://buckets/"):
+            body = resume_from_checkpoint.removeprefix("hf://buckets/").rstrip("/")
+            is_specific = body.count("/") > 1  # "namespace/name/checkpoint-<step>" vs just "namespace/name"
             if self.is_world_process_zero():
-                download_latest_checkpoint_from_bucket(
-                    self._bucket_id or args.bucket_id, args.output_dir, token=args.hub_token
-                )
+                if is_specific:
+                    download_checkpoint_from_bucket(resume_from_checkpoint, args.output_dir, token=args.hub_token)
+                else:
+                    download_latest_checkpoint_from_bucket(body, args.output_dir, token=args.hub_token)
             self.accelerator.wait_for_everyone()
-            resume_from_checkpoint = get_last_checkpoint(args.output_dir)
+            resume_from_checkpoint = (
+                os.path.join(args.output_dir, os.path.basename(body))
+                if is_specific
+                else get_last_checkpoint(args.output_dir)
+            )
             if resume_from_checkpoint is None:
-                raise ValueError("`resume_from_checkpoint='bucket'` but no checkpoint was found in the bucket.")
+                raise ValueError(f"No checkpoint found in bucket {body}.")
         elif isinstance(resume_from_checkpoint, bool) and resume_from_checkpoint:
             resume_from_checkpoint = get_last_checkpoint(args.output_dir)
             if resume_from_checkpoint is None:

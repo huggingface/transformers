@@ -2331,12 +2331,12 @@ class TrainerIntegrationWithHubBucketTester(unittest.TestCase):
                     state = TrainerState.load_from_json(os.path.join(local, TRAINER_STATE_NAME))
                     self.assertEqual(state.global_step, bucket_step)
 
-                # resume_from_checkpoint="bucket" on a fresh dir must download from the bucket and run to
-                # the end (it raises if the bucket-resume wiring fails).
+                # A bucket handle on a fresh dir must download from the bucket and run to the end (it
+                # raises if the bucket-resume wiring fails). The bucket root resolves to the latest checkpoint.
                 with tempfile.TemporaryDirectory() as tmp_dir3:
                     out3 = os.path.join(tmp_dir3, name)
                     trainer3 = self._bucket_trainer(out3, bucket_id)
-                    trainer3.train(resume_from_checkpoint="bucket")
+                    trainer3.train(resume_from_checkpoint=f"hf://buckets/{bucket_id}")
                     self.assertEqual(trainer3.state.global_step, final_step)
             finally:
                 delete_bucket(bucket_id, token=self._token, missing_ok=True)
