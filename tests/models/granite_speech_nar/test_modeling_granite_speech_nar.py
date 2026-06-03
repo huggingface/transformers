@@ -158,8 +158,8 @@ class TestEncoder:
 
         assert out.logits is not None
         assert out.logits.shape[1] == 100
-        assert out.all_hidden_states is not None
-        assert len(out.all_hidden_states) == 5  # input + 4 layers
+        assert out.hidden_states is not None
+        assert len(out.hidden_states) == 5  # input + 4 layers
 
 
 # === Projector tests ===

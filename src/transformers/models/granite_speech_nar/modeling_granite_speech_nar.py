@@ -53,7 +53,7 @@ class GraniteSpeechNarEncoderOutput(ModelOutput):
     loss: torch.Tensor | None = None
     logits: torch.FloatTensor | None = None
     last_hidden_state: torch.FloatTensor | None = None
-    all_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -830,6 +830,9 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
     """Conformer encoder with BPE CTC head and multi-layer output."""
 
     config_class = GraniteSpeechNarEncoderConfig
+    _can_record_outputs = {
+        "hidden_states": GraniteSpeechNarConformerBlock,
+    }
 
     def __init__(self, config: GraniteSpeechNarEncoderConfig):
         super().__init__(config)
@@ -841,11 +844,11 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
         self.dropout = nn.Dropout(config.pred_dropout)
         self.post_init()
 
+    @capture_outputs
     def forward(
         self,
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
         labels: torch.Tensor | None = None,
         label_lengths: torch.Tensor | None = None,
         **kwargs,
@@ -854,7 +857,6 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
             attention_mask = torch.ones(input_features.shape[:-1], dtype=torch.bool, device=input_features.device)
 
         hidden_states = self.input_linear(input_features.to(self.dtype))
-        all_hidden_states = (hidden_states,) if output_hidden_states else None
 
         context_size = self.config.context_size
         seq = torch.arange(context_size, device=hidden_states.device)
@@ -868,10 +870,7 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
                 mid_logits = self.out(self.dropout(hidden_states))
                 mid_probs = torch.softmax(mid_logits.float(), dim=-1)
                 blank_probs = mid_probs[:, :, 0]
-                hidden_states = hidden_states + self.out_mid(mid_probs.to(hidden_states.dtype))
-
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
+                hidden_states += self.out_mid(mid_probs.to(hidden_states.dtype))
 
         hidden_states = self.dropout(hidden_states)
 
@@ -893,7 +892,6 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
             loss=loss,
             logits=logits,
             last_hidden_state=hidden_states,
-            all_hidden_states=all_hidden_states,
         )
 
 
@@ -1001,7 +999,7 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
             ctc_token_ids = self._ctc_collapse_decode(enc_out.logits, bpe_lengths)
 
             multilayer_features = torch.cat(
-                [enc_out.all_hidden_states[idx] for idx in self.config.encoder_layer_indices], dim=-1
+                [enc_out.hidden_states[idx] for idx in self.config.encoder_layer_indices], dim=-1
             )
 
             encoder_loss = enc_out.loss
