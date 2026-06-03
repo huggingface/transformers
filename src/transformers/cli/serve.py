@@ -150,6 +150,8 @@ class Serve:
                 f"ZeroGPU mode enabled (size={gpu_size}). "
                 f"GPU resources will be dynamically allocated per request via @spaces.GPU."
             )
+        else:
+            logger.warning("ZeroGPU mode NOT enabled.")
 
         # Logging
         transformers_logger = logging.get_logger("transformers")
