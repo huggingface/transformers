@@ -755,7 +755,6 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("encoder-decoder", "encoder_decoder"),
         ("ernie4_5_vl_moe_text", "ernie4_5_vl_moe"),
         ("ernie4_5_vl_moe_vision", "ernie4_5_vl_moe"),
-        ("esmfold2_v2", "esmfold2"),
         ("exaone4_5_vision", "exaone4_5"),
         ("fastspeech2_conformer_hifigan", "fastspeech2_conformer"),
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),

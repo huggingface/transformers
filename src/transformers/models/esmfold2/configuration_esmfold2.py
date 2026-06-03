@@ -211,13 +211,13 @@ class ESMFold2Config(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import ESMFold2Config, ESMFold2ExperimentalModel
+    >>> from transformers import ESMFold2Config, ESMFold2Model
 
     >>> # Initializing an ESMFold2 configuration
-    >>> configuration = ESMFold2Config(type="experimental")
+    >>> configuration = ESMFold2Config(type="release")
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = ESMFold2ExperimentalModel(configuration)
+    >>> model = ESMFold2Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -230,11 +230,11 @@ class ESMFold2Config(PretrainedConfig):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.type: str = kwargs["type"]
-        if self.type not in ("release", "experimental"):
+        self.type: str = kwargs.get("type", "release")
+        if self.type != "release":
             raise ValueError(
-                f"ESMFold2Config.type must be 'release' or 'experimental', "
-                f"got {self.type!r}"
+                "ESMFold2Config.type must be 'release' (the 'experimental' variant "
+                f"is not included in this release), got {self.type!r}"
             )
 
         # Top-level scalar fields
