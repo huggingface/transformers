@@ -1204,6 +1204,22 @@ class TrainingArguments:
             "help": "The revision to use when pushing to the Hub. Can be a branch name, a tag, or a commit hash."
         },
     )
+    push_to_bucket: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to sync intermediate checkpoints to a Hub bucket (mutable object storage, no git "
+            "history, chunk-level xet dedup) instead of committing them to the model repo. Independent of "
+            "`push_to_hub`; if both are set, the final checkpoint is also committed to the repo at the end of training."
+        },
+    )
+    bucket_id: str | None = field(
+        default=None,
+        metadata={
+            "help": "Bucket id ('namespace/name') used when `push_to_bucket=True`. Defaults to `hub_model_id` if set, "
+            "otherwise the `output_dir` name under your namespace. Checkpoints are stored under a prefix named after "
+            "`output_dir`, so several runs can share one bucket. Resume from it with `resume_from_checkpoint='bucket'`."
+        },
+    )
 
     # --- Best Model Tracking ---
     load_best_model_at_end: bool = field(
@@ -1478,6 +1494,10 @@ class TrainingArguments:
         # Expand ~ in paths so os.makedirs works correctly (#10628)
         if self.output_dir is not None:
             self.output_dir = os.path.expanduser(self.output_dir)
+
+        # Default the checkpoint bucket to the model repo id, else the output_dir name.
+        if self.push_to_bucket and self.bucket_id is None:
+            self.bucket_id = self.hub_model_id or os.path.basename(self.output_dir.rstrip("/"))
 
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN

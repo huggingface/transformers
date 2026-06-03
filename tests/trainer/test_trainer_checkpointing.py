@@ -2248,3 +2248,98 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
             commits = list_repo_commits(repo_id=trainer.hub_model_id, revision=branch, token=self._token)
             self.assertEqual(commits[0].commit_id, push_commit.oid)
+
+
+@require_torch
+@is_staging_test
+class TrainerIntegrationWithHubBucketTester(unittest.TestCase):
+    """Checkpoints sync'd to a Hub bucket (mutable storage) instead of the model repo."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._token = TOKEN
+
+    def _bucket_trainer(self, output_dir, bucket_id, **kwargs):
+        return get_regression_trainer(
+            output_dir=output_dir,
+            push_to_hub=True,
+            push_to_bucket=True,
+            bucket_id=bucket_id,
+            hub_token=self._token,
+            save_strategy="steps",
+            save_steps=5,
+            **kwargs,
+        )
+
+    def test_push_checkpoint_to_bucket(self):
+        from huggingface_hub import create_bucket, delete_bucket, list_bucket_tree
+
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            name = tmp_repo.repo_name
+            bucket_id = f"{USER}/{name}"
+            create_bucket(bucket_id, token=self._token, exist_ok=True, private=True)
+            try:
+                # save_total_limit=1 rotates local checkpoints away; the bucket must keep all of them.
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    trainer = self._bucket_trainer(
+                        os.path.join(tmp_dir, name), bucket_id, hub_always_push=True, save_total_limit=1
+                    )
+                    trainer.train()
+                    trainer._finish_current_push()  # wait for the background bucket sync to finish
+                    local_ckpts = {p for p in os.listdir(os.path.join(tmp_dir, name)) if p.startswith("checkpoint-")}
+
+                files = {
+                    it.path
+                    for it in list_bucket_tree(bucket_id, token=self._token, recursive=True)
+                    if it.type == "file"
+                }
+                bucket_ckpts = {p.split("/")[0] for p in files if p.startswith("checkpoint-")}
+                # all_checkpoints behavior: the bucket accumulates every checkpoint, even those rotated
+                # away locally, so it is a strict superset of what remains on disk.
+                self.assertEqual(len(local_ckpts), 1)
+                self.assertTrue(local_ckpts <= bucket_ckpts)
+                self.assertGreater(len(bucket_ckpts), len(local_ckpts))
+                self.assertTrue(any(p.endswith("/optimizer.pt") for p in files))
+                self.assertTrue(any(p.endswith("/trainer_state.json") for p in files))
+            finally:
+                delete_bucket(bucket_id, token=self._token, missing_ok=True)
+
+    def test_resume_from_bucket(self):
+        from huggingface_hub import create_bucket, delete_bucket
+
+        from transformers.trainer import TRAINER_STATE_NAME
+
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            name = tmp_repo.repo_name
+            bucket_id = f"{USER}/{name}"
+            create_bucket(bucket_id, token=self._token, exist_ok=True, private=True)
+            try:
+                # First run: train and mirror checkpoints to the bucket.
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    trainer = self._bucket_trainer(os.path.join(tmp_dir, name), bucket_id, hub_always_push=True)
+                    trainer.train()
+                    trainer._finish_current_push()
+                    final_step = trainer.state.global_step
+
+                # Fresh local dir, nothing on disk. The download helper mirrors the bucket back into
+                # output_dir and returns the latest local checkpoint via get_last_checkpoint.
+                with tempfile.TemporaryDirectory() as tmp_dir2:
+                    out2 = os.path.join(tmp_dir2, name)
+                    trainer2 = self._bucket_trainer(out2, bucket_id)
+                    self.assertIsNone(get_last_checkpoint(out2))  # nothing local to resume from
+                    local = trainer2._download_resume_checkpoint_from_bucket()
+                    self.assertIsNotNone(local, "expected a checkpoint to be downloaded from the bucket")
+                    bucket_step = int(os.path.basename(local).split("-")[-1])
+                    self.assertTrue(0 < bucket_step <= final_step)
+                    state = TrainerState.load_from_json(os.path.join(local, TRAINER_STATE_NAME))
+                    self.assertEqual(state.global_step, bucket_step)
+
+                # resume_from_checkpoint="bucket" on a fresh dir must download from the bucket and run to
+                # the end (it raises if the bucket-resume wiring fails).
+                with tempfile.TemporaryDirectory() as tmp_dir3:
+                    out3 = os.path.join(tmp_dir3, name)
+                    trainer3 = self._bucket_trainer(out3, bucket_id)
+                    trainer3.train(resume_from_checkpoint="bucket")
+                    self.assertEqual(trainer3.state.global_step, final_step)
+            finally:
+                delete_bucket(bucket_id, token=self._token, missing_ok=True)
