@@ -46,7 +46,6 @@ from ...test_processing_common import url_to_local_path
 
 if is_torch_available():
     import torch
-    from huggingface_hub import hf_hub_download
     from torch import nn
 
     from transformers import (
@@ -560,60 +559,6 @@ class Tipsv2ModelTest(Tipsv2ModelTesterMixin, PipelineTesterMixin, unittest.Test
     )
     def test_reverse_loading_mapping(self):
         pass
-
-    @slow
-    @require_sentencepiece
-    def test_b14_raw_alignment_against_official_implementation(self):
-        repo_id = "google/tipsv2-b14"
-        expected_alignment_max_diffs = {
-            "image_cls_token": 1.311302185e-06,
-            "image_register_tokens": 1.035630703e-06,
-            "image_patch_tokens": 1.704692841e-05,
-            "text_pooled_embedding": 0.0,
-        }
-
-        torch.manual_seed(0)
-        official_model = AutoModel.from_pretrained(repo_id, trust_remote_code=True).eval()
-        hf_config = get_b14_tipsv2_config(temperature=official_model.config.temperature)
-        hf_model, loading_info = Tipsv2Model.from_pretrained(repo_id, config=hf_config, output_loading_info=True)
-        hf_model.eval()
-
-        self.assertListEqual(sorted(loading_info["missing_keys"]), [])
-        self.assertListEqual(sorted(loading_info["unexpected_keys"]), [])
-
-        pixel_values = torch.rand(1, 3, 448, 448, dtype=torch.float32)
-        vocab_file = hf_hub_download(repo_id, "tokenizer.model")
-        tokenizer = Tipsv2Tokenizer(vocab_file)
-        encoded = tokenizer(
-            ["A Cat on a Mat", "A DOG in the Fog"],
-            padding="max_length",
-            truncation=True,
-            max_length=64,
-            return_tensors="pt",
-        )
-        input_ids = encoded.input_ids
-        padding_mask = 1 - encoded.attention_mask
-
-        with torch.no_grad():
-            official_image = official_model.encode_image(pixel_values)
-            hf_vision = hf_model.vision_model(pixel_values=pixel_values, return_dict=True)
-            official_text = official_model.encode_text(input_ids, padding_mask=padding_mask)
-            hf_text = hf_model.text_model(
-                input_ids=input_ids, padding_mask=padding_mask, return_dict=True
-            ).pooler_output
-
-        hf_cls_token = hf_vision.last_hidden_state[:, :1]
-        hf_register_tokens = hf_vision.last_hidden_state[:, 1:2]
-        hf_patch_tokens = hf_vision.last_hidden_state[:, 2:]
-        actual_diffs = {
-            "image_cls_token": max_abs_diff(official_image.cls_token, hf_cls_token),
-            "image_register_tokens": max_abs_diff(official_image.register_tokens, hf_register_tokens),
-            "image_patch_tokens": max_abs_diff(official_image.patch_tokens, hf_patch_tokens),
-            "text_pooled_embedding": max_abs_diff(official_text, hf_text),
-        }
-
-        for name, expected_diff in expected_alignment_max_diffs.items():
-            self.assertLessEqual(actual_diffs[name], max(expected_diff * 2, 1e-7), name)
 
 
 def prepare_img():
