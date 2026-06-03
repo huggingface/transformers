@@ -123,15 +123,19 @@ class Tipsv2TextConfig(PreTrainedConfig):
     num_hidden_layers: int = 12
     num_attention_heads: int = 12
     max_position_embeddings: int = 64
+
     hidden_act: str = "relu"
     layer_norm_eps: float = 1e-5
     attention_dropout: float | int = 0.0
-    initializer_range: float = 0.02
     pad_token_id: int | None = 0
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
+    initializer_range: float = 0.02
     scale_sqrt_depth: bool = True
     pooling_epsilon: float = 1e-8
+
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""

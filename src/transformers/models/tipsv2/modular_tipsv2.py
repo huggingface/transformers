@@ -43,6 +43,7 @@ from ..dinov2_with_registers.modeling_dinov2_with_registers import (
     Dinov2WithRegistersModel,
     Dinov2WithRegistersPreTrainedModel,
 )
+from ..siglip2.configuration_siglip2 import Siglip2TextConfig
 
 
 logger = logging.get_logger(__name__)
@@ -167,7 +168,7 @@ class Tipsv2VisionConfig(Dinov2WithRegistersConfig):
 
 @auto_docstring(checkpoint="google/tipsv2-b14")
 @strict
-class Tipsv2TextConfig(PreTrainedConfig):
+class Tipsv2TextConfig(Siglip2TextConfig):
     r"""
     scale_sqrt_depth (`bool`, *optional*, defaults to `True`):
         Whether to scale token embeddings by `sqrt(hidden_size)` before adding sinusoidal position embeddings.
@@ -187,21 +188,19 @@ class Tipsv2TextConfig(PreTrainedConfig):
     model_type = "tipsv2_text_model"
     base_config_key = "text_config"
 
-    vocab_size: int = 32000
-    hidden_size: int = 768
-    intermediate_size: int = 3072
-    num_hidden_layers: int = 12
-    num_attention_heads: int = 12
-    max_position_embeddings: int = 64
     hidden_act: str = "relu"
     layer_norm_eps: float = 1e-5
-    attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
     pad_token_id: int | None = 0
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
     scale_sqrt_depth: bool = True
     pooling_epsilon: float = 1e-8
+
+    projection_size = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
