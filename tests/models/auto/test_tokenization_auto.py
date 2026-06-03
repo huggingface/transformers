@@ -394,29 +394,6 @@ class AutoTokenizerTest(unittest.TestCase):
         # There is no fast CTRL so this always gives us a slow tokenizer.
         self.assertIsInstance(tokenizer, CTRLTokenizer)
 
-    TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS = [
-        "rhymes-ai/Aria",
-        "Salesforce/blip2-flan-t5-xl",
-        "google/bigbird-pegasus-large-pubmed",
-        "microsoft/kosmos-2-patch14-224",
-        "allenai/OLMo-2-0425-1B",
-        "stabilityai/tiny-random-stablelm-2",
-    ]
-
-    @slow
-    @require_tokenizers
-    @parameterized.expand(TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS)
-    def test_actual_checkpoints_use_tokenizers_backend_auto_mappings(self, repo_id):
-        # PR #45936: v5 tokenizer auto mapping changes to use TokenizersBackend
-        TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT = "foo_bar\n\n123 "
-
-        tokenizer_auto = AutoTokenizer.from_pretrained(repo_id)
-        tokenizer_tok = TokenizersBackend.from_pretrained(repo_id)
-        self.assertEqual(
-            tokenizer_tok(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT, add_special_tokens=False)["input_ids"],
-            tokenizer_auto(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT, add_special_tokens=False)["input_ids"],
-        )
-
     def test_get_tokenizer_config(self):
         # Check we can load the tokenizer config of an online model.
         config = get_tokenizer_config("google-bert/bert-base-cased")
@@ -867,8 +844,32 @@ class NopConfig(PreTrainedConfig):
 
     @require_tokenizers
     @parameterized.expand(MODELS_WITHOUT_TOKENIZER_CLASS_CHECKPOINTS)
-    def test_models_without_tokenizer_class(self, repo_id):
+    def test_roundtrip_models_without_tokenizer_class(self, repo_id):
         tokenizer_auto = AutoTokenizer.from_pretrained(repo_id)
         self.assertEqual(
             tokenizer_auto.decode(tokenizer_auto.encode(input_string, add_special_tokens=False)), input_string
+        )
+
+    TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS = [
+        "rhymes-ai/Aria",
+        "Salesforce/blip2-flan-t5-xl",
+        "google/bigbird-pegasus-large-pubmed",
+        "microsoft/kosmos-2-patch14-224",
+        "allenai/OLMo-2-0425-1B",
+        "stabilityai/tiny-random-stablelm-2",
+        "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+    ]
+
+    @slow
+    @require_tokenizers
+    @parameterized.expand(TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS)
+    def test_tokenizers_auto_agreements_models_without_tokenizer_class(self, repo_id):
+        # PR #45936: v5 tokenizer auto mapping changes to use TokenizersBackend
+        TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT = "foo_bar\n\n123 "
+
+        tokenizer_auto = AutoTokenizer.from_pretrained(repo_id)
+        tokenizer_tok = TokenizersBackend.from_pretrained(repo_id)
+        self.assertEqual(
+            tokenizer_tok(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT, add_special_tokens=False)["input_ids"],
+            tokenizer_auto(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT, add_special_tokens=False)["input_ids"],
         )
