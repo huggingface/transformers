@@ -290,6 +290,8 @@ IGNORE_NON_TESTED = (
         "Sam3LiteTextTextModel",  # Building part of a bigger model, tested implicitly through Sam3LiteTextModel
         "Exaone4_5_VisionModel",  # Building part of a bigger model
         "Granite4VisionTextModel",  # Building part of bigger (tested) model. Tested implicitly through Granite4VisionModel.
+        "GraniteSpeechNarLanguageModel",  # Building part of bigger (tested) model. Tested implicitly through GraniteSpeechNarForCTC.
+        "GraniteSpeechNarModel",  # Building part of bigger (tested) model. Tested implicitly through GraniteSpeechNarForCTC.
     ]
 )
 
@@ -313,7 +315,6 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/sam3_video/test_modeling_sam3_video.py",
     "models/edgetam_video/test_modeling_edgetam_video.py",
     "models/gemma4_assistant/test_modeling_gemma4_assistant.py",
-    "models/granite_speech_nar/test_modeling_granite_speech_nar.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
