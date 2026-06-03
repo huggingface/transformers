@@ -198,11 +198,12 @@ class GraniteSpeechNarForCTCModelTester:
             result = model(input_features=input_features, attention_mask=attention_mask)
 
         self.parent.assertIsNotNone(result.logits)
-        self.parent.assertIsInstance(result.logits, list)
-        self.parent.assertEqual(len(result.logits), self.batch_size)
-        for logits in result.logits:
-            self.parent.assertEqual(logits.ndim, 2)
-            self.parent.assertEqual(logits.shape[1], self.vocab_size)
+        self.parent.assertIsInstance(result.logits, torch.Tensor)
+        self.parent.assertEqual(result.logits.ndim, 2)
+        self.parent.assertEqual(result.logits.shape[1], self.vocab_size)
+        self.parent.assertIsNotNone(result.text_lengths)
+        self.parent.assertEqual(len(result.text_lengths), self.batch_size)
+        self.parent.assertEqual(sum(result.text_lengths), result.logits.shape[0])
 
     def create_and_check_generate(self, config, input_features, attention_mask):
         model = GraniteSpeechNarForCTC(config=config)
@@ -306,19 +307,15 @@ class GraniteSpeechNarForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     def test_generation_tester_mixin_inheritance(self):
         pass
 
-    @unittest.skip(reason="Non-standard output format (logits is a list of tensors)")
-    def test_determinism(self):
-        pass
-
-    @unittest.skip(reason="Non-standard output format (logits is a list of tensors)")
+    @unittest.skip(reason="text_lengths (list[int]) in output breaks recursive tuple/dict comparison")
     def test_model_outputs_equivalence(self):
         pass
 
-    @unittest.skip(reason="Non-standard output format (logits is a list of tensors)")
+    @unittest.skip(reason="Composite model with flat packed sequences; hidden_states not piped to top-level output")
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="Non-standard output format (logits is a list of tensors)")
+    @unittest.skip(reason="Composite model with flat packed sequences; hidden_states not piped to top-level output")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 

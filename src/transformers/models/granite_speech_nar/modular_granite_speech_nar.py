@@ -81,8 +81,11 @@ class GraniteSpeechNarOutput(ModelOutput):
 
     Attributes:
         loss: Combined CTC + auxiliary losses (only when labels provided).
+        logits: Flat (concatenated) LLM logits of shape `(sum(text_lengths), vocab_size)`.
+            Split with `logits.split(text_lengths)` to get per-sample tensors.
+        text_lengths: Per-sample text sequence lengths for splitting logits.
         preds: List of predicted token ID tensors per sample (after CTC collapse, inference only).
-        logits: List of per-sample logit tensors from the LLM head.
+        audio_embeds: Projected audio embeddings (cached for multi-step editing).
         encoder_logits: Flat BPE CTC logits from the encoder.
         encoder_preds: List of CTC-collapsed encoder predictions per sample.
         encoder_loss: Encoder BPE CTC loss component (for logging).
@@ -90,8 +93,9 @@ class GraniteSpeechNarOutput(ModelOutput):
     """
 
     loss: torch.Tensor | None = None
+    logits: torch.FloatTensor | None = None
+    text_lengths: list[int] | None = None
     preds: list[torch.Tensor] | None = None
-    logits: list[torch.Tensor] | None = None
     audio_embeds: torch.FloatTensor | None = None
     encoder_logits: torch.Tensor | None = None
     encoder_preds: list[torch.Tensor] | None = None
@@ -640,7 +644,6 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
         text_lengths = model_out.text_lengths
         segment_lengths = [l for a, t in zip(audio_lengths, text_lengths) for l in (a, t)]
         text_logits = torch.cat(list(all_logits.split(segment_lengths)[1::2]))
-        logits_per_sample = list(text_logits.split(text_lengths))
 
         loss = None
         encoder_loss = model_out.encoder_loss
@@ -665,7 +668,8 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
 
         return GraniteSpeechNarOutput(
             loss=loss,
-            logits=logits_per_sample,
+            logits=text_logits,
+            text_lengths=text_lengths,
             audio_embeds=model_out.audio_embeds,
             encoder_logits=model_out.encoder_logits,
             encoder_preds=model_out.ctc_token_ids,
@@ -703,7 +707,8 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
             )
 
             blank_id = self.config.blank_token_id
-            ctc_token_ids = [_ctc_greedy_decode(sample_logits, blank_id) for sample_logits in output.logits]
+            logits_per_sample = output.logits.split(output.text_lengths)
+            ctc_token_ids = [_ctc_greedy_decode(sample_logits, blank_id) for sample_logits in logits_per_sample]
             audio_embeds = output.audio_embeds
 
             if step == 0:
@@ -712,6 +717,7 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
         return GraniteSpeechNarOutput(
             preds=ctc_token_ids,
             logits=output.logits,
+            text_lengths=output.text_lengths,
             encoder_logits=output.encoder_logits,
             encoder_preds=encoder_preds,
         )
