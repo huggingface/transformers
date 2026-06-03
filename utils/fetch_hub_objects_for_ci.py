@@ -48,6 +48,7 @@ URLS_FOR_TESTING_DATA = [
     "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png",
     "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png",
     "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/table_recognition.jpg",
+    # Don't use the original COCO URLs anymore. Replace with images from https://huggingface.co/datasets/hf-internal-testing/fixtures-coco below
     "http://images.cocodataset.org/val2017/000000000139.jpg",
     "http://images.cocodataset.org/val2017/000000000285.jpg",
     "http://images.cocodataset.org/val2017/000000000632.jpg",
@@ -81,6 +82,25 @@ URLS_FOR_TESTING_DATA = [
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/coco_annotations.txt",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/coco_panoptic_annotations.txt",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/coco_panoptic/000000039769.png",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000139.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000285.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000632.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000724.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000776.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000785.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000802.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000872.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000001000.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000004016.png",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.png",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000077595.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000136466.jpg",
 ]
 
 

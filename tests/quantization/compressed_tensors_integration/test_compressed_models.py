@@ -16,8 +16,6 @@ if is_torch_available():
 @require_torch
 class StackCompressedModelTest(unittest.TestCase):
     # Define stubs as class attributes
-    # NOTE: sparse-only and stacked (sparse+quantized) model stubs removed — Sparse24 bitmask
-    # format is no longer supported by compressed-tensors>=0.15.
     compressed_uncompressed_model_stubs = [
         (
             "nm-testing/llama2.c-stories42M-gsm8k-quantized-only-compressed",

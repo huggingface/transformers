@@ -93,6 +93,7 @@ if TYPE_CHECKING:
     from .deberta import *
     from .deberta_v2 import *
     from .decision_transformer import *
+    from .deepseek_ocr2 import *
     from .deepseek_v2 import *
     from .deepseek_v3 import *
     from .deepseek_v4 import *
@@ -394,6 +395,7 @@ if TYPE_CHECKING:
     from .sam3_tracker_video import *
     from .sam3_video import *
     from .sam_hq import *
+    from .sapiens2 import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
     from .seed_oss import *

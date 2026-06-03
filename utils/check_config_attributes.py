@@ -87,6 +87,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "TimeSeriesTransformerConfig": ["num_static_real_features", "num_time_features"],
     "AutoformerConfig": ["num_static_real_features", "num_time_features"],
     "SamVisionConfig": ["mlp_ratio"],
+    "DeepseekOcr2SamVisionConfig": ["mlp_ratio"],
     "Sam3VisionConfig": ["backbone_feature_sizes"],
     "SamHQVisionConfig": ["mlp_ratio"],
     "ClapAudioConfig": ["num_classes"],
@@ -194,6 +195,12 @@ SPECIAL_CASES_TO_ALLOW = {
     "PPChart2TableConfig": True,
     "PPChart2TableVisionConfig": True,
     "GlmgaConfig": ["vision_config"],
+    "Sapiens2Config": [
+        "num_first_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
+        "num_key_value_attention_heads",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
+        "num_last_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
+        "flip_pairs",  # used externally for post-processing keypoints, not in forward pass
+    ],
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
