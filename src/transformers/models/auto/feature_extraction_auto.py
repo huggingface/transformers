@@ -47,6 +47,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("encodec", "EncodecFeatureExtractor"),
         ("gemma3n", "Gemma3nAudioFeatureExtractor"),
         ("gemma4", "Gemma4AudioFeatureExtractor"),
+        ("gemma4_unified", "Gemma4UnifiedAudioFeatureExtractor"),
         ("glmasr", "WhisperFeatureExtractor"),
         ("granite_speech", "GraniteSpeechFeatureExtractor"),
         ("granite_speech_plus", "GraniteSpeechFeatureExtractor"),

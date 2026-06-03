@@ -988,7 +988,9 @@ class GenerationMixin(ContinuousMixin):
         # SinglePositionMultiTokenCandidateGenerator requires a target model that can provide, and an assistant model that
         # can work from a shared_kv_states dictionary. Currently, the only models that can provide this are Gemma 3n and
         # Gemma 4, and the only model that can work from it is a Gemma 4 Assistant
-        elif assistant_model is not None and assistant_model.__class__.__name__.startswith("Gemma4Assistant"):
+        elif assistant_model is not None and assistant_model.__class__.__name__.startswith(
+            ("Gemma4Assistant", "Gemma4UnifiedAssistant")
+        ):
             if not self.__class__.__name__.startswith(("Gemma4", "Gemma3n")):
                 raise ValueError(
                     f"Expected class name to start with Gemma4 or Gemma3n. Got {self.__class__.__name__}."

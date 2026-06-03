@@ -1292,11 +1292,14 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
         logits_processor: Optional["LogitsProcessorList"] = None,
         eos_token_id: int | list[int] | torch.Tensor | None = None,
     ):
-        if "Gemma4Assistant" not in assistant_model.__class__.__name__:
+        if (
+            "Gemma4Assistant" not in assistant_model.__class__.__name__
+            and "Gemma4UnifiedAssistant" not in assistant_model.__class__.__name__
+        ):
             raise ValueError(
-                f"Expected assistant_model to be a Gemma4AssistantForCausalLM. Got {assistant_model.__class__.__name__}"
+                f"Expected assistant_model to be a Gemma4AssistantForCausalLM or Gemma4UnifiedAssistantForCausalLM. Got {assistant_model.__class__.__name__}"
                 " This candidate generator requires that the assistant model is able to work from a shared_kv_states"
-                " dictionary. Currently, only the Gemma4AssistantForCausalLM supports this."
+                " dictionary. Currently, only the Gemma4AssistantForCausalLM and Gemma4UnifiedAssistantForCausalLM support this."
             )
 
         super().__init__(input_ids, assistant_model, generation_config, model_kwargs, inputs_tensor, logits_processor)

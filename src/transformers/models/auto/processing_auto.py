@@ -84,6 +84,7 @@ else:
             ("gemma3", "Gemma3Processor"),
             ("gemma3n", "Gemma3nProcessor"),
             ("gemma4", "Gemma4Processor"),
+            ("gemma4_unified", "Gemma4UnifiedProcessor"),
             ("git", "GitProcessor"),
             ("glm46v", "Glm46VProcessor"),
             ("glm4v", "Glm4vProcessor"),
