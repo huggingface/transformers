@@ -94,6 +94,7 @@ class MockTPModel:
         # apply_tensor_parallel registers an SP position_ids hook when enable_sp; no-op here.
         return None
 
+
 @require_torch
 class ApplyTensorParallelTest(unittest.TestCase):
     """End-to-end through apply_tensor_parallel over (user_tp_plan, enable_sp, enable_ep): the SP
@@ -147,7 +148,9 @@ class ApplyTensorParallelTest(unittest.TestCase):
     def test_override_sp_false_ep_false_uses_user_plan(self):
         # Explicit plan replaces _tp_plan verbatim. SP off, so a non-SP plan is accepted
         # (regression: this used to raise before the guard was gated on enable_sp).
-        self.assertEqual(self._resolved_plan(MockTPModel(USER_TP_PLAN, enable_sp=False, enable_ep=False)), USER_TP_PLAN)
+        self.assertEqual(
+            self._resolved_plan(MockTPModel(USER_TP_PLAN, enable_sp=False, enable_ep=False)), USER_TP_PLAN
+        )
 
     def test_override_sp_false_ep_true_user_union_ep(self):
         # Inference TP+EP with an explicit dense plan: user plan ∪ _ep_plan.

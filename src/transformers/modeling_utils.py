@@ -1470,7 +1470,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         The full tp plan for the model's modules
         """
-        #TODO(3outeille): should we resolve the plan here as well or rely on set attribute after resolving in apply_tensor_parallel?
+        # TODO(3outeille): should we resolve the plan here as well or rely on set attribute after resolving in apply_tensor_parallel?
         return self._tp_plan
 
     @property
@@ -4350,7 +4350,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # `apply_tensor_parallel` see the shared-parameter graph and can route tied
             # entries (e.g. `lm_head` -> `embed_tokens`) correctly. `_finalize_model_loading`
             # re-runs `tie_weights` after the checkpoint is loaded to handle missing-key edge cases.
-            #TODO(3outeille): there is 3 times calls of tie_weight (once here, once in apply_fully_shard_data_parallel, once at the end of from_pretrained)
+            # TODO(3outeille): there is 3 times calls of tie_weight (once here, once in apply_fully_shard_data_parallel, once at the end of from_pretrained)
             model.tie_weights()
             model = distribute_model(model, distributed_config, device_mesh)
         elif device_map is not None:
@@ -4368,7 +4368,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             dtype_plan=dtype_plan,
             hf_quantizer=hf_quantizer,
             device_mesh=device_mesh,
-            tp_plan=model.tp_plan, #TODO: why only tp_plan and model.fsdp_plan as well ? 
+            tp_plan=model.tp_plan,  # TODO: why only tp_plan and model.fsdp_plan as well ?
             weights_only=weights_only,
             weight_mapping=weight_conversions,
             use_safetensors=use_safetensors,

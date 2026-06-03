@@ -54,6 +54,15 @@ class FlexOlmoConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise_allgather",  # we need to replicate here due to the added norm on q and k
         "layers.*.self_attn.v_proj": "colwise_allgather",  # we need to replicate here due to the added norm on q and k
         "layers.*.self_attn.o_proj": "vocab_allreduce",  # input is replicated due to the added norm on q and k
+        "layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
+        "layers.*.mlp.experts.down_proj": "moe_tp_down_rowwise",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

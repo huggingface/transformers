@@ -90,9 +90,6 @@ experts.0.w3.weight   │ + Concatenate
 experts.1.w3.weight  ─┘
 ```
 
-> [!TIP]
-> The fused expert weights (`experts.gate_up_proj`, `experts.down_proj`) are sharded at parameter granularity by the parallel plan, not as whole modules. Tensor parallelism uses `moe_tp_gate_up_colwise` / `moe_tp_down_rowwise` and expert parallelism uses `grouped_gemm`; the experts module itself only carries the forward-communication entry `moe_experts_allreduce`. See [Expert parallelism](./expert_parallelism) for details.
-
 ### Composite models (e.g., vision-language)
 
 A `PreTrainedModel` may contain other `PreTrainedModel` sub-modules. Each sub-model can have its own conversion mapping, registered against either its class name or its `model_type`. When the parent model is loaded, [`get_model_conversion_mapping`] walks the sub-models in depth-first order, collects their mappings, and **automatically scopes** each transform to the path of its sub-module via `scope_prefix`.
