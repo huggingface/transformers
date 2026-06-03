@@ -4,6 +4,7 @@ on:
   schedule:
     # Run every night at 3 AM UTC
     - cron: "0 3 * * *"
+  workflow_dispatch:
 env:
   UV_SYSTEM_PYTHON: "1"
   VLLM_USE_PRECOMPILED: "1"
