@@ -1431,7 +1431,8 @@ def convert_and_load_state_dict_in_model(
                         )
                     shard_index = (
                         len(mapping.collected_tensors.get(source_pattern, []))
-                        if isinstance(mapping, WeightConverter) and isinstance(mapping.operations[0], MergeModulelist)
+                        if isinstance(mapping, WeightConverter)
+                        and any(isinstance(op, MergeModulelist) for op in mapping.operations)
                         else None
                     )
                     future_or_tensor = spawn_tp_materialize(
