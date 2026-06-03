@@ -295,8 +295,6 @@ class GraniteSpeechNarPreTrainedModel(PreTrainedModel):
 class GraniteSpeechNarAttention(GraniteAttention):
     """GraniteAttention with is_causal=False for bidirectional attention."""
 
-    is_causal = False
-
     def __init__(self, config, layer_idx=None):
         super().__init__(config, layer_idx=layer_idx)
         self.is_causal = False
