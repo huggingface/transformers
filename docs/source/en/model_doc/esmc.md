@@ -51,10 +51,6 @@ representations = outputs.last_hidden_state
 
 [[autodoc]] ESMCConfig
 
-## ESMCSAEConfig
-
-[[autodoc]] ESMCSAEConfig
-
 ## ESMCTokenizer
 
 [[autodoc]] ESMCTokenizer
@@ -77,9 +73,4 @@ representations = outputs.last_hidden_state
 ## ESMCForTokenClassification
 
 [[autodoc]] ESMCForTokenClassification
-    - forward
-
-## ESMCSAEModel
-
-[[autodoc]] ESMCSAEModel
     - forward

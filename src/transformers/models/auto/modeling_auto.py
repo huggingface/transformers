@@ -153,7 +153,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("ernie4_5_vl_moe", "Ernie4_5_VLMoeModel"),
         ("esm", "EsmModel"),
         ("esmc", "ESMCModel"),
-        ("esmc_sae", "ESMCSAEModel"),
         ("esmfold2", "ESMFold2Model"),
         ("eurobert", "EuroBertModel"),
         ("evolla", "EvollaModel"),
