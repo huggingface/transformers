@@ -408,9 +408,8 @@ TOKENIZER_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TOKENIZER_MAPPING_NAM
 
 CONFIG_TO_TYPE = {v: k for k, v in CONFIG_MAPPING_NAMES.items()}
 
-MODEL_IDS_TO_TOKENIZERS_BACKEND = [
-   "deepseek-ai/deepseek-r1-distill-llama-8b"
-]
+MODEL_IDS_TO_TOKENIZERS_BACKEND = ["deepseek-ai/deepseek-r1-distill-llama-8b"]
+
 
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""

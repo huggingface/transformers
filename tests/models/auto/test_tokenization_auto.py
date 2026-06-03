@@ -850,15 +850,11 @@ class NopConfig(PreTrainedConfig):
             tokenizer_auto.decode(tokenizer_auto.encode(input_string, add_special_tokens=False)), input_string
         )
 
-    TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS = [
-        "rhymes-ai/Aria",
-        "Salesforce/blip2-flan-t5-xl",
-        "google/bigbird-pegasus-large-pubmed",
-        "microsoft/kosmos-2-patch14-224",
-        "allenai/OLMo-2-0425-1B",
-        "stabilityai/tiny-random-stablelm-2",
-        "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
-    ]
+    TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS = (
+        (Path(__file__).parents[3] / "tools" / "tokenizer_compare" / "checkpoints_to_test.txt")
+        .read_text()
+        .splitlines()
+    )
 
     @slow
     @require_tokenizers
