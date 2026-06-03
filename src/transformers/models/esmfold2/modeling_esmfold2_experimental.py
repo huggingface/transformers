@@ -586,9 +586,11 @@ class ESMFold2ExperimentalModel(PreTrainedModel):
 
     def load_esmc(self, esmc_model_path: str) -> None:
         """Load the ESMC LM backbone from a HuggingFace Hub repo ID or local directory."""
-        from ..esmc.modeling_esmc import ESMCModel  # type: ignore[import]
+        # Resolve via the Auto registry (model_type "esmc" -> ESMCModel) rather
+        # than a hard cross-model import.
+        from ...models.auto.modeling_auto import AutoModel
 
-        esmc = ESMCModel.from_pretrained(esmc_model_path)
+        esmc = AutoModel.from_pretrained(esmc_model_path)
         self._esmc = esmc.bfloat16().to(self.device).eval()
 
     @classmethod
