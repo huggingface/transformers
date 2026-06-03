@@ -464,7 +464,7 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
         text_config = config.text_config
         if hasattr(config, "_attn_implementation"):
             text_config._attn_implementation = config._attn_implementation
-        self.language_model = GraniteSpeechNarLanguageModel._from_config(text_config)
+        self.language_model = GraniteSpeechNarLanguageModel(config.text_config)
 
         self.post_init()
 
