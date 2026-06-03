@@ -17,6 +17,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+import sentencepiece as spm
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
@@ -24,13 +25,17 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
+from ...image_processing_backends import TorchvisionBackend
+from ...image_utils import PILImageResampling
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_sentencepiece import SentencePieceBackend
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..dinov2_with_registers.configuration_dinov2_with_registers import Dinov2WithRegistersConfig
 from ..dinov2_with_registers.modeling_dinov2_with_registers import (
@@ -42,6 +47,121 @@ from ..dinov2_with_registers.modeling_dinov2_with_registers import (
 
 
 logger = logging.get_logger(__name__)
+
+
+VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
+
+
+@requires(backends=("sentencepiece",))
+class Tipsv2Tokenizer(SentencePieceBackend):
+    """Tipsv2 tokenizer based on SentencePiece.
+
+    The original Tipsv2 text pipeline lowercases inputs, does not add BOS/EOS tokens, pads to a maximum length of 64,
+    and uses padding token id 0.
+    """
+
+    vocab_files_names = VOCAB_FILES_NAMES
+    model_input_names = ["input_ids", "attention_mask"]
+
+    def __init__(
+        self,
+        vocab_file,
+        unk_token: str | None = None,
+        pad_token: str | None = None,
+        bos_token: str | None = None,
+        eos_token: str | None = None,
+        sp_model_kwargs: dict[str, Any] | None = None,
+        model_max_length: int = 64,
+        do_lower_case: bool = True,
+        **kwargs,
+    ) -> None:
+        sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+        sp_model = spm.SentencePieceProcessor(**sp_model_kwargs)
+        sp_model.Load(vocab_file)
+
+        if unk_token is None and sp_model.unk_id() >= 0:
+            unk_token = sp_model.id_to_piece(sp_model.unk_id())
+        if pad_token is None:
+            pad_token = sp_model.id_to_piece(max(sp_model.pad_id(), 0))
+
+        self.do_lower_case = do_lower_case
+
+        super().__init__(
+            vocab_file=vocab_file,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            sp_model_kwargs=sp_model_kwargs,
+            model_max_length=model_max_length,
+            do_lower_case=do_lower_case,
+            **kwargs,
+        )
+
+        if self.pad_token_id != 0:
+            raise ValueError(
+                f"TIPSv2 expects the SentencePiece padding token to have id 0, but got {self.pad_token_id}."
+            )
+
+    def _tokenize(self, text, **kwargs):
+        if self.do_lower_case:
+            text = text.lower()
+        return self.sp_model.encode(text, out_type=str)
+
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
+    ) -> list[int]:
+        if token_ids_1 is None:
+            return token_ids_0
+        return token_ids_0 + token_ids_1
+
+    def get_special_tokens_mask(
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
+        if already_has_special_tokens:
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
+            )
+        if token_ids_1 is None:
+            return [0] * len(token_ids_0)
+        return [0] * (len(token_ids_0) + len(token_ids_1))
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
+    ) -> list[int]:
+        if token_ids_1 is None:
+            return [0] * len(token_ids_0)
+        return [0] * (len(token_ids_0) + len(token_ids_1))
+
+
+@auto_docstring
+class Tipsv2ImageProcessor(TorchvisionBackend):
+    resample = PILImageResampling.BILINEAR
+    size = {"height": 448, "width": 448}
+    do_resize = True
+    do_rescale = True
+    do_normalize = False
+    do_convert_rgb = True
+
+
+class Tipsv2ProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": "max_length",
+            "truncation": True,
+            "max_length": 64,
+        },
+    }
+
+
+@auto_docstring
+class Tipsv2Processor(ProcessorMixin):
+    valid_processor_kwargs = Tipsv2ProcessorKwargs
+
+    def __init__(self, image_processor: Tipsv2ImageProcessor | None = None, tokenizer: Tipsv2Tokenizer | None = None):
+        super().__init__(image_processor, tokenizer)
 
 
 @auto_docstring(checkpoint="google/tipsv2-b14")
@@ -834,6 +954,9 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
 
 
 __all__ = [
+    "Tipsv2ImageProcessor",
+    "Tipsv2Processor",
+    "Tipsv2Tokenizer",
     "Tipsv2Config",
     "Tipsv2Model",
     "Tipsv2PreTrainedModel",
