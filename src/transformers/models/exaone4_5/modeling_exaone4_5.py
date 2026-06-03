@@ -706,6 +706,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
             )
         return special_image_mask, special_video_mask
 
+    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
