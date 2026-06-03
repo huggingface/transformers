@@ -2062,8 +2062,7 @@ def compute_lm_hidden_states(
         expand_map[prot_pos_b] = per_token_lm_pos[inverse_ordered]
         expand_maps.append(expand_map)
 
-    # Pad to longest LM input; round to ``pad_to_multiple`` when fp8 is on
-    # (TE fp8 kernels assert prod(shape[:-1]) % 8 == 0).
+    # Pad to longest LM input, optionally rounding up to ``pad_to_multiple``.
     max_len = max(lm_lengths)
     if pad_to_multiple is not None and pad_to_multiple > 1:
         max_len = ((max_len + pad_to_multiple - 1) // pad_to_multiple) * pad_to_multiple

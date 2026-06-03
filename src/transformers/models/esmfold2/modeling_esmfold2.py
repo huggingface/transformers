@@ -20,20 +20,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-try:
-    import transformer_engine.pytorch as te  # type: ignore[import]
-    from transformer_engine.common.recipe import (  # type: ignore[import]
-        DelayedScaling,
-        Format,
-    )
-
-    TE_AVAILABLE = True
-except ImportError:
-    te = None  # type: ignore[assignment]
-    DelayedScaling = None  # type: ignore[assignment]
-    Format = None  # type: ignore[assignment]
-    TE_AVAILABLE = False
-
 from ...modeling_utils import PreTrainedModel  # type: ignore[import]
 from .configuration_esmfold2 import ESMFold2Config
 from .modeling_esmfold2_common import (
@@ -56,6 +42,7 @@ from .modeling_esmfold2_common import (
     gather_rep_atom_coords,
     gather_token_to_atom,
 )
+
 
 _EPS = 1e-6
 _NONPOLYMER_ID = 4
@@ -349,139 +336,11 @@ def _inverse_softplus(value: float) -> float:
     return value + math.log(-math.expm1(-value))
 
 
-def _convert_te_modules_to_fp8_inplace(module: nn.Module) -> None:
-    """Re-init each TE module via quantized_model_init so weights live as fp8.
-
-    Must be called inside torch.no_grad(); covers nn.Linear, te.Linear,
-    te.LayerNormLinear, te.LayerNormMLP — the last two hold 99% of ESMC weight.
-    """
-    if not TE_AVAILABLE:
-        raise RuntimeError("transformer_engine is not available; cannot use fp8.")
-    from transformer_engine.pytorch import quantized_model_init  # type: ignore[import]
-
-    def _walk(mod: nn.Module) -> None:
-        for name, child in list(mod.named_children()):
-            replaced = False
-            if isinstance(child, nn.Linear):
-                in_f, out_f = child.in_features, child.out_features
-                has_bias = child.bias is not None
-                device = child.weight.device
-                dtype = child.weight.dtype
-                w = child.weight.data
-                b = child.bias.data if has_bias else None
-                setattr(mod, name, nn.Identity())
-                del child
-                torch.cuda.empty_cache()
-                with quantized_model_init(enabled=True):
-                    new_mod = te.Linear(  # type: ignore[union-attr]
-                        in_f, out_f, bias=has_bias, params_dtype=dtype
-                    ).to(device)
-                new_mod.weight.quantize_(w)  # type: ignore[attr-defined,operator]
-                if has_bias:
-                    assert b is not None
-                    new_mod.bias.data.copy_(b)  # type: ignore[union-attr]
-                del w, b
-                replaced = True
-            elif isinstance(child, te.Linear):  # type: ignore[union-attr]
-                # te.Linear with bf16 weight → re-init inside quantized_model_init for fp8.
-                in_f, out_f = child.in_features, child.out_features
-                has_bias = child.bias is not None
-                device = child.weight.device
-                dtype = (
-                    child.weight.dtype
-                    if not hasattr(child.weight, "_data")
-                    else torch.bfloat16
-                )
-                state = {k: v.detach().clone() for k, v in child.state_dict().items()}
-                setattr(mod, name, nn.Identity())
-                del child
-                torch.cuda.empty_cache()
-                with quantized_model_init(enabled=True):
-                    new_mod = te.Linear(  # type: ignore[union-attr]
-                        in_f,
-                        out_f,
-                        bias=has_bias,
-                        params_dtype=dtype,  # type: ignore[arg-type]
-                    ).to(device)  # type: ignore[arg-type]
-                new_mod.load_state_dict(state, strict=False)
-                replaced = True
-            elif (
-                hasattr(te, "LayerNormLinear") and isinstance(child, te.LayerNormLinear)  # type: ignore[union-attr]
-            ):
-                state = {k: v.detach().clone() for k, v in child.state_dict().items()}
-                hidden_size = child.in_features
-                out_features = child.out_features
-                has_bias = child.use_bias
-                device = next(child.parameters()).device
-                setattr(mod, name, nn.Identity())
-                del child
-                torch.cuda.empty_cache()
-                with quantized_model_init(enabled=True):
-                    new_mod = te.LayerNormLinear(  # type: ignore[union-attr]
-                        hidden_size,
-                        out_features,
-                        bias=has_bias,
-                        params_dtype=torch.bfloat16,
-                    ).to(device)
-                new_mod.load_state_dict(state, strict=False)
-                replaced = True
-            elif (
-                hasattr(te, "LayerNormMLP") and isinstance(child, te.LayerNormMLP)  # type: ignore[union-attr]
-            ):
-                state = {k: v.detach().clone() for k, v in child.state_dict().items()}
-                fc1_weight: Tensor = child.fc1_weight  # type: ignore[attr-defined]
-                hidden_size = int(fc1_weight.shape[1])
-                # fc1 packed as (2*ffn_hidden_size, hidden_size) for swiglu.
-                ffn_hidden_size = int(fc1_weight.shape[0]) // 2
-                has_bias = (
-                    getattr(child, "fc1_bias", None) is not None
-                    and child.fc1_bias is not None  # type: ignore[attr-defined]
-                )
-                device = fc1_weight.device
-                setattr(mod, name, nn.Identity())
-                del child
-                torch.cuda.empty_cache()
-                with quantized_model_init(enabled=True):
-                    new_mod = te.LayerNormMLP(  # type: ignore[union-attr]
-                        hidden_size=hidden_size,
-                        ffn_hidden_size=ffn_hidden_size,
-                        bias=has_bias,
-                        activation="swiglu",
-                        params_dtype=torch.bfloat16,
-                    ).to(device)  # type: ignore[arg-type]
-                new_mod.load_state_dict(state, strict=False)
-                replaced = True
-
-            if replaced:
-                # Freeze via .eval()+.requires_grad_(False); per-param ops would unwrap Float8Tensor.
-                new_mod.eval().requires_grad_(False)
-                setattr(mod, name, new_mod)
-                torch.cuda.empty_cache()
-            else:
-                _walk(child)
-
-    _walk(module)
-    torch.cuda.empty_cache()
-
-
 @contextmanager
-def _lm_precision_context(fp8: bool):
-    """bf16 autocast (+ optional TE fp8 autocast) around the LM forward.
-
-    te.autocast keeps te.Linear outputs bf16 instead of the fp32 default
-    (~425 MB at L=1024 in the hidden-state cache).
-    """
+def _lm_precision_context():
+    """bf16 autocast around the LM (ESMC backbone) forward."""
     with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-        if fp8 and TE_AVAILABLE:
-            fp8_recipe = DelayedScaling(  # type: ignore[misc]
-                fp8_format=Format.HYBRID,  # type: ignore[union-attr]
-                amax_history_len=1,
-                amax_compute_algo="most_recent",
-            )
-            with te.autocast(enabled=True, recipe=fp8_recipe):  # type: ignore[union-attr]
-                yield
-        else:
-            yield
+        yield
 
 
 class ESMFold2Model(PreTrainedModel):
@@ -528,7 +387,6 @@ class ESMFold2Model(PreTrainedModel):
             d_z=d_pair, d_model=config.lm_d_model, num_layers=config.lm_num_layers
         )
         self._esmc: nn.Module | None = None
-        self._esmc_fp8: bool = False  # set by load_esmc(fp8=True)
 
         pf = config.folding_trunk
         self.folding_trunk = FoldingTrunk(
@@ -580,12 +438,7 @@ class ESMFold2Model(PreTrainedModel):
         self.post_init()
 
     def load_esmc(self, esmc_model_path: str, precision: str = "bf16") -> None:
-        """Load the ESMC LM.
-
-        ``precision``: ``"bf16"`` (default), ``"fp32"``, or ``"fp8"``.
-        ``"fp8"`` requires H100 + TransformerEngine ≥ 2.x and quantizes
-        every TE module's weights to fp8 storage.
-        """
+        """Load the ESMC LM backbone. ``precision``: ``"bf16"`` (default) or ``"fp32"``."""
         # Resolve the ESMC backbone through the Auto registry (model_type "esmc"
         # -> ESMCModel) rather than a hard cross-model import. ESMC is a shared,
         # frozen backbone loaded from its own repo (`esmc_id`), not bundled here.
@@ -594,7 +447,6 @@ class ESMFold2Model(PreTrainedModel):
         dtype_map = {
             "bf16": torch.bfloat16,
             "fp32": torch.float32,
-            "fp8": torch.bfloat16,  # underlying weights stay bf16, TE re-quantizes to fp8
         }
         if precision not in dtype_map:
             raise ValueError(
@@ -609,17 +461,6 @@ class ESMFold2Model(PreTrainedModel):
         )
         for p in esmc.parameters():
             p.requires_grad_(False)
-
-        if precision == "fp8":
-            if not TE_AVAILABLE:
-                raise RuntimeError(
-                    "transformer_engine is not available; cannot use fp8."
-                )
-            with torch.no_grad():
-                _convert_te_modules_to_fp8_inplace(esmc)
-            self._esmc_fp8 = True
-        else:
-            self._esmc_fp8 = False
 
         self._esmc = esmc
 
@@ -691,9 +532,7 @@ class ESMFold2Model(PreTrainedModel):
         tok_mask: Tensor,
     ) -> Tensor:
         assert self._esmc is not None
-        # fp8 TE kernels require prod(shape[:-1]) % 8 == 0.
-        pad_to = 8 if self._esmc_fp8 else None
-        with _lm_precision_context(self._esmc_fp8):
+        with _lm_precision_context():
             return compute_lm_hidden_states(
                 self._esmc,
                 input_ids,
@@ -701,7 +540,7 @@ class ESMFold2Model(PreTrainedModel):
                 residue_index,
                 mol_type,
                 tok_mask,
-                pad_to_multiple=pad_to,
+                pad_to_multiple=None,
             )
 
     def _discretized_dynamics(self) -> tuple[Tensor, Tensor]:
