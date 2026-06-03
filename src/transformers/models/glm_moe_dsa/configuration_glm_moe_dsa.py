@@ -31,16 +31,28 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
+    rope_interleave (`bool`, *optional*, defaults to `True`):
+        Whether main MLA rotary embeddings use interleaved pair layout.
     mlp_layer_types (`list`, *optional*):
-        MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to 3 dense + rest sparse.
+        MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to `3` dense layers and then every `moe_layer_freq`-th layer sparse.
+    moe_layer_freq (`int`, *optional*, defaults to 1):
+        Frequency for sparse MoE layers.
     index_topk (`int`, *optional*, defaults to 2048):
         Number of top tokens selected by the indexer for sparse attention.
     index_head_dim (`int`, *optional*, defaults to 128):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int | None`, *optional*, defaults to 32):
         Number of heads for the indexer projections (DSA).
+    index_topk_freq (`int`, *optional*, defaults to 1):
+        Frequency for full indexer recomputation when `index_topk_pattern` is not provided.
+    index_topk_pattern (`str | list[str]`, *optional*):
+        Explicit full/shared indexer pattern using `"F"`/`"S"` or `"full"`/`"shared"` values.
+    index_skip_topk_offset (`int`, *optional*, defaults to 2):
+        Offset used with `index_topk_freq` to decide which layers recompute top-k indices.
+    indexer_rope_interleave (`bool`, *optional*, defaults to `False`):
+        Whether DSA indexer rotary embeddings use interleaved pair layout.
     indexer_types (`list[str]`, *optional*):
-        Indexer mode for each layer (`"full"` or `"shared"`). Defaults to first layer full, then every `index_topk_freq`-th layer full, rest shared.
+        Indexer mode for each layer (`"full"` or `"shared"`). Defaults to the pattern derived from `index_topk_freq` and `index_skip_topk_offset`.
 
     ```python
     >>> from transformers import GlmMoeDsaConfig, GlmMoeDsaModel
@@ -60,23 +72,26 @@ class GlmMoeDsaConfig(PreTrainedConfig):
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_b_proj": "colwise",
-        "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise_allreduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
     }
     attribute_map = {
         "num_local_experts": "n_routed_experts",
@@ -110,37 +125,41 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     pad_token_id: int | None = None
     bos_token_id: int | None = 0
     eos_token_id: int | list[int] | None = 1
+    pretraining_tp: int = 1
     tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
+    rope_interleave: bool = True
     mlp_layer_types: list[str] | None = None
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
     index_topk: int = 2048
     index_head_dim: int = 128
     index_n_heads: int = 32
+    moe_layer_freq: int = 1
+    index_topk_freq: int = 1
+    index_topk_pattern: str | list[str] | None = None
+    index_skip_topk_offset: int = 2
+    indexer_rope_interleave: bool = False
     indexer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
-
-        # MLP layer types: first 3 dense, rest sparse
         if self.mlp_layer_types is None:
-            self.mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (
-                self.num_hidden_layers - 3
-            )
+            self.mlp_layer_types = [
+                "sparse" if i >= 3 and i % self.moe_layer_freq == 0 else "dense" for i in range(self.num_hidden_layers)
+            ]
 
-        # Indexer layer types
         if self.indexer_types is None:
-            pattern = kwargs.pop("index_topk_pattern", None)
-            freq = kwargs.pop("index_topk_freq", 1)
+            pattern = self.index_topk_pattern
             if pattern is not None:
                 self.indexer_types = (
                     [{"F": "full", "S": "shared"}[c] for c in pattern] if isinstance(pattern, str) else list(pattern)
                 )
             else:
-                # First layer full, then every freq-th layer full, rest shared
+                freq = max(self.index_topk_freq, 1)
+                offset = self.index_skip_topk_offset
                 self.indexer_types = [
-                    "full" if (max(i - 1, 0) % freq) == 0 else "shared" for i in range(self.num_hidden_layers)
+                    "full" if (max(i - offset + 1, 0) % freq) == 0 else "shared" for i in range(self.num_hidden_layers)
                 ]
         super().__post_init__(**kwargs)
 

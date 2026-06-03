@@ -29,6 +29,7 @@ from ...models.llama.modeling_llama import rotate_half
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import is_flash_attention_requested
+from ..deepseek_v3.modeling_deepseek_v3 import apply_rotary_pos_emb_interleave
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeForCausalLM,
     Glm4MoeModel,
@@ -53,9 +54,9 @@ def apply_rotary_pos_emb(
     unsqueeze_dim: int = 1,
 ) -> torch.Tensor:
     """
-    Applies Rotary Position Embedding to a single tensor.
+    Applies (non-interleaved, NeoX/Llama style) Rotary Position Embedding to a single tensor.
 
-    This is the transformers equivalent of DeepSeek V3.2's `apply_rotary_emb(x, freqs_cis, interleaved)`.
+    This is the transformers equivalent of DeepSeek V3.2's `apply_rotary_emb(x, freqs_cis, interleaved=False)`.
     Instead of using complex-number `freqs_cis`, we use pre-split `(cos, sin)` tensors from RotaryEmbedding.
 
     Args:
@@ -70,11 +71,21 @@ def apply_rotary_pos_emb(
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
+    return (x * cos) + (rotate_half(x) * sin)
 
-    # Split-half (NeoX/Llama style): (x[:d/2], x[d/2:])
-    # This matches llama's apply_rotary_pos_emb logic.
-    x_rotated = (x * cos) + (rotate_half(x) * sin)
-    return x_rotated
+
+def apply_rotary_pos_emb_interleave_single(
+    x: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+    unsqueeze_dim: int = 1,
+) -> torch.Tensor:
+    """Interleaved (GPT-J style) RoPE applied to a single tensor (the indexer's q/k stream)."""
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    *leading_dims, head_dim = x.shape
+    x = x.view(*leading_dims, head_dim // 2, 2).transpose(-1, -2).reshape(*leading_dims, head_dim)
+    return (x * cos) + (rotate_half(x) * sin)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-5")
@@ -83,16 +94,28 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
+    rope_interleave (`bool`, *optional*, defaults to `True`):
+        Whether main MLA rotary embeddings use interleaved pair layout.
     mlp_layer_types (`list`, *optional*):
-        MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to 3 dense + rest sparse.
+        MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to `3` dense layers and then every `moe_layer_freq`-th layer sparse.
+    moe_layer_freq (`int`, *optional*, defaults to 1):
+        Frequency for sparse MoE layers.
     index_topk (`int`, *optional*, defaults to 2048):
         Number of top tokens selected by the indexer for sparse attention.
     index_head_dim (`int`, *optional*, defaults to 128):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int | None`, *optional*, defaults to 32):
         Number of heads for the indexer projections (DSA).
+    index_topk_freq (`int`, *optional*, defaults to 1):
+        Frequency for full indexer recomputation when `index_topk_pattern` is not provided.
+    index_topk_pattern (`str | list[str]`, *optional*):
+        Explicit full/shared indexer pattern using `"F"`/`"S"` or `"full"`/`"shared"` values.
+    index_skip_topk_offset (`int`, *optional*, defaults to 2):
+        Offset used with `index_topk_freq` to decide which layers recompute top-k indices.
+    indexer_rope_interleave (`bool`, *optional*, defaults to `False`):
+        Whether DSA indexer rotary embeddings use interleaved pair layout.
     indexer_types (`list[str]`, *optional*):
-        Indexer mode for each layer (`"full"` or `"shared"`). Defaults to first layer full, then every `index_topk_freq`-th layer full, rest shared.
+        Indexer mode for each layer (`"full"` or `"shared"`). Defaults to the pattern derived from `index_topk_freq` and `index_skip_topk_offset`.
 
     ```python
     >>> from transformers import GlmMoeDsaConfig, GlmMoeDsaModel
@@ -109,18 +132,24 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_b_proj": "colwise",
-        "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise_allreduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
+    }
+
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
     }
 
     hidden_size: int = 6144
@@ -136,34 +165,33 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
     index_topk: int = 2048
     index_head_dim: int = 128
     index_n_heads: int = 32
-    pretraining_tp = AttributeError()
-    rope_interleave = AttributeError()
+    moe_layer_freq: int = 1
+    pretraining_tp: int = 1
+    rope_interleave: bool = True
+    index_topk_freq: int = 1
+    index_topk_pattern: str | list[str] | None = None
+    index_skip_topk_offset: int = 2
+    indexer_rope_interleave: bool = False
     indexer_types: list[str] | None = None
-    attribute_map = {
-        "num_local_experts": "n_routed_experts",
-    }
 
     def __post_init__(self, **kwargs):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
-
-        # MLP layer types: first 3 dense, rest sparse
         if self.mlp_layer_types is None:
-            self.mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (
-                self.num_hidden_layers - 3
-            )
+            self.mlp_layer_types = [
+                "sparse" if i >= 3 and i % self.moe_layer_freq == 0 else "dense" for i in range(self.num_hidden_layers)
+            ]
 
-        # Indexer layer types
         if self.indexer_types is None:
-            pattern = kwargs.pop("index_topk_pattern", None)
-            freq = kwargs.pop("index_topk_freq", 1)
+            pattern = self.index_topk_pattern
             if pattern is not None:
                 self.indexer_types = (
                     [{"F": "full", "S": "shared"}[c] for c in pattern] if isinstance(pattern, str) else list(pattern)
                 )
             else:
-                # First layer full, then every freq-th layer full, rest shared
+                freq = max(self.index_topk_freq, 1)
+                offset = self.index_skip_topk_offset
                 self.indexer_types = [
-                    "full" if (max(i - 1, 0) % freq) == 0 else "shared" for i in range(self.num_hidden_layers)
+                    "full" if (max(i - offset + 1, 0) % freq) == 0 else "shared" for i in range(self.num_hidden_layers)
                 ]
         PreTrainedConfig.__post_init__(self, **kwargs)
 
@@ -177,8 +205,8 @@ class GlmMoeDsaIndexer(nn.Module):
     DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
 
     The Indexer has its own lightweight projections (wq_b, wk) separate from the
-    main MLA attention. It uses non-interleaved (NeoX/Llama) RoPE, unlike the main attention
-    which uses interleaved RoPE.
+    main MLA attention. RoPE layout (interleaved vs non-interleaved) is controlled
+    independently from the main attention by `config.indexer_rope_interleave`.
 
     **Cache strategy**: The Indexer manages its own key cache (`_cached_keys`) separately
     from the DynamicCache used by MLA attention, since DynamicCache is sized for exactly
@@ -210,6 +238,12 @@ class GlmMoeDsaIndexer(nn.Module):
 
         # Indexer maintains its own key cache (not in DynamicCache, which is sized for attention layers only)
         self.register_buffer("_cached_keys", None, persistent=False)
+
+    def _apply_indexer_rope(self, x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+        """Apply the indexer's RoPE (interleaved or not) to a `[B, S, H, rope_D]` tensor."""
+        if self.config.indexer_rope_interleave:
+            return apply_rotary_pos_emb_interleave_single(x, cos, sin, unsqueeze_dim=2)
+        return apply_rotary_pos_emb(x, cos, sin, unsqueeze_dim=2)
 
     @torch.no_grad()
     def forward(
@@ -248,13 +282,13 @@ class GlmMoeDsaIndexer(nn.Module):
         q = self.wq_b(q_resid)  # [B, S, H*D]
         q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
         q_pe, q_nope = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-        q_pe = apply_rotary_pos_emb(q_pe, cos, sin, unsqueeze_dim=2)  # [B, S, H, rope_D]
+        q_pe = self._apply_indexer_rope(q_pe, cos, sin)  # [B, S, H, rope_D]
         q = torch.cat([q_pe, q_nope], dim=-1)  # [B, S, H, D]
 
         # === Keys ===
         k = self.k_norm(self.wk(hidden_states))  # [B, S, D]
         k_pe, k_nope = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-        k_pe = apply_rotary_pos_emb(k_pe.unsqueeze(2), cos, sin, unsqueeze_dim=2).squeeze(2)  # [B, S, rope_D]
+        k_pe = self._apply_indexer_rope(k_pe.unsqueeze(2), cos, sin).squeeze(2)  # [B, S, rope_D]
         k = torch.cat([k_pe, k_nope], dim=-1)  # [B, S, D]
 
         # === Key cache (managed by the indexer, not DynamicCache) ===
@@ -315,6 +349,9 @@ class GlmMoeDsaAttention(nn.Module):
     and SDPA backends. The reference's compressed-cache decode path (which avoids the kv_b_proj
     expansion at decode time) is a future optimization that would require a dedicated MLA cache class.
 
+    **DSA layer sharing**: full layers run the indexer; shared layers reuse the previous full
+    layer's top-k indices (`skip_topk` / `next_skip_topk`, derived from `config.indexer_types`).
+
     **FP8 compatibility**: all weight accesses use standard nn.Linear forward calls (never
     raw `.weight` access), so FP8-quantized checkpoints work transparently.
     """
@@ -366,15 +403,15 @@ class GlmMoeDsaAttention(nn.Module):
 
         self.scaling = self.qk_head_dim ** (-0.5)
 
-        self.indexer = GlmMoeDsaIndexer(config, layer_idx)
-
         # Refer: https://arxiv.org/abs/2603.12201 for more details.
-        # skip_topk: when True, this layer will skip computation and reuse previous layer's topk indices.
-        # next_skip_topk: when True, the next layer will skip computation and reuse this layer's topk indices.
+        # skip_topk: when True, this layer reuses the previous full indexer layer's top-k indices.
+        # next_skip_topk: when True, the next layer reuses this layer's top-k indices.
+        # Shared layers have no indexer of their own.
         self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.next_skip_topk = (
             config.indexer_types[layer_idx + 1] == "shared" if layer_idx < len(config.indexer_types) - 1 else False
         )
+        self.indexer = None if self.skip_topk else GlmMoeDsaIndexer(config, layer_idx)
 
     def forward(
         self,
@@ -398,7 +435,6 @@ class GlmMoeDsaAttention(nn.Module):
         query_states = query_states.view(batch_size, seq_length, -1, self.qk_head_dim).transpose(1, 2)
         # Split nope/rope, apply RoPE, recombine — layout: [B, H, S, D]
         q_nope, q_pe = torch.split(query_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
-        q_pe = apply_rotary_pos_emb(q_pe, cos, sin, unsqueeze_dim=1)  # BHSD format
 
         # ===== KV path =====
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)  # [B, S, kv_rank + rope_D]
@@ -412,9 +448,13 @@ class GlmMoeDsaAttention(nn.Module):
         k_nope = k_nope.transpose(1, 2)  # [B, H, S, nope_D]
         value_states = value_states.transpose(1, 2)  # [B, H, S, v_D]
 
-        # RoPE on k_pe (single-head rope stream)
+        # RoPE on q_pe / k_pe (single-head rope stream for k)
         k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)  # [B, 1, S, rope_D]
-        k_pe = apply_rotary_pos_emb(k_pe, cos, sin, unsqueeze_dim=1)  # BHSD format
+        if self.config.rope_interleave:
+            q_pe, k_pe = apply_rotary_pos_emb_interleave(q_pe, k_pe, cos, sin)
+        else:
+            q_pe = apply_rotary_pos_emb(q_pe, cos, sin, unsqueeze_dim=1)
+            k_pe = apply_rotary_pos_emb(k_pe, cos, sin, unsqueeze_dim=1)
         k_pe = k_pe.expand(-1, k_nope.shape[1], -1, -1)  # [B, H, S, rope_D]
 
         # Assemble full Q and K
@@ -428,6 +468,8 @@ class GlmMoeDsaAttention(nn.Module):
         # ===== Indexer (DSA sparse mask) =====
         # attention_mask is [B, 1, S, T] (4D) for eager and (2D) otherwise but indexer works with [B, S, T] (3D)
         if not self.skip_topk or prev_topk_indices is None:
+            if self.indexer is None:
+                raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
             indexer_mask = (
                 attention_mask[:, 0, :, :]
                 if attention_mask is not None and attention_mask.dim() == 4
