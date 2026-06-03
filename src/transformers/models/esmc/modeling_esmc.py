@@ -663,12 +663,23 @@ class ESMCPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module: nn.Module):
         std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
+        # The fused LN+projection modules are handled explicitly: the base
+        # `_init_weights` matches norms by class-name substring ("LayerNorm"),
+        # which would otherwise mis-initialize their (Linear) `weight` to ones.
+        if isinstance(module, _PyTorchLayerNormLinear):
+            init.ones_(module.layer_norm_weight)
+            init.zeros_(module.layer_norm_bias)
             init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
+        elif isinstance(module, _PyTorchLayerNormMLP):
+            init.ones_(module.layer_norm_weight)
+            init.zeros_(module.layer_norm_bias)
+            init.normal_(module.fc1_weight, mean=0.0, std=std)
+            init.normal_(module.fc2_weight, mean=0.0, std=std)
         elif isinstance(module, ESMCRotaryEmbedding):
             init.copy_(module.inv_freq, module._compute_inv_freq(module.config))
+        else:
+            # nn.Linear / nn.Embedding / nn.LayerNorm via the base initializer.
+            super()._init_weights(module)
 
 
 # ---------------------------------------------------------------------------
