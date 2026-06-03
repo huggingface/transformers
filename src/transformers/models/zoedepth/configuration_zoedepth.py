@@ -37,7 +37,7 @@ class ZoeDepthConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*, defaults to `BeitConfig()`):
+        backbone_config (`Union[dict[str, Any], PretrainedConfig]`, *optional*, defaults to `BeitConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -64,9 +64,9 @@ class ZoeDepthConfig(PretrainedConfig):
             - "project" passes information to the other tokens by concatenating the readout to all other tokens before
               projecting the
             representation to the original feature dimension D using a linear layer followed by a GELU non-linearity.
-        reassemble_factors (`List[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
+        reassemble_factors (`list[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
             The up/downsampling factors of the reassemble layers.
-        neck_hidden_sizes (`List[str]`, *optional*, defaults to `[96, 192, 384, 768]`):
+        neck_hidden_sizes (`list[str]`, *optional*, defaults to `[96, 192, 384, 768]`):
             The hidden sizes to project to for the feature maps of the backbone.
         fusion_hidden_size (`int`, *optional*, defaults to 256):
             The number of channels before fusion.
@@ -82,7 +82,7 @@ class ZoeDepthConfig(PretrainedConfig):
             Whether to add a projection layer before the depth estimation head.
         bottleneck_features (`int`, *optional*, defaults to 256):
             The number of features in the bottleneck layer.
-        num_attractors (`List[int], *optional*, defaults to `[16, 8, 4, 1]`):
+        num_attractors (`list[int], *optional*, defaults to `[16, 8, 4, 1]`):
             The number of attractors to use in each stage.
         bin_embedding_dim (`int`, *optional*, defaults to 128):
             The dimension of the bin embeddings.
@@ -99,7 +99,7 @@ class ZoeDepthConfig(PretrainedConfig):
         bin_centers_type (`str`, *optional*, defaults to `"softplus"`):
             Activation type used for bin centers. Can be "normed" or "softplus". For "normed" bin centers, linear normalization trick
             is applied. This results in bounded bin centers. For "softplus", softplus activation is used and thus are unbounded.
-        bin_configurations (`List[dict]`, *optional*, defaults to `[{'n_bins': 64, 'min_depth': 0.001, 'max_depth': 10.0}]`):
+        bin_configurations (`list[dict]`, *optional*, defaults to `[{'n_bins': 64, 'min_depth': 0.001, 'max_depth': 10.0}]`):
             Configuration for each of the bin heads.
             Each configuration should consist of the following keys:
             - name (`str`): The name of the bin head - only required in case of multiple bin configurations.
@@ -232,6 +232,14 @@ class ZoeDepthConfig(PretrainedConfig):
         self.patch_transformer_hidden_size = patch_transformer_hidden_size
         self.patch_transformer_intermediate_size = patch_transformer_intermediate_size
         self.patch_transformer_num_attention_heads = patch_transformer_num_attention_heads
+
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
 
 
 __all__ = ["ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP", "ZoeDepthConfig"]

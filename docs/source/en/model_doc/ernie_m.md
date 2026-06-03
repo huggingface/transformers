@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-12-31 and added to Hugging Face Transformers on 2023-06-20.*
 
 # ErnieM
 
@@ -31,14 +32,13 @@ You can do so by running the following command: `pip install -U transformers==4.
 ## Overview
 
 The ErnieM model was proposed in [ERNIE-M: Enhanced Multilingual Representation by Aligning
-Cross-lingual Semantics with Monolingual Corpora](https://arxiv.org/abs/2012.15674)  by Xuan Ouyang, Shuohuan Wang, Chao Pang, Yu Sun,
+Cross-lingual Semantics with Monolingual Corpora](https://huggingface.co/papers/2012.15674)  by Xuan Ouyang, Shuohuan Wang, Chao Pang, Yu Sun,
 Hao Tian, Hua Wu, Haifeng Wang.
 
 The abstract from the paper is the following:
 
 *Recent studies have demonstrated that pre-trained cross-lingual models achieve impressive performance in downstream cross-lingual tasks. This improvement benefits from learning a large amount of monolingual and parallel corpora. Although it is generally acknowledged that parallel corpora are critical for improving the model performance, existing methods are often constrained by the size of parallel corpora, especially for lowresource languages. In this paper, we propose ERNIE-M, a new training method that encourages the model to align the representation of multiple languages with monolingual corpora, to overcome the constraint that the parallel corpus size places on the model performance. Our key insight is to integrate back-translation into the pre-training process. We generate pseudo-parallel sentence pairs on a monolingual corpus to enable the learning of semantic alignments between different languages, thereby enhancing the semantic modeling of cross-lingual models. Experimental results show that ERNIE-M outperforms existing cross-lingual models and delivers new state-of-the-art results in various cross-lingual downstream tasks.*
 This model was contributed by [Susnato Dhar](https://huggingface.co/susnato). The original code can be found [here](https://github.com/PaddlePaddle/PaddleNLP/tree/develop/paddlenlp/transformers/ernie_m).
-
 
 ## Usage tips
 
@@ -58,7 +58,6 @@ This model was contributed by [Susnato Dhar](https://huggingface.co/susnato). Th
 
 [[autodoc]] ErnieMConfig
 
-
 ## ErnieMTokenizer
 
 [[autodoc]] ErnieMTokenizer
@@ -66,7 +65,6 @@ This model was contributed by [Susnato Dhar](https://huggingface.co/susnato). Th
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
     - save_vocabulary
-
 
 ## ErnieMModel
 
@@ -78,18 +76,15 @@ This model was contributed by [Susnato Dhar](https://huggingface.co/susnato). Th
 [[autodoc]] ErnieMForSequenceClassification
     - forward
 
-
 ## ErnieMForMultipleChoice
 
 [[autodoc]] ErnieMForMultipleChoice
     - forward
 
-
 ## ErnieMForTokenClassification
 
 [[autodoc]] ErnieMForTokenClassification
     - forward
-
 
 ## ErnieMForQuestionAnswering
 

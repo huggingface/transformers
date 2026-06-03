@@ -26,6 +26,7 @@ Pass the audio signal, typically stored in `array`, to the feature extractor and
 from transformers import AutoFeatureExtractor
 
 feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
+dataset = load_dataset("PolyAI/minds14", name="en-US", split="train")
 processed_sample = feature_extractor(dataset[0]["audio"]["array"], sampling_rate=16000)
 processed_sample
 {'input_values': [array([ 9.4472744e-05,  3.0777880e-03, -2.8888427e-03, ...,

@@ -14,7 +14,6 @@ rendered properly in your Markdown viewer.
 
 -->
 
-
 # Image captioning
 
 [[open-in-colab]]
@@ -26,7 +25,7 @@ helps to improve content accessibility for people by describing images to them.
 This guide will show you how to:
 
 * Fine-tune an image captioning model.
-* Use the fine-tuned model for inference. 
+* Use the fine-tuned model for inference.
 
 Before you begin, make sure you have all the necessary libraries installed:
 
@@ -37,7 +36,6 @@ pip install jiwer -q
 
 We encourage you to log in to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to log in:
 
-
 ```python
 from huggingface_hub import notebook_login
 
@@ -47,8 +45,7 @@ notebook_login()
 ## Load the Pokémon BLIP captions dataset
 
 Use the 🤗 Dataset library to load a dataset that consists of {image-caption} pairs. To create your own image captioning dataset
-in PyTorch, you can follow [this notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/GIT/Fine_tune_GIT_on_an_image_captioning_dataset.ipynb). 
-
+in PyTorch, you can follow [this notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/GIT/Fine_tune_GIT_on_an_image_captioning_dataset.ipynb).
 
 ```python
 from datasets import load_dataset
@@ -56,6 +53,7 @@ from datasets import load_dataset
 ds = load_dataset("lambdalabs/pokemon-blip-captions")
 ds
 ```
+
 ```bash
 DatasetDict({
     train: Dataset({
@@ -69,12 +67,11 @@ The dataset has two features, `image` and `text`.
 
 <Tip>
 
-Many image captioning datasets contain multiple captions per image. In those cases, a common strategy is to randomly sample a caption amongst the available ones during training. 
+Many image captioning datasets contain multiple captions per image. In those cases, a common strategy is to randomly sample a caption amongst the available ones during training.
 
 </Tip>
 
-Split the dataset’s train split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
-
+Split the dataset's train split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
 
 ```python
 ds = ds["train"].train_test_split(test_size=0.1)
@@ -82,8 +79,7 @@ train_ds = ds["train"]
 test_ds = ds["test"]
 ```
 
-Let's visualize a couple of samples from the training set. 
-
+Let's visualize a couple of samples from the training set.
 
 ```python
 from textwrap import wrap
@@ -106,7 +102,7 @@ sample_images_to_visualize = [np.array(train_ds[i]["image"]) for i in range(5)]
 sample_captions = [train_ds[i]["text"] for i in range(5)]
 plot_images(sample_images_to_visualize, sample_captions)
 ```
-    
+
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sample_training_images_image_cap.png" alt="Sample training images"/>
 </div>
@@ -115,7 +111,7 @@ plot_images(sample_images_to_visualize, sample_captions)
 
 Since the dataset has two modalities (image and text), the pre-processing pipeline will preprocess images and the captions.
 
-To do so, load the processor class associated with the model you are about to fine-tune. 
+To do so, load the processor class associated with the model you are about to fine-tune.
 
 ```python
 from transformers import AutoProcessor
@@ -124,7 +120,7 @@ checkpoint = "microsoft/git-base"
 processor = AutoProcessor.from_pretrained(checkpoint)
 ```
 
-The processor will internally pre-process the image (which includes resizing, and pixel scaling) and tokenize the caption. 
+The processor will internally pre-process the image (which includes resizing, and pixel scaling) and tokenize the caption.
 
 ```python
 def transforms(example_batch):
@@ -139,12 +135,11 @@ train_ds.set_transform(transforms)
 test_ds.set_transform(transforms)
 ```
 
-With the dataset ready, you can now set up the model for fine-tuning. 
+With the dataset ready, you can now set up the model for fine-tuning.
 
 ## Load a base model
 
 Load the ["microsoft/git-base"](https://huggingface.co/microsoft/git-base) into a [`AutoModelForCausalLM`](https://huggingface.co/docs/transformers/model_doc/auto#transformers.AutoModelForCausalLM) object.
-
 
 ```python
 from transformers import AutoModelForCausalLM
@@ -154,10 +149,9 @@ model = AutoModelForCausalLM.from_pretrained(checkpoint)
 
 ## Evaluate
 
-Image captioning models are typically evaluated with the [Rouge Score](https://huggingface.co/spaces/evaluate-metric/rouge) or [Word Error Rate](https://huggingface.co/spaces/evaluate-metric/wer). For this guide, you will use the Word Error Rate (WER). 
+Image captioning models are typically evaluated with the [Rouge Score](https://huggingface.co/spaces/evaluate-metric/rouge) or [Word Error Rate](https://huggingface.co/spaces/evaluate-metric/wer). For this guide, you will use the Word Error Rate (WER).
 
-We use the 🤗 Evaluate library to do so. For potential limitations and other gotchas of the WER, refer to [this guide](https://huggingface.co/spaces/evaluate-metric/wer). 
-
+We use the 🤗 Evaluate library to do so. For potential limitations and other gotchas of the WER, refer to [this guide](https://huggingface.co/spaces/evaluate-metric/wer).
 
 ```python
 from evaluate import load
@@ -177,10 +171,9 @@ def compute_metrics(eval_pred):
 
 ## Train!
 
-Now, you are ready to start fine-tuning the model. You will use the 🤗 [`Trainer`] for this. 
+Now, you are ready to start fine-tuning the model. You will use the 🤗 [`Trainer`] for this.
 
 First, define the training arguments using [`TrainingArguments`].
-
 
 ```python
 from transformers import TrainingArguments, Trainer
@@ -208,7 +201,7 @@ training_args = TrainingArguments(
 )
 ```
 
-Then pass them along with the datasets and the model to 🤗 Trainer. 
+Then pass them along with the datasets and the model to 🤗 Trainer.
 
 ```python
 trainer = Trainer(
@@ -222,14 +215,13 @@ trainer = Trainer(
 
 To start training, simply call [`~Trainer.train`] on the [`Trainer`] object.
 
-```python 
+```python
 trainer.train()
 ```
 
 You should see the training loss drop smoothly as training progresses.
 
 Once training is completed, share your model to the Hub with the [`~Trainer.push_to_hub`] method so everyone can use your model:
-
 
 ```python
 trainer.push_to_hub()
@@ -238,7 +230,6 @@ trainer.push_to_hub()
 ## Inference
 
 Take a sample image from `test_ds` to test the model.
-
 
 ```python
 from PIL import Image
@@ -252,24 +243,25 @@ image
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/test_image_image_cap.png" alt="Test image"/>
 </div>
-    
+
 Prepare image for the model.
 
 ```python
-from accelerate.test_utils.testing import get_backend
-# automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
-device, _, _ = get_backend()
+from transformers import infer_device
+
+device = infer_device()
 inputs = processor(images=image, return_tensors="pt").to(device)
 pixel_values = inputs.pixel_values
 ```
 
-Call [`generate`] and decode the predictions. 
+Call [`generate`] and decode the predictions.
 
 ```python
 generated_ids = model.generate(pixel_values=pixel_values, max_length=50)
 generated_caption = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 print(generated_caption)
 ```
+
 ```bash
 a drawing of a pink and blue pokemon
 ```

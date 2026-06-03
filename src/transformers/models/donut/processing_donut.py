@@ -19,7 +19,7 @@ Processor class for Donut.
 import re
 import warnings
 from contextlib import contextmanager
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -65,10 +65,6 @@ class DonutProcessor(ProcessorMixin):
             feature_extractor = kwargs.pop("feature_extractor")
 
         image_processor = image_processor if image_processor is not None else feature_extractor
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
 
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
@@ -76,8 +72,8 @@ class DonutProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
-        text: Optional[Union[str, List[str], TextInput, PreTokenizedInput]] = None,
+        images: Optional[ImageInput] = None,
+        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[DonutProcessorKwargs],
@@ -116,19 +112,11 @@ class DonutProcessor(ProcessorMixin):
             inputs["input_ids"] = encodings["input_ids"]
             return inputs
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to DonutTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
+    @property
+    def model_input_names(self):
+        image_processor_input_names = self.image_processor.model_input_names
 
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to DonutTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
-        docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
+        return list(image_processor_input_names + ["input_ids", "labels"])
 
     @contextmanager
     def as_target_processor(self):
@@ -156,14 +144,18 @@ class DonutProcessor(ProcessorMixin):
         output = {}
 
         while tokens:
-            start_token = re.search(r"<s_(.*?)>", tokens, re.IGNORECASE)
-            if start_token is None:
+            # We want r"<s_(.*?)>" but without ReDOS risk, so do it manually in two parts
+            potential_start = re.search(r"<s_", tokens, re.IGNORECASE)
+            if potential_start is None:
                 break
-            key = start_token.group(1)
+            start_token = tokens[potential_start.start() :]
+            if ">" not in start_token:
+                break
+            start_token = start_token[: start_token.index(">") + 1]
+            key = start_token[len("<s_") : -len(">")]
             key_escaped = re.escape(key)
 
             end_token = re.search(rf"</s_{key_escaped}>", tokens, re.IGNORECASE)
-            start_token = start_token.group()
             if end_token is None:
                 tokens = tokens.replace(start_token, "")
             else:
@@ -195,7 +187,7 @@ class DonutProcessor(ProcessorMixin):
                 if tokens[:6] == r"<sep/>":  # non-leaf nodes
                     return [output] + self.token2json(tokens[6:], is_inner_value=True, added_vocab=added_vocab)
 
-        if len(output):
+        if output:
             return [output] if is_inner_value else output
         else:
             return [] if is_inner_value else {"text_sequence": tokens}

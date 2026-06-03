@@ -14,7 +14,7 @@
 # limitations under the License.
 """OneFormer model configuration"""
 
-from typing import Dict, Optional
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -74,7 +74,7 @@ class OneFormerConfig(PretrainedConfig):
         importance_sample_ratio (`float`, *optional*, defaults to 0.75):
             Ratio of points that are sampled via importance sampling.
         init_std (`float`, *optional*, defaults to 0.02):
-            Standard deviation for normal intialization.
+            Standard deviation for normal initialization.
         init_xavier_std (`float`, *optional*, defaults to 1.0):
             Standard deviation for xavier uniform initialization.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -150,11 +150,11 @@ class OneFormerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        backbone_config: Optional[Dict] = None,
+        backbone_config: Optional[dict] = None,
         backbone: Optional[str] = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,
-        backbone_kwargs: Optional[Dict] = None,
+        backbone_kwargs: Optional[dict] = None,
         ignore_value: int = 255,
         num_queries: int = 150,
         no_object_weight: int = 0.1,
@@ -272,6 +272,14 @@ class OneFormerConfig(PretrainedConfig):
         self.num_hidden_layers = decoder_layers
 
         super().__init__(**kwargs)
+
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
 
 
 __all__ = ["OneFormerConfig"]

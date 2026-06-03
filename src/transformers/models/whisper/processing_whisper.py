@@ -35,7 +35,7 @@ class WhisperProcessor(ProcessorMixin):
     """
 
     feature_extractor_class = "WhisperFeatureExtractor"
-    tokenizer_class = "WhisperTokenizer"
+    tokenizer_class = ("WhisperTokenizer", "WhisperTokenizerFast")
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
@@ -78,20 +78,6 @@ class WhisperProcessor(ProcessorMixin):
         else:
             inputs["labels"] = encodings["input_ids"]
             return inputs
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to WhisperTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to WhisperTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
 
     def get_prompt_ids(self, text: str, return_tensors="np"):
         return self.tokenizer.get_prompt_ids(text, return_tensors=return_tensors)

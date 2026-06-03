@@ -40,10 +40,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] utils.replace_return_docstrings
 
-## 特殊なプロパティ
-
-[[autodoc]] utils.cached_property
-
 ## その他のユーティリティ
 
 [[autodoc]] utils._LazyModule

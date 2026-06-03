@@ -137,7 +137,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
             The dropout ratio.
         ext_pw_out_channel (`int`, *optional*, defaults to 1024):
             Number of out channels in the point-wise conv modules.
-        depthwise_seperable_out_channel (`int`, *optional*, defaults to 1024):
+        depthwise_separable_out_channel (`int`, *optional*, defaults to 1024):
             Number of out channels in the depth-wise separable conv modules.
         depthwise_multiplier (`int`, *optional*, defaults to 1):
             Input size multiplier for the depth-wise separable conv modules.
@@ -190,7 +190,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         left_chunk: int = 18,
         dropout_rate: float = 0.0,
         ext_pw_out_channel: int = 1024,
-        depthwise_seperable_out_channel: int = 1024,
+        depthwise_separable_out_channel: int = 1024,
         depthwise_multiplier: int = 1,
         kernel_size: int = 3,
         conv_activation: str = "swish",
@@ -217,7 +217,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.num_blocks = num_blocks
         self.dropout_rate = dropout_rate
         self.ext_pw_out_channel = ext_pw_out_channel
-        self.depthwise_seperable_out_channel = depthwise_seperable_out_channel
+        self.depthwise_separable_out_channel = depthwise_separable_out_channel
         self.depthwise_multiplier = depthwise_multiplier
         self.kernel_size = kernel_size
         self.conv_activation = conv_activation
@@ -236,7 +236,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         if time_reduction % 2 != 0:
             raise ValueError("`time_reduction` should be a multiple of 2!")
         length = input_size
-        for _ in range(int(math.log(time_reduction, 2))):
+        for _ in range(int(math.log2(time_reduction))):
             length = math.floor((length - 1) / 2 + 1)
         self.nemo_final_size = length
 
@@ -268,8 +268,8 @@ class Phi4MultimodalConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         resid_pdrop (`float`, *optional*, defaults to 0.0):
             Dropout probability for mlp outputs.
@@ -452,7 +452,7 @@ class Phi4MultimodalConfig(PretrainedConfig):
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_short_factor = self.rope_scaling.get("short_factor", None)
         rope_scaling_long_factor = self.rope_scaling.get("long_factor", None)
-        if rope_scaling_type is None or rope_scaling_type not in ["longrope"]:
+        if rope_scaling_type is None or rope_scaling_type != "longrope":
             raise ValueError(f"`rope_scaling`'s type field must be one of ['longrope'], got {rope_scaling_type}")
         if not (
             isinstance(rope_scaling_short_factor, list)

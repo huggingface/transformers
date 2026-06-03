@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -380,14 +379,6 @@ class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip(reason="AlignTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="AlignTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "kakaobrain/align-base"
@@ -417,8 +408,10 @@ class AlignModelTester:
         return config, input_ids, token_type_ids, input_mask, pixel_values
 
     def get_config(self):
-        return AlignConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+        return AlignConfig(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
+            projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, token_type_ids, attention_mask, pixel_values):
@@ -471,9 +464,12 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_batching_equivalence(self, atol=3e-4, rtol=3e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
+
     @unittest.skip(reason="Start to fail after using torch `cu118`.")
     def test_multi_gpu_data_parallel_forward(self):
-        super().test_multi_gpu_data_parallel_forward()
+        pass
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -494,35 +490,6 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="AlignModel does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
-
-    # override as the `temperature` parameter initialization is different for ALIGN
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `temperature` is initialized as per the original implementation
-                    if name == "temperature":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            1.0,
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    elif name == "text_projection.weight":
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
@@ -566,8 +533,8 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {

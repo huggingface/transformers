@@ -280,7 +280,7 @@ model = AutoModel.from_pretrained("google-t5/t5-small")
 trainer = Trainer(model=model, args=training_args, ...)
 ```
 
-fp16 가중치가 단일 GPU에 맞지 않는 경우 ZeRO-3이 필요합니다. fp16 가중치를 로드할 수 있는 경우, [`~PreTrainedModel.from_pretrained`]에 `torch_dtype=torch.float16`을 지정해야 합니다.
+fp16 가중치가 단일 GPU에 맞지 않는 경우 ZeRO-3이 필요합니다. fp16 가중치를 로드할 수 있는 경우, [`~PreTrainedModel.from_pretrained`]에 `dtype=torch.float16`을 지정해야 합니다.
 
 ZeRO-3의 또 다른 고려 사항은 여러 개의 GPU를 사용하는 경우 현재 실행 중인 레이어의 매개변수가 아닌 한 단일 GPU에 모든 매개변수가 없다는 것입니다. 사전 훈련된 모델 가중치를 [`~PreTrainedModel.from_pretrained`]에 로드하는 등 모든 레이어의 모든 매개변수에 한 번에 액세스하려면 한 번에 하나의 레이어를 로드하고 즉시 모든 GPU에 파티셔닝합니다. 이는 매우 큰 모델의 경우 메모리 제한으로 인해 하나의 GPU에 가중치를 로드한 다음 다른 GPU에 분산할 수 없기 때문입니다.
 
@@ -1165,7 +1165,7 @@ python -c 'import deepspeed; print(f"deepspeed: {deepspeed.__version__}")'
 
 ### DeepSpeed 프로세스가 시작 단계에서 종료되었을 경우[[deepspeed-process-killed-at-startup]]
 
-실행 중에 트레이스백 없이 DeepSpeed 프로세스가 종료되면 일반적으로 프로그램이 시스템보다 많은 CPU 메모리를 할당하려고 시도했거나 프로세스가 허용된 것보다 많은 CPU 메모리를 할당하려고 시도하여 OS 커널이 프로세스를 종료했음을 의미합니다. 이 경우 구성 파일에 `offload_optimizer`, `offload_param` 또는 둘 다 CPU로 오프로드하도록 구성되어 있는지 확인하세요.  
+실행 중에 트레이스백 없이 DeepSpeed 프로세스가 종료되면 일반적으로 프로그램이 시스템보다 많은 CPU 메모리를 할당하려고 시도했거나 프로세스가 허용된 것보다 많은 CPU 메모리를 할당하려고 시도하여 OS 커널이 프로세스를 종료했음을 의미합니다. 이 경우 구성 파일에 `offload_optimizer`, `offload_param` 또는 둘 다 CPU로 오프로드하도록 구성되어 있는지 확인하세요.
 
 NVMe 및 ZeRO-3를 설정한 경우 NVMe로 오프로드를 실험해 보세요(모델의 메모리 요구 사항을 [확인](https://deepspeed.readthedocs.io/en/latest/memory.html)하세요).
 
@@ -1211,7 +1211,7 @@ NVMe 및 ZeRO-3를 설정한 경우 NVMe로 오프로드를 실험해 보세요(
 
 ## 리소스[[resources]]
 
-DeepSpeed ZeRO는 제한된 GPU 리소스로 추론을 위해 매우 큰 모델을 훈련하고 로드하는 강력한 기술로, 누구나 쉽게 사용할 수 있습니다. DeepSpeed에 대해 자세히 알아보려면 [블로그 포스트](https://www.microsoft.com/en-us/research/search/?q=deepspeed), [공식 문서](https://www.deepspeed.ai/getting-started/), [깃허브 리포지토리](https://github.com/deepspeedai/DeepSpeed)를 참조하세요. 
+DeepSpeed ZeRO는 제한된 GPU 리소스로 추론을 위해 매우 큰 모델을 훈련하고 로드하는 강력한 기술로, 누구나 쉽게 사용할 수 있습니다. DeepSpeed에 대해 자세히 알아보려면 [블로그 포스트](https://www.microsoft.com/en-us/research/search/?q=deepspeed), [공식 문서](https://www.deepspeed.ai/getting-started/), [깃허브 리포지토리](https://github.com/deepspeedai/DeepSpeed)를 참조하세요.
 
 다음 문서도 ZeRO에 대해 자세히 알아볼 수 있는 훌륭한 자료입니다:
 

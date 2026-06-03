@@ -15,8 +15,9 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from functools import cache
+from typing import Any, Callable
 
 import numpy as np
 import torch
@@ -74,11 +75,11 @@ def rot_vec_mul(r: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
     )
 
 
-@lru_cache(maxsize=None)
+@cache
 def identity_rot_mats(
-    batch_dims: Tuple[int, ...],
-    dtype: Optional[torch.dtype] = None,
-    device: Optional[torch.device] = None,
+    batch_dims: tuple[int, ...],
+    dtype: torch.dtype | None = None,
+    device: torch.device | None = None,
     requires_grad: bool = True,
 ) -> torch.Tensor:
     rots = torch.eye(3, dtype=dtype, device=device, requires_grad=requires_grad)
@@ -89,22 +90,22 @@ def identity_rot_mats(
     return rots
 
 
-@lru_cache(maxsize=None)
+@cache
 def identity_trans(
-    batch_dims: Tuple[int, ...],
-    dtype: Optional[torch.dtype] = None,
-    device: Optional[torch.device] = None,
+    batch_dims: tuple[int, ...],
+    dtype: torch.dtype | None = None,
+    device: torch.device | None = None,
     requires_grad: bool = True,
 ) -> torch.Tensor:
     trans = torch.zeros((*batch_dims, 3), dtype=dtype, device=device, requires_grad=requires_grad)
     return trans
 
 
-@lru_cache(maxsize=None)
+@cache
 def identity_quats(
-    batch_dims: Tuple[int, ...],
-    dtype: Optional[torch.dtype] = None,
-    device: Optional[torch.device] = None,
+    batch_dims: tuple[int, ...],
+    dtype: torch.dtype | None = None,
+    device: torch.device | None = None,
     requires_grad: bool = True,
 ) -> torch.Tensor:
     quat = torch.zeros((*batch_dims, 4), dtype=dtype, device=device, requires_grad=requires_grad)
@@ -115,12 +116,12 @@ def identity_quats(
     return quat
 
 
-_quat_elements: List[str] = ["a", "b", "c", "d"]
-_qtr_keys: List[str] = [l1 + l2 for l1 in _quat_elements for l2 in _quat_elements]
-_qtr_ind_dict: Dict[str, int] = {key: ind for ind, key in enumerate(_qtr_keys)}
+_quat_elements: list[str] = ["a", "b", "c", "d"]
+_qtr_keys: list[str] = [l1 + l2 for l1 in _quat_elements for l2 in _quat_elements]
+_qtr_ind_dict: dict[str, int] = {key: ind for ind, key in enumerate(_qtr_keys)}
 
 
-def _to_mat(pairs: List[Tuple[str, int]]) -> np.ndarray:
+def _to_mat(pairs: list[tuple[str, int]]) -> np.ndarray:
     mat = np.zeros((4, 4))
     for key, value in pairs:
         ind = _qtr_ind_dict[key]
@@ -212,14 +213,14 @@ _QUAT_MULTIPLY[:, :, 3] = [[0, 0, 0, 1], [0, 0, 1, 0], [0, -1, 0, 0], [1, 0, 0, 
 
 _QUAT_MULTIPLY_BY_VEC = _QUAT_MULTIPLY[:, 1:, :]
 
-_CACHED_QUATS: Dict[str, np.ndarray] = {
+_CACHED_QUATS: dict[str, np.ndarray] = {
     "_QTR_MAT": _QTR_MAT,
     "_QUAT_MULTIPLY": _QUAT_MULTIPLY,
     "_QUAT_MULTIPLY_BY_VEC": _QUAT_MULTIPLY_BY_VEC,
 }
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_quat(quat_key: str, dtype: torch.dtype, device: torch.device) -> torch.Tensor:
     return torch.tensor(_CACHED_QUATS[quat_key], dtype=dtype, device=device)
 
@@ -259,8 +260,8 @@ class Rotation:
 
     def __init__(
         self,
-        rot_mats: Optional[torch.Tensor] = None,
-        quats: Optional[torch.Tensor] = None,
+        rot_mats: torch.Tensor | None = None,
+        quats: torch.Tensor | None = None,
         normalize_quats: bool = True,
     ):
         """
@@ -294,8 +295,8 @@ class Rotation:
     @staticmethod
     def identity(
         shape,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
         requires_grad: bool = True,
         fmt: str = "quat",
     ) -> Rotation:
@@ -681,7 +682,7 @@ class Rotation:
         else:
             raise ValueError("Both rotations are None")
 
-    def to(self, device: Optional[torch.device], dtype: Optional[torch.dtype]) -> Rotation:
+    def to(self, device: torch.device | None, dtype: torch.dtype | None) -> Rotation:
         """
         Analogous to the to() method of torch Tensors
 
@@ -733,7 +734,7 @@ class Rigid:
     dimensions of its component parts.
     """
 
-    def __init__(self, rots: Optional[Rotation], trans: Optional[torch.Tensor]):
+    def __init__(self, rots: Rotation | None, trans: torch.Tensor | None):
         """
         Args:
             rots: A [*, 3, 3] rotation tensor
@@ -784,9 +785,9 @@ class Rigid:
 
     @staticmethod
     def identity(
-        shape: Tuple[int, ...],
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[torch.device] = None,
+        shape: tuple[int, ...],
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
         requires_grad: bool = True,
         fmt: str = "quat",
     ) -> Rigid:
@@ -1069,7 +1070,7 @@ class Rigid:
         e0 = [c / denom for c in e0]
         dot = sum((c1 * c2 for c1, c2 in zip(e0, e1)))
         e1 = [c2 - c1 * dot for c1, c2 in zip(e0, e1)]
-        denom = torch.sqrt(sum((c * c for c in e1)) + eps * torch.ones_like(e1[0]))
+        denom = torch.sqrt(sum(c * c for c in e1) + eps * torch.ones_like(e1[0]))
         e1 = [c / denom for c in e1]
         e2 = [
             e0[1] * e1[2] - e0[2] * e1[1],

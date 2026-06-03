@@ -23,10 +23,6 @@
     title: 使用🤗 PEFT加载和训练adapters
   - local: model_sharing
     title: 分享您的模型
-  - local: agents
-    title: 智能体和工具
-  - local: agents_advanced
-    title: 智能体，超强版 - 多智能体、外部工具等
   - local: llm_tutorial
     title: 使用LLMs进行生成
   title: 教程
@@ -105,8 +101,6 @@
   title: 概念指南
 - sections:
   - sections:
-    - local: main_classes/agent
-      title: 智能体和工具
     - local: main_classes/callback
       title: Callbacks
     - local: main_classes/configuration
@@ -163,5 +157,8 @@
       title: 通用工具
     - local: internal/time_series_utils
       title: 时序数据工具
+    - sections:
+      - local: model_doc/bert
+        title: BERT
     title: 内部辅助工具
   title: 应用程序接口 (API)

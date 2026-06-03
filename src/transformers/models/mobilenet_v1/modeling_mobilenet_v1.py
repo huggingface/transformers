@@ -18,28 +18,15 @@ from typing import Optional, Union
 
 import torch
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPoolingAndNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import auto_docstring, logging
 from .configuration_mobilenet_v1 import MobileNetV1Config
 
 
 logger = logging.get_logger(__name__)
-
-
-# General docstring
-_CONFIG_FOR_DOC = "MobileNetV1Config"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "google/mobilenet_v1_1.0_224"
-_EXPECTED_OUTPUT_SHAPE = [1, 1024, 7, 7]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "google/mobilenet_v1_1.0_224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 def _build_tf_to_pytorch_map(model, config, tf_weights=None):
@@ -184,7 +171,7 @@ class MobileNetV1ConvLayer(nn.Module):
         groups: Optional[int] = 1,
         bias: bool = False,
         use_normalization: Optional[bool] = True,
-        use_activation: Optional[bool or str] = True,
+        use_activation: Optional[Union[bool, str]] = True,
     ) -> None:
         super().__init__()
         self.config = config
@@ -239,13 +226,9 @@ class MobileNetV1ConvLayer(nn.Module):
         return features
 
 
+@auto_docstring
 class MobileNetV1PreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = MobileNetV1Config
+    config: MobileNetV1Config
     load_tf_weights = load_tf_weights_in_mobilenet_v1
     base_model_prefix = "mobilenet_v1"
     main_input_name = "pixel_values"
@@ -263,36 +246,13 @@ class MobileNetV1PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-MOBILENET_V1_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`MobileNetV1Config`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-MOBILENET_V1_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`MobileNetV1ImageProcessor.__call__`] for details.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare MobileNetV1 model outputting raw hidden-states without any specific head on top.",
-    MOBILENET_V1_START_DOCSTRING,
-)
+@auto_docstring
 class MobileNetV1Model(MobileNetV1PreTrainedModel):
     def __init__(self, config: MobileNetV1Config, add_pooling_layer: bool = True):
+        r"""
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
+        """
         super().__init__(config)
         self.config = config
 
@@ -345,14 +305,7 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
 
-    @add_start_docstrings_to_model_forward(MOBILENET_V1_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -394,12 +347,11 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     MobileNetV1 model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
     ImageNet.
-    """,
-    MOBILENET_V1_START_DOCSTRING,
+    """
 )
 class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
     def __init__(self, config: MobileNetV1Config) -> None:
@@ -417,13 +369,7 @@ class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MOBILENET_V1_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -447,26 +393,7 @@ class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+            loss = self.loss_function(labels, logits, self.config)
 
         if not return_dict:
             output = (logits,) + outputs[2:]

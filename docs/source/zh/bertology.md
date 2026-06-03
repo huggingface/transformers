@@ -16,18 +16,18 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 
 - BERT Rediscovers the Classical NLP Pipeline by Ian Tenney, Dipanjan Das, Ellie Pavlick:
-  https://arxiv.org/abs/1905.05950
-- Are Sixteen Heads Really Better than One? by Paul Michel, Omer Levy, Graham Neubig: https://arxiv.org/abs/1905.10650
+  https://huggingface.co/papers/1905.05950
+- Are Sixteen Heads Really Better than One? by Paul Michel, Omer Levy, Graham Neubig: https://huggingface.co/papers/1905.10650
 - What Does BERT Look At? An Analysis of BERT's Attention by Kevin Clark, Urvashi Khandelwal, Omer Levy, Christopher D.
-  Manning: https://arxiv.org/abs/1906.04341
-- CAT-probing: A Metric-based Approach to Interpret How Pre-trained Models for Programming Language Attend Code Structure: https://arxiv.org/abs/2210.04633
+  Manning: https://huggingface.co/papers/1906.04341
+- CAT-probing: A Metric-based Approach to Interpret How Pre-trained Models for Programming Language Attend Code Structure: https://huggingface.co/papers/2210.04633
 
 
-为了助力这一新兴领域的发展，我们在BERT/GPT/GPT-2模型中增加了一些附加功能，方便人们访问其内部表示，这些功能主要借鉴了Paul Michel的杰出工作(https://arxiv.org/abs/1905.10650)：
+为了助力这一新兴领域的发展，我们在BERT/GPT/GPT-2模型中增加了一些附加功能，方便人们访问其内部表示，这些功能主要借鉴了Paul Michel的杰出工作(https://huggingface.co/papers/1905.10650)：
 
 
 - 访问BERT/GPT/GPT-2的所有隐藏状态，
 - 访问BERT/GPT/GPT-2每个注意力头的所有注意力权重，
-- 检索注意力头的输出值和梯度，以便计算头的重要性得分并对头进行剪枝，详情可见论文：https://arxiv.org/abs/1905.10650。
+- 检索注意力头的输出值和梯度，以便计算头的重要性得分并对头进行剪枝，详情可见论文：https://huggingface.co/papers/1905.10650。
 
 为了帮助您理解和使用这些功能，我们添加了一个具体的示例脚本：[bertology.py](https://github.com/huggingface/transformers-research-projects/tree/main/bertology/run_bertology.py)，该脚本可以对一个在 GLUE 数据集上预训练的模型进行信息提取与剪枝。

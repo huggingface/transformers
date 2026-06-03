@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The SqueezeBert authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,18 +16,22 @@
 from transformers import SqueezeBertTokenizer, SqueezeBertTokenizerFast
 from transformers.testing_utils import require_tokenizers, slow
 
-from ..bert.test_tokenization_bert import BertTokenizationTest
+# Avoid import `BertTokenizationTest` directly as it will run as `test_tokenization_squeezebert.py::BertTokenizationTest`
+# together with `test_tokenization_bert.py::BertTokenizationTest`.
+from ..bert import test_tokenization_bert
 
 
 @require_tokenizers
-class SqueezeBertTokenizationTest(BertTokenizationTest):
+class SqueezeBertTokenizationTest(test_tokenization_bert.BertTokenizationTest):
     tokenizer_class = SqueezeBertTokenizer
     rust_tokenizer_class = SqueezeBertTokenizerFast
     test_rust_tokenizer = True
     from_pretrained_id = "squeezebert/squeezebert-uncased"
 
-    def get_rust_tokenizer(self, **kwargs):
-        return SqueezeBertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return SqueezeBertTokenizerFast.from_pretrained(pretrained_name, **kwargs)
 
     @slow
     def test_sequence_builders(self):

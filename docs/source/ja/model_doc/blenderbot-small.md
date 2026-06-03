@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Blender チャットボット モデルは、[Recipes for building an open-domain chatbot](https://arxiv.org/pdf/2004.13637.pdf) Stephen Roller、Emily Dinan、Naman Goyal、Da Ju、Mary Williamson、yinghan Liu、で提案されました。
+Blender チャットボット モデルは、[Recipes for building an open-domain chatbot](https://huggingface.co/papers/2004.13637) Stephen Roller、Emily Dinan、Naman Goyal、Da Ju、Mary Williamson、yinghan Liu、で提案されました。
 ジン・シュー、マイル・オット、カート・シャスター、エリック・M・スミス、Y-ラン・ブーロー、ジェイソン・ウェストン、2020年4月30日。
 
 論文の要旨は次のとおりです。

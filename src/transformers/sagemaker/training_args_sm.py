@@ -17,11 +17,12 @@ import json
 import os
 import warnings
 from dataclasses import dataclass, field
+from functools import cached_property
 
 import torch
 
 from ..training_args import TrainingArguments
-from ..utils import cached_property, is_sagemaker_dp_enabled, logging
+from ..utils import is_sagemaker_dp_enabled, logging
 
 
 logger = logging.get_logger(__name__)

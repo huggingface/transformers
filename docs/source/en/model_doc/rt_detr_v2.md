@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-07-24 and added to Hugging Face Transformers on 2025-02-06.*
 
 # RT-DETRv2
 
@@ -22,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The RT-DETRv2 model was proposed in [RT-DETRv2: Improved Baseline with Bag-of-Freebies for Real-Time Detection Transformer](https://arxiv.org/abs/2407.17140) by Wenyu Lv, Yian Zhao, Qinyao Chang, Kui Huang, Guanzhong Wang, Yi Liu.
+The RT-DETRv2 model was proposed in [RT-DETRv2: Improved Baseline with Bag-of-Freebies for Real-Time Detection Transformer](https://huggingface.co/papers/2407.17140) by Wenyu Lv, Yian Zhao, Qinyao Chang, Kui Huang, Guanzhong Wang, Yi Liu.
 
 RT-DETRv2 refines RT-DETR by introducing selective multi-scale feature extraction, a discrete sampling operator for broader deployment compatibility, and improved training strategies like dynamic data augmentation and scale-adaptive hyperparameters. These changes enhance flexibility and practicality while maintaining real-time performance.
 
@@ -33,9 +34,9 @@ The abstract from the paper is the following:
 This model was contributed by [jadechoghari](https://huggingface.co/jadechoghari).
 The original code can be found [here](https://github.com/lyuwenyu/RT-DETR).
 
-## Usage tips 
+## Usage tips
 
-This second version of RT-DETR improves how the decoder finds objects in an image. 
+This second version of RT-DETR improves how the decoder finds objects in an image.
 
 - **better sampling** – adjusts offsets so the model looks at the right areas
 - **flexible attention** – can use smooth (bilinear) or fixed (discrete) sampling
@@ -84,17 +85,15 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - See also: [Object detection task guide](../tasks/object_detection).
 - Notebooks for [inference](https://github.com/qubvel/transformers-notebooks/blob/main/notebooks/RT_DETR_v2_inference.ipynb) and [fine-tuning](https://github.com/qubvel/transformers-notebooks/blob/main/notebooks/RT_DETR_v2_finetune_on_a_custom_dataset.ipynb) RT-DETRv2 on a custom dataset (🌎).
 
-
 ## RTDetrV2Config
 
 [[autodoc]] RTDetrV2Config
-
 
 ## RTDetrV2Model
 
 [[autodoc]] RTDetrV2Model
     - forward
- 
+
 ## RTDetrV2ForObjectDetection
 
 [[autodoc]] RTDetrV2ForObjectDetection

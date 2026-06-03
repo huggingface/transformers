@@ -16,7 +16,7 @@
 
 import itertools
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import tensorflow as tf
 
@@ -181,7 +181,7 @@ class TFEfficientFormerSelfAttention(keras.layers.Layer):
 
     def call(
         self, hidden_states: tf.Tensor, output_attentions: bool = False, training: bool = False
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         batch_size, sequence_length, *_ = shape_list(hidden_states)
         qkv = self.qkv(inputs=hidden_states)
 
@@ -427,7 +427,7 @@ class TFEfficientFormerFlat(keras.layers.Layer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def call(self, hidden_states: tf.Tensor) -> Tuple[tf.Tensor]:
+    def call(self, hidden_states: tf.Tensor) -> tuple[tf.Tensor]:
         batch_size, _, _, in_channels = shape_list(hidden_states)
         hidden_states = tf.reshape(hidden_states, shape=[batch_size, -1, in_channels])
         return hidden_states
@@ -501,7 +501,7 @@ class TFEfficientFormerMeta3D(keras.layers.Layer):
 
     def call(
         self, hidden_states: tf.Tensor, output_attentions: bool = False, training: bool = False
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         self_attention_outputs = self.token_mixer(
             hidden_states=self.layernorm1(hidden_states, training=training),
             output_attentions=output_attentions,
@@ -547,7 +547,7 @@ class TFEfficientFormerMeta3DLayers(keras.layers.Layer):
 
     def call(
         self, hidden_states: tf.Tensor, output_attentions: bool = False, training: bool = False
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         all_attention_outputs = () if output_attentions else None
 
         for i, layer_module in enumerate(self.blocks):
@@ -625,7 +625,7 @@ class TFEfficientFormerMeta4D(keras.layers.Layer):
             with tf.name_scope(self.drop_path.name):
                 self.drop_path.build(None)
 
-    def call(self, hidden_states: tf.Tensor, training: bool = False) -> Tuple[tf.Tensor]:
+    def call(self, hidden_states: tf.Tensor, training: bool = False) -> tuple[tf.Tensor]:
         outputs = self.token_mixer(hidden_states)
 
         if self.config.use_layer_scale:
@@ -666,7 +666,7 @@ class TFEfficientFormerMeta4DLayers(keras.layers.Layer):
             for i in range(len(drop_paths))
         ]
 
-    def call(self, hidden_states: tf.Tensor, training: bool = False) -> Tuple[tf.Tensor]:
+    def call(self, hidden_states: tf.Tensor, training: bool = False) -> tuple[tf.Tensor]:
         for layer_module in self.blocks:
             hidden_states = layer_module(hidden_states=hidden_states, training=training)
         return hidden_states
@@ -686,7 +686,7 @@ class TFEfficientFormerIntermediateStage(keras.layers.Layer):
         super().__init__(**kwargs)
         self.meta4D_layers = TFEfficientFormerMeta4DLayers(config=config, stage_idx=index, name="meta4D_layers")
 
-    def call(self, hidden_states: tf.Tensor, training: bool = False) -> Tuple[tf.Tensor]:
+    def call(self, hidden_states: tf.Tensor, training: bool = False) -> tuple[tf.Tensor]:
         hidden_states = self.meta4D_layers(hidden_states=hidden_states, training=training)
         return hidden_states
 
@@ -708,7 +708,7 @@ class TFEfficientFormerLastStage(keras.layers.Layer):
 
     def call(
         self, hidden_states: tf.Tensor, output_attentions: bool = False, training: bool = False
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         hidden_states = self.meta4D_layers(hidden_states=hidden_states, training=training)
         hidden_states = self.flat(hidden_states=hidden_states)
         hidden_states = self.meta3D_layers(
@@ -832,7 +832,7 @@ class TFEfficientFormerMainLayer(keras.layers.Layer):
         output_hidden_states: Optional[tf.Tensor] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor, ...]]:
+    ) -> Union[TFBaseModelOutput, tuple[tf.Tensor, ...]]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         output_hidden_states = (
@@ -867,7 +867,7 @@ class TFEfficientFormerMainLayer(keras.layers.Layer):
         # The hidden states are in (batch_size, height, width, num_channels)
         # shape after all stages except the MB3D blocks.
         if output_hidden_states:
-            hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1][:-1]]) + (
+            hidden_states = tuple(tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1][:-1]) + (
                 encoder_outputs[1][-1],
             )
 
@@ -961,7 +961,7 @@ class TFEfficientFormerModel(TFEfficientFormerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple, TFBaseModelOutput]:
+    ) -> Union[tuple, TFBaseModelOutput]:
         outputs = self.efficientformer(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -1087,11 +1087,11 @@ class TFEfficientFormerForImageClassificationWithTeacherOutput(ModelOutput):
             the self-attention heads.
     """
 
-    logits: tf.Tensor = None
-    cls_logits: tf.Tensor = None
-    distillation_logits: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    logits: Optional[tf.Tensor] = None
+    cls_logits: Optional[tf.Tensor] = None
+    distillation_logits: Optional[tf.Tensor] = None
+    hidden_states: Optional[tuple[tf.Tensor]] = None
+    attentions: Optional[tuple[tf.Tensor]] = None
 
 
 @add_start_docstrings(
@@ -1188,3 +1188,11 @@ class TFEfficientFormerForImageClassificationWithTeacher(TFEfficientFormerPreTra
             if hasattr(self.distillation_classifier, "name"):
                 with tf.name_scope(self.distillation_classifier.name):
                     self.distillation_classifier.build([None, None, self.config.hidden_sizes[-1]])
+
+
+__all__ = [
+    "TFEfficientFormerForImageClassification",
+    "TFEfficientFormerForImageClassificationWithTeacher",
+    "TFEfficientFormerModel",
+    "TFEfficientFormerPreTrainedModel",
+]

@@ -1,4 +1,4 @@
-# Modular Transformers
+# Contributing a new model to Transformers
 
 Modular Transformers lowers the bar for contributing models and significantly reduces the code required to add a model by allowing imports and inheritance.
 
@@ -21,10 +21,10 @@ Model users still import and use the single-file interface they've grown familia
 
 A linter "unravels" the modular file into a `modeling.py` file to preserve the single model, single file directory structure (modeling, processor, etc.). Inheritance is flattened to only a **single** level.
 
-Run the command below to automatically generate a `modeling.py` file from a modular file.
+Run the command below to automatically generate a `modeling.py` file from a modular file (assuming the snake lowercase name of the model you want to convert is `your_model`).
 
 ```bash
-python utils/modular_model_converter.py --files_to_parse src/transformers/models/<your_model>/modular_<your_model>.py
+python utils/modular_model_converter.py  your_model
 ```
 
 For example:
@@ -34,12 +34,6 @@ For example:
 - If a new function is defined in the modular file and used inside classes, the linter automatically infers these as well.
 
 You should be able to write everything (tokenizer, image processor, model, config, etc.) in a modular and their corresponding single-files are generated.
-
-Run the command below to ensure the generated content matches `modular_<your_model>.py`.
-
-```bash
-python utils/check_modular_conversion.py --files src/transformers/models/<your_model>/modular_<your_model>.py
-```
 
 The example below demonstrates how a model can be added with significantly fewer lines of code with Modular Transformers.
 
@@ -88,13 +82,13 @@ class RobertaForMaskedLM(BertForMaskedLM):
 
 If you don't use the defined dependency, you'll receive the following error.
 
-```
+```text
 ValueError: You defined `RobertaEmbeddings` in the modular_roberta.py, it should be used when you define `BertModel`, as it is one of it's direct dependencies. Make sure you use it in the `__init__` function.
 ```
 
 ## Implementing a modular file
 
-The easiest way to start is by browsing Transformers for a model similar to yours in order to inherit from it. Some good starting points are [Mistral](./model_doc/mistral), [Qwen2](./model_doc/qwen2), [Cohere](./model_doc/cohere) and [Cohere](./model_doc/cohere2), and [Llama](./model_doc/llama). Refer to the table below for components your model might be using and where you can inherit from.
+The easiest way to start is by browsing Transformers for a model similar to yours in order to inherit from it. Some good starting points are [Mistral](./model_doc/mistral), [Qwen2](./model_doc/qwen2), [Cohere](./model_doc/cohere) and [Cohere2](./model_doc/cohere2), and [Llama](./model_doc/llama). Refer to the table below for components your model might be using and where you can inherit from.
 
 | Component | Model |
 |---|---|
@@ -216,12 +210,12 @@ class Olmo2Attention(OlmoAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -236,20 +230,14 @@ class Olmo2Attention(OlmoAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -296,13 +284,13 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
 
         # Self Attention
@@ -310,7 +298,7 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -418,17 +406,17 @@ class MyNewDummyModel(DummyModel):
     del self.attribute
 ```
 
-## Explicit super() calls
+## Calling parent methods without unravelling their definition
 
-If you still want to inherit from `DummyModel` but don't want to remove the `self.attribute`, be explicit about which class' `super()` you're calling. The example below shows how to call the `super()` of `nn.Module` (unraveled code shown on the right)
+If you want to inherit from a module `DummyModule` and want to call `super()` WITHOUT unravelling the parent's code (that is, you want to call `super()` on the *generated* class parent), be explicit about which class' `super()` you're calling. The example below shows how to call the `super()` of `nn.Module` (unraveled code shown on the right). In this example, as `DummyModule` is itself a `nn.Module`, it makes sense to call `nn.Module.__init__(self)` as it's what was the initial intention. It's then unravelled as `super()` in `MyNewDummyModule` to follow Python's best-practices.
 
 ```py
-class MyNewDummyModel(DummyModel, nn.Module):        |     class MyNewDummyModel(nn.Module):
-                                                     |
-  def __init__(self, config: MyNewDummyConfig):      |       def __init__(self, config: MyNewDummyConfig):
-    nn.Module.__init__(config)                       |         super().__init__()
-    self.foo = config.foo                            |         self.foo = config.foo
-    ...                                              |         ...
+class MyNewDummyModule(DummyModule):                   |     class MyNewDummyModule(nn.Module):
+                                                       |
+  def __init__(self):                                  |       def __init__(self):
+    nn.Module.__init__(self)                           |         super().__init__()
+    self.foo = config.foo                              |         self.foo = config.foo
+    ...                                                |         ...
 ```
 
 ## Deleting unused methods
@@ -500,7 +488,7 @@ class LlamaForCausalLM(nn.Module):
       input_ids: torch.LongTensor = None,
       attention_mask: Optional[torch.Tensor] = None,
       position_ids: Optional[torch.LongTensor] = None,
-      past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+      past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
       inputs_embeds: Optional[torch.FloatTensor] = None,
       labels: Optional[torch.LongTensor] = None,
       use_cache: Optional[bool] = None,
@@ -526,7 +514,7 @@ class NewModelForCausalLM(LlamaForCausalLM):    |    class LlamaForCausalLM(nn.M
                                                 |         input_ids: torch.LongTensor = None,
                                                 |         attention_mask: Optional[torch.Tensor] = None,
                                                 |         position_ids: Optional[torch.LongTensor] = None,
-                                                |         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = |None,
+                                                |         past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = |None,
                                                 |         inputs_embeds: Optional[torch.FloatTensor] = None,
                                                 |         labels: Optional[torch.LongTensor] = None,
                                                 |         use_cache: Optional[bool] = None,
@@ -545,6 +533,9 @@ This makes it very easy to switch decorators and makes it explicit that the only
 `**super_kwargs` should not be used to avoid being explicit when redefining methods though. If you overwrite a method, you should explicitly write the signature as you normally would. The `**super_kwargs` syntax is a shortcut for switching decorators and a few other niche cases.
 
 ## Docstring variables
+
+> [!TIP]
+> Refer to the [Documeting a model](./auto_docstring) guide for more information about how you can use the `@auto_docstring` decorator to help automatically generate consistent docstring arguments.
 
 If an object defined in both the modular and modeling file from which it inherits, the modular definition has precedence unless for assignments containing the pattern `DOCSTRING`. These variables are typically used in `MODEL_START_DOCSTRING` and `MODEL_INPUT_DOCSTRING` in the modeling files. They are big blocks of docstrings and the linter rewrites the names everywhere. For this reason, assignments containing the `DOCSTRING` variable can use the definition found in the source file without copying the whole docstring, by simply setting the variable to `None` in the modular file.
 

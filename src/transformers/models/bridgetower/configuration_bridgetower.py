@@ -136,9 +136,9 @@ class BridgeTowerTextConfig(PretrainedConfig):
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         is_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -303,17 +303,6 @@ class BridgeTowerConfig(PretrainedConfig):
 
         self.text_config = BridgeTowerTextConfig(**text_config)
         self.vision_config = BridgeTowerVisionConfig(**vision_config)
-
-    @classmethod
-    def from_text_vision_configs(
-        cls, text_config: BridgeTowerTextConfig, vision_config: BridgeTowerVisionConfig, **kwargs
-    ):
-        r"""
-        Instantiate a [`BridgeTowerConfig`] (or a derived class) from BridgeTower text model configuration. Returns:
-            [`BridgeTowerConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
 
 __all__ = ["BridgeTowerConfig", "BridgeTowerTextConfig", "BridgeTowerVisionConfig"]

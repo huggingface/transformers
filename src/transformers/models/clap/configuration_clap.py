@@ -61,9 +61,9 @@ class ClapTextConfig(PretrainedConfig):
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         is_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -377,18 +377,6 @@ class ClapConfig(PretrainedConfig):
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = initializer_factor
         self.num_hidden_layers = self.text_config.num_hidden_layers + len(self.audio_config.depths)
-
-    @classmethod
-    def from_text_audio_configs(cls, text_config: ClapTextConfig, audio_config: ClapAudioConfig, **kwargs):
-        r"""
-        Instantiate a [`ClapConfig`] (or a derived class) from clap text model configuration and clap audio model
-        configuration.
-
-        Returns:
-            [`ClapConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), audio_config=audio_config.to_dict(), **kwargs)
 
 
 __all__ = ["ClapAudioConfig", "ClapConfig", "ClapTextConfig"]

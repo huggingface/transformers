@@ -12,6 +12,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 rendered properly in your Markdown viewer.
 
 specific language governing permissions and limitations under the License. -->
+*This model was released on 2020-06-17 and added to Hugging Face Transformers on 2021-11-18.*
 
 # ImageGPT
 
@@ -25,7 +26,7 @@ The ImageGPT model was proposed in [Generative Pretraining from Pixels](https://
 Chen, Alec Radford, Rewon Child, Jeffrey Wu, Heewoo Jun, David Luan, Ilya Sutskever. ImageGPT (iGPT) is a GPT-2-like
 model trained to predict the next pixel value, allowing for both unconditional and conditional image generation.
 
-The abstract from the paper is the following:
+The abstract from the [paper](https://cdn.openai.com/papers/Generative_Pretraining_from_Pixels_V1_ICML.pdf) is the following:
 
 *Inspired by progress in unsupervised representation learning for natural language, we examine whether similar models
 can learn useful representations for images. We train a sequence Transformer to auto-regressively predict pixels,
@@ -101,6 +102,11 @@ If you're interested in submitting a resource to be included here, please feel f
 ## ImageGPTImageProcessor
 
 [[autodoc]] ImageGPTImageProcessor
+    - preprocess
+
+## ImageGPTImageProcessorFast
+
+[[autodoc]] ImageGPTImageProcessorFast
     - preprocess
 
 ## ImageGPTModel

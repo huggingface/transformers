@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-01-13 and added to Hugging Face Transformers on 2025-01-13.*
 
 # Helium
 
@@ -26,7 +27,6 @@ rendered properly in your Markdown viewer.
 
 Helium was proposed in [Announcing Helium-1 Preview](https://kyutai.org/2025/01/13/helium.html) by the Kyutai Team.
 
-
 Helium-1 preview is a lightweight language model with 2B parameters, targeting edge and mobile devices.
 It supports the following languages: English, French, German, Italian, Portuguese, Spanish.
 
@@ -34,9 +34,6 @@ It supports the following languages: English, French, German, Italian, Portugues
 - **Model type:** Large Language Model
 - **Language(s) (NLP):** English, French, German, Italian, Portuguese, Spanish
 - **License:** CC-BY 4.0
-
-
-
 
 ## Evaluation
 
@@ -46,7 +43,7 @@ It supports the following languages: English, French, German, Italian, Portugues
 
 <!-- This should link to a Dataset Card if possible. -->
 
-The model was evaluated on MMLU, TriviaQA, NaturalQuestions, ARC Easy & Challenge, Open Book QA, Common Sense QA, 
+The model was evaluated on MMLU, TriviaQA, NaturalQuestions, ARC Easy & Challenge, Open Book QA, Common Sense QA,
 Physical Interaction QA, Social Interaction QA, HellaSwag, WinoGrande, Multilingual Knowledge QA, FLORES 200.
 
 #### Metrics
@@ -91,7 +88,6 @@ We report BLEU on FLORES.
 || HS | 58.6 | 40.8 | 60.5 | 61.1 | 51.4 |
 || MKQA | 16.0 | 7.9 | 18.5 | 20.6 | 10.6 |
 
-
 ## Technical Specifications
 
 ### Model Architecture and Objective
@@ -109,23 +105,21 @@ Tips:
 
 - This model was contributed by [Laurent Mazare](https://huggingface.co/lmz)
 
-  
 ## Usage tips
 
 `Helium` can be found on the [Huggingface Hub](https://huggingface.co/models?other=helium)
 
-In the following, we demonstrate how to use `helium-1-preview` for the inference. 
+In the following, we demonstrate how to use `helium-1-preview` for the inference.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
->>> device = "cuda" # the device to load the model onto
 
 >>> model = AutoModelForCausalLM.from_pretrained("kyutai/helium-1-preview-2b", device_map="auto")
 >>> tokenizer = AutoTokenizer.from_pretrained("kyutai/helium-1-preview-2b")
 
 >>> prompt = "Give me a short introduction to large language model."
 
->>> model_inputs = tokenizer(prompt, return_tensors="pt").to(device)
+>>> model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(model_inputs.input_ids, max_new_tokens=512, do_sample=True)
 

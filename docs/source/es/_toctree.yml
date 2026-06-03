@@ -38,6 +38,8 @@
     sections:
     - local: tasks/asr
       title: Reconocimiento automático del habla
+    - local: tasks/audio_classification
+      title: Clasificación de audio
     title: Audio
   - isExpanded: false
     sections:

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,11 +16,11 @@
 from transformers import DistilBertTokenizer, DistilBertTokenizerFast
 from transformers.testing_utils import require_tokenizers, slow
 
-from ..bert.test_tokenization_bert import BertTokenizationTest
+from ..bert import test_tokenization_bert
 
 
 @require_tokenizers
-class DistilBertTokenizationTest(BertTokenizationTest):
+class DistilBertTokenizationTest(test_tokenization_bert.BertTokenizationTest):
     tokenizer_class = DistilBertTokenizer
     rust_tokenizer_class = DistilBertTokenizerFast
     test_rust_tokenizer = True

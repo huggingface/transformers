@@ -317,7 +317,7 @@ VarunaとSageMakerとの実験はまだ行っていませんが、彼らの論�
 - [DeepSpeed](https://www.deepspeed.ai/tutorials/pipeline/)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation - no API.
 - [Varuna](https://github.com/microsoft/varuna)
-- [SageMaker](https://arxiv.org/abs/2111.05972) - this is a proprietary solution that can only be used on AWS.
+- [SageMaker](https://huggingface.co/papers/2111.05972) - this is a proprietary solution that can only be used on AWS.
 - [OSLO](https://github.com/tunib-ai/oslo) - この実装は、Hugging Face Transformersに基づいています。
 
 🤗 Transformersのステータス: この執筆時点では、いずれのモデルも完全なPP（パイプライン並列処理）をサポートしていません。GPT2モデルとT5モデルは単純なMP（モデル並列処理）サポートを持っています。主な障害は、モデルを`nn.Sequential`に変換できず、すべての入力がテンソルである必要があることです。現在のモデルには、変換を非常に複雑にする多くの機能が含まれており、これらを削除する必要があります。
@@ -334,7 +334,7 @@ OSLOは、`nn.Sequential`の変換なしでTransformersに基づくパイプラ�
 
 テンソル並列処理では、各GPUがテンソルのスライスのみを処理し、全体が必要な操作のためにのみ完全なテンソルを集約します。
 
-このセクションでは、[Megatron-LM](https://github.com/NVIDIA/Megatron-LM)論文からのコンセプトと図を使用します：[GPUクラスタでの効率的な大規模言語モデルトレーニング](https://arxiv.org/abs/2104.04473)。
+このセクションでは、[Megatron-LM](https://github.com/NVIDIA/Megatron-LM)論文からのコンセプトと図を使用します：[GPUクラスタでの効率的な大規模言語モデルトレーニング](https://huggingface.co/papers/2104.04473)。
 
 どのトランスフォーマの主要な構築要素は、完全に接続された`nn.Linear`に続く非線形アクティベーション`GeLU`です。
 
@@ -365,7 +365,7 @@ SageMakerは、より効率的な処理のためにTPとDPを組み合わせて�
 実装例:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)には、モデル固有の内部実装があります。
 - [parallelformers](https://github.com/tunib-ai/parallelformers)（現時点では推論のみ）。
-- [SageMaker](https://arxiv.org/abs/2111.05972) - これはAWSでのみ使用できるプロプライエタリなソリューションです。
+- [SageMaker](https://huggingface.co/papers/2111.05972) - これはAWSでのみ使用できるプロプライエタリなソリューションです。
 - [OSLO](https://github.com/tunib-ai/oslo)には、Transformersに基づいたテンソル並列実装があります。
 
 🤗 Transformersの状況:
@@ -387,7 +387,7 @@ DeepSpeedの[パイプラインチュートリアル](https://www.deepspeed.ai/t
 - [DeepSpeed](https://github.com/deepspeedai/DeepSpeed)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
-- [SageMaker](https://arxiv.org/abs/2111.05972)
+- [SageMaker](https://huggingface.co/papers/2111.05972)
 - [OSLO](https://github.com/tunib-ai/oslo)
 
 🤗 Transformersの状況: まだ実装されていません
@@ -406,7 +406,7 @@ DeepSpeedの[パイプラインチュートリアル](https://www.deepspeed.ai/t
 - [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) - DeepSpeedには、さらに効率的なDPであるZeRO-DPと呼ばれるものも含まれています。
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
-- [SageMaker](https://arxiv.org/abs/2111.05972)
+- [SageMaker](https://huggingface.co/papers/2111.05972)
 - [OSLO](https://github.com/tunib-ai/oslo)
 
 🤗 Transformersの状況: まだ実装されていません。PPとTPがないため。
@@ -431,7 +431,7 @@ ZeROステージ3も同様の理由で適していません - より多くのノ
 
 重要な論文:
 
-- [DeepSpeedとMegatronを使用したMegatron-Turing NLG 530Bのトレーニング](https://arxiv.org/abs/2201.11990)
+- [DeepSpeedとMegatronを使用したMegatron-Turing NLG 530Bのトレーニング](https://huggingface.co/papers/2201.11990)
 
 🤗 Transformersの状況: まだ実装されていません。PPとTPがないため。
 
@@ -440,7 +440,7 @@ ZeROステージ3も同様の理由で適していません - より多くのノ
 
 [FlexFlow](https://github.com/flexflow/FlexFlow)は、わずかに異なるアプローチで並列化の問題を解決します。
 
-論文: [Zhihao Jia、Matei Zaharia、Alex Aikenによる "Deep Neural Networksのデータとモデルの並列化を超えて"](https://arxiv.org/abs/1807.05358)
+論文: [Zhihao Jia、Matei Zaharia、Alex Aikenによる "Deep Neural Networksのデータとモデルの並列化を超えて"](https://huggingface.co/papers/1807.05358)
 
 FlexFlowは、サンプル-オペレータ-属性-パラメータの4D並列化を行います。
 

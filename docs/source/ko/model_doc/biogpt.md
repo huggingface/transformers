@@ -29,7 +29,7 @@ BioGPT는 Renqian Luo, Liai Sun, Yingce Xia, Tao Qin, Sheng Zhang, Hoifung Poon,
 ## 사용 팁 [[usage-tips]]
 
 - BioGPT는 절대적 위치 임베딩(absolute position embedding)을 사용하므로, 입력을 왼쪽이 아닌 오른쪽에서 패딩하는 것이 권장됩니다.
-- BioGPT는 인과적 언어 모델링(Casual Langague Modeling, CLM) 목표로 학습되었기 때문에, 다음 토큰을 예측하는 데 강력한 성능을 보입니다. 이 기능을 활용하여 BioGPT는 구문적으로 일관된 텍스트를 생성할 수 있으며, 예시 스크립트 `run_generation.py`에서 이를 확인할 수 있습니다.
+- BioGPT는 인과적 언어 모델링(Causal Langague Modeling, CLM) 목표로 학습되었기 때문에, 다음 토큰을 예측하는 데 강력한 성능을 보입니다. 이 기능을 활용하여 BioGPT는 구문적으로 일관된 텍스트를 생성할 수 있으며, 예시 스크립트 `run_generation.py`에서 이를 확인할 수 있습니다.
 - 이 모델은 `past_key_values`(PyTorch 용)를 입력으로 받을 수 있는데, 이는 이전에 계산된 키/값 어텐션 쌍입니다. 이 값을 사용하면 텍스트 생성 중 이미 계산된 값을 다시 계산하지 않도록 할 수 있습니다. PyTorch에서 `past_key_values` 인수는 BioGptForCausalLM.forward() 메소드에서 자세히 설명되어 있습니다.
 
 ### Scaled Dot Product Attention(SDPA) 사용 [[using-scaled-dot-product-attention-sdpa]]
@@ -40,7 +40,7 @@ PyTorch는 `torch.nn.functional`의 일부로 스케일된 점곱 어텐션(SDPA
 
 ```
 from transformers import BioGptForCausalLM
-model = BioGptForCausalLM.from_pretrained("microsoft/biogpt", attn_implementation="sdpa", torch_dtype=torch.float16)
+model = BioGptForCausalLM.from_pretrained("microsoft/biogpt", attn_implementation="sdpa", dtype=torch.float16)
 ```
 
 NVIDIA GeForce RTX 2060-8GB, PyTorch 2.3.1, Ubuntu 20.04 환경에서 `float16` 및 CausalLM 헤드가 있는 `microsoft/biogpt` 모델로 로컬 벤치마크를 수행한 결과, 훈련 중 다음과 같은 속도 향상을 확인했습니다.

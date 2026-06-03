@@ -37,7 +37,7 @@ from tests.test_pipeline_mixin import pipeline_test_mapping
 
 
 PIPELINE_TEST_MAPPING = {}
-for task, _ in pipeline_test_mapping.items():
+for task in pipeline_test_mapping:
     PIPELINE_TEST_MAPPING[task] = {"pt": None, "tf": None}
 
 
@@ -160,7 +160,7 @@ def find_test_class(test_file):
             break
     # Take the test class with the shortest name (just a heuristic)
     if target_test_class is None and len(test_classes) > 0:
-        target_test_class = sorted(test_classes, key=lambda x: (len(x.__name__), x.__name__))[0]
+        target_test_class = min(test_classes, key=lambda x: (len(x.__name__), x.__name__))
 
     return target_test_class
 

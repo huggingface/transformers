@@ -17,12 +17,14 @@
 import warnings
 
 from ...utils import logging
+from ...utils.import_utils import requires
 from .image_processing_levit import LevitImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class LevitFeatureExtractor(LevitImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(

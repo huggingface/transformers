@@ -17,17 +17,12 @@ Processor class for InstructBLIP. Largely copy of Blip2Processor with addition o
 """
 
 import os
-from typing import List, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import (
-    AddedToken,
-    BatchEncoding,
-    PreTokenizedInput,
-    TextInput,
-)
+from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import logging
 from ..auto import AutoTokenizer
 
@@ -72,7 +67,6 @@ class InstructBlipProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer", "qformer_tokenizer"]
-    valid_kwargs = ["num_query_tokens"]
     image_processor_class = ("BlipImageProcessor", "BlipImageProcessorFast")
     tokenizer_class = "AutoTokenizer"
     qformer_tokenizer_class = "AutoTokenizer"
@@ -84,12 +78,13 @@ class InstructBlipProcessor(ProcessorMixin):
         else:
             self.image_token = tokenizer.image_token
         self.num_query_tokens = num_query_tokens
+
         super().__init__(image_processor, tokenizer, qformer_tokenizer)
 
     def __call__(
         self,
-        images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        images: Optional[ImageInput] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[InstructBlipProcessorKwargs],
@@ -103,7 +98,7 @@ class InstructBlipProcessor(ProcessorMixin):
             images (`ImageInput`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`):
+            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -117,76 +112,48 @@ class InstructBlipProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        encoding = BatchFeature()
-
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        encoding = {}
         if text is not None:
             if isinstance(text, str):
                 text = [text]
             elif not isinstance(text, list) and not isinstance(text[0], str):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-            # we have to concatenate lists - so we keep track of return_tensors here
-            return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-            _text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
-            output_kwargs["text_kwargs"]["return_tensors"] = return_tensors
-            # if we know how many query tokens, expand text inside processor. We need this hacky manipulation
-            # because BLIP expects image tokens to be at the beginning even before BOS token
-            if self.num_query_tokens is not None and images is not None:
-                text_encoding = {}
-                image_tokens = self.image_token.content * self.num_query_tokens
-                image_token_encoding = self.tokenizer(
-                    [image_tokens] * len(text), add_special_tokens=False, return_tensors=None
-                )
-                for k in _text_encoding:
-                    text_encoding[k] = [
-                        img_encoding + txt_encoding
-                        for img_encoding, txt_encoding in zip(image_token_encoding[k], _text_encoding[k])
-                    ]
-            else:
-                text_encoding = _text_encoding
-                if images is not None:
-                    logger.warning_once(
-                        "Expanding inputs for image tokens in InstructBLIP should be done in processing. "
-                        "Please follow instruction here (https://gist.github.com/zucchini-nlp/e9f20b054fa322f84ac9311d9ab67042) to update your InstructBLIP model. "
-                        "Using processors without these attributes in the config is deprecated and will throw an error in v4.50."
-                    )
-
-            # cast to desired return tensors type after concatenating
-            text_encoding = BatchEncoding(text_encoding, tensor_type=return_tensors)
-
-            encoding.update(text_encoding)
             qformer_text_encoding = self.qformer_tokenizer(text, **output_kwargs["text_kwargs"])
             encoding["qformer_input_ids"] = qformer_text_encoding.pop("input_ids")
             encoding["qformer_attention_mask"] = qformer_text_encoding.pop("attention_mask")
+
+            # We need this hacky manipulation because BLIP expects image tokens to be at the beginning even before BOS token
+            if output_kwargs["text_kwargs"].get("max_length") is not None:
+                output_kwargs["text_kwargs"]["max_length"] -= self.num_query_tokens
+            text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
+
+            if images is not None:
+                # Image tokens should not be padded/truncated or prepended with special BOS token
+                image_tokens = self.image_token.content * self.num_query_tokens
+                output_kwargs["text_kwargs"]["add_special_tokens"] = False
+                output_kwargs["text_kwargs"]["padding"] = False
+                output_kwargs["text_kwargs"]["truncation"] = False
+                image_text_encoding = self.tokenizer(image_tokens, **output_kwargs["text_kwargs"])
+                for k in text_encoding:
+                    text_encoding[k] = [image_text_encoding[k] + sample for sample in text_encoding[k]]
+            encoding.update(text_encoding)
 
         if images is not None:
             image_encoding = self.image_processor(images, **output_kwargs["images_kwargs"])
             encoding.update(image_encoding)
 
+        # Cast to desired return tensors type
+        encoding = BatchFeature(encoding, tensor_type=return_tensors)
         return encoding
 
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.decode with BertTokenizerFast->PreTrainedTokenizer
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     @property
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.model_input_names
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+        qformer_input_names = ["qformer_input_ids", "qformer_attention_mask"]
+        return tokenizer_input_names + image_processor_input_names + qformer_input_names
 
     # overwrite to save the Q-Former tokenizer in a separate folder
     def save_pretrained(self, save_directory, **kwargs):

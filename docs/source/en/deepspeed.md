@@ -260,7 +260,7 @@ with deepspeed.zero.Init():
 The DeepSped config file needs to have `is_deepspeed_zero3_enabled: true` setup in [`TrainingArguments`] and it needs a ZeRO configuration enabled. The [`TrainingArguments`] object must be created **before** calling [`~PreTrainedModel.from_pretrained`].
 
 > [!TIP]
-> You'll need ZeRO-3 when the fp16 weights don't fit on a single GPU. But if you're able to load the fp16 weights, set `torch_dtype=torch.float16` in [`~PreTrainedModel.from_pretrained`].
+> You'll need ZeRO-3 when the fp16 weights don't fit on a single GPU. But if you're able to load the fp16 weights, set `dtype=torch.float16` in [`~PreTrainedModel.from_pretrained`].
 
 ```py
 from transformers import AutoModel, Trainer, TrainingArguments
@@ -294,7 +294,7 @@ Consider running a [benchmark](https://github.com/microsoft/DeepSpeed/issues/998
 
 The example ZeRO-3 and ZeRO-Infinity config below sets most of the parameter values to `auto`, but you can also manually set configure these values.
 
-```yaml
+```json
 {
     "fp16": {
         "enabled": "auto",
@@ -383,7 +383,7 @@ Gradient checkpointing saves memory by only storing *some* of the intermediate a
 
 The batch size can be automatically configured or manually set. When you choose the `"auto"` option, [`Trainer`] sets `train_micro_batch_size_per_gpu` and `train_batch_size` to the value of `world_size * per_device_train_batch_size * gradient_accumulation_steps`.
 
-```yaml
+```json
 {
     "train_micro_batch_size_per_gpu": "auto",
     "train_batch_size": "auto"
@@ -400,7 +400,7 @@ Reduce operations are lossy, for example, when gradients are averaged across mul
 
 Choose the communication data type by setting the `communication_data_type` parameter in the config file. For example, choosing fp32 adds a small amount of overhead but ensures the reduction operation is accumulated in fp32 and when it is ready, it's downcasted to whichever half-precision data type you're training in.
 
-```yaml
+```json
 {
     "communication_data_type": "fp32"
 }
@@ -412,7 +412,7 @@ Gradient accumulation accumulates gradients over several mini-batches of data be
 
 Gradient accumulation can be automatically configured or manually set. When you choose the `"auto"` option, [`Trainer`] sets it to the value of `gradient_accumulation_steps`.
 
-```yaml
+```json
 {
     "gradient_accumulation_steps": "auto"
 }
@@ -424,7 +424,7 @@ Gradient clipping is useful for preventing exploding gradients which can lead to
 
 Gradient clipping can be automatically configured or manually set. When you choose the `"auto"` option, [`Trainer`] sets it to the value of `max_grad_norm`.
 
-```yaml
+```json
 {
     "gradient_clipping": "auto"
 }
@@ -439,7 +439,7 @@ Mixed precision accelerates training speed by performing some calculations in ha
 
 Train in fp32 if a model wasn't pretrained in mixed precision because it may cause underflow or overflow errors. Disable fp16, the default, in this case.
 
-```yaml
+```json
 {
     "fp16": {
         "enabled": false
@@ -454,7 +454,7 @@ For Ampere GPUs and PyTorch 1.7+, the more efficient [tf32](https://pytorch.org/
 
 To configure AMP-like fp16 mixed precision, set up the config as shown below with `"auto"` or your own values. [`Trainer`] automatically enables or disables fp16 based on the value of `fp16_backend`, and the rest of the config can be set by you. fp16 is enabled from the command line when the following arguments are passed: `--fp16`, `--fp16_backend amp` or `--fp16_full_eval`.
 
-```yaml
+```json
 {
     "fp16": {
         "enabled": "auto",
@@ -471,7 +471,7 @@ For additional DeepSpeed fp16 training options, take a look at the [FP16 Trainin
 
 To configure Apex-like fp16 mixed precision, set up the config as shown below with `"auto"` or your own values. [`Trainer`] automatically configures `amp` based on the values of `fp16_backend` and `fp16_opt_level`. It can also be enabled from the command line when the following arguments are passed: `--fp16`, `--fp16_backend apex` or `--fp16_opt_level 01`.
 
-```yaml
+```json
 {
     "amp": {
         "enabled": "auto",
@@ -486,11 +486,11 @@ To configure Apex-like fp16 mixed precision, set up the config as shown below wi
 > [!TIP]
 > bf16 requires DeepSpeed 0.6.0.
 
-bf16 has the same dynamic range as fp32, and doesn’t require loss scaling unlike fp16. However, if you use [gradient accumulation](#gradient-accumulation) with bf16, gradients are accumulated in bf16 which may not be desirable because the lower precision can lead to lossy accumulation.
+bf16 has the same dynamic range as fp32, and doesn't require loss scaling unlike fp16. However, if you use [gradient accumulation](#gradient-accumulation) with bf16, gradients are accumulated in bf16 which may not be desirable because the lower precision can lead to lossy accumulation.
 
 bf16 can be set up in the config file or enabled from the command line when the following arguments are passed: `--bf16` or `--bf16_full_eval`.
 
-```yaml
+```json
 {
     "bf16": {
         "enabled": "auto"
@@ -514,7 +514,7 @@ DeepSpeed offers several [optimizers](https://www.deepspeed.ai/docs/config-json/
 
 You can set the parameters to `"auto"` or manually input your own values.
 
-```yaml
+```json
 {
    "optimizer": {
        "type": "AdamW",
@@ -530,7 +530,7 @@ You can set the parameters to `"auto"` or manually input your own values.
 
 Use an unsupported optimizer by adding the following to the top level configuration.
 
-```yaml
+```json
 {
    "zero_allow_untested_optimizer": true
 }
@@ -538,7 +538,7 @@ Use an unsupported optimizer by adding the following to the top level configurat
 
 From DeepSpeed 0.8.3+, if you want to use offload, you'll also need to add the following to the top level configuration because offload works best with DeepSpeed's CPU Adam optimizer.
 
-```yaml
+```json
 {
    "zero_force_ds_cpu_optimizer": false
 }
@@ -558,7 +558,7 @@ If you don't configure the scheduler in the config file, [`Trainer`] automatical
 
 You can set the parameters to `"auto"` or manually input your own values.
 
-```yaml
+```json
 {
    "scheduler": {
          "type": "WarmupDecayLR",
@@ -581,7 +581,7 @@ You can set the parameters to `"auto"` or manually input your own values.
 
 Resume training with a Universal checkpoint by setting `load_universal` to `true` in the config file.
 
-```yaml
+```json
 {
     "checkpoint": {
         "load_universal": true
@@ -640,7 +640,7 @@ deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 
 A multi-node setup consists of multiple nodes, where each node has one of more GPUs running a workload. DeepSpeed expects a shared storage system, but if this is not the case, you need to adjust the config file to include a [checkpoint](https://www.deepspeed.ai/docs/config-json/#checkpoint-options) to allow loading without access to a shared filesystem.
 
-```yaml
+```json
 {
   "checkpoint": {
     "use_node_local_storage": true
@@ -824,7 +824,7 @@ ZeRO-2 saves the model weights in fp16. To save the weights in fp16 for ZeRO-3, 
 
 If you don't, [`Trainer`] won't save the weights in fp16 and won't create a `pytorch_model.bin` file. This is because DeepSpeed's state_dict contains a placeholder instead of the real weights, so you won't be able to load it.
 
-```yaml
+```json
 {
     "zero_optimization": {
         "stage": 3,
@@ -986,7 +986,7 @@ NaN loss often occurs when a model is pretrained in bf16 and you try to use it w
 
 It is also possible that fp16 is causing overflow. For example, if your config file looks like the one below, you may see the following overflow errors in the logs.
 
-```yaml
+```json
 {
     "fp16": {
         "enabled": "auto",

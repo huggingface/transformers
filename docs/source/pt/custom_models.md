@@ -47,7 +47,7 @@ class ResnetConfig(PretrainedConfig):
     def __init__(
         self,
         block_type="bottleneck",
-        layers: List[int] = [3, 4, 6, 3],
+        layers: list[int] = [3, 4, 6, 3],
         num_classes: int = 1000,
         input_channels: int = 3,
         cardinality: int = 1,
@@ -284,7 +284,7 @@ resnet50d.model.load_state_dict(pretrained_model.state_dict())
 Agora para enviar o modelo para o Hub, certifique-se de estar logado. Ou execute no seu terminal:
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 ou a partir do notebook:

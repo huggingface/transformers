@@ -33,7 +33,7 @@ pip install git+https://github.com/huggingface/peft.git
 
 - [محولات الرتبة المنخفضة](https://huggingface.co/docs/peft/conceptual_guides/lora)
 - [IA3](https://huggingface.co/docs/peft/conceptual_guides/ia3)
-- [AdaLoRA](https://arxiv.org/abs/2303.10512)
+- [AdaLoRA](https://huggingface.co/papers/2303.10512)
 
 إذا كنت تريد استخدام طرق PEFT الأخرى، مثل تعلم المحث أو ضبط المحث، أو حول مكتبة 🤗 PEFT بشكل عام، يرجى الرجوع إلى [الوثائق](https://huggingface.co/docs/peft/index).
 

@@ -42,9 +42,9 @@ class MaskFormerSwinConfig(BackboneConfigMixin, PretrainedConfig):
             The number of input channels.
         embed_dim (`int`, *optional*, defaults to 96):
             Dimensionality of patch embedding.
-        depths (`List[int]`, *optional*, defaults to `[2, 2, 6, 2]`):
+        depths (`list[int]`, *optional*, defaults to `[2, 2, 6, 2]`):
             Depth of each layer in the Transformer encoder.
-        num_heads (`List[int]`, *optional*, defaults to `[3, 6, 12, 24]`):
+        num_heads (`list[int]`, *optional*, defaults to `[3, 6, 12, 24]`):
             Number of attention heads in each layer of the Transformer encoder.
         window_size (`int`, *optional*, defaults to 7):
             Size of windows.
@@ -67,12 +67,12 @@ class MaskFormerSwinConfig(BackboneConfigMixin, PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        out_features (`List[str]`, *optional*):
+        out_features (`list[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
             corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
             same order as defined in the `stage_names` attribute.
-        out_indices (`List[int]`, *optional*):
+        out_indices (`list[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage. Must be in the

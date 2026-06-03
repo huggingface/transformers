@@ -9,6 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was released on 2021-08-10 and added to Hugging Face Transformers on 2023-09-15.*
 
 # BROS
 
@@ -18,7 +19,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The BROS model was proposed in [BROS: A Pre-trained Language Model Focusing on Text and Layout for Better Key Information Extraction from Documents](https://arxiv.org/abs/2108.04539) by Teakgyu Hong, Donghyun Kim, Mingi Ji, Wonseok Hwang, Daehyun Nam, Sungrae Park.
+The BROS model was proposed in [BROS: A Pre-trained Language Model Focusing on Text and Layout for Better Key Information Extraction from Documents](https://huggingface.co/papers/2108.04539) by Teakgyu Hong, Donghyun Kim, Mingi Ji, Wonseok Hwang, Daehyun Nam, Sungrae Park.
 
 BROS stands for *BERT Relying On Spatiality*. It is an encoder-only Transformer model that takes a sequence of tokens and their bounding boxes as inputs and outputs a sequence of hidden states. BROS encode relative spatial information instead of using absolute spatial information.
 
@@ -56,17 +57,16 @@ def expand_and_normalize_bbox(bboxes, doc_width, doc_height):
 
 - [`~transformers.BrosForTokenClassification.forward`, `~transformers.BrosSpadeEEForTokenClassification.forward`, `~transformers.BrosSpadeEEForTokenClassification.forward`] require not only `input_ids` and `bbox` but also `box_first_token_mask` for loss calculation. It is a mask to filter out non-first tokens of each box. You can obtain this mask by saving start token indices of bounding boxes when creating `input_ids` from words. You can make `box_first_token_mask` with following code,
 
-
 ```python
 def make_box_first_token_mask(bboxes, words, tokenizer, max_seq_length=512):
 
     box_first_token_mask = np.zeros(max_seq_length, dtype=np.bool_)
 
-    # encode(tokenize) each word from words (List[str])
-    input_ids_list: List[List[int]] = [tokenizer.encode(e, add_special_tokens=False) for e in words]
+    # encode(tokenize) each word from words (list[str])
+    input_ids_list: list[list[int]] = [tokenizer.encode(e, add_special_tokens=False) for e in words]
 
     # get the length of each box
-    tokens_length_list: List[int] = [len(l) for l in input_ids_list]
+    tokens_length_list: list[int] = [len(l) for l in input_ids_list]
 
     box_end_token_indices = np.array(list(itertools.accumulate(tokens_length_list)))
     box_start_token_indices = box_end_token_indices - np.array(tokens_length_list)
@@ -100,7 +100,6 @@ def make_box_first_token_mask(bboxes, words, tokenizer, max_seq_length=512):
 
 [[autodoc]] BrosModel
     - forward
-
 
 ## BrosForTokenClassification
 

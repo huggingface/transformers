@@ -58,10 +58,10 @@ class SeamlessM4TConfig(PretrainedConfig):
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
         encoder_layerdrop (`float`, *optional*, defaults to 0.05):
-            The LayerDrop probability for the encoders. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the encoders. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         decoder_layerdrop (`float`, *optional*, defaults to 0.05):
-            The LayerDrop probability for the decoders. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the decoders. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the decoder and feed-forward layers. If string,
@@ -118,7 +118,7 @@ class SeamlessM4TConfig(PretrainedConfig):
             Add an adapter layer on top of the speech encoder.
         speech_encoder_layerdrop (`float`, *optional*, defaults to 0.1):
             The LayerDrop probability for the speech encoder. See the [LayerDrop paper](see
-            https://arxiv.org/abs/1909.11556) for more details.
+            https://huggingface.co/papers/1909.11556) for more details.
         feature_projection_input_dim (`int`, *optional*, defaults to 160):
             Input dimension of the input feature projection of the speech encoder, i.e the dimension after processing
             input audios with [`SeamlessM4TFeatureExtractor`].
@@ -184,18 +184,18 @@ class SeamlessM4TConfig(PretrainedConfig):
             The sampling rate at which the output audio will be generated, expressed in hertz (Hz).
         upsample_initial_channel (`int`, *optional*, defaults to 512):
             The number of input channels into the hifi-gan upsampling network. Applies to the vocoder only.
-        upsample_rates (`Tuple[int]` or `List[int]`, *optional*, defaults to `[5, 4, 4, 2, 2]`):
+        upsample_rates (`tuple[int]` or `list[int]`, *optional*, defaults to `[5, 4, 4, 2, 2]`):
             A tuple of integers defining the stride of each 1D convolutional layer in the vocoder upsampling network.
             The length of *upsample_rates* defines the number of convolutional layers and has to match the length of
             *upsample_kernel_sizes*. Applies to the vocoder only.
-        upsample_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[11, 8, 8, 4, 4]`):
+        upsample_kernel_sizes (`tuple[int]` or `list[int]`, *optional*, defaults to `[11, 8, 8, 4, 4]`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the vocoder upsampling
             network. The length of *upsample_kernel_sizes* defines the number of convolutional layers and has to match
             the length of *upsample_rates*. Applies to the vocoder only.
-        resblock_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[3, 7, 11]`):
+        resblock_kernel_sizes (`tuple[int]` or `list[int]`, *optional*, defaults to `[3, 7, 11]`):
             A tuple of integers defining the kernel sizes of the vocoder 1D convolutional layers in the multi-receptive
             field fusion (MRF) module. Applies to the vocoder only.
-        resblock_dilation_sizes (`Tuple[Tuple[int]]` or `List[List[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
+        resblock_dilation_sizes (`tuple[tuple[int]]` or `list[list[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
             A nested tuple of integers defining the dilation rates of the vocoder dilated 1D convolutional layers in
             the multi-receptive field fusion (MRF) module. Applies to the vocoder only.
         leaky_relu_slope (`float`, *optional*, defaults to 0.1):

@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_pvt import *
     from .image_processing_pvt import *
+    from .image_processing_pvt_fast import *
     from .modeling_pvt import *
 else:
     import sys

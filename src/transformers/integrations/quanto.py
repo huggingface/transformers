@@ -30,7 +30,7 @@ def replace_with_quanto_layers(
 ):
     """
     Public method that recursively replaces the Linear layers of the given model with Quanto quantized layers.
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
 
     Args:
         model (`torch.nn.Module`):

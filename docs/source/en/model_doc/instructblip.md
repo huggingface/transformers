@@ -9,6 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was released on 2023-05-11 and added to Hugging Face Transformers on 2023-06-26.*
 
 # InstructBLIP
 
@@ -18,7 +19,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The InstructBLIP model was proposed in [InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning](https://arxiv.org/abs/2305.06500) by Wenliang Dai, Junnan Li, Dongxu Li, Anthony Meng Huat Tiong, Junqi Zhao, Weisheng Wang, Boyang Li, Pascale Fung, Steven Hoi.
+The InstructBLIP model was proposed in [InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning](https://huggingface.co/papers/2305.06500) by Wenliang Dai, Junnan Li, Dongxu Li, Anthony Meng Huat Tiong, Junqi Zhao, Weisheng Wang, Boyang Li, Pascale Fung, Steven Hoi.
 InstructBLIP leverages the [BLIP-2](blip2) architecture for visual instruction tuning.
 
 The abstract from the paper is the following:
@@ -28,7 +29,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/instructblip_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> InstructBLIP architecture. Taken from the <a href="https://arxiv.org/abs/2305.06500">original paper.</a> </small>
+<small> InstructBLIP architecture. Taken from the <a href="https://huggingface.co/papers/2305.06500">original paper.</a> </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/salesforce/LAVIS/tree/main/projects/instructblip).
@@ -58,7 +59,6 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
 
 [[autodoc]] InstructBlipProcessor
 
-
 ## InstructBlipVisionModel
 
 [[autodoc]] InstructBlipVisionModel
@@ -68,6 +68,10 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
 
 [[autodoc]] InstructBlipQFormerModel
     - forward
+
+## InstructBlipModel
+
+[[autodoc]] InstructBlipModel
 
 ## InstructBlipForConditionalGeneration
 

@@ -22,55 +22,68 @@ The `.optimization` module provides:
 - several schedules in the form of schedule objects that inherit from `_LRSchedule`:
 - a gradient accumulation class to accumulate the gradients of multiple batches
 
-
-## AdaFactor (PyTorch)
+## AdaFactor
 
 [[autodoc]] Adafactor
 
-## AdamWeightDecay (TensorFlow)
-
-[[autodoc]] AdamWeightDecay
-
-[[autodoc]] create_optimizer
-
 ## Schedules
 
-### Learning Rate Schedules (PyTorch)
+### SchedulerType
 
 [[autodoc]] SchedulerType
 
+### get_scheduler
+
 [[autodoc]] get_scheduler
 
+### get_constant_schedule
+
 [[autodoc]] get_constant_schedule
+
+### get_constant_schedule_with_warmup
 
 [[autodoc]] get_constant_schedule_with_warmup
 
 <img alt="" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/warmup_constant_schedule.png"/>
 
+### get_cosine_schedule_with_warmup
+
 [[autodoc]] get_cosine_schedule_with_warmup
 
 <img alt="" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/warmup_cosine_schedule.png"/>
 
+### get_cosine_with_hard_restarts_schedule_with_warmup
+
 [[autodoc]] get_cosine_with_hard_restarts_schedule_with_warmup
 
+### get_cosine_with_min_lr_schedule_with_warmup
+
+[[autodoc]] get_cosine_with_min_lr_schedule_with_warmup
+
+### get_cosine_with_min_lr_schedule_with_warmup_lr_rate
+
+[[autodoc]] get_cosine_with_min_lr_schedule_with_warmup_lr_rate
+
 <img alt="" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/warmup_cosine_hard_restarts_schedule.png"/>
+
+### get_linear_schedule_with_warmup
 
 [[autodoc]] get_linear_schedule_with_warmup
 
 <img alt="" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/warmup_linear_schedule.png"/>
 
+### get_polynomial_decay_schedule_with_warmup
+
 [[autodoc]] get_polynomial_decay_schedule_with_warmup
+
+### get_inverse_sqrt_schedule
 
 [[autodoc]] get_inverse_sqrt_schedule
 
+### get_reduce_on_plateau_schedule
+
+[[autodoc]] get_reduce_on_plateau_schedule
+
+### get_wsd_schedule
+
 [[autodoc]] get_wsd_schedule
-
-### Warmup (TensorFlow)
-
-[[autodoc]] WarmUp
-
-## Gradient Strategies
-
-### GradientAccumulator (TensorFlow)
-
-[[autodoc]] GradientAccumulator

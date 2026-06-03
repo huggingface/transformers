@@ -651,7 +651,7 @@ class SymmetricQuantFunction(Function):
         Returns:
             `torch.Tensor`: Symmetric-quantized value of *input*.
         """
-        zero_point = torch.tensor(0.0).to(scale.device)
+        zero_point = torch.tensor(0.0, device=scale.device)
 
         n = 2 ** (k - 1) - 1
         new_quant_x = linear_quantize(x, scale, zero_point, inplace=False)

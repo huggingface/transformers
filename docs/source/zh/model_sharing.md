@@ -56,7 +56,7 @@ Model Hub的内置版本控制基于git和[git-lfs](https://git-lfs.github.com/)
 
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 如果您正在使用像Jupyter或Colaboratory这样的`notebook`，请确保您已安装了[`huggingface_hub`](https://huggingface.co/docs/hub/adding-a-library)库。该库允许您以编程方式与Hub进行交互。

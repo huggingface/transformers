@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import io
 import json
 import subprocess
 
@@ -29,5 +28,5 @@ def get_all_data(pairs, n_objs):
 
 text = get_all_data(pairs, n_objs)
 filename = "./fsmt_val_data.json"
-with io.open(filename, "w", encoding="utf-8") as f:
+with open(filename, "w", encoding="utf-8") as f:
     bleu_data = json.dump(text, f, indent=2, ensure_ascii=False)

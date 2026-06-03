@@ -31,12 +31,12 @@ jobs:
     name: Setup
     strategy:
       matrix:
-        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-all-latest-gpu-push-ci
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       test_map: ${{ steps.set-matrix.outputs.test_map }}
@@ -131,12 +131,12 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
-        machine_type: [aws-g4dn-2xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-all-latest-gpu-push-ci
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     env:
       # For the meaning of these environment variables, see the job `Setup`
       CI_BRANCH_PUSH: ${{ github.event.ref }}
@@ -169,9 +169,9 @@ jobs:
         run: |
           echo "${{ matrix.machine_type }}"
 
-          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
             machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+          elif [ "${{ matrix.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
             machine_type=multi-gpu
           else
             machine_type=${{ matrix.machine_type }}
@@ -244,7 +244,7 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
-        machine_type: [aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g5-12xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -282,9 +282,9 @@ jobs:
         run: |
           echo "${{ matrix.machine_type }}"
 
-          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
             machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+          elif [ "${{ matrix.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
             machine_type=multi-gpu
           else
             machine_type=${{ matrix.machine_type }}
@@ -357,12 +357,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g4dn-2xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-pytorch-deepspeed-latest-gpu-push-ci
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     env:
       # For the meaning of these environment variables, see the job `Setup`
       CI_BRANCH_PUSH: ${{ github.event.ref }}
@@ -395,9 +395,9 @@ jobs:
         run: |
           echo "${{ matrix.machine_type }}"
 
-          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
             machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+          elif [ "${{ matrix.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
             machine_type=multi-gpu
           else
             machine_type=${{ matrix.machine_type }}
@@ -467,7 +467,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g5-12xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -505,9 +505,9 @@ jobs:
         run: |
           echo "${{ matrix.machine_type }}"
 
-          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
             machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+          elif [ "${{ matrix.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
             machine_type=multi-gpu
           else
             machine_type=${{ matrix.machine_type }}

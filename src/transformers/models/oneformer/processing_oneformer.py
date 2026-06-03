@@ -16,8 +16,6 @@
 Image/Text processor class for OneFormer
 """
 
-from typing import List
-
 from ...processing_utils import ProcessorMixin
 from ...utils import is_torch_available
 
@@ -50,11 +48,6 @@ class OneFormerProcessor(ProcessorMixin):
     def __init__(
         self, image_processor=None, tokenizer=None, max_seq_length: int = 77, task_seq_length: int = 77, **kwargs
     ):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
         self.max_seq_length = max_seq_length
         self.task_seq_length = task_seq_length
 
@@ -85,11 +78,11 @@ class OneFormerProcessor(ProcessorMixin):
         docstring of the above two methods for more information.
 
         Args:
-            task_inputs (`str`, `List[str]`):
+            task_inputs (`str`, `list[str]`):
                 The sequence or batch of task_inputs sequences to be encoded. Each sequence can be a string or a list
                 of strings of the template "the task is {task}".
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`,
-            `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`,
+            `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
             segmentation_maps (`ImageInput`, *optional*):
@@ -121,7 +114,7 @@ class OneFormerProcessor(ProcessorMixin):
         if isinstance(task_inputs, str):
             task_inputs = [task_inputs]
 
-        if isinstance(task_inputs, List) and all(isinstance(task_input, str) for task_input in task_inputs):
+        if isinstance(task_inputs, list) and all(isinstance(task_input, str) for task_input in task_inputs):
             task_token_inputs = []
             for task in task_inputs:
                 task_input = f"the task is {task}"
@@ -161,7 +154,7 @@ class OneFormerProcessor(ProcessorMixin):
         if isinstance(task_inputs, str):
             task_inputs = [task_inputs]
 
-        if isinstance(task_inputs, List) and all(isinstance(task_input, str) for task_input in task_inputs):
+        if isinstance(task_inputs, list) and all(isinstance(task_input, str) for task_input in task_inputs):
             task_token_inputs = []
             for task in task_inputs:
                 task_input = f"the task is {task}"

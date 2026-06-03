@@ -408,7 +408,7 @@ Y 軸が反転され、スペクトログラムが上下逆に表示されます
 ... class TTSDataCollatorWithPadding:
 ...     processor: Any
 
-...     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+...     def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
 ...         input_ids = [{"input_ids": feature["input_ids"]} for feature in features]
 ...         label_features = [{"input_values": feature["labels"]} for feature in features]
 ...         speaker_features = [feature["speaker_embeddings"] for feature in features]

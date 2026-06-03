@@ -118,7 +118,6 @@ class MarkupLMConfig(PretrainedConfig):
         subs_pad_id=1001,
         xpath_unit_hidden_size=32,
         max_depth=50,
-        position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
         **kwargs,
@@ -141,7 +140,6 @@ class MarkupLMConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
         # additional properties

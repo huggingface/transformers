@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-10-22 and added to Hugging Face Transformers on 2023-06-20.*
 
 # Hybrid Vision Transformer (ViT Hybrid)
 
@@ -32,7 +33,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 ## Overview
 
 The hybrid Vision Transformer (ViT) model was proposed in [An Image is Worth 16x16 Words: Transformers for Image Recognition
-at Scale](https://arxiv.org/abs/2010.11929) by Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk
+at Scale](https://huggingface.co/papers/2010.11929) by Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk
 Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob
 Uszkoreit, Neil Houlsby. It's the first paper that successfully trains a Transformer encoder on ImageNet, attaining
 very good results compared to familiar convolutional architectures. ViT hybrid is a slight variant of the [plain Vision Transformer](vit),
@@ -54,18 +55,18 @@ found [here](https://github.com/google-research/vision_transformer).
 
 ## Using Scaled Dot Product Attention (SDPA)
 
-PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
-encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
-[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
 or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
 page for more information.
 
-SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set
 `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
 
-```
+```py
 from transformers import ViTHybridForImageClassification
-model = ViTHybridForImageClassification.from_pretrained("google/vit-hybrid-base-bit-384", attn_implementation="sdpa", torch_dtype=torch.float16)
+model = ViTHybridForImageClassification.from_pretrained("google/vit-hybrid-base-bit-384", attn_implementation="sdpa", dtype=torch.float16)
 ...
 ```
 

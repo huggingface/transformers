@@ -6,7 +6,7 @@ developers, researchers, students, professors, engineers, and anyone else to bui
 
 In this list, we showcase incredibly impactful and novel projects that have pushed the field forward. We celebrate
 100 of these projects as we reach the milestone of 100k stars as a community; but we're very open to pull requests
-adding other projects to the list. If you believe a project should be here and it's not, then please, open a PR 
+adding other projects to the list. If you believe a project should be here and it's not, then please, open a PR
 to add it.
 
 ## [gpt4all](https://github.com/nomic-ai/gpt4all)
@@ -49,7 +49,7 @@ Keywords: LLMs, Large Language Models, Agents, Chains
 
 [LlamaIndex](https://github.com/run-llama/llama_index) is a project that provides a central interface to connect your LLM's with external data. It provides various kinds of indices and retrieval mechanisms to perform different LLM tasks and obtain knowledge-augmented results.
 
-Keywords: LLMs, Large Language Models, Data Retrieval, Indices, Knowledge Augmentation 
+Keywords: LLMs, Large Language Models, Data Retrieval, Indices, Knowledge Augmentation
 
 ## [ParlAI](https://github.com/facebookresearch/ParlAI)
 
@@ -257,7 +257,7 @@ Stable-Dreamfusion is a pytorch implementation of the text-to-3D model Dreamfusi
 Keywords: Text-to-3D, Stable Diffusion
 
 ## [txtai](https://github.com/neuml/txtai)
- 
+
 [txtai](https://github.com/neuml/txtai) is an open-source platform for semantic search and workflows powered by language models. txtai builds embeddings databases, which are a union of vector indexes and relational databases enabling similarity search with SQL. Semantic workflows connect language models together into unified applications.
 
 Keywords: Semantic search, LLM
@@ -288,7 +288,7 @@ Keywords: Music understanding, Music generation
 
 ## [dalle-flow](https://github.com/jina-ai/dalle-flow)
 
-DALL·E Flow is an interactive workflow for generating high-definition images from a text prompt. Itt leverages DALL·E-Mega, GLID-3 XL, and Stable Diffusion to generate image candidates, and then calls CLIP-as-service to rank the candidates w.r.t. the prompt.
+DALL·E Flow is an interactive workflow for generating high-definition images from a text prompt. It leverages DALL·E-Mega, GLID-3 XL, and Stable Diffusion to generate image candidates, and then calls CLIP-as-service to rank the candidates w.r.t. the prompt.
 The preferred candidate is fed to GLID-3 XL for diffusion, which often enriches the texture and background. Finally, the candidate is upscaled to 1024x1024 via SwinIR.
 
 Keywords: High-definition image generation, Stable Diffusion, DALL-E Mega, GLID-3 XL, CLIP, SwinIR
@@ -309,8 +309,8 @@ Keywords: OCR, LaTeX, Math formula
 
 OpenCLIP is an open source implementation of OpenAI's CLIP.
 
-The goal of this repository is to enable training models with contrastive image-text supervision, and to investigate their properties such as robustness to distribution shift. 
-The starting point is an implementation of CLIP that matches the accuracy of the original CLIP models when trained on the same dataset. 
+The goal of this repository is to enable training models with contrastive image-text supervision, and to investigate their properties such as robustness to distribution shift.
+The starting point is an implementation of CLIP that matches the accuracy of the original CLIP models when trained on the same dataset.
 
 Specifically, a ResNet-50 model trained with this codebase on OpenAI's 15 million image subset of YFCC achieves 32.7% top-1 accuracy on ImageNet.
 
@@ -526,7 +526,7 @@ Keywords: Model deployment, CLoud, Mobile, Edge
 
 ## [underthesea](https://github.com/undertheseanlp/underthesea)
 
-[underthesea](https://github.com/undertheseanlp/underthesea) is a Vietnamese NLP toolkit. Underthesea is a suite of open source Python modules data sets and tutorials supporting research and development in Vietnamese Natural Language Processing. We provides extremely easy API to quickly apply pretrained NLP models to your Vietnamese text, such as word segmentation, part-of-speech tagging (PoS), named entity recognition (NER), text classification and dependency parsing.
+[underthesea](https://github.com/undertheseanlp/underthesea) is a Vietnamese NLP toolkit. Underthesea is a suite of open source Python modules data sets and tutorials supporting research and development in Vietnamese Natural Language Processing. We provide extremely easy API to quickly apply pretrained NLP models to your Vietnamese text, such as word segmentation, part-of-speech tagging (PoS), named entity recognition (NER), text classification and dependency parsing.
 
 Keywords: Vietnamese, NLP
 
@@ -596,7 +596,7 @@ Keywords: Data-Centric AI, Data Quality, Noisy Labels, Outlier Detection, Active
 
 ## [BentoML](https://github.com/bentoml/BentoML)
 
-[BentoML](https://github.com/bentoml) is the unified framework for building, shipping, and scaling production-ready AI applications incorporating traditional ML, pre-trained AI models, Generative and Large Language Models. 
+[BentoML](https://github.com/bentoml) is the unified framework for building, shipping, and scaling production-ready AI applications incorporating traditional ML, pre-trained AI models, Generative and Large Language Models.
 All Hugging Face models and pipelines can be seamlessly integrated into BentoML applications, enabling the running of models on the most suitable hardware and independent scaling based on usage.
 
 Keywords: BentoML, Framework, Deployment, AI Applications
@@ -606,4 +606,3 @@ Keywords: BentoML, Framework, Deployment, AI Applications
 [LLaMA Factory](https://github.com/hiyouga/LLaMA-Factory) offers a user-friendly fine-tuning framework that incorporates PEFT. The repository includes training(fine-tuning) and inference examples for LLaMA-2, BLOOM, Falcon, Baichuan, Qwen, and other LLMs. A ChatGLM version is also available in [ChatGLM-Efficient-Tuning](https://github.com/hiyouga/ChatGLM-Efficient-Tuning).
 
 Keywords: PEFT, fine-tuning, LLaMA-2, ChatGLM, Qwen
-

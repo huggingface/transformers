@@ -28,11 +28,11 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
     # model_mapping = {CLAPConfig: CLAPModel}
 
     @require_torch
-    def test_small_model_pt(self, torch_dtype="float32"):
+    def test_small_model_pt(self, dtype="float32"):
         audio_classifier = pipeline(
             task="zero-shot-audio-classification",
             model="hf-internal-testing/tiny-clap-htsat-unfused",
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
         dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         audio = dataset["train"]["audio"][-1]["array"]
@@ -44,7 +44,7 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_model_pt_fp16(self):
-        self.test_small_model_pt(torch_dtype="float16")
+        self.test_small_model_pt(dtype="float16")
 
     @unittest.skip(reason="No models are available in TF")
     def test_small_model_tf(self):
