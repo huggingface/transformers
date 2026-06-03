@@ -80,3 +80,5 @@
       title: Pipeline
     - local: pipeline_gradio
       title: Aplicații de Machine learning
+    - local: pipeline_webserver
+      title: Inferență pe web server
