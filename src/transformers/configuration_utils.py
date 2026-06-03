@@ -190,8 +190,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
             sequence_length embeddings at a time. For more information on feed forward chunking, see [How does Feed
             Forward Chunking work?](../glossary.html#feed-forward-chunking).
-        per_layer_overrides (`dict[int | str, dict[str, Any]]`, *optional*):
-            A dictionary of per-layer configurations. Each key is a layer index, and the value is a dictionary of configuration attributes.
+        per_layer_config (`dict[int | str, dict[str, Any]]`, *optional*):
+            A sparse mapping from layer indices to configuration attribute overrides. Each key is a layer index, and each value contains the attributes that differ from the global config for that layer.
 
         > Parameters for fine-tuning tasks
 
@@ -307,7 +307,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # Additional attributes without default values
         for key, value in kwargs.items():
             # Needs to be handled after all other attributes are set
-            if key == "per_layer_overrides":
+            if key == "per_layer_config":
                 continue
 
             # Check this to avoid deserializing problematic fields from hub configs - they should use the public field
@@ -318,9 +318,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                     logger.error(f"Can't set {key} with value {value} for {self}")
                     raise err
 
-        per_layer_overrides = kwargs.pop("per_layer_overrides", None)
-        if per_layer_overrides is not None:
-            self.per_layer_overrides = per_layer_overrides
+        per_layer_config = kwargs.pop("per_layer_config", None)
+        if per_layer_config is not None:
+            self.per_layer_config = per_layer_config
 
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
@@ -864,8 +864,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 elif value != "auto":
                     config_dict[key] = value
 
-        if "per_layer_overrides" in kwargs:
-            config_dict["per_layer_overrides"] = kwargs.pop("per_layer_overrides")
+        if "per_layer_config" in kwargs:
+            config_dict["per_layer_config"] = kwargs.pop("per_layer_config")
 
         config = cls(**config_dict)
 
@@ -1335,30 +1335,24 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         return hasattr(self, "_heterogeneity_spec")
 
     @property
-    def per_layer_overrides(self) -> dict[int, dict[str, Any]] | None:
+    def per_layer_config(self) -> Sequence["PreTrainedConfig"] | None:
         if not self.is_heterogeneous:
             return None
-        return copy.deepcopy(self._heterogeneity_spec.per_layer_overrides)
+        return get_per_layer_config(self)
 
-    @per_layer_overrides.setter
-    def per_layer_overrides(self, per_layer_overrides: dict[int | str, dict[str, Any]] | None) -> None:
-        if per_layer_overrides is None:
+    @per_layer_config.setter
+    def per_layer_config(self, per_layer_config: dict[int | str, dict[str, Any]] | None) -> None:
+        if per_layer_config is None:
             delattr(self, "_heterogeneity_spec")
             return
 
-        apply_heterogeneous_config(self, per_layer_overrides)
+        apply_heterogeneous_config(self, per_layer_config)
 
     @property
     def per_layer_attributes(self) -> set[str] | None:
         if not self.is_heterogeneous:
             return None
         return self._heterogeneity_spec.per_layer_attributes
-
-    @property
-    def per_layer_config(self) -> Sequence["PreTrainedConfig"] | None:
-        if not self.is_heterogeneous:
-            return None
-        return get_per_layer_config(self)
 
 
 def get_configuration_file(configuration_files: list[str]) -> str:

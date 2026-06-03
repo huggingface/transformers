@@ -75,7 +75,7 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
     if _layer_init_context.get() is not None:
         return
 
-    per_layer_skip_types = [getattr(layer_config, "skip", []) for layer_config in model.config.per_layer_config]
+    per_layer_skip_types = [layer_config.skip for layer_config in model.config.per_layer_config]
     skip_descriptors = getattr(model, "_skip_descriptors", None) or {}
     _validate_skip_descriptors(per_layer_skip_types, skip_descriptors)
 

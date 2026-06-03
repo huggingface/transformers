@@ -19,7 +19,7 @@ class HeterogeneitySpec:
 
 def apply_heterogeneous_config(
     config: PreTrainedConfig,
-    per_layer_overrides: dict[int | str, dict[str, Any]],
+    per_layer_config: dict[int | str, dict[str, Any]],
     explicit: bool = False,
 ) -> None:
     """Register per-layer configuration overrides on a model config.
@@ -35,14 +35,14 @@ def apply_heterogeneous_config(
 
     Args:
         config: The global model config to modify in-place.
-        per_layer_overrides: Mapping from layer index to a dictionary
+        per_layer_config: Mapping from layer index to a dictionary
             of attribute overrides. Only layers that differ from the global
             config need to be included.
-        explicit: Whether to enforce that `per_layer_overrides` exists for each layer
+        explicit: Whether to enforce that `per_layer_config` exists for each layer
             and that each layer has all per-layer attributes defined.
     """
 
-    normalized_per_layer_overrides = _normalize_per_layer_overrides(per_layer_overrides)
+    normalized_per_layer_overrides = _normalize_per_layer_overrides(per_layer_config)
 
     _validate_layer_indices(config, normalized_per_layer_overrides)
     _validate_sliding_window_and_attention_chunk_size(config, normalized_per_layer_overrides)
@@ -57,12 +57,12 @@ def heterogeneous_to_dict_helper(config: PreTrainedConfig, d: dict[str, Any]) ->
     if per_layer_overrides:
         # Zero-pad so keys sort numerically in JSON (0,1,...,10 not 0,1,10,2,...)
         max_digits = len(str(max(per_layer_overrides.keys())))
-        d["per_layer_overrides"] = {
+        d["per_layer_config"] = {
             str(layer_idx).zfill(max_digits): copy.deepcopy(layer_overrides)
             for layer_idx, layer_overrides in per_layer_overrides.items()
         }
     else:
-        d["per_layer_overrides"] = {}
+        d["per_layer_config"] = {}
 
     d.pop("_heterogeneity_spec", None)
 
@@ -157,7 +157,7 @@ def _validate_layer_indices(config: PreTrainedConfig, per_layer_overrides: dict[
     ]
     if invalid_layer_indices:
         raise ValueError(
-            f"`per_layer_overrides` keys must be integer layer indices in the range [0, {num_hidden_layers}); "
+            f"`per_layer_config` keys must be integer layer indices in the range [0, {num_hidden_layers}); "
             f"got {invalid_layer_indices}."
         )
 
@@ -181,7 +181,7 @@ def _validate_sliding_window_and_attention_chunk_size(
         raise ValueError(
             f"The following layers have the mutually exclusive `sliding_window` and `attention_chunk_size` both defined: "
             f"{problematic_indices}. To fix this, either remove a conflicting attribute from the global config,"
-            f"or set it to `None` in `per_layer_overrides` for the problematic layers."
+            f"or set it to `None` in `per_layer_config` for the problematic layers."
         )
 
 
@@ -205,7 +205,7 @@ def _modify_config_and_create_heterogeneity_spec(
 
     if missing_required_global_attributes:
         raise ValueError(
-            f"The following attributes are missing: {sorted(missing_required_global_attributes)}\nPlease add them globally, or make sure they are defined in all of the per-layer overrides"
+            f"The following attributes are missing: {sorted(missing_required_global_attributes)}\nPlease define them globally, or provide them for every layer in `per_layer_config`"
         )
 
     for attr in per_layer_attributes:
