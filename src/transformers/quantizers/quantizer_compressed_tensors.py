@@ -59,12 +59,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         super().__init__(quantization_config, **kwargs)
 
-        if not is_compressed_tensors_available():
-            raise ImportError(
-                "Using `compressed_tensors` quantized models requires the compressed-tensors library: "
-                "`pip install compressed-tensors`"
-            )
-
         # Call post_init here to ensure proper config setup when `run_compressed`
         # is provided directly via CompressedTensorsConfig, and to avoid duplicate logging.
 
@@ -106,8 +100,8 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def validate_environment(self, *args, **kwargs):
         if not is_compressed_tensors_available():
             raise ImportError(
-                "Using `compressed_tensors` quantized models requires the compressed-tensors library: "
-                "`pip install compressed-tensors`"
+                "Using `compressed_tensors` quantized models requires compressed-tensors>=0.15.0: "
+                "`pip install compressed-tensors>=0.15.0`"
             )
 
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
@@ -145,10 +139,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         # Always initialize compressed wrappers to match the checkpoint
         apply_quantization_config(model, ct_quantization_config, self.run_compressed)
-        if (
-            self.quantization_config.is_quantization_compressed
-            or self.quantization_config.is_sparsification_compressed
-        ):
+        if self.quantization_config.is_quantization_compressed:
             self.compressor.compress_model(model=model)
 
     def _process_model_before_weight_loading_fp8(self, model, **kwargs):
@@ -171,9 +162,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         if self._use_fp8_kernel:
             return
 
-        if (self.quantization_config.is_quantization_compressed and not self.run_compressed) or (
-            self.quantization_config.is_sparsification_compressed
-        ):
+        if self.quantization_config.is_quantization_compressed and not self.run_compressed:
             self.compressor.decompress_model(model=model)
 
     # NOTE: TP plan override for compressed tensors removed - unsupported styles were used.
