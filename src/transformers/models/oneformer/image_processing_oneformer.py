@@ -291,12 +291,10 @@ class OneFormerImageProcessor(TorchvisionBackend):
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
     size = {"shortest_edge": 800, "longest_edge": 1333}
-    crop_size = None
     do_resize = True
     do_rescale = True
     do_normalize = True
     default_to_square = False
-    do_center_crop = False
     do_convert_rgb = True
     rescale_factor = 1 / 255
     ignore_index = None
