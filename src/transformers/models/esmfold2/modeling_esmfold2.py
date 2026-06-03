@@ -631,16 +631,6 @@ class ESMFold2Model(PreTrainedModel):
             config = ESMFold2Config.from_pretrained(
                 pretrained_model_name_or_path, **kwargs
             )
-            if config.type == "experimental":
-                from .modeling_esmfold2_experimental import ESMFold2ExperimentalModel
-
-                return ESMFold2ExperimentalModel.from_pretrained(
-                    pretrained_model_name_or_path,
-                    *args,
-                    config=config,
-                    load_esmc=load_esmc,
-                    **kwargs,
-                )
             kwargs["config"] = config
         # Pop the precision knob before forwarding to the HF loader.
         esmc_precision = kwargs.pop("esmc_precision", "bf16")
