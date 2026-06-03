@@ -82,3 +82,6 @@
       title: Aplicații de Machine learning
     - local: pipeline_webserver
       title: Inferență pe web server
+    - local: add_new_pipeline
+      title: Adăugarea unui nou pipeline
+    title: API-ul Pipeline
