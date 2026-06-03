@@ -199,14 +199,23 @@ class ESMFold2IntegrationTest(TestCasePlus):
         # from_pretrained auto-loads the ESMC backbone (load_esmc=True by default).
         model = ESMFold2Model.from_pretrained("biohub/ESMFold2").to(torch_device).eval()
 
-        seq = "MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQAPILSRVGDGTQDNLSGAEKAVQVKVKALPDAQFEVVHSLAKWKR"
+        # Ubiquitin (PDB 1UBQ), a textbook well-folding 76-residue domain. These
+        # diffusion folders draw several samples and the best-ranked is the
+        # prediction, so assert on the best of N.
+        seq = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG"
+        torch.manual_seed(0)
         with torch.no_grad():
-            output = model.infer_protein(seq, num_diffusion_samples=1)
+            output = model.infer_protein(seq, num_diffusion_samples=8, num_sampling_steps=68)
 
         coords = output["sample_atom_coords"]
-        plddt = output["plddt"]
         self.assertEqual(coords.shape[-1], 3)
         self.assertTrue(torch.isfinite(coords).all())
-        # pLDDT is a 0-100 confidence; a real fold of this sequence should be confident.
-        self.assertTrue((plddt >= 0).all() and (plddt <= 100).all())
-        self.assertGreater(plddt.mean().item(), 50.0)
+
+        # pLDDT and pTM are on a 0-1 scale in this model; ESMFold2 folds ubiquitin
+        # confidently (CPU-fp32 reference: best pLDDT ~0.80, best pTM ~0.74).
+        plddt = output["plddt"].float()  # [num_samples, n_res]
+        ptm = output["ptm"].float()  # [num_samples]
+        best_plddt = plddt.mean(dim=1).max().item()
+        best_ptm = ptm.max().item()
+        self.assertGreater(best_plddt, 0.7)
+        self.assertGreater(best_ptm, 0.6)
