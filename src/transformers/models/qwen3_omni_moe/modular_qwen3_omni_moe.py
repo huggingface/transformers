@@ -17,6 +17,7 @@
 import math
 import re
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import torch
@@ -1263,6 +1264,8 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         output_router_logits: bool | None = None,
         use_audio_in_video=None,
         video_second_per_grid=None,
+        image_outputs: BaseModelOutputWithPooling | None = None,
+        video_outputs: BaseModelOutputWithPooling | None = None,
         **kwargs,
     ) -> tuple | Qwen3OmniMoeThinkerCausalLMOutputWithPast:
         output_router_logits = (
@@ -1285,10 +1288,17 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             _, _, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
 
-        if pixel_values is not None:
+        if image_outputs is None and pixel_values is not None:
             image_outputs: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
+
+        if video_outputs is None and pixel_values_videos is not None:
+            video_outputs: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+
+        if image_outputs is not None:
             image_embeds = image_outputs.pooler_output
             image_embeds_multiscale = image_outputs.deepstack_features
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
@@ -1297,10 +1307,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if pixel_values_videos is not None:
-            video_outputs: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
-                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
-            )
+        if video_outputs is not None:
             video_embeds = video_outputs.pooler_output
             video_embeds_multiscale = video_outputs.deepstack_features
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
@@ -1400,6 +1407,41 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             past_key_values=outputs.past_key_values,
             rope_deltas=self.rope_deltas,
         )
+
+    def _expand_inputs_for_generation(
+        self,
+        expand_size: int = 1,
+        is_encoder_decoder: bool = False,
+        input_ids: torch.LongTensor | None = None,
+        **model_kwargs,
+    ) -> tuple[torch.LongTensor, dict[str, Any]]:
+        # Overwritten -- Qwen3VL uses 3D position ids that has to be expanded on dim=1
+        # and list of deepstack features per layer
+
+        position_ids = model_kwargs.pop("position_ids", None)
+        input_ids, model_kwargs = super()._expand_inputs_for_generation(
+            expand_size=expand_size,
+            is_encoder_decoder=is_encoder_decoder,
+            input_ids=input_ids,
+            **model_kwargs,
+        )
+
+        if position_ids is not None:
+            if expand_size != 1:
+                position_ids = position_ids.repeat_interleave(expand_size, dim=1)
+            model_kwargs["position_ids"] = position_ids
+
+        if expand_size != 1:
+            if image_outputs := model_kwargs.get("image_outputs"):
+                image_outputs["deepstack_features"] = [
+                    item.repeat_interleave(expand_size, dim=0) for item in image_outputs["deepstack_features"]
+                ]
+            if video_outputs := model_kwargs.get("video_outputs"):
+                video_outputs["deepstack_features"] = [
+                    item.repeat_interleave(expand_size, dim=0) for item in video_outputs["deepstack_features"]
+                ]
+
+        return input_ids, model_kwargs
 
 
 class Qwen3OmniMoeTalkerResizeMLP(nn.Module):

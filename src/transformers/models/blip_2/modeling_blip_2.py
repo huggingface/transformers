@@ -1632,6 +1632,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
+        image_outputs: BaseModelOutputWithPooling | None = None,
         labels: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
@@ -1712,12 +1713,14 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         two
         ```"""
 
-        image_features: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
-            pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
-        )
-        language_model_inputs = image_features.pooler_output
-        qformer_outputs = image_features.qformer_outputs
-        vision_outputs = image_features.vision_outputs
+        if image_outputs is None:
+            image_outputs: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
+                pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
+            )
+
+        language_model_inputs = image_outputs.pooler_output
+        qformer_outputs = image_outputs.qformer_outputs
+        vision_outputs = image_outputs.vision_outputs
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)

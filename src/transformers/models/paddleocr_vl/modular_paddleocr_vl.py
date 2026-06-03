@@ -994,19 +994,22 @@ class PaddleOCRVLModel(Qwen2VLModel):
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        image_outputs: BaseModelOutputWithPooling | None = None,
         **kwargs,
     ) -> tuple | PaddleOCRVLModelOutputWithPast:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
+
         if inputs_embeds is None:
             inputs_embeds = self.language_model.embed_tokens(input_ids)
 
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(
-                pixel_values, image_grid_thw, return_dict=True, **kwargs
-            ).pooler_output
+        if image_outputs is None and pixel_values is not None:
+            image_outputs = self.get_image_features(pixel_values, image_grid_thw, return_dict=True, **kwargs)
+
+        if image_outputs is not None:
+            image_embeds = image_outputs.pooler_output
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)

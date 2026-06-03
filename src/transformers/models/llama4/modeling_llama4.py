@@ -1258,6 +1258,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
+        image_outputs: BaseModelOutputWithPooling | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Llama4CausalLMOutputWithPast:
@@ -1308,13 +1309,15 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_features = self.get_image_features(
+        if image_outputs is None and pixel_values is not None:
+            image_outputs = self.get_image_features(
                 pixel_values=pixel_values,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 return_dict=True,
-            ).last_hidden_state
+            )
 
+        if image_outputs is not None:
+            image_features = image_outputs.last_hidden_state
             vision_flat = image_features.view(-1, image_features.size(-1))
             projected_vision_flat = self.multi_modal_projector(vision_flat).to(
                 inputs_embeds.device, inputs_embeds.dtype
@@ -1367,7 +1370,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if image_outputs is not None else None,
         )
 
     def prepare_inputs_for_generation(

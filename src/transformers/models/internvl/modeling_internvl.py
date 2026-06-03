@@ -622,6 +622,7 @@ class InternVLModel(InternVLPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
+        image_outputs: BaseModelOutputWithPooling | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InternVLModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -630,13 +631,16 @@ class InternVLModel(InternVLPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_features = self.get_image_features(
+        if image_outputs is None and pixel_values is not None:
+            image_outputs = self.get_image_features(
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 return_dict=True,
-            ).pooler_output
+            )
+
+        if image_outputs is not None:
+            image_features = image_outputs.pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -656,7 +660,7 @@ class InternVLModel(InternVLPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if image_outputs is not None else None,
         )
 
     def pixel_shuffle(self, vision_features: torch.Tensor, scale_factor: float = 0.5):
@@ -772,6 +776,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         image_sizes: torch.Tensor | None = None,
+        image_outputs: BaseModelOutputWithPooling | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InternVLCausalLMOutputWithPast:
         r"""
@@ -819,6 +824,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
             image_sizes=image_sizes,
+            image_outputs=image_outputs,
             **kwargs,
         )
 

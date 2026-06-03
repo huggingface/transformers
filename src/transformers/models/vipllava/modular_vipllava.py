@@ -124,6 +124,7 @@ class VipLlavaModel(LlavaModel):
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layers: int | list[int] | None = None,
         use_cache: bool | None = None,
+        image_outputs: BaseModelOutputWithPooling | None = None,
         **lm_kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VipLlavaModelOutputWithPast:
         r"""
@@ -141,11 +142,13 @@ class VipLlavaModel(LlavaModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_features = self.get_image_features(
+        if image_outputs is None and pixel_values is not None:
+            image_outputs = self.get_image_features(
                 pixel_values=pixel_values, vision_feature_layers=vision_feature_layers
-            ).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            )
+
+        if image_outputs is not None:
+            image_features = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -165,7 +168,7 @@ class VipLlavaModel(LlavaModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if image_outputs is not None else None,
         )
         return output
 
@@ -202,6 +205,7 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
         vision_feature_layers: int | list[int] | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
+        image_outputs: BaseModelOutputWithPooling | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **lm_kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VipLlavaCausalLMOutputWithPast:
@@ -254,6 +258,7 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             vision_feature_layers=vision_feature_layers,
+            image_outputs=image_outputs,
             **lm_kwargs,
         )
 

@@ -687,6 +687,8 @@ class MiniCPMV4_6Model(Lfm2VlModel):
         past_key_values: list[torch.FloatTensor] | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        image_outputs: BaseModelOutputWithPooling | None = None,
+        video_outputs: BaseModelOutputWithPooling | None = None,
         downsample_mode: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
@@ -705,29 +707,24 @@ class MiniCPMV4_6Model(Lfm2VlModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None and self.config.image_token_id is not None:
-            # Pixels are always `1` in first dim due to NaViT packing, and we don't
-            # want to waste compute processing the same image `num_beams` times. Hack until
-            # @raushan adds support for encoding images once same waay as in enc-dec models
-            num_beams = pixel_values.shape[0]
-            vision_output = self.get_image_features(pixel_values[:1], target_sizes, downsample_mode=downsample_mode)
-            image_features = (
-                torch.cat(vision_output.pooler_output, dim=0)
-                .to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
-                .repeat(num_beams, 1)
+        if image_outputs is None and pixel_values is not None and self.config.image_token_id is not None:
+            image_outputs = self.get_image_features(pixel_values[:1], target_sizes, downsample_mode=downsample_mode)
+
+        if video_outputs is None and pixel_values_videos is not None and self.config.video_token_id is not None:
+            video_outputs = self.get_video_features(
+                pixel_values_videos[:1], target_sizes_videos, downsample_mode=downsample_mode
+            )
+
+        if image_outputs is not None:
+            image_features = torch.cat(image_outputs.pooler_output, dim=0).to(
+                device=inputs_embeds.device, dtype=inputs_embeds.dtype
             )
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features, self.config.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
 
-        if pixel_values_videos is not None and self.config.video_token_id is not None:
-            num_beams = pixel_values_videos.shape[0]
-            vision_output = self.get_video_features(
-                pixel_values_videos[:1], target_sizes_videos, downsample_mode=downsample_mode
-            )
-            video_features = (
-                torch.cat(vision_output.pooler_output, dim=0)
-                .to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
-                .repeat(num_beams, 1)
+        if video_outputs is not None:
+            video_features = torch.cat(video_outputs.pooler_output, dim=0).to(
+                device=inputs_embeds.device, dtype=inputs_embeds.dtype
             )
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features, self.config.video_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, video_features)
@@ -768,6 +765,8 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
+        image_outputs: BaseModelOutputWithPooling | None = None,
+        video_outputs: BaseModelOutputWithPooling | None = None,
         downsample_mode: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -794,6 +793,8 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            image_outputs=image_outputs,
+            video_outputs=video_outputs,
             downsample_mode=downsample_mode,
             **kwargs,
         )
@@ -852,36 +853,6 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
             model_inputs["pixel_values_videos"] = pixel_values_videos
             model_inputs["target_sizes_videos"] = target_sizes_videos
         return model_inputs
-
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # NaViT packs all images/frames into a single sequence with dim-0 = 1.
-        # We let parent repeat_interleave pixel_values / pixel_values_videos
-        # along dim-0 ([1,C,P,L] -> [num_beams,C,P,L]) so forward() can
-        # infer num_beams from shape[0], then encode only [:1].
-        #
-        # target_sizes ([K,2]) must be popped because:
-        #  - forward encodes pixel_values[:1] (original K images), so
-        #    target_sizes must stay [K,2] to match cu_seqlens computation.
-        #  - expanded [K*num_beams, 2] would define phantom segments with
-        #    no corresponding pixel data, crashing the vision encoder.
-        ts_keys = ("target_sizes", "target_sizes_videos")
-        saved = {k: model_kwargs.pop(k) for k in ts_keys if model_kwargs.get(k) is not None}
-
-        input_ids, model_kwargs = super()._expand_inputs_for_generation(
-            expand_size=expand_size,
-            is_encoder_decoder=is_encoder_decoder,
-            input_ids=input_ids,
-            **model_kwargs,
-        )
-
-        model_kwargs.update(saved)
-        return input_ids, model_kwargs
 
 
 __all__ = [

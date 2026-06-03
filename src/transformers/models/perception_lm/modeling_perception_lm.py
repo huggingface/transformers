@@ -242,7 +242,8 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
+        image_outputs: BaseModelOutputWithPooling | None = None,
+        video_outputs: BaseModelOutputWithPooling | None = None,
         **lm_kwargs,
     ) -> tuple | PerceptionLMModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -256,18 +257,22 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         image_features = None
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values=pixel_values, return_dict=True).pooler_output
-            image_features = image_features.to(inputs_embeds.device, dtype=inputs_embeds.dtype)
+        if image_outputs is None and pixel_values is not None:
+            image_outputs = self.get_image_features(pixel_values=pixel_values, return_dict=True)
+
+        if image_outputs is not None:
+            image_features = image_outputs.pooler_output.to(inputs_embeds.device, dtype=inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         video_features = None
-        if pixel_values_videos is not None:
-            video_features = self.get_image_features(pixel_values=pixel_values_videos, return_dict=True).pooler_output
-            video_features = video_features.to(inputs_embeds.device, dtype=inputs_embeds.dtype)
+        if video_outputs is None and pixel_values_videos is not None:
+            video_outputs = self.get_image_features(pixel_values=pixel_values_videos, return_dict=True)
+
+        if video_outputs is not None:
+            video_features = video_outputs.pooler_output.to(inputs_embeds.device, dtype=inputs_embeds.dtype)
             _, special_video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
             )
@@ -280,7 +285,6 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
-            logits_to_keep=logits_to_keep,
             **lm_kwargs,
         )
         return PerceptionLMModelOutputWithPast(
@@ -288,8 +292,8 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
             hidden_states=outputs.hidden_states,
             past_key_values=outputs.past_key_values,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
-            video_hidden_states=(video_features if pixel_values_videos is not None else None),
+            image_hidden_states=image_features if image_outputs is not None else None,
+            video_hidden_states=video_features if video_outputs is not None else None,
         )
 
 
@@ -319,6 +323,8 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
+        image_outputs: BaseModelOutputWithPooling | None = None,
+        video_outputs: BaseModelOutputWithPooling | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **lm_kwargs,
     ) -> tuple | PerceptionLMCausalLMOutputWithPast:
@@ -379,7 +385,8 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
+            image_outputs=image_outputs,
+            video_outputs=video_outputs,
             **lm_kwargs,
         )
 

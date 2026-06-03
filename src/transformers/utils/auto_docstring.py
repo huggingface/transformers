@@ -2113,6 +2113,13 @@ class ModelArgs:
         "shape": "of shape `(batch_size, num_channels, image_size, image_size)`",
     }
 
+    image_outputs = {
+        "description": """
+    The output dict corresponding to an encoded image. It can be obtained using [`model.get_image_features()`].
+    """,
+        "shape": "of shape `(batch_size, image_seq_length, projected_hidden_dim)`",
+    }
+
     pixel_values_videos = {
         "description": """
     The tensors corresponding to the input video. Pixel values for videos can be obtained using
@@ -2120,6 +2127,13 @@ class ModelArgs:
     [`{video_processor_class}`] for processing videos).
     """,
         "shape": "of shape `(batch_size, num_frames, num_channels, frame_size, frame_size)`",
+    }
+
+    video_outputs = {
+        "description": """
+    The output dict corresponding to an encoded video. It can be obtained using [`model.get_video_features()`].
+    """,
+        "shape": "of shape `(batch_size, video_seq_length, projected_hidden_dim)`",
     }
 
     vision_feature_layer = {

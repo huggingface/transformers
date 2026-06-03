@@ -113,6 +113,7 @@ class Cohere2VisionModel(AyaVisionModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        image_outputs: BaseModelOutputWithPooling | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | Cohere2VisionModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -121,8 +122,11 @@ class Cohere2VisionModel(AyaVisionModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
+        if image_outputs is None and pixel_values is not None:
+            image_outputs = self.get_image_features(pixel_values, return_dict=True)
+
+        if image_outputs is not None:
+            image_features = image_outputs.pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -143,7 +147,7 @@ class Cohere2VisionModel(AyaVisionModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if image_outputs is not None else None,
         )
 
 
@@ -166,6 +170,7 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         image_sizes: torch.Tensor | None = None,
+        image_outputs: BaseModelOutputWithPooling | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Cohere2VisionCausalLMOutputWithPast:
         r"""
@@ -212,6 +217,7 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             image_sizes=image_sizes,
+            image_outputs=image_outputs,
             **kwargs,
         )
 

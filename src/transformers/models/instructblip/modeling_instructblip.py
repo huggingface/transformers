@@ -1208,6 +1208,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool = False,
+        image_outputs: BaseModelOutputWithPooling | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InstructBlipForConditionalGenerationModelOutput:
         r"""
@@ -1273,16 +1274,17 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV, which is parked in the middle of a busy city street. This is an unconventional approach to ironing clothes, as it requires the man to balance himself and his ironing equipment on top of the vehicle while navigating through traffic. Additionally, the presence of taxis and other vehicles in the scene further emphasizes the unusual nature of this situation.
         ```"""
 
-        image_features: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
-            pixel_values,
-            qformer_input_ids=qformer_input_ids,
-            qformer_attention_mask=qformer_attention_mask,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=True,
-        )
-        language_model_inputs = image_features.pooler_output
-        qformer_outputs = image_features.qformer_outputs
-        vision_outputs = image_features.vision_outputs
+        if image_outputs is None:
+            image_outputs: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
+                pixel_values,
+                qformer_input_ids=qformer_input_ids,
+                qformer_attention_mask=qformer_attention_mask,
+                interpolate_pos_encoding=interpolate_pos_encoding,
+                return_dict=True,
+            )
+        language_model_inputs = image_outputs.pooler_output
+        qformer_outputs = image_outputs.qformer_outputs
+        vision_outputs = image_outputs.vision_outputs
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)

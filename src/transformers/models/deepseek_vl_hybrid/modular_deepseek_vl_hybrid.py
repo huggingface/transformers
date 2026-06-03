@@ -309,7 +309,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
+        image_outputs: BaseModelOutputWithPooling | None = None,
         **kwargs,
     ) -> DeepseekVLHybridBaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -323,7 +323,10 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
+        if image_outputs is None and pixel_values is not None:
+            image_outputs = self.get_image_features(pixel_values, high_res_pixel_values, return_dict=True)
+
+        if image_outputs is not None:
             if input_ids is None:
                 image_attention_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
@@ -331,10 +334,9 @@ class DeepseekVLHybridModel(DeepseekVLModel):
                 image_attention_mask = image_attention_mask.all(-1)
             else:
                 image_attention_mask = input_ids == self.config.image_token_id
-
             image_attention_mask = image_attention_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-            image_embeds = self.get_image_features(pixel_values, high_res_pixel_values, return_dict=True).pooler_output
-            image_features = image_embeds.reshape(-1, inputs_embeds.shape[-1])
+
+            image_features = image_outputs.pooler_output.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(image_attention_mask, image_features)
 
@@ -344,7 +346,6 @@ class DeepseekVLHybridModel(DeepseekVLModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 
@@ -353,7 +354,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
             past_key_values=lm_output.past_key_values,
             hidden_states=lm_output.hidden_states,
             attentions=lm_output.attentions,
-            image_hidden_states=image_embeds if pixel_values is not None else None,
+            image_hidden_states=image_features if image_outputs is not None else None,
         )
 
 
@@ -371,6 +372,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
+        image_outputs: BaseModelOutputWithPooling | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> DeepseekVLHybridCausalLMOutputWithPast:
@@ -389,6 +391,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            image_outputs=image_outputs,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
