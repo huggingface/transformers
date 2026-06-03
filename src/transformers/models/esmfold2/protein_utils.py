@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 Biohub. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +20,7 @@ import math
 import numpy as np
 import torch
 from torch import Tensor
+
 
 MOL_TYPE_PROTEIN = 0
 PROTEIN_UNK_RES_TYPE = 22
@@ -407,9 +407,7 @@ def prepare_protein_features(sequence: str) -> dict[str, Tensor]:
             atom_cursor += 1
 
         rep_name = "CB" if "CB" in atom_names else "CA"
-        distogram_rep_atom_idx.append(
-            token_atom_starts[t_idx] + atom_names.index(rep_name)
-        )
+        distogram_rep_atom_idx.append(token_atom_starts[t_idx] + atom_names.index(rep_name))
 
         res_type_vals.append(res_type)
         input_id_vals.append(input_id)
@@ -429,9 +427,7 @@ def prepare_protein_features(sequence: str) -> dict[str, Tensor]:
         ref_pos[i] = torch.tensor(pos, dtype=torch.float32)
         ref_element[i] = _PROTEIN_ELEMENT_TO_ATOMIC_NUM[element]
         ref_charge[i] = charge
-        ref_atom_name_chars[i] = torch.tensor(
-            _encode_atom_name(name), dtype=torch.int64
-        )
+        ref_atom_name_chars[i] = torch.tensor(_encode_atom_name(name), dtype=torch.int64)
         ref_space_uid[i] = t_idx
         atom_attention_mask[i] = True
         atom_to_token[i] = t_idx
@@ -484,9 +480,7 @@ def prepare_protein_features(sequence: str) -> dict[str, Tensor]:
 
 
 # 0-32 res_type → 3-letter name (only protein indices 2-22 are populated).
-_RES_TYPE_TO_3LETTER: dict[int, str] = {
-    rt: three for three, rt in PROTEIN_RESIDUE_TO_RES_TYPE.items()
-}
+_RES_TYPE_TO_3LETTER: dict[int, str] = {rt: three for three, rt in PROTEIN_RESIDUE_TO_RES_TYPE.items()}
 _RES_TYPE_TO_3LETTER[PROTEIN_UNK_RES_TYPE] = "UNK"
 
 # Featurization keys that ``output_to_pdb`` reads off the forward output.
@@ -562,9 +556,7 @@ def output_to_pdb(output: dict) -> str:
         if tok not in tok_to_new:
             continue
         new_i = tok_to_new[tok]
-        name = "".join(
-            chr(int(c) + 32) if int(c) != 0 else " " for c in ref_chars[a]
-        ).strip()
+        name = "".join(chr(int(c) + 32) if int(c) != 0 else " " for c in ref_chars[a]).strip()
         idx37 = rc.atom_order.get(name)
         if idx37 is None:
             continue
