@@ -64,3 +64,5 @@
       title: Procesatoare de imagini
     - local: video_processors
       title: Procesatoare video
+    - local: backbones
+      title: Backbone-uri
