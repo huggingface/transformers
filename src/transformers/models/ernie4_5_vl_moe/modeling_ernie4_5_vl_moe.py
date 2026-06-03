@@ -1653,7 +1653,6 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
             video_grid_thw=video_grid_thw,
             image_outputs=image_outputs,
             video_outputs=video_outputs,
-            rope_deltas=rope_deltas,
             **kwargs,
         )
 

@@ -816,7 +816,6 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs,
     ) -> torch.FloatTensor:
         # Prepare image/video hidden states if the model support the given modality so we don't re-compute it
-        keys_to_remove = set()
         if (
             "image" in self.input_modalities
             and model_kwargs.get("image_outputs") is None
@@ -831,7 +830,6 @@ class GenerationMixin(ContinuousMixin):
                 name for name, param in image_signature.items() if param.default is inspect.Parameter.empty
             ]
             if all(model_kwargs.get(n) is not None for n in required_args):
-                keys_to_remove = keys_to_remove | set(image_signature)
                 image_encoder_kwargs = {
                     argument: model_kwargs.get(argument, None) for argument in set(image_signature)
                 }
@@ -854,7 +852,6 @@ class GenerationMixin(ContinuousMixin):
                 name for name, param in video_signature.items() if param.default is inspect.Parameter.empty
             ]
             if all(model_kwargs.get(n) is not None for n in required_args):
-                keys_to_remove = keys_to_remove | set(video_signature)
                 video_encoder_kwargs = {
                     argument: model_kwargs.get(argument, None) for argument in set(video_signature)
                 }
@@ -862,10 +859,6 @@ class GenerationMixin(ContinuousMixin):
                 model_kwargs["video_outputs"]: torch.FloatTensor = self.base_model.get_video_features(
                     **video_encoder_kwargs
                 )
-
-        # Image and video might share same kwargs, we can't pop keys before processing all inputs
-        for key in keys_to_remove:
-            model_kwargs.pop(key, None)
 
         return model_kwargs
 
@@ -1626,6 +1619,10 @@ class GenerationMixin(ContinuousMixin):
         if self.config.is_encoder_decoder:
             for key in ["decoder_input_ids"]:
                 model_kwargs.pop(key, None)
+
+        # Excludes arguments that might not be in signature of older models
+        for key in ["image_outputs", "video_outputs"]:
+            model_kwargs.pop(key, None)
 
         unused_model_args = []
         model_args = set(inspect.signature(self.prepare_inputs_for_generation).parameters)

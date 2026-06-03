@@ -22,7 +22,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 import torch
@@ -842,6 +842,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
             new_image_features.append(image_feature)
             feature_lens.append(image_feature.size(0))
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0].device)
+        new_image_features = torch.cat(new_image_features, dim=0)
         return new_image_features, feature_lens
 
     @merge_with_config_defaults
@@ -855,7 +856,6 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> Granite4VisionImageFeaturesOutput:
         r"""
@@ -887,7 +887,8 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         elif pixel_values.dim() != 4:
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
-        vision_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
+        kwargs["output_hidden_states"] = True
+        vision_outputs = self.vision_tower(pixel_values, **kwargs)
 
         # Deepstack features: extract from multiple vision layers, downsample via interpolation
         all_features = []
@@ -970,6 +971,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
+        image_outputs: BaseModelOutputWithPooling | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Granite4VisionModelOutputWithPast:
@@ -985,28 +987,31 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        # Build deepstack injection map and scatter initial image embeddings
-        deepstack_features = None
-        vision_mask = None
-        image_features = None
-        if pixel_values is not None:
-            image_features = self.get_image_features(
+        if image_outputs is None and pixel_values is not None:
+            image_outputs = self.get_image_features(
                 pixel_values,
                 image_sizes,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
+                return_dict=True,
             )
 
+        # Build deepstack injection map and scatter initial image embeddings
+        deepstack_features = None
+        vision_mask = None
+        if image_outputs is not None:
             deepstack_features = {}
-            for idx, (llm_layer_idx, packed_features) in enumerate(image_features.deepstack_features):
-                concat_features = torch.cat(packed_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            for idx, (llm_layer_idx, packed_features) in enumerate(image_outputs.deepstack_features):
+                if not isinstance(packed_features, torch.Tensor):
+                    packed_features = torch.cat(packed_features, dim=0)
+                packed_features = packed_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 if idx == 0:
                     vision_mask = self.get_placeholder_mask(
-                        input_ids, inputs_embeds=inputs_embeds, image_features=concat_features
+                        input_ids, inputs_embeds=inputs_embeds, image_features=packed_features
                     )
                     # Zero out image token positions — deepstack injection will sum features in during forward.
                     inputs_embeds = inputs_embeds.masked_fill(vision_mask, 0.0)
-                deepstack_features[llm_layer_idx] = concat_features
+                deepstack_features[llm_layer_idx] = packed_features
 
         outputs = self.language_model(
             input_ids=None,
@@ -1025,7 +1030,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            deepstack_features=image_features.deepstack_features if pixel_values is not None else None,
+            deepstack_features=image_outputs.deepstack_features if image_outputs is not None else None,
         )
 
 
@@ -1100,6 +1105,7 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
+        image_outputs: BaseModelOutputWithPooling | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1148,6 +1154,7 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            image_outputs=image_outputs,
             use_cache=use_cache,
             return_dict=True,
             **kwargs,
@@ -1208,6 +1215,31 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
             model_inputs["image_sizes"] = image_sizes
 
         return model_inputs
+
+    def _expand_inputs_for_generation(
+        self,
+        expand_size: int = 1,
+        is_encoder_decoder: bool = False,
+        input_ids: torch.LongTensor | None = None,
+        **model_kwargs,
+    ) -> tuple[torch.LongTensor, dict[str, Any]]:
+        # Overwritten -- model uses list of deepstack features per layer
+
+        input_ids, model_kwargs = super()._expand_inputs_for_generation(
+            expand_size=expand_size,
+            is_encoder_decoder=is_encoder_decoder,
+            input_ids=input_ids,
+            **model_kwargs,
+        )
+
+        if expand_size != 1:
+            if image_outputs := model_kwargs.get("image_outputs"):
+                image_outputs["deepstack_features"] = [
+                    (tuple_item[0], tuple_item[1].repeat_interleave(expand_size, dim=0))
+                    for tuple_item in image_outputs["deepstack_features"]
+                ]
+
+        return input_ids, model_kwargs
 
 
 __all__ = [
