@@ -1429,10 +1429,6 @@ def convert_and_load_state_dict_in_model(
                         mapping.distributed_operation = tp_layer(
                             device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
                         )
-                    # Per-expert TP layers (e.g. `GroupedGemmTensorParallel`) need the
-                    # per-expert index to route local vs remote. Scan the whole chain for
-                    # `MergeModulelist` — `Fp8Dequantize` prepends to the chain in dequant
-                    # mode, so the merge isn't always at index 0.
                     shard_index = (
                         len(mapping.collected_tensors.get(source_pattern, []))
                         if isinstance(mapping, WeightConverter)
