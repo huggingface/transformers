@@ -14,10 +14,8 @@
 """PyTorch ESMC model."""
 
 import math
-import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import cast
 
 import torch
 import torch.nn as nn
@@ -43,7 +41,6 @@ from ..esm.modeling_esm import (
     eager_attention_forward,
 )
 from .configuration_esmc import ESMCConfig
-from .modeling_esmc_sae import _ESMCSAELayer
 
 
 logger = logging.get_logger(__name__)
@@ -65,10 +62,6 @@ class ESMCOutput(ModelOutput):
             Stacked hidden states for all encoder layers.
             Shape ``(n_layers, batch_size, sequence_length, d_model)``.
             Returned when ``output_hidden_states=True``.
-        sae_outputs (`dict[str, torch.Tensor]`, *optional*):
-            SAE feature magnitudes keyed by SAE model name (sparse tensors).
-            Only populated when SAE models have been registered via
-            ``add_sae_models`` and ``compute_sae=True``.
         attentions (`tuple(torch.FloatTensor)`, *optional*):
             Per-layer attention weights of shape
             ``(batch_size, num_heads, sequence_length, sequence_length)``.
@@ -78,7 +71,6 @@ class ESMCOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor | None = None
     hidden_states: torch.FloatTensor | None = None
-    sae_outputs: dict[str, torch.Tensor] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
@@ -94,8 +86,6 @@ class ESMCMaskedLMOutput(MaskedLMOutput):
             Final hidden states after layer normalisation.
         hidden_states (`torch.FloatTensor`, *optional*):
             Stacked hidden states. Shape ``(n_layers, batch_size, sequence_length, d_model)``.
-        sae_outputs (`dict[str, torch.Tensor]`, *optional*):
-            SAE feature magnitudes keyed by SAE model name (sparse tensors).
         attentions (`tuple(torch.FloatTensor)`, *optional*):
             Per-layer attention weights of shape
             ``(batch_size, num_heads, sequence_length, sequence_length)``.
@@ -106,7 +96,6 @@ class ESMCMaskedLMOutput(MaskedLMOutput):
     logits: torch.FloatTensor | None = None
     last_hidden_state: torch.FloatTensor | None = None
     hidden_states: torch.FloatTensor | None = None
-    sae_outputs: dict[str, torch.Tensor] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
@@ -122,8 +111,6 @@ class ESMCTokenClassifierOutput(TokenClassifierOutput):
             Final hidden states after layer normalisation.
         hidden_states (`torch.FloatTensor`, *optional*):
             Stacked hidden states. Shape ``(n_layers, batch_size, sequence_length, d_model)``.
-        sae_outputs (`dict[str, torch.Tensor]`, *optional*):
-            SAE feature magnitudes keyed by SAE model name (sparse tensors).
         attentions (`tuple(torch.FloatTensor)`, *optional*):
             Per-layer attention weights of shape
             ``(batch_size, num_heads, sequence_length, sequence_length)``.
@@ -134,7 +121,6 @@ class ESMCTokenClassifierOutput(TokenClassifierOutput):
     logits: torch.FloatTensor | None = None
     last_hidden_state: torch.FloatTensor | None = None
     hidden_states: torch.FloatTensor | None = None
-    sae_outputs: dict[str, torch.Tensor] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
@@ -150,8 +136,6 @@ class ESMCSequenceClassifierOutput(SequenceClassifierOutput):
             Final hidden states after layer normalisation.
         hidden_states (`torch.FloatTensor`, *optional*):
             Stacked hidden states. Shape ``(n_layers, batch_size, sequence_length, d_model)``.
-        sae_outputs (`dict[str, torch.Tensor]`, *optional*):
-            SAE feature magnitudes keyed by SAE model name (sparse tensors).
         attentions (`tuple(torch.FloatTensor)`, *optional*):
             Per-layer attention weights of shape
             ``(batch_size, num_heads, sequence_length, sequence_length)``.
@@ -162,7 +146,6 @@ class ESMCSequenceClassifierOutput(SequenceClassifierOutput):
     logits: torch.FloatTensor | None = None
     last_hidden_state: torch.FloatTensor | None = None
     hidden_states: torch.FloatTensor | None = None
-    sae_outputs: dict[str, torch.Tensor] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
@@ -653,7 +636,6 @@ class ESMCModel(ESMCPreTrainedModel):
             config.n_heads,
             config.n_layers,
         )
-        self._sae_models: nn.ModuleDict = nn.ModuleDict()
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Embedding:
@@ -661,94 +643,6 @@ class ESMCModel(ESMCPreTrainedModel):
 
     def set_input_embeddings(self, value: nn.Embedding):
         self.embed = value
-
-    def add_sae_models(self, sae_models: list[_ESMCSAELayer]) -> None:
-        """Register one or more SAEs obtained from an :class:`ESMCSAEModel`.
-
-        Each is keyed by ``f"layer{N}"`` (the backbone-layer index ``N`` the
-        SAE is trained against, set by
-        :meth:`ESMCSAEModel.initialize_layers`). Attaching two SAEs for the
-        same backbone layer raises — only one SAE per layer can be active.
-
-        Example::
-
-            sae = ESMCSAEModel.from_pretrained(
-                "biohub/esmc-600m-2024-12-sae-k64-codebook16384"
-            )
-            sae.initialize_layers([27, 33])
-            model.add_sae_models([sae.layers["27"], sae.layers["33"]])
-        """
-        for layer in sae_models:
-            assert isinstance(layer, _ESMCSAELayer), (
-                f"Expected an SAE layer (model.layers['<idx>']), got {type(layer).__name__}."
-            )
-            key = f"layer{int(layer.layer)}"
-            if key in self._sae_models:
-                raise ValueError(
-                    f"An SAE is already registered at {key!r}. Only one SAE "
-                    "per backbone layer can be active — pick a different "
-                    "layer on one of them, or attach in a fresh model."
-                )
-            self._sae_models[key] = layer
-
-    _SAE_KEY_RE = re.compile(r"layer(\d+)")
-
-    def _get_sae_layer_num_requested(self, model_name: str) -> int:
-        """Recover the backbone-layer index from a key written by
-        :meth:`add_sae_models` (``"layer{N}"`` → ``N``)."""
-        match = self._SAE_KEY_RE.fullmatch(model_name)
-        assert match is not None, f"Unexpected SAE key {model_name!r}; expected 'layer{{N}}'."
-        return int(match.group(1))
-
-    def _validate_sae_inputs(self, input_ids: torch.Tensor) -> None:
-        assert torch.all(input_ids != self.config.mask_token_id), (
-            "SAE inputs must not contain mask tokens. SAEs were trained on unmasked sequences."
-        )
-
-    def _get_sae_outputs(
-        self,
-        hidden_states: torch.Tensor,
-        layers_to_collect: list[int],
-        token_mask: torch.Tensor,
-        normalize_sae: bool = False,
-    ) -> dict[str, torch.Tensor]:
-        """Run all registered SAEs and return their feature magnitudes.
-
-        Args:
-            hidden_states: Stacked tensor of shape
-                ``(len(layers_to_collect), batch, seq_len, d_model)``.
-            layers_to_collect: The ESMC layer indices that were collected,
-                in the same order as the first dim of ``hidden_states``.
-            token_mask: Boolean mask ``(batch, seq_len)`` — ``True`` for
-                real (non-padding) tokens.
-            normalize_sae: When ``True``, scale features by ``idf / max``
-                using the per-feature stats trained alongside each SAE.
-        """
-        layer_to_idx = {layer: idx for idx, layer in enumerate(layers_to_collect)}
-        sae_outputs: dict[str, torch.Tensor] = {}
-
-        for model_name, sae_module in self._sae_models.items():
-            # `nn.ModuleDict` only stores `nn.Module`s at the type level;
-            # ``add_sae_models`` enforces that each entry is an ``_ESMCSAELayer``.
-            assert isinstance(sae_module, _ESMCSAELayer)
-            layer: _ESMCSAELayer = sae_module
-            requested_layer = self._get_sae_layer_num_requested(model_name)
-            layer_idx = layer_to_idx[requested_layer]
-            layer_states = hidden_states[layer_idx].clone().to(self.device)
-
-            sae_out = layer.get_sae_output(layer_states, token_mask)
-            features = sae_out.feature_magnitudes.detach()
-
-            if normalize_sae:
-                # ``register_buffer`` is typed as ``Tensor | Module`` on
-                # ``nn.Module``; narrow here since these are Tensors.
-                idf = cast(torch.Tensor, layer.idf)
-                max_val = cast(torch.Tensor, layer.max)
-                features = (features / max_val) * idf
-
-            sae_outputs[model_name] = features.to_sparse()
-
-        return sae_outputs
 
     @can_return_tuple
     @auto_docstring
@@ -760,8 +654,6 @@ class ESMCModel(ESMCPreTrainedModel):
         output_hidden_states: bool | None = None,
         output_attentions: bool | None = None,
         return_dict: bool | None = None,
-        compute_sae: bool = True,
-        normalize_sae: bool = False,
     ) -> tuple[torch.Tensor, ...] | ESMCOutput:
         r"""
         sequence_id (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -777,13 +669,6 @@ class ESMCModel(ESMCPreTrainedModel):
             Forces a manual-SDPA path inside :class:`MultiHeadAttention` so the
             attention probabilities are observable; raises on the
             ``flash_attention_2`` path.
-        compute_sae (`bool`, *optional*, defaults to ``True``):
-            Whether to run any SAE models registered via :meth:`add_sae_models`.
-            Has no effect when no SAEs are registered.
-        normalize_sae (`bool`, *optional*, defaults to ``False``):
-            When ``True``, scale SAE feature magnitudes by ``idf / max`` (only
-            applied when the SAE's normalization buffers contain non-trivial values).
-
         Examples:
 
         ```python
@@ -803,26 +688,12 @@ class ESMCModel(ESMCPreTrainedModel):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        output_sae = compute_sae and len(self._sae_models) > 0
-
-        # Determine which intermediate layers to collect.  When SAEs are
-        # registered we must collect at least the layers they target, even if
-        # the caller did not ask for all hidden states.
-        if output_hidden_states:
-            layers_to_collect: list[int] = list(range(self.config.n_layers + 1))
-        elif output_sae:
-            layers_to_collect = sorted({self._get_sae_layer_num_requested(name) for name in self._sae_models})
-        else:
-            layers_to_collect = []
+        # Collect per-layer hidden states only when the caller asks for them.
+        layers_to_collect: list[int] = list(range(self.config.n_layers + 1)) if output_hidden_states else []
 
         user_supplied_sequence_id = sequence_id is not None
-        if user_supplied_sequence_id:
-            bool_mask = sequence_id >= 0
-        else:
-            if attention_mask is None:
-                attention_mask = input_ids != self.config.pad_token_id
-            assert attention_mask is not None
-            bool_mask = attention_mask.bool()
+        if not user_supplied_sequence_id and attention_mask is None:
+            attention_mask = input_ids != self.config.pad_token_id
 
         x = self.embed(input_ids)
         position_ids = torch.arange(x.shape[1], device=x.device).unsqueeze(0)
@@ -859,17 +730,9 @@ class ESMCModel(ESMCPreTrainedModel):
             output_attentions=output_attentions,
         )
 
-        # Stack once; reused for both SAE and hidden-state output.
         collected_tensor: torch.Tensor | None = (
             torch.stack(collected, dim=0) if collected else None  # type: ignore[arg-type]
         )
-
-        sae_outputs: dict[str, torch.Tensor] | None = None
-        if output_sae and collected_tensor is not None:
-            assert input_ids is not None
-            self._validate_sae_inputs(input_ids)
-            sae_outputs = self._get_sae_outputs(collected_tensor, layers_to_collect, bool_mask, normalize_sae)
-
         hidden_states_tensor = collected_tensor if output_hidden_states else None
 
         if not return_dict:
@@ -878,7 +741,6 @@ class ESMCModel(ESMCPreTrainedModel):
                 for v in [
                     last_hidden_state,
                     hidden_states_tensor,
-                    sae_outputs,
                     attentions,
                 ]
                 if v is not None
@@ -887,7 +749,6 @@ class ESMCModel(ESMCPreTrainedModel):
         return ESMCOutput(
             last_hidden_state=last_hidden_state,
             hidden_states=hidden_states_tensor,
-            sae_outputs=sae_outputs,
             attentions=attentions,
         )
 
@@ -934,10 +795,6 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
     def set_output_embeddings(self, new_embeddings: nn.Linear):
         self.lm_head[-1] = new_embeddings
 
-    def add_sae_models(self, sae_models: list[_ESMCSAELayer]) -> None:
-        """Proxy to :meth:`ESMCModel.add_sae_models`."""
-        self.esmc.add_sae_models(sae_models)
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -949,8 +806,6 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
         output_attentions: bool | None = None,
         return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
-        compute_sae: bool = True,
-        normalize_sae: bool = False,
     ) -> tuple[torch.Tensor, ...] | ESMCMaskedLMOutput:
         r"""
         sequence_id (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -962,10 +817,6 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
         output_attentions (`bool`, *optional*):
             Whether to return per-block attention weights. Forwarded to the
             backbone; raises on the ``flash_attention_2`` path.
-        compute_sae (`bool`, *optional*, defaults to ``True``):
-            Whether to run registered SAE models. Has no effect when none are registered.
-        normalize_sae (`bool`, *optional*, defaults to ``False``):
-            When ``True``, scale SAE features by ``idf / max`` normalization buffers.
 
         Examples:
 
@@ -990,8 +841,6 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
             return_dict=True,
-            compute_sae=compute_sae,
-            normalize_sae=normalize_sae,
         )
 
         logits = self.lm_head(encoder_outputs.last_hidden_state)
@@ -1008,7 +857,6 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
                     logits,
                     encoder_outputs.last_hidden_state,
                     encoder_outputs.hidden_states,
-                    encoder_outputs.sae_outputs,
                     encoder_outputs.attentions,
                 ]
                 if v is not None
@@ -1019,7 +867,6 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
             logits=logits,
             last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
-            sae_outputs=encoder_outputs.sae_outputs,
             attentions=encoder_outputs.attentions,
         )
 
@@ -1067,10 +914,6 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
         self.classifier = _ESMCClassificationHead(config)
         self.post_init()
 
-    def add_sae_models(self, sae_models: list[_ESMCSAELayer]) -> None:
-        """Proxy to :meth:`ESMCModel.add_sae_models`."""
-        self.esmc.add_sae_models(sae_models)
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1081,8 +924,6 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
         output_attentions: bool | None = None,
         return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
-        compute_sae: bool = True,
-        normalize_sae: bool = False,
     ) -> tuple[torch.Tensor, ...] | ESMCSequenceClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1092,10 +933,6 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
         output_attentions (`bool`, *optional*):
             Whether to return per-block attention weights. Forwarded to the
             backbone; raises on the ``flash_attention_2`` path.
-        compute_sae (`bool`, *optional*, defaults to ``True``):
-            Whether to run registered SAE models. Has no effect when none are registered.
-        normalize_sae (`bool`, *optional*, defaults to ``False``):
-            When ``True``, scale SAE features by ``idf / max`` normalization buffers.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1105,8 +942,6 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
             return_dict=True,
-            compute_sae=compute_sae,
-            normalize_sae=normalize_sae,
         )
         logits = self.classifier(encoder_outputs.last_hidden_state)
 
@@ -1141,7 +976,6 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
                     logits,
                     encoder_outputs.last_hidden_state,
                     encoder_outputs.hidden_states,
-                    encoder_outputs.sae_outputs,
                     encoder_outputs.attentions,
                 ]
                 if v is not None
@@ -1152,7 +986,6 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
             logits=logits,
             last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
-            sae_outputs=encoder_outputs.sae_outputs,
             attentions=encoder_outputs.attentions,
         )
 
@@ -1178,10 +1011,6 @@ class ESMCForTokenClassification(ESMCPreTrainedModel):
         self.classifier = nn.Linear(config.d_model, config.num_labels)
         self.post_init()
 
-    def add_sae_models(self, sae_models: list[_ESMCSAELayer]) -> None:
-        """Proxy to :meth:`ESMCModel.add_sae_models`."""
-        self.esmc.add_sae_models(sae_models)
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1192,8 +1021,6 @@ class ESMCForTokenClassification(ESMCPreTrainedModel):
         output_attentions: bool | None = None,
         return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
-        compute_sae: bool = True,
-        normalize_sae: bool = False,
     ) -> tuple[torch.Tensor, ...] | ESMCTokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1202,10 +1029,6 @@ class ESMCForTokenClassification(ESMCPreTrainedModel):
         output_attentions (`bool`, *optional*):
             Whether to return per-block attention weights. Forwarded to the
             backbone; raises on the ``flash_attention_2`` path.
-        compute_sae (`bool`, *optional*, defaults to ``True``):
-            Whether to run registered SAE models. Has no effect when none are registered.
-        normalize_sae (`bool`, *optional*, defaults to ``False``):
-            When ``True``, scale SAE features by ``idf / max`` normalization buffers.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1215,8 +1038,6 @@ class ESMCForTokenClassification(ESMCPreTrainedModel):
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
             return_dict=True,
-            compute_sae=compute_sae,
-            normalize_sae=normalize_sae,
         )
 
         sequence_output = self.dropout(encoder_outputs.last_hidden_state)
@@ -1236,7 +1057,6 @@ class ESMCForTokenClassification(ESMCPreTrainedModel):
                     logits,
                     encoder_outputs.last_hidden_state,
                     encoder_outputs.hidden_states,
-                    encoder_outputs.sae_outputs,
                     encoder_outputs.attentions,
                 ]
                 if v is not None
@@ -1247,7 +1067,6 @@ class ESMCForTokenClassification(ESMCPreTrainedModel):
             logits=logits,
             last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
-            sae_outputs=encoder_outputs.sae_outputs,
             attentions=encoder_outputs.attentions,
         )
 

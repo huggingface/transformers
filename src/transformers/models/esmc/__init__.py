@@ -16,11 +16,10 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule  # type: ignore[import]
 from ...utils.import_utils import define_import_structure  # type: ignore[import]
 
+
 if TYPE_CHECKING:
     from .configuration_esmc import *  # noqa: F403
-    from .configuration_esmc_sae import *  # noqa: F403
     from .modeling_esmc import *  # noqa: F403
-    from .modeling_esmc_sae import *  # noqa: F403
     from .tokenization_esmc import *  # noqa: F403
 else:
     import sys
