@@ -30,9 +30,7 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer", "video_processor"]
-    image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
-    video_processor_class = "AutoVideoProcessor"
 
     IMAGE_TOKEN = "]<]image[>["
     VIDEO_TOKEN = "]<]video[>["

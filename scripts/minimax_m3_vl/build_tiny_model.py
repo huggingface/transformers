@@ -37,7 +37,10 @@ def build_tiny_config():
         num_attention_heads=4,
         num_key_value_heads=2,
         head_dim=32,
-        vocab_size=512,
+        # Match the real tokenizer (200k) so the snapshot's tokenizer.json works
+        # end-to-end with the tiny model — embedding table is large but params are
+        # still cheap (200064 * 128 ≈ 26M).
+        vocab_size=200064,
         num_local_experts=4,
         num_experts_per_tok=2,
         n_shared_experts=1,
@@ -74,8 +77,10 @@ def build_tiny_config():
         text_config=text_cfg.to_dict(),
         vision_config=vis_cfg.to_dict(),
         projector_hidden_size=128,
-        image_token_index=300,
-        video_token_index=301,
+        # Use the real tokenizer's image/video token IDs (200025 / 200026) so
+        # the snapshot tokenizer + this tiny model are interchangeable.
+        image_token_index=200025,
+        video_token_index=200026,
     )
     return cfg
 

@@ -91,6 +91,7 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
     swiglu_limit: float = 7.0
     moe_layer_freq: list[int] | None = None
     sparse_attention_config: dict | None = None
+    layer_types: list[str] | None = None
     num_mtp_modules: int = 0
 
 

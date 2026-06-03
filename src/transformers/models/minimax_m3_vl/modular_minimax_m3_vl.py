@@ -22,7 +22,7 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicLayer
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
@@ -88,6 +88,7 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
     swiglu_limit: float = 7.0
     moe_layer_freq: list[int] | None = None
     sparse_attention_config: dict | None = None
+    layer_types: list[str] | None = None
     num_mtp_modules: int = 0
     tie_word_embeddings: bool = False
     pad_token_id: int | None = None
@@ -158,6 +159,80 @@ class MiniMaxM3VLConfig(PreTrainedConfig):
             self.tie_word_embeddings = self.text_config.tie_word_embeddings
 
         super().__post_init__(**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Per-layer cache for sparse-attention layers
+# ---------------------------------------------------------------------------
+
+
+class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
+    """Cache layer for M3 sparse-attention layers: standard DynamicLayer for the
+    main attention plus ``idx_keys`` / ``idx_values`` slots for the lightning
+    indexer's K/V (one head, ``sparse_index_dim`` per token).
+
+    Same dispatch story as DeepSeek-V4's ``DeepseekV4CSACache``: the class
+    registers itself via ``layer_type = "minimax_m3_sparse"`` so
+    ``DynamicCache(config=text_config)`` picks it for each layer where
+    ``text_config.layer_types[i] == "minimax_m3_sparse"``.
+    """
+
+    layer_type = "minimax_m3_sparse"
+
+    def __init__(self, config: PreTrainedConfig | None = None):
+        super().__init__(config)
+        self.idx_keys: torch.Tensor | None = None
+        self.idx_values: torch.Tensor | None = None
+
+    def update_index(
+        self, idx_k: torch.Tensor, idx_v: torch.Tensor | None
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Append the new token's ``idx_k`` / ``idx_v`` to the cache and return
+        the full cached history. ``idx_v`` is ``None`` for layers with
+        ``disable_index_value`` set; we keep it ``None`` end-to-end.
+        """
+        if self.idx_keys is None:
+            self.idx_keys = idx_k
+        else:
+            self.idx_keys = torch.cat([self.idx_keys, idx_k], dim=-2)
+
+        if idx_v is None:
+            return self.idx_keys, None
+        if self.idx_values is None:
+            self.idx_values = idx_v
+        else:
+            self.idx_values = torch.cat([self.idx_values, idx_v], dim=-2)
+        return self.idx_keys, self.idx_values
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        if self.idx_keys is not None:
+            self.idx_keys = self.idx_keys.index_select(0, beam_idx.to(self.idx_keys.device))
+        if self.idx_values is not None:
+            self.idx_values = self.idx_values.index_select(0, beam_idx.to(self.idx_values.device))
+
+    def batch_repeat_interleave(self, repeats: int) -> None:
+        super().batch_repeat_interleave(repeats)
+        if self.idx_keys is not None:
+            self.idx_keys = self.idx_keys.repeat_interleave(repeats, dim=0)
+        if self.idx_values is not None:
+            self.idx_values = self.idx_values.repeat_interleave(repeats, dim=0)
+
+    def batch_select_indices(self, indices: torch.Tensor) -> None:
+        super().batch_select_indices(indices)
+        if self.idx_keys is not None:
+            self.idx_keys = self.idx_keys[indices, ...]
+        if self.idx_values is not None:
+            self.idx_values = self.idx_values[indices, ...]
+
+    def crop(self, max_length: int) -> None:
+        super().crop(max_length)
+        if max_length < 0:
+            max_length = self.get_seq_length() - abs(max_length)
+        if self.idx_keys is not None and self.idx_keys.shape[-2] > max_length:
+            self.idx_keys = self.idx_keys[..., :max_length, :]
+        if self.idx_values is not None and self.idx_values.shape[-2] > max_length:
+            self.idx_values = self.idx_values[..., :max_length, :]
 
 
 # ---------------------------------------------------------------------------
@@ -379,89 +454,106 @@ class MiniMaxM3VLIndexer(nn.Module):
             self.v_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
             self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
 
-    def _block_bias(self, idx_q: torch.Tensor, idx_k: torch.Tensor) -> torch.Tensor:
-        r"""Build the ``[B, 1, S, S]`` top-k + init + local additive mask.
+    def _block_bias(
+        self, idx_q: torch.Tensor, idx_k: torch.Tensor, q_positions: torch.Tensor
+    ) -> torch.Tensor:
+        r"""Build the ``[B, 1, S_q, S_k]`` top-k + init + local additive mask.
 
-        ``idx_q``: ``[B, H_idx, S_q, D]``; ``idx_k``: ``[B, 1, S_k, D]``.
-
-        For each query token, score every key *block* of size ``block_size``
-        with the (max-reduced) inner products against the per-head index
-        vectors, then keep ``topk_blocks`` + ``init_blocks`` + the
-        ``local_blocks`` immediately-prior blocks.
+        ``idx_q``: ``[B, H_idx, S_q, D]`` — only the *new* queries.
+        ``idx_k``: ``[B, 1, S_k, D]`` — the *full* cached key history.
+        ``q_positions``: ``[S_q]`` absolute positions of the queries, so the
+        causal block threshold lines up with the cached history during decode.
         """
         B, H, Sq, _ = idx_q.shape
         Sk = idx_k.shape[2]
         block = self.block_size
-        # Pad key length up to a multiple of block_size so we can reshape.
         pad = (-Sk) % block
         if pad:
             idx_k = F.pad(idx_k, (0, 0, 0, pad))
         n_blocks = (Sk + pad) // block
 
-        # Per-(query, head, block) scores: ``max`` over the keys within each block.
-        # `scores_qk` is the full [B, H, Sq, Sk_padded] inner-product tensor; we
-        # split it into blocks of size `block` and reduce by `score_type` (only
-        # "max" is in the real config; "softmax_sum" is left as a hook).
-        idx_k_h = idx_k.expand(-1, H, -1, -1)  # broadcast the single idx-K head
-        scores_qk = torch.matmul(idx_q.float(), idx_k_h.float().transpose(-1, -2))  # [B, H, Sq, Sk_pad]
+        # Inner-product scores: ``[B, H, Sq, n_blocks * block]`` -> max over block.
+        idx_k_h = idx_k.expand(-1, H, -1, -1)
+        scores_qk = torch.matmul(idx_q.float(), idx_k_h.float().transpose(-1, -2))
         scores_qk = scores_qk.view(B, H, Sq, n_blocks, block)
         if self.score_type == "max":
-            block_scores = scores_qk.amax(dim=-1)  # [B, H, Sq, n_blocks]
-        else:  # softmax-sum, kept as a fall-through hook
+            block_scores = scores_qk.amax(dim=-1)
+        else:
             block_scores = scores_qk.softmax(dim=-1).sum(dim=-1)
-        block_scores = block_scores.amax(dim=1)  # aggregate over index heads → [B, Sq, n_blocks]
+        block_scores = block_scores.amax(dim=1)  # max over index heads -> [B, Sq, n_blocks]
 
-        # Causality: a query at position `q` lives in block `q // block_size`
-        # and may only see blocks ``<= q_block``.
-        q_pos = torch.arange(Sq, device=idx_q.device)
-        q_block = q_pos // block  # [Sq]
+        # Causality on absolute positions.
+        q_block = q_positions // block  # [Sq]
         block_idx = torch.arange(n_blocks, device=idx_q.device)
-        future_mask = block_idx.view(1, 1, -1) > q_block.view(1, -1, 1)  # [1, Sq, n_blocks]
+        future_mask = block_idx.view(1, 1, -1) > q_block.view(1, -1, 1)
         block_scores = block_scores.masked_fill(future_mask, float("-inf"))
 
         topk = min(self.topk_blocks, n_blocks)
         topk_idx = block_scores.topk(topk, dim=-1).indices  # [B, Sq, topk]
 
-        # `block_keep` marks every block that should remain visible per query.
         block_keep = torch.zeros((B, Sq, n_blocks), dtype=torch.bool, device=idx_q.device)
         block_keep.scatter_(-1, topk_idx, True)
         if self.init_blocks > 0:
             block_keep[..., : self.init_blocks] = True
         if self.local_blocks > 0:
             local_offset = torch.arange(self.local_blocks, device=idx_q.device)
-            local_idx = (q_block.view(-1, 1) - local_offset.view(1, -1)).clamp(min=0)  # [Sq, L]
+            local_idx = (q_block.view(-1, 1) - local_offset.view(1, -1)).clamp(min=0)
             block_keep.scatter_(-1, local_idx.unsqueeze(0).expand(B, -1, -1), True)
 
-        # Expand block mask to per-token: each block "owns" `block_size` keys.
-        token_keep = block_keep.repeat_interleave(block, dim=-1)[..., :Sk]  # [B, Sq, Sk]
-        block_bias = torch.zeros_like(token_keep, dtype=idx_q.dtype)
-        block_bias = block_bias.masked_fill(~token_keep, float("-inf"))
-        return block_bias.unsqueeze(1)  # [B, 1, Sq, Sk]
+        token_keep = block_keep.repeat_interleave(block, dim=-1)[..., :Sk]
+        return torch.zeros_like(token_keep, dtype=idx_q.dtype).masked_fill_(~token_keep, float("-inf")).unsqueeze(1)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_ids: torch.Tensor | None,
+        past_key_values: Cache | None,
+        layer_idx: int,
     ) -> tuple[torch.Tensor | None, torch.Tensor]:
         bsz, slen, _ = hidden_states.shape
         idx_q = self.q_proj(hidden_states).view(bsz, slen, self.num_heads, self.head_dim)
         idx_k = self.k_proj(hidden_states).view(bsz, slen, 1, self.head_dim)
-        idx_q = self.q_norm(idx_q).transpose(1, 2)  # [B, H_idx, S, D]
-        idx_k = self.k_norm(idx_k).transpose(1, 2)  # [B, 1, S, D]
+        idx_q = self.q_norm(idx_q).transpose(1, 2)  # [B, H_idx, Sq, D]
+        idx_k = self.k_norm(idx_k).transpose(1, 2)  # [B, 1, Sq, D]
         cos, sin = position_embeddings
         idx_q, idx_k = apply_rotary_pos_emb(
             idx_q, idx_k, cos[..., : self.head_dim], sin[..., : self.head_dim]
         )
 
-        block_bias = self._block_bias(idx_q, idx_k)
+        idx_v = None
+        if not self.disable_index_value:
+            idx_v = self.v_proj(hidden_states).view(bsz, slen, 1, self.head_dim).transpose(1, 2)
+
+        # Append to cache (or run stateless if no cache is provided).
+        cache_layer: MiniMaxM3VLSparseCacheLayer | None = (
+            past_key_values.layers[layer_idx] if past_key_values is not None else None
+        )
+        if cache_layer is not None:
+            idx_k_full, idx_v_full = cache_layer.update_index(idx_k, idx_v)
+        else:
+            idx_k_full, idx_v_full = idx_k, idx_v
+
+        # Absolute query positions; default to ``arange`` if the model didn't pass them.
+        if position_ids is None:
+            q_positions = torch.arange(slen, device=idx_q.device)
+        else:
+            q_positions = position_ids[0]
+
+        block_bias = self._block_bias(idx_q, idx_k_full, q_positions)
 
         idx_output: torch.Tensor | None = None
         if not self.disable_index_value:
-            idx_v = self.v_proj(hidden_states).view(bsz, slen, 1, self.head_dim).transpose(1, 2)
-            idx_k_e = idx_k.expand(-1, self.num_heads, -1, -1)
-            idx_v_e = idx_v.expand(-1, self.num_heads, -1, -1)
+            idx_k_e = idx_k_full.expand(-1, self.num_heads, -1, -1)
+            idx_v_e = idx_v_full.expand(-1, self.num_heads, -1, -1)
+            # Build the index-branch causal mask explicitly (Sq < Sk during decode,
+            # so ``is_causal=True`` would mis-align the diagonal).
+            Sq, Sk = idx_q.shape[2], idx_k_e.shape[2]
+            causal = torch.full((Sq, Sk), float("-inf"), device=idx_q.device, dtype=idx_q.dtype)
+            k_pos = torch.arange(Sk, device=idx_q.device)
+            causal = causal.masked_fill(k_pos.view(1, -1) <= q_positions.view(-1, 1), 0.0)
             idx_attn = F.scaled_dot_product_attention(
-                idx_q, idx_k_e, idx_v_e, attn_mask=None, is_causal=True
+                idx_q, idx_k_e, idx_v_e, attn_mask=causal, is_causal=False
             )
             idx_attn = idx_attn.transpose(1, 2).reshape(bsz, slen, self.num_heads * self.head_dim)
             idx_output = self.o_proj(idx_attn)
@@ -496,9 +588,16 @@ class MiniMaxM3VLSparseAttention(MiniMaxM3VLAttention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
+        position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        idx_output, block_bias = self.indexer(hidden_states, position_embeddings)
+        idx_output, block_bias = self.indexer(
+            hidden_states,
+            position_embeddings,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            layer_idx=self.layer_idx,
+        )
 
         # Same trick as deepseek_v4: encode top-k block visibility as a `-inf`
         # additive mask, sum it onto the regular causal mask. SDPA then sees a
@@ -564,6 +663,9 @@ class MiniMaxM3VLDecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
+        # ``position_ids`` is consumed by the sparse-attention indexer (used for
+        # absolute-position causality on the cached idx_k history). The dense
+        # attention path ignores it.
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -608,6 +710,14 @@ class MiniMaxM3VLTextModel(MiniMaxM2Model):
     config: MiniMaxM3VLTextConfig
 
     def __init__(self, config: MiniMaxM3VLTextConfig):
+        # Derive layer_types from sparse_attention_freq so DynamicCache(config=...)
+        # dispatches the per-layer sparse cache for sparse-attention layers.
+        if config.layer_types is None and config.sparse_attention_config is not None:
+            freq = config.sparse_attention_config.get("sparse_attention_freq")
+            if freq is not None:
+                config.layer_types = [
+                    "minimax_m3_sparse" if f else "full_attention" for f in freq
+                ]
         super().__init__(config)
         self.layers = nn.ModuleList(
             [MiniMaxM3VLDecoderLayer(config, i) for i in range(config.num_hidden_layers)]
