@@ -238,7 +238,9 @@ class GraniteSpeechNarConformerConvModule(nn.Module):
         return hidden_states
 
 
-class GraniteSpeechNarConformerBlock(nn.Module):
+class GraniteSpeechNarConformerBlock(
+    GradientCheckpointingLayer,
+):
     """Conformer block, consisting largely of linear layers, attention, and convolutional layers."""
 
     def __init__(self, config: GraniteSpeechNarEncoderConfig):
@@ -391,6 +393,7 @@ class GraniteSpeechNarProjector(nn.Module):
 class GraniteSpeechNarPreTrainedModel(PreTrainedModel):
     config_class = GraniteSpeechNarConfig
     base_model_prefix = "model"
+    main_input_name = "input_features"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_flash_attn_2 = True
@@ -1061,7 +1064,6 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
 
     def forward(
         self,
-        *,
         input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,

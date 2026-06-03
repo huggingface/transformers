@@ -26,6 +26,7 @@ from ...masking_utils import (
     find_packed_sequence_indices,
     packed_sequence_mask_function,
 )
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -98,7 +99,7 @@ class GraniteSpeechNarOutput(ModelOutput):
     ce_loss: torch.Tensor | None = None
 
 
-class GraniteSpeechNarConformerBlock(GraniteSpeechConformerBlock):
+class GraniteSpeechNarConformerBlock(GradientCheckpointingLayer, GraniteSpeechConformerBlock):
     pass
 
 
@@ -285,6 +286,7 @@ class GraniteSpeechNarProjector(nn.Module):
 class GraniteSpeechNarPreTrainedModel(PreTrainedModel):
     config_class = GraniteSpeechNarConfig
     base_model_prefix = "model"
+    main_input_name = "input_features"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_flash_attn_2 = True
@@ -588,7 +590,6 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
 
     def forward(
         self,
-        *,
         input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
