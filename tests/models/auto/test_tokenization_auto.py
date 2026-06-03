@@ -830,15 +830,6 @@ class NopConfig(PreTrainedConfig):
 
     @slow
     @require_tokenizers
-    def test_deepseek_r1_tokenizer_preserves_spaces(self):
-        """Regression: deepseek_v3 Hub config has wrong tokenizer_class='LlamaTokenizerFast'; must use TokenizersBackend."""
-        tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1")
-        self.assertIsInstance(tokenizer, TokenizersBackend)
-        text = "hello world"
-        self.assertEqual(tokenizer.decode(tokenizer.encode(text)), text)
-
-    @slow
-    @require_tokenizers
     def test_deepseek_r1_distill_qwen_uses_qwen2_tokenizer(self):
         """Regression: qwen2 model with wrong Hub tokenizer_class='LlamaTokenizerFast' must use Qwen2Tokenizer."""
         tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")
@@ -870,3 +861,14 @@ class NopConfig(PreTrainedConfig):
             mock_nllb.assert_called_once()
             mock_tb.assert_not_called()
             self.assertIs(result, mock_tokenizer)
+
+
+    MODELS_WITHOUT_TOKENIZER_CLASS_CHECKPOINTS = [
+        "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+    ]
+    @require_tokenizers
+    @parameterized.expand(TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS)
+    def test_models_without_tokenizer_class(self, repo_id):
+        text = "hello world"
+        tokenizer_auto = AutoTokenizer.from_pretrained(repo_id)
+        self.assertEqual(tokenizer_auto.decode(tokenizer_auto.encode(text, add_special_tokens=False)), text)

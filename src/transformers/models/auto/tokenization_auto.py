@@ -408,6 +408,9 @@ TOKENIZER_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TOKENIZER_MAPPING_NAM
 
 CONFIG_TO_TYPE = {v: k for k, v in CONFIG_MAPPING_NAMES.items()}
 
+MODEL_IDS_TO_TOKENIZERS_BACKEND = [
+   "deepseek-ai/deepseek-r1-distill-llama-8b"
+]
 
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
@@ -752,7 +755,7 @@ class AutoTokenizer:
         if (
             tokenizer_auto_map is None
             and TokenizersBackend is not None
-            and _config_name_or_path.startswith("deepseek-ai/deepseek-r1")
+            and _config_name_or_path in MODEL_IDS_TO_TOKENIZERS_BACKEND
         ):
             return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
