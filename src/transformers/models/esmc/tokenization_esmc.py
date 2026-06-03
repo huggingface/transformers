@@ -23,7 +23,7 @@ from ...utils import logging  # type: ignore[import]
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
 
 # Canonical amino acid vocabulary used by all ESMC checkpoints.
 # Indices must be kept stable — they are hard-coded into model weights.
