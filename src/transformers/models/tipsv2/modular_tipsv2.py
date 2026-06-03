@@ -764,14 +764,14 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Tipsv2Output:
         r"""
-        return_loss (`bool`, *optional*):
-            Whether or not to return the contrastive loss when both image and text inputs are provided.
         padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Official TIPSv2-style padding mask where `1` marks padding tokens and `0` marks valid tokens. Mutually
             exclusive with the Hugging Face-style `attention_mask`, where `1` marks valid tokens.
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
             pre-training.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss when both image and text inputs are provided.
         """
         if pixel_values is None and input_ids is None and inputs_embeds is None:
             raise ValueError("You have to specify pixel_values, input_ids, or inputs_embeds")
