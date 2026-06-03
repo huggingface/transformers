@@ -9,7 +9,6 @@
 """Processor for MiniMax M3 VL."""
 
 import re
-from typing import List
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -40,17 +39,11 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, **kwargs):
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.IMAGE_TOKEN) if tokenizer else None
         self.video_token_id = tokenizer.convert_tokens_to_ids(self.VIDEO_TOKEN) if tokenizer else None
-        self.vision_start_token_id = (
-            tokenizer.convert_tokens_to_ids(self.VISION_START_TOKEN) if tokenizer else None
-        )
-        self.vision_end_token_id = (
-            tokenizer.convert_tokens_to_ids(self.VISION_END_TOKEN) if tokenizer else None
-        )
+        self.vision_start_token_id = tokenizer.convert_tokens_to_ids(self.VISION_START_TOKEN) if tokenizer else None
+        self.vision_end_token_id = tokenizer.convert_tokens_to_ids(self.VISION_END_TOKEN) if tokenizer else None
         super().__init__(image_processor, tokenizer, video_processor)
 
-    def _prune_video_tokens(
-        self, input_text: str, video_segments: List[int], video_token: str
-    ) -> str:
+    def _prune_video_tokens(self, input_text: str, video_segments: list[int], video_token: str) -> str:
         """Drop every other video-token according to ``temporal_patch_size`` (2:1 sampling)."""
         if not video_segments or self.video_processor.temporal_patch_size <= 1:
             return input_text
@@ -155,13 +148,16 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
                     metadata = video_metadata[idx] if video_metadata is not None else None
                     chunk = ""
                     for f in range(grid_t):
-                        if metadata is not None and getattr(metadata, "fps", None) is not None \
-                                and getattr(metadata, "frames_indices", None) is not None:
+                        if (
+                            metadata is not None
+                            and getattr(metadata, "fps", None) is not None
+                            and getattr(metadata, "frames_indices", None) is not None
+                        ):
                             ts = (
                                 metadata.frames_indices[
-                                    min(f * self.video_processor.temporal_patch_size,
-                                        len(metadata.frames_indices) - 1)
-                                ] / metadata.fps
+                                    min(f * self.video_processor.temporal_patch_size, len(metadata.frames_indices) - 1)
+                                ]
+                                / metadata.fps
                             )
                             chunk += f"]<]{ts:.1f} seconds[>["
                         chunk += self.VISION_START_TOKEN + placeholder * frame_seqlen + self.VISION_END_TOKEN

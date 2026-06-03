@@ -88,6 +88,10 @@ AUTO_QUANTIZER_MAPPING = {
     "vptq": VptqHfQuantizer,
     "spqr": SpQRHfQuantizer,
     "fp8": FineGrainedFP8HfQuantizer,
+    # MXFP8 = FP8 (E4M3 weights) with per-block ``[1, 32]`` E8M0 (uint8) scales —
+    # reuses the FineGrainedFP8 dequant path, with the E8M0 byte→exponent
+    # unpacking handled inside ``Fp8Dequantize._dequantize_one``.
+    "mxfp8": FineGrainedFP8HfQuantizer,
     "auto-round": AutoRoundQuantizer,
     "mxfp4": Mxfp4HfQuantizer,
     "metal": MetalHfQuantizer,
@@ -114,6 +118,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "vptq": VptqConfig,
     "spqr": SpQRConfig,
     "fp8": FineGrainedFP8Config,
+    "mxfp8": FineGrainedFP8Config,
     "auto-round": AutoRoundConfig,
     "mxfp4": Mxfp4Config,
     "metal": MetalConfig,

@@ -28,12 +28,25 @@ from ..auto import AutoConfig
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
 @strict
 class MiniMaxM3VLTextConfig(PreTrainedConfig):
-    r"""Text-side config for MiniMax M3 VL.
-
-    Extends [`MiniMaxM2Config`] with the M3-specific knobs: shared experts,
-    swiglu-with-limit activation parameters, partial rotary embeddings,
-    per-layer ``moe_layer_freq`` selecting dense vs MoE MLP, and the lightning
-    sparse-attention config.
+    r"""
+    dense_intermediate_size (`int`, *optional*, defaults to 12288):
+        Intermediate size of the dense MLP used on layers where ``moe_layer_freq[i] == 0``.
+    shared_intermediate_size (`int`, *optional*, defaults to 3072):
+        Intermediate size of a single shared expert in the MoE layers.
+    use_routing_bias (`bool`, *optional*, defaults to `True`):
+        Whether the MoE router adds a learned per-expert bias before top-k selection.
+    rotary_dim (`int`, *optional*, defaults to 64):
+        Number of head channels rotated by RoPE; the remaining channels are passed through unchanged.
+    swiglu_alpha (`float`, *optional*, defaults to 1.702):
+        Sigmoid gain of the SwiGLU-OAI activation.
+    swiglu_limit (`float`, *optional*, defaults to 7.0):
+        Clamp bound applied to the gate and up projections of the SwiGLU-OAI activation.
+    moe_layer_freq (`list[int]`, *optional*):
+        Per-layer flags (`0`/`1`) selecting a dense MLP (`0`) or a sparse MoE block (`1`).
+    sparse_attention_config (`dict`, *optional*):
+        Configuration of the lightning sparse attention (top-k, indexer dims, local/init window, frequency).
+    num_mtp_modules (`int`, *optional*, defaults to 0):
+        Number of multi-token-prediction modules in the checkpoint; ignored at inference.
     """
 
     model_type = "minimax_m3_vl_text"
@@ -98,9 +111,9 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
 @strict
 class MiniMaxM3VLVisionConfig(PreTrainedConfig):
-    r"""Vision-side config for MiniMax M3 VL.
-
-    CLIP-style ViT with 3D RoPE over (T, H, W) and Conv3d patch embedding.
+    r"""
+    rope_theta (`float`, *optional*, defaults to 10000.0):
+        Base period of the vision tower's 3D rotary position embedding.
     """
 
     model_type = "minimax_m3_vl_vision"
@@ -124,7 +137,6 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
 @strict
 class MiniMaxM3VLConfig(PreTrainedConfig):
-    r"""Composite config for MiniMax M3 VL (vision tower + M3 LLM)."""
 
     model_type = "minimax_m3_vl"
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
@@ -141,14 +153,18 @@ class MiniMaxM3VLConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
+        # The snapshot bundles its sub-configs with their original model_types
+        # (e.g. ``clip_vision_model`` for the ViT, ``minimax_m2`` for the LLM).
+        # We always rebuild them as our own classes so the resulting attributes
+        # carry the fields our model code expects.
         if isinstance(self.vision_config, dict):
-            self.vision_config.setdefault("model_type", "minimax_m3_vl_vision")
+            self.vision_config.pop("model_type", None)
             self.vision_config = MiniMaxM3VLVisionConfig(**self.vision_config)
         elif self.vision_config is None:
             self.vision_config = MiniMaxM3VLVisionConfig()
 
         if isinstance(self.text_config, dict):
-            self.text_config.setdefault("model_type", "minimax_m3_vl_text")
+            self.text_config.pop("model_type", None)
             self.text_config = MiniMaxM3VLTextConfig(**self.text_config)
         elif self.text_config is None:
             self.text_config = MiniMaxM3VLTextConfig()

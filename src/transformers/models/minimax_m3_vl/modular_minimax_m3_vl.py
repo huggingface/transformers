@@ -13,8 +13,8 @@
 # limitations under the License.
 """MiniMax M3 VL: vision tower + M3 (mixed sparse/dense MoE) text backbone."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 import torch
 import torch.nn as nn
@@ -24,7 +24,6 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicLayer
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import RopeParameters
@@ -33,6 +32,8 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple
 from ..auto import AutoConfig
+from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
+from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel
 from ..minimax_m2.configuration_minimax_m2 import MiniMaxM2Config
 from ..minimax_m2.modeling_minimax_m2 import (
     MiniMaxM2Attention,
@@ -56,12 +57,25 @@ from ..minimax_m2.modeling_minimax_m2 import (
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
 @strict
 class MiniMaxM3VLTextConfig(MiniMaxM2Config):
-    r"""Text-side config for MiniMax M3 VL.
-
-    Extends [`MiniMaxM2Config`] with the M3-specific knobs: shared experts,
-    swiglu-with-limit activation parameters, partial rotary embeddings,
-    per-layer ``moe_layer_freq`` selecting dense vs MoE MLP, and the lightning
-    sparse-attention config.
+    r"""
+    dense_intermediate_size (`int`, *optional*, defaults to 12288):
+        Intermediate size of the dense MLP used on layers where ``moe_layer_freq[i] == 0``.
+    shared_intermediate_size (`int`, *optional*, defaults to 3072):
+        Intermediate size of a single shared expert in the MoE layers.
+    use_routing_bias (`bool`, *optional*, defaults to `True`):
+        Whether the MoE router adds a learned per-expert bias before top-k selection.
+    rotary_dim (`int`, *optional*, defaults to 64):
+        Number of head channels rotated by RoPE; the remaining channels are passed through unchanged.
+    swiglu_alpha (`float`, *optional*, defaults to 1.702):
+        Sigmoid gain of the SwiGLU-OAI activation.
+    swiglu_limit (`float`, *optional*, defaults to 7.0):
+        Clamp bound applied to the gate and up projections of the SwiGLU-OAI activation.
+    moe_layer_freq (`list[int]`, *optional*):
+        Per-layer flags (`0`/`1`) selecting a dense MLP (`0`) or a sparse MoE block (`1`).
+    sparse_attention_config (`dict`, *optional*):
+        Configuration of the lightning sparse attention (top-k, indexer dims, local/init window, frequency).
+    num_mtp_modules (`int`, *optional*, defaults to 0):
+        Number of multi-token-prediction modules in the checkpoint; ignored at inference.
     """
 
     model_type = "minimax_m3_vl_text"
@@ -100,9 +114,9 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
 @strict
 class MiniMaxM3VLVisionConfig(PreTrainedConfig):
-    r"""Vision-side config for MiniMax M3 VL.
-
-    CLIP-style ViT with 3D RoPE over (T, H, W) and Conv3d patch embedding.
+    r"""
+    rope_theta (`float`, *optional*, defaults to 10000.0):
+        Base period of the vision tower's 3D rotary position embedding.
     """
 
     model_type = "minimax_m3_vl_vision"
@@ -143,14 +157,18 @@ class MiniMaxM3VLConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
+        # The snapshot bundles its sub-configs with their original model_types
+        # (e.g. ``clip_vision_model`` for the ViT, ``minimax_m2`` for the LLM).
+        # We always rebuild them as our own classes so the resulting attributes
+        # carry the fields our model code expects.
         if isinstance(self.vision_config, dict):
-            self.vision_config.setdefault("model_type", "minimax_m3_vl_vision")
+            self.vision_config.pop("model_type", None)
             self.vision_config = MiniMaxM3VLVisionConfig(**self.vision_config)
         elif self.vision_config is None:
             self.vision_config = MiniMaxM3VLVisionConfig()
 
         if isinstance(self.text_config, dict):
-            self.text_config.setdefault("model_type", "minimax_m3_vl_text")
+            self.text_config.pop("model_type", None)
             self.text_config = MiniMaxM3VLTextConfig(**self.text_config)
         elif self.text_config is None:
             self.text_config = MiniMaxM3VLTextConfig()
@@ -249,20 +267,8 @@ def _swigluoai(gate_up: torch.Tensor, alpha: float, limit: float) -> torch.Tenso
     return (up + 1.0) * glu
 
 
-class MiniMaxM3VLRMSNorm(nn.Module):
-    """Gemma-style RMSNorm: multiplies by ``weight + 1`` in fp32."""
-
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__()
-        self.weight = nn.Parameter(torch.zeros(dim))
-        self.variance_epsilon = eps
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        orig_dtype = x.dtype
-        x32 = x.float()
-        variance = x32.pow(2).mean(-1, keepdim=True)
-        x32 = x32 * torch.rsqrt(variance + self.variance_epsilon)
-        return (x32 * (self.weight.float() + 1.0)).to(orig_dtype)
+class MiniMaxM3VLRMSNorm(Gemma3RMSNorm):
+    """Gemma-style RMSNorm: normalizes in fp32 and scales by ``weight + 1``."""
 
 
 # ---------------------------------------------------------------------------
@@ -297,12 +303,8 @@ class MiniMaxM3VLExperts(MiniMaxM2Experts):
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.intermediate_size
-        self.gate_up_proj = nn.Parameter(
-            torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim)
-        )
-        self.down_proj = nn.Parameter(
-            torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim)
-        )
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.swiglu_alpha = config.swiglu_alpha
         self.swiglu_limit = config.swiglu_limit
 
@@ -390,9 +392,7 @@ class MiniMaxM3VLAttention(MiniMaxM2Attention):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = _apply_partial_rope(
-            query_states, key_states, cos, sin, self.rotary_dim
-        )
+        query_states, key_states = _apply_partial_rope(query_states, key_states, cos, sin, self.rotary_dim)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
@@ -454,9 +454,7 @@ class MiniMaxM3VLIndexer(nn.Module):
             self.v_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
             self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
 
-    def _block_bias(
-        self, idx_q: torch.Tensor, idx_k: torch.Tensor, q_positions: torch.Tensor
-    ) -> torch.Tensor:
+    def _block_bias(self, idx_q: torch.Tensor, idx_k: torch.Tensor, q_positions: torch.Tensor) -> torch.Tensor:
         r"""Build the ``[B, 1, S_q, S_k]`` top-k + init + local additive mask.
 
         ``idx_q``: ``[B, H_idx, S_q, D]`` — only the *new* queries.
@@ -517,9 +515,7 @@ class MiniMaxM3VLIndexer(nn.Module):
         idx_q = self.q_norm(idx_q).transpose(1, 2)  # [B, H_idx, Sq, D]
         idx_k = self.k_norm(idx_k).transpose(1, 2)  # [B, 1, Sq, D]
         cos, sin = position_embeddings
-        idx_q, idx_k = apply_rotary_pos_emb(
-            idx_q, idx_k, cos[..., : self.head_dim], sin[..., : self.head_dim]
-        )
+        idx_q, idx_k = apply_rotary_pos_emb(idx_q, idx_k, cos[..., : self.head_dim], sin[..., : self.head_dim])
 
         idx_v = None
         if not self.disable_index_value:
@@ -552,9 +548,7 @@ class MiniMaxM3VLIndexer(nn.Module):
             causal = torch.full((Sq, Sk), float("-inf"), device=idx_q.device, dtype=idx_q.dtype)
             k_pos = torch.arange(Sk, device=idx_q.device)
             causal = causal.masked_fill(k_pos.view(1, -1) <= q_positions.view(-1, 1), 0.0)
-            idx_attn = F.scaled_dot_product_attention(
-                idx_q, idx_k_e, idx_v_e, attn_mask=causal, is_causal=False
-            )
+            idx_attn = F.scaled_dot_product_attention(idx_q, idx_k_e, idx_v_e, attn_mask=causal, is_causal=False)
             idx_attn = idx_attn.transpose(1, 2).reshape(bsz, slen, self.num_heads * self.head_dim)
             idx_output = self.o_proj(idx_attn)
 
@@ -688,6 +682,8 @@ class MiniMaxM3VLPreTrainedModel(MiniMaxM2PreTrainedModel):
     base_model_prefix = "model"
     _no_split_modules = ["MiniMaxM3VLDecoderLayer", "MiniMaxM3VLVisionEncoderLayer"]
     input_modalities = ("image", "video", "text")
+    # MTP modules ship in the upstream checkpoint but aren't part of this port.
+    _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -715,13 +711,9 @@ class MiniMaxM3VLTextModel(MiniMaxM2Model):
         if config.layer_types is None and config.sparse_attention_config is not None:
             freq = config.sparse_attention_config.get("sparse_attention_freq")
             if freq is not None:
-                config.layer_types = [
-                    "minimax_m3_sparse" if f else "full_attention" for f in freq
-                ]
+                config.layer_types = ["minimax_m3_sparse" if f else "full_attention" for f in freq]
         super().__init__(config)
-        self.layers = nn.ModuleList(
-            [MiniMaxM3VLDecoderLayer(config, i) for i in range(config.num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([MiniMaxM3VLDecoderLayer(config, i) for i in range(config.num_hidden_layers)])
         self.norm = MiniMaxM3VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
@@ -890,10 +882,12 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
         self.embeddings = MiniMaxM3VLVisionEmbeddings(config)
         head_dim = config.hidden_size // config.num_attention_heads
         self.rotary_emb = MiniMaxM3VL3DRotaryEmbedding(head_dim, theta=config.rope_theta)
-        self.layers = nn.ModuleList(
-            [MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)]
-        )
-        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        # Snapshot keeps the CLIP-style ``pre_layrnorm`` (yes, that's the upstream
+        # spelling) applied to patch embeddings before the encoder stack. There is
+        # *no* post-encoder norm — the last encoder layer feeds the projector
+        # directly.
+        self.pre_layrnorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layers = nn.ModuleList([MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.post_init()
 
     def forward(
@@ -904,12 +898,11 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
     ) -> BaseModelOutputWithPooling:
         embeds = self.embeddings(pixel_values)
         cos, sin = self.rotary_emb(image_grid_thw, device=embeds.device, dtype=torch.float32)
-        hidden_states = embeds.unsqueeze(0)
+        hidden_states = self.pre_layrnorm(embeds).unsqueeze(0)
         cos = cos.to(hidden_states.dtype)
         sin = sin.to(hidden_states.dtype)
         for layer in self.layers:
             hidden_states = layer(hidden_states, position_embeddings=(cos, sin))
-        hidden_states = self.post_layernorm(hidden_states)
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
             pooler_output=hidden_states[:, 0],
@@ -942,12 +935,8 @@ class MiniMaxM3VLMultiModalProjector(nn.Module):
 
     def __init__(self, config: MiniMaxM3VLConfig):
         super().__init__()
-        self.linear_1 = nn.Linear(
-            config.vision_config.hidden_size, config.projector_hidden_size, bias=True
-        )
-        self.linear_2 = nn.Linear(
-            config.projector_hidden_size, config.text_config.hidden_size, bias=True
-        )
+        self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.projector_hidden_size, bias=True)
+        self.linear_2 = nn.Linear(config.projector_hidden_size, config.text_config.hidden_size, bias=True)
 
     def forward(self, image_features: torch.Tensor) -> torch.Tensor:
         return self.linear_2(F.gelu(self.linear_1(image_features)))
@@ -973,7 +962,7 @@ class MiniMaxM3VLCausalLMOutputWithPast(ModelOutput):
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL backbone (vision + projector + text), without LM head.")
-class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
+class MiniMaxM3VLModel(LlavaModel):
     config: MiniMaxM3VLConfig
 
     def __init__(self, config: MiniMaxM3VLConfig):
@@ -984,36 +973,21 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         self.language_model = MiniMaxM3VLTextModel(config.text_config)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.language_model.embed_tokens = value
-
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.Tensor,
         **kwargs,
     ) -> torch.Tensor:
+        r"""
+        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
+            and to merge patch features.
+        """
         vision_out = self.vision_tower(pixel_values=pixel_values, image_grid_thw=image_grid_thw)
         # vision_out is [1, seq, vision_hidden] -> project -> spatial merge.
         hidden_states = self.multi_modal_projector(vision_out.last_hidden_state.squeeze(0))
         return self.patch_merge_mlp(hidden_states)
-
-    def get_placeholder_mask(
-        self,
-        input_ids: torch.LongTensor | None,
-        inputs_embeds: torch.FloatTensor,
-    ) -> torch.Tensor:
-        if input_ids is None:
-            image_emb = self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_index, dtype=torch.long, device=inputs_embeds.device)
-            )
-            mask = (inputs_embeds == image_emb).all(-1)
-        else:
-            mask = input_ids == self.config.image_token_index
-        return mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
 
     @can_return_tuple
     @auto_docstring
@@ -1028,6 +1002,11 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxM3VLModelOutputWithPast:
+        r"""
+        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
+            and to merge patch features.
+        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1036,10 +1015,10 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
 
         image_features = None
         if pixel_values is not None:
-            image_features = self.get_image_features(
-                pixel_values=pixel_values, image_grid_thw=image_grid_thw
-            ).to(inputs_embeds.device, inputs_embeds.dtype)
-            mask = self.get_placeholder_mask(input_ids, inputs_embeds)
+            image_features = self.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
 
         outputs = self.language_model(
@@ -1060,23 +1039,15 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL full model with LM head (text + vision).")
-class MiniMaxM3VLForConditionalGeneration(MiniMaxM3VLPreTrainedModel, GenerationMixin):
+class MiniMaxM3VLForConditionalGeneration(LlavaForConditionalGeneration):
     config: MiniMaxM3VLConfig
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-
-    def __init__(self, config: MiniMaxM3VLConfig):
-        super().__init__(config)
-        self.model = MiniMaxM3VLModel(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def get_output_embeddings(self):
-        return self.lm_head
 
     def get_image_features(self, pixel_values, image_grid_thw, **kwargs):
+        r"""
+        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
+            and to merge patch features.
+        """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
@@ -1094,6 +1065,11 @@ class MiniMaxM3VLForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Generation
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxM3VLCausalLMOutputWithPast:
+        r"""
+        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
+            and to merge patch features.
+        """
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,

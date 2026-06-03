@@ -1018,6 +1018,7 @@ VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("llava_next_video", "LlavaNextVideoVideoProcessor"),
         ("llava_onevision", "LlavaOnevisionVideoProcessor"),
         ("minicpmv4_6", "MiniCPMV4_6VideoProcessor"),
+        ("minimax_m3_vl", "MiniMaxM3VLVideoProcessor"),
         ("pe_video", "PeVideoVideoProcessor"),
         ("perception_lm", "PerceptionLMVideoProcessor"),
         ("qwen2_vl", "Qwen2VLVideoProcessor"),

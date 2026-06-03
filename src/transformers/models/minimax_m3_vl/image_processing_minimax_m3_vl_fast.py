@@ -9,7 +9,6 @@
 """Fast image processor for MiniMax M3 VL."""
 
 import math
-from typing import List
 
 import torch
 from torchvision.transforms import InterpolationMode
@@ -49,8 +48,7 @@ def smart_resize(
 ) -> tuple[int, int]:
     if max(height, width) / min(height, width) > MAX_RATIO:
         raise ValueError(
-            f"absolute aspect ratio must be smaller than {MAX_RATIO}, "
-            f"got {max(height, width) / min(height, width)}"
+            f"absolute aspect ratio must be smaller than {MAX_RATIO}, got {max(height, width) / min(height, width)}"
         )
     h_bar = max(factor, _round(height, factor))
     w_bar = max(factor, _round(width, factor))
@@ -98,15 +96,15 @@ class MiniMaxM3VLImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List[torch.Tensor],
+        images: list[torch.Tensor],
         do_resize: bool,
         size: SizeDict,
         resample: PILImageResampling | InterpolationMode | int | None,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: float | List[float] | None,
-        image_std: float | List[float] | None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         patch_size: int,
         temporal_patch_size: int,
         merge_size: int,
@@ -115,9 +113,7 @@ class MiniMaxM3VLImageProcessorFast(BaseImageProcessorFast):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        grouped_images, grouped_images_index = group_images_by_shape(
-            images, disable_grouping=disable_grouping
-        )
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_grouped = {}
         factor = patch_size * merge_size
         for shape, stacked in grouped_images.items():
@@ -128,9 +124,7 @@ class MiniMaxM3VLImageProcessorFast(BaseImageProcessorFast):
             resized_grouped[shape] = stacked
         resized = reorder_images(resized_grouped, grouped_images_index)
 
-        grouped_images, grouped_images_index = group_images_by_shape(
-            resized, disable_grouping=disable_grouping
-        )
+        grouped_images, grouped_images_index = group_images_by_shape(resized, disable_grouping=disable_grouping)
         processed_grouped = {}
         grids = {}
         for shape, stacked in grouped_images.items():
@@ -150,9 +144,16 @@ class MiniMaxM3VLImageProcessorFast(BaseImageProcessorFast):
             grid_t = grid_t // temporal_patch_size
             grid_h, grid_w = rh // patch_size, rw // patch_size
             patches = patches.view(
-                bs, grid_t, temporal_patch_size, c,
-                grid_h // merge_size, merge_size, patch_size,
-                grid_w // merge_size, merge_size, patch_size,
+                bs,
+                grid_t,
+                temporal_patch_size,
+                c,
+                grid_h // merge_size,
+                merge_size,
+                patch_size,
+                grid_w // merge_size,
+                merge_size,
+                patch_size,
             )
             patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
             flat = patches.reshape(bs, grid_t * grid_h * grid_w, c * temporal_patch_size * patch_size * patch_size)

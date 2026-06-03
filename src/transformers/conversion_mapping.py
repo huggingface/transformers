@@ -435,6 +435,96 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
+        # MiniMax M3 VL upstream layout (matches the snapshot at
+        # ``MiniMaxAI/MiniMax-M3-preview``). Mirrors ``llava`` for the top-level
+        # text/vision/projector prefixes, then layers on the M3-specific renames
+        # for the lightning-index branch (``self_attn.index_<x>`` →
+        # ``self_attn.indexer.<x>``), the MoE-block rename (``block_sparse_moe``
+        # → ``mlp`` — our decoder layer always exposes the MLP at ``self.mlp``),
+        # the vision tower's ``vision_tower.vision_model.<X>`` → ``vision_tower.<X>``
+        # path strip, and the expert / dense-MLP packing rules that mirror
+        # ``deepseek_v4``'s.
+        "MiniMaxM3VLModel": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
+        ],
+        "minimax_m3_vl": [
+            # ---- top-level prefix rewrites (llava-style) ----
+            WeightRenaming(source_patterns=r"^language_model\.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
+            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
+            WeightRenaming(source_patterns=r"^patch_merge_mlp", target_patterns="model.patch_merge_mlp"),
+            # ---- vision tower: strip the inner ``vision_model.`` wrapper ----
+            WeightRenaming(
+                source_patterns=r"^model\.vision_tower\.vision_model\.",
+                target_patterns="model.vision_tower.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.vision_tower\.encoder\.layers",
+                target_patterns="model.vision_tower.layers",
+            ),
+            # ---- text decoder: MoE block path + lightning index branch ----
+            WeightRenaming(
+                source_patterns=r"\.block_sparse_moe\.",
+                target_patterns=".mlp.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.self_attn\.index_q_proj\.",
+                target_patterns=".self_attn.indexer.q_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.self_attn\.index_k_proj\.",
+                target_patterns=".self_attn.indexer.k_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.self_attn\.index_v_proj\.",
+                target_patterns=".self_attn.indexer.v_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.self_attn\.index_o_proj\.",
+                target_patterns=".self_attn.indexer.o_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.self_attn\.index_q_norm\.",
+                target_patterns=".self_attn.indexer.q_norm.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.self_attn\.index_k_norm\.",
+                target_patterns=".self_attn.indexer.k_norm.",
+            ),
+            # ---- expert packing: stack experts on dim 0, concat w1+w3 along intermediate dim ----
+            # Mirrors deepseek_v4 — the snapshot ships 128 separate experts each with
+            # `w1, w2, w3`, our `MiniMaxM3VLExperts` packs them as
+            # `gate_up_proj: [num_experts, 2*intermediate, hidden]` and
+            # `down_proj: [num_experts, hidden, intermediate]`.
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.w1.weight",
+                    "mlp.experts.*.w3.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.w2.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            # ---- dense MLP (layers 0..2) and shared experts: pack gate+up into gate_up_proj ----
+            WeightConverter(
+                source_patterns=["mlp.gate_proj.weight", "mlp.up_proj.weight"],
+                target_patterns="mlp.gate_up_proj.weight",
+                operations=[Concatenate(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=[
+                    "mlp.shared_experts.gate_proj.weight",
+                    "mlp.shared_experts.up_proj.weight",
+                ],
+                target_patterns="mlp.shared_experts.gate_up_proj.weight",
+                operations=[Concatenate(dim=0)],
+            ),
+        ],
         "qwen2_audio": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),

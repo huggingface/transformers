@@ -43,7 +43,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_minimax_m3_vl import MiniMaxM3VLConfig, MiniMaxM3VLTextConfig, MiniMaxM3VLVisionConfig
@@ -124,19 +124,25 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
 
 
 class MiniMaxM3VLRMSNorm(nn.Module):
-    """Gemma-style RMSNorm: multiplies by ``weight + 1`` in fp32."""
+    """Gemma-style RMSNorm: normalizes in fp32 and scales by ``weight + 1``."""
 
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
+        self.eps = eps
         self.weight = nn.Parameter(torch.zeros(dim))
-        self.variance_epsilon = eps
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        orig_dtype = x.dtype
-        x32 = x.float()
-        variance = x32.pow(2).mean(-1, keepdim=True)
-        x32 = x32 * torch.rsqrt(variance + self.variance_epsilon)
-        return (x32 * (self.weight.float() + 1.0)).to(orig_dtype)
+    def _norm(self, x):
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+
+    def forward(self, x):
+        output = self._norm(x.float())
+        # Llama does x.to(float16) * w whilst MiniMaxM3VL is (x * w).to(float16)
+        # See https://github.com/huggingface/transformers/pull/29402
+        output = output * (1.0 + self.weight.float())
+        return output.type_as(x)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
 # ---------------------------------------------------------------------------
@@ -782,6 +788,8 @@ class MiniMaxM3VLPreTrainedModel(PreTrainedModel):
         "attentions": MiniMaxM3VLAttention,
     }
     input_modalities = ("image", "video", "text")
+    # MTP modules ship in the upstream checkpoint but aren't part of this port.
+    _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1222,8 +1230,12 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
         self.embeddings = MiniMaxM3VLVisionEmbeddings(config)
         head_dim = config.hidden_size // config.num_attention_heads
         self.rotary_emb = MiniMaxM3VL3DRotaryEmbedding(head_dim, theta=config.rope_theta)
+        # Snapshot keeps the CLIP-style ``pre_layrnorm`` (yes, that's the upstream
+        # spelling) applied to patch embeddings before the encoder stack. There is
+        # *no* post-encoder norm — the last encoder layer feeds the projector
+        # directly.
+        self.pre_layrnorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layers = nn.ModuleList([MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_init()
 
     def forward(
@@ -1234,12 +1246,11 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
     ) -> BaseModelOutputWithPooling:
         embeds = self.embeddings(pixel_values)
         cos, sin = self.rotary_emb(image_grid_thw, device=embeds.device, dtype=torch.float32)
-        hidden_states = embeds.unsqueeze(0)
+        hidden_states = self.pre_layrnorm(embeds).unsqueeze(0)
         cos = cos.to(hidden_states.dtype)
         sin = sin.to(hidden_states.dtype)
         for layer in self.layers:
             hidden_states = layer(hidden_states, position_embeddings=(cos, sin))
-        hidden_states = self.post_layernorm(hidden_states)
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
             pooler_output=hidden_states[:, 0],
@@ -1282,7 +1293,6 @@ class MiniMaxM3VLMultiModalProjector(nn.Module):
 @dataclass
 @auto_docstring(custom_intro="MiniMax M3 VL model output (without LM head).")
 class MiniMaxM3VLModelOutputWithPast(BaseModelOutputWithPast):
-    r"""image_hidden_states: Image features from the vision tower after projection."""
 
     image_hidden_states: torch.FloatTensor | None = None
 
@@ -1306,40 +1316,54 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         super().__init__(config)
         self.vision_tower = MiniMaxM3VLVisionModel(config.vision_config)
         self.multi_modal_projector = MiniMaxM3VLMultiModalProjector(config)
-        self.patch_merge_mlp = MiniMaxM3VLPatchMerger(config)
         self.language_model = MiniMaxM3VLTextModel(config.text_config)
+        self.patch_merge_mlp = MiniMaxM3VLPatchMerger(config)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.language_model.embed_tokens = value
-
+    @merge_with_config_defaults
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.Tensor,
         **kwargs,
     ) -> torch.Tensor:
+        r"""
+        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
+            and to merge patch features.
+        """
         vision_out = self.vision_tower(pixel_values=pixel_values, image_grid_thw=image_grid_thw)
         # vision_out is [1, seq, vision_hidden] -> project -> spatial merge.
         hidden_states = self.multi_modal_projector(vision_out.last_hidden_state.squeeze(0))
         return self.patch_merge_mlp(hidden_states)
 
     def get_placeholder_mask(
-        self,
-        input_ids: torch.LongTensor | None,
-        inputs_embeds: torch.FloatTensor,
-    ) -> torch.Tensor:
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
         if input_ids is None:
-            image_emb = self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_index, dtype=torch.long, device=inputs_embeds.device)
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
-            mask = (inputs_embeds == image_emb).all(-1)
+            special_image_mask = special_image_mask.all(-1)
         else:
-            mask = input_ids == self.config.image_token_index
-        return mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
+        return special_image_mask
 
     @can_return_tuple
     @auto_docstring
@@ -1354,6 +1378,11 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxM3VLModelOutputWithPast:
+        r"""
+        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
+            and to merge patch features.
+        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1365,7 +1394,7 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
             image_features = self.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
-            mask = self.get_placeholder_mask(input_ids, inputs_embeds)
+            mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
 
         outputs = self.language_model(
@@ -1387,8 +1416,8 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
 
 @auto_docstring(custom_intro="MiniMax M3 VL full model with LM head (text + vision).")
 class MiniMaxM3VLForConditionalGeneration(MiniMaxM3VLPreTrainedModel, GenerationMixin):
-    config: MiniMaxM3VLConfig
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    config: MiniMaxM3VLConfig
 
     def __init__(self, config: MiniMaxM3VLConfig):
         super().__init__(config)
@@ -1396,13 +1425,16 @@ class MiniMaxM3VLForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Generation
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def get_image_features(self, pixel_values, image_grid_thw, **kwargs):
+    @auto_docstring
+    def get_image_features(self, pixel_values, image_grid_thw, **kwargs) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
+            and to merge patch features.
+        """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
@@ -1420,6 +1452,11 @@ class MiniMaxM3VLForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Generation
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxM3VLCausalLMOutputWithPast:
+        r"""
+        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
+            and to merge patch features.
+        """
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1446,6 +1483,38 @@ class MiniMaxM3VLForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Generation
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        pixel_values=None,
+        attention_mask=None,
+        logits_to_keep=None,
+        is_first_iteration=False,
+        **kwargs,
+    ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            # Pixel values are used only in the first iteration if available
+            # In subsequent iterations, they are already merged with text and cached
+            # NOTE: first iteration doesn't have to be prefill, it can be the first
+            # iteration with a question and cached system prompt (continue generate from cache)
+            model_inputs["pixel_values"] = pixel_values
+
+        return model_inputs
 
 
 __all__ = [

@@ -56,7 +56,6 @@ else:
         [
             ("exaone4_5", "Qwen2VLVideoProcessor"),
             ("instructblip", "InstructBlipVideoVideoProcessor"),
-            ("minimax_m3_vl", "MiniMaxM3VLVideoProcessor"),
             ("pe_audio_video", "PeVideoVideoProcessor"),
             ("qwen2_5_omni", "Qwen2VLVideoProcessor"),
             ("qwen2_5_vl", "Qwen2VLVideoProcessor"),

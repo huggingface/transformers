@@ -8,13 +8,11 @@
 
 """Video processor for MiniMax M3 VL."""
 
-from typing import List
-
 import torch
 from torchvision.transforms import InterpolationMode
 
-from ...image_utils import PILImageResampling, SizeDict
 from ...feature_extraction_utils import BatchFeature
+from ...image_utils import PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType
 from ...video_processing_utils import BaseVideoProcessor
@@ -63,7 +61,7 @@ class MiniMaxM3VLVideoProcessor(BaseVideoProcessor):
 
     def _preprocess(
         self,
-        videos: List[torch.Tensor],
+        videos: list[torch.Tensor],
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
@@ -71,8 +69,8 @@ class MiniMaxM3VLVideoProcessor(BaseVideoProcessor):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: float | List[float] | None,
-        image_std: float | List[float] | None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         patch_size: int,
         temporal_patch_size: int,
         merge_size: int,
@@ -110,9 +108,16 @@ class MiniMaxM3VLVideoProcessor(BaseVideoProcessor):
             grid_t = grid_t // temporal_patch_size
             grid_h, grid_w = rh // patch_size, rw // patch_size
             patches = patches.view(
-                bs, grid_t, temporal_patch_size, c,
-                grid_h // merge_size, merge_size, patch_size,
-                grid_w // merge_size, merge_size, patch_size,
+                bs,
+                grid_t,
+                temporal_patch_size,
+                c,
+                grid_h // merge_size,
+                merge_size,
+                patch_size,
+                grid_w // merge_size,
+                merge_size,
+                patch_size,
             )
             patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
             flat = patches.reshape(bs, grid_t * grid_h * grid_w, c * temporal_patch_size * patch_size * patch_size)
