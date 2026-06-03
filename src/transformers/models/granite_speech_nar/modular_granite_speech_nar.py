@@ -302,12 +302,6 @@ class GraniteSpeechNarAttention(GraniteAttention):
         self.is_causal = False
 
 
-class GraniteSpeechNarDecoderLayer(GraniteDecoderLayer):
-    """GraniteDecoderLayer using bidirectional attention."""
-
-    def __init__(self, config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.self_attn = GraniteSpeechNarAttention(config=config, layer_idx=layer_idx)
 
 
 class GraniteSpeechNarLanguageModel(GraniteModel):
