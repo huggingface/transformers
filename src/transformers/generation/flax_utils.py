@@ -66,6 +66,7 @@ class FlaxGreedySearchOutput(ModelOutput):
     """
 
     sequences: Optional[jnp.ndarray] = None
+    scores: Optional[jnp.ndarray] = None
 
 
 @flax.struct.dataclass
@@ -80,6 +81,7 @@ class FlaxSampleOutput(ModelOutput):
     """
 
     sequences: Optional[jnp.ndarray] = None
+    scores: Optional[jnp.ndarray] = None
 
 
 @flax.struct.dataclass
