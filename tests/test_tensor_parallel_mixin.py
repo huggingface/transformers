@@ -217,15 +217,6 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs, trace
     dist.destroy_process_group()
     _crumb("destroy_process_group:done")
 
-    # Force Python to drop all remaining references to the gloo ProcessGroup
-    # object immediately.  Without this, the C++ ProcessGroup destructor is
-    # called by the interpreter shutdown finalizer while the pt_gloo_runloop
-    # threads are still alive, triggering a SIGABRT.  gc.collect() ensures the
-    # destructor runs here — while the process is still in a clean state —
-    # rather than during interpreter teardown.
-    import gc
-    gc.collect()
-
 
 def _init_distributed(tp: int, max_retries: int = 5, backend: str = "gloo"):
     """Decorator to initialize distributed environment and spawn processes."""
