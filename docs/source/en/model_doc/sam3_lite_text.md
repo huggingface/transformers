@@ -50,6 +50,7 @@ SAM3-LiteText is a drop-in replacement for SAM3 with a lightweight text encoder.
 from io import BytesIO
 
 import httpx
+import torch
 from PIL import Image
 
 from transformers import AutoModel, AutoProcessor
@@ -63,7 +64,8 @@ image = Image.open(BytesIO(httpx.get(image_url).content)).convert("RGB")
 
 inputs = processor(images=image, text="ear", return_tensors="pt").to(model.device)
 
-outputs = model(**inputs)
+with torch.inference_mode():
+    outputs = model(**inputs)
 
 results = processor.post_process_instance_segmentation(
     outputs,
