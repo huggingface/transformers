@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule  # type: ignore[import]
 from ...utils.import_utils import define_import_structure  # type: ignore[import]
 
+
 if TYPE_CHECKING:
     from .configuration_esmfold2 import *  # noqa: F403
     from .modeling_esmfold2 import *  # noqa: F403
@@ -23,6 +24,4 @@ else:
     import sys
 
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(
-        __name__, _file, define_import_structure(_file), module_spec=__spec__
-    )
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
