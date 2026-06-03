@@ -279,6 +279,31 @@ def get_last_checkpoint(folder):
     return os.path.join(folder, max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])))
 
 
+def download_latest_checkpoint_from_bucket(bucket_id: str, output_dir: str, token: str | None = None) -> str | None:
+    """Download the latest `checkpoint-<step>` from `bucket_id` into `output_dir`.
+
+    Returns the local checkpoint path (named `checkpoint-<step>` so the step is recovered on resume), or
+    `None` if the bucket holds no checkpoint.
+    """
+    from .utils.hub import hf_api
+
+    api = hf_api()
+    steps = set()
+    for item in api.list_bucket_tree(bucket_id, token=token):
+        top = item.path.strip("/").split("/", 1)[0]  # first path component, e.g. "checkpoint-500"
+        suffix = top[len(PREFIX_CHECKPOINT_DIR) + 1 :]
+        if top.startswith(f"{PREFIX_CHECKPOINT_DIR}-") and suffix.isdigit():
+            steps.add(int(suffix))
+    if not steps:
+        return None
+
+    leaf = f"{PREFIX_CHECKPOINT_DIR}-{max(steps)}"
+    dest = os.path.join(output_dir, leaf)
+    os.makedirs(dest, exist_ok=True)
+    api.sync_bucket(f"hf://buckets/{bucket_id}/{leaf}", dest, token=token, quiet=True)
+    return dest
+
+
 def sort_checkpoints(
     output_dir: str,
     checkpoint_prefix: str = PREFIX_CHECKPOINT_DIR,

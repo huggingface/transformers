@@ -29,7 +29,6 @@ import tempfile
 import time
 import warnings
 from collections.abc import Callable, Iterator, Mapping
-from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -132,6 +131,7 @@ from .trainer_utils import (
     compare_trainer_and_checkpoint_args,
     default_compute_objective,
     denumpify_detensorize,
+    download_latest_checkpoint_from_bucket,
     enable_full_determinism,
     find_executable_batch_size,
     get_last_checkpoint,
@@ -574,12 +574,14 @@ class Trainer:
 
         # ---- 9. Hub & output ---------------------------------------------------------
         self.hub_model_id = None  # Set by init_hf_repo() when push_to_hub is enabled
-        self._bucket_id = None  # Set by init_hf_bucket() when push_to_bucket is enabled
-        self.push_in_progress = None  # Tracks the in-flight checkpoint push (repo and/or bucket)
+        self._bucket_id = None  # Canonical id of the checkpoint bucket when push_to_bucket is enabled
+        self.push_in_progress = None  # Tracks the in-flight repo push
         if self.args.push_to_hub:
             self.init_hf_repo()
-        if self.args.push_to_bucket:
-            self.init_hf_bucket()
+        if self.args.push_to_bucket and self.is_world_process_zero():
+            self._bucket_id = hf_api().create_bucket(
+                self.args.bucket_id, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True
+            ).bucket_id
         if self.args.should_save:
             os.makedirs(self.args.output_dir, exist_ok=True)
 
@@ -1416,12 +1418,16 @@ class Trainer:
 
         # Load potential model checkpoint
         if resume_from_checkpoint == "bucket":
-            # Resume from the checkpoint bucket (uses `bucket_id`), downloading the latest complete one.
-            resume_from_checkpoint = self._download_resume_checkpoint_from_bucket()
-            if resume_from_checkpoint is None:
-                raise ValueError(
-                    "`resume_from_checkpoint='bucket'` but no complete checkpoint was found in the bucket."
+            # Resume from the checkpoint bucket (uses `bucket_id`). Only the main process downloads (ranks
+            # share the filesystem); the others wait at the barrier, then all resolve the local checkpoint.
+            if self.is_world_process_zero():
+                download_latest_checkpoint_from_bucket(
+                    self._bucket_id or args.bucket_id, args.output_dir, token=args.hub_token
                 )
+            self.accelerator.wait_for_everyone()
+            resume_from_checkpoint = get_last_checkpoint(args.output_dir)
+            if resume_from_checkpoint is None:
+                raise ValueError("`resume_from_checkpoint='bucket'` but no checkpoint was found in the bucket.")
         elif isinstance(resume_from_checkpoint, bool) and resume_from_checkpoint:
             resume_from_checkpoint = get_last_checkpoint(args.output_dir)
             if resume_from_checkpoint is None:
@@ -3959,16 +3965,6 @@ class Trainer:
         self.hub_model_id = repo_url.repo_id
         self.push_in_progress = None
 
-    def init_hf_bucket(self, token: str | None = None) -> None:
-        """Create the checkpoint bucket (mutable object storage, no git history) on process zero."""
-        if not self.is_world_process_zero():
-            return
-        token = token if token is not None else self.args.hub_token
-        bucket_url = hf_api().create_bucket(
-            self.args.bucket_id, token=token, private=self.args.hub_private_repo, exist_ok=True
-        )
-        self._bucket_id = bucket_url.bucket_id
-
     def create_model_card(
         self,
         language: str | None = None,
@@ -4200,9 +4196,21 @@ class Trainer:
                     )
                 )
 
-        # ---- output_dir -> bucket (accumulates all checkpoints, independent of repo and hub_strategy) ----
+        # ---- checkpoint -> bucket (accumulates all checkpoints, independent of repo and hub_strategy) ----
+        # Each checkpoint is kept under its own checkpoint-<step>/ prefix (delete=False), uploaded async via
+        # huggingface_hub's thread pool (same as the repo push above) so it plugs into push_in_progress.
         if self.args.push_to_bucket:
-            push_jobs.append(self._sync_checkpoint_to_bucket())
+            leaf = Path(checkpoint_folder).name
+            push_jobs.append(
+                hf_api().run_as_future(
+                    hf_api().sync_bucket,
+                    checkpoint_folder,
+                    f"hf://buckets/{self._bucket_id}/{leaf}",
+                    delete=False,
+                    token=self.args.hub_token,
+                    quiet=True,
+                )
+            )
 
         if not push_jobs:
             return
@@ -4218,43 +4226,6 @@ class Trainer:
         if self.push_in_progress is not None and not self.push_in_progress.is_done():
             logger.info("Waiting for the current checkpoint push to be finished, this might take a couple of minutes.")
             self.push_in_progress.wait_until_done()
-
-    def _sync_checkpoint_to_bucket(self):
-        """Sync new files from `output_dir` to the checkpoint bucket in the background.
-
-        Returns a `Future` so it plugs into the existing `push_in_progress` machinery. This accumulates
-        every checkpoint in the bucket (the `all_checkpoints` behavior), independent of `hub_strategy`:
-        `delete=False` so checkpoints rotated away locally by `save_total_limit` are *kept* in the bucket.
-        Uses rsync-style `sync_bucket`, so only new/changed files transfer (xet dedups at chunk level).
-        """
-        if not hasattr(self, "_bucket_executor"):
-            self._bucket_executor = ThreadPoolExecutor(max_workers=1)  # serialize, like a single git push
-        bucket = self._bucket_id
-        output_dir = self.args.output_dir
-        token = self.args.hub_token
-
-        def _do_sync():
-            hf_api().sync_bucket(output_dir, f"hf://buckets/{bucket}", delete=False, token=token, quiet=True)
-
-        return self._bucket_executor.submit(_do_sync)
-
-    def _download_resume_checkpoint_from_bucket(self) -> str | None:
-        """Download the bucket mirror into `output_dir` for `resume_from_checkpoint='bucket'`.
-
-        The bucket mirrors `output_dir`, so we just pull it down and reuse the normal local-resume logic:
-        the latest `checkpoint-<step>` is returned (or `None` if the bucket has no checkpoint).
-        """
-        bucket = self._bucket_id or self.args.bucket_id
-        if bucket is None:
-            return None
-        os.makedirs(self.args.output_dir, exist_ok=True)
-        hf_api().sync_bucket(
-            f"hf://buckets/{bucket}", self.args.output_dir, token=self.args.hub_token, quiet=True
-        )
-        resumed = get_last_checkpoint(self.args.output_dir)
-        if resumed is not None:
-            logger.info(f"Resumed checkpoint from bucket {bucket} into {resumed}")
-        return resumed
 
     # ---- Hyperparameter Search ----
 

@@ -2279,13 +2279,10 @@ class TrainerIntegrationWithHubBucketTester(unittest.TestCase):
             bucket_id = f"{USER}/{name}"
             create_bucket(bucket_id, token=self._token, exist_ok=True, private=True)
             try:
-                # save_total_limit=1 rotates local checkpoints away; the bucket must keep all of them.
                 with tempfile.TemporaryDirectory() as tmp_dir:
-                    trainer = self._bucket_trainer(
-                        os.path.join(tmp_dir, name), bucket_id, hub_always_push=True, save_total_limit=1
-                    )
+                    trainer = self._bucket_trainer(os.path.join(tmp_dir, name), bucket_id, hub_always_push=True)
                     trainer.train()
-                    trainer._finish_current_push()  # wait for the background bucket sync to finish
+                    trainer._finish_current_push()  # wait for the background bucket syncs to finish
                     local_ckpts = {p for p in os.listdir(os.path.join(tmp_dir, name)) if p.startswith("checkpoint-")}
 
                 files = {
@@ -2294,11 +2291,10 @@ class TrainerIntegrationWithHubBucketTester(unittest.TestCase):
                     if it.type == "file"
                 }
                 bucket_ckpts = {p.split("/")[0] for p in files if p.startswith("checkpoint-")}
-                # all_checkpoints behavior: the bucket accumulates every checkpoint, even those rotated
-                # away locally, so it is a strict superset of what remains on disk.
-                self.assertEqual(len(local_ckpts), 1)
-                self.assertTrue(local_ckpts <= bucket_ckpts)
-                self.assertGreater(len(bucket_ckpts), len(local_ckpts))
+                # all_checkpoints behavior: every checkpoint is accumulated under its own checkpoint-<step>/
+                # prefix (not overwritten into a single dir), so the bucket holds all of them.
+                self.assertGreater(len(bucket_ckpts), 1)
+                self.assertEqual(bucket_ckpts, local_ckpts)
                 self.assertTrue(any(p.endswith("/optimizer.pt") for p in files))
                 self.assertTrue(any(p.endswith("/trainer_state.json") for p in files))
             finally:
@@ -2308,6 +2304,7 @@ class TrainerIntegrationWithHubBucketTester(unittest.TestCase):
         from huggingface_hub import create_bucket, delete_bucket
 
         from transformers.trainer import TRAINER_STATE_NAME
+        from transformers.trainer_utils import download_latest_checkpoint_from_bucket
 
         with TemporaryHubRepo(token=self._token) as tmp_repo:
             name = tmp_repo.repo_name
@@ -2321,13 +2318,13 @@ class TrainerIntegrationWithHubBucketTester(unittest.TestCase):
                     trainer._finish_current_push()
                     final_step = trainer.state.global_step
 
-                # Fresh local dir, nothing on disk. The download helper mirrors the bucket back into
-                # output_dir and returns the latest local checkpoint via get_last_checkpoint.
+                # Fresh local dir, nothing on disk. The download helper pulls the latest checkpoint from
+                # the bucket into output_dir as `checkpoint-<step>` so the step is recovered on resume.
                 with tempfile.TemporaryDirectory() as tmp_dir2:
                     out2 = os.path.join(tmp_dir2, name)
                     trainer2 = self._bucket_trainer(out2, bucket_id)
                     self.assertIsNone(get_last_checkpoint(out2))  # nothing local to resume from
-                    local = trainer2._download_resume_checkpoint_from_bucket()
+                    local = download_latest_checkpoint_from_bucket(trainer2._bucket_id, out2, token=self._token)
                     self.assertIsNotNone(local, "expected a checkpoint to be downloaded from the bucket")
                     bucket_step = int(os.path.basename(local).split("-")[-1])
                     self.assertTrue(0 < bucket_step <= final_step)
