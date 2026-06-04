@@ -32,6 +32,11 @@ RUN python3 -m pip uninstall -y transformer-engine
 # Uninstall `torch-tensorrt` and `apex` shipped with the base image
 RUN python3 -m pip uninstall -y torch-tensorrt apex
 
+# Uninstall outdated `nvtx` (0.2.5 from /rapids/) shipped with the base image:
+# DeepSpeed calls `nvtx.get_domain` (added in 0.2.12) and will crash otherwise.
+# DeepSpeed falls back to `torch.cuda.nvtx` when the standalone package is absent.
+RUN python3 -m pip uninstall -y nvtx
+
 # Pre-build **nightly** release of DeepSpeed, so it would be ready for testing (otherwise, the 1st deepspeed test will timeout)
 RUN python3 -m pip uninstall -y deepspeed
 # This has to be run inside the GPU VMs running the tests. (So far, it fails here due to GPU checks during compilation.)
