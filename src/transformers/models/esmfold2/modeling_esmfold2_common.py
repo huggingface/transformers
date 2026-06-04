@@ -45,6 +45,26 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS  # type: ignore[import]
 from .configuration_esmfold2 import ESMFold2Config
 
 
+class LayerNorm(nn.LayerNorm):
+    """LayerNorm pinned to float32.
+
+    Normalization statistics are numerically sensitive, so this computes in
+    float32 and keeps its weights in float32 even when the model is loaded in a
+    lower precision (the explicit ``dtype`` overrides ``from_pretrained(dtype=...)``).
+    Inputs/outputs keep their original dtype, so it drops into a bf16 model
+    transparently. This is the standard Transformers idiom (matmuls run in the
+    model dtype; norms stay fp32) and replaces the model's former reliance on
+    autocast to keep norms in fp32.
+    """
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("dtype", torch.float32)
+        super().__init__(*args, **kwargs)
+
+    def forward(self, x: Tensor) -> Tensor:
+        return super().forward(x.float()).to(x.dtype)
+
+
 class DropoutResidual(nn.Module):
     """``residual + dropout(delta)`` with row/col-shared dropout."""
 
@@ -201,7 +221,7 @@ class TransitionLayer(nn.Module):
     def __init__(self, d_model: int, n: int, eps: float = 1e-5) -> None:
         super().__init__()
         hidden = n * d_model
-        self.norm = nn.LayerNorm(d_model, eps=eps)
+        self.norm = LayerNorm(d_model, eps=eps)
         self.a_proj = nn.Linear(d_model, hidden, bias=False)
         self.b_proj = nn.Linear(d_model, hidden, bias=False)
         self.out_proj = nn.Linear(hidden, d_model, bias=False)
@@ -231,8 +251,8 @@ class AdaptiveLayerNorm(nn.Module):
         self.s_shift = nn.Linear(d_cond, d_model, bias=False)
 
     def forward(self, a: Tensor, s: Tensor) -> Tensor:
-        a_norm = F.layer_norm(a, (self.d_model,), None, None, self.eps)
-        s_norm = F.layer_norm(s, (self.d_cond,), self.s_scale, None, self.eps)
+        a_norm = F.layer_norm(a.float(), (self.d_model,), None, None, self.eps).to(a.dtype)
+        s_norm = F.layer_norm(s.float(), (self.d_cond,), self.s_scale.float(), None, self.eps).to(s.dtype)
         return torch.sigmoid(self.s_gate(s_norm)) * a_norm + self.s_shift(s_norm)
 
 
@@ -698,7 +718,7 @@ class ESMFold2AtomEncoder(nn.Module):
         self.structure_prediction = structure_prediction
 
         self.atom_linear = nn.Linear(ATOM_FEATURE_DIM, d_atom, bias=False)
-        self.atom_norm = nn.LayerNorm(d_atom)
+        self.atom_norm = LayerNorm(d_atom)
 
         if structure_prediction:
             self.coords_linear = nn.Linear(6, d_atom, bias=False)
@@ -758,7 +778,7 @@ class ESMFold2AtomEncoder(nn.Module):
                 ],
                 dim=-1,
             )
-            c_base = self.atom_norm(self.atom_linear(atom_feats))
+            c_base = self.atom_norm(self.atom_linear(atom_feats.to(self.atom_linear.weight.dtype)))
             cos, sin = self.atom_transformer._build_3d_rope(ref_pos, ref_space_uid)
             cos = cos.repeat_interleave(num_diffusion_samples, 0)
             sin = sin.repeat_interleave(num_diffusion_samples, 0)
@@ -790,7 +810,7 @@ class ESMFold2AtomEncoder(nn.Module):
             if pred_r1 is None:
                 pred_r1 = torch.zeros_like(r_l)
             r_input = torch.cat([r_l, pred_r1], dim=-1)
-            r_to_q = self.coords_linear(r_input)
+            r_to_q = self.coords_linear(r_input.to(self.coords_linear.weight.dtype))
             q = q + r_to_q
 
         c = c.repeat_interleave(num_diffusion_samples, 0)
@@ -853,7 +873,7 @@ class ESMFold2AtomDecoder(nn.Module):
             uid_rope_base_frequency=uid_rope_base_frequency,
         )
 
-        self.norm = nn.LayerNorm(d_atom)
+        self.norm = LayerNorm(d_atom)
         self.output_linear = nn.Linear(d_atom, XYZ_DIMS, bias=False)
 
     def forward(
@@ -919,7 +939,7 @@ class AttentionPairBias(nn.Module):
             nn.init.zeros_(self.out_gate.weight)
             nn.init.constant_(self.out_gate.bias, -2.0)
         else:
-            self.pre_norm = nn.LayerNorm(d_model, eps=1e-5)
+            self.pre_norm = LayerNorm(d_model, eps=1e-5)
 
         self.q_proj = nn.Linear(d_model, d_model, bias=True)
         self.kv_proj = nn.Linear(d_model, 2 * d_model, bias=False)
@@ -927,7 +947,7 @@ class AttentionPairBias(nn.Module):
         self.out_proj = nn.Linear(d_model, d_model, bias=False)
 
         if d_pair > 0:
-            self.pair_norm = nn.LayerNorm(d_pair, eps=1e-5)
+            self.pair_norm = LayerNorm(d_pair, eps=1e-5)
             self.pair_bias_proj = nn.Linear(d_pair, num_heads, bias=False)
 
     def forward(
@@ -975,7 +995,7 @@ class AttentionPairBias(nn.Module):
             mask_bias = torch.where(attention_mask.bool()[:, None, :, None], 0.0, min_val)
             logits = logits + mask_bias.to(dtype=logits.dtype)
 
-        attn = torch.softmax(logits, dim=-2).to(dtype=v.dtype)
+        attn = torch.softmax(logits, dim=-2, dtype=torch.float32).to(dtype=v.dtype)
         ctx = torch.einsum("... i j h, ... j h d -> ... i h d", attn, v)
         ctx = g * ctx
         out = self.out_proj(ctx.reshape(bsz, n_queries, d_model))
@@ -1010,7 +1030,7 @@ class ConditionedTransitionBlock(nn.Module):
             nn.init.zeros_(self.output_gate.weight)
             nn.init.constant_(self.output_gate.bias, -2.0)
         else:
-            self.pre_norm = nn.LayerNorm(d_model, eps=1e-5)
+            self.pre_norm = LayerNorm(d_model, eps=1e-5)
 
         self.lin_swish = nn.Linear(d_model, 2 * hidden, bias=False)
         self.lin_out = nn.Linear(hidden, d_model, bias=False)
@@ -1126,16 +1146,16 @@ class DiffusionConditioning(nn.Module):
         self.c_s = c_s
         self.c_s_inputs = c_s_inputs
 
-        self.z_input_norm = nn.LayerNorm(2 * c_z, eps=layer_norm_eps)
+        self.z_input_norm = LayerNorm(2 * c_z, eps=layer_norm_eps)
         self.z_proj = nn.Linear(2 * c_z, c_z, bias=False)
         self.z_transitions = nn.ModuleList(
             [TransitionLayer(c_z, n=transition_multiplier, eps=layer_norm_eps) for _ in range(2)]
         )
 
-        self.s_input_norm = nn.LayerNorm(c_s_inputs, eps=layer_norm_eps)
+        self.s_input_norm = LayerNorm(c_s_inputs, eps=layer_norm_eps)
         self.s_proj = nn.Linear(c_s_inputs, c_s, bias=False)
         self.fourier = FourierEmbedding(fourier_dim)
-        self.noise_norm = nn.LayerNorm(fourier_dim, eps=layer_norm_eps)
+        self.noise_norm = LayerNorm(fourier_dim, eps=layer_norm_eps)
         self.noise_proj = nn.Linear(fourier_dim, c_s, bias=False)
         self.s_transitions = nn.ModuleList(
             [TransitionLayer(c_s, n=transition_multiplier, eps=layer_norm_eps) for _ in range(2)]
@@ -1162,10 +1182,11 @@ class DiffusionConditioning(nn.Module):
         else:
             z_rel = relative_position_encoding.to(dtype=torch.float32)
             z = torch.cat([z_trunk.to(dtype=torch.float32), z_rel], dim=-1)
-            z = self.z_proj(self.z_input_norm(z))
-            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                for block in self.z_transitions:
-                    z = z + block(z)
+            # The relpos/coords conditioning is fp32; z_input_norm keeps it fp32,
+            # then we hand off to z_proj in the model's compute dtype.
+            z = self.z_proj(self.z_input_norm(z).to(self.z_proj.weight.dtype))
+            for block in self.z_transitions:
+                z = z + block(z)
             if inference_cache is not None:
                 inference_cache["z"] = z
 
@@ -1174,7 +1195,7 @@ class DiffusionConditioning(nn.Module):
         if s_inputs_eff.shape[0] != target_batch:
             s_inputs_eff = s_inputs_eff.repeat_interleave(num_diffusion_samples, 0)
 
-        s = self.s_proj(self.s_input_norm(s_inputs_eff.to(dtype=torch.float32)))
+        s = self.s_proj(self.s_input_norm(s_inputs_eff.to(dtype=torch.float32)).to(self.s_proj.weight.dtype))
 
         # Noise embedding
         t = torch.as_tensor(t_hat, dtype=torch.float32, device=s.device).reshape(-1)
@@ -1275,8 +1296,8 @@ class DiffusionModule(nn.Module):
             use_conditioning=True,
         )
 
-        self.s_step_norm = nn.LayerNorm(c_token)
-        self.token_norm = nn.LayerNorm(c_token)
+        self.s_step_norm = LayerNorm(c_token)
+        self.token_norm = LayerNorm(c_token)
 
     def forward(
         self,
@@ -1635,9 +1656,9 @@ class DiffusionStructureHead(nn.Module):
             if request_atom_repr:
                 diff_atom_intermediates = dm_out.get("atom_intermediates")
 
-            # Reverse diffusion alignment (Kabsch)
-            with torch.autocast(device_type="cuda", enabled=False):
-                x_noisy = self._weighted_rigid_align(x_noisy.float(), x_denoised.float(), atom_mask, atom_mask)
+            # Reverse diffusion alignment (Kabsch). _weighted_rigid_align upcasts
+            # to fp32 internally for the SVD/det.
+            x_noisy = self._weighted_rigid_align(x_noisy.float(), x_denoised.float(), atom_mask, atom_mask)
             x_noisy = x_noisy.to(dtype=x_denoised.dtype)
 
             # ODE/SDE step
@@ -1647,13 +1668,12 @@ class DiffusionStructureHead(nn.Module):
 
             # Denoising early-exit: stop when consecutive predictions converge
             if denoising_early_exit_rmsd is not None and x_denoised_prev is not None and step_idx >= 1:
-                with torch.autocast(device_type="cuda", enabled=False):
-                    aligned = self._weighted_rigid_align(
-                        x_denoised_prev.float(),
-                        x_denoised.float(),
-                        atom_mask,
-                        atom_mask,
-                    )
+                aligned = self._weighted_rigid_align(
+                    x_denoised_prev.float(),
+                    x_denoised.float(),
+                    atom_mask,
+                    atom_mask,
+                )
                 diff = (x_denoised.float() - aligned) * atom_mask.unsqueeze(-1)
                 per_sample_rmsd = (diff.pow(2).sum(dim=(-1, -2)) / atom_mask.sum(dim=-1).clamp(min=1)).sqrt()
                 if per_sample_rmsd.max().item() < denoising_early_exit_rmsd:
@@ -1693,7 +1713,7 @@ class RowAttentionPooling(nn.Module):
             torch.full_like(scores, -1e9),
         )
         scores = scores + mask_bias
-        weights = F.softmax(scores, dim=-1)
+        weights = F.softmax(scores, dim=-1, dtype=torch.float32).to(scores.dtype)
         pooled = torch.einsum("bnm,bnmd->bnd", weights, z)
         return self.out_proj(pooled)
 
@@ -1752,7 +1772,13 @@ class InputsEmbedder(nn.Module):
             ref_atom_name_chars=ref_atom_name_chars,
             atom_to_token=atom_to_token,
         )
-        return torch.cat([a, aatype, profile, deletion_mean.unsqueeze(-1)], dim=-1)
+        # The continuous input features are fp32; fold them into the atom
+        # encoding's (compute) dtype so the single representation is one dtype.
+        dtype = a.dtype
+        return torch.cat(
+            [a, aatype.to(dtype), profile.to(dtype), deletion_mean.unsqueeze(-1).to(dtype)],
+            dim=-1,
+        )
 
 
 # ===========================================================================
@@ -1835,7 +1861,7 @@ class ResIdxAsymIdSymIdEntityIdEncoding(nn.Module):
             dim=-1,
         )
 
-        return self.embed(feats)
+        return self.embed(feats.to(self.embed.weight.dtype))
 
 
 # ===========================================================================
@@ -1881,8 +1907,8 @@ class LanguageModelShim(nn.Module):
     def __init__(self, d_z: int = 256, d_model: int = 2560, num_layers: int = 80) -> None:
         super().__init__()
 
-        self.base_z_mlp = nn.Sequential(SingleToPair(d_z, d_z, d_z), nn.LayerNorm(d_z))
-        self.base_z_linear = nn.Sequential(nn.LayerNorm(d_model), nn.Linear(d_model, d_z, bias=False))
+        self.base_z_mlp = nn.Sequential(SingleToPair(d_z, d_z, d_z), LayerNorm(d_z))
+        self.base_z_linear = nn.Sequential(LayerNorm(d_model), nn.Linear(d_model, d_z, bias=False))
         self.base_z_combine = nn.Parameter(torch.zeros(num_layers + 1))
 
     def forward(self, hidden_states: Tensor, *, lm_dropout: float = 0.0) -> Tensor:
@@ -1896,6 +1922,9 @@ class LanguageModelShim(nn.Module):
         Returns:
             [B, L, L, d_pair] pair representation.
         """
+        # The ESMC backbone may be loaded at a different precision than the trunk
+        # (e.g. bf16 backbone with an fp32 trunk); align to the projection dtype.
+        hidden_states = hidden_states.to(self.base_z_linear[1].weight.dtype)
         lm_z = self.base_z_linear(hidden_states)  # [B, L, 81, d_z]
         weights = self.base_z_combine.softmax(0)  # [81]
         lm_z = (weights @ lm_z).squeeze(-2)  # [B, L, d_z]
@@ -2067,8 +2096,8 @@ class TriangleMultiplicativeBlock(nn.Module):
         self.latent_channels = latent_channels
         self.flow = flow
         self._einsum_equation = self._FLOW_TO_EINSUM[flow]
-        self.norm_start = nn.LayerNorm(self.input_channels, eps=_EPS)
-        self.norm_mix = nn.LayerNorm(self.latent_channels, eps=_EPS)
+        self.norm_start = LayerNorm(self.input_channels, eps=_EPS)
+        self.norm_mix = LayerNorm(self.latent_channels, eps=_EPS)
         self.proj_bundle = nn.Linear(self.input_channels, 4 * self.latent_channels, bias=False)
         self.proj_emit = nn.Linear(self.latent_channels, self.input_channels, bias=False)
         self.proj_gate = nn.Linear(self.input_channels, self.input_channels, bias=False)
@@ -2112,7 +2141,7 @@ class TriangleMultiplicativeBlock(nn.Module):
             contracted = self._triangular_contract_chunked(left_stream, right_stream, self._chunk_size)
         else:
             contracted = self._triangular_contract(left_stream, right_stream)
-        mixed = self.proj_emit(self.norm_mix(contracted))
+        mixed = self.proj_emit(self.norm_mix(contracted).to(self.proj_emit.weight.dtype))
         output_gate = torch.sigmoid(self.proj_gate(normalized_grid))
         return mixed * output_gate
 
@@ -2142,7 +2171,7 @@ class Transition(nn.Module):
 
     def __init__(self, d_model: int, expansion_ratio: int = 4) -> None:
         super().__init__()
-        self.norm = nn.LayerNorm(d_model)
+        self.norm = LayerNorm(d_model)
         self.ffn = SwiGLUMLP(d_model, expansion_ratio=expansion_ratio, bias=False)
         # Default chunked; set_chunk_size(None) disables for bit-exact parity tests.
         self._chunk_size: int | None = 64
@@ -2235,7 +2264,7 @@ class OuterProductMean(nn.Module):
         super().__init__()
         self.d_hidden = d_hidden
         self.divide_outer_before_proj = divide_outer_before_proj
-        self.norm = nn.LayerNorm(d_msa)
+        self.norm = LayerNorm(d_msa)
         self.W = nn.Linear(d_msa, 2 * d_hidden, bias=False)
         self.Wout = nn.Linear(d_hidden * d_hidden, d_pair, bias=True)
         # Off for bit-exact bf16; ``set_chunk_size(64)`` for long sequences.
@@ -2276,8 +2305,8 @@ class MSAPairWeightedAveraging(nn.Module):
         super().__init__()
         self.n_heads = n_heads
         self.head_width = head_width
-        self.norm_single = nn.LayerNorm(d_msa)
-        self.compute_bias = nn.Sequential(nn.LayerNorm(d_pair), nn.Linear(d_pair, n_heads, bias=False))
+        self.norm_single = LayerNorm(d_msa)
+        self.compute_bias = nn.Sequential(LayerNorm(d_pair), nn.Linear(d_pair, n_heads, bias=False))
         self.Wv = nn.Linear(d_msa, n_heads * head_width, bias=False)
         self.Wgate = nn.Linear(d_msa, n_heads * head_width, bias=False)
         self.Wout = nn.Linear(n_heads * head_width, d_msa, bias=False)
@@ -2297,7 +2326,7 @@ class MSAPairWeightedAveraging(nn.Module):
         msa_normed = self.norm_single(msa_repr)
         bias = self.compute_bias(pair_repr)  # [B, L, L, n_heads]
         bias.masked_fill_(~pair_attention_mask.unsqueeze(-1).bool(), -1e5)
-        attn = torch.softmax(bias, dim=-2)  # softmax over j
+        attn = torch.softmax(bias, dim=-2, dtype=torch.float32).to(bias.dtype)  # softmax over j
 
         v = self.Wv(msa_normed).reshape(B, L, M, h, dh)
         gate = torch.sigmoid(self.Wgate(msa_normed)).reshape(B, L, M, h, dh)
