@@ -56,15 +56,15 @@ inputs = feature_extractor(audio=audio, sampling_rate=feature_extractor.sampling
     model.device, model.dtype
 )
 print("Input waveform shape:", inputs["audio"].shape)
-# Input waveform shape: torch.Size([1, 1, 94080])
+# Input waveform shape: torch.Size([1, 1, 93760])
 
 # encoder and decoder
 audio_codes = model.encode(**inputs).audio_codes
 print("Audio codes shape:", audio_codes.shape)
-# Audio codes shape: torch.Size([1, 1, 294])
+# Audio codes shape: torch.Size([1, 1, 293])
 audio_values = model.decode(audio_codes).audio_values
 print("Audio values shape:", audio_values.shape)
-# Audio values shape: torch.Size([1, 1, 94080])
+# Audio values shape: torch.Size([1, 1, 93760])
 
 # Equivalently, you can do encoding and decoding in one step
 model_output = model(**inputs)
@@ -74,15 +74,15 @@ audio_values = model_output.audio_values
 
 ### Batch processing
 
-The original [checkpoint](https://huggingface.co/HKUSTAudio/xcodec2) and code via PyPI does not support batch processing, but it is possible with this version!
+This implementation also supports batched input, unlike the original [release](https://huggingface.co/HKUSTAudio/xcodec2)!
 
 ```python
 from datasets import Audio, load_dataset
-from transformers import AutoFeatureExtractor, Xcodec2Model
+from transformers import AutoFeatureExtractor, AutoModel
 
 batch_size = 2
 model_id = "bezzam/xcodec2"
-model = Xcodec2Model.from_pretrained(model_id, device_map="auto")
+model = AutoModel.from_pretrained(model_id, device_map="auto")
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
 dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -113,21 +113,24 @@ audio_values = model_output.audio_values
 
 You can speed up inference with [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html). The first few calls will be slower due to compilation overhead, but subsequent calls will be faster.
 
+On an A100, we observed a speed-up of ~1.3 for a batch size of 4 ([script](https://gist.github.com/ebezzam/3b79481b5d48d8e35c4ecc582aee0cb3#file-benchmark_torch_compile-py)).
+
 ```python
 import torch
 from datasets import Audio, load_dataset
-from transformers import AutoFeatureExtractor, Xcodec2Model
+from transformers import AutoFeatureExtractor, AutoModel
 
+batch_size = 4
 model_id = "bezzam/xcodec2"
-model = Xcodec2Model.from_pretrained(model_id, device_map="auto")
+model = AutoModel.from_pretrained(model_id, device_map="auto")
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
 dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
-audio = dataset[0]["audio"]["array"]
-inputs = feature_extractor(audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(
-    model.device, model.dtype
-)
+audios = [dataset[i]["audio"]["array"] for i in range(batch_size)]
+inputs = feature_extractor(
+    audio=audios, sampling_rate=feature_extractor.sampling_rate, padding=True, return_tensors="pt"
+).to(model.device, model.dtype)
 
 compiled_model = torch.compile(model, fullgraph=True)
 
@@ -135,21 +138,10 @@ compiled_model = torch.compile(model, fullgraph=True)
 for _ in range(10):
     with torch.inference_mode():
         _ = compiled_model(**inputs)
-torch.cuda.synchronize()
 
-# Timed runs using CUDA events for accurate GPU timing
-num_iterations = 25
-start_event = torch.cuda.Event(enable_timing=True)
-end_event = torch.cuda.Event(enable_timing=True)
-start_event.record()
-for _ in range(num_iterations):
-    with torch.inference_mode():
-        _ = compiled_model(**inputs)
-end_event.record()
-torch.cuda.synchronize()
-avg_time_ms = start_event.elapsed_time(end_event) / num_iterations
-print(f"Average inference time: {avg_time_ms:.2f} ms")
-# Results on A100: ~51 ms compiled vs ~79 ms eager (1.54x speedup)
+with torch.inference_mode():
+    output = compiled_model(**inputs)
+print("Audio values shape:", output.audio_values.shape)
 ```
 
 ## Xcodec2Config
