@@ -218,7 +218,7 @@ class TestHubKernels(TestCasePlus):
         del model
 
     @require_torch_accelerator
-    def test_kernel_fusion_with_init_matches_baseline(self):
+    def test_kernel_fusion(self):
         model_id = "michaelbenayoun/qwen3-tiny-4kv-heads-4layers-random"
         kernel_config = KernelConfig(
             {
@@ -248,22 +248,28 @@ class TestHubKernels(TestCasePlus):
 
         torch.testing.assert_close(baseline_out, fused_out, atol=1e-4, rtol=1e-4)
 
-        # Structural check: mlp children of decoder layers must be replaced by nn.Identity,
-        # and post_attention_layernorm must hold the kernel instance (has kernel_layer_name).
-        decoder_layers = [m for m in fused.modules() if hasattr(m, "post_attention_layernorm") and hasattr(m, "mlp")]
+        decoder_layers = [
+            (name, m)
+            for name, m in fused.named_modules()
+            if hasattr(m, "post_attention_layernorm") and hasattr(m, "mlp")
+        ]
         self.assertTrue(len(decoder_layers) > 0, "No decoder layers found")
-        for layer in decoder_layers:
-            self.assertIsInstance(layer.mlp, torch.nn.Identity, "mlp should be nn.Identity after fusion")
+        for name, layer in decoder_layers:
+            self.assertIsInstance(
+                layer.mlp,
+                torch.nn.Identity,
+                f"{name}.mlp should be nn.Identity after fusion",
+            )
             self.assertTrue(
                 hasattr(layer.post_attention_layernorm, "kernel_layer_name")
                 or hasattr(type(layer.post_attention_layernorm), "kernel_layer_name"),
-                "post_attention_layernorm should be the kernel layout instance",
+                f"{name}.post_attention_layernorm should carry kernel_layer_name after fusion",
             )
 
         del fused
 
     @require_torch_accelerator
-    def test_kernel_replacement_with_layout_matches_baseline(self):
+    def test_kernel_replacement_with_layout(self):
         model_id = "michaelbenayoun/qwen3-tiny-4kv-heads-4layers-random"
         kernel_config = KernelConfig({"RMSNorm": "michaelbenayoun/dummy-rmsnorm-kernel-with-init:CustomRMSNorm"})
 
@@ -287,14 +293,30 @@ class TestHubKernels(TestCasePlus):
 
         torch.testing.assert_close(baseline_out, model_out, atol=1e-4, rtol=1e-4)
 
-        # Structural check: replaced modules must carry kernel_layer_name and must
-        # no longer be instances of the original RMSNorm class.
         replaced = [m for m in model.modules() if hasattr(type(m), "kernel_layer_name")]
         self.assertTrue(len(replaced) > 0, "No replaced kernel layout modules found")
         for m in replaced:
             self.assertNotIsInstance(m, original_rmsnorm_cls)
 
         del model
+
+    def test_faulty_fusion_incomplete_pattern(self):
+        model_id = "michaelbenayoun/qwen3-tiny-4kv-heads-4layers-random"
+        # "layers.*.post_attention_layernorm" is missing the leading "model." segment.
+        # re.fullmatch("layers.\w+", "model.layers.0") returns None, so no module
+        # is ever matched and the function raises ValueError.
+        kernel_config = KernelConfig(
+            {
+                (
+                    ("RMSNorm", "layers.*.post_attention_layernorm"),
+                    ("MLP", "layers.*.mlp"),
+                ): "michaelbenayoun/dummy-rmsnorm-mlp-with-transformations-and-init:RMSNormMLP",
+            }
+        )
+        with self.assertRaises(ValueError):
+            _ = AutoModelForCausalLM.from_pretrained(
+                model_id, use_kernels=True, kernel_config=kernel_config, device_map=torch_device
+            )
 
     def test_faulty_kernel_mapping_layer_name(self):
         kernel_config = KernelConfig(kernel_mapping={"RMSNorm1": "kernels-community/layer_norm:LlamaRMSNorm"})

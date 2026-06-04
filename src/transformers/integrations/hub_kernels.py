@@ -555,6 +555,10 @@ def register_kernel_replacements_and_fusions(
     patch_mapping: dict[str, type] = {}
     new_mapping: dict = {}
 
+    # We might need to instantiate the model on meta device.
+    # We do it lazily, only if we encounter a fused kernel.
+    meta_model = None
+
     for layer_name, hub_repo in kernel_config.kernel_mapping.items():
         if isinstance(hub_repo, dict):
             if len(hub_repo.values()) != 1:
@@ -562,10 +566,8 @@ def register_kernel_replacements_and_fusions(
                     f"Expected exactly one kernel repo regardless of device/mode specificity, got {hub_repo}"
                 )
             repo_str = next(iter(hub_repo.values()))
-            print("Here", repo_str)
         elif isinstance(hub_repo, str):
             repo_str = hub_repo
-            print("There", repo_str)
         else:
             raise ValueError(f"Invalid hub repo {hub_repo!r} for layer {layer_name!r}")
 
@@ -626,20 +628,28 @@ def register_kernel_replacements_and_fusions(
             parent_pattern = parent_patterns[0].replace("*", r"\w+")
             child_names = [p.rsplit(".", 1)[1] for p in glob_patterns]
 
-            with torch.device("meta"):
-                meta_model = cls(config)
+            if meta_model is None:
+                with torch.device("meta"):
+                    meta_model = cls(config)
 
+            matched_any = False
             for name, module in meta_model.named_modules():
                 if not re.fullmatch(parent_pattern, name):
                     continue
-                if not all(hasattr(module, name) for name in child_names):
+                if not all(hasattr(module, child) for child in child_names):
                     raise ValueError(
                         f"Module {name!r} does not have the expected child modules {child_names} required for "
                         f"the fused kernel {kernel_cls.__name__!r}"
                     )
-
+                matched_any = True
                 module_cls = type(module)
                 patch_mapping[module_cls.__name__] = make_kernel_init_parent_class(module_cls, child_names, layout_cls)
+
+            if not matched_any:
+                raise ValueError(
+                    f"No module matched pattern {parent_pattern!r} for fused kernel {kernel_cls.__name__!r}. "
+                    f"Provide the full dotted path from the model root."
+                )
 
         register_patch_mapping(patch_mapping, overwrite=True)
 
