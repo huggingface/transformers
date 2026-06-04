@@ -17,15 +17,17 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import cached_property
+from types import GeneratorType
 
 import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
+from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -51,12 +53,11 @@ from ..parakeet.modeling_parakeet import (
     ParakeetEncoderFeedForward,
     ParakeetEncoderModelOutput,
     ParakeetEncoderRelPositionalEncoding,
-    ParakeetEncoderSubsamplingConv2D,
-    ParakeetForTDT,
+    ParakeetForRNNT,
     ParakeetPreTrainedModel,
-    ParakeetTDTDecoder,
+    ParakeetRNNTDecoder,
+    ParakeetRNNTOutput,
     ParakeetTDTJointNetwork,
-    ParakeetTDTOutput,
 )
 from .generation_nemotron_asr import NemotronAsrGenerationMixin, NemotronAsrTDTDecoderCache
 
@@ -206,7 +207,12 @@ class NemotronAsrConfig(ParakeetTDTConfig):
             )
         # The decoder starts on the blank token at frame 0 (NeMo's blank_as_pad convention).
         kwargs.setdefault("decoder_start_token_id", self.blank_token_id)
-        super().__post_init__(**kwargs)
+        if isinstance(self.encoder_config, dict):
+            self.encoder_config = NemotronAsrEncoderConfig(**self.encoder_config)
+        elif self.encoder_config is None:
+            self.encoder_config = NemotronAsrEncoderConfig()
+        self.initializer_range = self.encoder_config.initializer_range
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 class NemotronAsrFeatureExtractor(ParakeetFeatureExtractor):
@@ -381,6 +387,59 @@ class NemotronAsrFeatureExtractor(ParakeetFeatureExtractor):
         )
 
 
+class NemotronAsrEncoderCache:
+    """
+    Order-preserving sliding-window K/V cache for the cache-aware streaming encoder.
+
+    Unlike a standard rolling `StaticCache`, the cached keys/values are kept in **temporal order**
+    (concatenate the new keys, then keep the last `max_cache_len` frames). The encoder uses
+    Transformer-XL-style relative-position attention, which requires ordered keys, so a wrapping
+    buffer cannot be used here. Created and reused through [`NemotronAsrForRNNT._get_encoder_cache`],
+    mirroring how [`VoxtralRealtimeForConditionalGeneration`] threads an `encoder_past_key_values`.
+    """
+
+    def __init__(self, num_hidden_layers: int, max_cache_len: int):
+        self.max_cache_len = max_cache_len
+        self.key_cache: list[torch.Tensor | None] = [None] * num_hidden_layers
+        self.value_cache: list[torch.Tensor | None] = [None] * num_hidden_layers
+
+    def get_seq_length(self, layer_idx: int = 0) -> int:
+        key = self.key_cache[layer_idx]
+        return 0 if key is None else key.shape[2]
+
+    def get_mask_sizes(self, query_length: int, layer_idx: int = 0) -> tuple[int, int]:
+        """`(kv_length, kv_offset)` for mask creation. Keys are `[cached | current]`, starting at offset 0.
+
+        Because the cache length is always a multiple of the attention chunk size (each streaming chunk is
+        one chunk), using the cache-relative offset in `create_bidirectional_mask` yields the same
+        `chunked_limited` mask as absolute frame positions would (it only depends on the chunk *difference*).
+        """
+        return self.get_seq_length(layer_idx) + query_length, 0
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: dict | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        prev_key = self.key_cache[layer_idx]
+        if prev_key is None:
+            full_key, full_value = key_states, value_states
+        else:
+            full_key = torch.cat([prev_key, key_states], dim=2)
+            full_value = torch.cat([self.value_cache[layer_idx], value_states], dim=2)
+        # Keep the last `max_cache_len` frames (in order) for the next chunk.
+        self.key_cache[layer_idx] = full_key[:, :, -self.max_cache_len :].detach()
+        self.value_cache[layer_idx] = full_value[:, :, -self.max_cache_len :].detach()
+        return full_key, full_value
+
+    def reset(self):
+        for layer_idx in range(len(self.key_cache)):
+            self.key_cache[layer_idx] = None
+            self.value_cache[layer_idx] = None
+
+
 @auto_docstring(
     custom_intro="""
     Extends [`ParakeetEncoderModelOutput`] with optional streaming caches. Caches are only populated for
@@ -396,17 +455,13 @@ class NemotronAsrEncoderModelOutput(ParakeetEncoderModelOutput):
 
         - 1 for tokens that are **not masked**,
         - 0 for tokens that are **masked**.
-    cache_last_channel (`torch.Tensor` of shape `(num_layers, batch, left_ctx, hidden_size)`, *optional*):
-        Updated attention cache from the encoder (sliding KV window). Pass to the next chunk call.
-    cache_last_time (`torch.Tensor` of shape `(num_layers, batch, hidden_size, conv_left_ctx)`, *optional*):
-        Updated convolution cache from the encoder. Pass to the next chunk call.
-    cache_last_channel_len (`torch.Tensor` of shape `(batch,)`, *optional*):
-        Number of valid frames currently stored in `cache_last_channel`.
+    past_key_values (`NemotronAsrEncoderCache`, *optional*):
+        Updated attention K/V sliding-window cache from the encoder. Pass to the next chunk call.
     """
 
-    cache_last_channel: torch.Tensor | None = None
-    cache_last_time: torch.Tensor | None = None
-    cache_last_channel_len: torch.Tensor | None = None
+    attention_mask: torch.Tensor | None = None
+
+    past_key_values: NemotronAsrEncoderCache | None = None
 
 
 class NemotronAsrEncoderRelPositionalEncoding(ParakeetEncoderRelPositionalEncoding):
@@ -446,10 +501,16 @@ class NemotronAsrEncoderFeedForward(ParakeetEncoderFeedForward):
 
 
 class NemotronAsrEncoderConvolutionModule(FastSpeech2ConformerConvolutionModule):
-    def __init__(self, config: NemotronAsrEncoderConfig, module_config=None):
+    def __init__(self, config: NemotronAsrEncoderConfig, module_config=None, layer_idx: int | None = None):
+        """
+        Args:
+            config (NemotronAsrEncoderConfig): Configuration for the model.
+            module_config (dict): Configuration for the module (e.g., encoder or decoder).
+            layer_idx (int): Index of the conformer block; used to build a unique conv padding cache key.
+        """
         super().__init__(config, module_config)
-        channels = config.hidden_size
         kernel_size = config.conv_kernel_size
+        channels = config.hidden_size
 
         # Replace BatchNorm with LayerNorm for cache-aware checkpoints.
         if config.conv_norm_type == "layer_norm":
@@ -466,9 +527,22 @@ class NemotronAsrEncoderConvolutionModule(FastSpeech2ConformerConvolutionModule)
         else:  # explicit [left, right]
             self._conv_left, self._conv_right = ctx
 
-        # Symmetric padding is the default; override depthwise conv if asymmetric.
+        # A purely causal depthwise conv (left = kernel - 1, right = 0) supports streaming through the
+        # unified `NemotronAsrEncoderCausalConvPaddingCache`. Other (symmetric / asymmetric-with-right)
+        # configs keep a plain `Conv1d` with manual padding and are not streaming-capable.
         sym = (kernel_size - 1) // 2
-        if self._conv_left != sym or self._conv_right != sym:
+        self._is_causal_streaming = self._conv_left == kernel_size - 1 and self._conv_right == 0
+        if self._is_causal_streaming:
+            self.depthwise_conv = NemotronAsrEncoderCausalConv1d(
+                channels,
+                channels,
+                kernel_size,
+                cache_key=f"conv.{layer_idx}",
+                stride=1,
+                groups=channels,
+                bias=config.convolution_bias,
+            )
+        elif self._conv_left != sym or self._conv_right != sym:
             self.depthwise_conv = nn.Conv1d(
                 channels,
                 channels,
@@ -483,10 +557,22 @@ class NemotronAsrEncoderConvolutionModule(FastSpeech2ConformerConvolutionModule)
         self,
         hidden_states,
         attention_mask=None,
-        cache_last_time: torch.Tensor | None = None,
+        padding_cache: "NemotronAsrEncoderCausalConvPaddingCache | None" = None,
     ):
+        """
+        Compute convolution module.
+
+        Args:
+            hidden_states (`torch.Tensor` of shape `(batch, time, channels)`): Input tensor.
+            attention_mask (`torch.Tensor` of shape `(batch, 1, time, time)`): Attention mask.
+            padding_cache (`NemotronAsrEncoderCausalConvPaddingCache`, *optional*): Streaming conv cache.
+
+        Returns:
+            `torch.Tensor`: Output tensor of shape `(batch, time, channels)`.
+
+        """
         # Override the parent forward to support asymmetric (causal/custom) conv padding
-        # and LayerNorm (channel-last layout), plus an optional time-domain cache for streaming.
+        # and LayerNorm (channel-last layout), plus an optional streaming padding cache.
         # exchange the temporal dimension and the feature dimension
         hidden_states = hidden_states.transpose(1, 2)  # (B, C, T)
 
@@ -503,22 +589,16 @@ class NemotronAsrEncoderConvolutionModule(FastSpeech2ConformerConvolutionModule)
                 all_masked_rows = torch.all(attention_mask == 0.0, dim=-1)
             hidden_states = hidden_states.masked_fill(all_masked_rows, 0.0)
 
-        # Asymmetric / causal padding: optionally use cache from previous chunk on the left.
-        sym = (self.depthwise_conv.kernel_size[0] - 1) // 2
-        new_cache = None
-        if self._conv_left != sym or self._conv_right != sym:
-            if cache_last_time is not None:
-                # cache_last_time: (B, C, _conv_left)
-                padded = torch.cat([cache_last_time, hidden_states], dim=2)
-                # Sliding-window update: keep the last `_conv_left` frames of [cache | current]
-                new_cache = padded[:, :, -self._conv_left :]
-            else:
-                padded = nn.functional.pad(hidden_states, (self._conv_left, 0))
-            if self._conv_right > 0:
-                padded = nn.functional.pad(padded, (0, self._conv_right))
-            hidden_states = self.depthwise_conv(padded)
+        if self._is_causal_streaming:
+            # Causal depthwise conv: left context from `padding_cache` when streaming, else left-padded.
+            hidden_states = self.depthwise_conv(hidden_states, padding_cache=padding_cache)
         else:
-            hidden_states = self.depthwise_conv(hidden_states)
+            sym = (self.depthwise_conv.kernel_size[0] - 1) // 2
+            if self._conv_left != sym or self._conv_right != sym:
+                padded = nn.functional.pad(hidden_states, (self._conv_left, self._conv_right))
+                hidden_states = self.depthwise_conv(padded)
+            else:
+                hidden_states = self.depthwise_conv(hidden_states)
 
         # Norm: BatchNorm1d expects (B,C,T); LayerNorm expects (B,T,C).
         if isinstance(self.norm, nn.LayerNorm):
@@ -532,8 +612,6 @@ class NemotronAsrEncoderConvolutionModule(FastSpeech2ConformerConvolutionModule)
         hidden_states = self.pointwise_conv2(hidden_states)
         hidden_states = hidden_states.transpose(1, 2)  # (B, T, C)
 
-        if new_cache is not None:
-            return hidden_states, new_cache
         return hidden_states
 
 
@@ -545,9 +623,9 @@ class NemotronAsrEncoderAttention(ParakeetEncoderAttention):
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        cache_last_channel: torch.Tensor | None = None,
+        past_key_values: "NemotronAsrEncoderCache | None" = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         batch_size, seq_length = input_shape
         hidden_shape = (batch_size, seq_length, -1, self.head_dim)
@@ -556,16 +634,9 @@ class NemotronAsrEncoderAttention(ParakeetEncoderAttention):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        # Streaming: prepend cached K/V from previous chunks and update the sliding window cache.
-        new_cache = None
-        if cache_last_channel is not None:
-            cache_len = cache_last_channel.shape[1]
-            cache_shape = (batch_size, cache_len, -1, self.head_dim)
-            k_cache = self.k_proj(cache_last_channel).view(cache_shape).transpose(1, 2)
-            v_cache = self.v_proj(cache_last_channel).view(cache_shape).transpose(1, 2)
-            key_states = torch.cat([k_cache, key_states], dim=2)
-            value_states = torch.cat([v_cache, value_states], dim=2)
-            new_cache = torch.cat([cache_last_channel, hidden_states], dim=1)[:, -cache_len:]
+        # Streaming: prepend cached K/V from previous chunks and update the order-preserving sliding window.
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         total_key_length = key_states.shape[2]
 
@@ -609,43 +680,316 @@ class NemotronAsrEncoderAttention(ParakeetEncoderAttention):
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights, new_cache
+        return attn_output, attn_weights
 
 
-class NemotronAsrEncoderSubsamplingConv2D(ParakeetEncoderSubsamplingConv2D): ...
+class NemotronAsrEncoderCausalConvCacheLayer:
+    """
+    Per-convolution streaming cache holding the left time-context of one causal conv.
+
+    Works for **both** `Conv1d` (`(B, C, T)`) and `Conv2d` (`(B, C, T, F)`): the time axis is `dim=2`
+    in both layouts, so the cache always slices and concatenates along `dim=2`. For the `Conv2d` case
+    the (non-streamed) frequency axis is padded *before* the cache is consulted, so the cached tensor
+    keeps a constant frequency size across chunks.
+
+    The cache carries `conv_module.left_pad` frames between chunks, which for a causal conv is
+    `effective_kernel_size - stride` (`1` for the stride-2 kernel-3 subsampling convs, `8` for the
+    stride-1 kernel-9 conformer depthwise conv). The very first chunk instead needs the full offline
+    left padding `conv_module.left_pad_init` (`effective_kernel_size - 1`), which only differs from the
+    carry for strided convs; the extra `stride - 1` leading zeros reproduce the offline causal padding.
+    """
+
+    def __init__(self):
+        self.cache: torch.Tensor | None = None
+        self.is_initialized: bool = False
+
+    def lazy_initialization(self, hidden_states, conv_module):
+        self.left_pad = conv_module.left_pad
+        cache_shape = list(hidden_states.shape)
+        cache_shape[2] = conv_module.left_pad_init  # time axis (offline left padding for the first chunk)
+        self.cache = torch.zeros(cache_shape, device=hidden_states.device, dtype=hidden_states.dtype)
+        self.is_initialized = True
+
+    def update(self, hidden_states, conv_module=None):
+        if not self.is_initialized and conv_module is not None:
+            self.lazy_initialization(hidden_states, conv_module)
+        elif not self.is_initialized:
+            raise ValueError(
+                "NemotronAsrEncoderCausalConvCacheLayer is not initialized. "
+                "Make sure to provide conv_module to the update method."
+            )
+
+        # The current cache is prepended to this chunk; the new cache keeps the last `left_pad` frames of
+        # [previous_cache | hidden_states] along the time axis (== last `left_pad` frames the next chunk's
+        # leftmost conv window needs from this chunk).
+        prepend = self.cache
+        combined = torch.cat([self.cache, hidden_states], dim=2)
+        if self.left_pad > 0:
+            self.cache = combined.narrow(2, combined.shape[2] - self.left_pad, self.left_pad).clone()
+        else:
+            self.cache = combined.narrow(2, 0, 0)
+        return prepend
+
+
+class NemotronAsrEncoderCausalConvPaddingCache:
+    """
+    Unified streaming padding cache for **all** causal convolutions in the encoder: the depthwise
+    `Conv2d` layers of the subsampling **and** the depthwise `Conv1d` of every conformer block's
+    convolution module. Each conv registers under a unique `cache_key`.
+
+    This is the first transformers cache that backs both `Conv1d` and `Conv2d` layers. It mirrors
+    [`VoxtralRealtimeConv1dPaddingCache`] but caches along the time axis (`dim=2`) so the same logic
+    serves the 4D subsampling tensors and the 3D conformer-conv tensors.
+    """
+
+    def __init__(self):
+        self.layers: dict[str, NemotronAsrEncoderCausalConvCacheLayer] = {}
+
+    def update(self, hidden_states, cache_key, conv_module):
+        if cache_key not in self.layers:
+            self.layers[cache_key] = NemotronAsrEncoderCausalConvCacheLayer()
+
+        padding_states = self.layers[cache_key].update(hidden_states, conv_module)
+        return torch.cat([padding_states, hidden_states], dim=2)
+
+
+class NemotronAsrEncoderCausalConv1d(nn.Conv1d):
+    """
+    Causal `Conv1d` (left-only padding) used as the depthwise conv of the conformer convolution module,
+    with optional streaming support through [`NemotronAsrEncoderCausalConvPaddingCache`].
+    """
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        cache_key: str,
+        stride: int = 1,
+        dilation: int = 1,
+        groups: int = 1,
+        bias: bool = True,
+    ):
+        super().__init__(
+            in_channels, out_channels, kernel_size, stride=stride, dilation=dilation, groups=groups, bias=bias
+        )
+        self.cache_key = cache_key
+
+    @cached_property
+    def left_pad(self):
+        effective_kernel_size = (self.kernel_size[0] - 1) * self.dilation[0] + 1
+        return effective_kernel_size - self.stride[0]
+
+    @cached_property
+    def left_pad_init(self):
+        effective_kernel_size = (self.kernel_size[0] - 1) * self.dilation[0] + 1
+        return effective_kernel_size - 1
+
+    def forward(self, x: torch.Tensor, padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None):
+        # x: (B, C, T). Conv1d caches along dim=2 (== last dim here).
+        if padding_cache is not None:
+            x = padding_cache.update(x, self.cache_key, self)
+        else:
+            x = nn.functional.pad(x, (self.left_pad, 0))
+        return super().forward(x)
+
+
+class NemotronAsrEncoderCausalConv2D(nn.Conv2d):
+    """
+    Causal `Conv2d` for the subsampling. The frequency axis is never streamed and is always padded the
+    same way; the time axis is left-padded causally offline, or sourced from a
+    [`NemotronAsrEncoderCausalConvPaddingCache`] when streaming.
+    """
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        cache_key: str,
+        stride: int = 1,
+        padding: int = 0,
+        dilation: int = 1,
+        groups: int = 1,
+    ):
+        super().__init__(
+            in_channels, out_channels, kernel_size, stride=stride, padding=padding, dilation=dilation, groups=groups
+        )
+        self.cache_key = cache_key
+
+    @cached_property
+    def left_pad(self):
+        # Streaming cache size along time: kernel - stride. With stride 2 the conv output windows advance
+        # by `stride`, so the boundary window needs only `kernel - stride` (== 1 for the k=3, s=2
+        # subsampling convs) cached frames from the previous chunk; a larger cache would land windows on
+        # the wrong stride parity.
+        return self.kernel_size[0] - self.stride[0]
+
+    @cached_property
+    def left_pad_init(self):
+        # First-chunk left padding (offline causal pad) along time: kernel - 1.
+        return self.kernel_size[0] - 1
+
+    @cached_property
+    def time_pad(self):
+        # Offline causal padding on the time axis: (left = kernel - 1, right = stride - 1).
+        return (self.kernel_size[0] - 1, self.stride[0] - 1)
+
+    @cached_property
+    def freq_pad(self):
+        # Frequency axis is not streamed: always padded (left = kernel - 1, right = stride - 1).
+        return (self.kernel_size[1] - 1, self.stride[1] - 1)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None,
+    ) -> torch.Tensor:
+        # x: (B, C, T, F). Always pad the (non-streamed) frequency axis (the last dim).
+        x = nn.functional.pad(x, (self.freq_pad[0], self.freq_pad[1]))
+        if padding_cache is not None:
+            # Streaming: the left time-context comes from the cache (size = left_pad = kernel - stride).
+            x = padding_cache.update(x, self.cache_key, self)
+        else:
+            # Offline: causal padding on the time axis (dim 2).
+            x = nn.functional.pad(x, (0, 0, self.time_pad[0], self.time_pad[1]))
+        return super().forward(x)
+
+
+class NemotronAsrEncoderSubsamplingConv2D(nn.Module):
+    def __init__(self, config: NemotronAsrEncoderConfig):
+        super().__init__()
+
+        self.kernel_size = config.subsampling_conv_kernel_size
+        self.stride = config.subsampling_conv_stride
+        self.channels = config.subsampling_conv_channels
+        self.padding = (self.kernel_size - 1) // 2
+        self.num_layers = int(math.log2(config.subsampling_factor))
+
+        # define layers
+        # All strided convs are causal (NeMo's `dw_striding` with `is_causal=True`): the first conv is a
+        # full causal Conv2d, followed by depthwise-causal + pointwise blocks. Every causal conv registers
+        # a unique `cache_key` so a single `NemotronAsrEncoderCausalConvPaddingCache` can back them all.
+        self.layers = nn.ModuleList()
+        self.layers.append(
+            NemotronAsrEncoderCausalConv2D(
+                1, self.channels, kernel_size=self.kernel_size, stride=self.stride, padding=0, cache_key="subsampling.0"
+            )
+        )
+        self.layers.append(nn.ReLU())
+        for idx in range(self.num_layers - 1):
+            # depthwise conv
+            self.layers.append(
+                NemotronAsrEncoderCausalConv2D(
+                    self.channels,
+                    self.channels,
+                    kernel_size=self.kernel_size,
+                    stride=self.stride,
+                    padding=0,
+                    groups=self.channels,
+                    cache_key=f"subsampling.{idx + 1}",
+                )
+            )
+            # pointwise conv
+            self.layers.append(nn.Conv2d(self.channels, self.channels, kernel_size=1))
+            # activation
+            self.layers.append(nn.ReLU())
+
+        self._pad_left = self.kernel_size - 1
+        self._pad_right = self.stride - 1
+        out_length = config.num_mel_bins
+        total_pad = self._pad_left + self._pad_right
+        for _ in range(self.num_layers):
+            out_length = (out_length + total_pad - self.kernel_size) // self.stride + 1
+        self.linear = nn.Linear(config.subsampling_conv_channels * out_length, config.hidden_size, bias=True)
+
+    def _get_output_length(self, input_lengths: torch.Tensor, conv_layer: nn.Conv2d, streaming: bool = False):
+        if not (hasattr(conv_layer, "stride") and conv_layer.stride != (1, 1)):
+            return input_lengths
+
+        kernel_size = conv_layer.kernel_size[0]
+        stride = conv_layer.stride[0]
+        if isinstance(conv_layer, NemotronAsrEncoderCausalConv2D):
+            # Streaming consumes `left_pad` cached frames on the left and no right padding; offline uses
+            # the full causal padding `(kernel - 1, stride - 1)` on the time axis.
+            left, right = (conv_layer.left_pad, 0) if streaming else conv_layer.time_pad
+        else:
+            left = right = conv_layer.padding[0]
+        return (input_lengths + left + right - kernel_size) // stride + 1
+
+    def forward(
+        self,
+        input_features: torch.Tensor,
+        attention_mask: torch.Tensor = None,
+        padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None,
+    ):
+        hidden_states = input_features.unsqueeze(1)
+        current_lengths = attention_mask.sum(-1) if attention_mask is not None else None
+        streaming = padding_cache is not None
+
+        for layer in self.layers:
+            if isinstance(layer, NemotronAsrEncoderCausalConv2D):
+                hidden_states = layer(hidden_states, padding_cache=padding_cache)
+            else:
+                hidden_states = layer(hidden_states)
+
+            # mask the hidden states
+            if isinstance(layer, nn.Conv2d) and attention_mask is not None:
+                current_lengths = self._get_output_length(current_lengths, layer, streaming=streaming)
+                current_seq_length = hidden_states.shape[2]
+                channel_mask = (
+                    torch.arange(current_seq_length, device=attention_mask.device) < current_lengths[:, None]
+                )
+                hidden_states *= channel_mask[:, None, :, None]
+
+        hidden_states = hidden_states.transpose(1, 2).reshape(hidden_states.shape[0], hidden_states.shape[2], -1)
+        hidden_states = self.linear(hidden_states)
+
+        return hidden_states
 
 
 class NemotronAsrEncoderBlock(ParakeetEncoderBlock):
+    def __init__(self, config: NemotronAsrEncoderConfig, layer_idx: int | None = None):
+        super().__init__()
+        self.gradient_checkpointing = False
+
+        self.feed_forward1 = NemotronAsrEncoderFeedForward(config)
+        self.self_attn = NemotronAsrEncoderAttention(config, layer_idx)
+        self.conv = NemotronAsrEncoderConvolutionModule(config, layer_idx=layer_idx)
+        self.feed_forward2 = NemotronAsrEncoderFeedForward(config)
+
+        self.norm_feed_forward1 = nn.LayerNorm(config.hidden_size)
+        self.norm_self_att = nn.LayerNorm(config.hidden_size)
+        self.norm_conv = nn.LayerNorm(config.hidden_size)
+        self.norm_feed_forward2 = nn.LayerNorm(config.hidden_size)
+        self.norm_out = nn.LayerNorm(config.hidden_size)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: torch.Tensor | None = None,
-        cache_last_channel: torch.Tensor | None = None,
-        cache_last_time: torch.Tensor | None = None,
+        past_key_values: "NemotronAsrEncoderCache | None" = None,
+        padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.feed_forward1(self.norm_feed_forward1(hidden_states))
         hidden_states = residual + 0.5 * hidden_states  # the conformer architecture uses a factor of 0.5
 
         normalized_hidden_states = self.norm_self_att(hidden_states)
-        attn_output, _, new_cache_channel = self.self_attn(
+        attn_output, _ = self.self_attn(
             hidden_states=normalized_hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
-            cache_last_channel=cache_last_channel,
+            past_key_values=past_key_values,
             **kwargs,
         )
         hidden_states = hidden_states + attn_output
 
-        conv_result = self.conv(
-            self.norm_conv(hidden_states), attention_mask=attention_mask, cache_last_time=cache_last_time
+        conv_output = self.conv(
+            self.norm_conv(hidden_states), attention_mask=attention_mask, padding_cache=padding_cache
         )
-        if isinstance(conv_result, tuple):
-            conv_output, new_cache_time = conv_result
-        else:
-            conv_output, new_cache_time = conv_result, None
         hidden_states = hidden_states + conv_output
 
         ff2_output = self.feed_forward2(self.norm_feed_forward2(hidden_states))
@@ -653,7 +997,7 @@ class NemotronAsrEncoderBlock(ParakeetEncoderBlock):
 
         hidden_states = self.norm_out(hidden_states)
 
-        return hidden_states, new_cache_channel, new_cache_time
+        return hidden_states
 
 
 @auto_docstring
@@ -722,14 +1066,22 @@ class NemotronAsrEncoder(ParakeetEncoder):
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        past_key_values: "NemotronAsrEncoderCache | None" = None,
         output_attention_mask: bool = True,
         use_cache: bool | None = None,
+        padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None,
+        att_context_size: list | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
         output_attention_mask (`bool`, *optional*, defaults to `True`):
             Whether to return the output attention mask. Only effective when `attention_mask` is provided.
+        past_key_values (`NemotronAsrEncoderCache`, *optional*):
+            Order-preserving sliding-window K/V cache for cache-aware streaming attention.
+        padding_cache (`NemotronAsrEncoderCausalConvPaddingCache`, *optional*):
+            Unified streaming cache backing the subsampling Conv2d layers and the conformer depthwise Conv1d.
+        att_context_size (`list[int]`, *optional*):
+            Override of the `[left, right]` attention context for this forward pass.
 
         Example:
 
@@ -750,10 +1102,17 @@ class NemotronAsrEncoder(ParakeetEncoder):
         >>> print(encoder_outputs.last_hidden_state.shape)
         ```
         """
+        # Lazily allocate the conv padding cache when streaming is requested without one.
+        if use_cache and padding_cache is None:
+            padding_cache = NemotronAsrEncoderCausalConvPaddingCache()
 
-        inputs_embeds = self.subsampling(input_features, attention_mask)
+        inputs_embeds = self.subsampling(input_features, attention_mask, padding_cache=padding_cache)
         inputs_embeds *= self.input_scale
-        position_embeddings = self.encode_positions(inputs_embeds)
+
+        seq_length = inputs_embeds.shape[1]
+        # In streaming, attention also attends to the cached frames on the left (sliding window).
+        cache_len = past_key_values.get_seq_length() if past_key_values is not None else 0
+        position_embeddings = self.encode_positions(inputs_embeds, context_length=cache_len + seq_length)
 
         inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.dropout, training=self.training)
         position_embeddings = nn.functional.dropout(
@@ -761,19 +1120,23 @@ class NemotronAsrEncoder(ParakeetEncoder):
         )
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = torch.arange(seq_length, device=inputs_embeds.device) + cache_len
             position_ids = position_ids.unsqueeze(0)
 
         output_mask = None
         if attention_mask is not None:
-            output_mask = self._get_output_attention_mask(attention_mask, target_length=inputs_embeds.shape[1])
+            output_mask = self._get_output_attention_mask(attention_mask, target_length=seq_length)
 
-        left_ctx, right_ctx = self._resolve_att_context_size()
-        chunk_aware_bidirectional_mask = create_bidirectional_mask(
+        # The standard masking machinery handles the cache offset (`q_offset = past_key_values.get_seq_length()`,
+        # keys = [cache | current]); the `chunked_limited` overlay only depends on the chunk difference, so the
+        # cache-relative offset gives the same mask as absolute positions. `past_key_values=None` (offline) is
+        # the full-sequence case.
+        left_ctx, right_ctx = self._resolve_att_context_size(att_context_size)
+        attention_mask_4d = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=output_mask,
+            past_key_values=past_key_values,
             position_ids=position_ids,
             and_mask_function=chunked_limited_mask_function(left_ctx, right_ctx),
         )
@@ -788,16 +1151,19 @@ class NemotronAsrEncoder(ParakeetEncoder):
                     to_drop = True
 
             if not to_drop:
-                hidden_states, _, _ = encoder_layer(
+                hidden_states = encoder_layer(
                     hidden_states,
-                    attention_mask=chunk_aware_bidirectional_mask,
+                    attention_mask=attention_mask_4d,
                     position_embeddings=position_embeddings,
+                    past_key_values=past_key_values,
+                    padding_cache=padding_cache,
                     **kwargs,
                 )
 
         return NemotronAsrEncoderModelOutput(
             last_hidden_state=hidden_states,
             attention_mask=output_mask.int() if output_mask is not None and output_attention_mask else None,
+            past_key_values=past_key_values,
         )
 
     def _resolve_att_context_size(self, att_context_size: list | None = None) -> list | None:
@@ -824,39 +1190,8 @@ class NemotronAsrEncoder(ParakeetEncoder):
             return configured[0]
         return configured
 
-    def get_initial_cache_state(
-        self,
-        batch_size: int = 1,
-        dtype: torch.dtype = torch.float32,
-        device: torch.device | str | None = None,
-    ) -> dict[str, torch.Tensor]:
-        """
-        Returns zeroed cache tensors to start a streaming session.
 
-        Returns a dict with keys `cache_last_channel`, `cache_last_time`, `cache_last_channel_len`
-        that can be passed directly as `**cache` to `forward()`.
-        """
-        ctx = self._resolve_att_context_size()
-        if ctx is None:
-            raise ValueError("get_initial_cache_state() is only valid for cache-aware (streaming) models.")
-        left_ctx = ctx[0]
-        conv_ctx = self.config.conv_context_size
-        if conv_ctx is None:
-            conv_left = (self.config.conv_kernel_size - 1) // 2
-        elif conv_ctx == "causal":
-            conv_left = self.config.conv_kernel_size - 1
-        else:
-            conv_left = conv_ctx[0]
-        n = self.config.num_hidden_layers
-        d = self.config.hidden_size
-        return {
-            "cache_last_channel": torch.zeros(n, batch_size, left_ctx, d, dtype=dtype, device=device),
-            "cache_last_time": torch.zeros(n, batch_size, d, conv_left, dtype=dtype, device=device),
-            "cache_last_channel_len": torch.zeros(batch_size, dtype=torch.long, device=device),
-        }
-
-
-class NemotronAsrTDTDecoder(ParakeetTDTDecoder):
+class NemotronAsrTDTDecoder(ParakeetRNNTDecoder):
     """LSTM-based prediction network for RNN-T."""
 
     def __init__(self, config: NemotronAsrConfig):
@@ -871,7 +1206,7 @@ class NemotronAsrTDTJointNetwork(ParakeetTDTJointNetwork):
 
 
 @dataclass
-class NemotronAsrTDTOutput(ParakeetTDTOutput):
+class NemotronAsrTDTOutput(ParakeetRNNTOutput):
     pass
 
 
@@ -880,7 +1215,7 @@ class NemotronAsrTDTOutput(ParakeetTDTOutput):
     NemotronAsr Encoder with an RNN-T (Recurrent Neural Network Transducer) head.
     """
 )
-class NemotronAsrForRNNT(ParakeetForTDT, NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin):
+class NemotronAsrForRNNT(ParakeetForRNNT, NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin):
     config: NemotronAsrConfig
 
     def __init__(self, config: NemotronAsrConfig):
@@ -972,333 +1307,162 @@ class NemotronAsrForRNNT(ParakeetForTDT, NemotronAsrPreTrainedModel, NemotronAsr
             decoder_cache=decoder_cache,
         )
 
-    def get_initial_streaming_state(
-        self,
-        batch_size: int = 1,
-        dtype: torch.dtype = torch.float32,
-        device: torch.device | str | None = None,
-    ) -> dict:
-        """
-        Returns the streaming state dict to seed `streaming_step`.
+    # ----------------------------------------------------------------------------------------------
+    # Cache-aware streaming generation.
+    #
+    # `generate(input_features=<generator of mel chunks>, ...)` drives RNN-T greedy decoding over a
+    # stream: each chunk is encoded cache-aware (threading the attention `encoder_past_key_values` and
+    # the unified `NemotronAsrEncoderCausalConvPaddingCache`), its encoder frames are appended to a
+    # growing buffer, and the transducer walks that buffer frame by frame. Mirrors the generator +
+    # `encoder_past_key_values` handling of [`VoxtralRealtimeForConditionalGeneration`], adapted to the
+    # transducer frame-walking loop.
+    # ----------------------------------------------------------------------------------------------
 
-        Holds:
-        - encoder cache (`cache_last_channel`, `cache_last_time`, `cache_last_channel_len`)
-        - decoder LSTM `(h, c)` state from BEFORE processing `last_token` (`dec_h`, `dec_c`)
-        - decoder output `g` for the most recent committed token (`last_dec_g`) — reused on
-          blank predictions so the LSTM is not re-stepped
-        - last committed (non-blank) token (`last_token`: `(B, 1)` LongTensor, seeded with blank)
-
-        The state mirrors NeMo's `(last_label, hidden, hidden_prime)` triple in
-        `_greedy_decode_blank_as_pad_loop_frames`.
-
-        Args:
-            batch_size: Number of audio streams to decode in parallel.
-        """
-        enc_state = self.encoder.get_initial_cache_state(batch_size=batch_size, dtype=dtype, device=device)
-        return {
-            "cache_last_channel": enc_state["cache_last_channel"],
-            "cache_last_time": enc_state["cache_last_time"],
-            "cache_last_channel_len": enc_state["cache_last_channel_len"],
-            # Decoder LSTM state from BEFORE last_token. None means "freshly initialized".
-            "dec_h": None,
-            "dec_c": None,
-            # Cached decoder output `g` (after projector); reused on blank predictions.
-            # Lazily allocated on the first non-blank emission.
-            "last_dec_g": None,
-            "last_token": torch.full((batch_size, 1), self.config.blank_token_id, dtype=torch.long, device=device),
-        }
-
-    def _decoder_pred_step(self, last_token, dec_h, dec_c):
-        """
-        Run a single LSTM + projector step manually so we can decide AFTER the joint+argmax
-        whether to commit the resulting state. Mirrors NeMo's `RNNTDecoder.predict`.
-
-        Args:
-            last_token: `(B, 1)` LongTensor input.
-            dec_h, dec_c: optional `(num_layers, B, hidden)` LSTM states from BEFORE last_token.
-                          `None` means "no prior state" (initial).
-
-        Returns:
-            (g, new_h, new_c) where `g` is `(B, 1, decoder_hidden_size)` and `new_h/new_c` are
-            the post-`last_token` LSTM states.
-        """
-        emb = self.decoder.embedding(last_token)
-        if dec_h is None:
-            lstm_output, (new_h, new_c) = self.decoder.lstm(emb)
+    def _get_encoder_cache(self, batch_size: int, max_cache_len: int) -> "NemotronAsrEncoderCache":
+        """Return a reusable [`NemotronAsrEncoderCache`] for cache-aware streaming (mirrors VoxtralRealtime)."""
+        need_new_cache = (
+            not hasattr(self, "_encoder_cache")
+            or self._encoder_cache.max_cache_len != max_cache_len
+            or len(self._encoder_cache.key_cache) != self.config.encoder_config.num_hidden_layers
+        )
+        if need_new_cache:
+            self._encoder_cache = NemotronAsrEncoderCache(
+                num_hidden_layers=self.config.encoder_config.num_hidden_layers, max_cache_len=max_cache_len
+            )
         else:
-            lstm_output, (new_h, new_c) = self.decoder.lstm(emb, (dec_h, dec_c))
-        g = self.decoder.decoder_projector(lstm_output)
-        return g, new_h, new_c
+            self._encoder_cache.reset()
+        return self._encoder_cache
 
-    @torch.no_grad()
-    def streaming_step(
+    def _encode_streaming_chunk(
         self,
-        inputs: dict,
-        drop_extra_pre_encoded: int,
-        state: dict,
-        att_context_size: list | None = None,
-    ) -> list[list[int]]:
-        """
-        Process one audio chunk and emit non-blank tokens, threading encoder + decoder state.
-
-        Mirrors NeMo's `_greedy_decode_blank_as_pad_loop_frames`: encoder runs cache-aware on
-        the chunk, then a per-frame inner loop emits up to `max_symbols_per_step` non-blank tokens
-        before advancing. The decoder LSTM is run only when the prediction would advance state
-        (non-blank emission); on blank predictions we reuse `last_dec_g` so the state is not
-        corrupted by re-stepping the same token.
-
-        Args:
-            inputs: dict with `input_features` and `attention_mask` for this chunk
-                    (typically yielded by `NemotronAsrCacheAwareStreamingBuffer`).
-            drop_extra_pre_encoded: number of pre-encoded mel frames to drop after subsampling
-                    (0 for the first chunk, otherwise from the buffer).
-            state: dict from `get_initial_streaming_state`. Mutated in place.
-            att_context_size: optional override of `[left, right]` attention window.
-
-        Returns:
-            list of length `batch_size`, each a list of token IDs (excluding blanks) emitted
-            during this chunk.
-        """
+        chunk: torch.Tensor,
+        encoder_past_key_values: "NemotronAsrEncoderCache",
+        padding_cache: NemotronAsrEncoderCausalConvPaddingCache,
+        att_context_size: list,
+    ) -> torch.Tensor:
+        """Encode one mel chunk cache-aware and return its projected (joint-space) encoder frames."""
         encoder_outputs = self.encoder(
-            input_features=inputs["input_features"],
-            attention_mask=inputs.get("attention_mask"),
-            cache_last_channel=state["cache_last_channel"],
-            cache_last_time=state["cache_last_time"],
-            cache_last_channel_len=state["cache_last_channel_len"],
+            input_features=chunk,
+            past_key_values=encoder_past_key_values,
+            padding_cache=padding_cache,
             att_context_size=att_context_size,
             use_cache=True,
-            drop_extra_pre_encoded=drop_extra_pre_encoded,
-            output_attention_mask=True,
+            output_attention_mask=False,
         )
-        state["cache_last_channel"] = encoder_outputs.cache_last_channel
-        state["cache_last_time"] = encoder_outputs.cache_last_time
-        state["cache_last_channel_len"] = encoder_outputs.cache_last_channel_len
+        # `encoder_past_key_values` and `padding_cache` are mutated in place.
+        return self.encoder_projector(encoder_outputs.last_hidden_state)
 
-        encoded = encoder_outputs.last_hidden_state  # (B, T_chunk, enc_hidden)
+    def _prepare_model_inputs(self, inputs=None, bos_token_id=None, model_kwargs=None):
+        input_features = inputs if inputs is not None else (model_kwargs or {}).get("input_features")
+        if not isinstance(input_features, GeneratorType):
+            return super()._prepare_model_inputs(inputs, bos_token_id, model_kwargs)
 
-        pooled = self.encoder_projector(encoded)  # (B, T_chunk, joint_hidden)
-        chunk_attn = encoder_outputs.attention_mask
-        if chunk_attn is not None:
-            chunk_attn = chunk_attn.bool()
+        model_kwargs = model_kwargs or {}
+        generator = input_features
+        try:
+            first_chunk = next(generator)
+        except StopIteration as e:
+            raise ValueError("The `input_features` generator did not yield any chunk.") from e
+        first_chunk = first_chunk.to(device=self.device, dtype=self.dtype)
+        batch_size = first_chunk.shape[0]
 
-        batch_size, time_steps, _ = pooled.shape
-        blank_id = self.config.blank_token_id
-        last_token = state["last_token"]
-        dec_h = state["dec_h"]
-        dec_c = state["dec_c"]
-        last_dec_g = state["last_dec_g"]
-        emitted: list[list[int]] = [[] for _ in range(batch_size)]
+        encoder_past_key_values = self._get_encoder_cache(batch_size, max_cache_len=self._streaming_att_context[0])
+        padding_cache = NemotronAsrEncoderCausalConvPaddingCache()
+        pooler = self._encode_streaming_chunk(
+            first_chunk, encoder_past_key_values, padding_cache, self._streaming_att_context
+        )
 
-        for time_idx in range(time_steps):
-            f = pooled[:, time_idx : time_idx + 1, :]  # (B, 1, D)
-            if chunk_attn is not None:
-                frame_invalid = ~chunk_attn[:, time_idx]
-            else:
-                frame_invalid = torch.zeros(batch_size, dtype=torch.bool, device=pooled.device)
+        model_kwargs.pop("input_features", None)
+        model_kwargs["input_features_generator"] = generator
+        model_kwargs["encoder_past_key_values"] = encoder_past_key_values
+        model_kwargs["padding_cache"] = padding_cache
+        model_kwargs["encoder_outputs"] = NemotronAsrEncoderModelOutput(pooler_output=pooler)
+        model_kwargs["encoder_valid_lengths"] = torch.full(
+            (batch_size,), pooler.shape[1], dtype=torch.long, device=self.device
+        )
+        model_kwargs["encoder_frame_idxs"] = torch.zeros(batch_size, dtype=torch.long, device=self.device)
+        return first_chunk, "input_features", model_kwargs
 
-            symbols_added = 0
-            advance_now = frame_invalid.clone()
-            while not advance_now.all() and symbols_added < self.max_symbols_per_step:
-                # Run LSTM with last_token + (dec_h, dec_c). Compute lookahead WITHOUT
-                # committing the new state until we see whether the prediction is non-blank.
-                g, new_h, new_c = self._decoder_pred_step(last_token, dec_h, dec_c)
-                logits = (
-                    self.joint(
-                        encoder_hidden_states=f[:, :, None, :],
-                        decoder_hidden_states=g[:, None, :, :],
-                    )
-                    .squeeze(2)
-                    .squeeze(1)
-                )
-                tokens = logits.argmax(-1)  # (B,)
+    def _update_model_kwargs_for_generation(self, outputs, model_kwargs, *args, **kwargs):
+        model_kwargs = super()._update_model_kwargs_for_generation(outputs, model_kwargs, *args, **kwargs)
+        if not getattr(self, "_streaming", False):
+            return model_kwargs
 
-                is_blank = tokens == blank_id
-                effective_blank = is_blank | advance_now
+        generator = model_kwargs.get("input_features_generator")
+        # Pull and encode further chunks whenever the frame pointer has caught up with the buffer.
+        while not self._stream_exhausted and bool(
+            (model_kwargs["encoder_frame_idxs"] >= model_kwargs["encoder_valid_lengths"]).all()
+        ):
+            try:
+                chunk = next(generator)
+            except StopIteration:
+                self._stream_exhausted = True
+                break
+            chunk = chunk.to(device=self.device, dtype=self.dtype)
+            pooler = self._encode_streaming_chunk(
+                chunk,
+                model_kwargs["encoder_past_key_values"],
+                model_kwargs["padding_cache"],
+                self._streaming_att_context,
+            )
+            if pooler.shape[1] == 0:
+                continue
+            encoder_outputs = model_kwargs["encoder_outputs"]
+            encoder_outputs.pooler_output = torch.cat([encoder_outputs.pooler_output, pooler], dim=1)
+            model_kwargs["encoder_valid_lengths"] = model_kwargs["encoder_valid_lengths"] + pooler.shape[1]
 
-                # Per-element commit: only update last_token / state for non-blank emissions.
-                # For blank predictions, last_token, dec_h, dec_c remain unchanged so the next
-                # iter's pred_step recomputes the same g (or we'd just break out of the loop).
-                if not effective_blank.all():
-                    # Build a (B, 1) gather mask for which elements should update.
-                    update = (~effective_blank).view(-1, 1, 1)  # for state shape
-                    update_h = update.permute(2, 0, 1)  # (1, B, 1) for (L, B, H) state shape
-                    if dec_h is None:
-                        # No prior state means this is the very first emission for at least
-                        # one batch element. Initialize with new state where committed,
-                        # zeros elsewhere.
-                        committed_h = torch.where(update_h, new_h, torch.zeros_like(new_h))
-                        committed_c = torch.where(update_h, new_c, torch.zeros_like(new_c))
-                    else:
-                        committed_h = torch.where(update_h, new_h, dec_h)
-                        committed_c = torch.where(update_h, new_c, dec_c)
-                    dec_h, dec_c = committed_h, committed_c
+        # Recompute exhaustion now that the buffer may have grown (drives `EncoderExhaustedCriteria`).
+        self._encoder_finished = model_kwargs["encoder_frame_idxs"] >= model_kwargs["encoder_valid_lengths"]
+        return model_kwargs
 
-                    # Emit + update last_token for non-blank items.
-                    for b in range(batch_size):
-                        if not effective_blank[b]:
-                            emitted[b].append(int(tokens[b].item()))
-                            last_token[b, 0] = tokens[b]
+    def _prepare_generated_length(
+        self,
+        generation_config,
+        has_default_max_length,
+        has_default_min_length,
+        model_input_name,
+        input_ids_length,
+        inputs_tensor,
+    ):
+        if getattr(self, "_streaming", False):
+            # In streaming the length is bounded by stream exhaustion (via `EncoderExhaustedCriteria`),
+            # not by the (unknown) total audio length: size the output buffer generously.
+            if has_default_max_length and generation_config.max_new_tokens is None:
+                generation_config.max_length = int(1e9)
+                has_default_max_length = False
+            return GenerationMixin._prepare_generated_length(
+                self,
+                generation_config,
+                has_default_max_length,
+                has_default_min_length,
+                model_input_name,
+                input_ids_length,
+                inputs_tensor,
+            )
+        prepared = super()._prepare_generated_length(
+            generation_config,
+            has_default_max_length,
+            has_default_min_length,
+            model_input_name,
+            input_ids_length,
+            inputs_tensor,
+        )
+        return prepared
 
-                    # Cache the latest g (used as fallback if last_token stays unchanged on
-                    # subsequent blank predictions). Per-element commit on g too:
-                    if last_dec_g is None:
-                        last_dec_g = torch.where(update.expand_as(g), g, torch.zeros_like(g))
-                    else:
-                        last_dec_g = torch.where(update.expand_as(g), g, last_dec_g)
-
-                advance_now = advance_now | is_blank
-                symbols_added += 1
-
-        state["last_token"] = last_token
-        state["dec_h"] = dec_h
-        state["dec_c"] = dec_c
-        state["last_dec_g"] = last_dec_g
-        return emitted
-
-
-class NemotronAsrCacheAwareStreamingBuffer:
-    """
-    Streaming audio buffer for cache-aware NemotronAsr models (the **Nemotron Speech Streaming**
-    family). Works with the RNN-T ([`NemotronAsrForRNNT`]) cache-aware checkpoints.
-
-    Splits audio into correctly-sized chunks and yields processor inputs ready to pass directly
-    to the encoder, handling the pre-encode cache, STFT lookahead, and mel frame trimming internally.
-
-    Args:
-        model ([`NemotronAsrForRNNT`]):
-            The streaming model.
-        processor ([`ParakeetProcessor`]):
-            Matching processor (provides the feature extractor and tokenizer).
-        att_context_size (`list[int]`, *optional*):
-            `[left, right]` attention context to use. Defaults to the first (largest lookahead)
-            entry in `model.encoder.config.att_context_size`.
-
-    Example (RNN-T streaming with the public Nemotron Speech Streaming checkpoint):
-
-    ```python
-    import torch
-    import soundfile as sf
-    from transformers import AutoProcessor, NemotronAsrForRNNT, NemotronAsrCacheAwareStreamingBuffer
-
-    model_id = "nvidia/nemotron-speech-streaming-en-0.6b"
-    processor = AutoProcessor.from_pretrained(model_id)
-    model = NemotronAsrForRNNT.from_pretrained(model_id).eval()
-
-    audio, _ = sf.read("audio.wav", dtype="float32")  # resample to 16 kHz if needed
-
-    buffer = NemotronAsrCacheAwareStreamingBuffer(model, processor, att_context_size=[70, 6])
-    buffer.append_audio(audio)
-
-    state = model.get_initial_streaming_state(batch_size=1, device=model.device, dtype=model.dtype)
-    all_tokens = []
-    for inputs, drop in buffer:
-        inputs = {k: v.to(model.device) for k, v in inputs.items()}
-        with torch.no_grad():
-            chunk_tokens = model.streaming_step(inputs, drop, state)
-        all_tokens.extend(chunk_tokens[0])
-
-    print(processor.batch_decode(torch.tensor([all_tokens]), skip_special_tokens=True)[0])
-    ```
-    """
-
-    def __init__(self, model: "NemotronAsrForRNNT", processor, att_context_size=None, pad_and_drop_preencoded=True):
-        encoder = model.encoder
-        cfg_ctx = encoder.config.att_context_size
-        if att_context_size is not None:
-            ctx = list(att_context_size)
-        elif isinstance(cfg_ctx[0], list):
-            ctx = list(cfg_ctx[0])
-        else:
-            ctx = list(cfg_ctx)
-        self.att_context_size = ctx
-        right_ctx = ctx[1]
-
-        hop = processor.feature_extractor.hop_length
-        S = encoder.config.subsampling_factor
-
-        self._processor = processor
-        self._sr = processor.feature_extractor.sampling_rate
-        self._n_fft_half = processor.feature_extractor.n_fft // 2
-
-        pre_encode_cache_mel = S + 1
-        self._pre_cache_mel = pre_encode_cache_mel
-        self._pre_cache_samples = pre_encode_cache_mel * hop
-        self._drop = 1 + (pre_encode_cache_mel - 1) // S
-        # When pad_and_drop_preencoded is True (NeMo's reference inference mode), chunk 0
-        # uses the same layout as subsequent chunks (steady-state size, zero pre-encode
-        # pad, drop applied). When False, chunk 0 is smaller (no pad, no drop) which
-        # mismatches what the encoder saw during training and degrades early-utterance WER.
-        self.pad_and_drop_preencoded = pad_and_drop_preencoded
-        if pad_and_drop_preencoded:
-            self._first_chunk_mel = S * (right_ctx + 1)
-        else:
-            self._first_chunk_mel = 1 + S * right_ctx
-        self._first_chunk_samples = self._first_chunk_mel * hop
-        self._chunk_mel = S * (right_ctx + 1)
-        self._chunk_samples = self._chunk_mel * hop
-        self._target_mel_len = pre_encode_cache_mel + self._chunk_mel
-
-        self._audio = None
-        self._chunks = None
-
-    def append_audio(self, audio):
-        """
-        Queue audio for streaming.
-
-        Args:
-            audio (`numpy.ndarray`):
-                Float32 audio array sampled at `processor.feature_extractor.sampling_rate`.
-        """
-        self._audio = audio
-        self._chunks = [audio[: self._first_chunk_samples]]
-        rem = audio[self._first_chunk_samples :]
-        i = 0
-        while i < len(rem):
-            self._chunks.append(rem[i : i + self._chunk_samples])
-            i += self._chunk_samples
-
-    def __iter__(self):
-        """Yield `(processor_inputs, drop_extra_pre_encoded)` for each chunk."""
-        if self._chunks is None:
-            return
-        past = np.zeros(self._pre_cache_samples, dtype=np.float32)
-        for idx, chunk in enumerate(self._chunks):
-            if idx == 0 and self.pad_and_drop_preencoded:
-                # NeMo-style chunk 0: real audio occupies the steady-state chunk_size, and the
-                # pre-encode cache is filled with zero mel frames (in normalized space). This
-                # matches the encoder's training-time input layout so the first chunk's encoder
-                # output is consistent with subsequent chunks.
-                ns = self._first_chunk_samples
-                lookahead = self._audio[ns : ns + self._n_fft_half]
-                ext = np.concatenate([chunk, lookahead])
-                inputs = self._processor([ext], return_tensors="pt", sampling_rate=self._sr)
-                if inputs["input_features"].shape[1] > self._chunk_mel:
-                    inputs["input_features"] = inputs["input_features"][:, : self._chunk_mel, :]
-                    inputs["attention_mask"] = inputs["attention_mask"][:, : self._chunk_mel]
-                feats = inputs["input_features"]
-                mask = inputs["attention_mask"]
-                pad_feats = torch.zeros(feats.shape[0], self._pre_cache_mel, feats.shape[-1], dtype=feats.dtype)
-                pad_mask = torch.ones(mask.shape[0], self._pre_cache_mel, dtype=mask.dtype)
-                inputs["input_features"] = torch.cat([pad_feats, feats], dim=1)
-                inputs["attention_mask"] = torch.cat([pad_mask, mask], dim=1)
-                drop = self._drop
-            elif idx == 0:
-                inputs = self._processor([chunk], return_tensors="pt", sampling_rate=self._sr)
-                if inputs["input_features"].shape[1] > self._first_chunk_mel:
-                    inputs["input_features"] = inputs["input_features"][:, : self._first_chunk_mel, :]
-                    inputs["attention_mask"] = inputs["attention_mask"][:, : self._first_chunk_mel]
-                drop = 0
-            else:
-                ns = self._first_chunk_samples + idx * self._chunk_samples
-                lookahead = self._audio[ns : ns + self._n_fft_half]
-                ext = np.concatenate([past, chunk, lookahead])
-                inputs = self._processor([ext], return_tensors="pt", sampling_rate=self._sr)
-                if inputs["input_features"].shape[1] > self._target_mel_len:
-                    inputs["input_features"] = inputs["input_features"][:, : self._target_mel_len, :]
-                    inputs["attention_mask"] = inputs["attention_mask"][:, : self._target_mel_len]
-                drop = self._drop
-            past = chunk[-self._pre_cache_samples :]
-            yield inputs, drop
+    def generate(self, inputs=None, generation_config=None, **kwargs):
+        input_features = kwargs.get("input_features", inputs)
+        self._streaming = isinstance(input_features, GeneratorType)
+        if self._streaming:
+            self._stream_exhausted = False
+            att_context_size = kwargs.pop("att_context_size", None)
+            self._streaming_att_context = att_context_size or self.encoder._resolve_att_context_size()
+        try:
+            return super().generate(inputs=inputs, generation_config=generation_config, **kwargs)
+        finally:
+            # `_encoder_cache` is intentionally kept for reuse across calls (mirrors VoxtralRealtime).
+            for attr in ("_streaming", "_stream_exhausted", "_streaming_att_context"):
+                if hasattr(self, attr):
+                    delattr(self, attr)
 
 
 __all__ = [
@@ -1307,7 +1471,6 @@ __all__ = [
     "NemotronAsrFeatureExtractor",
     "NemotronAsrEncoderModelOutput",
     "NemotronAsrTDTOutput",
-    "NemotronAsrCacheAwareStreamingBuffer",
     "NemotronAsrForRNNT",
     "NemotronAsrEncoder",
     "NemotronAsrPreTrainedModel",

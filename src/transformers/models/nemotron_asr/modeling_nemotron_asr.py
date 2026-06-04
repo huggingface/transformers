@@ -21,11 +21,10 @@
 
 import math
 from collections.abc import Callable
-from functools import cached_property
 from dataclasses import dataclass
+from functools import cached_property
 from types import GeneratorType
 
-import numpy as np
 import torch
 from torch import nn
 
@@ -38,12 +37,16 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, is_torchdynamo_compiling
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from .configuration_nemotron_asr import NemotronAsrConfig, NemotronAsrEncoderConfig
-from .generation_nemotron_asr import NemotronAsrGenerationMixin, NemotronAsrTDTDecoderCache
+from .configuration_nemotron_asr import NemotronAsrConfig, NemotronAsrEncoderConfig, NemotronAsrRNNTConfig
+from .generation_nemotron_asr import (
+    NemotronAsrGenerationMixin,
+    NemotronAsrRNNTDecoderCache,
+    NemotronAsrTDTDecoderCache,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -703,7 +706,12 @@ class NemotronAsrEncoderSubsamplingConv2D(nn.Module):
         self.layers = nn.ModuleList()
         self.layers.append(
             NemotronAsrEncoderCausalConv2D(
-                1, self.channels, kernel_size=self.kernel_size, stride=self.stride, padding=0, cache_key="subsampling.0"
+                1,
+                self.channels,
+                kernel_size=self.kernel_size,
+                stride=self.stride,
+                padding=0,
+                cache_key="subsampling.0",
             )
         )
         self.layers.append(nn.ReLU())
@@ -1102,7 +1110,7 @@ class NemotronAsrTDTDecoder(nn.Module):
     def forward(
         self,
         input_ids: torch.LongTensor,
-        cache: NemotronAsrTDTDecoderCache | None = None,
+        cache: NemotronAsrRNNTDecoderCache | None = None,
     ) -> torch.Tensor:
         if cache is not None:
             blank_mask = input_ids[:, -1] == self.blank_token_id
@@ -1132,13 +1140,13 @@ class NemotronAsrTDTDecoder(nn.Module):
         return decoder_output
 
 
-class NemotronAsrTDTJointNetwork(nn.Module):
-    """Joint network that combines encoder and decoder outputs to predict tokens (no duration head)."""
+class NemotronAsrRNNTJointNetwork(nn.Module):
+    """Joint network that combines encoder and decoder outputs to predict token logits."""
 
-    def __init__(self, config: NemotronAsrConfig):
+    def __init__(self, config: NemotronAsrRNNTConfig):
         super().__init__()
         self.activation = ACT2FN[config.hidden_act]
-        self.head = nn.Linear(config.decoder_hidden_size, config.vocab_size + len(config.durations))
+        self.head = nn.Linear(config.decoder_hidden_size, config.vocab_size)
         self.vocab_size = config.vocab_size
 
     def forward(
@@ -1150,24 +1158,32 @@ class NemotronAsrTDTJointNetwork(nn.Module):
         return self.head(joint_output)
 
 
+class NemotronAsrTDTJointNetwork(NemotronAsrRNNTJointNetwork):
+    """Joint network that combines encoder and decoder outputs to predict tokens (no duration head)."""
+
+    def __init__(self, config: NemotronAsrConfig):
+        super().__init__(config)
+        self.head = nn.Linear(config.decoder_hidden_size, config.vocab_size + len(config.durations))
+
+
 @dataclass
 class NemotronAsrTDTOutput(BaseModelOutputWithPooling):
     """
-    Output of the NemotronAsr TDT forward pass.
+    Output of the NemotronAsr RNN-T forward pass.
 
     Args:
         loss (`torch.FloatTensor`, *optional*):
-            TDT loss, returned when `labels` are provided.
+            RNN-T loss, returned when `labels` are provided.
         logits (`torch.FloatTensor`):
-            Joint token and duration logits. Shape is `(batch, T, U+1, vocab+durations)` for training
-            or `(batch, 1, 1, vocab+durations)` for single-step inference.
+            Joint token logits. Shape is `(batch, T, U+1, vocab)` for training
+            or `(batch, 1, 1, vocab)` for single-step inference.
         decoder_cache (`NemotronAsrTDTDecoderCache`, *optional*):
             Decoder LSTM cache containing hidden state, cell state, and last output.
     """
 
     loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
-    decoder_cache: NemotronAsrTDTDecoderCache | None = None
+    decoder_cache: NemotronAsrRNNTDecoderCache | None = None
 
 
 @auto_docstring(
@@ -1177,7 +1193,7 @@ class NemotronAsrTDTOutput(BaseModelOutputWithPooling):
 )
 class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin):
     config: NemotronAsrConfig
-    _no_split_modules = ["NemotronAsrTDTDecoder"]
+    _no_split_modules = ["NemotronAsrRNNTDecoder"]
     _supported_generation_modes = [GenerationMode.GREEDY_SEARCH]
 
     def __init__(self, config: NemotronAsrConfig):
@@ -1283,6 +1299,9 @@ class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin)
             attentions=encoder_outputs.attentions,
             decoder_cache=decoder_cache,
         )
+
+    def loss_function(self, logits, labels, encoder_outputs, **kwargs):
+        raise NotImplementedError("RNN-T loss function is not implemented yet")
 
     # ----------------------------------------------------------------------------------------------
     # Cache-aware streaming generation.
@@ -1416,7 +1435,7 @@ class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin)
                 input_ids_length,
                 inputs_tensor,
             )
-        return super()._prepare_generated_length(
+        prepared = super()._prepare_generated_length(
             generation_config,
             has_default_max_length,
             has_default_min_length,
@@ -1424,6 +1443,7 @@ class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin)
             input_ids_length,
             inputs_tensor,
         )
+        return prepared
 
     def generate(self, inputs=None, generation_config=None, **kwargs):
         input_features = kwargs.get("input_features", inputs)
@@ -1444,7 +1464,6 @@ class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin)
 __all__ = [
     "NemotronAsrEncoderModelOutput",
     "NemotronAsrTDTOutput",
-    "NemotronAsrCacheAwareStreamingBuffer",
     "NemotronAsrForRNNT",
     "NemotronAsrEncoder",
     "NemotronAsrPreTrainedModel",

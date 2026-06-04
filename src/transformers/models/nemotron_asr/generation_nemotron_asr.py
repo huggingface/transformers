@@ -19,11 +19,17 @@ import torch
 
 from ...generation import GenerationMixin
 from ...utils import ModelOutput
-from ..parakeet.generation_parakeet import ParakeetRNNTGenerationMixin, ParakeetTDTDecoderCache
+from ..parakeet.generation_parakeet import ParakeetRNNTDecoderCache, ParakeetRNNTGenerationMixin
 
 
-class NemotronAsrTDTDecoderCache(ParakeetTDTDecoderCache):
+class NemotronAsrRNNTDecoderCache(ParakeetRNNTDecoderCache):
     pass
+
+
+# Backwards-compatible alias: the decoder/joint/output classes are named with the historical "TDT"
+# prefix in this model, while the RNN-T decoder cache (inherited from the refactored Parakeet RNN-T
+# stack) is referenced under both names in the generated modeling file.
+NemotronAsrTDTDecoderCache = NemotronAsrRNNTDecoderCache
 
 
 @dataclass
