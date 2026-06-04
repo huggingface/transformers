@@ -35,6 +35,7 @@ from .heterogeneity import (
     apply_heterogeneous_config,
     get_per_layer_config,
     heterogeneous_to_dict_helper,
+    validate_global_per_layer_attribute_access,
 )
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .modeling_rope_utils import RotaryEmbeddingConfigMixin
@@ -447,7 +448,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         if key != "attribute_map" and key in super().__getattribute__("attribute_map"):
             key = super().__getattribute__("attribute_map")[key]
 
-        # In heterogeneous configs, per-layer attributes are ambiguous on the root config.
+        # In heterogeneous configs, per-layer attributes are ambiguous on the global config.
         # Callers must read them from a concrete layer unless they explicitly opt into the global value.
         try:
             heterogeneity_spec = super().__getattribute__("_heterogeneity_spec")
@@ -460,17 +461,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 )
             except AttributeError:
                 allow_global_per_layer_attribute_access = False
-                if key == "allow_global_per_layer_attribute_access":
-                    return allow_global_per_layer_attribute_access
-
-            if not allow_global_per_layer_attribute_access and key in heterogeneity_spec.per_layer_attributes:
-                raise AttributeError(
-                    f"'{key}' is a per-layer attribute and varies across layers. Access it via the individual layer "
-                    f"configs instead (e.g. config.per_layer_config[i].{key}). To read the global config value from "
-                    f"config.{key} anyway, set `allow_global_per_layer_attribute_access` to `True` on the config. "
-                    f"Warning: only do this if the caller can safely handle heterogeneous configs; code that assumes "
-                    f"a homogeneous model may use the global value incorrectly."
-                )
+            if key == "allow_global_per_layer_attribute_access":
+                return allow_global_per_layer_attribute_access
+            validate_global_per_layer_attribute_access(
+                key, heterogeneity_spec, allow_global_per_layer_attribute_access
+            )
 
         return super().__getattribute__(key)
 

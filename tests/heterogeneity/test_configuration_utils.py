@@ -8,6 +8,7 @@ from parameterized import parameterized
 
 from transformers import LlamaConfig
 from transformers.heterogeneity import apply_heterogeneous_config
+from transformers.utils import logging as transformers_logging
 
 
 apply_heterogeneous_config_explicit = partial(apply_heterogeneous_config, explicit=True)
@@ -89,7 +90,7 @@ class TestHeterogeneousConfig(unittest.TestCase):
         self.assertEqual(config2.per_layer_config[1].num_key_value_heads, 2)
         self.assertEqual(config2.per_layer_config[0].num_key_value_heads, 4)
 
-    def test_per_layer_config_reflects_current_root_config_state(self):
+    def test_per_layer_config_reflects_current_global_config_state(self):
         config = _tiny_llama_config(per_layer_config={0: {"intermediate_size": 64}})
 
         # PreTrainedModel.__init__ updates this after config construction.
@@ -129,11 +130,24 @@ class TestHeterogeneousConfig(unittest.TestCase):
             per_layer_config={0: {"num_key_value_heads": 2}, 1: {"num_key_value_heads": 1}},
             allow_global_per_layer_attribute_access=True,
         )
+        logger = transformers_logging.get_logger("transformers.heterogeneity.configuration_utils")
+        logger.warning_once.cache_clear()
 
-        self.assertEqual(config.num_key_value_heads, 4)
+        with self.assertLogs(logger=logger, level="WARNING") as logs:
+            self.assertEqual(config.num_key_value_heads, 4)
+
+        self.assertIn("Reading global config value for per-layer attribute `num_key_value_heads`", logs.output[0])
         self.assertEqual(config.per_layer_config[0].num_key_value_heads, 2)
         self.assertEqual(config.per_layer_config[1].num_key_value_heads, 1)
         self.assertEqual(config.per_layer_config[2].num_key_value_heads, 4)
+
+    def test_non_per_layer_attributes_do_not_warn(self):
+        config = _tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}, 1: {"num_key_value_heads": 1}})
+        logger = transformers_logging.get_logger("transformers.heterogeneity.configuration_utils")
+        logger.warning_once.cache_clear()
+
+        with self.assertNoLogs(logger=logger, level="WARNING"):
+            self.assertEqual(config.hidden_size, 64)
 
     def test_iter_skips_per_layer_attributes_by_default(self):
         config = _tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}, 1: {"num_key_value_heads": 1}})

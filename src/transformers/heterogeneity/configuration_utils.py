@@ -5,9 +5,14 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from transformers.utils import logging
+
 
 if TYPE_CHECKING:
     from transformers import PreTrainedConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -65,6 +70,30 @@ def heterogeneous_to_dict_helper(config: PreTrainedConfig, d: dict[str, Any]) ->
         d["per_layer_config"] = {}
 
     d.pop("_heterogeneity_spec", None)
+
+
+def validate_global_per_layer_attribute_access(
+    key: str,
+    heterogeneity_spec: HeterogeneitySpec,
+    allow_global_per_layer_attribute_access: bool,
+) -> None:
+    if key not in heterogeneity_spec.per_layer_attributes:
+        return
+
+    if not allow_global_per_layer_attribute_access:
+        raise AttributeError(
+            f"'{key}' is a per-layer attribute and varies across layers. Access it via the individual layer "
+            f"configs instead (e.g. config.per_layer_config[i].{key}). To read the global config value from "
+            f"config.{key} anyway, set `allow_global_per_layer_attribute_access` to `True` on the config. "
+            f"Warning: only do this if the caller can safely handle heterogeneous configs; code that assumes "
+            f"a homogeneous model may use the global value incorrectly."
+        )
+
+    logger.warning_once(
+        f"Reading global config value for per-layer attribute `{key}` on a heterogeneous config. "
+        "Only do this if the caller can safely handle heterogeneous configs; code that assumes a homogeneous "
+        "model may use the global value incorrectly."
+    )
 
 
 def get_per_layer_config(config: PreTrainedConfig) -> Sequence[PreTrainedConfig]:
