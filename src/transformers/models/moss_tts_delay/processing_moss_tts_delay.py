@@ -27,7 +27,7 @@ from ... import (
     PreTrainedTokenizerBase,
     ProcessorMixin,
 )
-from ...utils import is_torchaudio_available, logging
+from ...utils import auto_docstring, is_torchaudio_available, logging
 from .configuration_moss_tts_delay import MossTTSDelayConfig
 from .tts_robust_normalizer_single_script import normalize_tts_text
 
@@ -148,6 +148,7 @@ USER_MESSAGE_FIELDS = (
 )
 
 
+@auto_docstring
 class MossTTSDelayProcessor(ProcessorMixin):
     tokenizer_class = "AutoTokenizer"
     audio_tokenizer_class = "AutoModel"
@@ -162,6 +163,12 @@ class MossTTSDelayProcessor(ProcessorMixin):
         model_config: MossTTSDelayConfig | None = None,
         **kwargs,
     ):
+        r"""
+        audio_tokenizer (`PreTrainedModel`, *optional*):
+            Audio tokenizer model used to encode reference waveforms into audio codebook tokens.
+        model_config (`MossTTSDelayConfig`, *optional*):
+            MOSS-TTS Delay model configuration used for special audio token ids and VQ channel settings.
+        """
         super().__init__(tokenizer=tokenizer, audio_tokenizer=audio_tokenizer, **kwargs)
 
         # Explicit assignments for type-checkers; ProcessorMixin sets these too.
@@ -189,7 +196,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *args, **kwargs):
-        trust_remote_code = kwargs.pop("trust_remote_code", True)
+        trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs.pop("_from_auto", None)
 
         audio_tokenizer_name_or_path = kwargs.pop("codec_path", None)
@@ -239,7 +246,12 @@ class MossTTSDelayProcessor(ProcessorMixin):
             **kwargs,
         )
 
+    @auto_docstring
     def __call__(self, *args, **kwargs) -> BatchFeature:
+        r"""
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with MOSS-TTS input ids and attention mask.
+        """
         conversations = args[0] if len(args) > 0 else kwargs.pop("conversations")
         mode: str = kwargs.pop("mode", "generation")
         apply_chat_template: bool = kwargs.pop("apply_chat_template", True)
