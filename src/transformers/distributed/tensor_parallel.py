@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import contextlib
+import functools
 import re
 
 from ..utils import logging
@@ -28,6 +29,8 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
     import torch.distributed as dist
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
+
+    from .sharding_utils import _find_strided_shard_placement_from_fused_params
 
     # Cache this result has it's a C FFI call which can be pretty time-consuming
     _torch_distributed_available = torch.distributed.is_available()
@@ -446,6 +449,30 @@ class MoEParamShard(TensorParallelLayer):
 
 if is_torch_available() and is_torch_greater_or_equal("2.5"):
 
+    def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tensor) -> torch.Tensor:
+        """Stitch a local grad back onto the original DTensor parameter.
+
+        Used when the forward swap detaches the local leaf (``_StridedShard`` params) because
+        DTensor backward redistribute does not support that placement as a source.
+        """
+        tensor_meta = original_param._spec.tensor_meta
+        detached_grad = local_grad.detach()
+        with torch.no_grad():
+            if original_param.grad is None:
+                original_param.grad = DTensor.from_local(
+                    detached_grad,
+                    original_param.device_mesh,
+                    original_param.placements,
+                    run_check=False,
+                    shape=tensor_meta.shape,
+                    stride=tensor_meta.stride,
+                )
+            elif isinstance(original_param.grad, DTensor):
+                original_param.grad._local_tensor.add_(detached_grad)
+            else:
+                original_param.grad.add_(detached_grad)
+        return local_grad
+
     class _AllReduceBackward(torch.autograd.Function):
         """Identity forward, allreduce-sum backward.
 
@@ -511,7 +538,14 @@ class MoEExpertsParallel(TensorParallelLayer):
         to_swap_params = [(name, param) for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)]
         for name, param in to_swap_params:
             del module._parameters[name]
-            setattr(module, name, param.to_local())
+            # Happens only when train in TP only (experts dont use grouped_gemm)
+            if _find_strided_shard_placement_from_fused_params(param.placements) is not None:
+                local = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
+                if param.requires_grad:
+                    local.register_hook(functools.partial(_accumulate_local_param_grad, param))
+            else:
+                local = param.to_local()
+            setattr(module, name, local)
         try:
             yield
         finally:
