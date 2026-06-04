@@ -38,24 +38,24 @@ from .utils import X_REQUEST_ID, CBWorkerDeadError, GenerationState
 logger = logging.get_logger(__name__)
 
 
-def _apply_zerogpu(endpoint):
-    """Wrap an endpoint with ``@spaces.GPU`` if ZeroGPU is active.
+async def allocate_and_run(func, *args):
+    """Wrap a a request handler function with ``@spaces.GPU`` if ZeroGPU is active.
 
-    The ``@spaces.GPU`` decorator from the ``spaces`` package only supports
+    Note: the ``@spaces.GPU`` decorator from the ``spaces`` package only supports
     sync functions. This function checks whether ZeroGPU is enabled and,
-    if so, applies the decorator. In non-ZeroGPU mode it returns the
-    function unchanged (effect-free).
+    if so, applies the decorator and runs it in a separate thread asynchronously.
+    In non-ZeroGPU mode it returns the function unchanged (effect-free).
 
     Args:
-        endpoint: The FastAPI endpoint function to wrap.
+        func: The request handler function to wrap.
 
     Returns:
-        The wrapped (or unchanged) endpoint.
+        The result of func(*args)
     """
     from ...cli import serve_zerogpu
 
     decorator = serve_zerogpu.zerogpu_decorator(size=serve_zerogpu.zerogpu_size())
-    return decorator(endpoint)
+    return await decorator(func)(*args)
 
 
 def build_server(
@@ -118,27 +118,23 @@ def build_server(
     # ---- Routes ----
 
     @app.post("/v1/chat/completions")
-    @_apply_zerogpu
     async def chat_completions(request: Request, body: dict):
-        return await chat_handler.handle_request(body, request.state.request_id)
+        return await allocate_and_run(chat_handler.handle_request, body, request.state.request_id)
 
     @app.post("/v1/completions")
-    @_apply_zerogpu
     async def completions(request: Request, body: dict):
-        return await completion_handler.handle_request(body, request.state.request_id)
+        return await allocate_and_run(completion_handler.handle_request, body, request.state.request_id)
 
     @app.post("/v1/responses")
-    @_apply_zerogpu
     async def responses(request: Request, body: dict):
-        return await response_handler.handle_request(body, request.state.request_id)
+        return await allocate_and_run(response_handler.handle_request, body, request.state.request_id)
 
     @app.post("/v1/audio/transcriptions")
-    @_apply_zerogpu
     async def audio_transcriptions(request: Request):
-        return await transcription_handler.handle_request(request)
+        args = await transcription_handler.parse_request(request)
+        return await allocate_and_run(transcription_handler.handle_request, *args)
 
     @app.post("/load_model")
-    @_apply_zerogpu
     async def load_model(body: dict):
         from fastapi import HTTPException
 

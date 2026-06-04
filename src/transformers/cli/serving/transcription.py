@@ -82,15 +82,15 @@ class TranscriptionHandler:
         if unused:
             logger.warning_once(f"Ignoring unsupported fields in the request: {unused}")
 
-    async def handle_request(self, request: Request) -> JSONResponse | StreamingResponse:
-        """Parse multipart form, run transcription, return result.
+    async def parse_request(self, request: Request) -> tuple[str, bytes, bool]:
+        """Parse multipart form.
 
         Args:
             request (`Request`): FastAPI request containing multipart form data with
                 ``file`` (audio bytes), ``model`` (model ID), and optional ``stream`` flag.
 
         Returns:
-            `JSONResponse | StreamingResponse`: Transcription result or SSE stream.
+            `tuple[str, bytes, bool]`: model, file_bytes, stream
         """
         from transformers.utils.import_utils import is_librosa_available, is_multipart_available
 
@@ -111,7 +111,18 @@ class TranscriptionHandler:
             if not isinstance(model, str):
                 raise HTTPException(status_code=422, detail="Expected model name as string")
             stream = str(form.get("stream", "false")).lower() == "true"
+        return model, file_bytes, stream
 
+    async def handle_request(self, model: str, file_bytes: bytes, stream: bool) -> JSONResponse | StreamingResponse:
+        """Parse multipart form, run transcription, return result.
+
+        Args:
+            request (`Request`): FastAPI request containing multipart form data with
+                ``file`` (audio bytes), ``model`` (model ID), and optional ``stream`` flag.
+
+        Returns:
+            `JSONResponse | StreamingResponse`: Transcription result or SSE stream.
+        """
         model_id_and_revision = self.model_manager.process_model_name(model)
         audio_model, audio_processor = self.model_manager.load_model_and_processor(model_id_and_revision)
         base_manager = self.generation_state.get_manager(model_id_and_revision)

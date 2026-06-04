@@ -38,17 +38,10 @@ This module provides:
 
 from __future__ import annotations
 
-import asyncio
 import inspect
 import os
 from collections.abc import Callable
-from contextlib import contextmanager
-from functools import wraps
-from typing import TYPE_CHECKING
-
-
-if TYPE_CHECKING:
-    from collections.abc import Generator
+from functools import partial
 
 
 logger = None  # Set lazily by callers
@@ -65,13 +58,12 @@ def is_zerogpu() -> bool:
 def zerogpu_enabled() -> bool:
     """Return whether ZeroGPU is active in the serve process.
 
-    This combines the environment detection with the explicit ``--zerogpu``
-    CLI flag from ``Serve.__init__``, which set ZeroGPU mode with ``serve_zerogpu._zerogpu_enabled``.
+    This combines the environment detection (`spaces` and SPACE_ID available) and the explicit ``--zerogpu`` flag.
 
     Returns:
         `bool`: ``True`` if ZeroGPU mode is active and if we are running in a ZeroGPU Hugging Face Space.
     """
-    return _zerogpu_enabled and is_zerogpu()
+    return _zerogpu_enabled and os.environ.get("SPACE_ID") and is_zerogpu()
 
 
 def zerogpu_size() -> str:
@@ -111,7 +103,8 @@ def zerogpu_decorator(size: str = "large") -> Callable:
     It handles both sync and async functions:
     - **Sync functions**: directly apply ``@spaces.GPU``.
     - **Async functions**: wrap in a sync function that runs the async method
-      under ``@spaces.GPU``, then return the result.
+      under ``@spaces.GPU``, then run the wrapped sync function in a separate
+      thread asynchronously.
 
     The decorator is effect-free outside ZeroGPU Spaces — the function runs
     normally without any GPU context.
@@ -136,7 +129,7 @@ def zerogpu_decorator(size: str = "large") -> Callable:
         ```
     """
     spaces_gpu = _get_spaces_gpu_decorator()
-    _in_zerogpu = spaces_gpu is not None and is_zerogpu()
+    _in_zerogpu = zerogpu_enabled()
 
     def decorator(func: Callable) -> Callable:
         if logger is not None:
@@ -158,134 +151,18 @@ def zerogpu_decorator(size: str = "large") -> Callable:
                     "; ".join(reason),
                 )
         if _in_zerogpu:
-            # ZeroGPU mode: apply @spaces.GPU to allocate GPU per function call
             if inspect.iscoroutinefunction(func):
-                # Create a sync wrapper that runs the async function.
-                # FastAPI runs endpoints in an event loop; we must use
-                # asyncio.new_event_loop() for nested run_until_complete
-                # to avoid event loop conflicts.
-                @wraps(func)
-                def sync_wrapper(*args, **kwargs):
-                    loop = asyncio.new_event_loop()
-                    try:
-                        return loop.run_until_complete(func(*args, **kwargs))
-                    finally:
-                        loop.close()
+                import anyio
+                import anyio.to_thread
 
-                return spaces_gpu(size=size)(sync_wrapper)
+                return partial(anyio.to_thread.run_sync, spaces_gpu(partial(anyio.run, func)))
             else:
-                return spaces_gpu(size=size)(func)
+                return spaces_gpu(func)
         else:
             # Non-ZeroGPU: effect-free pass-through
             return func
 
     return decorator
-
-
-# ---------------------------------------------------------------------------
-# Context manager
-# ---------------------------------------------------------------------------
-
-
-@contextmanager
-def gpu_context(size: str = "large") -> Generator[None, None, None]:
-    """Context manager that ensures GPU is available for inference.
-
-    In a ZeroGPU Space, this activates ``@spaces.GPU`` for the duration
-    of the context block. In non-ZeroGPU environments, this is a no-op.
-
-    This context manager is **effect-free** outside ZeroGPU Spaces.
-
-    Example:
-        ```python
-        from transformers.cli.serve_zerogpu import gpu_context
-
-        with gpu_context(size="xlarge"):
-            outputs = model.generate(**inputs)
-        ```
-
-    Args:
-        size (`str`, *optional*, defaults to ``"large"``):
-            GPU size: ``"large"`` (half RTX Pro 6000 Blackwell) or
-            ``"xlarge"`` (full RTX Pro 6000 Blackwell).
-    """
-    # In ZeroGPU Spaces, GPU allocation is handled by the @spaces.GPU
-    # decorator wrapping serve endpoints in server.py. This context manager
-    # is effect-free — model loading and inference happen inside the
-    # @spaces.GPU-wrapped endpoint handler.
-    yield
-
-
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-
-def get_zerogpu_config() -> dict:
-    """Return the current ZeroGPU configuration.
-
-    Returns:
-        `dict`: Configuration dict with keys:
-            - ``enabled``: Whether ZeroGPU is active.
-            - ``size``: GPU size setting.
-            - ``space_id``: The Hugging Face Space ID (if running in a Space).
-    """
-    return {
-        "enabled": zerogpu_enabled(),
-        "size": _zerogpu_size,
-        "space_id": os.environ.get("SPACE_ID", ""),
-    }
-
-
-# ---------------------------------------------------------------------------
-# Gradio SDK helpers
-# ---------------------------------------------------------------------------
-
-
-def get_spaces_gpu(size: str | None = None) -> Callable:
-    """Get a properly configured ``@spaces.GPU`` decorator.
-
-    This returns the real ``@spaces.GPU`` from the ``spaces`` package
-    when running in a ZeroGPU Space, or an effect-free pass-through
-    otherwise.
-
-    Args:
-        size (`str`, *optional*):
-            GPU size to request. Defaults to ``"large"``.
-
-    Returns:
-        A decorator that can be applied to inference functions.
-    """
-    return zerogpu_decorator(size=size or _zerogpu_size)
-
-
-def create_zero_gpu_decorator(size: str = "large") -> Callable:
-    """Create a ``@spaces.GPU``-compatible decorator for inference functions.
-
-    This is the recommended way to wrap inference functions for ZeroGPU Spaces.
-    The decorator is effect-free outside ZeroGPU Spaces.
-
-    Args:
-        size (`str`, *optional*, defaults to ``"large"``):
-            GPU size: ``"large"`` or ``"xlarge"``.
-
-    Returns:
-        A decorator function.
-
-    Example:
-        ```python
-        from transformers.cli.serve_zerogpu import create_zero_gpu_decorator
-
-        gpu = create_zero_gpu_decorator(size="xlarge")
-
-        @gpu
-        def generate_text(text: str) -> str:
-            inputs = tokenizer(text, return_tensors="pt").to("cuda")
-            outputs = model.generate(**inputs)
-            return tokenizer.decode(outputs[0], skip_special_tokens=True)
-        ```
-    """
-    return zerogpu_decorator(size=size)
 
 
 # ---------------------------------------------------------------------------
