@@ -84,6 +84,14 @@ COPYRIGHT = f"""
 # limitations under the License.
 """.lstrip()
 
+# Don't modify the following dict unless you changed the format of `models/auto/auto_mappings.py`
+_AUTO_MAPPING_NAMES = {
+    "image_processing_auto.py": "IMAGE_PROCESSOR_MAPPING_NAMES",
+    "video_processing_auto.py": "VIDEO_PROCESSOR_MAPPING_NAMES",
+    "processing_auto.py": "PROCESSOR_MAPPING_NAMES",
+    "feature_extraction_auto.py": "FEATURE_EXTRACTOR_MAPPING_NAMES",
+}
+
 ### Entrypoint
 
 
@@ -219,34 +227,28 @@ def add_model_to_auto_mappings(
     )
     autofile = (repo_path / "src" / "transformers" / "models" / "auto" / "auto_mappings.py").read_text()
 
-    auto_mapping_names = {
-        "image_processing_auto.py": "IMAGE_PROCESSOR_MAPPING_NAMES",
-        "video_processing_auto.py": "VIDEO_PROCESSOR_MAPPING_NAMES",
-        "processing_auto.py": "PROCESSOR_MAPPING_NAMES",
-        "feature_extraction_auto.py": "FEATURE_EXTRACTOR_MAPPING_NAMES",
-    }
     for filename, to_add in corrected_filenames_to_add:
         if to_add:
-            if filename in auto_mapping_names:
+            if filename in _AUTO_MAPPING_NAMES:
                 # These are saved in `auto_mapping.py` and require a slighlty diff regex match
-                mapping_name = auto_mapping_names[filename]
+                mapping_name = _AUTO_MAPPING_NAMES[filename]
                 filename = "auto_mappings.py"  # use the unified mapping filename to write content!
                 block_match = re.search(
                     rf"[^\w_]{mapping_name}\s*=\s*OrderedDict\(\s*\[(.*?)\]\s*\)", autofile, re.DOTALL
                 )
                 block = block_match.group(1)  # type: ignore
-                # matching_lines = re.findall(rf'^\s+\("{old_lowercase_name}",\s+"[^"]+"\)(?:,\n)?', block, re.MULTILINE)
                 matching_lines = re.findall(
                     rf'( {{8,12}}\(\s*"{old_lowercase_name}",.*?\),\n)(?: {{4,12}}\(|\])', block, re.DOTALL
                 )
             else:
-                # The auto mapping
+                # These auto mappings are filled-in manually (tokenization and modeling files)
                 filename = filename.replace("_fast.py", ".py")
                 file = (repo_path / "src" / "transformers" / "models" / "auto" / filename).read_text()
                 # The regex has to be a bit complex like this as the tokenizer mapping has new lines everywhere
                 matching_lines = re.findall(
                     rf'( {{8,12}}\(\s*"{old_lowercase_name}",.*?\),\n)(?: {{4,12}}\(|\])', file, re.DOTALL
                 )
+
             for match in matching_lines:
                 add_content_to_file(
                     repo_path / "src" / "transformers" / "models" / "auto" / filename,
