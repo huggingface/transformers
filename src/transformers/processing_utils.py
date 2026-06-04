@@ -30,7 +30,7 @@ from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union
 
 import numpy as np
 import typing_extensions
-from huggingface_hub import create_repo, is_offline_mode
+from huggingface_hub import is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
@@ -57,6 +57,7 @@ from .utils import (
     cached_file,
     copy_func,
     direct_transformers_import,
+    hf_api,
     is_torch_available,
     list_repo_templates,
     logging,
@@ -852,12 +853,15 @@ class ProcessorMixin(PushToHubMixin):
             return text, []
 
         # Use named regex so we can extract groups later and replace
+        # TODO @raushan: vllm encodes text and mm-data separately causing errors when a placeholder
+        # has no associated mm-data. Thus we can check if there are any `replacements` and skip otherwise
+        # Plan: update all models and contrib to vllm, they might benefit largely from `replacement_offsets`
         token_groups = []
-        if image_token := getattr(self, "image_token", None):
+        if len(images_replacements) > 0 and (image_token := getattr(self, "image_token", None)) is not None:
             token_groups.append(f"(?P<image>{re.escape(image_token)})")
-        if video_token := getattr(self, "video_token", None):
+        if len(videos_replacements) > 0 and (video_token := getattr(self, "video_token", None)) is not None:
             token_groups.append(f"(?P<video>{re.escape(video_token)})")
-        if audio_token := getattr(self, "audio_token", None):
+        if len(audio_replacements) > 0 and (audio_token := getattr(self, "audio_token", None)) is not None:
             token_groups.append(f"(?P<audio>{re.escape(audio_token)})")
 
         regex_special_mm_tokens = "|".join(token_groups) or r"(?!)"
@@ -1089,7 +1093,7 @@ class ProcessorMixin(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
@@ -1146,6 +1150,9 @@ class ProcessorMixin(PushToHubMixin):
                 else:
                     os.makedirs(chat_template_dir, exist_ok=True)
                     template_filepath = os.path.join(chat_template_dir, f"{template_name}.jinja")
+                    # template_name is an untrusted dict key; reject path traversal (CWE-22)
+                    if Path(template_filepath).resolve().parent != Path(chat_template_dir).resolve():
+                        raise ValueError(f"Invalid chat template name: {template_name!r}")
                     with open(template_filepath, "w", encoding="utf-8") as f:
                         f.write(template)
                     logger.info(f"chat template saved in {template_filepath}")
@@ -1592,6 +1599,9 @@ class ProcessorMixin(PushToHubMixin):
                             f"Keyword argument {modality_key} was passed two times:\n"
                             f"in a dictionary for {modality} and as a **kwarg."
                         )
+                    # fall back to the flat kwarg when the modality dict is present but doesn't carry this key
+                    if kwarg_value == "__empty__" and modality_key in non_modality_kwargs:
+                        kwarg_value = kwargs[modality_key]
                 elif modality_key in kwargs:
                     # we get a modality_key instead of popping it because modality-specific processors
                     # can have overlapping kwargs

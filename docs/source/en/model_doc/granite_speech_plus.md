@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-04-23 and added to Hugging Face Transformers on 2026-04-29.*
+*This model was contributed to Hugging Face Transformers on 2026-04-29.*
 
 # Granite Speech Plus
 
@@ -142,6 +142,11 @@ for k in range(NUM_SEGMENTS):
 ## GraniteSpeechPlusEncoderConfig
 
 [[autodoc]] GraniteSpeechPlusEncoderConfig
+
+## GraniteSpeechPlusModel
+
+[[autodoc]] GraniteSpeechPlusModel
+    - forward
 
 ## GraniteSpeechPlusForConditionalGeneration
 

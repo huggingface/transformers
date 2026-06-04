@@ -558,15 +558,24 @@ class Gemma4VisionPatchEmbedder(nn.Module):
         self.position_embedding_table = nn.Parameter(torch.ones(2, self.position_embedding_size, self.hidden_size))
 
     def _position_embeddings(self, pixel_position_ids: torch.Tensor, padding_positions: torch.Tensor) -> torch.Tensor:
-        """Prepare patch positions map for matmul with positon embedding table."""
-        # Expanding and permute patch positions to (batch_size, num_patches, 2, position_embedding_size) for matmul.
+        """Compute 2-D patch position embeddings via embedding lookup.
+
+        ``pixel_position_ids`` has shape ``(batch, num_patches, 2)`` where the
+        last dimension holds (x, y) indices into ``position_embedding_table``
+        (shape ``(2, position_embedding_size, hidden_size)``).  The result is the
+        sum of the x- and y-embeddings for each patch.
+        """
+        # Clamp only the lower bound: negative values encode padding and must be
+        # mapped to a valid index before lookup (padding embeddings are zeroed
+        # out unconditionally below).  Valid positions are always in-range by
+        # construction, so no upper-bound clamping is needed.
         clamped_positions = pixel_position_ids.clamp(min=0)
-        one_hot = F.one_hot(clamped_positions, num_classes=self.position_embedding_size)
-        one_hot = one_hot.permute(0, 2, 1, 3).to(self.position_embedding_table)
-        # Compute positional embeddings and sum across x and y.
-        position_embeddings = one_hot @ self.position_embedding_table
-        position_embeddings = position_embeddings.sum(dim=1)
-        # Zero out embeddings for any padding patches.
+        # position_embedding_table: (2, position_embedding_size, hidden_size)
+        # clamped_positions[..., 0]: (batch, num_patches) — x indices
+        # clamped_positions[..., 1]: (batch, num_patches) — y indices
+        x_emb = F.embedding(clamped_positions[..., 0], self.position_embedding_table[0])
+        y_emb = F.embedding(clamped_positions[..., 1], self.position_embedding_table[1])
+        position_embeddings = x_emb + y_emb
         position_embeddings = torch.where(padding_positions.unsqueeze(-1), 0.0, position_embeddings)
         return position_embeddings
 
@@ -581,7 +590,12 @@ class Gemma4VisionPatchEmbedder(nn.Module):
 
 
 class Gemma4VisionPooler(nn.Module):
-    """Scaling and optional spatial pooling for vision encodings"""
+    """Spatial pooling and ``sqrt(hidden_size)`` scaling for vision encodings.
+
+    The scaling expands the activation magnitude, which can exceed the float16 range, so it is
+    computed in float32 and the pooled features are returned in float32. The caller
+    (``Gemma4VisionModel.forward``) standardizes them and casts back to the working dtype.
+    """
 
     def __init__(self, config: Gemma4VisionConfig):
         super().__init__()
@@ -635,7 +649,10 @@ class Gemma4VisionPooler(nn.Module):
                 hidden_states, pixel_position_ids, output_length
             )
 
-        hidden_states *= self.root_hidden_size
+        # Scale in float32 and return float32: the sqrt(hidden_size) scaling can push the
+        # activations past the float16 range (max 65504), so the magnitude is kept in float32
+        # until the caller standardizes it.
+        hidden_states = hidden_states.float() * self.root_hidden_size
         return hidden_states, padding_positions
 
 
@@ -1203,7 +1220,12 @@ class Gemma4TextScaledWordEmbedding(Gemma3TextScaledWordEmbedding):
 
 
 class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
-    _no_split_modules = ["Gemma4TextDecoderLayer", "Gemma4VisionEncoderLayer", "Gemma4AudioLayer"]
+    _no_split_modules = [
+        "Gemma4TextDecoderLayer",
+        "Gemma4VisionEncoderLayer",
+        "Gemma4VisionPatchEmbedder",
+        "Gemma4AudioLayer",
+    ]
     input_modalities = ("image", "text", "video", "audio")
     _can_record_outputs = None  # override
 
@@ -1703,8 +1725,11 @@ class Gemma4VisionModel(Gemma4PreTrainedModel):
         # Strip padding tokens. pooler_mask is True = valid, False = padding.
         hidden_states = hidden_states[pooler_mask]
 
+        # The pooler returns float32-scaled features. Standardize in float32 (the std_bias
+        # subtraction cancels large values) and cast back to the working dtype.
         if self.config.standardize:
-            hidden_states = (hidden_states - self.std_bias) * self.std_scale
+            hidden_states = (hidden_states - self.std_bias.float()) * self.std_scale.float()
+        hidden_states = hidden_states.to(inputs_embeds.dtype)
 
         return BaseModelOutputWithPast(last_hidden_state=hidden_states)
 
@@ -1769,9 +1794,9 @@ def token_type_ids_mask_function(
     return inner_mask
 
 
-def get_block_sequence_ids_for_mask(
-    mm_token_type_ids: torch.Tensor, device: torch.device | None = None
-) -> torch.Tensor:
+def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: torch.device) -> torch.Tensor:
+    mm_token_type_ids = mm_token_type_ids.to(device)
+
     is_vision = (mm_token_type_ids == 1) | (mm_token_type_ids == 2)
     is_prev_vision = torch.roll(is_vision, shifts=1, dims=-1)
     is_prev_vision[..., 0] = False
@@ -1949,7 +1974,7 @@ class Gemma4Model(Gemma3nModel):
         llm_input_ids = None
         if inputs_embeds is None:
             llm_input_ids = input_ids.clone()
-            llm_input_ids[multimodal_mask] = self.config.text_config.pad_token_id
+            llm_input_ids = torch.where(multimodal_mask, self.config.text_config.pad_token_id, llm_input_ids)
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if per_layer_inputs is None and self.config.get_text_config().hidden_size_per_layer_input:
@@ -2004,7 +2029,7 @@ class Gemma4Model(Gemma3nModel):
             # Strip padding tokens: only keep real (non-padding) audio soft tokens.
             # audio_mask_from_encoder is True for valid positions, False for padding tokens.
             # This mirrors the vision encoder's padding stripping (see Gemma4VisionEncoder.forward).
-            audio_features = audio_features[audio_mask_from_encoder]
+            audio_features = audio_features[audio_mask_from_encoder.to(audio_features.device)]
 
             n_audio_tokens = audio_mask.sum()
             audio_mask = audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
@@ -2038,7 +2063,9 @@ class Gemma4Model(Gemma3nModel):
             if self.config.get_text_config().use_bidirectional_attention == "vision":
                 block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
                 if mm_token_type_ids is not None:
-                    block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids)
+                    block_sequence_ids = get_block_sequence_ids_for_mask(
+                        mm_token_type_ids, device=inputs_embeds.device
+                    )
 
                 mask_kwargs["block_sequence_ids"] = block_sequence_ids
 
@@ -2225,7 +2252,7 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
         if getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision":
             block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
             if mm_token_type_ids is not None:
-                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids)
+                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
 
             mask_kwargs["block_sequence_ids"] = block_sequence_ids
 

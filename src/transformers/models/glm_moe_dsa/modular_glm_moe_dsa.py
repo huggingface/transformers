@@ -34,6 +34,7 @@ from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeModel,
     Glm4MoePreTrainedModel,
     Glm4MoeRMSNorm,
+    Glm4MoeRotaryEmbedding,
 )
 from ..glm4_moe_lite.configuration_glm4_moe_lite import Glm4MoeLiteConfig
 from ..glm4_moe_lite.modeling_glm4_moe_lite import (
@@ -108,21 +109,18 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_b_proj": "colwise",
+        "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
-        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_allreduce",
-    }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
+        "layers.*.mlp.down_proj": "rowwise",
     }
 
     hidden_size: int = 6144
@@ -143,7 +141,6 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
     indexer_types: list[str] | None = None
     attribute_map = {
         "num_local_experts": "n_routed_experts",
-        "head_dim": "qk_rope_head_dim",
     }
 
     def __post_init__(self, **kwargs):
@@ -541,6 +538,26 @@ class GlmMoeDsaPreTrainedModel(Glm4MoePreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = False
     _compatible_flash_implementations = ["kernels-community/flash-mla"]
+
+
+class GlmMoeDsaRotaryEmbedding(Glm4MoeRotaryEmbedding):
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: GlmMoeDsaConfig | None = None,
+        device=None,
+        seq_len: int | None = None,
+    ):
+        base = config.rope_parameters["rope_theta"]
+        head_dim = config.qk_rope_head_dim
+        attention_factor = 1.0
+
+        if head_dim == 0:
+            return torch.empty(0, device=device), attention_factor
+
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / head_dim)
+        )
+        return inv_freq, attention_factor
 
 
 class GlmMoeDsaModel(Glm4MoeModel):
