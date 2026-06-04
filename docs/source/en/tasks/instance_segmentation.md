@@ -194,7 +194,7 @@ Use [`~datasets.Dataset.with_transform`] to apply preprocessing lazily (on-the-f
 >>> valid_ds = valid_ds.with_transform(transform)
 ```
 
-Let's verify what a preprocessed example looks like. You should see `pixel_values` (the normalized image tensor), `pixel_mask` (indicating real pixels vs padding), and `labels` (a dict with `class_labels`, `boxes` in normalized center format, and binary `masks`):
+Verify a preprocessed example. It contains `pixel_values` (the normalized image tensor), `pixel_mask` (indicating real pixels vs padding), and `labels` (a dict with `class_labels`, `boxes` in normalized center format, and binary `masks`):
 
 ```py
 >>> example = train_ds[0]
