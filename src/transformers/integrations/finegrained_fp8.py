@@ -46,8 +46,7 @@ _UE8M0_SF_DTYPE = getattr(torch, "float8_e8m0fnu", None)
 
 
 def _ue8m0_sf_dtype():
-    """Return ``torch.float8_e8m0fnu`` or raise a clear error on torch without FP8 support.
-    """
+    """Return ``torch.float8_e8m0fnu`` or raise a clear error on torch without FP8 support."""
     if _UE8M0_SF_DTYPE is None:
         raise RuntimeError(
             "scale_fmt='ue8m0' requires torch.float8_e8m0fnu, which is only available in "
