@@ -17,6 +17,7 @@ import numpy as np
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -71,7 +72,7 @@ class Xcodec2Config(PreTrainedConfig):
     quantization_dim: int = 2048
     quantization_levels: list[int] | tuple[int, ...] = (4, 4, 4, 4, 4, 4, 4, 4)
     max_position_embeddings: int = 4096
-    rope_parameters: RopeParameters| dict | None = None
+    rope_parameters: RopeParameters | dict | None = None
 
     def __post_init__(self, **kwargs):
         if isinstance(self.semantic_model_config, dict):
@@ -81,7 +82,6 @@ class Xcodec2Config(PreTrainedConfig):
             )
         elif self.semantic_model_config is None:
             self.semantic_model_config = CONFIG_MAPPING["wav2vec2-bert"](num_hidden_layers=16)
-
 
         super().__post_init__(**kwargs)
 
