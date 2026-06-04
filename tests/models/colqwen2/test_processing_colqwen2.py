@@ -291,3 +291,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip("ColQwen2Processor can't process text+image inputs at the same time")
     def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
         pass
+
+    @unittest.skip("ColQwen2Processor can't process text+image inputs at the same time")
+    def test_processor_does_not_mutate_text_input(self):
+        pass

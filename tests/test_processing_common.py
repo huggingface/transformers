@@ -785,6 +785,32 @@ class ProcessorTesterMixin:
         with self.assertRaises((TypeError, ValueError)):
             processor()
 
+    def test_processor_does_not_mutate_text_input(self):
+        """
+        Calling a processor must not modify the user-provided `text` list in place. The shared
+        `get_text_with_replacements` helper expands placeholder tokens in place, so a processor must
+        run it on a copy (the default `__call__` does this via `prepare_inputs_layout`). This guards
+        against regressions where a custom `__call__` forwards the user's list directly.
+        """
+        processor = self.get_processor()
+        call_signature = inspect.signature(processor.__call__)
+        input_args = [param.name for param in call_signature.parameters.values() if param.annotation != param.empty]
+
+        if "text" not in input_args or "images" not in input_args:
+            self.skipTest(f"{self.processor_class} doesn't support image+text inputs.")
+
+        if processor.tokenizer.pad_token_id is None:
+            processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        text = self.prepare_text_inputs(batch_size=2, modalities=["image"])
+        image_inputs = self.prepare_image_inputs(batch_size=2)
+        # nested input type is the format supported by all multimodal processors
+        image_inputs = [[image] if not isinstance(image, list) else image for image in image_inputs]
+
+        text_snapshot = list(text)
+        processor(text=text, images=image_inputs, padding=True, return_tensors="pt")
+        self.assertEqual(text, text_snapshot, "`__call__` must not modify the input `text` list in place")
+
     def test_processor_text_has_no_visual(self):
         """
         Tests that multimodal models can process batch of inputs where samples can

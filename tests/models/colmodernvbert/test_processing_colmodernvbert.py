@@ -283,6 +283,10 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip("ColModernVBert can't process text+image inputs at the same time")
+    def test_processor_does_not_mutate_text_input(self):
+        pass
+
+    @unittest.skip("ColModernVBert can't process text+image inputs at the same time")
     def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
         pass
 
