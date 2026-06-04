@@ -1542,8 +1542,7 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
             image_features = self.get_image_features(
                 pixel_values, pixel_values_local, num_local_patches, return_dict=True
             ).pooler_output
-            image_features = torch.cat(image_features, dim=0)
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
