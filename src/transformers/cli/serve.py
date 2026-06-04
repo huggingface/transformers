@@ -109,9 +109,9 @@ class Serve:
             ),
         ] = False,
         gpu_size: Annotated[
-            str,
+            str | None,
             typer.Option(help='ZeroGPU size: "large" (half RTX Pro 6000, default) or "xlarge" (full RTX Pro 6000).'),
-        ] = "large",
+        ] = None,
         # Server options
         host: Annotated[str, typer.Option(help="Server listen address.")] = "localhost",
         port: Annotated[int, typer.Option(help="Server listen port.")] = 8000,
@@ -236,6 +236,9 @@ class Serve:
             self.server.run()
 
     def start_server(self):
+        if serve_zerogpu.zerogpu_enabled():
+            serve_zerogpu.startup()
+
         def _run():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -255,15 +258,6 @@ class Serve:
             return
         self.server.should_exit = True
         self._thread.join(timeout=2)
-
-    @property
-    def zerogpu_config(self) -> dict:
-        """Return the current ZeroGPU configuration.
-
-        Returns:
-            `dict`: Configuration dict with ``enabled``, ``size``, and ``space_id``.
-        """
-        return serve_zerogpu.get_zerogpu_config()
 
 
 Serve.__doc__ = """

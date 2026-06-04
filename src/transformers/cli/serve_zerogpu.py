@@ -46,8 +46,8 @@ from functools import partial
 
 logger = None  # Set lazily by callers
 
-# Global GPU size set by the ``--gpu-size`` CLI flag (default: "large")
-_zerogpu_size: str = "large"
+# Global GPU size set by the ``--gpu-size`` CLI flag
+_zerogpu_size: str | None = None
 
 
 def is_zerogpu() -> bool:
@@ -163,6 +163,16 @@ def zerogpu_decorator(size: str = "large") -> Callable:
             return func
 
     return decorator
+
+
+def startup():
+    """Since we don't call gradio.launch(), let's start zerogpu manually"""
+    try:
+        import spaces.zero
+
+        spaces.zero.startup()
+    except ImportError:
+        return None
 
 
 # ---------------------------------------------------------------------------
