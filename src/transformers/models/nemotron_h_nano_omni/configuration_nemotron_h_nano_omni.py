@@ -76,6 +76,12 @@ class NemotronH_Nano_Omni_Reasoning_V3_Config(PretrainedConfig):
         attn_implementation="flash_attention_2",
         video_pruning_rate: float = 0.0,
         video_temporal_patch_size: int = 2,
+        # Vision token settings
+        patch_size: int = 16,
+        img_context_token_id: int | None = None,
+        img_context_token: str = "<image>",
+        video_context_token_id: int | None = None,
+        video_context_token: str = "<video>",
         # Sound/audio settings
         sound_context_token_id: int | None = None,
         sound_context_token: str = "<audio>",
@@ -110,6 +116,13 @@ class NemotronH_Nano_Omni_Reasoning_V3_Config(PretrainedConfig):
         self.vit_hidden_size = vit_hidden_size
         self.video_pruning_rate = video_pruning_rate
         self.video_temporal_patch_size = video_temporal_patch_size
+
+        # Vision token settings
+        self.patch_size = patch_size
+        self.img_context_token_id = img_context_token_id
+        self.img_context_token = img_context_token
+        self.video_context_token_id = video_context_token_id
+        self.video_context_token = video_context_token
 
         # Sound/audio token settings
         self.sound_context_token_id = sound_context_token_id
