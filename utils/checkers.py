@@ -507,6 +507,7 @@ def main():
     )
     parser.add_argument("--list", action="store_true", help="List available checkers and exit.")
     parser.add_argument("--no-cache", action="store_true", help="Ignore the disk cache and re-run every checker.")
+    parser.add_argument("--parallel", action="store_true", help="Run checkers in parallel (one process per checker).")
 
     args = parser.parse_args()
 
@@ -557,7 +558,7 @@ def main():
     total_start = time.perf_counter()
 
     # Parallel execution for check mode with multiple checkers; sequential for --fix.
-    use_parallel = not args.fix and len(names) > 1
+    use_parallel = args.parallel and not args.fix and len(names) > 1
 
     # --- Cache pass (always sequential, fast) ---
     to_run = []
