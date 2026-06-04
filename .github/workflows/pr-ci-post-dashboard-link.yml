@@ -30,10 +30,27 @@ jobs:
               return;
             }
 
+            // Delete any existing dashboard comment before posting a fresh one
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+            });
+            for (const comment of comments) {
+              if (comment.body.includes('**CI Observability Dashboard:** [View test results in Grafana]') ||
+                  comment.body.includes('**CI Dashboard:** [View test results in Grafana]')) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: comment.id,
+                });
+              }
+            }
+
             const url = `https://transformers-ci.lor-e.huggingface.cool/d/pytest-observability-by-pr/pytest-observability-branch?var-pr=${pr.number}`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: pr.number,
-              body: `**CI Observability Dashboard:** [View test results in Grafana](${url})`,
+              body: `**CI Dashboard:** [View test results in Grafana](${url})`,
             });
