@@ -1,0 +1,39 @@
+name: Post CI Dashboard Link
+
+on:
+  workflow_run:
+    workflows: ["PR CI"]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  post-link:
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const headSha = context.payload.workflow_run.head_sha;
+
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+            });
+
+            const pr = prs.find(pr => pr.head.sha === headSha);
+            if (!pr) {
+              console.log(`No open PR found for SHA ${headSha}, skipping`);
+              return;
+            }
+
+            const url = `https://transformers-ci.lor-e.huggingface.cool/d/pytest-observability-by-pr/pytest-observability-branch?var-pr=${pr.number}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body: `**CI Observability Dashboard:** [View test results in Grafana](${url})`,
+            });
