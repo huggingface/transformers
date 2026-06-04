@@ -90,6 +90,36 @@ class MossTTSDelayConfig(PreTrainedConfig):
         sampling_rate: int = 24000,
         **kwargs,
     ):
+        r"""
+        language_config (`Qwen3Config` or `dict`, *optional*):
+            Configuration for the backbone language model.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            Standard deviation used to initialize weights.
+        n_vq (`int`, *optional*, defaults to 32):
+            Number of audio VQ codebook channels.
+        pad_token_id (`int`, *optional*, defaults to 151643):
+            Padding token id for the text channel.
+        im_start_token_id (`int`, *optional*, defaults to 151644):
+            Token id used to mark the beginning of a chat message.
+        im_end_token_id (`int`, *optional*, defaults to 151645):
+            Token id used to mark the end of a chat message.
+        audio_vocab_size (`int`, *optional*, defaults to 1024):
+            Vocabulary size for each audio codebook.
+        audio_user_slot_token_id (`int`, *optional*, defaults to 151654):
+            Placeholder token id for user-side audio inputs.
+        audio_assistant_gen_slot_token_id (`int`, *optional*, defaults to 151656):
+            Placeholder token id that triggers assistant audio generation.
+        audio_assistant_delay_slot_token_id (`int`, *optional*, defaults to 151662):
+            Token id used for delayed audio-code positions.
+        audio_start_token_id (`int`, *optional*, defaults to 151652):
+            Token id that marks the start of an audio segment.
+        audio_end_token_id (`int`, *optional*, defaults to 151653):
+            Token id that marks the end of an audio segment.
+        audio_pad_code (`int`, *optional*, defaults to 1024):
+            Padding code used in audio VQ channels.
+        sampling_rate (`int`, *optional*, defaults to 24000):
+            Audio sampling rate used by the processor and audio tokenizer.
+        """
         if isinstance(language_config, dict):
             self.language_config = Qwen3Config(**language_config)
         elif language_config is None:
