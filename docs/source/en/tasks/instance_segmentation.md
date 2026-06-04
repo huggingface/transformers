@@ -67,7 +67,7 @@ The [satellite-building-segmentation](https://huggingface.co/datasets/merve/sate
 >>> print(f"Train: {len(train_ds)} images, Valid: {len(valid_ds)} images")
 ```
 
-Let's explore what a single example looks like. Each record has an `image`, an `image_id`, and an `objects` dict containing per-instance annotations. Each instance has a `bbox` in `[x, y, width, height]` format and a `segmentation` field with polygon coordinates:
+Inspect a single example. Each record has an `image`, an `image_id`, and an `objects` dict containing per-instance annotations. Each instance has a `bbox` in `[x, y, width, height]` format and a `segmentation` field with polygon coordinates:
 
 ```py
 >>> sample = train_ds[0]
