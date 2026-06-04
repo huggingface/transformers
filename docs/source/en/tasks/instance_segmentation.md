@@ -35,7 +35,7 @@ We'll use the [satellite-building-segmentation](https://huggingface.co/datasets/
 Before you begin, install all the necessary libraries:
 
 ```bash
-pip install -Uq transformers>=5.9 datasets torchvision
+pip install -Uq "transformers>=5.9" datasets torchvision
 ```
 
 We encourage you to share your model with the community. Log in to your Hugging Face account to upload it to the Hub when training is complete:
