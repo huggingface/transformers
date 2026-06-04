@@ -565,17 +565,6 @@ def _try_load_kernel_class(repo_str: str, use_local: bool = False) -> type | Non
         return None
 
 
-def _find_layout_class(kernel_cls: type) -> type | None:
-    """
-    Look for a companion layout class named ``{kernel_cls.__name__}Layout`` in the
-    same module as kernel_cls.
-    """
-    module = sys.modules.get(kernel_cls.__module__)
-    if module is None:
-        return None
-    return getattr(module, f"{kernel_cls.__name__}Layout", None)
-
-
 def register_kernel_replacements(
     cls: "type[PreTrainedModel]",
     kernel_config: "KernelConfig",
@@ -610,7 +599,8 @@ def register_kernel_replacements(
 
         # Look for a companion layout class named "{kernel_cls.__name__}Layout".
         # If found, it handles __init__ (weight layout); kernel_cls handles forward.
-        layout_cls = _find_layout_class(kernel_cls)
+        kernel_mod = sys.modules.get(kernel_cls.__module__)
+        layout_cls = getattr(kernel_mod, f"{kernel_cls.__name__}Layout", None) if kernel_mod else None
         if layout_cls is None:
             # No layout class: stateless kernel, leave for kernels.kernelize.
             new_mapping[layer_name] = hub_repo
@@ -670,7 +660,8 @@ def register_kernel_fusions(
         if kernel_cls is None:
             raise ValueError(f"Could not load kernel class from hub_repo={hub_repo!r}")
 
-        layout_cls = _find_layout_class(kernel_cls)
+        kernel_mod = sys.modules.get(kernel_cls.__module__)
+        layout_cls = getattr(kernel_mod, f"{kernel_cls.__name__}Layout", None) if kernel_mod else None
         if layout_cls is None:
             raise ValueError(
                 f"Fused kernel {kernel_cls.__name__!r} requires a companion layout class "
