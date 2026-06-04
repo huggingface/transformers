@@ -371,7 +371,7 @@ class Tipsv2VisionEmbeddings(Dinov2WithRegistersEmbeddings):
 
 class Tipsv2VisionPreTrainedModel(Dinov2WithRegistersPreTrainedModel):
     config: Tipsv2VisionConfig
-    base_model_prefix = "tipsv2_vision_model"
+    base_model_prefix = "vision_model"
 
 
 class Tipsv2VisionEncoder(Dinov2WithRegistersEncoder):
@@ -608,7 +608,7 @@ class Tipsv2TextEncoder(nn.Module):
 @auto_docstring
 class Tipsv2TextPreTrainedModel(PreTrainedModel):
     config: Tipsv2TextConfig
-    base_model_prefix = "tipsv2_text_model"
+    base_model_prefix = "text_model"
     main_input_name = "input_ids"
     input_modalities = ("text",)
     supports_gradient_checkpointing = True
@@ -735,7 +735,7 @@ class Tipsv2TextModel(Tipsv2TextPreTrainedModel):
 @auto_docstring
 class Tipsv2PreTrainedModel(PreTrainedModel):
     config: Tipsv2Config
-    base_model_prefix = "tipsv2"
+    base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = [
