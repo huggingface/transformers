@@ -14,30 +14,27 @@ rendered properly in your Markdown viewer.
 
 -->
 *This model was contributed to Hugging Face Transformers on 2026-06-02.*
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-06-01.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">    </div>
+    <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+    <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">    </div>
 </div>
 
 # Cosmos3 Omni
 
 [Cosmos3](https://huggingface.co/nvidia/Cosmos3-Nano) is a mixture-of-transformers (MoT) Vision Foundation Model from NVIDIA, composed of a *Reasoner* tower and a *Generator* tower. The two towers share the same input embedding and visual encoder but use disjoint MoT experts for understanding vs. generation, plus cross-modal adapters (`proj_out`, `audio_proj_out`, `action_proj_out`, etc.) that connect the language model to image / audio / action heads.
 
-The transformers integration loads **only the Reasoner tower** from a unified Cosmos3 checkpoint. The Reasoner is architecturally identical to [Qwen3-VL](./qwen3_vl) — `Cosmos3ReasonerForConditionalGeneration` is a thin subclass of `Qwen3VLForConditionalGeneration`.
+The transformers integration loads **only the Reasoner tower** from a unified Cosmos3 checkpoint. The Reasoner is architecturally identical to [Qwen3-VL](./qwen3_vl) — `Cosmos3OmniForConditionalGeneration` is a thin subclass of `Qwen3VLForConditionalGeneration`.
 
 
 ## Usage
 
 ```python
 import torch
-from transformers import AutoProcessor, Cosmos3ReasonerForConditionalGeneration
+from transformers import AutoProcessor, Cosmos3OmniForConditionalGeneration
 
-model = Cosmos3ReasonerForConditionalGeneration.from_pretrained(
-    "nvidia/Cosmos3-Nano",
-)
+model = Cosmos3OmniForConditionalGeneration.from_pretrained("nvidia/Cosmos3-Nano", device_map="auto")
 processor = AutoProcessor.from_pretrained("nvidia/Cosmos3-Nano")
 
 conversation = [
@@ -67,43 +64,20 @@ output = processor.batch_decode(
 print(output[0])
 ```
 
-## Cosmos3ReasonerConfig
+## Cosmos3OmniConfig
 
-[[autodoc]] Cosmos3ReasonerConfig
+[[autodoc]] Cosmos3OmniConfig
 
-## Cosmos3ReasonerVisionConfig
+## Cosmos3OmniModel
 
-[[autodoc]] Cosmos3ReasonerVisionConfig
-
-## Cosmos3ReasonerTextConfig
-
-[[autodoc]] Cosmos3ReasonerTextConfig
-
-## Cosmos3ReasonerProcessor
-
-[[autodoc]] Cosmos3ReasonerProcessor
-    - __call__
-
-## Cosmos3ReasonerVisionModel
-
-[[autodoc]] Cosmos3ReasonerVisionModel
-    - forward
-
-## Cosmos3ReasonerTextModel
-
-[[autodoc]] Cosmos3ReasonerTextModel
-    - forward
-
-## Cosmos3ReasonerModel
-
-[[autodoc]] Cosmos3ReasonerModel
+[[autodoc]] Cosmos3OmniModel
     - forward
     - get_video_features
     - get_image_features
 
-## Cosmos3ReasonerForConditionalGeneration
+## Cosmos3OmniForConditionalGeneration
 
-[[autodoc]] Cosmos3ReasonerForConditionalGeneration
+[[autodoc]] Cosmos3OmniForConditionalGeneration
     - forward
     - get_video_features
     - get_image_features

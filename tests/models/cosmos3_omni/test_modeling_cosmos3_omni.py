@@ -28,12 +28,9 @@ import pytest
 from transformers import (
     AutoProcessor,
     Cosmos3OmniConfig,
-    Cosmos3OmniForConditionalGeneration,
-    Cosmos3OmniModel,
     Qwen3VLTextConfig,
     Qwen3VLVisionConfig,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     Expectations,
@@ -48,11 +45,13 @@ from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
-if is_vision_available():
-    pass
-
 if is_torch_available():
     import torch
+
+    from transformers import (
+        Cosmos3OmniForConditionalGeneration,
+        Cosmos3OmniModel,
+    )
 
 
 class Cosmos3OmniVisionText2TextModelTester(VLMModelTester):
