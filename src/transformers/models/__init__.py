@@ -219,6 +219,7 @@ if TYPE_CHECKING:
     from .janus import *
     from .jetmoe import *
     from .jina_embeddings_v3 import *
+    from .kormo import *
     from .kosmos2 import *
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *

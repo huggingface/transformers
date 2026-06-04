@@ -301,6 +301,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("janus_vqgan", "JanusVQVAEConfig"),
         ("jetmoe", "JetMoeConfig"),
         ("jina_embeddings_v3", "JinaEmbeddingsV3Config"),
+        ("kormo", "KORMoConfig"),
         ("kosmos-2", "Kosmos2Config"),
         ("kosmos-2.5", "Kosmos2_5Config"),
         ("kosmos_2_5_text_model", "Kosmos2_5TextConfig"),
