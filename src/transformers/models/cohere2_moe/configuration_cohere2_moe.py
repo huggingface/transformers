@@ -35,8 +35,6 @@ class Cohere2MoeConfig(PreTrainedConfig):
         Number of routed experts.
     num_shared_experts (`int`, *optional*, defaults to 0):
         The number of shared experts.
-    shared_expert_combination_strategy (`str`, *optional*, defaults to `"average"`):
-        The combination strategy of shared expert, must be one of ['average', 'sum'].
     expert_selection_fn (`str`, *optional*, defaults to `"softmax"`):
         Expert selection function of router.
     layer_types (`list`, *optional*):
@@ -110,7 +108,6 @@ class Cohere2MoeConfig(PreTrainedConfig):
     num_experts_per_tok: int = 2
     num_experts: int = 8
     num_shared_experts: int = 0
-    shared_expert_combination_strategy: str = "average"
     expert_selection_fn: str = "softmax"
     layer_types: list[str] | None = None
     mlp_layer_types: list | None = None
