@@ -459,6 +459,7 @@ class Gemma4UnifiedTextConfig(Gemma4TextConfig):
 
     sliding_window: int = 1024
     use_bidirectional_attention: Literal["all", "vision"] | None = "vision"
+    max_position_embeddings: int = 262_144
 
     # PLE and MoE is not used
     vocab_size_per_layer_input = AttributeError()
