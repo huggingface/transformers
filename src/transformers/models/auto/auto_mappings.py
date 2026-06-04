@@ -1041,6 +1041,35 @@ VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
+    [
+        ("audio-spectrogram-transformer", "ASTFeatureExtractor"),
+        ("clap", "ClapFeatureExtractor"),
+        ("clvp", "ClvpFeatureExtractor"),
+        ("cohere_asr", "CohereAsrFeatureExtractor"),
+        ("dac", "DacFeatureExtractor"),
+        ("dia", "DiaFeatureExtractor"),
+        ("encodec", "EncodecFeatureExtractor"),
+        ("gemma3n", "Gemma3nAudioFeatureExtractor"),
+        ("gemma4", "Gemma4AudioFeatureExtractor"),
+        ("gemma4_unified", "Gemma4UnifiedAudioFeatureExtractor"),
+        ("granite_speech", "GraniteSpeechFeatureExtractor"),
+        ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
+        ("musicgen_melody", "MusicgenMelodyFeatureExtractor"),
+        ("pe_audio", "PeAudioFeatureExtractor"),
+        ("phi4_multimodal", "Phi4MultimodalFeatureExtractor"),
+        ("pop2piano", "Pop2PianoFeatureExtractor"),
+        ("seamless_m4t", "SeamlessM4TFeatureExtractor"),
+        ("speech_to_text", "Speech2TextFeatureExtractor"),
+        ("speecht5", "SpeechT5FeatureExtractor"),
+        ("univnet", "UnivNetFeatureExtractor"),
+        ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerFeatureExtractor"),
+        ("voxtral_realtime", "VoxtralRealtimeFeatureExtractor"),
+        ("wav2vec2", "Wav2Vec2FeatureExtractor"),
+        ("whisper", "WhisperFeatureExtractor"),
+    ]
+)
+
 PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("align", "AlignProcessor"),
@@ -1065,6 +1094,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("colpali", "ColPaliProcessor"),
         ("colqwen2", "ColQwen2Processor"),
         ("csm", "CsmProcessor"),
+        ("deepseek_ocr2", "DeepseekOcr2Processor"),
         ("deepseek_vl", "DeepseekVLProcessor"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridProcessor"),
         ("dia", "DiaProcessor"),
@@ -1078,6 +1108,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("gemma3", "Gemma3Processor"),
         ("gemma3n", "Gemma3nProcessor"),
         ("gemma4", "Gemma4Processor"),
+        ("gemma4_unified", "Gemma4UnifiedProcessor"),
         ("git", "GitProcessor"),
         ("glm46v", "Glm46VProcessor"),
         ("glm4v", "Glm4vProcessor"),
@@ -1167,33 +1198,5 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("wav2vec2", "Wav2Vec2Processor"),
         ("wav2vec2-bert", "Wav2Vec2BertProcessor"),
         ("whisper", "WhisperProcessor"),
-    ]
-)
-
-FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
-    [
-        ("audio-spectrogram-transformer", "ASTFeatureExtractor"),
-        ("clap", "ClapFeatureExtractor"),
-        ("clvp", "ClvpFeatureExtractor"),
-        ("cohere_asr", "CohereAsrFeatureExtractor"),
-        ("dac", "DacFeatureExtractor"),
-        ("dia", "DiaFeatureExtractor"),
-        ("encodec", "EncodecFeatureExtractor"),
-        ("gemma3n", "Gemma3nAudioFeatureExtractor"),
-        ("gemma4", "Gemma4AudioFeatureExtractor"),
-        ("granite_speech", "GraniteSpeechFeatureExtractor"),
-        ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
-        ("musicgen_melody", "MusicgenMelodyFeatureExtractor"),
-        ("pe_audio", "PeAudioFeatureExtractor"),
-        ("phi4_multimodal", "Phi4MultimodalFeatureExtractor"),
-        ("pop2piano", "Pop2PianoFeatureExtractor"),
-        ("seamless_m4t", "SeamlessM4TFeatureExtractor"),
-        ("speech_to_text", "Speech2TextFeatureExtractor"),
-        ("speecht5", "SpeechT5FeatureExtractor"),
-        ("univnet", "UnivNetFeatureExtractor"),
-        ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerFeatureExtractor"),
-        ("voxtral_realtime", "VoxtralRealtimeFeatureExtractor"),
-        ("wav2vec2", "Wav2Vec2FeatureExtractor"),
-        ("whisper", "WhisperFeatureExtractor"),
     ]
 )
