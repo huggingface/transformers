@@ -395,7 +395,13 @@ class PackedColwiseParallel(TensorParallelLayer):
         ]
         for name, param in to_swap_params:
             del module._parameters[name]
-            setattr(module, name, param.to_local())
+            if _find_strided_shard_placement_from_fused_params(param.placements) is not None:
+                local = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
+                if param.requires_grad:
+                    local.register_hook(functools.partial(_accumulate_local_param_grad, param))
+            else:
+                local = param.to_local()
+            setattr(module, name, local)
         try:
             yield
         finally:
@@ -542,7 +548,7 @@ class MoEExpertsParallel(TensorParallelLayer):
         ]
         for name, param in to_swap_params:
             del module._parameters[name]
-            # Happens only when train in TP only (experts dont use grouped_gemm)
+            # Happens only when train in TP only (experts dont use grouped_gemm but rely on moe_tp_gate_up_colwise)
             if _find_strided_shard_placement_from_fused_params(param.placements) is not None:
                 local = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
                 if param.requires_grad:
