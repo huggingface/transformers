@@ -377,11 +377,10 @@ def fp8_batched_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
-    # Clamp EP sentinels so per-token weight indexing stays in-bounds. Routing weights are already
-    # zero at sentinel slots (RouterParallel masks them at dispatch), so the weighted mul drops
-    # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
-    # Out-of-place to avoid mutating the caller's routing tensor (a contiguous `reshape(-1)` aliases it).
-    expert_ids = expert_ids.clamp(0, self.num_experts - 1)
+    # EP sentinel handling: leave `expert_ids` unclamped — the batched kernel early-returns on
+    # `expert_id >= NUM_EXPERTS`, leaving sentinel output rows uninitialized. The post-mask below
+    # zeroes them before the per-token reduction so `uninit * 0 = NaN` can't poison the sum.
+    sentinel_mask = (expert_ids >= self.num_experts).unsqueeze(-1)
 
     weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
     weight_scale_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
@@ -416,6 +415,10 @@ def fp8_batched_mm_experts_forward(
 
     # Apply routing weights
     weighted_out = proj_out * sample_weights.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
+
+    # Post-mask sentinel rows: kernel left them uninitialized, so zero them out
+    # before the reduction below (uninit may be NaN; NaN * 0 = NaN).
+    weighted_out.masked_fill_(sentinel_mask, 0.0)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
     # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
