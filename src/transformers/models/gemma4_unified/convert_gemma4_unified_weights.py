@@ -872,7 +872,6 @@ def main(*args):
         vision_config = config.vision_config
         feature_extractor = Gemma4UnifiedAudioFeatureExtractor()
         image_processor = Gemma4UnifiedImageProcessor(
-            max_soft_tokens=vision_config.num_soft_tokens,
             do_normalize=False,
             pooling_kernel_size=vision_config.pooling_kernel_size,
         )
@@ -882,7 +881,6 @@ def main(*args):
             feature_extractor=feature_extractor,
             video_processor=video_processor,
             tokenizer=tokenizer,
-            image_seq_length=vision_config.num_soft_tokens,
             **chat_template_kwargs,
         )
         processor.save_pretrained(output_path)
