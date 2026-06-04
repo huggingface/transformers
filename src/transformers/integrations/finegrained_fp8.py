@@ -57,7 +57,6 @@ class FineGrainedFP8:
     """Entry points exposed by the `kernels-community/finegrained-fp8` Triton kernel."""
 
     matmul: Callable
-    act_quant: Callable
     batched_matmul: Callable
     grouped_matmul: Callable
 
@@ -82,18 +81,16 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
             "has a build matching the current torch/CUDA."
         )
 
-    matmul = getattr(kernel, "fp8_matmul", None)
-    act_quant = getattr(kernel, "fp8_act_quant", None)
-    batched_matmul = getattr(kernel, "fp8_matmul_batched", None)
-    grouped_matmul = getattr(kernel, "fp8_matmul_grouped", None)
+    matmul = getattr(kernel, "matmul", None)
+    batched_matmul = getattr(kernel, "matmul_batched", None)
+    grouped_matmul = getattr(kernel, "matmul_grouped", None)
 
     missing = [
         name
         for name, attr in [
-            ("fp8_matmul", matmul),
-            ("fp8_act_quant", act_quant),
-            ("fp8_matmul_batched", batched_matmul),
-            ("fp8_matmul_grouped", grouped_matmul),
+            ("matmul", matmul),
+            ("matmul_batched", batched_matmul),
+            ("matmul_grouped", grouped_matmul),
         ]
         if attr is None
     ]
@@ -105,7 +102,6 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
 
     return FineGrainedFP8(
         matmul=matmul,
-        act_quant=act_quant,
         batched_matmul=batched_matmul,
         grouped_matmul=grouped_matmul,
     )
@@ -159,20 +155,12 @@ def finegrained_fp8_linear(
     """
     finegrained_fp8 = _load_finegrained_fp8_kernel()
 
-    if activation_scale is not None:
-        scale = activation_scale.to(torch.float32)
-        qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-    else:
-        gran_k = block_size[1] if block_size is not None else input.shape[-1]
-        qinput, scale = finegrained_fp8.act_quant(input, gran_k)
-
     # Triton's autotuner can't key on `float8_e8m0fnu` (UE8M0 SFs) — always cast
     # to fp32 at the kernel boundary. No-op for fp32 SFs; cheap for UE8M0 since
     # scales are 1/gran_k the size of the weight.
     output = finegrained_fp8.matmul(
-        qinput,
+        input,
         weight,
-        scale,
         weight_scale_inv.float() if weight.dtype != torch.int8 else weight_scale_inv,
         block_size,
         output_dtype,
