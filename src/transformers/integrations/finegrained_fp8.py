@@ -365,13 +365,6 @@ def fp8_batched_mm_experts_forward(
             "Use the default eager dispatch or switch to activation_scheme='dynamic'."
         )
 
-    weight_up = self.gate_up_proj if self.has_gate else self.up_proj
-    if weight_up.dtype == torch.int8:
-        raise NotImplementedError(
-            "'batched_mm' experts dispatch is Triton-only and does not support FP4 (int8-packed) "
-            "expert weights. Use experts_implementation='deepgemm' instead."
-        )
-
     finegrained_fp8 = _load_finegrained_fp8_kernel()
 
     num_top_k = top_k_index.size(-1)
@@ -441,13 +434,6 @@ def fp8_grouped_mm_experts_forward(
         raise NotImplementedError(
             "grouped_mm experts dispatch does not support activation_scheme='static'. "
             "Use the default eager dispatch or switch to activation_scheme='dynamic'."
-        )
-
-    weight_up = self.gate_up_proj if self.has_gate else self.up_proj
-    if weight_up.dtype == torch.int8:
-        raise NotImplementedError(
-            "'grouped_mm' experts dispatch is Triton-only and does not support FP4 (int8-packed) "
-            "expert weights. Use experts_implementation='deepgemm' instead."
         )
 
     finegrained_fp8 = _load_finegrained_fp8_kernel()
