@@ -114,7 +114,7 @@ Let's visualize an example with its ground-truth masks to get a sense of the dat
 
 ## Load the model and image processor
 
-We'll use [`AutoImageProcessor`] and [`AutoModelForInstanceSegmentation`] to load the RF-DETR-Seg model. When loading the model, we pass `id2label` and `label2id` mappings to configure the classification head for our single "building" class. Since the pretrained model was trained on COCO (91 classes), we set `ignore_mismatched_sizes=True` to reinitialize the classification head with the correct number of outputs.
+Use [`AutoImageProcessor`] and [`AutoModelForInstanceSegmentation`] to load the RF-DETR-Seg model. When loading the model, pass `id2label` and `label2id` mappings to configure the classification head for the single "building" class. Since the pretrained model was trained on COCO (91 classes), set `ignore_mismatched_sizes=True` to reinitialize the classification head with the correct number of outputs.
 
 The image processor handles all the preprocessing: resizing images while maintaining aspect ratio, normalizing with ImageNet statistics, padding to a uniform size, and — crucially for instance segmentation — converting polygon annotations to binary masks, resizing those masks, and normalizing bounding boxes to the `[cx, cy, w, h]` format in `[0, 1]` range that the model expects.
 
