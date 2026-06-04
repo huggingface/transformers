@@ -109,9 +109,11 @@ class GgufLinearStateDictRoundtripTest(unittest.TestCase):
 @require_torch
 @require_gguf
 class ReplaceWithGgufLinearTest(unittest.TestCase):
-    """``replace_with_gguf_linear`` does the FP8-style meta-time swap."""
+    """``replace_with_gguf_linear`` does a uniform meta-time swap — every Linear
+    becomes a quant-type-agnostic placeholder (kernels bound post-load), except
+    those in `modules_to_not_convert`."""
 
-    def test_swap_select_linears(self):
+    def test_uniform_swap_with_skip(self):
         class M(nn.Module):
             def __init__(self):
                 super().__init__()
@@ -120,13 +122,15 @@ class ReplaceWithGgufLinearTest(unittest.TestCase):
                 self.b = nn.Linear(64, 32, bias=False)
 
         m = M()
-        info = {"a": {"quant_type": "Q4_0"}}  # only swap `.a`
-        n = replace_with_gguf_linear(m, info)
+        n = replace_with_gguf_linear(m, modules_to_not_convert={"b"})  # swap everything but `.b`
         self.assertEqual(n, 1)
         self.assertIsInstance(m.a, GgufLinear)
         self.assertIsInstance(m.b, nn.Linear)
-        # Buffer shape is (out_features, bytes_per_row) for Q4_0: 32 × 2 blocks × 18 bytes.
-        self.assertEqual(tuple(m.a.weight.shape), (32, (64 // 32) * 18))
+        # Placeholder: quant type unknown at swap, no kernels bound yet, uint8 buffer
+        # sized from the Q4_K_M average until the real bytes load.
+        self.assertIsNone(m.a.quant_type)
+        self.assertIsNone(m.a._mv_op)
+        self.assertEqual(m.a.weight.dtype, torch.uint8)
 
     def test_moe_registry_lookup(self):
         # Every MoE arch we promise byte-passthrough support for must land on

@@ -408,18 +408,22 @@ class GGUFQuantizedTensor(torch.Tensor):
         if kwargs is None:
             kwargs = {}
         result = super().__torch_function__(func, types, args, kwargs)
-        # Only re-wrap on `Tensor.to` — the GGUFDequantize op in the conversion
-        # chain reads `quant_type` off the post-transfer tensor. Other ops in
-        # the path don't care, so skipping the wrap saves Python overhead per call.
-        if func is not torch.Tensor.to:
-            return result
+        # Carry `quant_type` through every subclass-preserving op so it survives the
+        # byte-manipulation chain that builds the swapped buffers — the loader's
+        # `.to` move, the Q/K permute (reshape/swapaxes), and the gate/up merge
+        # (`torch.cat`) — and `GgufLinear`/`GgufExperts.bind_after_load` can read it
+        # back. These subclasses only exist during loading (buffers are unwrapped to
+        # plain tensors at bind time), so this never runs on the forward hot path.
         quant_type = cls._extract_quant_type(args)
         if quant_type is None:
             return result
         if isinstance(result, cls):
-            result.quant_type = quant_type
+            if getattr(result, "quant_type", None) is None:
+                result.quant_type = quant_type
             return result
-        if isinstance(result, torch.Tensor):
+        # `.to` may return a plain tensor (e.g. device-only move); keep it tagged so
+        # the downstream dequant op can still read the type.
+        if func is torch.Tensor.to and isinstance(result, torch.Tensor):
             return cls(result, quant_type=quant_type)
         return result
 

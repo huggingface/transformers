@@ -341,48 +341,60 @@ class GgufLoadCheckpointStateDequantDecisionTests(unittest.TestCase):
 
 @require_torch
 @require_gguf
-class GgufBuildQuantInfoFromMetadataTests(unittest.TestCase):
-    """The gguf_file swap plan is built from GGUF header *metadata*
-    (`gguf_tensor_types`: name → quant type), renamed through `weight_mapping`
-    — it never touches the materialized `gguf_tensors`. Pin that contract."""
+class GgufUniformSwapTests(unittest.TestCase):
+    """The swap is uniform (no rename, no per-module plan): placeholders are sized
+    from the Q4_K_M average, the kernel path is gated by a coarse all-supported
+    check, and quant types are bound (or float sources reverted) post-load."""
 
-    def _tiny_model(self):
-        import torch.nn as nn
+    def test_bytes_per_row_exact_and_average(self):
+        from transformers.integrations.gguf_linear import _AVG_BYTES_PER_ELEM, _bytes_per_row
 
-        class _Tiny(nn.Module):
-            base_model_prefix = ""
+        # Known quant type → exact width (Q4_0 = 18 bytes per 32 elems).
+        self.assertEqual(_bytes_per_row(64, "Q4_0"), (64 // 32) * 18)
+        # Unknown (uniform-swap placeholder) → Q4_K_M average.
+        self.assertEqual(_bytes_per_row(256, None), max(1, round(256 * _AVG_BYTES_PER_ELEM)))
 
-            def __init__(self):
-                super().__init__()
-                self.q_proj = nn.Linear(32, 32, bias=False)
-                self.k_proj = nn.Linear(32, 32, bias=False)
-
-                from types import SimpleNamespace
-
-                self.config = SimpleNamespace(model_type="llama")
-
-        return _Tiny()
-
-    def test_plan_built_from_metadata_not_tensors(self):
+    def test_unsupported_quant_forces_full_dequant(self):
+        """A file containing a quant type with no metal kernel (Q2_K) must clear
+        `_all_supported`, so the whole model dequantizes even on (simulated) MPS."""
         import gguf
+        import torch
 
+        import transformers.integrations.gguf_dequant as _dq
+        import transformers.modeling_gguf_pytorch_utils as _mod
         from transformers import GgufQuantizeConfig
+        from transformers.integrations.gguf_dequant import GGUFQuantizedTensor
         from transformers.quantizers.quantizer_gguf import GGUFQuantizer
 
-        q = GGUFQuantizer(GgufQuantizeConfig(gguf_file="some.gguf"))
-        self.assertFalse(q.on_the_fly)
-        # Identity rename (gguf name == hf weight key). Q4_K is kernel-supported;
-        # Q2_K is not, so it must be dropped from the swap plan.
-        q.weight_mapping = []
-        q.gguf_tensor_types = {
-            "q_proj.weight": gguf.GGMLQuantizationType.Q4_K,
-            "k_proj.weight": gguf.GGMLQuantizationType.Q2_K,
-        }
-        # Deliberately empty — proves the plan comes from metadata, not tensor data.
-        q.gguf_tensors = {}
+        def patch(obj, name, value):
+            sentinel = object()
+            orig = getattr(obj, name, sentinel)
+            setattr(obj, name, value)
+            self.addCleanup(setattr, obj, name, orig) if orig is not sentinel else self.addCleanup(
+                delattr, obj, name
+            )
 
-        info = q._build_quant_info(self._tiny_model())
-        self.assertEqual(info, {"q_proj": {"quant_type": "Q4_K"}})
+        types = {"blk.0.attn_q.weight": gguf.GGMLQuantizationType.Q2_K}  # unsupported
+
+        def fake_load(_path, return_tensors=True):
+            tensors = {n: GGUFQuantizedTensor(torch.zeros(32, dtype=torch.uint8), quant_type=qt) for n, qt in types.items()}
+            return {"tensors": tensors, "weight_mapping": [], "tensor_quant_types": dict(types)}
+
+        patch(_mod, "load_gguf_checkpoint", fake_load)
+        called = {"n": 0}
+
+        def fake_dequant(t, quant_type, device=None):
+            called["n"] += 1
+            return torch.zeros(8, 16, dtype=torch.float32)
+
+        patch(_dq, "dequantize_gguf_tensor", fake_dequant)
+        patch(torch.backends.mps, "is_available", lambda: True)
+
+        q = GGUFQuantizer(GgufQuantizeConfig())
+        out = q.load_checkpoint_state("/does/not/exist")
+        self.assertFalse(q._all_supported)
+        self.assertEqual(called["n"], 1, "unsupported quant must be dequantized despite MPS")
+        self.assertNotIsInstance(out["blk.0.attn_q.weight"], GGUFQuantizedTensor)
 
 
 if __name__ == "__main__":
