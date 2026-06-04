@@ -71,7 +71,7 @@ class Xcodec2Config(PreTrainedConfig):
     quantization_dim: int = 2048
     quantization_levels: list[int] | tuple[int, ...] = (4, 4, 4, 4, 4, 4, 4, 4)
     max_position_embeddings: int = 4096
-    rope_parameters: dict | None = None
+    rope_parameters: RopeParameters| dict | None = None
 
     def __post_init__(self, **kwargs):
         if isinstance(self.semantic_model_config, dict):
@@ -82,8 +82,6 @@ class Xcodec2Config(PreTrainedConfig):
         elif self.semantic_model_config is None:
             self.semantic_model_config = CONFIG_MAPPING["wav2vec2-bert"](num_hidden_layers=16)
 
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_theta": 10000.0, "rope_type": "default"}
 
         super().__post_init__(**kwargs)
 
