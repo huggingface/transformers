@@ -21,6 +21,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -785,12 +786,12 @@ class ProcessorTesterMixin:
         with self.assertRaises((TypeError, ValueError)):
             processor()
 
-    def test_processor_does_not_mutate_text_input(self):
+    def test_processor_expands_tokens_via_get_text_with_replacements(self):
         """
-        Calling a processor must not modify the user-provided `text` list in place. The shared
-        `get_text_with_replacements` helper expands placeholder tokens in place, so a processor must
-        run it on a copy (the default `__call__` does this via `prepare_inputs_layout`). This guards
-        against regressions where a custom `__call__` forwards the user's list directly.
+        Multimodal placeholder expansion must go through the shared `get_text_with_replacements`
+        helper (see #45493) instead of bespoke per-processor `.replace`/`re.sub` logic, so that
+        placeholder handling, replacement offsets and `mm_token_type_ids` stay consistent across
+        models. This asserts the processor actually calls the helper when expanding image tokens.
         """
         processor = self.get_processor()
         call_signature = inspect.signature(processor.__call__)
@@ -807,9 +808,14 @@ class ProcessorTesterMixin:
         # nested input type is the format supported by all multimodal processors
         image_inputs = [[image] if not isinstance(image, list) else image for image in image_inputs]
 
-        text_snapshot = list(text)
-        processor(text=text, images=image_inputs, padding=True, return_tensors="pt")
-        self.assertEqual(text, text_snapshot, "`__call__` must not modify the input `text` list in place")
+        with patch.object(processor, "get_text_with_replacements", wraps=processor.get_text_with_replacements) as spy:
+            processor(text=text, images=image_inputs, padding=True, return_tensors="pt")
+
+        self.assertTrue(
+            spy.called,
+            f"{self.processor_class.__name__} must expand multimodal tokens via "
+            "`get_text_with_replacements` rather than bespoke logic.",
+        )
 
     def test_processor_text_has_no_visual(self):
         """

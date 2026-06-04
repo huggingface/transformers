@@ -283,7 +283,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip("ColModernVBert can't process text+image inputs at the same time")
-    def test_processor_does_not_mutate_text_input(self):
+    def test_processor_expands_tokens_via_get_text_with_replacements(self):
         pass
 
     @unittest.skip("ColModernVBert can't process text+image inputs at the same time")
