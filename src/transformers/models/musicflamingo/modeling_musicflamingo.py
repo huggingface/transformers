@@ -213,7 +213,6 @@ def apply_rotary_time_emb(hidden_states, cos, sin):
 )
 class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
     _tp_plan = None
-    _sp_plan = None
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
 
@@ -377,12 +376,12 @@ class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
         return window_indices.unsqueeze(1) * max_post_length * audio_embed_frame_step + frame_offsets
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for MusicFlamingo causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class MusicFlamingoCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

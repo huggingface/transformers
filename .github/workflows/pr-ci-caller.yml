@@ -7,7 +7,8 @@ on:
       - main
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  # Group by PR number, commit SHA (main) to avoid cross-branch cancellation, or branch ref for cancellation within each branch
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || (github.ref == 'refs/heads/main' && github.sha) || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -17,7 +18,6 @@ jobs:
   pr-ci:
     # Allow `ydshieh2` for testing during development
     if: github.event_name == 'push' || contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.pull_request.author_association) || github.event.pull_request.user.login == 'ydshieh2'
-    uses: huggingface/transformers-test-ci/.github/workflows/pr-ci_dynamic_caller_example.yml@91d590c4f744e4564a8ae0d3810068c8a35b939e # main
-    secrets:
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
-      OTEL_TOKEN: ${{ secrets.OTEL_TOKEN }}
+    # DON'T use commit sha here before the CI migration is finished
+    uses: huggingface/transformers-test-ci/.github/workflows/pr-ci_dynamic_caller_example.yml@main # main
+
