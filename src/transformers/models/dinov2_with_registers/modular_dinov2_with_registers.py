@@ -119,8 +119,9 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
         self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
         self.patch_embeddings = Dinov2WithRegistersPatchEmbeddings(config)
-        num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
+        self.position_embeddings = nn.Parameter(
+            torch.randn(1, self.patch_embeddings.num_patches + 1, config.hidden_size)
+        )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
         self.config = config
@@ -247,6 +248,10 @@ class Dinov2WithRegistersForImageClassification(Dinov2ForImageClassification):
 
 
 class Dinov2WithRegistersBackbone(Dinov2Backbone):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_register_tokens = config.num_register_tokens
+
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @can_return_tuple
