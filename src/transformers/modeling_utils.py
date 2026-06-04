@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, get_type_hints, overload
 from zipfile import is_zipfile
 
 import torch
-from huggingface_hub import create_repo, is_offline_mode, split_torch_state_dict_into_shards
+from huggingface_hub import is_offline_mode, split_torch_state_dict_into_shards
 from packaging import version
 from safetensors import safe_open
 from safetensors.torch import load as _safe_load_bytes
@@ -123,7 +123,7 @@ from .utils import (
     logging,
 )
 from .utils.generic import GeneralInterface, is_flash_attention_requested, split_attention_implementation
-from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files
+from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files, hf_api
 from .utils.import_utils import (
     is_flash_attn_greater_or_equal,
     is_huggingface_hub_greater_or_equal,
@@ -729,7 +729,7 @@ def _get_resolved_checkpoint_files(
                         Thread(
                             target=auto_conversion,
                             args=(pretrained_model_name_or_path,),
-                            kwargs={"ignore_errors_during_conversion": False, **cached_file_kwargs},
+                            kwargs={"ignore_errors_during_conversion": True, **cached_file_kwargs},
                             name="Thread-auto_conversion",
                         ).start()
 
@@ -1102,7 +1102,16 @@ class EmbeddingAccessMixin:
         model = getattr(self, "model", None)
         if model is not None and hasattr(model, name):
             return getattr(model, name)
+        # 4) Multimodal LMs that wrap a text sub-model at `self.language_model`.
+        language_model = getattr(self, "language_model", None)
+        if (
+            language_model is not None
+            and language_model is not self
+            and hasattr(language_model, "get_input_embeddings")
+        ):
+            return language_model.get_input_embeddings()
 
+        # 5) recurse once into the registered *base* model (e.g. for encoder/decoder)
         base_model = getattr(self, "base_model", None)
         if base_model is not None and base_model is not self and hasattr(base_model, "get_input_embeddings"):
             return base_model.get_input_embeddings()
@@ -1133,7 +1142,14 @@ class EmbeddingAccessMixin:
         # 3) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
         elif (model := getattr(self, "model", None)) is not None and hasattr(model, name):
             setattr(model, name, value)
-        # 4) recurse once into the registered *base* model (e.g. for encoder/decoder)
+        # 4) Multimodal LMs that wrap a text sub-model at `self.language_model`.
+        elif (
+            (language_model := getattr(self, "language_model", None)) is not None
+            and language_model is not self
+            and hasattr(language_model, "set_input_embeddings")
+        ):
+            language_model.set_input_embeddings(value)
+        # 5) recurse once into the registered *base* model (e.g. for encoder/decoder)
         elif (
             (base_model := getattr(self, "base_model", None)) is not None
             and base_model is not self
@@ -2213,6 +2229,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             else experts_implementation.get("", self.config._experts_implementation)
         )
 
+        # MegaMoE is locked at load time: its TP plan is baked into `base_model_tp_plan`
+        # by `update_tp_plan` (and isn't re-evaluated) and `setup_megamoe_weights`
+        # mutates the expert weights into UTCCP layout on first forward. Either side of
+        # a switch would silently produce garbage, so reject it with a clear pointer.
+        current = self.config._experts_implementation
+        if "deepgemm_megamoe" in (current, requested_implementation) and current != requested_implementation:
+            raise RuntimeError(
+                f"Cannot switch experts implementation from {current!r} to {requested_implementation!r} "
+                "at runtime: `deepgemm_megamoe` is a load-time choice. Reload via "
+                "`from_pretrained(..., experts_implementation=...)` to switch."
+            )
+
         if requested_implementation != self.config._experts_implementation:
             requested_implementation = self._check_and_adjust_experts_implementation(requested_implementation)
             # Apply the change (on the internal attr, to avoid setting it recursively)
@@ -2417,9 +2445,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
             if getattr(module, "weight", None) is not None:
-                init.normal_(module.weight.float(), mean=0.0, std=std)
+                init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
+        elif isinstance(module, nn.LSTM):
+            for name, param in module.named_parameters():
+                if "weight" in name:
+                    init.xavier_uniform_(param)
+                elif "bias" in name:
+                    init.constant_(param, 0.0)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=std)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
@@ -3380,7 +3414,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory_path.split(os.path.sep)[-1])
             create_pr = kwargs.pop("create_pr", False)
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         metadata = {}
@@ -4955,7 +4989,7 @@ def get_total_byte_count(
 
     total_byte_count = defaultdict(lambda: 0)
     tied_param_names = model.all_tied_weights_keys.keys()
-    tp_plan = model._tp_plan if _is_torch_distributed_initialized() else []
+    tp_plan = model.tp_plan if _is_torch_distributed_initialized() else []
 
     for param_name, device in accelerator_device_map.items():
         # Skip if the parameter has already been accounted for (tied weights)
@@ -5042,6 +5076,12 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
             # Note that we use an absolute value instead of device proportion here, as a 8GiB device could still allocate too much
             # if using e.g. 90% of device size, while a 140GiB device would allocate too little
             byte_count = min(byte_count, total_device_memory - 1.2 * 1024**3)
+        elif device.type == "mps":
+            # Skip warmup on MPS: there is a limit of the maximum size a single buffer can have on MPS,
+            # which from testing seems to be about 2/3 of the total device memory (tested on apple silicon).
+            # This causes the warmup function to return a `RuntimeError: Invalid buffer size: XX.XX GiB`.
+            # NOTE: not tested on intel macs
+            continue
         # We divide by 2 here as we allocate in fp16
         _ = torch.empty(int(byte_count // 2), dtype=torch.float16, device=device, requires_grad=False)
 
