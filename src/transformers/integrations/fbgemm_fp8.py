@@ -139,9 +139,9 @@ class FbgemmFp8Linear(torch.nn.Linear):
     def forward(self, x):
         # quantize_fp8_per_row will squash the leading dimensions, so save the desired shape here
         output_shape = (*x.shape[:-1], -1)
-        # Keep the current device aligned with the input tensor device while launching the quantization kernel.
-        # Keep the guard at the quantization call: moving the returned quantized tensors across devices after
-        # the launch is not equivalent and can produce incorrect output.
+        # x_quantized and x_scale are not necessarily on the same device as x, this is an issue.
+        # https://github.com/pytorch/FBGEMM/blob/e08af8539c391437f447173863df0f3f6f6f1855/fbgemm_gpu/experimental/gen_ai/src/quantize/quantize.cu#L1237C3-L1237C45
+        # Add guard here to keep the current device aligned with the input tensor device while launching the quantization kernel.
         with on_device(x):
             x_quantized, x_scale = quantize_fp8_per_row(
                 x.view(-1, x.shape[-1]).contiguous(), scale_ub=self.input_scale_ub
