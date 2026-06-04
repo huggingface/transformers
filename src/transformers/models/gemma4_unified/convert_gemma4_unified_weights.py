@@ -79,7 +79,7 @@ from transformers.utils.hub import cached_file
 # ==== Internal Constants and Classes ====
 
 # The correct chat templates were already uploaded to those 2 repos, so download from there
-_CHAT_TEMPLATE = pathlib.Path(cached_file("gg-hf-gg/gemma-4-31B-it", "chat_template.jinja")).read_text()
+_CHAT_TEMPLATE = pathlib.Path(cached_file("google/gemma-4-31B-it", "chat_template.jinja")).read_text()
 
 _RESPONSE_SCHEMA = {
     "type": "object",
