@@ -205,6 +205,7 @@ class TorchAoHfQuantizer(HfQuantizer):
 
     def get_weight_conversions(self):
         from ..integrations.torchao import TorchAoDeserialize
+
         if self.pre_quantized:
             param_names = self._discover_quantized_param_names()
             converters = []
