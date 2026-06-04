@@ -78,6 +78,10 @@ class NemotronHSparseConfig(PreTrainedConfig):
         Dimension of the MLP representations in shared experts.
     moe_shared_expert_overlap (`bool`, *optional*, defaults to `True`):
         Whether shared experts overlap with routed experts.
+    moe_latent_size (`int`, *optional*):
+        Latent dimension the routed experts operate in. When set, the MoE block projects the hidden states down to
+        `moe_latent_size` before the routed experts and back up to `hidden_size` afterwards (the shared expert keeps
+        running at `hidden_size`). `None` disables it, i.e. the routed experts run directly at `hidden_size`.
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for expert routing.
     use_bias (`bool`, *optional*, defaults to `False`):
@@ -138,6 +142,7 @@ class NemotronHSparseConfig(PreTrainedConfig):
     moe_intermediate_size: int = 7688
     moe_shared_expert_intermediate_size: int = 7688
     moe_shared_expert_overlap: bool = True
+    moe_latent_size: int | None = None
     num_experts_per_tok: int = 2
     routed_scaling_factor: float | int = 1.0
     n_group: int = 1
@@ -162,11 +167,10 @@ class NemotronHSparseConfig(PreTrainedConfig):
         self.use_conv_bias = kwargs.pop("mamba_conv_bias", self.use_conv_bias)
         self.chunk_size = kwargs.pop("mamba_chunk_size", self.chunk_size)
 
-        # Drop unsupported kwargs (MTP / latent expert projections / layer counts).
+        # Drop unsupported kwargs (MTP / layer counts). `moe_latent_size` is now supported (see the MoE block).
         kwargs.pop("num_nextn_predict_layers", None)
         kwargs.pop("mtp_hybrid_override_pattern", None)
         kwargs.pop("mtp_layers_block_type", None)
-        kwargs.pop("moe_latent_size", None)
         kwargs.pop("num_hidden_layers", None)
         kwargs.pop("layers_block_type", None)
 

@@ -728,8 +728,9 @@ class NemotronHSparseExperts(nn.Module):
     def __init__(self, config: NemotronHSparseConfig):
         super().__init__()
         self.num_experts = config.n_routed_experts
-        self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
+        # The routed experts run at `moe_latent_size` when latent projection is enabled, else at `hidden_size`.
+        self.hidden_dim = config.moe_latent_size if config.moe_latent_size is not None else config.hidden_size
         self.up_proj = nn.Parameter(torch.empty(self.num_experts, self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.mlp_hidden_act]
@@ -777,7 +778,14 @@ class NemotronHSparseTopkRouter(nn.Module):
 
 
 class NemotronHSparseMoE(nn.Module):
-    """Routed experts + one shared-expert MLP. Drop-in FFN for Nemotron-H Sparse layers."""
+    """
+    Routed experts + one shared-expert MLP. Drop-in FFN for Nemotron-H Sparse layers.
+
+    When `config.moe_latent_size` is set, the routed experts run in a lower-dimensional latent space: the hidden
+    states are projected down before the experts and back up afterwards (the shared expert keeps running at
+    `hidden_size`). Among the released checkpoints only Nemotron-3 Nano (A3B) leaves `moe_latent_size` unset; Super
+    and Ultra both use it, so it lives here on the shared sparse block rather than in a dedicated model.
+    """
 
     def __init__(self, config: NemotronHSparseConfig):
         super().__init__()
@@ -793,6 +801,12 @@ class NemotronHSparseMoE(nn.Module):
         self.norm_topk_prob = config.norm_topk_prob
         self.routed_scaling_factor = config.routed_scaling_factor
         self.top_k = config.num_experts_per_tok
+        if config.moe_latent_size is not None:
+            self.fc1_latent_proj = nn.Linear(config.hidden_size, config.moe_latent_size, bias=config.mlp_bias)
+            self.fc2_latent_proj = nn.Linear(config.moe_latent_size, config.hidden_size, bias=config.mlp_bias)
+        else:
+            self.fc1_latent_proj = nn.Identity()
+            self.fc2_latent_proj = nn.Identity()
 
     def route_tokens_to_experts(self, router_logits):
         router_logits = router_logits.sigmoid()
@@ -819,13 +833,17 @@ class NemotronHSparseMoE(nn.Module):
         topk_weights = topk_weights * self.routed_scaling_factor
         return topk_indices, topk_weights
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
         router_logits = self.gate(hidden_states)
         topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        # Routed experts run in latent space (no-op `Identity` when `moe_latent_size` is unset).
+        hidden_states = self.fc1_latent_proj(hidden_states)
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights)
+        hidden_states = self.fc2_latent_proj(hidden_states)
+        hidden_states = hidden_states.view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 
