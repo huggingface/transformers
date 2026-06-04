@@ -122,6 +122,7 @@ else:
             ("llava_next", "LlavaNextProcessor"),
             ("llava_next_video", "LlavaNextVideoProcessor"),
             ("llava_onevision", "LlavaOnevisionProcessor"),
+            ("locateanything", "LocateAnythingProcessor"),
             ("markuplm", "MarkupLMProcessor"),
             ("metaclip_2", "CLIPProcessor"),
             ("mgp-str", "MgpstrProcessor"),

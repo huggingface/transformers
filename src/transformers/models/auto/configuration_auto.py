@@ -36,6 +36,7 @@ _CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
 CONFIG_MAPPING_NAMES.update(
     {
         "EvollaModel": "EvollaConfig",
+        "locateanything": "LocateAnythingConfig",
         "mlcd": "MLCDVisionConfig",
         "vibevoice_acoustic_tokenizer_decoder": "VibeVoiceAcousticTokenizerDecoderConfig",
         "vibevoice_acoustic_tokenizer_encoder": "VibeVoiceAcousticTokenizerEncoderConfig",

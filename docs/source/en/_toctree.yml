@@ -1313,6 +1313,8 @@
         title: LLaVa-NeXT-Video
       - local: model_doc/llava_onevision
         title: LLaVA-Onevision
+      - local: model_doc/locateanything
+        title: LocateAnything
       - local: model_doc/lxmert
         title: LXMERT
       - local: model_doc/matcha
