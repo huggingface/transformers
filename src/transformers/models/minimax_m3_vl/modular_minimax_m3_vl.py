@@ -25,7 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicLayer
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -154,8 +154,8 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
                 setattr(self, flat, sparse_cfg[legacy])
 
         # ``layer_types`` is the canonical per-layer attention dispatch: it tells
-        # ``DynamicCache(config=...)`` which layers want the sparse cache and lets
-        # the decoder pick ``MiniMaxM3VLSparseAttention`` vs. plain attention.
+        # ``DynamicCache(config=...)`` which layers want the sparse cache and tells
+        # ``MiniMaxM3VLAttention`` which layers build a sparse Lightning Indexer.
         if self.layer_types is None and "sparse_attention_freq" in sparse_cfg:
             self.layer_types = [
                 "minimax_m3_sparse" if f else "full_attention" for f in sparse_cfg["sparse_attention_freq"]
@@ -288,15 +288,6 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
 # ---------------------------------------------------------------------------
 
 
-def _swigluoai(gate_up: torch.Tensor, alpha: float, limit: float) -> torch.Tensor:
-    """SwiGLU with output clamp (M3-style, non-interleaved gate/up layout)."""
-    gate, up = gate_up.chunk(2, dim=-1)
-    gate = gate.clamp(min=None, max=limit)
-    up = up.clamp(min=-limit, max=limit)
-    glu = gate * torch.sigmoid(gate * alpha)
-    return (up + 1.0) * glu
-
-
 class MiniMaxM3VLRMSNorm(Gemma3RMSNorm):
     """Gemma-style RMSNorm: normalizes in fp32 and scales by ``weight + 1``."""
 
@@ -319,7 +310,11 @@ class MiniMaxM3VLDenseMLP(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         gate_up = self.gate_up_proj(hidden_states)
-        return self.down_proj(_swigluoai(gate_up, self.swiglu_alpha, self.swiglu_limit))
+        gate, up = gate_up.chunk(2, dim=-1)
+        gate = gate.clamp(max=self.swiglu_limit)
+        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        glu = gate * torch.sigmoid(gate * self.swiglu_alpha)
+        return self.down_proj((up + 1.0) * glu)
 
 
 class MiniMaxM3VLExperts(PhimoeExperts):
@@ -344,7 +339,11 @@ class MiniMaxM3VLExperts(PhimoeExperts):
         self.swiglu_limit = config.swiglu_limit
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        return _swigluoai(gate_up, self.swiglu_alpha, self.swiglu_limit)
+        gate, up = gate_up.chunk(2, dim=-1)
+        gate = gate.clamp(max=self.swiglu_limit)
+        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        glu = gate * torch.sigmoid(gate * self.swiglu_alpha)
+        return (up + 1.0) * glu
 
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
@@ -384,10 +383,6 @@ class MiniMaxM3VLSparseMoeBlock(MiniMaxM2SparseMoeBlock):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-        if self.training and self.jitter_noise > 0:
-            hidden_states = hidden_states * torch.empty_like(hidden_states).uniform_(
-                1.0 - self.jitter_noise, 1.0 + self.jitter_noise
-            )
         hidden_states_flat = hidden_states.view(-1, hidden_dim)
         _, top_k_weights, top_k_index = self.gate(hidden_states_flat, self.e_score_correction_bias)
         top_k_weights = top_k_weights * self.routed_scaling_factor
@@ -406,7 +401,7 @@ class MiniMaxM3VLRotaryEmbedding(MiniMaxM2RotaryEmbedding):
 
 
 class MiniMaxM3VLAttention(MiniMaxM2Attention):
-    """M3 attention: per-head Gemma QK-norm + partial RoPE.
+    """M3 attention: per-head Gemma QK-norm + partial RoPE, optionally sparse.
 
     Overrides the inherited FlexOlmo-style forward because per-head QK norm
     requires reshaping to ``[..., num_heads, head_dim]`` before the norm
@@ -415,6 +410,12 @@ class MiniMaxM3VLAttention(MiniMaxM2Attention):
     (via ``partial_rotary_factor``), so the inherited ``apply_rotary_pos_emb`` —
     which derives ``rotary_dim`` from ``cos.shape[-1]`` and passes the remaining
     channels through unchanged — rotates exactly the first ``rotary_dim`` channels.
+
+    On ``"minimax_m3_sparse"`` layers a [`MiniMaxM3VLIndexer`] selects, per query, a
+    small set of key blocks; its ``[B, 1, S, S]`` additive ``block_bias`` (``0`` where
+    a query may attend, ``-inf`` elsewhere) is summed onto the causal mask so the
+    attention kernel already excludes every key outside the top-k blocks — the same
+    optional-branch design as [`DeepseekV4Attention`]'s compressor.
     """
 
     def __init__(self, config: MiniMaxM3VLTextConfig, layer_idx: int):
@@ -422,6 +423,7 @@ class MiniMaxM3VLAttention(MiniMaxM2Attention):
         # Replace the inherited (per-layer) q_norm/k_norm with per-head Gemma norms.
         self.q_norm = MiniMaxM3VLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = MiniMaxM3VLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.indexer = MiniMaxM3VLIndexer(config) if config.layer_types[layer_idx] == "minimax_m3_sparse" else None
 
     def forward(
         self,
@@ -429,10 +431,24 @@ class MiniMaxM3VLAttention(MiniMaxM2Attention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
+        position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
+
+        # Sparse layers fold the indexer's block selection into the attention mask.
+        if self.indexer is not None:
+            block_bias = self.indexer(
+                hidden_states,
+                position_embeddings,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                layer_idx=self.layer_idx,
+            )
+            if attention_mask is not None:
+                block_bias = block_bias + attention_mask.to(block_bias.dtype)
+            attention_mask = block_bias
 
         query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
@@ -562,48 +578,6 @@ class MiniMaxM3VLIndexer(nn.Module):
         return token_bias.to(idx_q.dtype).unsqueeze(1)
 
 
-class MiniMaxM3VLSparseAttention(MiniMaxM3VLAttention):
-    """Sparse-attention layer: standard M3 attention restricted to the key
-    blocks selected by the [`MiniMaxM3VLIndexer`].
-
-    The indexer returns a ``[B, 1, S, S]`` additive ``block_bias`` (``0`` where a
-    query may attend, ``-inf`` elsewhere); we sum it onto the regular causal
-    ``attention_mask`` so SDPA already excludes every key outside the top-k
-    blocks — the same approach as [`DeepseekV4Attention`].
-    """
-
-    def __init__(self, config: MiniMaxM3VLTextConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.indexer = MiniMaxM3VLIndexer(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        position_ids: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        block_bias = self.indexer(
-            hidden_states,
-            position_embeddings,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            layer_idx=self.layer_idx,
-        )
-        if attention_mask is not None:
-            block_bias = block_bias + attention_mask.to(block_bias.dtype)
-
-        return super().forward(
-            hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
-            attention_mask=block_bias,
-            past_key_values=past_key_values,
-            **kwargs,
-        )
-
-
 # ---------------------------------------------------------------------------
 # Text branch: decoder layer + model
 # ---------------------------------------------------------------------------
@@ -617,10 +591,9 @@ class MiniMaxM3VLDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         eps = config.rms_norm_eps
 
-        if config.layer_types[layer_idx] == "minimax_m3_sparse":
-            self.self_attn = MiniMaxM3VLSparseAttention(config, layer_idx)
-        else:
-            self.self_attn = MiniMaxM3VLAttention(config, layer_idx)
+        # Sparse vs. dense attention is decided inside MiniMaxM3VLAttention by
+        # config.layer_types[layer_idx] (sparse layers build a MiniMaxM3VLIndexer).
+        self.self_attn = MiniMaxM3VLAttention(config, layer_idx)
 
         if config.moe_layer_freq[layer_idx]:
             self.mlp = MiniMaxM3VLSparseMoeBlock(config)
@@ -844,43 +817,20 @@ class MiniMaxM3VLVisionMLP(CLIPMLP):
     pass
 
 
+# 3D-RoPE ``position_embeddings`` reach the attention through ``**kwargs`` (threaded
+# unchanged by the inherited CLIP encoder/layer forwards), so neither needs an override
+# beyond swapping in the M3 attention/MLP submodules.
 class MiniMaxM3VLVisionEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: MiniMaxM3VLVisionConfig):
         super().__init__(config)
         self.self_attn = MiniMaxM3VLVisionAttention(config)
         self.mlp = MiniMaxM3VLVisionMLP(config)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states, _ = self.self_attn(
-            self.layer_norm1(hidden_states), position_embeddings, attention_mask, **kwargs
-        )
-        hidden_states = residual + hidden_states
-        return hidden_states + self.mlp(self.layer_norm2(hidden_states))
-
 
 class MiniMaxM3VLVisionEncoder(CLIPEncoder):
     def __init__(self, config: MiniMaxM3VLVisionConfig):
         super().__init__(config)
         self.layers = nn.ModuleList([MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-
-    def forward(
-        self,
-        inputs_embeds: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
-        hidden_states = inputs_embeds
-        for encoder_layer in self.layers:
-            hidden_states = encoder_layer(hidden_states, position_embeddings, attention_mask, **kwargs)
-        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class MiniMaxM3VLVisionTransformer(nn.Module):
