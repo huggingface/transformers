@@ -11,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MossTTSDelay model configuration """
-
+"""MossTTSDelay model configuration"""
 
 from huggingface_hub.dataclasses import strict
 
@@ -68,6 +67,7 @@ class MossTTSDelayConfig(PreTrainedConfig):
         sampling_rate (`int`, *optional*, defaults to 24000):
             Audio sampling rate used by the processor and audio tokenizer.
     """
+
     model_type = "moss_tts_delay"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"language_config": Qwen3Config}

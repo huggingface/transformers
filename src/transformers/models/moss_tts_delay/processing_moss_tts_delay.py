@@ -90,12 +90,10 @@ class UserMessage(Message):
             reference = []
             for speaker_idx, speaker_reference in enumerate(self.reference):
                 if speaker_reference is not None:
-                    reference.append(f"[S{speaker_idx+1}]:\n{AUDIO_PLACEHOLDER}")
+                    reference.append(f"[S{speaker_idx + 1}]:\n{AUDIO_PLACEHOLDER}")
             reference = "\n".join(reference)
             audio_codes_list = [
-                speaker_reference
-                for speaker_reference in self.reference
-                if speaker_reference is not None
+                speaker_reference for speaker_reference in self.reference if speaker_reference is not None
             ]
         else:
             raise TypeError("`reference` should be exactly a list when it is not None.")
@@ -180,15 +178,9 @@ class MossTTSDelayProcessor(ProcessorMixin):
                 return tok[0] if len(tok) > 0 else ""
             return cast(str, tok)
 
-        self.audio_user_slot_token = _id_to_token(
-            self.model_config.audio_user_slot_token_id
-        )
-        self.audio_assistant_gen_slot_token = _id_to_token(
-            self.model_config.audio_assistant_gen_slot_token_id
-        )
-        self.audio_assistant_delay_slot_token = _id_to_token(
-            self.model_config.audio_assistant_delay_slot_token_id
-        )
+        self.audio_user_slot_token = _id_to_token(self.model_config.audio_user_slot_token_id)
+        self.audio_assistant_gen_slot_token = _id_to_token(self.model_config.audio_assistant_gen_slot_token_id)
+        self.audio_assistant_delay_slot_token = _id_to_token(self.model_config.audio_assistant_delay_slot_token_id)
         self.audio_start_token = _id_to_token(self.model_config.audio_start_token_id)
         self.audio_end_token = _id_to_token(self.model_config.audio_end_token_id)
 
@@ -205,14 +197,12 @@ class MossTTSDelayProcessor(ProcessorMixin):
                     pretrained_model_name_or_path,
                     **processor_lookup_kwargs,
                 )
-                audio_tokenizer_name_or_path = processor_dict.get(
-                    "audio_tokenizer_name_or_path"
-                )
+                audio_tokenizer_name_or_path = processor_dict.get("audio_tokenizer_name_or_path")
                 audio_tokenizer_dict = processor_dict.get("audio_tokenizer", {})
                 if isinstance(audio_tokenizer_dict, dict):
-                    audio_tokenizer_name_or_path = audio_tokenizer_dict.get(
-                        "audio_tokenizer_name_or_path"
-                    ) or audio_tokenizer_name_or_path
+                    audio_tokenizer_name_or_path = (
+                        audio_tokenizer_dict.get("audio_tokenizer_name_or_path") or audio_tokenizer_name_or_path
+                    )
             except Exception:
                 audio_tokenizer_name_or_path = None
         if audio_tokenizer_name_or_path is None:
@@ -288,9 +278,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
             unified_codes = []
             for message_idx, message in enumerate(conversation):
                 if apply_chat_template:
-                    add_generation_prompt = (
-                        mode == "generation" and message_idx == len(conversation) - 1
-                    )
+                    add_generation_prompt = mode == "generation" and message_idx == len(conversation) - 1
                     try:
                         content = self.tokenizer.apply_chat_template(
                             [{"role": message["role"], "content": message["content"]}],
@@ -309,9 +297,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
                                 add_generation_prompt=add_generation_prompt,
                             )
                         except Exception:
-                            logger.warning(
-                                "apply_chat_template failed; fallback to raw content."
-                            )
+                            logger.warning("apply_chat_template failed; fallback to raw content.")
                             content = message["content"]
                 else:
                     content = message["content"]
@@ -326,9 +312,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
 
                 audio_codes_list: list[torch.Tensor] = []
                 if len(raw_audio_items) > 0:
-                    encoded_items: list[torch.Tensor | None] = [None] * len(
-                        raw_audio_items
-                    )
+                    encoded_items: list[torch.Tensor | None] = [None] * len(raw_audio_items)
                     paths: list[str] = []
                     path_positions: list[int] = []
 
@@ -346,25 +330,17 @@ class MossTTSDelayProcessor(ProcessorMixin):
                             path_positions.append(idx)
                             continue
 
-                        raise TypeError(
-                            "Each audio item must be a torch.Tensor of codes or a path-like string."
-                        )
+                        raise TypeError("Each audio item must be a torch.Tensor of codes or a path-like string.")
 
                     if len(paths) > 0:
                         encoded_from_paths = self.encode_audios_from_path(paths, n_vq)
                         if len(encoded_from_paths) != len(paths):
-                            raise RuntimeError(
-                                "encode_audios_from_path returned an unexpected number of items."
-                            )
+                            raise RuntimeError("encode_audios_from_path returned an unexpected number of items.")
                         for pos, codes in zip(path_positions, encoded_from_paths):
                             encoded_items[pos] = codes
 
                     audio_codes_list = [cast(torch.Tensor, t) for t in encoded_items]
-                unified_codes.append(
-                    self._get_unified_codes(
-                        message["role"], content, audio_codes_list, truncation
-                    )
-                )
+                unified_codes.append(self._get_unified_codes(message["role"], content, audio_codes_list, truncation))
 
             unified_codes = torch.cat(unified_codes)
             input_ids_list.append(unified_codes)
@@ -435,13 +411,11 @@ class MossTTSDelayProcessor(ProcessorMixin):
             padding_value=self.model_config.audio_pad_code,
             padding_side="left",
         )
-        other_channel_mask = (pad_input_ids.shape[1] - lengths).unsqueeze(
-            1
-        ) > torch.arange(pad_input_ids.shape[1], device=device).unsqueeze(0)
+        other_channel_mask = (pad_input_ids.shape[1] - lengths).unsqueeze(1) > torch.arange(
+            pad_input_ids.shape[1], device=device
+        ).unsqueeze(0)
         pad_input_ids[..., 0][other_channel_mask] = self.model_config.pad_token_id
-        attention_mask = torch.zeros(
-            pad_input_ids.shape[0], pad_input_ids.shape[1], device=device
-        )
+        attention_mask = torch.zeros(pad_input_ids.shape[0], pad_input_ids.shape[1], device=device)
         attention_mask[~other_channel_mask] = 1
         attention_mask = attention_mask.bool()
         return {
@@ -465,8 +439,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
         num_placeholders = content.count(AUDIO_PLACEHOLDER)
         if num_placeholders != len(lengths):
             raise ValueError(
-                f"Number of {AUDIO_PLACEHOLDER} ({num_placeholders}) "
-                f"does not match lengths ({len(lengths)})"
+                f"Number of {AUDIO_PLACEHOLDER} ({num_placeholders}) does not match lengths ({len(lengths)})"
             )
 
         def build_audio_block(length: int) -> str:
@@ -499,9 +472,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
             return content, audio_codes_list
 
         if len(matches) != len(audio_codes_list):
-            raise ValueError(
-                "Audio placeholders do not match the provided audio codes list."
-            )
+            raise ValueError("Audio placeholders do not match the provided audio codes list.")
 
         new_audio_codes_list = []
         new_parts = []
@@ -509,10 +480,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
         i = 0
         while i < len(matches):
             j = i
-            while (
-                j + 1 < len(matches)
-                and content[matches[j].end() : matches[j + 1].start()].strip() == ""
-            ):
+            while j + 1 < len(matches) and content[matches[j].end() : matches[j + 1].start()].strip() == "":
                 j += 1
 
             new_parts.append(content[last_pos : matches[i].start()])
@@ -522,9 +490,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
             if j == i:
                 new_audio_codes_list.append(audio_codes_list[i])
             else:
-                new_audio_codes_list.append(
-                    torch.cat(audio_codes_list[i : j + 1], dim=0)
-                )
+                new_audio_codes_list.append(torch.cat(audio_codes_list[i : j + 1], dim=0))
 
             i = j + 1
 
@@ -578,9 +544,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
             n_vq = self.model_config.n_vq
 
         if len(audio_codes_list) > 1 and AUDIO_PLACEHOLDER in content:
-            content, audio_codes_list = self._merge_consecutive_audio_placeholders(
-                content, audio_codes_list
-            )
+            content, audio_codes_list = self._merge_consecutive_audio_placeholders(content, audio_codes_list)
         content = self._replace_audio_placeholders(
             content=content,
             lengths=[len(audio_codes) for audio_codes in audio_codes_list],
@@ -595,18 +559,10 @@ class MossTTSDelayProcessor(ProcessorMixin):
             device=audio_codes_list[0].device if audio_codes_list else None,
         )
 
-        audio_start_indices = torch.where(
-            text_codes == self.model_config.audio_start_token_id
-        )[0]
-        audio_end_indices = torch.where(
-            text_codes == self.model_config.audio_end_token_id
-        )[0]
-        if len(audio_start_indices) != len(audio_codes_list) or len(
-            audio_end_indices
-        ) != len(audio_codes_list):
-            raise ValueError(
-                "Audio placeholders do not match the provided audio codes list."
-            )
+        audio_start_indices = torch.where(text_codes == self.model_config.audio_start_token_id)[0]
+        audio_end_indices = torch.where(text_codes == self.model_config.audio_end_token_id)[0]
+        if len(audio_start_indices) != len(audio_codes_list) or len(audio_end_indices) != len(audio_codes_list):
+            raise ValueError("Audio placeholders do not match the provided audio codes list.")
 
         delay_audio_codes_list = []
         if len(audio_codes_list) == 0:
@@ -623,9 +579,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
             ):
                 audio_start_idx = int(audio_start_idx_t.item())
                 audio_end_idx = int(audio_end_idx_t.item())
-                delay_audio_codes = self.apply_delay_pattern(
-                    audio_codes, self.model_config.audio_pad_code
-                )
+                delay_audio_codes = self.apply_delay_pattern(audio_codes, self.model_config.audio_pad_code)
                 pad_codes = torch.full(
                     (audio_start_idx - prefix_idx + 1, n_vq),
                     self.model_config.audio_pad_code,
@@ -636,9 +590,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
                 prefix_idx = audio_end_idx
 
             if truncation:
-                delay_audio_codes_list[-1] = delay_audio_codes_list[-1][
-                    : -(n_vq - 1), :
-                ]
+                delay_audio_codes_list[-1] = delay_audio_codes_list[-1][: -(n_vq - 1), :]
             else:
                 last_audio_end_idx = int(audio_end_indices[-1].item())
                 pad_codes = torch.full(
@@ -654,9 +606,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
         if text_codes.shape[0] != delay_audio_codes_list.shape[0]:
             text_codes = text_codes[: delay_audio_codes_list.shape[0]]
 
-        unified_codes = torch.cat(
-            [text_codes.unsqueeze(1), delay_audio_codes_list], dim=1
-        )
+        unified_codes = torch.cat([text_codes.unsqueeze(1), delay_audio_codes_list], dim=1)
         return unified_codes
 
     def _parse_text_codes(self, start_length, text_codes):
@@ -708,16 +658,10 @@ class MossTTSDelayProcessor(ProcessorMixin):
 
         # Keep codec causal context by decoding the whole first segment first,
         # then trim at waveform level according to start_length ratio.
-        if (
-            start_length > 0
-            and len(audio_codes_list) > 0
-            and len(decoded_audio_list) > 0
-        ):
+        if start_length > 0 and len(audio_codes_list) > 0 and len(decoded_audio_list) > 0:
             first_codes_length = audio_codes_list[0].shape[0]
             if first_codes_length > 0:
-                trim_ratio = max(
-                    0.0, min(float(start_length) / float(first_codes_length), 1.0)
-                )
+                trim_ratio = max(0.0, min(float(start_length) / float(first_codes_length), 1.0))
                 first_audio = decoded_audio_list[0]
                 if trim_ratio >= 1.0:
                     decoded_audio_list = decoded_audio_list[1:]
@@ -736,17 +680,13 @@ class MossTTSDelayProcessor(ProcessorMixin):
         genearted_messages = []
         for start_length, generation_ids in output:
             content = self._parse_text_codes(start_length, generation_ids[:, 0])
-            audio_codes_list = self._parse_audio_codes(
-                start_length, generation_ids[:, 1:]
-            )
+            audio_codes_list = self._parse_audio_codes(start_length, generation_ids[:, 1:])
             if content == "":
                 message = None
             else:
                 message = AssistantMessage(
                     content=content,
-                    audio_codes_list=cast(
-                        list[str | torch.Tensor], audio_codes_list
-                    ),
+                    audio_codes_list=cast(list[str | torch.Tensor], audio_codes_list),
                 )
             genearted_messages.append(message)
         return genearted_messages
@@ -776,9 +716,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
 
         audio_tokenizer = getattr(self, "audio_tokenizer", None)
         if audio_tokenizer is None:
-            logger.warning(
-                "audio_tokenizer is not set on processor. Using CPU as default."
-            )
+            logger.warning("audio_tokenizer is not set on processor. Using CPU as default.")
             return torch.device("cpu")
 
         device_attr = getattr(audio_tokenizer, "device", None)
@@ -789,9 +727,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
             return next(audio_tokenizer.parameters()).device
         except StopIteration:
             # No parameters (shouldn't happen for real models); default to CPU.
-            logger.warning(
-                "No parameters found on audio_tokenizer. Using CPU as default."
-            )
+            logger.warning("No parameters found on audio_tokenizer. Using CPU as default.")
             return torch.device("cpu")
 
     def encode_audios_from_wav(
@@ -832,12 +768,8 @@ class MossTTSDelayProcessor(ProcessorMixin):
         else:
             # Fallback: use encode() with explicit padding.
             max_len = max(int(wav.shape[-1]) for wav in wav_list_)
-            input_values = torch.zeros(
-                len(wav_list_), 1, max_len, device=device, dtype=torch.float32
-            )
-            padding_mask = torch.zeros(
-                len(wav_list_), max_len, device=device, dtype=torch.bool
-            )
+            input_values = torch.zeros(len(wav_list_), 1, max_len, device=device, dtype=torch.float32)
+            padding_mask = torch.zeros(len(wav_list_), max_len, device=device, dtype=torch.bool)
             for i, wav in enumerate(wav_list_):
                 this_len = int(wav.shape[-1])
                 input_values[i, 0, :this_len] = wav
@@ -852,28 +784,18 @@ class MossTTSDelayProcessor(ProcessorMixin):
             audio_codes_lengths = enc.audio_codes_lengths
 
         if audio_codes is None or audio_codes_lengths is None:
-            raise RuntimeError(
-                "audio_tokenizer.encode() returned empty outputs (audio_codes/audio_codes_lengths)."
-            )
+            raise RuntimeError("audio_tokenizer.encode() returned empty outputs (audio_codes/audio_codes_lengths).")
 
         # Keep processor's historical contract: list[Tensor] with shape (T, NQ)
         # and on CPU (so downstream text/audio packing remains device-agnostic).
         codes_list: list[torch.Tensor] = []
         for i in range(int(audio_codes.shape[1])):
             length_i = int(audio_codes_lengths[i].item())
-            codes_i = (
-                audio_codes[:, i, :length_i]
-                .transpose(0, 1)
-                .contiguous()
-                .to(torch.long)
-                .cpu()
-            )
+            codes_i = audio_codes[:, i, :length_i].transpose(0, 1).contiguous().to(torch.long).cpu()
             codes_list.append(codes_i)
         return codes_list
 
-    def encode_audios_from_path(
-        self, wav_path_list: str | list[str], n_vq: int | None = None
-    ):
+    def encode_audios_from_path(self, wav_path_list: str | list[str], n_vq: int | None = None):
         if isinstance(wav_path_list, str):
             wav_path_list = [wav_path_list]
 
@@ -898,9 +820,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
 
         return self.encode_audios_from_wav(wav_list, target_sr, n_vq)
 
-    def decode_audio_codes(
-        self, audio_tokens_list: torch.Tensor | list[torch.Tensor]
-    ):
+    def decode_audio_codes(self, audio_tokens_list: torch.Tensor | list[torch.Tensor]):
         if self.audio_tokenizer is None:
             raise RuntimeError("audio_tokenizer is not set on processor.")
         audio_tokenizer = self.audio_tokenizer
@@ -914,33 +834,24 @@ class MossTTSDelayProcessor(ProcessorMixin):
 
         # Processor uses (T, NQ); MossAudioTokenizer expects (NQ, T) (or (NQ, B, T)).
         codes_list = [
-            codes.transpose(0, 1).contiguous().to(device=device, dtype=torch.long)
-            for codes in audio_tokens_list
+            codes.transpose(0, 1).contiguous().to(device=device, dtype=torch.long) for codes in audio_tokens_list
         ]
 
         # Fallback: pad to (NQ, B, T) + mask, then decode.
         nq = int(codes_list[0].shape[0])
         max_t = max(int(c.shape[1]) for c in codes_list)
-        audio_codes = torch.zeros(
-            nq, len(codes_list), max_t, device=device, dtype=torch.long
-        )
-        padding_mask = torch.zeros(
-            len(codes_list), max_t, device=device, dtype=torch.bool
-        )
+        audio_codes = torch.zeros(nq, len(codes_list), max_t, device=device, dtype=torch.long)
+        padding_mask = torch.zeros(len(codes_list), max_t, device=device, dtype=torch.bool)
         for i, c in enumerate(codes_list):
             t = int(c.shape[1])
             audio_codes[:, i, :t] = c
             padding_mask[i, :t] = True
-        dec = audio_tokenizer.decode(
-            audio_codes, padding_mask=padding_mask, return_dict=True, chunk_duration=8
-        )
+        dec = audio_tokenizer.decode(audio_codes, padding_mask=padding_mask, return_dict=True, chunk_duration=8)
         audio = dec.audio
         audio_lengths = dec.audio_lengths
 
         if audio is None or audio_lengths is None:
-            raise RuntimeError(
-                "audio_tokenizer.decode() returned empty outputs (audio/audio_lengths)."
-            )
+            raise RuntimeError("audio_tokenizer.decode() returned empty outputs (audio/audio_lengths).")
 
         # Return historical contract: list of 1D waveforms (T,)
         wav_list: list[torch.Tensor] = []

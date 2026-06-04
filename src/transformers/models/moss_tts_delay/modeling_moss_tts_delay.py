@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Modeling classes for MossTTSDelay. """
+"""Modeling classes for MossTTSDelay."""
 
 from dataclasses import dataclass
 
@@ -73,6 +73,7 @@ class MossTTSDelayOutputWithPast(ModelOutput):
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed):
             Tuple of torch.FloatTensor (one for each layer) of the attention weights.
     """
+
     loss: torch.FloatTensor | None = None
     all_sum_losses: torch.FloatTensor | None = None
     all_token_nums: torch.LongTensor | None = None
@@ -82,8 +83,6 @@ class MossTTSDelayOutputWithPast(ModelOutput):
     past_key_values: Cache | None = None
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
-
-
 
 
 class MossTTSDelayPreTrainedModel(PreTrainedModel):
@@ -130,7 +129,6 @@ class MossTTSDelayPreTrainedModel(PreTrainedModel):
             # For your lm_heads, super()._init_weights already covers typical Linear.
             # This block is only needed if you have custom Linear variants later.
             pass
-
 
 
 MOSSTTS_START_DOCSTRING = r"""
@@ -180,9 +178,9 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
         # Multi-Head Prediction Layers
         # Head 0: Main language head
         # Head 1..N: Audio VQ heads
-        self.lm_heads = nn.ModuleList([
-            nn.Linear(config.language_config.hidden_size, config.language_config.vocab_size, bias=False)
-        ])
+        self.lm_heads = nn.ModuleList(
+            [nn.Linear(config.language_config.hidden_size, config.language_config.vocab_size, bias=False)]
+        )
         for vq_idx in range(self.config.n_vq):
             self.lm_heads.append(
                 nn.Linear(config.language_config.hidden_size, self.config.audio_vocab_size + 1, bias=False)
@@ -267,14 +265,14 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
         # 2. Backbone Forward
         # Qwen3Model outputs standard CausalLMOutputWithPast or similar
         outputs = self.language_model(
-            input_ids=None, # Passed via inputs_embeds
+            input_ids=None,  # Passed via inputs_embeds
             position_ids=position_ids,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            output_hidden_states=True, # Always need hidden states for multi-head projection
+            output_hidden_states=True,  # Always need hidden states for multi-head projection
             return_dict=True,
             cache_position=cache_position,
             **kwargs,
@@ -336,7 +334,7 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
 
                 # Flatten for CrossEntropy
                 # logits: [B*S, V], labels: [B*S]
-                loss_fct = CrossEntropyLoss(reduction='none')
+                loss_fct = CrossEntropyLoss(reduction="none")
                 vocab_size = logits.size(-1)
 
                 reshaped_logits = logits.view(-1, vocab_size)
@@ -347,7 +345,7 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
 
                 # Reshape back to [B, S] and sum over Sequence dimension to get per-sample loss
                 per_token_loss = per_token_loss.view(batch_size, -1)
-                per_sample_loss = torch.sum(per_token_loss, dim=-1) # [B]
+                per_sample_loss = torch.sum(per_token_loss, dim=-1)  # [B]
 
                 all_sum_losses_list.append(per_sample_loss)
 
@@ -359,7 +357,9 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
                 if len(channelwise_loss_weight) != n_heads:
                     raise ValueError(f"channelwise_loss_weight length {len(channelwise_loss_weight)} != {n_heads}")
 
-                w_tensor = torch.tensor(channelwise_loss_weight, device=all_sum_losses.device, dtype=all_sum_losses.dtype)
+                w_tensor = torch.tensor(
+                    channelwise_loss_weight, device=all_sum_losses.device, dtype=all_sum_losses.dtype
+                )
 
                 # Sample losses: Weighted sum over channels per sample / Total weight
                 # Normalize by token count per channel
@@ -433,16 +433,28 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
         torch_int64_max = torch.iinfo(torch.int64).max
         delayed_lengths = torch.full((batch_size,), torch_int64_max, dtype=torch.int64, device=device)
 
-        is_continuation = (input_ids[:, -1, 0] == self.config.audio_start_token_id) | (input_ids[:, -1, 0] == self.config.audio_assistant_gen_slot_token_id)
+        is_continuation = (input_ids[:, -1, 0] == self.config.audio_start_token_id) | (
+            input_ids[:, -1, 0] == self.config.audio_assistant_gen_slot_token_id
+        )
         audio_start_indices = find_last_equal_C(input_ids[..., 0], self.config.audio_start_token_id)
         audio_start_mask = is_continuation & (audio_start_indices != -1)
         audio_lengths[audio_start_mask] = seq_len - audio_start_indices[audio_start_mask]
 
         is_audio = audio_start_mask.clone()
 
-        pre_exclude_mask0 = torch.tensor([self.config.pad_token_id, self.config.audio_assistant_gen_slot_token_id, self.config.audio_assistant_delay_slot_token_id, self.config.audio_end_token_id], device=device)
+        pre_exclude_mask0 = torch.tensor(
+            [
+                self.config.pad_token_id,
+                self.config.audio_assistant_gen_slot_token_id,
+                self.config.audio_assistant_delay_slot_token_id,
+                self.config.audio_end_token_id,
+            ],
+            device=device,
+        )
         pre_exclude_mask1 = torch.ones(self.config.language_config.vocab_size, device=device).bool()
-        pre_exclude_mask1[[self.config.audio_assistant_gen_slot_token_id, self.config.audio_assistant_delay_slot_token_id]] = False
+        pre_exclude_mask1[
+            [self.config.audio_assistant_gen_slot_token_id, self.config.audio_assistant_delay_slot_token_id]
+        ] = False
 
         for time_step in tqdm(range(max_new_tokens), desc=f"Generating bs{batch_size} ..."):
             outputs = self(
@@ -453,7 +465,10 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
             )
             past_key_values = outputs.past_key_values
 
-            next_token_logits = [logit[:, -1, :] / text_temperature if logit_idx == 0 else logit[:, -1, :] / audio_temperature for logit_idx, logit in enumerate(outputs.logits)] # List, len=n_vq+1, [batch_size, 1, vocab_size];
+            next_token_logits = [
+                logit[:, -1, :] / text_temperature if logit_idx == 0 else logit[:, -1, :] / audio_temperature
+                for logit_idx, logit in enumerate(outputs.logits)
+            ]  # List, len=n_vq+1, [batch_size, 1, vocab_size];
             next_token_logits[0] = next_token_logits[0].clone()
             next_text_token = torch.full((batch_size,), self.config.pad_token_id, device=device)
             next_text_token[~is_stopping & (delayed_lengths < n_vq)] = self.config.audio_assistant_delay_slot_token_id
@@ -461,26 +476,35 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
             next_text_token[is_audio_eos] = self.config.audio_end_token_id
             is_audio[is_audio_eos] = False
             sampling_text_mask = ~is_stopping & (delayed_lengths > n_vq)
-            next_token_logits[0][~is_audio] = next_token_logits[0][~is_audio].index_fill(-1, pre_exclude_mask0, float('-inf'))
-            next_token_logits[0][is_audio] = next_token_logits[0][is_audio].masked_fill(pre_exclude_mask1, float('-inf'))
+            next_token_logits[0][~is_audio] = next_token_logits[0][~is_audio].index_fill(
+                -1, pre_exclude_mask0, float("-inf")
+            )
+            next_token_logits[0][is_audio] = next_token_logits[0][is_audio].masked_fill(
+                pre_exclude_mask1, float("-inf")
+            )
             if time_step == 0:
-                next_token_logits[0][..., 151662] = float('-inf')
+                next_token_logits[0][..., 151662] = float("-inf")
             if time_step <= n_vq:
-                next_token_logits[0][..., self.config.im_end_token_id] = float('-inf')
+                next_token_logits[0][..., self.config.im_end_token_id] = float("-inf")
 
             next_text_token[sampling_text_mask] = sample_token(
                 logits=next_token_logits[0][sampling_text_mask],
                 top_p=text_top_p,
                 top_k=text_top_k,
-                do_sample=text_do_sample
+                do_sample=text_do_sample,
             )
             is_audio[next_text_token == self.config.audio_start_token_id] = True
             is_stopping[next_text_token == self.config.im_end_token_id] = True
 
             next_audio_tokens = torch.full((batch_size, n_vq), self.config.audio_pad_code, device=device)
 
-            pre_audio_mask = audio_lengths.unsqueeze(1) > torch.arange(n_vq, dtype=int, device=device).expand(batch_size, n_vq)
-            post_audio_mask = torch.arange(n_vq, dtype=int, device=device).expand(batch_size, n_vq) > delayed_lengths.unsqueeze(1) - 1
+            pre_audio_mask = audio_lengths.unsqueeze(1) > torch.arange(n_vq, dtype=int, device=device).expand(
+                batch_size, n_vq
+            )
+            post_audio_mask = (
+                torch.arange(n_vq, dtype=int, device=device).expand(batch_size, n_vq)
+                > delayed_lengths.unsqueeze(1) - 1
+            )
             post_audio_mask[delayed_lengths == torch_int64_max] = True
             sampling_audio_mask = pre_audio_mask & post_audio_mask
             next_audio_tokens[~sampling_audio_mask] = self.config.audio_pad_code
@@ -488,15 +512,15 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
             if sampling_audio_mask.sum() > 0:
                 audio_ch0_logits = next_token_logits[1][sampling_audio_mask[:, 0]]
                 audio_logits = torch.stack(next_token_logits[2:], dim=1)[sampling_audio_mask[:, 1:]]
-                audio_ch0_logits[..., self.config.audio_pad_code] = float('-inf')
-                audio_logits[..., self.config.audio_pad_code] = float('-inf')
+                audio_ch0_logits[..., self.config.audio_pad_code] = float("-inf")
+                audio_logits[..., self.config.audio_pad_code] = float("-inf")
                 next_audio_tokens[:, 0][sampling_audio_mask[:, 0]] = sample_token(
                     logits=audio_ch0_logits,
                     prev_tokens=generation_ids[:, :, 1],
                     repetition_penalty=audio_repetition_penalty,
                     top_p=audio_top_p,
                     top_k=audio_top_k,
-                    do_sample=audio_do_sample
+                    do_sample=audio_do_sample,
                 )
                 next_audio_tokens[:, 1:][sampling_audio_mask[:, 1:]] = sample_token(
                     logits=audio_logits,
@@ -504,12 +528,19 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
                     repetition_penalty=audio_repetition_penalty,
                     top_p=audio_top_p,
                     top_k=audio_top_k,
-                    do_sample=audio_do_sample
+                    do_sample=audio_do_sample,
                 )
 
-            audio_lengths[(next_text_token == self.config.audio_start_token_id) | (next_text_token == self.config.audio_assistant_gen_slot_token_id) | (next_text_token == self.config.audio_assistant_delay_slot_token_id)] += 1
+            audio_lengths[
+                (next_text_token == self.config.audio_start_token_id)
+                | (next_text_token == self.config.audio_assistant_gen_slot_token_id)
+                | (next_text_token == self.config.audio_assistant_delay_slot_token_id)
+            ] += 1
             audio_lengths[next_text_token == self.config.audio_end_token_id] = 0
-            delayed_lengths[(delayed_lengths == torch_int64_max) & (next_text_token == self.config.audio_assistant_delay_slot_token_id)] = 0
+            delayed_lengths[
+                (delayed_lengths == torch_int64_max)
+                & (next_text_token == self.config.audio_assistant_delay_slot_token_id)
+            ] = 0
             delayed_lengths[delayed_lengths != torch_int64_max] += 1
             delayed_lengths[delayed_lengths > n_vq] = torch_int64_max
 
