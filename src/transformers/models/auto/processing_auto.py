@@ -53,6 +53,7 @@ else:
             ("altclip", "AltCLIPProcessor"),
             ("aria", "AriaProcessor"),
             ("audioflamingo3", "AudioFlamingo3Processor"),
+            ("audiovisualflamingo", "AudioVisualFlamingoProcessor"),
             ("aya_vision", "AyaVisionProcessor"),
             ("bark", "BarkProcessor"),
             ("blip", "BlipProcessor"),
