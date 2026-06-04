@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+from itertools import groupby
 
 import torch
 
@@ -88,3 +89,26 @@ class DeepseekOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(num_local_patches, 6)
         self.assertEqual(num_image_tokens, 1121)
         self.assertIn("pixel_values_local", inputs)
+
+    def test_image_token_expansion_multiple_images(self):
+        """Several `<image>` placeholders in one prompt are each expanded, in encounter order."""
+        processor = self.get_processor()
+        processor.image_processor.size = {"height": 1024, "width": 1024}
+        processor.image_processor.tile_size = 768
+
+        small = torch.randint(0, 256, (3, 300, 200), dtype=torch.uint8)  # 0 local patches -> 257 tokens
+        large = torch.randint(0, 256, (3, 3264, 2448), dtype=torch.uint8)  # 6 local patches -> 1121 tokens
+        prompt = "<image>\n<image>\nFree OCR."
+
+        inputs = processor(images=[small, large], text=prompt, return_tensors="pt")
+
+        image_token_id = processor.image_token_id
+        ids = inputs["input_ids"][0].tolist()
+        # contiguous run lengths of image tokens, in order of appearance
+        runs = [sum(1 for _ in group) for token, group in groupby(ids) if token == image_token_id]
+
+        # patches are consumed in encounter order: small (0 local) then large (6 local)
+        self.assertEqual([int(n) for n in inputs["num_local_patches"]], [0, 6])
+        # the single-pass expansion must map the 1st placeholder -> 257 and the 2nd -> 1121, in order
+        self.assertEqual(runs, [257, 1121])
+        self.assertEqual((inputs["input_ids"] == image_token_id).sum().item(), 257 + 1121)
