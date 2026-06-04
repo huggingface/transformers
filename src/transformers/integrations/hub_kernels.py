@@ -607,30 +607,38 @@ def register_kernel_replacements_and_fusions(
 
         # Case 2: fusion.
         elif isinstance(layer_name, tuple):
-            glob_patterns = [item[1] for item in layer_name]
-            child_names = [p.rsplit(".", 1)[1] for p in glob_patterns]
-
             if layout_cls is None:
                 raise ValueError(
                     f"Fused kernel {kernel_cls.__name__!r} requires a companion layout class "
-                    f"named '{kernel_cls.__name__}Layout' in the same module. "
-                    f"Define it with __init__(self, {', '.join(child_names)}) to set up the "
-                    f"fused parameter layout."
+                    f"named '{kernel_cls.__name__}Layout' in the same module."
                 )
 
             layout_cls.kernel_layer_name = kernel_cls.__name__
 
+            glob_patterns = [item[1] for item in layer_name]
+            parent_patterns = [p.rsplit(".", 1)[0] for p in glob_patterns]
+
+            if len(set(parent_patterns)) != 1:
+                raise ValueError(
+                    f"All patterns for a fused kernel must share the same parent module, got {glob_patterns}"
+                )
+
+            parent_pattern = parent_patterns[0].replace("*", r"\w+")
+            child_names = [p.rsplit(".", 1)[1] for p in glob_patterns]
+
             with torch.device("meta"):
                 meta_model = cls(config)
 
-            seen: set[type] = set()
-            for module in meta_model.modules():
-                module_cls = type(module)
-                if module_cls in seen:
+            for name, module in meta_model.named_modules():
+                if not re.fullmatch(parent_pattern, name):
                     continue
                 if not all(hasattr(module, name) for name in child_names):
-                    continue
-                seen.add(module_cls)
+                    raise ValueError(
+                        f"Module {name!r} does not have the expected child modules {child_names} required for "
+                        f"the fused kernel {kernel_cls.__name__!r}"
+                    )
+
+                module_cls = type(module)
                 patch_mapping[module_cls.__name__] = make_kernel_init_parent_class(module_cls, child_names, layout_cls)
 
         register_patch_mapping(patch_mapping, overwrite=True)
