@@ -496,11 +496,15 @@ class DINOv3ViTEncoder(DINOv3ViTPreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        output_hidden_states: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
+        all_hidden_states = (hidden_states,) if output_hidden_states else None
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states, position_embeddings=position_embeddings, **kwargs)
-        return BaseModelOutput(last_hidden_state=hidden_states)
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
 @auto_docstring
@@ -568,12 +572,8 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_state = self.embeddings(pixel_values)
         position_embeddings = self.rope_embeddings(pixel_values)
-        # Iterate the layer ModuleList directly to collect per-stage hidden_states inline
-        # for feature_maps; @capture_outputs handles injection into the returned BackboneOutput.
-        stage_hidden_states = (hidden_state,)
-        for layer in self.model.layer:
-            hidden_state = layer(hidden_state, position_embeddings=position_embeddings, **kwargs)
-            stage_hidden_states = stage_hidden_states + (hidden_state,)
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
+        stage_hidden_states = self.model(hidden_state, position_embeddings, **kwargs).hidden_states
 
         batch_size, _, image_height, image_width = pixel_values.shape
         patch_size = self.config.patch_size

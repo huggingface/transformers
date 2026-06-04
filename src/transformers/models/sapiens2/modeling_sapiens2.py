@@ -850,11 +850,15 @@ class Sapiens2Encoder(Sapiens2PreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        output_hidden_states: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
+        all_hidden_states = (hidden_states,) if output_hidden_states else None
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states, position_embeddings=position_embeddings, **kwargs)
-        return BaseModelOutput(last_hidden_state=hidden_states)
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
 @auto_docstring
@@ -962,12 +966,10 @@ class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
         ```
         """
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
-        hidden_states = self.embeddings(pixel_values)
+        hidden_state = self.embeddings(pixel_values)
         position_embeddings = self.rope_embeddings(pixel_values)
-
         kwargs["output_hidden_states"] = True  # required to extract layers for the stages
-        output = self.model(hidden_states, position_embeddings, **kwargs)
-        stage_hidden_states = output.hidden_states
+        stage_hidden_states = self.model(hidden_state, position_embeddings, **kwargs).hidden_states
 
         batch_size, _, image_height, image_width = pixel_values.shape
         patch_size = self.config.patch_size
@@ -1002,8 +1004,6 @@ class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
         return Sapiens2BackboneOutput(
             feature_maps=tuple(feature_maps),
             cls_tokens=tuple(cls_tokens) if return_class_token else None,
-            hidden_states=output.hidden_states,
-            attentions=output.attentions,
         )
 
 

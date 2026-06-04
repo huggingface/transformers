@@ -370,11 +370,15 @@ class Dinov2WithRegistersEncoder(Dinov2WithRegistersPreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        output_hidden_states: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
+        all_hidden_states = (hidden_states,) if output_hidden_states else None
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states, attention_mask, **kwargs)
-        return BaseModelOutput(last_hidden_state=hidden_states)
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
 @auto_docstring
@@ -536,13 +540,9 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
             inputs_embeds=embedding_output,
             attention_mask=attention_mask,
         )
-        # Iterate layers directly to collect per-stage hidden_states inline for feature_maps;
-        # @capture_outputs handles injection into the returned BackboneOutput.
-        hidden_state = embedding_output
-        hidden_states = (hidden_state,)
-        for layer in self.encoder.layer:
-            hidden_state = layer(hidden_state, attention_mask, **kwargs)
-            hidden_states = hidden_states + (hidden_state,)
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
+        outputs: BaseModelOutput = self.encoder(embedding_output, attention_mask=attention_mask, **kwargs)
+        hidden_states = outputs.hidden_states
 
         feature_maps = []
         for stage, hidden_state in zip(self.stage_names, hidden_states):

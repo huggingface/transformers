@@ -22,7 +22,7 @@ from ... import initialization as init
 from ...backbone_utils import BackboneConfigMixin, filter_output_hidden_states
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling, ImageClassifierOutput
+from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
@@ -295,13 +295,9 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
             inputs_embeds=embedding_output,
             attention_mask=attention_mask,
         )
-        # Iterate layers directly to collect per-stage hidden_states inline for feature_maps;
-        # @capture_outputs handles injection into the returned BackboneOutput.
-        hidden_state = embedding_output
-        hidden_states = (hidden_state,)
-        for layer in self.encoder.layer:
-            hidden_state = layer(hidden_state, attention_mask, **kwargs)
-            hidden_states = hidden_states + (hidden_state,)
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
+        outputs: BaseModelOutput = self.encoder(embedding_output, attention_mask=attention_mask, **kwargs)
+        hidden_states = outputs.hidden_states
 
         feature_maps = []
         for stage, hidden_state in zip(self.stage_names, hidden_states):
