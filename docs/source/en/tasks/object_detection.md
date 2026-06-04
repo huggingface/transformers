@@ -134,7 +134,7 @@ Train: 6669, Validation: 1177
 >>> image_processor = AutoImageProcessor.from_pretrained(MODEL_NAME)
 ```
 
-The `image_processor` expects annotations in the COCO format: `{'image_id': int, 'annotations': list[Dict]}`. We format each example's annotations and let the processor handle the rest:
+The `image_processor` expects annotations in the COCO format: `{'image_id': int, 'annotations': list[Dict]}`. Format each example's annotations and let the processor handle the rest:
 
 ```py
 >>> def format_image_annotations_as_coco(image_id, categories, areas, bboxes):
