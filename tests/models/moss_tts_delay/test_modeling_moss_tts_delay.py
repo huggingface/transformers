@@ -242,6 +242,17 @@ class MossTTSDelayIntegrationTest(unittest.TestCase):
         message = processor.build_user_message(text="The sun rises in the east.", language="English")
         inputs = processor([message], mode="generation").to(model.device)
 
+        # Reference targets were produced with the original MOSS-TTS-v1.5 remote-code implementation.
+        expected_text_input_prefix = torch.tensor(
+            [151644, 872, 198, 27, 872, 17740, 397, 12, 17207, 1141], device=inputs.input_ids.device
+        )
+        expected_text_input_suffix = torch.tensor(
+            [624, 522, 872, 17740, 29, 151645, 198, 151644, 77091, 198], device=inputs.input_ids.device
+        )
+        self.assertEqual(inputs.input_ids.shape, (1, 64, config.n_vq + 1))
+        torch.testing.assert_close(inputs.input_ids[0, :10, 0], expected_text_input_prefix)
+        torch.testing.assert_close(inputs.input_ids[0, -10:, 0], expected_text_input_suffix)
+
         with torch.no_grad():
             outputs = model(**inputs)
 
@@ -250,6 +261,24 @@ class MossTTSDelayIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits[0].shape[-1], config.vocab_size)
         self.assertEqual(outputs.logits[1].shape[-1], config.audio_vocab_size + 1)
         self.assertTrue(torch.isfinite(outputs.logits[0][..., :10]).all().item())
+
+        expected_text_argmax = torch.tensor(
+            [151662, 151652, 151656, 151652, 151652, 151652, 151652, 151652],
+            device=outputs.logits[0].device,
+        )
+        expected_audio_argmax = torch.tensor(
+            [169, 746, 13, 845, 126, 818, 183, 409],
+            device=outputs.logits[1].device,
+        )
+        expected_text_logits_slice = torch.tensor(
+            [-368.0, -368.0, -366.0, -366.0, -366.0, -368.0, -366.0, -368.0],
+            device=outputs.logits[0].device,
+        )
+        torch.testing.assert_close(outputs.logits[0].argmax(-1)[0, -8:], expected_text_argmax)
+        torch.testing.assert_close(outputs.logits[1].argmax(-1)[0, -8:], expected_audio_argmax)
+        torch.testing.assert_close(
+            outputs.logits[0][0, -1, :8].float(), expected_text_logits_slice, atol=1e-3, rtol=1e-3
+        )
 
     @slow
     @require_torch_accelerator
@@ -264,12 +293,23 @@ class MossTTSDelayIntegrationTest(unittest.TestCase):
 
         outputs = model.generate(
             **inputs,
-            max_new_tokens=1,
+            max_new_tokens=4,
             text_temperature=0.0,
             audio_temperature=0.0,
         )
 
         self.assertEqual(len(outputs), 1)
         start_length, generated_ids = outputs[0]
-        self.assertGreaterEqual(start_length, 0)
-        self.assertEqual(generated_ids.shape[-1], config.n_vq + 1)
+        expected_generated_ids = torch.tensor(
+            [
+                [151652] + [1024] * 32,
+                [151656, 1021] + [1024] * 31,
+                [151656, 545, 175] + [1024] * 30,
+                [151656, 141, 621, 760] + [1024] * 29,
+            ],
+            device=generated_ids.device,
+        )
+
+        self.assertEqual(start_length, 0)
+        self.assertEqual(generated_ids.shape, (4, config.n_vq + 1))
+        torch.testing.assert_close(generated_ids, expected_generated_ids)
