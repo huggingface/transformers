@@ -291,7 +291,7 @@ def main(overwrite: bool):
     for k, v in new_mappings.items():
         new_content += format_ordered_dict(name=k, data=v)
 
-    # 3. If the new auto-generate content is different, overwrite it
+    # If the new auto-generate content is different, overwrite it
     # Dirty hack to sort and apply ruff to the file content, for easier matching
     with tempfile.TemporaryDirectory() as temp_folder:
         temp_filename = os.path.join(temp_folder, "temp.py")
