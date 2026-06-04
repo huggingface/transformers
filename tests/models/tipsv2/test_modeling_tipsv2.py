@@ -20,7 +20,7 @@ from functools import cached_property
 
 from parameterized import parameterized
 
-from transformers import Tipsv2Config, Tipsv2TextConfig, Tipsv2VisionConfig
+from transformers import AutoConfig, Tipsv2Config, Tipsv2TextConfig, Tipsv2VisionConfig
 from transformers.testing_utils import (
     Expectations,
     is_flaky,
@@ -405,7 +405,6 @@ class Tipsv2ModelTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
-            "return_loss": False,
         }
         return config, inputs_dict
 
@@ -625,3 +624,19 @@ class Tipsv2ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             outputs.text_model_output.pooler_output[0, :5], expected_text_pooler_output, rtol=1e-4, atol=1e-4
         )
+
+    @slow
+    def test_models_from_pretrained(self):
+        model_ids = [
+            "google/tipsv2-b14",
+            "google/tipsv2-l14",
+            "google/tipsv2-so400m14",
+            "google/tipsv2-g14",
+        ]
+        for model_id in model_ids:
+            with self.subTest(model_id=model_id):
+                config = AutoConfig.from_pretrained(model_id)
+                self.assertIsInstance(config, Tipsv2Config)
+
+                model = AutoModel.from_pretrained(model_id)
+                self.assertIsInstance(model, Tipsv2Model)
