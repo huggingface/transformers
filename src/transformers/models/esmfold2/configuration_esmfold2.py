@@ -33,8 +33,6 @@ _DEFAULT_ESMC_HF_REPO = "biohub/ESMC-6B"
 class MSAEncoderConfig(PreTrainedConfig):
     """Config for the optional MSA encoder module (Large MSA models only)."""
 
-    model_type = "esmfold2_msa_encoder"
-
     enabled: bool | None = False
     d_msa: int | None = 128
     d_hidden: int | None = 32
@@ -47,8 +45,6 @@ class MSAEncoderConfig(PreTrainedConfig):
 class ParcaeConfig(PreTrainedConfig):
     """Release-only config for the parcae diffusion-loop scheduler."""
 
-    model_type = "esmfold2_parcae"
-
     enabled: bool | None = True
     poisson_mean: float | None = 3.0
     min_steps: int | None = 1
@@ -60,8 +56,6 @@ class ParcaeConfig(PreTrainedConfig):
 class LMEncoderConfig(PreTrainedConfig):
     """Release-only config for the LM-side pair encoder."""
 
-    model_type = "esmfold2_lm_encoder"
-
     enabled: bool | None = True
     n_layers: int | None = 4
     lm_dropout: float | None = 0.25
@@ -71,8 +65,6 @@ class LMEncoderConfig(PreTrainedConfig):
 @strict
 class AtomAttentionConfig(PreTrainedConfig):
     """Config for the SWA atom encoder/decoder with 3D RoPE."""
-
-    model_type = "esmfold2_atom_attention"
 
     d_atom: int | None = 128
     d_token: int | None = 768
@@ -90,8 +82,6 @@ class AtomAttentionConfig(PreTrainedConfig):
 class FoldingTrunkConfig(PreTrainedConfig):
     """Config for a pairwise folding trunk stack."""
 
-    model_type = "esmfold2_folding_trunk"
-
     n_layers: int | None = 24
     n_heads: int | None = 8
     dropout: float | None = 0.0
@@ -101,7 +91,6 @@ class FoldingTrunkConfig(PreTrainedConfig):
 class InputsEmbedderConfig(PreTrainedConfig):
     """Config for the inputs embedder (wraps the atom encoder)."""
 
-    model_type = "esmfold2_inputs_embedder"
     sub_configs = {"atom_encoder": AtomAttentionConfig}
 
     d_inputs: int | None = 451
@@ -118,8 +107,6 @@ class InputsEmbedderConfig(PreTrainedConfig):
 @strict
 class DiffusionModuleConfig(PreTrainedConfig):
     """Config for the DiffusionModule."""
-
-    model_type = "esmfold2_diffusion_module"
 
     sigma_data: float | None = 16.0
     c_atom: int | None = 128
@@ -140,7 +127,6 @@ class DiffusionModuleConfig(PreTrainedConfig):
 class DiffusionStructureHeadConfig(PreTrainedConfig):
     """Config for the diffusion-based structure prediction head."""
 
-    model_type = "esmfold2_structure_head"
     sub_configs = {"diffusion_module": DiffusionModuleConfig}
 
     diffusion_module: dict | DiffusionModuleConfig | None = None
@@ -171,7 +157,6 @@ class DiffusionStructureHeadConfig(PreTrainedConfig):
 class ConfidenceHeadConfig(PreTrainedConfig):
     """Config for the confidence prediction head."""
 
-    model_type = "esmfold2_confidence_head"
     sub_configs = {"folding_trunk": FoldingTrunkConfig}
 
     enabled: bool | None = True
