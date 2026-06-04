@@ -457,11 +457,15 @@ class RfDetrDinov2Encoder(RfDetrDinov2PreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        output_hidden_states: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
+        all_hidden_states = (hidden_states,) if output_hidden_states else None
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states, attention_mask, **kwargs)
-        return BaseModelOutput(last_hidden_state=hidden_states)
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
 @auto_docstring(
