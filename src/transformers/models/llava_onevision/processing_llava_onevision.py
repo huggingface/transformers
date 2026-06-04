@@ -16,7 +16,6 @@ Processor class for LLaVa-Onevision.
 """
 
 import math
-import re
 from collections.abc import Iterable
 
 import numpy as np
@@ -169,18 +168,14 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         special_token: str,
         batch_num_images: Iterable[int],
     ):
-        prompt_strings = []
+        images_replacements = []
         max_num_vision_tokens = 0
-        pattern = re.escape(special_token)
         for sample in text:
-            if special_token in sample:
-                num_images = next(batch_num_images)  # should consume iterable
-                is_multi_image = num_images != 1
-            else:
-                is_multi_image = False
-
-            def expand(_match, is_multi_image=is_multi_image):
-                nonlocal max_num_vision_tokens
+            if special_token not in sample:
+                continue
+            num_images = next(batch_num_images)  # should consume iterable
+            is_multi_image = num_images != 1
+            for _ in range(sample.count(special_token)):
                 original_size = next(image_sizes)  # should consume iterable
                 if is_multi_image:
                     num_image_tokens = self.num_image_tokens + 1  # one for image_newline
@@ -193,10 +188,9 @@ class LlavaOnevisionProcessor(ProcessorMixin):
                 max_num_vision_tokens = max(max_num_vision_tokens, num_image_tokens)
                 if self.vision_feature_select_strategy == "default":
                     num_image_tokens -= 1
-                return special_token * num_image_tokens
-
-            prompt_strings.append(re.sub(pattern, expand, sample))
-        text = prompt_strings
+                images_replacements.append(special_token * num_image_tokens)
+        # `get_text_with_replacements` mutates the list in place, so copy to avoid editing the caller's input
+        text, _ = self.get_text_with_replacements(list(text), images_replacements=images_replacements)
         return text, max_num_vision_tokens
 
     def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:

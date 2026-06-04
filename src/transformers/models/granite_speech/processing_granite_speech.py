@@ -13,7 +13,6 @@
 # limitations under the License.
 """Processor class for Granite Speech."""
 
-import re
 from typing import Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -47,6 +46,9 @@ class GraniteSpeechProcessor(ProcessorMixin):
         self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
         super().__init__(audio_processor, tokenizer, chat_template=chat_template)
 
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+        return self.audio_token * audio_inputs["audio_embed_sizes"][audio_idx]
+
     @auto_docstring
     def __call__(
         self,
@@ -70,20 +72,14 @@ class GraniteSpeechProcessor(ProcessorMixin):
             # TODO (@alex-jw-brooks); we should add a util to get_num_audio_tokens
             # from feature lengths and call it here, rather than returning it
             # from the feature extractor.
-            audio_embed_sizes = audio_inputs.pop("audio_embed_sizes")
-
             # Expand the audio placeholders to match the feature dims; this
             # is similar to how many VLMs handle image tokens, e.g., llava next
-            num_replaced = 0
-
-            def expand(_match):
-                nonlocal num_replaced
-                num_tokens = audio_embed_sizes[num_replaced]
-                num_replaced += 1
-                return self.audio_token * num_tokens
-
-            pattern = re.escape(self.audio_token)
-            prompt_strings = [re.sub(pattern, expand, sample) for sample in text]
+            audio_replacements = [
+                self.replace_audio_token(audio_inputs, i) for i in range(len(audio_inputs["audio_embed_sizes"]))
+            ]
+            audio_inputs.pop("audio_embed_sizes")
+            # `get_text_with_replacements` mutates the list in place, so copy to avoid editing the caller's input
+            prompt_strings, _ = self.get_text_with_replacements(list(text), audio_replacements=audio_replacements)
         else:
             audio_inputs = {}
 

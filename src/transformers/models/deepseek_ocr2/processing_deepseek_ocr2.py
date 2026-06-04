@@ -16,7 +16,6 @@ Processor class for DeepSeek-OCR-2.
 """
 
 import math
-import re
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -64,24 +63,7 @@ class DeepseekOcr2Processor(ProcessorMixin):
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
-    def _expand_image_tokens(
-        self,
-        text: list[TextInput],
-        num_crops_list: list[int],
-    ) -> list[str]:
-        """
-        Expand each `<image>` placeholder in the text to the correct number of image tokens.
-
-        Args:
-            text (`list[str]`):
-                List of text strings, each potentially containing `<image>` placeholders.
-            num_crops_list (`list[int]`):
-                Number of crops for each image, consumed in order as `<image>` placeholders
-                are encountered across all text samples.
-
-        Returns:
-            `list[str]`: Text with expanded image token placeholders.
-        """
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         size = self.image_processor.size["height"]
         tile_size = self.image_processor.tile_size
 
@@ -91,16 +73,8 @@ class DeepseekOcr2Processor(ProcessorMixin):
         num_queries_local = math.ceil(tile_size / self.patch_size / self.downsample_ratio)
         local_tokens = num_queries_local * num_queries_local
 
-        crop_index = 0
-
-        def expand(_match):
-            nonlocal crop_index
-            num_tokens = global_tokens + local_tokens * num_crops_list[crop_index] + 1
-            crop_index += 1
-            return self.image_token * num_tokens
-
-        pattern = re.escape(self.image_token)
-        return [re.sub(pattern, expand, text_i) for text_i in text]
+        num_tokens = global_tokens + local_tokens * image_inputs["num_local_patches"][image_idx] + 1
+        return self.image_token * num_tokens
 
     @auto_docstring
     def __call__(
@@ -139,8 +113,10 @@ class DeepseekOcr2Processor(ProcessorMixin):
         text = text.copy()  # below lines change text in-place
 
         image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-        num_crops_list = image_inputs["num_local_patches"]
-        text = self._expand_image_tokens(text, num_crops_list)
+        images_replacements = [
+            self.replace_image_token(image_inputs, i) for i in range(len(image_inputs["num_local_patches"]))
+        ]
+        text, _ = self.get_text_with_replacements(text, images_replacements=images_replacements)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
