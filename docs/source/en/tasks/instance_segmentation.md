@@ -208,7 +208,7 @@ Let's verify what a preprocessed example looks like. You should see `pixel_value
 
 ## Data collator
 
-Since each image has a different number of object instances, labels are variable-length dictionaries and cannot be stacked into a single tensor. We define a custom collate function that stacks `pixel_values` and `pixel_mask` normally, but keeps `labels` as a list of per-image dicts:
+Since each image has a different number of object instances, labels are variable-length dictionaries and cannot be stacked into a single tensor. Define a custom collate function that stacks `pixel_values` and `pixel_mask` normally, but keeps `labels` as a list of per-image dicts:
 
 ```py
 >>> import torch
