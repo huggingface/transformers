@@ -63,13 +63,13 @@ class Cosmos3OmniConfig(PreTrainedConfig):
                 model_type = "qwen3_vl_vision"
             self.vision_config = CONFIG_MAPPING[model_type](**self.vision_config)
         elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["qwen3_vl_text"]()
+            self.vision_config = CONFIG_MAPPING["qwen3_vl_vision"]()
 
         if isinstance(self.text_config, dict):
             model_type = self.text_config.get("model_type", "qwen3_vl_text")
             self.text_config = CONFIG_MAPPING[model_type](**self.text_config)
         elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3_vl_vision"]()
+            self.text_config = CONFIG_MAPPING["qwen3_vl_text"]()
 
         super().__post_init__(**kwargs)
 
