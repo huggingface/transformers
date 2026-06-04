@@ -25,7 +25,7 @@ from ...video_utils import VideoInput
 
 
 if is_vision_available():
-    from .image_processing_pil_gemma4 import Gemma4ImageProcessorKwargs, get_aspect_ratio_preserving_size
+    from .image_processing_gemma4 import Gemma4ImageProcessorKwargs, get_aspect_ratio_preserving_size
 
 
 logger = logging.get_logger(__name__)
