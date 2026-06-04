@@ -18,9 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_cosmos3_reasoner import *
-    from .modeling_cosmos3_reasoner import *
-    from .processing_cosmos3_reasoner import *
+    from .configuration_cosmos3_omni import *
+    from .modeling_cosmos3_omni import *
 else:
     import sys
 
