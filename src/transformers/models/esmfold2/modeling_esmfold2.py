@@ -4,7 +4,7 @@ Quickstart::
 
     from transformers import ESMFold2Model
 
-    model = ESMFold2Model.from_pretrained("biohub/ESMFold2").cuda().eval()
+    model = ESMFold2Model.from_pretrained("biohub/ESMFold2", dtype=torch.bfloat16).cuda().eval()
     open("ubq.pdb", "w").write(model.infer_protein_as_pdb("MQIFVKTLTGKT..."))
 
 For multi-chain / ligand / MSA inputs see ``ESMFold2InputBuilder`` in the
@@ -12,7 +12,6 @@ companion ``esm`` package.
 """
 
 import math
-from contextlib import contextmanager
 from typing import cast
 
 import torch
@@ -30,6 +29,7 @@ from .modeling_esmfold2_common import (
     FoldingTrunk,
     InputsEmbedder,
     LanguageModelShim,
+    LayerNorm,
     MSAPairWeightedAveraging,
     OuterProductMean,
     ResIdxAsymIdSymIdEntityIdEncoding,
@@ -61,7 +61,7 @@ class PairTransition(nn.Module):
 
     def __init__(self, d_model: int, expansion_ratio: int = 4) -> None:
         super().__init__()
-        self.norm = nn.LayerNorm(d_model)
+        self.norm = LayerNorm(d_model)
         self.ffn = SwiGLUMLP(d_model, expansion_ratio=expansion_ratio, bias=False)
         self._chunk_size: int | None = _DEFAULT_CHUNK_SIZE
 
@@ -95,7 +95,7 @@ class ConfidenceHead(nn.Module):
         self.register_buffer("boundaries", boundaries)
         self.dist_bin_pairwise_embed = nn.Embedding(ch.distogram_bins, d_pair)
 
-        self.s_norm = nn.LayerNorm(d_single)
+        self.s_norm = LayerNorm(d_single)
         self.s_inputs_to_single = nn.Linear(d_inputs, d_single, bias=False)
         self.s_to_z = nn.Linear(d_inputs, d_pair, bias=False)
         self.s_to_z_transpose = nn.Linear(d_inputs, d_pair, bias=False)
@@ -103,8 +103,8 @@ class ConfidenceHead(nn.Module):
         self.s_to_z_prod_in2 = nn.Linear(d_inputs, d_pair, bias=False)
         self.s_to_z_prod_out = nn.Linear(d_pair, d_pair, bias=False)
         self.s_input_to_s = nn.Linear(d_inputs, d_single, bias=False)
-        self.s_inputs_norm = nn.LayerNorm(d_inputs)
-        self.z_norm = nn.LayerNorm(d_pair)
+        self.s_inputs_norm = LayerNorm(d_inputs)
+        self.z_norm = LayerNorm(d_pair)
 
         self.row_attention_pooling = RowAttentionPooling(d_pair=d_pair, d_single=d_single)
 
@@ -112,17 +112,17 @@ class ConfidenceHead(nn.Module):
         self.folding_trunk = FoldingTrunk(n_layers=pf.n_layers, d_pair=d_pair, expansion_ratio=4)
 
         # Heads.
-        self.plddt_ln = nn.LayerNorm(d_single)
+        self.plddt_ln = LayerNorm(d_single)
         max_atoms_per_token = 23
         self.plddt_weight = nn.Parameter(torch.zeros(max_atoms_per_token, d_single, ch.num_plddt_bins))
 
-        self.pae_ln = nn.LayerNorm(d_pair)
+        self.pae_ln = LayerNorm(d_pair)
         self.pae_head = nn.Linear(d_pair, ch.num_pae_bins, bias=False)
 
-        self.pde_ln = nn.LayerNorm(d_pair)
+        self.pde_ln = LayerNorm(d_pair)
         self.pde_head = nn.Linear(d_pair, ch.num_pde_bins, bias=False)
 
-        self.resolved_ln = nn.LayerNorm(d_single)
+        self.resolved_ln = LayerNorm(d_single)
         # 2 = resolved logits ([unresolved, resolved]).
         self.resolved_weight = nn.Parameter(torch.zeros(max_atoms_per_token, d_single, 2))
 
@@ -183,13 +183,13 @@ class ConfidenceHead(nn.Module):
 
         pair_mask = mask[:, :, None].float() * mask[:, None, :].float()
 
-        # FoldingTrunk handles the bf16 cast internally during inference so
-        # each block's fused trimul engages. In-place residual avoids an
-        # extra fp32 pair allocation.
-        with torch.amp.autocast("cuda", enabled=pair.is_cuda, dtype=torch.bfloat16):
-            pair_delta = self.folding_trunk(pair, pair_attention_mask=pair_mask)
+        # `pair` is fp32 here (built from the fp32 trunk output `z`); run the
+        # folding trunk in the model's compute dtype, then accumulate in fp32.
+        pair_delta = self.folding_trunk(pair.to(self.pae_head.weight.dtype), pair_attention_mask=pair_mask)
         pair.add_(pair_delta.float())
         del pair_delta
+        # Accumulated in fp32; hand the downstream confidence heads the compute dtype.
+        pair = pair.to(self.pae_head.weight.dtype)
         single = self.row_attention_pooling(pair, mask)
 
         atom_mask_f = atom_mask_m.float()
@@ -250,7 +250,7 @@ class ConfidenceHead(nn.Module):
         N_res = mask_f.sum(dim=-1, keepdim=True)
         d0 = 1.24 * (N_res.clamp(min=19) - 15) ** (1 / 3) - 1.8
         tm_per_bin = 1 / (1 + (bin_centers / d0) ** 2)
-        pae_probs = F.softmax(pae_logits, dim=-1)
+        pae_probs = F.softmax(pae_logits, dim=-1, dtype=torch.float32)
         tm_expected = (pae_probs * tm_per_bin[:, None, None, :]).sum(dim=-1)
 
         pair_mask_2d = mask_f.unsqueeze(-1) * mask_f.unsqueeze(-2)
@@ -294,13 +294,6 @@ class ConfidenceHead(nn.Module):
 
 def _inverse_softplus(value: float) -> float:
     return value + math.log(-math.expm1(-value))
-
-
-@contextmanager
-def _lm_precision_context():
-    """bf16 autocast around the LM (ESMC backbone) forward."""
-    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-        yield
 
 
 class ESMFold2Model(PreTrainedModel):
@@ -358,7 +351,7 @@ class ESMFold2Model(PreTrainedModel):
         else:
             self.lm_encoder = None
 
-        self.parcae_input_norm = nn.LayerNorm(d_pair)
+        self.parcae_input_norm = LayerNorm(d_pair)
         self.parcae_log_a = nn.Parameter(torch.zeros(d_pair))
         parcae_decay_init = math.sqrt(1.0 / 5.0)
         parcae_delta_init = -math.log(parcae_decay_init)
@@ -482,16 +475,15 @@ class ESMFold2Model(PreTrainedModel):
         tok_mask: Tensor,
     ) -> Tensor:
         assert self._esmc is not None
-        with _lm_precision_context():
-            return compute_lm_hidden_states(
-                self._esmc,
-                input_ids,
-                asym_id,
-                residue_index,
-                mol_type,
-                tok_mask,
-                pad_to_multiple=None,
-            )
+        return compute_lm_hidden_states(
+            self._esmc,
+            input_ids,
+            asym_id,
+            residue_index,
+            mol_type,
+            tok_mask,
+            pad_to_multiple=None,
+        )
 
     def _discretized_dynamics(self) -> tuple[Tensor, Tensor]:
         delta = F.softplus(self.parcae_log_delta)
@@ -627,97 +619,93 @@ class ESMFold2Model(PreTrainedModel):
         ref_atom_name_chars_oh = ref_atom_name_chars_oh * atm_mask_f.unsqueeze(-1).unsqueeze(-1)
         atom_to_token = atom_to_token * atm_mask.long()
 
-        use_amp = ref_pos.device.type == "cuda"
-        with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.bfloat16):
-            x_inputs = self.inputs_embedder(
-                aatype=res_type_oh,
-                profile=profile.float(),
-                deletion_mean=deletion_mean.float(),
-                ref_pos=ref_pos,
-                atom_attention_mask=atm_mask,
-                ref_space_uid=ref_space_uid,
-                ref_charge=ref_charge,
-                ref_element=ref_element_oh,
-                ref_atom_name_chars=ref_atom_name_chars_oh,
-                atom_to_token=atom_to_token,
+        x_inputs = self.inputs_embedder(
+            aatype=res_type_oh,
+            profile=profile.float(),
+            deletion_mean=deletion_mean.float(),
+            ref_pos=ref_pos,
+            atom_attention_mask=atm_mask,
+            ref_space_uid=ref_space_uid,
+            ref_charge=ref_charge,
+            ref_element=ref_element_oh,
+            ref_atom_name_chars=ref_atom_name_chars_oh,
+            atom_to_token=atom_to_token,
+        )
+
+        z_init = self.z_init_1(x_inputs).unsqueeze(2) + self.z_init_2(x_inputs).unsqueeze(1)
+
+        relative_position_encoding = self.rel_pos(
+            residue_index=residue_index,
+            asym_id=asym_id,
+            sym_id=sym_id,
+            entity_id=entity_id,
+            token_index=token_index,
+        )
+        token_bonds_encoding = self.token_bonds(token_bonds.to(self.token_bonds.weight.dtype))
+        z_init = z_init + relative_position_encoding + token_bonds_encoding
+
+        if lm_hidden_states is None and input_ids is not None and self._esmc is not None:
+            lm_hidden_states = self._compute_lm_hidden_states(input_ids, asym_id, residue_index, mol_type, tok_mask)
+        lm_z: Tensor | None = None
+        if lm_hidden_states is not None:
+            lm_z = self.language_model(lm_hidden_states.detach())
+        del lm_hidden_states
+
+        pair_mask = tok_mask[:, :, None].float() * tok_mask[:, None, :].float()
+
+        z = self._init_pair_state(z_init)
+
+        a, b = self._discretized_dynamics()
+        a = a.view(1, 1, 1, -1).to(device=z.device, dtype=z.dtype)
+        b_mat = b.to(device=z.device, dtype=z.dtype)
+
+        _msa_kwargs: dict | None = None
+        if self.msa_encoder is not None and msa is not None:
+            B_msa, M, L_msa = msa.shape
+            msa_oh = F.one_hot(msa.permute(0, 2, 1).long(), num_classes=NUM_RES_TYPES).float()
+            msa_attn = (
+                msa_attention_mask.permute(0, 2, 1).float()
+                if msa_attention_mask is not None
+                else tok_mask[:, :, None].expand(-1, -1, M).float()
             )
-
-            z_init = self.z_init_1(x_inputs).unsqueeze(2) + self.z_init_2(x_inputs).unsqueeze(1)
-
-            relative_position_encoding = self.rel_pos(
-                residue_index=residue_index,
-                asym_id=asym_id,
-                sym_id=sym_id,
-                entity_id=entity_id,
-                token_index=token_index,
+            # Bias-free MSAEncoder.embed requires zeroed padding.
+            msa_oh = msa_oh * msa_attn.unsqueeze(-1)
+            hd = (
+                has_deletion.permute(0, 2, 1).float()
+                if has_deletion is not None
+                else torch.zeros(B_msa, L_msa, M, device=msa.device)
             )
-            token_bonds_encoding = self.token_bonds(token_bonds.float())
-            z_init = z_init + relative_position_encoding + token_bonds_encoding
-
-            if lm_hidden_states is None and input_ids is not None and self._esmc is not None:
-                lm_hidden_states = self._compute_lm_hidden_states(
-                    input_ids, asym_id, residue_index, mol_type, tok_mask
-                )
-            lm_z: Tensor | None = None
-            if lm_hidden_states is not None:
-                lm_z = self.language_model(lm_hidden_states.detach())
-            del lm_hidden_states
-
-            pair_mask = tok_mask[:, :, None].float() * tok_mask[:, None, :].float()
-
-            z = self._init_pair_state(z_init)
-
-            a, b = self._discretized_dynamics()
-            a = a.view(1, 1, 1, -1).to(device=z.device, dtype=z.dtype)
-            b_mat = b.to(device=z.device, dtype=z.dtype)
-
-            _msa_kwargs: dict | None = None
-            if self.msa_encoder is not None and msa is not None:
-                B_msa, M, L_msa = msa.shape
-                msa_oh = F.one_hot(msa.permute(0, 2, 1).long(), num_classes=NUM_RES_TYPES).float()
-                msa_attn = (
-                    msa_attention_mask.permute(0, 2, 1).float()
-                    if msa_attention_mask is not None
-                    else tok_mask[:, :, None].expand(-1, -1, M).float()
-                )
-                # Bias-free MSAEncoder.embed requires zeroed padding.
-                msa_oh = msa_oh * msa_attn.unsqueeze(-1)
-                hd = (
-                    has_deletion.permute(0, 2, 1).float()
-                    if has_deletion is not None
-                    else torch.zeros(B_msa, L_msa, M, device=msa.device)
-                )
-                dv = (
-                    deletion_value.permute(0, 2, 1).float()
-                    if deletion_value is not None
-                    else torch.zeros(B_msa, L_msa, M, device=msa.device)
-                )
-                _msa_kwargs = {
-                    "x_inputs": x_inputs,
-                    "msa_oh": msa_oh,
-                    "has_deletion": hd,
-                    "deletion_value": dv,
-                    "msa_attention_mask": msa_attn,
-                }
-
-            # Method call (not inline loop) frees per-iter L²×c_z locals.
-            z = self._run_one_loop(
-                z=z,
-                z_init=z_init,
-                lm_z=lm_z,
-                _msa_kwargs=_msa_kwargs,
-                pair_mask=pair_mask,
-                a=a,
-                b_mat=b_mat,
-                total_steps=total_steps,
+            dv = (
+                deletion_value.permute(0, 2, 1).float()
+                if deletion_value is not None
+                else torch.zeros(B_msa, L_msa, M, device=msa.device)
             )
-            del z_init, lm_z, _msa_kwargs, a, b_mat
+            _msa_kwargs = {
+                "x_inputs": x_inputs,
+                "msa_oh": msa_oh,
+                "has_deletion": hd,
+                "deletion_value": dv,
+                "msa_attention_mask": msa_attn,
+            }
 
-            z = self.parcae_readout(z)
-            z = self.parcae_coda(z, pair_attention_mask=pair_mask)
+        # Method call (not inline loop) frees per-iter L²×c_z locals.
+        z = self._run_one_loop(
+            z=z,
+            z_init=z_init,
+            lm_z=lm_z,
+            _msa_kwargs=_msa_kwargs,
+            pair_mask=pair_mask,
+            a=a,
+            b_mat=b_mat,
+            total_steps=total_steps,
+        )
+        del z_init, lm_z, _msa_kwargs, a, b_mat
 
-            z = z.float()
-        distogram_logits = self.distogram_head(z + z.transpose(-2, -3))
+        z = self.parcae_readout(z)
+        z = self.parcae_coda(z, pair_attention_mask=pair_mask)
+
+        z = z.float()
+        distogram_logits = self.distogram_head((z + z.transpose(-2, -3)).to(self.distogram_head.weight.dtype))
 
         structure_output = self.structure_head.sample(
             z_trunk=z,
@@ -881,7 +869,7 @@ class MSAEncoder(nn.Module):
     ) -> Tensor:
         # All inputs are pre-transposed to [B, L, M, ...] before calling.
         m_feat = torch.cat([msa_oh, has_deletion.unsqueeze(-1), deletion_value.unsqueeze(-1)], dim=-1)
-        m = self.embed(m_feat) + self.project_inputs(x_inputs).unsqueeze(2)
+        m = self.embed(m_feat.to(self.embed.weight.dtype)) + self.project_inputs(x_inputs).unsqueeze(2)
         tok_mask = msa_attention_mask[:, :, 0].bool()
         pair_attention_mask = tok_mask.unsqueeze(2) & tok_mask.unsqueeze(1)
         for block in self.blocks:
