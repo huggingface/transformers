@@ -147,9 +147,7 @@ class ESMCTokenizer(PreTrainedTokenizerFast):
         # preserved during encode/decode and can be looked up easily.
         kwargs.setdefault("additional_special_tokens", [])
         if chain_break_token not in kwargs["additional_special_tokens"]:
-            kwargs["additional_special_tokens"] = list(
-                kwargs["additional_special_tokens"]
-            ) + [chain_break_token]
+            kwargs["additional_special_tokens"] = list(kwargs["additional_special_tokens"]) + [chain_break_token]
 
         # Keep reference before super().__init__ so properties below work.
         self._chain_break_token = chain_break_token
