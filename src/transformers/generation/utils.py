@@ -805,6 +805,62 @@ class GenerationMixin(ContinuousMixin):
 
         return model_kwargs
 
+    def _prepare_multimodal_encoder_kwargs_for_generation(
+        self: "GenerativePreTrainedModel",
+        model_kwargs,
+    ) -> torch.FloatTensor:
+        # Prepare image/video hidden states if the model support the given modality so we don't re-compute it
+        if (
+            "image" in self.input_modalities
+            and model_kwargs.get("image_outputs") is None
+            and hasattr(self.base_model, "get_image_features")
+        ):
+            image_signature = {
+                k: v
+                for k, v in inspect.signature(self.base_model.get_image_features).parameters.items()
+                if k != "kwargs"
+            }
+            required_args = [
+                name for name, param in image_signature.items() if param.default is inspect.Parameter.empty
+            ]
+            if all(model_kwargs.get(n) is not None for n in required_args):
+                image_encoder_kwargs = {
+                    argument: model_kwargs.get(argument, None) for argument in set(image_signature)
+                }
+                image_encoder_kwargs["return_dict"] = True
+                model_kwargs["image_outputs"]: torch.FloatTensor = self.base_model.get_image_features(
+                    **image_encoder_kwargs
+                )
+                # Forward token id so _expand_inputs_for_generation can group pooler_output per sample
+                if (image_token_id := getattr(self.config, "image_token_id", None)) is not None:
+                    model_kwargs["image_token_id"] = image_token_id
+
+        if (
+            "video" in self.input_modalities
+            and model_kwargs.get("video_outputs") is None
+            and hasattr(self.base_model, "get_video_features")
+        ):
+            video_signature = {
+                k: v
+                for k, v in inspect.signature(self.base_model.get_video_features).parameters.items()
+                if k != "kwargs"
+            }
+            required_args = [
+                name for name, param in video_signature.items() if param.default is inspect.Parameter.empty
+            ]
+            if all(model_kwargs.get(n) is not None for n in required_args):
+                video_encoder_kwargs = {
+                    argument: model_kwargs.get(argument, None) for argument in set(video_signature)
+                }
+                video_encoder_kwargs["return_dict"] = True
+                model_kwargs["video_outputs"]: torch.FloatTensor = self.base_model.get_video_features(
+                    **video_encoder_kwargs
+                )
+                if (video_token_id := getattr(self.config, "video_token_id", None)) is not None:
+                    model_kwargs["video_token_id"] = video_token_id
+
+        return model_kwargs
+
     def _prepare_decoder_input_ids_for_generation(
         self: "GenerativePreTrainedModel",
         batch_size: int,
@@ -892,6 +948,40 @@ class GenerationMixin(ContinuousMixin):
             if model_kwargs.get("encoder_outputs") is None:
                 raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
+
+        def _expand_multimodal_outputs(outputs_key, token_id_key):
+            outputs = model_kwargs.get(outputs_key)
+            if not outputs:
+                return
+            pooler = getattr(outputs, "pooler_output", None)
+            outputs.pooler_output = None  # hide list from generic expansion; tensors handled below
+            model_kwargs[outputs_key] = _expand_dict_for_generation(outputs)
+            if isinstance(pooler, list):
+                if input_ids is not None:
+                    batch_size = input_ids.shape[0] // expand_size
+                    if len(pooler) != batch_size:
+                        # pooler is a flat per-image list; group into per-sample using token counts in input_ids.
+                        # Mirrors how model.forward() places features: it fills image tokens left-to-right per row.
+                        token_id = model_kwargs.get(token_id_key)
+                        if token_id is not None:
+                            orig_ids = input_ids[
+                                ::expand_size
+                            ]  # repeat_interleave → stride by expand_size to get originals
+                            token_counts = (orig_ids == token_id).sum(dim=1).tolist()
+                            feat_sizes = [f.shape[0] for f in pooler]
+                            grouped, offset = [], 0
+                            for n in token_counts:
+                                grp, cum = [], 0
+                                while cum < n:
+                                    grp.append(pooler[offset])
+                                    cum += feat_sizes[offset]
+                                    offset += 1
+                                grouped.append(torch.cat(grp, dim=0))
+                            pooler = grouped
+                model_kwargs[outputs_key].pooler_output = [item for item in pooler for _ in range(expand_size)]
+
+        _expand_multimodal_outputs("image_outputs", "image_token_id")
+        _expand_multimodal_outputs("video_outputs", "video_token_id")
 
         return input_ids, model_kwargs
 
@@ -1551,6 +1641,10 @@ class GenerationMixin(ContinuousMixin):
         if self.config.is_encoder_decoder:
             for key in ["decoder_input_ids"]:
                 model_kwargs.pop(key, None)
+
+        # Excludes arguments that might not be in signature of older models
+        for key in ["image_outputs", "video_outputs", "image_token_id", "video_token_id"]:
+            model_kwargs.pop(key, None)
 
         unused_model_args = []
         model_args = set(inspect.signature(self.prepare_inputs_for_generation).parameters)
