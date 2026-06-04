@@ -228,24 +228,10 @@ class CsmProcessor(ProcessorMixin):
             num_audio_tokens_list = [
                 self._get_encoded_length(audio_array.shape[-1], **encoded_length_kwargs) for audio_array in audio
             ]
-            num_audio_tokens_list_copy = num_audio_tokens_list.copy()
 
             # expand the text to repeat the audio token for the corresponding number of frames
-            expanded_text = []
-            for sample in text:
-                replace_str = []
-                while self.audio_token in sample:
-                    num_audio_tokens = num_audio_tokens_list_copy.pop(0)
-                    expanded_audio_token = self.audio_token * num_audio_tokens
-
-                    replace_str.append(expanded_audio_token)
-                    sample = sample.replace(self.audio_token, "<placeholder>", 1)
-
-                while "<placeholder>" in sample:
-                    sample = sample.replace("<placeholder>", replace_str.pop(0), 1)
-                expanded_text.append(sample)
-
-            text = expanded_text
+            audio_replacements = [self.audio_token * num_audio_tokens for num_audio_tokens in num_audio_tokens_list]
+            text, _ = self.get_text_with_replacements(list(text), audio_replacements=audio_replacements)
 
         encoding = self.tokenizer(text, **text_kwargs)
         data = {}

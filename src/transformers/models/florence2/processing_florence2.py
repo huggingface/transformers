@@ -130,6 +130,9 @@ class Florence2Processor(ProcessorMixin):
             prompts.append(prompt)
         return prompts
 
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        return self.image_token * self.num_image_tokens
+
     @auto_docstring
     def __call__(
         self,
@@ -176,17 +179,16 @@ class Florence2Processor(ProcessorMixin):
 
         # Add image tokens and special tokens if images are provided
         if image_inputs.get("pixel_values") is not None:
-            # Replace the image token with the expanded image token sequence
-            expanded_image_prompts = []
-            for sample in prompt_strings:
-                sample = (
-                    self.image_token * self.num_image_tokens
-                    + self.tokenizer.bos_token
-                    + sample
-                    + self.tokenizer.eos_token
-                )
-                expanded_image_prompts.append(sample)
-            prompt_strings = expanded_image_prompts
+            # Prepend a single image placeholder (plus bos/eos wrapping), then expand it via the
+            # shared `get_text_with_replacements` helper into the full image token sequence.
+            prompt_strings = [
+                self.image_token + self.tokenizer.bos_token + sample + self.tokenizer.eos_token
+                for sample in prompt_strings
+            ]
+            images_replacements = [self.replace_image_token(image_inputs, i) for i in range(len(prompt_strings))]
+            prompt_strings, _ = self.get_text_with_replacements(
+                prompt_strings, images_replacements=images_replacements
+            )
 
         # Construct and tokenize prompts
         output_kwargs["text_kwargs"].pop("add_special_tokens", None)

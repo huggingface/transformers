@@ -110,8 +110,6 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         self.image_token = self.tokenizer.image_token
         self.audio_token = self.tokenizer.audio_token
         self.video_token = self.tokenizer.video_token
-        self.vision_bos_token = self.tokenizer.vision_bos_token
-        self.vision_eos_token = self.tokenizer.vision_eos_token
         self.audio_bos_token = self.tokenizer.audio_bos_token
         self.audio_eos_token = self.tokenizer.audio_eos_token
 
@@ -178,7 +176,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             text = [text]
 
         if images is not None or videos is not None or audio is not None:
-            text = self.replace_multimodal_special_tokens(
+            images_replacements, videos_replacements, audio_replacements = self._build_multimodal_replacements(
                 text,
                 audio_lengths,
                 image_grid_thw,
@@ -188,6 +186,12 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                 position_id_per_seconds=position_id_per_seconds,
                 seconds_per_chunk=seconds_per_chunk,
             )
+            text, _ = self.get_text_with_replacements(
+                list(text),
+                images_replacements=images_replacements,
+                videos_replacements=videos_replacements,
+                audio_replacements=audio_replacements,
+            )
 
         texts_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
@@ -196,7 +200,55 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             tensor_type=kwargs.get("return_tensors"),
         )
 
-    def replace_multimodal_special_tokens(
+    def replace_image_token(self, image_grid_thw) -> str:
+        merge_length = self.image_processor.merge_size**2
+        num_image_tokens = image_grid_thw.prod() // merge_length
+        return self.image_token * num_image_tokens
+
+    def replace_audio_token(self, audio_length) -> str:
+        return self.audio_token * audio_length
+
+    def replace_video_token(
+        self,
+        video_grid_thw,
+        audio_length=None,
+        video_second_per_grid=None,
+        use_audio_in_video=False,
+        position_id_per_seconds=25,
+        seconds_per_chunk=2.0,
+    ) -> str:
+        if not use_audio_in_video:
+            merge_length = self.video_processor.merge_size**2
+            num_video_tokens = video_grid_thw.prod() // merge_length
+            return self.video_token * num_video_tokens
+
+        # Audio interleaved with video. The surrounding `vision_bos`/`vision_eos` tokens stay in the
+        # text, so only the inner `audio_bos` + interleaved chunks + `audio_eos` are produced here.
+        audio_token_indices = np.arange(audio_length)
+        height = video_grid_thw[1] // self.video_processor.merge_size
+        width = video_grid_thw[2] // self.video_processor.merge_size
+        video_token_indices = np.arange(video_grid_thw[0]).reshape(-1, 1, 1)
+        video_token_indices = np.broadcast_to(
+            video_token_indices, (video_token_indices.shape[0], height, width)
+        ).reshape(-1)
+        video_token_indices = video_token_indices * video_second_per_grid * position_id_per_seconds
+
+        tokens_per_chunk = int(position_id_per_seconds * seconds_per_chunk)
+        video_chunk_indexes = self.get_chunked_index(video_token_indices, tokens_per_chunk)
+        audio_chunk_indexes = self.get_chunked_index(audio_token_indices, tokens_per_chunk)
+
+        replacement_string = self.audio_bos_token
+        for j in range(max(len(video_chunk_indexes), len(audio_chunk_indexes))):
+            if j < len(video_chunk_indexes):
+                video_seq_length = video_chunk_indexes[j][1] - video_chunk_indexes[j][0]
+                replacement_string += self.video_token * video_seq_length
+            if j < len(audio_chunk_indexes):
+                audio_seq_length = audio_chunk_indexes[j][1] - audio_chunk_indexes[j][0]
+                replacement_string += self.audio_token * audio_seq_length
+        replacement_string += self.audio_eos_token
+        return replacement_string
+
+    def _build_multimodal_replacements(
         self,
         text,
         audio_lengths,
@@ -207,13 +259,16 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         position_id_per_seconds,
         seconds_per_chunk,
     ):
-        # Extend mm token length
-        merge_length_image = self.image_processor.merge_size**2
-        merge_length_video = self.video_processor.merge_size**2
-
-        processed_text = []
+        """
+        Build the per-modality replacement strings in document order. The `audio_lengths` iterator is
+        shared between standalone audio tokens and audio interleaved inside videos (when
+        `use_audio_in_video=True`), so replacements must be produced in a single in-order pass over the
+        batch rather than via independent per-modality index maps.
+        """
+        images_replacements = []
+        videos_replacements = []
+        audio_replacements = []
         for sample in text:
-            positions = []
             special_tokens = [re.escape(tok) for tok in [self.audio_token, self.image_token, self.video_token]]
             pattern = "|".join(special_tokens)
             positions = sorted([(match.start(), match.group()) for match in re.finditer(pattern, sample)])
@@ -221,51 +276,24 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
 
             for _, special_token in positions:
                 if special_token == self.audio_token:
-                    sample = sample.replace(self.audio_token, "<|audio_placeholder|>" * next(audio_lengths), 1)
+                    audio_replacements.append(self.replace_audio_token(next(audio_lengths)))
                 elif special_token == self.image_token:
-                    image_seq_length = next(image_grid_thw).prod() // merge_length_image
-                    sample = sample.replace(self.image_token, "<|image_placeholder|>" * image_seq_length, 1)
+                    images_replacements.append(self.replace_image_token(next(image_grid_thw)))
                 elif special_token == self.video_token:
                     if not use_audio_in_video:
-                        video_seq_length = next(video_grid_thw).prod() // merge_length_video
-                        sample = sample.replace(self.video_token, "<|video_placeholder|>" * video_seq_length, 1)
+                        videos_replacements.append(self.replace_video_token(next(video_grid_thw)))
                     else:
-                        audio_token_indices = np.arange(next(audio_lengths))
-                        curr_video_grid_thw = next(video_grid_thw)
-                        height = curr_video_grid_thw[1] // self.video_processor.merge_size
-                        width = curr_video_grid_thw[2] // self.video_processor.merge_size
-                        video_token_indices = np.arange(curr_video_grid_thw[0]).reshape(-1, 1, 1)
-                        video_token_indices = np.broadcast_to(
-                            video_token_indices, (video_token_indices.shape[0], height, width)
-                        ).reshape(-1)
-                        video_token_indices = (
-                            video_token_indices * next(video_second_per_grid) * position_id_per_seconds
+                        videos_replacements.append(
+                            self.replace_video_token(
+                                next(video_grid_thw),
+                                audio_length=next(audio_lengths),
+                                video_second_per_grid=next(video_second_per_grid),
+                                use_audio_in_video=True,
+                                position_id_per_seconds=position_id_per_seconds,
+                                seconds_per_chunk=seconds_per_chunk,
+                            )
                         )
-
-                        tokens_per_chunk = int(position_id_per_seconds * seconds_per_chunk)
-                        video_chunk_indexes = self.get_chunked_index(video_token_indices, tokens_per_chunk)
-                        audio_chunk_indexes = self.get_chunked_index(audio_token_indices, tokens_per_chunk)
-
-                        placeholder_string = self.vision_bos_token + self.audio_bos_token
-                        for j in range(max(len(video_chunk_indexes), len(audio_chunk_indexes))):
-                            if j < len(video_chunk_indexes):
-                                video_seq_length = video_chunk_indexes[j][1] - video_chunk_indexes[j][0]
-                                placeholder_string += "<|video_placeholder|>" * video_seq_length
-                            if j < len(audio_chunk_indexes):
-                                audio_seq_length = audio_chunk_indexes[j][1] - audio_chunk_indexes[j][0]
-                                placeholder_string += "<|audio_placeholder|>" * audio_seq_length
-                        placeholder_string += self.audio_eos_token + self.vision_eos_token
-                        sample = sample.replace(
-                            self.vision_bos_token + self.video_token + self.vision_eos_token,
-                            placeholder_string,
-                            1,
-                        )
-
-            sample = sample.replace("<|audio_placeholder|>", self.audio_token)
-            sample = sample.replace("<|image_placeholder|>", self.image_token)
-            sample = sample.replace("<|video_placeholder|>", self.video_token)
-            processed_text.append(sample)
-        return processed_text
+        return images_replacements, videos_replacements, audio_replacements
 
     def get_chunked_index(self, token_indices: np.ndarray, tokens_per_chunk: int) -> list[tuple[int, int]]:
         """

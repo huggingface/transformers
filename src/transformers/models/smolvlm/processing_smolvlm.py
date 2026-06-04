@@ -145,33 +145,17 @@ class SmolVLMProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
 
-    def expand_text_with_image_tokens(self, text, image_rows, image_cols):
-        prompt_strings = []
-        for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
-            # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
-            image_prompt_strings = []
-            for n_rows, n_cols in zip(sample_rows, sample_cols):
-                image_prompt_string = get_image_prompt_string(
-                    n_rows,
-                    n_cols,
-                    self.image_seq_len,
-                    image_token=self.image_token,
-                    fake_token_around_image=self.fake_image_token,
-                    global_image_token=self.global_image_token,
-                )
-                image_prompt_strings.append(image_prompt_string)
-
-            split_sample = sample.split(self.image_token)
-            if len(split_sample) == 0:
-                raise ValueError("The image token should be present in the text.")
-
-            # Place in the image prompt strings where the image tokens are
-            sample = split_sample[0]
-            for i, image_prompt_string in enumerate(image_prompt_strings):
-                sample += image_prompt_string + split_sample[i + 1]
-            prompt_strings.append(sample)
-
-        return prompt_strings
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        image_rows = [row for row_list in image_inputs["rows"] for row in row_list][image_idx]
+        image_cols = [col for col_list in image_inputs["cols"] for col in col_list][image_idx]
+        return get_image_prompt_string(
+            image_rows,
+            image_cols,
+            self.image_seq_len,
+            image_token=self.image_token,
+            fake_token_around_image=self.fake_image_token,
+            global_image_token=self.global_image_token,
+        )
 
     def expand_text_with_video_tokens(self, text, video_inputs):
         num_frames = video_inputs["pixel_values"].shape[1]
@@ -262,7 +246,10 @@ class SmolVLMProcessor(ProcessorMixin):
                     image_rows = [[0] * n_images for n_images in n_images_in_text]
                 if image_cols is None:
                     image_cols = [[0] * n_images for n_images in n_images_in_text]
-                text = self.expand_text_with_image_tokens(text, image_rows=image_rows, image_cols=image_cols)
+                image_inputs = {"rows": image_rows, "cols": image_cols}
+                num_images = sum(n_images_in_text)
+                images_replacements = [self.replace_image_token(image_inputs, i) for i in range(num_images)]
+                text, _ = self.get_text_with_replacements(list(text), images_replacements=images_replacements)
 
         elif videos is not None:
             vision_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])

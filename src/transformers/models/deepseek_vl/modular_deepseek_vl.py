@@ -190,6 +190,9 @@ class DeepseekVLProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        return self.image_token * self.num_image_tokens
+
     @auto_docstring
     def __call__(
         self,
@@ -219,11 +222,9 @@ class DeepseekVLProcessor(ProcessorMixin):
             elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-        prompt_strings = []
-        one_img_tokens = self.image_token * self.num_image_tokens
-        for prompt in text:
-            prompt = prompt.replace(self.image_token, one_img_tokens)
-            prompt_strings.append(prompt)
+        num_images = sum(prompt.count(self.image_token) for prompt in text)
+        images_replacements = [self.replace_image_token(None, i) for i in range(num_images)]
+        prompt_strings, _ = self.get_text_with_replacements(list(text), images_replacements=images_replacements)
 
         data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
 

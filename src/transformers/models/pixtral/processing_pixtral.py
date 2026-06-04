@@ -102,6 +102,17 @@ class PixtralProcessor(ProcessorMixin):
     def image_token_ids(self) -> list[int]:
         return [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
 
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        patch_size = self.patch_size * self.spatial_merge_size
+        height, width = image_inputs["image_sizes"][image_idx]
+        num_height_tokens = height // patch_size
+        num_width_tokens = width // patch_size
+        replace_tokens = [[self.image_token] * num_width_tokens + [self.image_break_token]] * num_height_tokens
+        # Flatten list
+        replace_tokens = [item for sublist in replace_tokens for item in sublist]
+        replace_tokens[-1] = self.image_end_token
+        return "".join(replace_tokens)
+
     @auto_docstring
     def __call__(
         self,
@@ -140,32 +151,15 @@ class PixtralProcessor(ProcessorMixin):
             raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         # try to expand inputs in processing if we have the necessary parts
-        prompt_strings = text
+        prompt_strings = list(text)
         if image_inputs.get("pixel_values") is not None:
             # Replace the image token with the expanded image token sequence
-            image_sizes = iter(image_inputs["image_sizes"])
-            prompt_strings = []
-            replace_strings = []
-
-            for sample in text:
-                while self.image_token in sample:
-                    height, width = next(image_sizes)
-                    num_height_tokens = height // patch_size
-                    num_width_tokens = width // patch_size
-                    replace_tokens = [
-                        [self.image_token] * num_width_tokens + [self.image_break_token]
-                    ] * num_height_tokens
-                    # Flatten list
-                    replace_tokens = [item for sublist in replace_tokens for item in sublist]
-                    replace_tokens[-1] = self.image_end_token
-                    replace_str = "".join(replace_tokens)
-                    replace_strings.append(replace_str)
-                    sample = sample.replace(self.image_token, "<placeholder>", 1)
-
-                while "<placeholder>" in sample:
-                    replace_str = replace_strings.pop(0)
-                    sample = sample.replace("<placeholder>", replace_str, 1)
-                prompt_strings.append(sample)
+            images_replacements = [
+                self.replace_image_token(image_inputs, i) for i in range(len(image_inputs["image_sizes"]))
+            ]
+            prompt_strings, _ = self.get_text_with_replacements(
+                prompt_strings, images_replacements=images_replacements
+            )
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)

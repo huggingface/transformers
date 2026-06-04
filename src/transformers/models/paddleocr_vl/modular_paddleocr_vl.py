@@ -388,6 +388,13 @@ class PaddleOCRVLProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.image_token_id
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    def replace_image_token(self, image_inputs, image_idx: int) -> str:
+        image_grid_thw = image_inputs["image_grid_thw"]
+        num_image_tokens = (
+            image_grid_thw[image_idx].prod() // self.image_processor.merge_size // self.image_processor.merge_size
+        )
+        return self.image_token * num_image_tokens
+
     def __call__(
         self,
         images: ImageInput = None,
@@ -440,21 +447,10 @@ class PaddleOCRVLProcessor(ProcessorMixin):
         text = text.copy()
 
         if image_grid_thw is not None:
-            index = 0
-            for i in range(len(text)):
-                while self.image_token in text[i]:
-                    text[i] = text[i].replace(
-                        self.image_token,
-                        "<|placeholder|>"
-                        * (
-                            image_grid_thw[index].prod()
-                            // self.image_processor.merge_size
-                            // self.image_processor.merge_size
-                        ),
-                        1,
-                    )
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
+            images_replacements = [
+                self.replace_image_token(image_inputs, image_idx=idx) for idx in range(len(image_grid_thw))
+            ]
+            text, _ = self.get_text_with_replacements(list(text), images_replacements=images_replacements)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)

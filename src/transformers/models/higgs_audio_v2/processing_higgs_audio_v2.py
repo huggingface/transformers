@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
 from itertools import islice
 from pathlib import Path
 
@@ -185,13 +184,11 @@ class HiggsAudioV2Processor(ProcessorMixin):
                 audio_input_ids = self.build_delay_pattern(audio_input_ids)
                 audio_input_ids_list.append(audio_input_ids[0].transpose(0, 1))
 
-            # expand audio tokens in text
-            num_audio_tokens_iter = iter(len(audio_input_ids) for audio_input_ids in audio_input_ids_list)
-            for i in range(len(text)):
-                expanded = re.sub(
-                    re.escape(self.audio_token), lambda _: self.get_audio_tokens(next(num_audio_tokens_iter)), text[i]
-                )
-                text[i] = expanded
+            # expand audio tokens in text, one replacement per audio token in document order
+            audio_replacements = [
+                self.get_audio_tokens(len(audio_input_ids)) for audio_input_ids in audio_input_ids_list
+            ]
+            text, _ = self.get_text_with_replacements(list(text), audio_replacements=audio_replacements)
 
             # convert to nested list according to n_audio_in_text
             # [audio_1, audio_2, ...] -> [[audio_1_1, audio_1_2, ...], [audio_2_1, audio_2_2, ...], ...]

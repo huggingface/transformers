@@ -335,25 +335,26 @@ class QianfanOCRProcessor(InternVLProcessor):
         Processes interleaved text with <image> placeholders, replacing them with appropriate image tokens.
         """
         image_index = 0
-        processed_text = []
         image_patches = []
-        replace_strings = []
-        for prompt in text:
-            new_prompt = prompt
-            while self.image_placeholder_token in new_prompt:
+        images_replacements = []
+        text = list(text)
+        # Traverse prompts in document order: for each `<image>` placeholder, record the patches it
+        # consumes and the expanded replacement string, then map the placeholder to `self.image_token`
+        # so the shared `get_text_with_replacements` helper can expand it.
+        for batch_idx, prompt in enumerate(text):
+            while self.image_placeholder_token in prompt:
                 start_index = image_num_patches_indices[image_index - 1] if image_index > 0 else 0
                 end_index = image_num_patches_indices[image_index]
                 image_patches.append(image_pixel_values[start_index:end_index])
-                new_prompt = new_prompt.replace(self.image_placeholder_token, "<placeholder>", 1)
-                replace_strings.append(
+                images_replacements.append(
                     f"{self.start_image_token}{self.image_token * self.image_seq_length * image_num_patches[image_index]}{self.end_image_token}"
                 )
+                prompt = prompt.replace(self.image_placeholder_token, self.image_token, 1)
                 image_index += 1
-            while "<placeholder>" in new_prompt:
-                replace_str = replace_strings.pop(0)
-                new_prompt = new_prompt.replace("<placeholder>", replace_str, 1)
-            processed_text.append(new_prompt)
-        return processed_text, image_patches, image_index, 0
+            text[batch_idx] = prompt
+
+        text, _ = self.get_text_with_replacements(text, images_replacements=images_replacements)
+        return text, image_patches, image_index, 0
 
     def __call__(
         self,

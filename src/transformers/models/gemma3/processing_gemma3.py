@@ -18,10 +18,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, logging, to_py_obj
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring, to_py_obj
 
 
 class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
@@ -53,8 +50,12 @@ class Gemma3Processor(ProcessorMixin):
         **kwargs,
     ):
         self.image_seq_length = image_seq_length
-        self.image_token_id = tokenizer.image_token_id
+        # The placeholder expanded by `get_text_with_replacements` is the begin-of-image token; the
+        # repeated `<image_soft_token>` (id below) is only used to build `mm_token_type_ids`.
         self.boi_token = tokenizer.boi_token
+        self.image_token = tokenizer.boi_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(tokenizer.boi_token)
+        self.mm_image_token_id = tokenizer.image_token_id
         image_tokens_expanded = "".join([tokenizer.image_token] * image_seq_length)
         self.full_image_sequence = f"\n\n{tokenizer.boi_token}{image_tokens_expanded}{tokenizer.eoi_token}\n\n"
 
@@ -122,8 +123,10 @@ class Gemma3Processor(ProcessorMixin):
                         prompt = prompt[:idx] + formatted_image_text + prompt[idx + len(self.boi_token) :]
                         text[batch_idx] = prompt
 
-            # Expand placeholder image tokens to the full image token sequence
-            text = [prompt.replace(self.boi_token, self.full_image_sequence) for prompt in text]
+            # Expand each begin-of-image placeholder to the full image token sequence
+            num_images = sum(prompt.count(self.boi_token) for prompt in text)
+            images_replacements = [self.replace_image_token(image_inputs, i) for i in range(num_images)]
+            text, _ = self.get_text_with_replacements(list(text), images_replacements=images_replacements)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
@@ -133,6 +136,11 @@ class Gemma3Processor(ProcessorMixin):
         if return_mm_token_type_ids:
             text_inputs["token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        # Every begin-of-image placeholder expands to the same fixed-length sequence, so the
+        # replacement does not depend on `image_idx`.
+        return self.full_image_sequence
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
@@ -166,12 +174,10 @@ class Gemma3Processor(ProcessorMixin):
         return ["num_crops"]
 
     @property
-    def image_token(self) -> list[str]:
-        logger.warning_once(
-            "Deprecated: `processor.image_token` will switch from returning "
-            "`tokenizer.image_token` to `tokenizer.boi_token` in v5.11."
-        )
-        return self.tokenizer.image_token
+    def image_token_ids(self) -> list[int | None]:
+        # `mm_token_type_ids` must mark the repeated `<image_soft_token>` positions, not the
+        # begin-of-image placeholder that `image_token_id` now points to.
+        return [self.mm_image_token_id]
 
 
 __all__ = ["Gemma3Processor"]

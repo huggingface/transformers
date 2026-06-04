@@ -65,6 +65,28 @@ class VideoLlavaProcessor(ProcessorMixin):
         self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
 
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        height, width = get_image_size(to_numpy_array(image_inputs.get("pixel_values_images")[image_idx]))
+        num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
+        num_image_tokens += self.num_additional_image_tokens
+        if self.vision_feature_select_strategy == "default":
+            num_image_tokens -= 1
+        return self.image_token * num_image_tokens
+
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+        one_video = video_inputs.get("pixel_values_videos")[video_idx]
+        if isinstance(one_video, (list, tuple)):
+            one_video = np.array(one_video)
+        else:
+            one_video = to_numpy_array(one_video)
+        height, width = get_image_size(one_video[0])
+        num_frames = one_video.shape[0]  # frame dim is always after batch dim
+
+        num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
+        num_image_tokens += self.num_additional_image_tokens
+        num_video_tokens = num_image_tokens * num_frames
+        return self.video_token * num_video_tokens
+
     @auto_docstring
     def __call__(
         self,
@@ -108,33 +130,26 @@ class VideoLlavaProcessor(ProcessorMixin):
             raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         data = {}
+        encoded_images = encoded_videos = None
         if images is not None:
             encoded_images = self.image_processor(images=images, return_tensors=return_tensors)
             data.update(encoded_images)
-
-            height, width = get_image_size(to_numpy_array(encoded_images.get("pixel_values_images")[0]))
-            num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
-            num_image_tokens += self.num_additional_image_tokens
-            if self.vision_feature_select_strategy == "default":
-                num_image_tokens -= 1
-            text = [sample.replace(self.image_token, self.image_token * num_image_tokens) for sample in text]
 
         if videos is not None:
             encoded_videos = self.video_processor(videos=videos, return_tensors=return_tensors)
             data.update(encoded_videos)
 
-            one_video = encoded_videos.get("pixel_values_videos")[0]
-            if isinstance(encoded_videos.get("pixel_values_videos")[0], (list, tuple)):
-                one_video = np.array(one_video)
-            else:
-                one_video = to_numpy_array(one_video)
-            height, width = get_image_size(one_video[0])
-            num_frames = one_video.shape[0]  # frame dim is always after batch dim
-
-            num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
-            num_image_tokens += self.num_additional_image_tokens
-            num_video_tokens = num_image_tokens * num_frames
-            text = [sample.replace(self.video_token, self.video_token * num_video_tokens) for sample in text]
+        images_replacements = videos_replacements = []
+        if encoded_images is not None:
+            num_images = len(encoded_images.get("pixel_values_images"))
+            images_replacements = [self.replace_image_token(encoded_images, i) for i in range(num_images)]
+        if encoded_videos is not None:
+            num_videos = len(encoded_videos.get("pixel_values_videos"))
+            videos_replacements = [self.replace_video_token(encoded_videos, i) for i in range(num_videos)]
+        if encoded_images is not None or encoded_videos is not None:
+            text, _ = self.get_text_with_replacements(
+                list(text), images_replacements=images_replacements, videos_replacements=videos_replacements
+            )
 
         text_inputs = self.tokenizer(
             text,
