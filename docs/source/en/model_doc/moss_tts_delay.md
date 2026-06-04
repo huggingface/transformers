@@ -44,7 +44,23 @@ outputs = model.generate(**inputs, max_new_tokens=256)
 
 [[autodoc]] MossTTSDelayProcessor
 
+## Message
+
+[[autodoc]] Message
+
+## UserMessage
+
+[[autodoc]] UserMessage
+
+## AssistantMessage
+
+[[autodoc]] AssistantMessage
+
 ## MossTTSDelayModel
 
 [[autodoc]] MossTTSDelayModel
     - forward
+
+## MossTTSDelayOutputWithPast
+
+[[autodoc]] MossTTSDelayOutputWithPast
