@@ -120,6 +120,7 @@ class Granite4VisionProcessor(ProcessorMixin):
         if image_inputs:
             image_sizes = iter(image_inputs["image_sizes"])
             height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
+
             def expand(_match):
                 image_size = next(image_sizes)
                 if not isinstance(image_size, (list, tuple)):
