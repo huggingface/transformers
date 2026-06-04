@@ -483,8 +483,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
         gguf_checkpoint_path (`str`):
             The path the to GGUF file to load
         return_tensors (`bool`, defaults to `False`):
-            Whether to read the tensors from the file and return them. Not doing so is faster
-            and only loads the metadata in memory.
+            Whether to materialize the tensor data (`"tensors"`) and return it. When `False`,
+            only the header is read — config, tokenizer, and the cheap `"tensor_quant_types"` /
+            `"weight_mapping"` metadata — which is faster and enough to plan a module swap.
     """
     if is_gguf_available() and is_torch_available():
         from gguf import GGUFReader
@@ -672,19 +673,28 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                 "This will use default value from model config class and cause unexpected behavior."
             )
 
-    if return_tensors:
-        config = parsed_parameters.get("config", {})
-        model_type = config.get("model_type", architecture)
+    # Tensors GGUF ships as metadata for its own runtime but HF models compute on the
+    # fly (or don't store as a parameter). Skip so they don't show up as "unexpected".
+    _GGUF_RUNTIME_AUX_TENSORS = frozenset({"rope_freqs.weight"})
 
+    # Header-only metadata — read straight off the reader without touching any
+    # tensor data, so it is always cheap and available even when `return_tensors`
+    # is False. The GGUF quantizer plans its module swap from this alone (names +
+    # quant types + the rename/convert map): a pure-renaming step, no tensor load.
+    model_type = parsed_parameters.get("config", {}).get("model_type", architecture)
+    parsed_parameters["tensor_quant_types"] = {
+        tensor.name: tensor.tensor_type
+        for tensor in reader.tensors
+        if tensor.name not in _GGUF_RUNTIME_AUX_TENSORS
+    }
+    parsed_parameters["weight_mapping"] = get_gguf_converters(model_type)
+
+    if return_tensors:
         # Wrap raw uint8 bytes in a `torch.Tensor` subclass that carries `quant_type`.
         # `GGUFDequantize` does the actual dequant inside the WeightConverter chain,
         # on whatever device the loader has moved the bytes to.
         import numpy as np
         import torch  # local: keep top-of-file import-light when torch isn't required
-
-        # Tensors GGUF ships as metadata for its own runtime but HF models compute on the
-        # fly (or don't store as a parameter). Skip so they don't show up as "unexpected".
-        _GGUF_RUNTIME_AUX_TENSORS = frozenset({"rope_freqs.weight"})
 
         # `np.copy(tensor.data)` materializes a writable buffer — the mmap view
         # returned by GGUFReader is non-writable, and downstream `.to(device,dtype)`
@@ -694,17 +704,6 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
             for tensor in reader.tensors
             if tensor.name not in _GGUF_RUNTIME_AUX_TENSORS
         }
-        # Lightweight `{gguf_name: ggml_quant_type}` metadata, read straight off the
-        # reader without touching tensor data. The quantizer builds its module-swap
-        # plan from this (see `GGUFQuantizer._build_quant_info`) instead of walking
-        # the materialized `tensors` dict — deciding the swap needs the quant type,
-        # not the weights.
-        parsed_parameters["tensor_quant_types"] = {
-            tensor.name: tensor.tensor_type
-            for tensor in reader.tensors
-            if tensor.name not in _GGUF_RUNTIME_AUX_TENSORS
-        }
-        parsed_parameters["weight_mapping"] = get_gguf_converters(model_type)
 
     if len(reader_keys) > 0:
         logger.info(f"Some keys of the GGUF file were not considered: {reader_keys}")
