@@ -169,7 +169,6 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
     index_head_dim: int = 128
     index_n_heads: int = 32
     moe_layer_freq: int = 1
-    pretraining_tp: int = 1
     rope_interleave: bool = True
     index_topk_freq: int = 1
     index_topk_pattern: str | list[str] | None = None
