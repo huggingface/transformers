@@ -48,7 +48,7 @@ We encourage you to share your model with the community. Log in to your Hugging 
 
 ## Load the dataset
 
-The [satellite-building-segmentation](https://huggingface.co/datasets/merve/satellite-building-segmentation) dataset is in native Hugging Face Datasets format, so we can load it directly with `load_dataset`. Each row contains:
+The [satellite-building-segmentation](https://huggingface.co/datasets/merve/satellite-building-segmentation) dataset is in native Hugging Face Datasets format, so load it directly with `load_dataset`. Each row contains:
 
 - `image`: the satellite image (PIL)
 - `image_id`: unique identifier for the image
