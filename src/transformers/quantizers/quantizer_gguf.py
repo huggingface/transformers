@@ -179,12 +179,8 @@ class GGUFQuantizer(HfQuantizer):
             — for those the swap step skips the layer and the bytes would
             otherwise be assigned raw into a plain `nn.Linear.weight`.
         """
-        import re
-
         import torch
 
-        from ..core_model_loading import WeightConverter
-        from ..gguf_conversion_ops import SubtractOne
         from ..integrations.gguf_dequant import GGUFQuantizedTensor, dequantize_gguf_tensor
         from ..integrations.gguf_linear import gguf_linear_supports
         from ..modeling_gguf_pytorch_utils import load_gguf_checkpoint
@@ -193,29 +189,9 @@ class GGUFQuantizer(HfQuantizer):
         self.weight_mapping = list(parsed.get("weight_mapping", []) or [])
         self.gguf_tensor_types = dict(parsed.get("tensor_quant_types", {}) or {})
         tensors = parsed["tensors"]
-        # Gemma2 / Gemma3 / Nemotron store every RMSNorm weight as `w + 1`. The
-        # `-1` must land on the fp32 source *before* the loader casts to the
-        # target dtype: the loader's `_materialize_copy` casts first and the
-        # converter chain runs after, so `cast(w + 1) - 1` loses ~1 ULP near
-        # `w = 1` (verified — `SubtractOne` sees fp16 there) and breaks the
-        # weights-conversion tests. So `SubtractOne` is a no-op marker in the
-        # chain and we apply the real subtraction here. Which tensors need it is
-        # *not* a hardcoded arch list — it's exactly the source patterns carried
-        # by the `SubtractOne` converters in `weight_mapping`, so new arches work
-        # for free as long as their converter graph declares the offset.
-        offset_patterns = [
-            pat
-            for entry in self.weight_mapping
-            if isinstance(entry, WeightConverter) and any(isinstance(op, SubtractOne) for op in entry.operations)
-            for pat in entry.source_patterns
-        ]
-        if offset_patterns:
-            offset_re = re.compile("|".join(offset_patterns))
-            for name, t in tensors.items():
-                if isinstance(t, torch.Tensor) and t.is_floating_point() and offset_re.search(name):
-                    # Detach to break any GGUFQuantizedTensor wrapping; clone to
-                    # own the storage the loader will cast.
-                    tensors[name] = t.detach().clone() - 1.0
+        # NB: the Gemma/Nemotron `w + 1` norm de-offset is handled by the
+        # `SubtractOne` converter running in fp32 — `_process_model_before_weight_loading`
+        # forces those norms to stay fp32 for the load (see `_mark_offset_norms_fp32`).
         # Linear-mode (byte passthrough → GgufLinear) requires MPS; off-MPS we
         # fall back to dequant-at-load so the model still runs as plain
         # `nn.Linear` weights. On MPS we commit to the kernel path — if the
@@ -264,6 +240,29 @@ class GGUFQuantizer(HfQuantizer):
             return True
         return torch.backends.mps.is_available() and not self.quantization_config.dequantize
 
+    def _mark_offset_norms_fp32(self, model) -> None:
+        """Gemma/Nemotron store RMSNorm weights as `w + 1`; the `SubtractOne`
+        converter de-offsets them, but only correctly in fp32 — the loader casts
+        to the target dtype *before* the converter chain runs. Force exactly those
+        norms to stay fp32 for the load through `_keep_in_fp32_modules_strict`
+        (which covers both fp16 and bf16). The set of norms is the targets of the
+        `SubtractOne` converters in `weight_mapping` — no hardcoded arch list, so a
+        new arch works as soon as its converter graph declares the offset. Runs on
+        every load path (the dequant path needs it too). Must run before
+        `_get_dtype_plan` reads the flag — `preprocess_model` is called first.
+        """
+        from ..core_model_loading import WeightConverter
+        from ..gguf_conversion_ops import SubtractOne
+
+        offset_targets = {
+            pat
+            for entry in self.weight_mapping
+            if isinstance(entry, WeightConverter) and any(isinstance(op, SubtractOne) for op in entry.operations)
+            for pat in entry.target_patterns
+        }
+        if offset_targets:
+            model._keep_in_fp32_modules_strict = set(model._keep_in_fp32_modules_strict or []) | offset_targets
+
     def _process_model_before_weight_loading(self, model, **kwargs):
         """Swap nn.Linear / fused-expert modules to GgufLinear / GgufExperts in
         place at meta time, when `_resolve_keep_quantized` selects the byte path.
@@ -271,6 +270,7 @@ class GGUFQuantizer(HfQuantizer):
         `quantization_config.module_quant_types` so it survives
         `save_pretrained` → `from_pretrained`.
         """
+        self._mark_offset_norms_fp32(model)
         self.keep_quantized = self._resolve_keep_quantized()
         if not self.keep_quantized:
             return

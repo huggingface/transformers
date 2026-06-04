@@ -841,7 +841,7 @@ class GgufModelTests(unittest.TestCase):
         for layer_name, original_params in original_state_dict.items():
             if layer_name in converted_state_dict:
                 self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
-                torch.testing.assert_close(original_params, converted_state_dict[layer_name])
+                torch.testing.assert_close(original_params, converted_state_dict[layer_name].to(original_params.dtype))
             else:
                 raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
 
@@ -919,7 +919,7 @@ class GgufModelTests(unittest.TestCase):
         for layer_name, original_params in original_state_dict.items():
             if layer_name in converted_state_dict:
                 self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
-                torch.testing.assert_close(original_params, converted_state_dict[layer_name])
+                torch.testing.assert_close(original_params, converted_state_dict[layer_name].to(original_params.dtype))
             else:
                 raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
 
@@ -958,7 +958,7 @@ class GgufModelTests(unittest.TestCase):
         for layer_name, original_params in original_state_dict.items():
             if layer_name in converted_state_dict:
                 self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
-                torch.testing.assert_close(original_params, converted_state_dict[layer_name])
+                torch.testing.assert_close(original_params, converted_state_dict[layer_name].to(original_params.dtype))
             else:
                 raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
 
@@ -983,7 +983,7 @@ class GgufModelTests(unittest.TestCase):
         for layer_name, original_params in original_state_dict.items():
             if layer_name in converted_state_dict:
                 self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
-                torch.testing.assert_close(original_params, converted_state_dict[layer_name])
+                torch.testing.assert_close(original_params, converted_state_dict[layer_name].to(original_params.dtype))
             else:
                 raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
 

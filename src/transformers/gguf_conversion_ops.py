@@ -167,16 +167,15 @@ class Squeeze(ConversionOps):
 
 
 class SubtractOne(ConversionOps):
-    """Declarative marker for GGUF norm weights stored as `w + 1` (Gemma/Nemotron).
+    """Subtract 1 from GGUF norm weights stored as `w + 1` (Gemma/Nemotron).
 
-    The `-1` must run on the fp32 source *before* the loader casts to the target
-    dtype, otherwise `cast(w + 1) - 1` drops ~1 ULP near `w = 1` and the norm
-    weights end up ~5e-4 off vs HF. The loader's `_materialize_copy` casts
-    *before* the converter chain runs (verified: this op sees fp16), so the op
-    can't do it safely. Instead `GGUFQuantizer.load_checkpoint_state` discovers
-    which source tensors carry a `SubtractOne` and applies the subtraction on the
-    fp32 source up-front — so by the time the chain runs the value is already
-    de-offset and `convert` is a no-op pass-through.
+    The `-1` must run in fp32: `cast_to_fp16(w + 1) - 1` drops ~1 ULP near
+    `w = 1` and the norm weights end up ~5e-4 off vs HF. The loader's
+    `_materialize_copy` casts to the target dtype *before* the converter chain
+    runs, so this op alone would see fp16. `GGUFQuantizer` keeps these norms in
+    fp32 for the load (via `_keep_in_fp32_modules_strict`, keyed off the
+    `SubtractOne` converter targets), so by the time `convert` runs the tensor is
+    fp32 and the subtraction is exact.
     """
 
     def convert(
@@ -189,7 +188,7 @@ class SubtractOne(ConversionOps):
         target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        return {target_pattern: tensor}
+        return {target_pattern: tensor - 1}
 
     @property
     def reverse_op(self) -> ConversionOps:
