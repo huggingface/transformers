@@ -206,7 +206,12 @@ class Molmo2GQAAttention(nn.Module):
             value_states = repeat_kv(value_states, self.num_key_value_groups)
             attn_weights = torch.matmul(query_states / math.sqrt(query_states.size(-1)), key_states.transpose(2, 3))
             if attention_mask is not None:
-                attn_weights = attn_weights + attention_mask
+                # The image pooling adapter passes a boolean keep-mask (valid patches); exclude the
+                # invalid ones with -inf to match the SDPA path. A float mask is already additive.
+                if attention_mask.dtype == torch.bool:
+                    attn_weights = attn_weights.masked_fill(~attention_mask, torch.finfo(attn_weights.dtype).min)
+                else:
+                    attn_weights = attn_weights + attention_mask
 
             attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
             attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=self.training)
