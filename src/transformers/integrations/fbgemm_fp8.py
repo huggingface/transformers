@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from contextlib import contextmanager
 from functools import lru_cache
 
 from ..activations import ACT2FN
@@ -25,6 +24,7 @@ from ..utils import (
     is_torch_xpu_available,
     logging,
 )
+from .quantization_utils import on_device
 
 
 if is_torch_available():
@@ -40,25 +40,6 @@ if is_fbgemm_gpu_available() and not _is_torch_xpu_available:
     import fbgemm_gpu.experimental.gen_ai  # noqa: F401
 
 logger = logging.get_logger(__name__)
-
-
-@contextmanager
-def on_device(tensor):
-    """Force the global current device to match ``tensor``'s device.
-
-    This keeps quantization kernel launches aligned with the input tensor device when the
-    process current device differs from the module placement.
-    """
-    device = getattr(tensor, "device", None)
-    device_type = getattr(device, "type", None)
-    if device_type == "cuda":
-        with torch.cuda.device(device):
-            yield
-    elif _is_torch_xpu_available and device_type == "xpu":
-        with torch.xpu.device(device):
-            yield
-    else:
-        yield
 
 
 class FbgemmFp8Quantize(ConversionOps):

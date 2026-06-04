@@ -18,10 +18,10 @@ from ..utils import is_torch_available, logging
 if is_torch_available():
     import torch
     from torch import nn
-from contextlib import contextmanager
 
 from ..core_model_loading import ConversionOps, _IdentityOp
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
+from .quantization_utils import on_device
 
 
 logger = logging.get_logger(__name__)
