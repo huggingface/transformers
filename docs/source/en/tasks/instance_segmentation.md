@@ -79,7 +79,7 @@ Inspect a single example. Each record has an `image`, an `image_id`, and an `obj
 >>> print(f"First category: {sample['objects']['category'][0]}")
 ```
 
-Let's visualize an example with its ground-truth masks to get a sense of the data:
+Visualize an example with its ground-truth masks:
 
 ```py
 >>> import numpy as np
