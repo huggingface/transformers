@@ -11,6 +11,7 @@ MODEL_TO_SPEC_FACTORY: dict[str, Callable[[], HeterogeneousModelingSpec]] = {
     "nemotron_h": lambda: nemotron_h(),
 }
 
+
 def gpt_oss() -> HeterogeneousModelingSpec:
     import torch
 

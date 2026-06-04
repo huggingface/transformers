@@ -1,3 +1,4 @@
+import importlib
 import tempfile
 import unittest
 from contextlib import ExitStack, contextmanager
@@ -420,10 +421,8 @@ class TestHeterogeneousModeling(unittest.TestCase):
 
         BuiltInModel.__module__ = "transformers.models.test_model.modeling_test_model"
 
-        with patch.dict(
-            "transformers.heterogeneity.supported_models.MODEL_TO_SPEC_FACTORY",
-            {"test_model": lambda: spec},
-        ):
+        supported_models = importlib.import_module("transformers.heterogeneity.supported_models")
+        with patch.dict(supported_models.MODEL_TO_SPEC_FACTORY, {"test_model": lambda: spec}):
             self.assertIs(get_heterogeneous_modeling_spec(BuiltInModel()), spec)
 
     def test_get_heterogeneous_modeling_spec_raises_for_unsupported_builtin_model(self):
