@@ -145,7 +145,7 @@ To fine-tune the model, you must preprocess the data to match the format the mod
 
 The transform reconstructs the COCO-style annotation dicts that the image processor expects from the dataset's `objects` column.
 
-We use [`~datasets.Dataset.with_transform`] to apply preprocessing lazily (on-the-fly when samples are loaded), which avoids storing the entire processed dataset in memory.
+Use [`~datasets.Dataset.with_transform`] to apply preprocessing lazily (on-the-fly when samples are loaded), which avoids storing the entire processed dataset in memory.
 
 ```py
 >>> from functools import partial
