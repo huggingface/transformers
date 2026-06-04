@@ -1209,7 +1209,7 @@ class TrainingArguments:
         metadata={
             "help": "Whether to sync intermediate checkpoints to a Hub bucket (mutable object storage, no git "
             "history, chunk-level xet dedup) instead of committing them to the model repo. Independent of "
-            "`push_to_hub`; if both are set, the final checkpoint is also committed to the repo at the end of training."
+            "`push_to_hub`; if both are set to `True`, the final checkpoint is also committed to the repo at the end of training."
         },
     )
     bucket_id: str | None = field(

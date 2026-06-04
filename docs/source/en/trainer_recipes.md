@@ -250,7 +250,7 @@ Checkpoint resuming requires optimizer and scheduler state files in the checkpoi
 
 ### Checkpointing to a bucket
 
-Set `push_to_bucket=True` to sync checkpoints to a [Hugging Face bucket](https://huggingface.co/docs/huggingface_hub/guides/buckets) instead of (or alongside) keeping them only on local disk. A bucket is mutable, Xet-backed object storage with no git history — a better fit for the rotating, throwaway nature of intermediate checkpoints than a model repository. Only changed files (and, within them, changed chunks) are transferred on each save.
+Set `push_to_bucket=True` to sync checkpoints to a [Hugging Face bucket](https://huggingface.co/docs/huggingface_hub/guides/buckets). Checkpoints still save to local disk, but the bucket receives a copy of each one. A bucket is mutable, Xet-backed object storage with no git history. Buckets suit intermediate checkpoints better than a model repository, since checkpoints rotate constantly and are meant to be thrown away. Each save transfers only the changed files, and only the changed chunks within them.
 
 ```py
 from transformers import Trainer, TrainingArguments
@@ -267,11 +267,11 @@ trainer = Trainer(
 trainer.train()
 ```
 
-Each checkpoint is uploaded to the bucket under its own `checkpoint-<step>/` prefix and **kept there even after it is rotated away locally** by [`~TrainingArguments.save_total_limit`] (i.e. the bucket accumulates every checkpoint). Uploads run asynchronously, so they don't block training.
+[`Trainer`] uploads each checkpoint to the bucket under its own `checkpoint-<step>/` prefix and keeps it there even after [`~TrainingArguments.save_total_limit`] rotates it off local disk.. The bucket accumulates every checkpoint. Uploads run asynchronously, so they don't block training.
 
-`push_to_bucket` is independent of `push_to_hub`: use it on its own to store checkpoints without creating a model repository, or together with `push_to_hub` to also publish the model. 
+`push_to_bucket` is independent of `push_to_hub`. Use it on its own to store checkpoints without creating a model repository, or together with `push_to_hub` to also publish the model. 
 
-To resume from a bucket, pass its handle to `resume_from_checkpoint`. [`Trainer`] downloads the checkpoint into `output_dir` and continues from it — handy for resuming on a fresh machine where nothing is on local disk yet. Pass the bucket root to resume from its latest checkpoint, or a full checkpoint handle to resume from a specific one:
+To resume from a bucket, pass its handle to `resume_from_checkpoint`. [`Trainer`] downloads the checkpoint into `output_dir` and continues from it. This helps when resuming on a fresh machine where nothing is on local disk yet. Pass the bucket root to resume from its latest checkpoint, or a full checkpoint handle to resume from a specific one:
 
 ```py
 trainer.train(resume_from_checkpoint="hf://buckets/my-org/my-run")                 # latest in that bucket
