@@ -390,7 +390,9 @@ class PackedColwiseParallel(TensorParallelLayer):
     @contextlib.contextmanager
     def context_around_forward(self, module):
         # grouped_mm etc needs plain tensors, so swap the params
-        to_swap_params = [(name, param) for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)]
+        to_swap_params = [
+            (name, param) for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)
+        ]
         for name, param in to_swap_params:
             del module._parameters[name]
             setattr(module, name, param.to_local())
@@ -535,7 +537,9 @@ class MoEExpertsParallel(TensorParallelLayer):
     @contextlib.contextmanager
     def context_around_forward(self, module):
         # grouped_mm experts forward needs plain tensors, so swap the params
-        to_swap_params = [(name, param) for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)]
+        to_swap_params = [
+            (name, param) for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)
+        ]
         for name, param in to_swap_params:
             del module._parameters[name]
             # Happens only when train in TP only (experts dont use grouped_gemm)
