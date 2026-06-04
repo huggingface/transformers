@@ -3021,6 +3021,15 @@ class AntiAliasedActivation1d(nn.Module):
         return hidden_states
 
 
+# Alias for BC
+class Activation1d(AntiAliasedActivation1d):
+    """Deprecated alias for `AntiAliasedActivation1d`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`Activation1d` is deprecated; please use `AntiAliasedActivation1d` instead.")
+        super().__init__(*args, **kwargs)
+
+
 class AMPBlock(torch.nn.Module):
     def __init__(
         self,

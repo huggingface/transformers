@@ -1850,6 +1850,7 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
         ("dac", "DacModel"),
         ("higgs_audio_v2_tokenizer", "HiggsAudioV2TokenizerModel"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
+        ("xcodec2", "Xcodec2Model"),
     ]
 )
 
