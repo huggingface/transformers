@@ -386,7 +386,7 @@ class PackedColwiseParallel(TensorParallelLayer):
 
     @contextlib.contextmanager
     def context_around_forward(self, module):
-        # grouped_mm etc. needs plain tensors, so swap the params recorded by
+        # grouped_mm etc. needs plain tensors, so swap the params
         to_swaps_params = [(name, param) for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)]
         for name, param in to_swaps_params:
             module.register_parameter(name, torch.nn.Parameter(param.to_local(), requires_grad=param.requires_grad))
@@ -394,6 +394,7 @@ class PackedColwiseParallel(TensorParallelLayer):
             yield
         finally:
             for name, param in to_swaps_params:
+                # restore the original DTensor params
                 module.register_parameter(name, param)
 
     def transform_output_post_forward(self, module, output, mesh):
@@ -504,7 +505,7 @@ class MoEExpertsParallel(TensorParallelLayer):
 
     @contextlib.contextmanager
     def context_around_forward(self, module):
-        # grouped_mm experts forward needs plain tensors, so swap the params recorded by
+        # grouped_mm experts forward needs plain tensors, so swap the params
         to_swaps_params = [(name, param) for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)]
         for name, param in to_swaps_params:
             module.register_parameter(name, torch.nn.Parameter(param.to_local(), requires_grad=param.requires_grad))
@@ -512,6 +513,7 @@ class MoEExpertsParallel(TensorParallelLayer):
             yield
         finally:
             for name, param in to_swaps_params:
+                # restore the original DTensor params
                 module.register_parameter(name, param)
 
     def transform_output_post_forward(self, module, output, mesh):
