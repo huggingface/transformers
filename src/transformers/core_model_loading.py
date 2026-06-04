@@ -123,16 +123,12 @@ class Chunk(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        targets = self.get_target_patterns(input_dict, target_patterns)
+        targets = target_patterns
         sizes = len(targets)
         chunks = torch.chunk(tensor, sizes, dim=self.dim)
+        if len(input_dict) > 1 or len(target_patterns) == 1 or len(chunks) != len(target_patterns):
+            raise ValueError(f"Failed to convert {kwargs.get('full_layer_name')}")
         return dict(zip(targets, chunks))
-
-    def get_target_patterns(self, input_dict: dict, target_patterns: list[str]) -> list[str]:
-        # Here we always return the target patterns
-        if len(input_dict) > 1 or len(target_patterns) == 1:
-            raise ValueError("Undefined Operation encountered!")
-        return target_patterns
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -161,7 +157,10 @@ class Concatenate(ConversionOps):
         for source_pattern in source_patterns:
             if source_pattern not in input_dict:
                 continue
-            tensors = input_dict[source_pattern]
+            # Immediately free the input_dict, so that we do not keep many copies simultaneously - otherwise we have to
+            # wait for this function to return to be able to clean-up, which will not get garbage collected as fast as if
+            # everything is freed right now
+            tensors = input_dict.pop(source_pattern)
             if isinstance(tensors, list):
                 all_tensors.extend(tensors)
             else:
@@ -197,15 +196,20 @@ class MergeModulelist(ConversionOps):
         target_patterns: list[str],
         **kwargs,
     ) -> dict[str, torch.Tensor]:
+        input_size = len(input_dict)
         merged: dict[str, torch.Tensor] = {}
-        for source_pattern, tensors in input_dict.items():
-            target_pattern = self.get_target_pattern(input_dict, source_pattern, target_patterns)
+        for source_pattern in list(input_dict.keys()):
+            # Immediately free the input dict, so that we do not keep many copies simultaneously - otherwise we have to
+            # wait for this function to return to be able to clean-up, and if the size of the input_dict is larger than 1
+            # (such as the MoEs' gate_proj/up_proj merging), we are wasting quite some memory
+            tensors = input_dict.pop(source_pattern)
+            target_pattern = self.get_target_pattern(input_size, source_pattern, target_patterns)
             merged[target_pattern] = torch.stack(tensors, dim=self.dim)
         return merged
 
-    def get_target_pattern(self, input_dict: dict, source_pattern: str, target_patterns: list[str]) -> str:
+    def get_target_pattern(self, input_size: int, source_pattern: str, target_patterns: list[str]) -> str:
         # Here it's a single operation, so we use the target
-        if len(input_dict) == 1:
+        if input_size == 1:
             if len(target_patterns) == 1:
                 return target_patterns[0]
             else:
@@ -595,6 +599,7 @@ class WeightTransform:
         "_original_target_patterns",
         "_was_used",
         "scope_prefix",
+        "base_model_prefix",
     )
 
     def __init__(self, source_patterns: str | list[str], target_patterns: str | list[str]):
@@ -612,9 +617,11 @@ class WeightTransform:
 
         # Flag to notice if the Transform was used
         self._was_used = False
-        # Optional prefix scope: when set, this transform only applies to keys starting with
-        # `scope_prefix + "."`, stripping / re-attaching the prefix around the pattern match.
+
+        # Optional scope_prefix/base_model_prefix. When used, the transform will only match and apply to keys containing
+        # either `base_model_prefix.scope_prefix.` or `scope_prefix.` prefixes
         self.scope_prefix: str | None = None
+        self.base_model_prefix: str | None = None
 
         # We need to process a few exceptions here when instantiating the reverse mapping (i.e. the targets become
         # sources, and sources become targets). The issues lie in the sources usually, so here we need to check the
@@ -682,23 +689,34 @@ class WeightTransform:
 
     def _scoped_match(self, source_key: str) -> tuple[str | None, str, re.Match[str]] | None:
         """
-        Apply `scope_prefix` stripping (if any), then match `compiled_sources` against the suffix.
+        Strip `scope_prefix` (if any) from `source_key`, then match `compiled_sources` against the
+        remaining suffix.
 
-        Returns `(prefix_dot, key_to_match, match_object)` when a branch matches, where `prefix_dot` is `None`
-        if `scope_prefix` is unset, else `f"{scope_prefix}."`. Returns `None` when out of scope or unmatched.
+        Returns `(prefix_dot, key_to_match, match_object)` on match, else `None`. `prefix_dot` is
+        the prefix consumed from `source_key`: either `f"{scope_prefix}."` or that same string with
+        one `base_model_prefix` level stripped or prepended when the former didn't match.
+        `None` when `scope_prefix` is unset.
         """
-        prefix_dot = None
         key_to_match = source_key
+        prefix = None
         if self.scope_prefix is not None:
-            prefix_dot = self.scope_prefix + "."
-            if not source_key.startswith(prefix_dot):
+            scope_prefix = f"{self.scope_prefix}." if self.scope_prefix != "" else ""
+            base_model_prefix = f"{self.base_model_prefix}." if self.base_model_prefix != "" else ""
+            # First, try to match the longest sequence, i.e. base_model_prefix + scope_prefix
+            if source_key.startswith(base_model_prefix + scope_prefix):
+                prefix = base_model_prefix + scope_prefix
+            # Then, try to strip the base_model_prefix, in case we load a ForXXX model from BaseModel weights
+            elif source_key.startswith(scope_prefix):
+                prefix = scope_prefix
+            # In this case, no match is ever possible
+            else:
                 return None
-            key_to_match = source_key[len(prefix_dot) :]
+            key_to_match = source_key.removeprefix(prefix)
 
         match_object = self.compiled_sources.search(key_to_match)
         if match_object is None:
             return None
-        return (prefix_dot, key_to_match, match_object)
+        return (prefix, key_to_match, match_object)
 
     def rename_source_key(self, source_key: str) -> tuple[str, str | None]:
         """
@@ -753,6 +771,7 @@ class WeightTransform:
             source_patterns=self._original_target_patterns, target_patterns=self._original_source_patterns, **kwargs
         )
         reverse_transform.scope_prefix = self.scope_prefix
+        reverse_transform.base_model_prefix = self.base_model_prefix
         return reverse_transform
 
     def materialize_tensors(self) -> dict[str, list[torch.Tensor]]:
@@ -875,6 +894,7 @@ class PrefixChange(WeightRenaming):
             prefix_to_add=self.prefix_to_remove, prefix_to_remove=self.prefix_to_add, model_prefix=self.model_prefix
         )
         result.scope_prefix = self.scope_prefix
+        result.base_model_prefix = self.base_model_prefix
         return result
 
 
@@ -1145,7 +1165,7 @@ def rename_source_key(
     source_key: str,
     weight_renamings: list[WeightRenaming],
     weight_converters: list[WeightConverter],
-    prefix: str | None = None,
+    base_model_prefix: str | None = None,
     meta_state_dict: dict | None = None,
 ) -> tuple[str, str | None]:
     """
@@ -1163,10 +1183,10 @@ def rename_source_key(
             Applied in order; every matching renaming fires (they may chain).
         weight_converters (`list[WeightConverter]`):
             Applied after all renamings; at most one may match. Subsequent converters are skipped.
-        prefix (`str`, *optional*):
-            Base-model prefix to add or strip when both `prefix` and `meta_state_dict` are given.
+        base_model_prefix (`str`, *optional*):
+            Base-model prefix to add or strip when both `base_model_prefix` and `meta_state_dict` are given.
         meta_state_dict (`dict`, *optional*):
-            Meta state dict used to decide whether `prefix` should be added or stripped.
+            Meta state dict used to decide whether `base_model_prefix` should be added or stripped.
 
     Returns:
         `tuple[str, str | None]`: The renamed key and the matched converter's source pattern
@@ -1186,15 +1206,15 @@ def rename_source_key(
         if source_pattern is not None:
             break
 
-    # 3. check if we need to add or remove prefix if necessary (only during loading, not saving)
-    if prefix is not None and meta_state_dict is not None:
+    # 3. check if we need to add or remove base_model_prefix if necessary (only during loading, not saving)
+    if base_model_prefix is not None and meta_state_dict is not None:
         if (
-            renamed_key.startswith(prefix)
-            and meta_state_dict.get(re.sub(f"^{prefix}.", "", renamed_key, count=1)) is not None
+            renamed_key.startswith(base_model_prefix)
+            and meta_state_dict.get(re.sub(f"^{base_model_prefix}.", "", renamed_key, count=1)) is not None
         ):
-            renamed_key = re.sub(f"^{prefix}.", "", renamed_key, count=1)
-        elif meta_state_dict.get(f"{prefix}.{renamed_key}") is not None:
-            renamed_key = f"{prefix}.{renamed_key}"
+            renamed_key = re.sub(f"^{base_model_prefix}.", "", renamed_key, count=1)
+        elif meta_state_dict.get(f"{base_model_prefix}.{renamed_key}") is not None:
+            renamed_key = f"{base_model_prefix}.{renamed_key}"
 
     return renamed_key, source_pattern
 
@@ -1292,7 +1312,7 @@ def convert_and_load_state_dict_in_model(
     ```
 
     """
-    prefix = model.base_model_prefix
+    base_model_prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
     device_map = load_config.device_map or {"": "cpu"}
     hf_quantizer = load_config.hf_quantizer
@@ -1345,12 +1365,12 @@ def convert_and_load_state_dict_in_model(
     for original_key, tensor in state_dict:
         # 1. Rename the key according to all renaming and weight conversion patterns.
         renamed_key, source_pattern = rename_source_key(
-            original_key, renamings, converters, prefix=prefix, meta_state_dict=meta_model_state_dict
+            original_key, renamings, converters, base_model_prefix, meta_model_state_dict
         )
         if renamed_key not in meta_model_state_dict and original_key in meta_model_state_dict:
             # Key should probably not have been renamed but we might need the `prefix` to be added.
             renamed_key, source_pattern = rename_source_key(
-                original_key, [], [], prefix=prefix, meta_state_dict=meta_model_state_dict
+                original_key, [], [], base_model_prefix=base_model_prefix, meta_state_dict=meta_model_state_dict
             )
 
         # 2. finally, collect the tensor into the proper converter
@@ -1411,7 +1431,8 @@ def convert_and_load_state_dict_in_model(
                         )
                     shard_index = (
                         len(mapping.collected_tensors.get(source_pattern, []))
-                        if isinstance(mapping, WeightConverter) and isinstance(mapping.operations[0], MergeModulelist)
+                        if isinstance(mapping, WeightConverter)
+                        and any(isinstance(op, MergeModulelist) for op in mapping.operations)
                         else None
                     )
                     future_or_tensor = spawn_tp_materialize(

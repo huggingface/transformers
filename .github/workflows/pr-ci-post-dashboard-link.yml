@@ -1,0 +1,71 @@
+name: Post CI Dashboard Link
+
+on:
+  workflow_run:
+    workflows: ["PR CI"]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  post-link:
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const headSha = context.payload.workflow_run.head_sha;
+            const runId = context.payload.workflow_run.id;
+
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+            });
+
+            const pr = prs.find(pr => pr.head.sha === headSha);
+            if (!pr) {
+              console.log(`No open PR found for SHA ${headSha}, skipping`);
+              return;
+            }
+
+            // Check if the code quality job failed (causes all test jobs to be skipped)
+            const { data: jobsData } = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+              per_page: 100,
+            });
+            const qualityJob = jobsData.jobs.find(j => j.name.includes('Check code quality'));
+            const qualityFailed = qualityJob && qualityJob.conclusion === 'failure';
+
+            // Delete any existing dashboard comment before posting a fresh one
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+            });
+            for (const comment of comments) {
+              if (comment.body.includes('**CI Observability Dashboard:** [View test results in Grafana]') ||
+                  comment.body.includes('**CI Dashboard:** [View test results in Grafana]')) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: comment.id,
+                });
+              }
+            }
+
+            const url = `https://transformers-ci.lor-e.huggingface.cool/d/pytest-observability-by-pr/pytest-observability-branch?var-pr=${pr.number}`;
+            let body = `**CI Dashboard:** [View test results in Grafana](${url})`;
+            if (qualityFailed) {
+              body += `\n\n> ⚠️ **Code quality check failed** — all test jobs were skipped. Fix the code quality issues and push again to run tests.`;
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body,
+            });

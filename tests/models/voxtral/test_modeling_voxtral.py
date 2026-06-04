@@ -21,6 +21,7 @@ from transformers import (
     VoxtralConfig,
     VoxtralEncoderConfig,
     VoxtralForConditionalGeneration,
+    VoxtralModel,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -40,6 +41,7 @@ if is_torch_available():
 
 class VoxtralModelTester(ALMModelTester):
     config_class = VoxtralConfig
+    base_model_class = VoxtralModel
     conditional_generation_class = VoxtralForConditionalGeneration
     text_config_class = LlamaConfig
     audio_config_class = VoxtralEncoderConfig
