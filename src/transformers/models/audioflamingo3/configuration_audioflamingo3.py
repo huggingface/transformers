@@ -100,6 +100,7 @@ class AudioFlamingo3Config(PreTrainedConfig):
     audio_token_id: int = 151669
     projector_hidden_act: str = "gelu"
     projector_bias: bool = True
+    tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
