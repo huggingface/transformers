@@ -186,9 +186,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         :meth:`get_weight_conversions` is still appended at the end as a fallback for
         plain ``nn.Linear`` weights with no model-specific converter.
         """
-        if self.pre_quantized and not self.quantization_config.dequantize:
-            return self._update_native_weight_conversions(weight_conversions)
-
+        # Native (``dequantize=False``) path: the weights stay in ``float8_e4m3fn`` and
+        # the model's own converters route the sibling ``*.weight_scale_inv`` keys through
+        # the same substring match + suffix-preserving rename as ``*.weight`` (see
+        # huggingface/transformers#45634), so there is nothing extra to wire up here.
         if not (self.pre_quantized and self.quantization_config.dequantize):
             return weight_conversions + self.get_weight_conversions()
 
@@ -226,72 +227,4 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             updated.append(conv)
         # Generic fallback for plain ``nn.Linear`` weights with no model-specific converter.
         updated.extend(self.get_weight_conversions())
-        return updated
-
-    def _update_native_weight_conversions(self, weight_conversions):
-        """Wire the native (``dequantize=False``) MXFP8 compute path.
-
-        The weight stays in ``float8_e4m3fn`` and loads straight into the FP8
-        parameters, so the model-supplied converters keep their merge/concat ops
-        untouched — we only anchor their ``.weight`` sources with ``$`` so the
-        unanchored patterns don't also swallow the sibling ``.weight_scale_inv``
-        keys (regex is searched, and ``.weight`` is a prefix of ``.weight_scale_inv``).
-
-        Each packing converter then gets a *parallel* scale converter that decodes
-        the ``E8M0`` ``uint8`` scales to ``float32`` (:class:`Mxfp8DequantizeScale`)
-        and packs them with the same merge/concat ops — valid because the MXFP8
-        ``[1, N]`` block keeps the per-expert row axis 1:1 with the weight. A final
-        generic ``weight_scale_inv`` decode converter (lowest priority, so the
-        expert-specific ones match first) handles every remaining plain FP8 linear.
-        """
-        # Only MXFP8 checkpoints carry ``uint8`` E8M0 scales that need decoding; a
-        # standard FP8 checkpoint already ships ``float32`` ``weight_scale_inv`` and
-        # loads natively with no extra conversion.
-        if getattr(self.quantization_config, "quant_method", None) != "mxfp8":
-            return weight_conversions + self.get_weight_conversions()
-
-        from ..core_model_loading import WeightConverter
-        from ..integrations.finegrained_fp8 import Mxfp8DequantizeScale
-
-        def _scale_target(target: str) -> str:
-            # Packed expert params are bare Parameters (``...gate_up_proj``); plain
-            # linears carry the ``.weight`` suffix (``...gate_proj.weight``).
-            if target.endswith(".weight"):
-                return target[: -len(".weight")] + ".weight_scale_inv"
-            return target + "_scale_inv"
-
-        updated: list = []
-        scale_converters: list = []
-        for conv in weight_conversions:
-            if not isinstance(conv, WeightConverter):
-                updated.append(conv)
-                continue
-            weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
-            if not weight_sources:
-                updated.append(conv)
-                continue
-            other = [p for p in conv.source_patterns if not p.endswith(".weight")]
-            updated.append(
-                WeightConverter(
-                    source_patterns=[p + "$" for p in weight_sources] + other,
-                    target_patterns=conv._original_target_patterns,
-                    operations=list(conv.operations),
-                )
-            )
-            scale_converters.append(
-                WeightConverter(
-                    source_patterns=[p[: -len(".weight")] + ".weight_scale_inv" for p in weight_sources],
-                    target_patterns=_scale_target(conv._original_target_patterns[0]),
-                    operations=[Mxfp8DequantizeScale()] + list(conv.operations),
-                )
-            )
-        # Specific (packed) scale converters first; the generic catch-all last.
-        updated.extend(scale_converters)
-        updated.append(
-            WeightConverter(
-                source_patterns=["weight_scale_inv"],
-                target_patterns="weight_scale_inv",
-                operations=[Mxfp8DequantizeScale()],
-            )
-        )
         return updated

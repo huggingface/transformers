@@ -23,7 +23,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 from ..activations import ACT2FN
-from ..core_model_loading import ConversionOps, _IdentityOp
+from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import logging
 from ..utils.import_utils import get_cuda_runtime_version, is_kernels_available, resolve_internal_import
@@ -1091,45 +1091,3 @@ class Fp8Dequantize(ConversionOps):
         # checkpoint preserves the FP8 format (weight + per-block ``weight_scale_inv``)
         # whether the in-memory state stayed quantized or was dequantized for compute.
         return Fp8Quantize(self.hf_quantizer)
-
-
-class Mxfp8DequantizeScale(ConversionOps):
-    """Decode MXFP8 ``E8M0`` block scales (stored as ``torch.uint8``) to ``float32``.
-
-    Unlike :class:`Fp8Dequantize` — which folds the scale into the weight for the
-    full-precision (``dequantize=True``) path — the native FP8 compute path keeps
-    the weight in ``float8_e4m3fn`` and holds ``*_scale_inv`` as a ``float32``
-    parameter that is fed straight to ``w8a8_fp8_matmul``. MXFP8 checkpoints ship
-    each per-block scale as a single ``E8M0`` exponent byte whose real multiplier
-    is ``2 ** (byte - 127)``; copying the raw bytes into the ``float32`` parameter
-    would be silently wrong, so we unpack them here.
-
-    The op is elementwise and preserves the input keys, so it composes both as the
-    sole op of a plain ``nn.Linear`` scale converter (source/target share the
-    ``weight_scale_inv`` suffix, so the loader's prefix/suffix rename maps it to the
-    full name) and as the first op of an expert-packing chain (the following
-    ``MergeModulelist``/``Concatenate`` then pack the decoded per-expert scales
-    exactly like the weight side, since the ``[1, N]`` block keeps the row axis 1:1).
-    """
-
-    @torch.no_grad
-    def convert(
-        self,
-        input_dict: dict[str, list[torch.Tensor] | torch.Tensor],
-        source_patterns: list[str] | None = None,
-        target_patterns: list[str] | None = None,
-        **kwargs,
-    ) -> dict[str, list[torch.Tensor] | torch.Tensor]:
-        def _decode(tensor: torch.Tensor) -> torch.Tensor:
-            if tensor.dtype == torch.uint8:
-                return (tensor.to(torch.float32) - 127.0).exp2()
-            return tensor.to(torch.float32)
-
-        result: dict[str, list[torch.Tensor] | torch.Tensor] = {}
-        for key, value in input_dict.items():
-            result[key] = [_decode(t) for t in value] if isinstance(value, list) else _decode(value)
-        return result
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return _IdentityOp()
