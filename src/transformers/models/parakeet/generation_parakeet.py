@@ -20,7 +20,7 @@ from ...generation import GenerationMixin, StoppingCriteria
 from ...utils import ModelOutput
 
 
-class ParakeetTDTDecoderCache:
+class ParakeetRNNTDecoderCache:
     def __init__(self, config):
         self.config = config
         self.cache: torch.Tensor | None = None
@@ -83,9 +83,9 @@ class ParakeetTDTDecoderCache:
 
 
 @dataclass
-class ParakeetTDTGenerateOutput(ModelOutput):
+class ParakeetRNNTGenerateOutput(ModelOutput):
     """
-    Outputs of Parakeet TDT generation.
+    Outputs of Parakeet transducer (RNN-T / TDT) generation.
 
     Args:
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -118,11 +118,15 @@ class EncoderExhaustedCriteria(StoppingCriteria):
         return self.model._encoder_finished
 
 
-class ParakeetTDTGenerationMixin(GenerationMixin):
-    """Generation mixin for Parakeet TDT models.
+class ParakeetRNNTGenerationMixin(GenerationMixin):
+    """Generation mixin for Parakeet RNN-T models, and the base for all Parakeet transducer generation.
 
-    Handles transducer-specific generation logic: encoder frame tracking,
-    duration accumulation, and encoder-exhaustion stopping.
+    Handles the transducer machinery shared by RNN-T and TDT: encoder frame tracking, decoder cache
+    preparation, encoder-exhaustion stopping, and output-buffer sizing. For RNN-T greedy decoding the encoder
+    frame pointer advances by one frame on every blank emission and stays put on every non-blank emission; a
+    ``max_symbols_per_step`` guard forces an advance after too many consecutive non-blank emissions at the same
+    frame, mirroring NeMo's greedy RNN-T decoding. The duration-aware [`ParakeetTDTGenerationMixin`] extends this
+    by advancing the frame pointer by a predicted duration instead.
     """
 
     def _get_stopping_criteria(self, *args, **kwargs):
@@ -133,18 +137,20 @@ class ParakeetTDTGenerationMixin(GenerationMixin):
     def _update_model_kwargs_for_generation(self, outputs, *args, **kwargs):
         model_kwargs = super()._update_model_kwargs_for_generation(outputs, *args, **kwargs)
 
-        # Advance encoder frame pointer by the predicted duration
         logits = outputs.logits[:, -1, :]
-        tokens = logits[:, : self.config.vocab_size].argmax(dim=-1)
-        durations = logits[:, self.config.vocab_size :].argmax(dim=-1)
-
-        # Only force forward progress (duration >= 1) for blank predictions;
+        tokens = logits.argmax(dim=-1)
         blank_mask = tokens == self.config.blank_token_id
-        durations = torch.where(blank_mask & (durations == 0), torch.ones_like(durations), durations)
-        model_kwargs["encoder_frame_idxs"] = model_kwargs["encoder_frame_idxs"] + durations
-        self._step_durations.append(durations)
 
-        # Track which batch elements have exhausted their encoder frames.
+        # Count consecutive non-blank emissions at the current encoder frame; reset on advance.
+        if self._symbols_at_frame is None:
+            self._symbols_at_frame = torch.zeros_like(tokens)
+        symbols = torch.where(blank_mask, torch.zeros_like(self._symbols_at_frame), self._symbols_at_frame + 1)
+        force_advance = symbols >= self.max_symbols_per_step
+        self._symbols_at_frame = torch.where(blank_mask | force_advance, torch.zeros_like(symbols), symbols)
+
+        # Advance the encoder frame pointer on blank (or forced) emissions; stay put otherwise.
+        advance = (blank_mask | force_advance).long()
+        model_kwargs["encoder_frame_idxs"] = model_kwargs["encoder_frame_idxs"] + advance
         self._encoder_finished = model_kwargs["encoder_frame_idxs"] >= model_kwargs["encoder_valid_lengths"]
 
         return model_kwargs
@@ -207,7 +213,7 @@ class ParakeetTDTGenerationMixin(GenerationMixin):
         return inputs, input_name, model_kwargs
 
     def _prepare_cache_for_generation(self, generation_config, model_kwargs, *args, **kwargs):
-        model_kwargs["decoder_cache"] = ParakeetTDTDecoderCache(self.config)
+        model_kwargs["decoder_cache"] = ParakeetRNNTDecoderCache(self.config)
 
     def prepare_inputs_for_generation(self, input_ids, *args, **kwargs):
         from .modeling_parakeet import ParakeetEncoderModelOutput
@@ -227,65 +233,61 @@ class ParakeetTDTGenerationMixin(GenerationMixin):
         return model_inputs
 
     def generate(self, inputs=None, generation_config=None, **kwargs):
-        # TODO @eustlb: this is temporary — we're going to modularize generate to allow doing this cleanly.
-        self._step_durations = []
         self._encoder_finished = None
+        self._symbols_at_frame = None
 
         outputs = super().generate(inputs=inputs, generation_config=generation_config, **kwargs)
-        durations = torch.stack(self._step_durations, dim=1)  # (batch, steps)
-        # Prepend a zero duration for the decoder_start_token_id that super().generate() prepends to sequences
-        durations = torch.cat(
-            [torch.zeros(durations.shape[0], 1, dtype=durations.dtype, device=durations.device), durations], dim=1
-        )
-        del self._step_durations, self._encoder_finished
+        del self._encoder_finished, self._symbols_at_frame
 
-        return ParakeetTDTGenerateOutput(
+        return ParakeetRNNTGenerateOutput(
             sequences=outputs.sequences if isinstance(outputs, ModelOutput) else outputs,
-            durations=durations,
         )
 
 
-class ParakeetRNNTGenerationMixin(ParakeetTDTGenerationMixin):
-    """Generation mixin for Parakeet RNN-T models.
+class ParakeetTDTGenerationMixin(ParakeetRNNTGenerationMixin):
+    """Generation mixin for Parakeet TDT models.
 
-    RNN-T can be seen as the special case of TDT where the joint network has no duration head: the frame pointer
-    advances by one frame on every blank emission and stays put on every non-blank emission. A
-    ``max_symbols_per_step`` guard forces an advance after too many consecutive non-blank emissions at the
-    same frame, mirroring NeMo's greedy RNN-T decoding. Everything else (encoder frame tracking, decoder
-    cache, stopping criteria, output buffer sizing) is inherited unchanged from [`ParakeetTDTGenerationMixin`].
+    Extends [`ParakeetRNNTGenerationMixin`] with duration-aware decoding: instead of advancing the encoder frame
+    pointer by one on each blank emission, the joint network predicts a per-step duration and the pointer advances
+    by that amount. The shared setup (encoder frame tracking, decoder cache, stopping criteria, output buffer
+    sizing) is inherited unchanged.
     """
 
     def _update_model_kwargs_for_generation(self, outputs, *args, **kwargs):
-        # Skip ParakeetTDTGenerationMixin's update (it reads a duration head we don't have) and go
+        # Skip ParakeetRNNTGenerationMixin's update (it counts per-frame symbols we don't use) and go
         # straight to the base GenerationMixin bookkeeping.
         model_kwargs = GenerationMixin._update_model_kwargs_for_generation(self, outputs, *args, **kwargs)
 
+        # Advance encoder frame pointer by the predicted duration
         logits = outputs.logits[:, -1, :]
-        tokens = logits.argmax(dim=-1)
+        tokens = logits[:, : self.config.vocab_size].argmax(dim=-1)
+        durations = logits[:, self.config.vocab_size :].argmax(dim=-1)
+
+        # Only force forward progress (duration >= 1) for blank predictions;
         blank_mask = tokens == self.config.blank_token_id
+        durations = torch.where(blank_mask & (durations == 0), torch.ones_like(durations), durations)
+        model_kwargs["encoder_frame_idxs"] = model_kwargs["encoder_frame_idxs"] + durations
+        self._step_durations.append(durations)
 
-        # Count consecutive non-blank emissions at the current encoder frame; reset on advance.
-        if self._symbols_at_frame is None:
-            self._symbols_at_frame = torch.zeros_like(tokens)
-        symbols = torch.where(blank_mask, torch.zeros_like(self._symbols_at_frame), self._symbols_at_frame + 1)
-        force_advance = symbols >= self.max_symbols_per_step
-        self._symbols_at_frame = torch.where(blank_mask | force_advance, torch.zeros_like(symbols), symbols)
-
-        # Advance the encoder frame pointer on blank (or forced) emissions; stay put otherwise.
-        advance = (blank_mask | force_advance).long()
-        model_kwargs["encoder_frame_idxs"] = model_kwargs["encoder_frame_idxs"] + advance
+        # Track which batch elements have exhausted their encoder frames.
         self._encoder_finished = model_kwargs["encoder_frame_idxs"] >= model_kwargs["encoder_valid_lengths"]
 
         return model_kwargs
 
     def generate(self, inputs=None, generation_config=None, **kwargs):
+        # TODO @eustlb: this is temporary — we're going to modularize generate to allow doing this cleanly.
+        self._step_durations = []
         self._encoder_finished = None
-        self._symbols_at_frame = None
 
-        # Bypass ParakeetTDTGenerationMixin.generate (it stacks per-step durations we never produce).
         outputs = GenerationMixin.generate(self, inputs=inputs, generation_config=generation_config, **kwargs)
-        del self._encoder_finished, self._symbols_at_frame
+        durations = torch.stack(self._step_durations, dim=1)  # (batch, steps)
+        # Prepend a zero duration for the decoder_start_token_id that generate() prepends to sequences
+        durations = torch.cat(
+            [torch.zeros(durations.shape[0], 1, dtype=durations.dtype, device=durations.device), durations], dim=1
+        )
+        del self._step_durations, self._encoder_finished
 
-        return ParakeetTDTGenerateOutput(
+        return ParakeetRNNTGenerateOutput(
             sequences=outputs.sequences if isinstance(outputs, ModelOutput) else outputs,
+            durations=durations,
         )
