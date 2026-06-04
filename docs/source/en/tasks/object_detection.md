@@ -54,7 +54,7 @@ When prompted, enter your token to log in:
 >>> notebook_login()
 ```
 
-To get started, we'll define global constants, namely the model name and image size. For this tutorial, we'll use the RF-DETR model. Feel free to select any object detection model available in the `transformers` library.
+Define global constants, namely the model name and image size. This tutorial uses RF-DETR, but you can select any object detection model in Transformers.
 
 ```py
 >>> MODEL_NAME = "Roboflow/rf-detr-medium"
