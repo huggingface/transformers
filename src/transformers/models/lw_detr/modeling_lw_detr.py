@@ -400,7 +400,6 @@ class LwDetrViTBackbone(BackboneMixin, LwDetrViTPreTrainedModel):
             .reshape(batch_size * self.config.num_windows_side**2, window_height * window_width, channels)
         )
 
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
         output = self.encoder(hidden_states, **kwargs)
 
         feature_maps = ()
