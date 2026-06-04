@@ -15,16 +15,18 @@
 import copy
 from typing import Any
 
-from ... import is_torch_available
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
+from ...utils.import_utils import is_torch_available, is_torchaudio_available
 
 
 if is_torch_available():
     import torch
     import torch.nn.functional as F
+
+if is_torchaudio_available():
     import torchaudio
 
 
@@ -210,32 +212,20 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
                 .values
             )
 
-        padded_inputs = BatchFeature(
+        return BatchFeature(
             {
                 "audio": padded_audio,
                 "padding_mask": padding_mask,
                 "audio_spectrogram": audio_spectrogram,
                 "spectrogram_mask": spectrogram_mask,
-            }
+            },
+            tensor_type=return_tensors,
         )
-        if return_tensors == "np":
-            padded_inputs = BatchFeature(
-                {
-                    "audio": padded_audio.cpu().numpy(),
-                    "padding_mask": padding_mask.cpu().numpy() if padding_mask is not None else None,
-                    "audio_spectrogram": audio_spectrogram.cpu().numpy(),
-                    "spectrogram_mask": spectrogram_mask.cpu().numpy() if spectrogram_mask is not None else None,
-                }
-            )
-        else:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
-        return padded_inputs
 
     def to_dict(self) -> dict[str, Any]:
         output = copy.deepcopy(self.__dict__)
         output["feature_extractor_type"] = self.__class__.__name__
-        if "acoustic_encoder_padder" in output:
-            del output["acoustic_encoder_padder"]
+        output.pop("acoustic_encoder_padder", None)
         return output
 
 
