@@ -34,6 +34,7 @@ from .tts_robust_normalizer_single_script import normalize_tts_text
 
 logger = logging.get_logger(__name__)
 
+
 def _require_torchaudio():
     if not is_torchaudio_available():
         raise ImportError("MossTTSDelayProcessor requires torchaudio to load or resample waveform files.")
