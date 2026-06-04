@@ -20,7 +20,7 @@ import gc
 import json
 import threading
 from collections.abc import Callable
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import TYPE_CHECKING
 
 from huggingface_hub import scan_cache_dir
@@ -305,7 +305,7 @@ class ModelManager:
                     model,
                     timeout_seconds=self.model_timeout,
                     processor=processor,
-                    on_unload=lambda key=model_id_and_revision: self.loaded_models.pop(key, None),
+                    on_unload=partial(self.loaded_models.pop, model_id_and_revision, None),
                 )
                 if progress_callback is not None:
                     progress_callback({"status": "ready", "model": model_id_and_revision, "cached": False})
