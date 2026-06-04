@@ -1937,7 +1937,11 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             The temporal, height and width of feature shape of each video in LLM.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = list(video_embeds)
+        return vision_outputs
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
@@ -2151,7 +2155,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             video_outputs: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
-            video_embeds = video_outputs.pooler_output
+            video_embeds = torch.cat(video_outputs.pooler_output, dim=0)
             video_embeds_multiscale = video_outputs.deepstack_features
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask, _ = self.get_placeholder_mask(

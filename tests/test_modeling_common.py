@@ -5567,6 +5567,21 @@ class ModelTesterMixin:
                     f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
                 )
 
+                if (
+                    model_class.__name__ in get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES)
+                    and outputs.pooler_output is not None
+                ):
+                    self.assertEqual(
+                        len(outputs.pooler_output),
+                        self.model_tester.batch_size,
+                        f"batch_size mismatch for `pooler_output`: {len(outputs.pooler_output)} != {self.model_tester.batch_size}",
+                    )
+                    self.assertEqual(
+                        outputs.pooler_output[0].ndim,
+                        2,
+                        f"each sample in `pooler_output` should be a 2D array but got {outputs.pooler_output[0].ndim}",
+                    )
+
             else:
                 self.assertIsInstance(outputs, tuple, "get_video_features() must return a tuple if return_dict=False")
 
