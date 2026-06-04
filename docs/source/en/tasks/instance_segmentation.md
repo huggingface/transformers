@@ -29,11 +29,8 @@ In this guide, you will learn how to:
 
 We'll use the [satellite-building-segmentation](https://huggingface.co/datasets/merve/satellite-building-segmentation) dataset, which contains ~9.6k satellite images annotated with building instance masks.
 
-<Tip>
-
-To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/image-segmentation).
-
-</Tip>
+> [!TIP]
+> To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/image-segmentation).
 
 Before you begin, install all the necessary libraries:
 
