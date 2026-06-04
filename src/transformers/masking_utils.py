@@ -1021,6 +1021,7 @@ def create_bidirectional_mask(
     attention_mask: torch.Tensor | None,
     encoder_hidden_states: torch.Tensor | None = None,
     past_key_values: Cache | None = None,
+    position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
     **kwargs,
@@ -1052,7 +1053,7 @@ def create_bidirectional_mask(
     """
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
-        config, inputs_embeds, attention_mask, past_key_values, None, 0, encoder_hidden_states
+        config, inputs_embeds, attention_mask, past_key_values, position_ids, 0, encoder_hidden_states
     )
     if early_exit:
         return attention_mask

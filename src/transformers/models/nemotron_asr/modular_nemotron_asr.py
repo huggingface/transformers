@@ -23,8 +23,10 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -49,6 +51,7 @@ from ..parakeet.modeling_parakeet import (
     ParakeetEncoderFeedForward,
     ParakeetEncoderModelOutput,
     ParakeetEncoderRelPositionalEncoding,
+    ParakeetEncoderSubsamplingConv2D,
     ParakeetForTDT,
     ParakeetPreTrainedModel,
     ParakeetTDTDecoder,
@@ -609,100 +612,7 @@ class NemotronAsrEncoderAttention(ParakeetEncoderAttention):
         return attn_output, attn_weights, new_cache
 
 
-class NemotronAsrEncoderSubsamplingConv2D(nn.Module):
-    def __init__(self, config: NemotronAsrEncoderConfig):
-        super().__init__()
-
-        self.kernel_size = config.subsampling_conv_kernel_size
-        self.stride = config.subsampling_conv_stride
-        self.channels = config.subsampling_conv_channels
-        self.padding = (self.kernel_size - 1) // 2
-        self.num_layers = int(math.log2(config.subsampling_factor))
-        self.causal_downsampling = config.causal_downsampling
-
-        # Causal downsampling: each strided Conv2d uses asymmetric padding
-        # `(left=kernel-1, right=stride-1)` on BOTH time and freq axes (matches NeMo's CausalConv2D).
-        # We apply the pad manually via F.pad, then the inner Conv2d uses padding=0.
-        #
-        # Non-causal: standard symmetric `(kernel-1)//2` on both axes via Conv2d's built-in padding.
-        if self.causal_downsampling:
-            self._pad_left = self.kernel_size - 1
-            self._pad_right = self.stride - 1
-            conv_padding = 0
-        else:
-            self._pad_left = self.padding
-            self._pad_right = self.padding
-            conv_padding = self.padding
-
-        # define layers
-        self.layers = nn.ModuleList()
-        self.layers.append(
-            nn.Conv2d(1, self.channels, kernel_size=self.kernel_size, stride=self.stride, padding=conv_padding)
-        )
-        self.layers.append(nn.ReLU())
-        for _ in range(self.num_layers - 1):
-            # depthwise conv
-            self.layers.append(
-                nn.Conv2d(
-                    self.channels,
-                    self.channels,
-                    kernel_size=self.kernel_size,
-                    stride=self.stride,
-                    padding=conv_padding,
-                    groups=self.channels,
-                )
-            )
-            # pointwise conv
-            self.layers.append(nn.Conv2d(self.channels, self.channels, kernel_size=1))
-            # activation
-            self.layers.append(nn.ReLU())
-
-        # Compute output freq length by simulating the conv chain with the actual padding applied.
-        out_length = config.num_mel_bins
-        total_pad = self._pad_left + self._pad_right
-        for _ in range(self.num_layers):
-            out_length = (out_length + total_pad - self.kernel_size) // self.stride + 1
-        self.linear = nn.Linear(config.subsampling_conv_channels * out_length, config.hidden_size, bias=True)
-
-    def _get_output_length(self, input_lengths: torch.Tensor, conv_layer: nn.Conv2d):
-        if hasattr(conv_layer, "stride") and conv_layer.stride != (1, 1):
-            kernel_size = conv_layer.kernel_size[0]
-            stride = conv_layer.stride[0]
-            total_pad = self._pad_left + self._pad_right
-            output_lengths = (input_lengths + total_pad - kernel_size) // stride + 1
-            return output_lengths
-
-        return input_lengths
-
-    def forward(self, input_features: torch.Tensor, attention_mask: torch.Tensor = None):
-        # input_features is (B, T, F); after unsqueeze(1) it is (B, 1, T, F).
-        # F.pad pads from the *last* axis outward, so the tuple is (F_l, F_r, T_l, T_r).
-        hidden_states = input_features.unsqueeze(1)
-        current_lengths = attention_mask.sum(-1) if attention_mask is not None else None
-
-        for layer in self.layers:
-            # Causal downsampling: each strided Conv2d gets the asymmetric pad
-            # (left=kernel-1, right=stride-1) on BOTH freq and time axes — matches NeMo's CausalConv2D.
-            if self.causal_downsampling and isinstance(layer, nn.Conv2d) and layer.stride != (1, 1):
-                hidden_states = nn.functional.pad(
-                    hidden_states,
-                    (self._pad_left, self._pad_right, self._pad_left, self._pad_right),
-                )
-            hidden_states = layer(hidden_states)
-
-            # mask the hidden states
-            if isinstance(layer, nn.Conv2d) and attention_mask is not None:
-                current_lengths = self._get_output_length(current_lengths, layer)
-                current_seq_length = hidden_states.shape[2]
-                channel_mask = (
-                    torch.arange(current_seq_length, device=attention_mask.device) < current_lengths[:, None]
-                )
-                hidden_states *= channel_mask[:, None, :, None]
-
-        hidden_states = hidden_states.transpose(1, 2).reshape(hidden_states.shape[0], hidden_states.shape[2], -1)
-        hidden_states = self.linear(hidden_states)
-
-        return hidden_states
+class NemotronAsrEncoderSubsamplingConv2D(ParakeetEncoderSubsamplingConv2D): ...
 
 
 class NemotronAsrEncoderBlock(ParakeetEncoderBlock):
@@ -773,12 +683,123 @@ class NemotronAsrPreTrainedModel(ParakeetPreTrainedModel):
         return lengths.to(dtype=torch.int)
 
 
+def chunked_limited_mask_function(left_ctx: int, right_ctx: int) -> Callable:
+    """
+    Build the `chunked_limited` attention mask function used by NeMo cache-aware FastConformer models.
+
+    From the `[left, right]` attention context, frames are grouped into fixed chunks of size
+    `right + 1` by integer division of their position: `chunk_idx = position // (right + 1)`. A query
+    attends to a key iff the key lies in the query's own chunk or in one of the `left // (right + 1)`
+    chunks immediately to its left. Because membership is by chunk index, every frame in a chunk shares
+    identical boundaries — a frame sees future frames only up to its chunk boundary. This is NOT a
+    per-frame sliding window (which would let each frame peek a fixed number of frames into the next
+    chunk).
+    """
+    chunk_size = right_ctx + 1
+    left_context_chunks = left_ctx // chunk_size if left_ctx >= 0 else 10_000
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        q_chunk = torch.div(q_idx, chunk_size, rounding_mode="trunc")
+        kv_chunk = torch.div(kv_idx, chunk_size, rounding_mode="trunc")
+        chunk_diff = q_chunk - kv_chunk
+        return (chunk_diff >= 0) & (chunk_diff <= left_context_chunks)
+
+    return inner_mask
+
+
 @auto_docstring(
     custom_intro="""
     The NemotronAsr Encoder model, based on the [Fast Conformer architecture](https://huggingface.co/papers/2305.05084).
     """
 )
 class NemotronAsrEncoder(ParakeetEncoder):
+    @auto_docstring
+    @merge_with_config_defaults
+    @capture_outputs
+    @can_return_tuple
+    def forward(
+        self,
+        input_features: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        output_attention_mask: bool = True,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        r"""
+        output_attention_mask (`bool`, *optional*, defaults to `True`):
+            Whether to return the output attention mask. Only effective when `attention_mask` is provided.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, NemotronAsrEncoder
+        >>> from datasets import load_dataset, Audio
+
+        >>> model_id = "nvidia/nemotron_asr-ctc-1.1b"
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> encoder = NemotronAsrEncoder.from_pretrained(model_id)
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+
+        >>> inputs = processor(ds[0]["audio"]["array"])
+        >>> encoder_outputs = encoder(**inputs)
+
+        >>> print(encoder_outputs.last_hidden_state.shape)
+        ```
+        """
+
+        inputs_embeds = self.subsampling(input_features, attention_mask)
+        inputs_embeds *= self.input_scale
+        position_embeddings = self.encode_positions(inputs_embeds)
+
+        inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.dropout, training=self.training)
+        position_embeddings = nn.functional.dropout(
+            position_embeddings, p=self.dropout_positions, training=self.training
+        )
+
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
+        output_mask = None
+        if attention_mask is not None:
+            output_mask = self._get_output_attention_mask(attention_mask, target_length=inputs_embeds.shape[1])
+
+        left_ctx, right_ctx = self._resolve_att_context_size()
+        chunk_aware_bidirectional_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=output_mask,
+            position_ids=position_ids,
+            and_mask_function=chunked_limited_mask_function(left_ctx, right_ctx),
+        )
+
+        hidden_states = inputs_embeds
+        for encoder_layer in self.layers:
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
+            to_drop = False
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:  # skip the layer
+                    to_drop = True
+
+            if not to_drop:
+                hidden_states, _, _ = encoder_layer(
+                    hidden_states,
+                    attention_mask=chunk_aware_bidirectional_mask,
+                    position_embeddings=position_embeddings,
+                    **kwargs,
+                )
+
+        return NemotronAsrEncoderModelOutput(
+            last_hidden_state=hidden_states,
+            attention_mask=output_mask.int() if output_mask is not None and output_attention_mask else None,
+        )
+
     def _resolve_att_context_size(self, att_context_size: list | None = None) -> list | None:
         """
         Resolve the effective `[left, right]` attention context for this forward pass.
@@ -833,200 +854,6 @@ class NemotronAsrEncoder(ParakeetEncoder):
             "cache_last_time": torch.zeros(n, batch_size, d, conv_left, dtype=dtype, device=device),
             "cache_last_channel_len": torch.zeros(batch_size, dtype=torch.long, device=device),
         }
-
-    def _build_att_window_mask(
-        self,
-        seq_len: int,
-        total_key_len: int,
-        left_ctx: int,
-        right_ctx: int,
-        device: torch.device,
-    ) -> torch.Tensor:
-        """
-        Build a boolean attention window mask of shape (1, 1, seq_len, total_key_len). Limits each
-        query at position t (within the chunk) to attend to keys in [t-left_ctx, t+right_ctx].
-        Cache frames are positioned before the chunk; key index 0 is the oldest cache frame.
-        """
-        cache_len = total_key_len - seq_len
-        q_idx = torch.arange(seq_len, device=device).unsqueeze(1)
-        k_idx = torch.arange(total_key_len, device=device).unsqueeze(0)
-        # Cache frames are at positions -(cache_len)..(-1), chunk at 0..(seq_len-1)
-        q_pos = q_idx
-        k_pos = k_idx - cache_len
-        dist = q_pos - k_pos  # positive = left of q, negative = right of q
-        mask = (dist >= -right_ctx) & (dist <= left_ctx)
-        return mask.unsqueeze(0).unsqueeze(0)  # (1, 1, seq_len, total_key_len)
-
-    @auto_docstring
-    @merge_with_config_defaults
-    @capture_outputs
-    @can_return_tuple
-    def forward(
-        self,
-        input_features: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        output_attention_mask: bool = True,
-        cache_last_channel: torch.Tensor | None = None,
-        cache_last_time: torch.Tensor | None = None,
-        cache_last_channel_len: torch.Tensor | None = None,
-        att_context_size: list | None = None,
-        use_cache: bool = False,
-        drop_extra_pre_encoded: int = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
-        r"""
-        output_attention_mask (`bool`, *optional*, defaults to `True`):
-            Whether to return the output attention mask. Only effective when `attention_mask` is provided.
-        cache_last_channel (`torch.Tensor` of shape `(num_layers, batch, left_ctx, hidden_size)`, *optional*):
-            Cached hidden states from previous chunks for the attention layers. Obtained from a prior
-            call's output or from `get_initial_cache_state()`.
-        cache_last_time (`torch.Tensor` of shape `(num_layers, batch, hidden_size, conv_left_ctx)`, *optional*):
-            Cached frames from previous chunks for the causal convolution layers.
-        cache_last_channel_len (`torch.Tensor` of shape `(batch,)`, *optional*):
-            Number of valid frames currently stored in `cache_last_channel`.
-        att_context_size (`list[int]`, *optional*):
-            Override the attention context `[left, right]` for this call. Must be one of the contexts
-            the model was trained with. If not provided, the first entry of `config.att_context_size` is used.
-        use_cache (`bool`, *optional*, defaults to `False`):
-            Whether to return updated cache tensors in the output.
-        drop_extra_pre_encoded (`int`, *optional*, defaults to `0`):
-            Number of encoder frames to drop from the start of the subsampled output before the conformer
-            layers. Used in cache-aware streaming: each chunk is prepended with a few mel frames of past
-            audio so the subsampling Conv2d has left context, and after subsampling those extra frames are
-            removed here so only the genuine new chunk frames flow through the conformer and into the KV
-            cache. Pass `0` for the first chunk and `1 + (pre_encode_cache_mel - 1) // subsampling_factor`
-            for subsequent chunks.
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoProcessor, NemotronAsrEncoder
-        >>> from datasets import load_dataset, Audio
-
-        >>> model_id = "nvidia/nemotron-speech-streaming-en-0.6b"
-        >>> processor = AutoProcessor.from_pretrained(model_id)
-        >>> encoder = NemotronAsrEncoder.from_pretrained(model_id)
-
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
-
-        >>> inputs = processor(ds[0]["audio"]["array"])
-        >>> encoder_outputs = encoder(**inputs)
-
-        >>> print(encoder_outputs.last_hidden_state.shape)
-        ```
-        """
-        effective_ctx = self._resolve_att_context_size(att_context_size)
-        streaming = cache_last_channel is not None or (effective_ctx is not None and use_cache)
-
-        hidden_states = self.subsampling(input_features, attention_mask)
-        hidden_states = hidden_states * self.input_scale
-
-        if drop_extra_pre_encoded > 0:
-            hidden_states = hidden_states[:, drop_extra_pre_encoded:, :]
-
-        # Position embeddings span the full context window (cache + chunk) when streaming.
-        cache_len = cache_last_channel.shape[2] if cache_last_channel is not None else 0
-        chunk_len = hidden_states.shape[1]
-        total_context_len = chunk_len + cache_len
-        position_embeddings = self.encode_positions(hidden_states, context_length=total_context_len)
-
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        position_embeddings = nn.functional.dropout(
-            position_embeddings, p=self.dropout_positions, training=self.training
-        )
-
-        output_mask = None
-        if attention_mask is not None:
-            if drop_extra_pre_encoded > 0:
-                # The padding mask covers cache_mel + chunk_mel frames. Re-derive valid encoder-frame
-                # counts after the drop so the chunk-portion mask reflects only genuine frames.
-                subsampled_lengths = self._get_subsampling_output_length(attention_mask.sum(-1))
-                adjusted_lengths = (subsampled_lengths - drop_extra_pre_encoded).clamp(min=0)
-                output_mask = torch.arange(chunk_len, device=attention_mask.device) < adjusted_lengths[:, None]
-            else:
-                output_mask = self._get_output_attention_mask(attention_mask, target_length=chunk_len)
-            # Build (B, 1, chunk_len, total_context_len) padding mask. Cache positions: only the
-            # last `cache_last_channel_len` entries are valid (sliding window has leading zeros).
-            if cache_len > 0:
-                if cache_last_channel_len is not None:
-                    valid_start = cache_len - cache_last_channel_len  # (B,)
-                    cache_key_mask = torch.arange(cache_len, device=output_mask.device).unsqueeze(
-                        0
-                    ) >= valid_start.unsqueeze(1)  # (B, cache_len)
-                else:
-                    cache_key_mask = torch.ones(
-                        output_mask.shape[0], cache_len, dtype=torch.bool, device=output_mask.device
-                    )
-                full_key_mask = torch.cat([cache_key_mask, output_mask], dim=1)
-            else:
-                full_key_mask = output_mask
-            pad_mask = output_mask.unsqueeze(2) & full_key_mask.unsqueeze(1)
-            attention_mask_4d = pad_mask.unsqueeze(1)  # (B, 1, chunk_len, total_key_len)
-        elif effective_ctx is not None:
-            # No padding mask supplied but the model was trained with a limited attention context.
-            attention_mask_4d = torch.ones(
-                hidden_states.shape[0],
-                1,
-                chunk_len,
-                total_context_len,
-                dtype=torch.bool,
-                device=hidden_states.device,
-            )
-        else:
-            attention_mask_4d = None
-
-        # Apply limited attention windowing (cache-aware models).
-        if effective_ctx is not None:
-            left_ctx, right_ctx = effective_ctx
-            window_mask = self._build_att_window_mask(
-                chunk_len, total_context_len, left_ctx, right_ctx, hidden_states.device
-            )
-            if attention_mask_4d is not None:
-                attention_mask_4d = attention_mask_4d & window_mask
-            else:
-                attention_mask_4d = window_mask
-
-        new_cache_channels: list[torch.Tensor] = []
-        new_cache_times: list[torch.Tensor] = []
-
-        for i, encoder_layer in enumerate(self.layers):
-            to_drop = False
-            if self.training:
-                dropout_probability = torch.rand([])
-                if dropout_probability < self.layerdrop:  # skip the layer
-                    to_drop = True
-
-            if not to_drop:
-                layer_cache_ch = cache_last_channel[i] if cache_last_channel is not None else None
-                layer_cache_time = cache_last_time[i] if cache_last_time is not None else None
-                hidden_states, new_ch, new_time = encoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask_4d,
-                    position_embeddings=position_embeddings,
-                    cache_last_channel=layer_cache_ch,
-                    cache_last_time=layer_cache_time,
-                    **kwargs,
-                )
-                if streaming:
-                    new_cache_channels.append(new_ch if new_ch is not None else layer_cache_ch)
-                    new_cache_times.append(new_time if new_time is not None else layer_cache_time)
-
-        out_cache_channel, out_cache_time, out_cache_len = None, None, None
-        if streaming and use_cache and new_cache_channels:
-            out_cache_channel = torch.stack(new_cache_channels, dim=0)
-            out_cache_time = torch.stack(new_cache_times, dim=0)
-            if cache_last_channel_len is not None:
-                left_ctx = effective_ctx[0] if effective_ctx else 0
-                out_cache_len = torch.clamp(cache_last_channel_len + chunk_len, max=left_ctx)
-
-        return NemotronAsrEncoderModelOutput(
-            last_hidden_state=hidden_states,
-            attention_mask=output_mask.int() if output_mask is not None and output_attention_mask else None,
-            cache_last_channel=out_cache_channel,
-            cache_last_time=out_cache_time,
-            cache_last_channel_len=out_cache_len,
-        )
 
 
 class NemotronAsrTDTDecoder(ParakeetTDTDecoder):
