@@ -542,18 +542,6 @@ def make_kernel_init_parent_class(
     return patched_cls
 
 
-def _first_str_leaf(obj) -> str | None:
-    """Recursively extract the first string leaf from a potentially nested dict (device → mode → str)."""
-    if isinstance(obj, str):
-        return obj
-    if isinstance(obj, dict):
-        for v in obj.values():
-            result = _first_str_leaf(v)
-            if result is not None:
-                return result
-    return None
-
-
 def _try_load_kernel_class(repo_str: str, use_local: bool = False) -> type | None:
     if ":" not in repo_str:
         return None
@@ -605,14 +593,16 @@ def register_kernel_replacements(
             new_mapping[layer_name] = hub_repo
             continue
 
-        if isinstance(hub_repo, type) and issubclass(hub_repo, nn.Module):
-            kernel_cls = hub_repo
+        if isinstance(hub_repo, dict):
+            if len(hub_repo.values()) != 1:
+                raise ValueError(
+                    f"Expected exactly one kernel repo regardless of device/mode specificity, got {hub_repo}"
+                )
+            repo_str = next(iter(hub_repo.values()))
         else:
-            repo_str = _first_str_leaf(hub_repo)
-            if repo_str is None:
-                new_mapping[layer_name] = hub_repo
-                continue
-            kernel_cls = _try_load_kernel_class(repo_str, use_local=kernel_config.use_local_kernel)
+            repo_str = hub_repo
+
+        kernel_cls = _try_load_kernel_class(repo_str, use_local=kernel_config.use_local_kernel)
 
         if kernel_cls is None:
             new_mapping[layer_name] = hub_repo
@@ -666,13 +656,16 @@ def register_kernel_fusions(
         child_names = [p.rsplit(".", 1)[1] for p in glob_patterns]
 
         # 1. Resolve the kernel class — accept a direct class reference or a repo string.
-        if isinstance(hub_repo, type) and issubclass(hub_repo, nn.Module):
-            kernel_cls = hub_repo
+        if isinstance(hub_repo, dict):
+            if len(hub_repo.values()) != 1:
+                raise ValueError(
+                    f"Expected exactly one kernel repo regardless of device/mode specificity, got {hub_repo}"
+                )
+            repo_str = next(iter(hub_repo.values()))
         else:
-            repo_str = _first_str_leaf(hub_repo)
-            if repo_str is None:
-                raise ValueError(f"Cannot resolve a repo string from hub_repo={hub_repo!r}")
-            kernel_cls = _try_load_kernel_class(repo_str, use_local=kernel_config.use_local_kernel)
+            repo_str = hub_repo
+
+        kernel_cls = _try_load_kernel_class(repo_str, use_local=kernel_config.use_local_kernel)
 
         if kernel_cls is None:
             raise ValueError(f"Could not load kernel class from hub_repo={hub_repo!r}")
