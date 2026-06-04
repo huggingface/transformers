@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-02-06 and added to Hugging Face Transformers on 2026-04-30.*
+*This model was released on 2025-02-06 and added to Hugging Face Transformers on 2026-06-04.*
 
 # X-Codec2
 
@@ -44,10 +44,10 @@ Here is a quick example of how to encode and decode an audio using this model:
 
 ```python 
 from datasets import Audio, load_dataset
-from transformers import AutoFeatureExtractor, Xcodec2Model
+from transformers import AutoFeatureExtractor, AutoModel
 
 model_id = "bezzam/xcodec2"
-model = Xcodec2Model.from_pretrained(model_id, device_map="auto")
+model = AutoModel.from_pretrained(model_id, device_map="auto")
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
 dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
