@@ -4183,7 +4183,7 @@ class Trainer:
             else:
                 commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
 
-            # Model snapshot 
+            # Model snapshot
             push_jobs.append(
                 hf_api().upload_folder(
                     repo_id=self.hub_model_id,
