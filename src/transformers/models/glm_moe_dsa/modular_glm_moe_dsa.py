@@ -175,6 +175,7 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
     index_skip_topk_offset: int = 2
     indexer_rope_interleave: bool = False
     indexer_types: list[str] | None = None
+    pretraining_tp = AttributeError()
 
     def __post_init__(self, **kwargs):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
