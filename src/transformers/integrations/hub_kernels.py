@@ -103,33 +103,34 @@ try:
         "SwiGLUMLP": {
             "cuda": LayerRepository(
                 repo_id="kernels-community/liger-kernels",
-                layer_name="LigerSwiGLUMLP",
+                layer_name="LigerSwiGLUMLPTransformers",
                 version=1,
             ),
         },
+        # TODO: liger version will change
         "RMSNorm": {
             # NOTE: Not torch.compile friendly for unknown reasons
             "cuda": {
                 Mode.TRAINING: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerRMSNorm",
+                    layer_name="LigerRMSNormTransformers",
                     version=1,
                 ),
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerRMSNorm",
+                    layer_name="LigerRMSNormTransformers",
                     version=1,
                 ),
             },
             "rocm": {
                 Mode.TRAINING: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerRMSNorm",
+                    layer_name="LigerRMSNormTransformers",
                     version=1,
                 ),
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerRMSNorm",
+                    layer_name="LigerRMSNormTransformers",
                     version=1,
                 ),
             },
@@ -150,12 +151,12 @@ try:
             "npu": {
                 Mode.TRAINING: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerRMSNorm",
+                    layer_name="LigerRMSNormTransformers",
                     version=1,
                 ),
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerRMSNorm",
+                    layer_name="LigerRMSNormTransformers",
                     version=1,
                 ),
             },
@@ -261,7 +262,7 @@ try:
             "ForCausalLMLoss": {
                 "cuda": {
                     Mode.TRAINING | Mode.TORCH_COMPILE: FuncRepository(
-                        repo_id="kernels-community/liger-kernels", func_name="LigerForCausalLMLoss", version=1
+                        repo_id="kernels-community/liger-kernels", func_name="LigerForCausalLMLossTransformers", version=1
                     ),
                 },
             },
