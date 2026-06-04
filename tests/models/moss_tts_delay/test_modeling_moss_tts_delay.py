@@ -17,7 +17,7 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 
@@ -29,8 +29,10 @@ if is_torch_available():
         AutoConfig,
         AutoModel,
         AutoModelForTextToWaveform,
+        AutoTokenizer,
         MossTTSDelayConfig,
         MossTTSDelayModel,
+        MossTTSDelayProcessor,
     )
 
 
@@ -217,3 +219,57 @@ class MossTTSDelayModelTest(unittest.TestCase):
         self.assertIsInstance(loaded_config, MossTTSDelayConfig)
         self.assertIsInstance(loaded_model, MossTTSDelayModel)
         self.assertIsInstance(loaded_tta_model, MossTTSDelayModel)
+
+
+@require_torch
+class MossTTSDelayIntegrationTest(unittest.TestCase):
+    model_id = "OpenMOSS-Team/MOSS-TTS-v1.5"
+
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    @slow
+    @require_torch_accelerator
+    def test_model_logits(self):
+        config = AutoConfig.from_pretrained(self.model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        processor = MossTTSDelayProcessor(tokenizer=tokenizer, model_config=config)
+        model = AutoModelForTextToWaveform.from_pretrained(self.model_id, dtype="auto", device_map="auto")
+
+        message = processor.build_user_message(text="The sun rises in the east.", language="English")
+        inputs = processor([message], mode="generation").to(model.device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        self.assertEqual(len(outputs.logits), config.n_vq + 1)
+        self.assertEqual(outputs.logits[0].shape[:2], inputs.input_ids.shape[:2])
+        self.assertEqual(outputs.logits[0].shape[-1], config.vocab_size)
+        self.assertEqual(outputs.logits[1].shape[-1], config.audio_vocab_size + 1)
+        self.assertTrue(torch.isfinite(outputs.logits[0][..., :10]).all().item())
+
+    @slow
+    @require_torch_accelerator
+    def test_model_generation(self):
+        config = AutoConfig.from_pretrained(self.model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        processor = MossTTSDelayProcessor(tokenizer=tokenizer, model_config=config)
+        model = AutoModelForTextToWaveform.from_pretrained(self.model_id, dtype="auto", device_map="auto")
+
+        message = processor.build_user_message(text="Hello.", language="English")
+        inputs = processor([message], mode="generation").to(model.device)
+
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=1,
+            text_temperature=0.0,
+            audio_temperature=0.0,
+        )
+
+        self.assertEqual(len(outputs), 1)
+        start_length, generated_ids = outputs[0]
+        self.assertGreaterEqual(start_length, 0)
+        self.assertEqual(generated_ids.shape[-1], config.n_vq + 1)
