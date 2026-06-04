@@ -135,12 +135,12 @@ class Tipsv2VisionEmbeddings(nn.Module):
         - https://github.com/facebookresearch/dino/blob/main/vision_transformer.py
         - https://github.com/facebookresearch/dinov2/blob/main/dinov2/models/vision_transformer.py
         """
-        previous_dtype = embeddings.dtype
+        embeddings_dtype = embeddings.dtype
         num_patches = embeddings.shape[1] - 1
         num_positions = self.position_embeddings.shape[1] - 1
 
         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embeddings.to(dtype=previous_dtype)
+            return self.position_embeddings.to(dtype=embeddings_dtype)
 
         position_embeddings = self.position_embeddings.float()
         class_pos_embed = position_embeddings[:, 0]
@@ -179,7 +179,7 @@ class Tipsv2VisionEmbeddings(nn.Module):
                 raise ValueError("Width or height does not match with the interpolated position embeddings")
 
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1).to(dtype=previous_dtype)
+        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1).to(dtype=embeddings_dtype)
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
