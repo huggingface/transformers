@@ -38,26 +38,6 @@ from .utils import X_REQUEST_ID, CBWorkerDeadError, GenerationState
 logger = logging.get_logger(__name__)
 
 
-async def allocate_and_run(func, *args):
-    """Wrap a a request handler function with ``@spaces.GPU`` if ZeroGPU is active.
-
-    Note: the ``@spaces.GPU`` decorator from the ``spaces`` package only supports
-    sync functions. This function checks whether ZeroGPU is enabled and,
-    if so, applies the decorator and runs it in a separate thread asynchronously.
-    In non-ZeroGPU mode it returns the function unchanged (effect-free).
-
-    Args:
-        func: The request handler function to wrap.
-
-    Returns:
-        The result of func(*args)
-    """
-    from ...cli import serve_zerogpu
-
-    decorator = serve_zerogpu.zerogpu_decorator(size=serve_zerogpu.zerogpu_size())
-    return await decorator(func)(*args)
-
-
 def build_server(
     model_manager: ModelManager,
     chat_handler: ChatCompletionHandler,
@@ -81,6 +61,7 @@ def build_server(
     Returns:
         A FastAPI app ready to be passed to uvicorn.
     """
+    from ...cli import serve_zerogpu
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -115,24 +96,30 @@ def build_server(
         response.headers[X_REQUEST_ID] = request_id
         return response
 
+    # ---- ZeroGPU ----
+
+    @serve_zerogpu.zerogpu_decorator
+    async def _handle_request(handler, *args):
+        return await handler.handle_request(*args)
+
     # ---- Routes ----
 
     @app.post("/v1/chat/completions")
     async def chat_completions(request: Request, body: dict):
-        return await allocate_and_run(chat_handler.handle_request, body, request.state.request_id)
+        return await _handle_request(chat_handler, body, request.state.request_id)
 
     @app.post("/v1/completions")
     async def completions(request: Request, body: dict):
-        return await allocate_and_run(completion_handler.handle_request, body, request.state.request_id)
+        return await _handle_request(completion_handler, body, request.state.request_id)
 
     @app.post("/v1/responses")
     async def responses(request: Request, body: dict):
-        return await allocate_and_run(response_handler.handle_request, body, request.state.request_id)
+        return await _handle_request(response_handler, body, request.state.request_id)
 
     @app.post("/v1/audio/transcriptions")
     async def audio_transcriptions(request: Request):
         args = await transcription_handler.parse_request(request)
-        return await allocate_and_run(transcription_handler.handle_request, *args)
+        return await _handle_request(transcription_handler, *args)
 
     @app.post("/load_model")
     async def load_model(body: dict):

@@ -66,11 +66,11 @@ def zerogpu_enabled() -> bool:
     return _zerogpu_enabled and os.environ.get("SPACE_ID") and is_zerogpu()
 
 
-def zerogpu_size() -> str:
+def zerogpu_size() -> str | None:
     """Return the configured GPU size.
 
     Returns:
-        `str`: GPU size — ``"large"`` or ``"xlarge"``.
+        `str | None`: GPU size — ``"large"`` or ``"xlarge"``.
     """
     return _zerogpu_size
 
@@ -94,7 +94,7 @@ def _get_spaces_gpu_decorator() -> type | None:
 # ---------------------------------------------------------------------------
 
 
-def zerogpu_decorator(size: str = "large") -> Callable:
+def zerogpu_decorator(size: str | None = None) -> Callable:
     """Create a ``@spaces.GPU``-compatible decorator for ZeroGPU Spaces.
 
     This decorator wraps functions with ``@spaces.GPU`` in ZeroGPU Spaces
@@ -110,7 +110,7 @@ def zerogpu_decorator(size: str = "large") -> Callable:
     normally without any GPU context.
 
     Args:
-        size (`str`, *optional*, defaults to ``"large"``):
+        size (`str`, *optional*):
             GPU size: ``"large"`` or ``"xlarge"``.
 
     Returns:
@@ -128,6 +128,10 @@ def zerogpu_decorator(size: str = "large") -> Callable:
             ...
         ```
     """
+    if callable(size):
+        return zerogpu_decorator()(size)
+
+    size = size or zerogpu_size()
     spaces_gpu = _get_spaces_gpu_decorator()
     _in_zerogpu = zerogpu_enabled()
 
@@ -155,9 +159,9 @@ def zerogpu_decorator(size: str = "large") -> Callable:
                 import anyio
                 import anyio.to_thread
 
-                return partial(anyio.to_thread.run_sync, spaces_gpu(partial(anyio.run, func)))
+                return partial(anyio.to_thread.run_sync, spaces_gpu(size=size)(partial(anyio.run, func)))
             else:
-                return spaces_gpu(func)
+                return spaces_gpu(size=size)(func)
         else:
             # Non-ZeroGPU: effect-free pass-through
             return func
