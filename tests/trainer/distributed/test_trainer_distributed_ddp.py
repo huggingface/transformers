@@ -34,10 +34,18 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_bf16_available_on_device, is_torch_fp16_available_on_device
 
-from .test_trainer_distributed import CONFIGS_DIR, SCRIPTS_DIR, TRAIN_SCRIPT, TrainerDistributedCommon
+from .test_trainer_distributed import CONFIGS_DIR, DISTRIBUTED_DIR, SCRIPTS_DIR, TRAIN_SCRIPT, TrainerDistributedCommon
 
 
 DDP_CONFIG_FILE = os.path.join(CONFIGS_DIR, "ddp.yaml")
+LOSS_TRAJECTORIES_FILE = os.path.join(DISTRIBUTED_DIR, "loss_trajectories.json")
+SFT_CHAT_FIXTURE = os.path.normpath(
+    os.path.join(DISTRIBUTED_DIR, "..", "..", "fixtures", "tests_samples", "sft_chat", "chat.jsonl")
+)
+
+# When set, loss-trajectory tests overwrite the on-disk reference instead of asserting against it.
+CAPTURE_LOSS_TRAJECTORIES = os.environ.get("CAPTURE_LOSS_TRAJECTORIES") == "1"
+
 AXOLOTL_PRETRAINED_CAUSAL_MODELS = (
     ("llama", "axolotl-ai-co/tiny-llama-50m", 0.03),
     ("mistral", "axolotl-ai-co/tiny-mistral-25m", 0.06),
@@ -49,6 +57,9 @@ AXOLOTL_PRETRAINED_CAUSAL_MODELS = (
     ("gemma2", "axolotl-ai-co/tiny-gemma2-137m", 0.29),
 )
 GRADIENT_ACCUMULATION_PARAMS = (1, 4)
+# Per-step tolerance: max(abs_tol, rel_tol * |expected|).
+LOSS_TRAJECTORY_ABS_TOL = 0.05
+LOSS_TRAJECTORY_REL_TOL = 0.10
 
 dtypes = []
 if is_torch_bf16_available_on_device(torch_device):
@@ -66,6 +77,26 @@ loss_decrease_params = [
     for _, model_name, expected_loss in AXOLOTL_PRETRAINED_CAUSAL_MODELS
     for gradient_accumulation_steps in GRADIENT_ACCUMULATION_PARAMS
 ]
+ga_equivalence_params = [(model_name,) for _, model_name, _ in AXOLOTL_PRETRAINED_CAUSAL_MODELS]
+sft_chat_params = [(model_name,) for _, model_name, _ in AXOLOTL_PRETRAINED_CAUSAL_MODELS]
+
+
+def _load_loss_trajectories():
+    with open(LOSS_TRAJECTORIES_FILE) as f:
+        return json.load(f)
+
+
+def _trajectory_key(model_name, gradient_accumulation_steps, data_mode):
+    return f"{model_name}:ga={gradient_accumulation_steps}:mode={data_mode}"
+
+
+def _save_loss_trajectory(key, losses):
+    """Write a captured trajectory back into the on-disk reference file."""
+    payload = _load_loss_trajectories()
+    payload.setdefault("trajectories", {})[key] = losses
+    with open(LOSS_TRAJECTORIES_FILE, "w") as f:
+        json.dump(payload, f, indent=2, sort_keys=True)
+        f.write("\n")
 
 
 def _parameterized_custom_name_func(func, param_num, param):
@@ -315,23 +346,38 @@ class TestTrainerDistributedDDPCommon(DDPCommandsMixin, TrainerDistributedCommon
     def test_eval(self):
         self.check_eval(config_file=DDP_CONFIG_FILE)
 
-    @parameterized.expand(loss_decrease_params, name_func=_parameterized_custom_name_func)
-    def test_training_loss_decreases(self, model_name, expected_loss, gradient_accumulation_steps):
-        output_dir = self.get_auto_remove_tmp_dir()
+    # -----------------------------------------------------------------------
+    # Loss-trajectory helpers
+    # -----------------------------------------------------------------------
+    def _run_train_capture_losses(
+        self,
+        model_name,
+        gradient_accumulation_steps,
+        per_device_train_batch_size=4,
+        data_mode="synthetic",
+        data_path=None,
+        max_steps=16,
+        learning_rate=5e-4,
+        seed=42,
+        output_dir=None,
+    ):
+        """Launch one accelerate DDP training run and return the per-step loss list."""
+        if output_dir is None:
+            output_dir = self.get_auto_remove_tmp_dir()
         loss_output_file = os.path.join(output_dir, "losses.json")
         script_args = [
             "--output_dir",
             output_dir,
             "--max_steps",
-            "16",
+            str(max_steps),
             "--logging_steps",
             "1",
             "--per_device_train_batch_size",
-            "4",
+            str(per_device_train_batch_size),
             "--gradient_accumulation_steps",
             str(gradient_accumulation_steps),
             "--learning_rate",
-            "5e-4",
+            str(learning_rate),
             "--save_strategy",
             "no",
             "--model_name",
@@ -339,20 +385,114 @@ class TestTrainerDistributedDDPCommon(DDPCommandsMixin, TrainerDistributedCommon
             "--model_dtype",
             "fp32",
             "--seed",
-            "42",
+            str(seed),
+            "--data_mode",
+            data_mode,
             "--loss_output_file",
             loss_output_file,
         ]
+        if data_path is not None:
+            script_args += ["--data_path", data_path]
         execute_subprocess_async(
             self.get_accelerate_cmd(TRAIN_SCRIPT, DDP_CONFIG_FILE, script_args=script_args),
             env=self.get_env(),
         )
-
         with open(loss_output_file) as f:
-            losses = json.load(f)
+            return json.load(f)
+
+    def _assert_trajectory_matches_reference(self, key, losses):
+        """Compare a captured trajectory against the on-disk reference or capture it."""
+        if CAPTURE_LOSS_TRAJECTORIES:
+            _save_loss_trajectory(key, losses)
+            self.skipTest(f"CAPTURE_LOSS_TRAJECTORIES=1 — saved reference for {key}")
+        trajectories = _load_loss_trajectories().get("trajectories", {})
+        reference = trajectories.get(key)
+        if reference is None:
+            self.skipTest(f"No reference trajectory for {key}; rerun with CAPTURE_LOSS_TRAJECTORIES=1 to populate it.")
+        self.assertEqual(
+            len(reference),
+            len(losses),
+            f"Trajectory length mismatch for {key}: expected {len(reference)}, got {len(losses)}",
+        )
+        for step, (expected, actual) in enumerate(zip(reference, losses)):
+            tol = max(LOSS_TRAJECTORY_ABS_TOL, LOSS_TRAJECTORY_REL_TOL * abs(expected))
+            self.assertAlmostEqual(
+                actual,
+                expected,
+                delta=tol,
+                msg=(
+                    f"Trajectory drift for {key} at step {step}: "
+                    f"expected {expected:.4f}, got {actual:.4f} (|delta| > {tol:.4f})"
+                ),
+            )
+
+    # -----------------------------------------------------------------------
+    # Loss-trajectory tests
+    # -----------------------------------------------------------------------
+    @parameterized.expand(loss_decrease_params, name_func=_parameterized_custom_name_func)
+    def test_training_loss_decreases(self, model_name, expected_loss, gradient_accumulation_steps):
+        losses = self._run_train_capture_losses(
+            model_name=model_name,
+            gradient_accumulation_steps=gradient_accumulation_steps,
+        )
         self.assertGreater(
             losses[0],
             losses[-1],
             f"Observed DDP logged losses did not decrease from first to last: {losses}",
         )
         self.assertAlmostEqual(losses[-1], expected_loss, delta=0.12)
+        self._assert_trajectory_matches_reference(
+            _trajectory_key(model_name, gradient_accumulation_steps, "synthetic"),
+            losses,
+        )
+
+    @parameterized.expand(ga_equivalence_params, name_func=_parameterized_custom_name_func)
+    def test_gradient_accumulation_equivalence(self, model_name):
+        """Same global batch should produce nearly identical loss trajectories regardless of ga."""
+        # Two configurations producing the same global batch (per_device * ga * num_processes = 4).
+        losses_ga1 = self._run_train_capture_losses(
+            model_name=model_name,
+            gradient_accumulation_steps=1,
+            per_device_train_batch_size=2,
+        )
+        losses_ga2 = self._run_train_capture_losses(
+            model_name=model_name,
+            gradient_accumulation_steps=2,
+            per_device_train_batch_size=1,
+        )
+        self.assertEqual(
+            len(losses_ga1),
+            len(losses_ga2),
+            f"Step count mismatch: ga=1 -> {len(losses_ga1)} steps, ga=2 -> {len(losses_ga2)} steps",
+        )
+        for step, (a, b) in enumerate(zip(losses_ga1, losses_ga2)):
+            tol = max(LOSS_TRAJECTORY_ABS_TOL, LOSS_TRAJECTORY_REL_TOL * max(abs(a), abs(b)))
+            self.assertAlmostEqual(
+                a,
+                b,
+                delta=tol,
+                msg=(
+                    f"Grad-accum equivalence violated for {model_name} at step {step}: "
+                    f"ga=1 -> {a:.4f}, ga=2 -> {b:.4f} (|delta| > {tol:.4f})"
+                ),
+            )
+
+    @parameterized.expand(sft_chat_params, name_func=_parameterized_custom_name_func)
+    def test_training_loss_decreases_sft_chat(self, model_name):
+        losses = self._run_train_capture_losses(
+            model_name=model_name,
+            gradient_accumulation_steps=1,
+            per_device_train_batch_size=2,
+            data_mode="sft_chat",
+            data_path=SFT_CHAT_FIXTURE,
+            max_steps=8,
+        )
+        self.assertGreater(
+            losses[0],
+            losses[-1],
+            f"SFT chat DDP losses did not decrease for {model_name}: {losses}",
+        )
+        self._assert_trajectory_matches_reference(
+            _trajectory_key(model_name, 1, "sft_chat"),
+            losses,
+        )
