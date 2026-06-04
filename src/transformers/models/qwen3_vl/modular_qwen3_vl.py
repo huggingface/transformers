@@ -1137,7 +1137,7 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
         for frame_idx in range(num_frames):
             curr_time = curr_timestamp[frame_idx]
             video_placeholder += f"<{curr_time:.1f} seconds>"
-            video_placeholder += self.vision_start_token + "<|placeholder|>" * frame_seqlen + self.vision_end_token
+            video_placeholder += self.vision_start_token + self.video_token * frame_seqlen + self.vision_end_token
         return video_placeholder
 
     def _calculate_timestamps(self, indices: list[int] | np.ndarray, video_fps: float, merge_size: int = 2):

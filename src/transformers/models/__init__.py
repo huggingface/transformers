@@ -160,6 +160,8 @@ if TYPE_CHECKING:
     from .gemma3n import *
     from .gemma4 import *
     from .gemma4_assistant import *
+    from .gemma4_unified import *
+    from .gemma4_unified_assistant import *
     from .git import *
     from .glm import *
     from .glm4 import *
@@ -395,6 +397,7 @@ if TYPE_CHECKING:
     from .sam3_tracker_video import *
     from .sam3_video import *
     from .sam_hq import *
+    from .sapiens2 import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
     from .seed_oss import *
