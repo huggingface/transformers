@@ -209,6 +209,8 @@
         title: torch.compile
       - local: kernels
         title: Kernels
+      - local: padding_free
+        title: Padding-free training
       title: Speed optimization
     title: Performance
   - isExpanded: false
