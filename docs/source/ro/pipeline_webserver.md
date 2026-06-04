@@ -115,9 +115,9 @@ Mecanismul de punere în queue al server-ului poate fi folosit pentru unele apli
 Exemplul de mai jos este scris în pseudocod pentru lizibilitate mai degrabă decât pentru performanță, în special, vei observa că:
 
 1. Nu există o limită pentru dimensiunea batch-ului.
-2. Timeout-ul este resetat la fiecare preluare din queue, așa că ai putea ajunge să aștepți mult mai mult decât valoarea `timeout` înainte de a procesa o cerere. Acest lucru ar întârzia și prima cerere de inferență cu acea perioadă de timp. Web server-ul așteaptă mereu 1s chiar dacă queue-ul este gol, ceea ce este ineficient, deoarece acel timp poate fi folosit pentru a porni inferența. Totuși, ar putea avea sens dacă batching-ul este esențial pentru cazul tău de utilizare.
+2. Timeout-ul este resetat la fiecare preluare din queue, așa că ai putea ajunge să aștepți mult mai mult decât valoarea `timeout` înainte de a procesa o cerere. Acest lucru ar întârzia și prima cerere de inferență cu acea perioadă de timp. Web server-ul așteaptă mereu 1ms chiar dacă queue-ul este gol, ceea ce este ineficient, deoarece acel timp poate fi folosit pentru a porni inferența. Totuși, ar putea avea sens dacă batching-ul este esențial pentru cazul tău de utilizare.
 
-    Ar fi mai bine să ai un singur deadline de 1s, în loc să îl resetezi la fiecare preluare, așa cum se arată mai jos.
+    Ar fi mai bine să ai un singur deadline de 1ms, în loc să îl resetezi la fiecare preluare, așa cum se arată mai jos.
 
 ```py
 async def server_loop(q):
