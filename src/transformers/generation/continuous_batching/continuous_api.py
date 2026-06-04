@@ -973,12 +973,17 @@ class ContinuousBatchingManager:
         if paged_attention_cache.num_sliding_attention_groups > 0:
             self.continuous_batching_config.max_blocks_per_request = 0
 
-        # Create the scheduler
+        # Retrieve the scheduler class
         scheduler_type = self.continuous_batching_config.scheduler_type
-        scheduler = SCHEDULER_MAPPING.get(scheduler_type, None)
-        if scheduler is None:
+        scheduler_cls = SCHEDULER_MAPPING.get(scheduler_type, None)
+        if scheduler_cls is None:
             logger.warning(f"Scheduler '{scheduler_type}' not found. Defaulting to FIFO.")
-            scheduler = FIFOScheduler
+            scheduler_cls = FIFOScheduler
+        # Instantiate the actual scheduler
+        scheduler_kwrgs = {"cache": paged_attention_cache}
+        if self.continuous_batching_config.safety_margin is not None:
+            scheduler_kwrgs["safety_margin"] = self.continuous_batching_config.safety_margin
+        scheduler = scheduler_cls(**scheduler_kwrgs)
 
         # Create the batch processor
         batch_processor = ContinuousBatchProcessor(
@@ -993,7 +998,7 @@ class ContinuousBatchingManager:
             background_thread_status=self.background_thread_status,
             model_device=self.model.device,
             model_dtype=self.model.dtype,
-            scheduler=scheduler(paged_attention_cache),
+            scheduler=scheduler,
             distributed_helper=self.distributed_helper,
         )
         return batch_processor

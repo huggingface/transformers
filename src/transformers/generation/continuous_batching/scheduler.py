@@ -26,8 +26,13 @@ class Scheduler(ABC):
     schedulers implement different strategies for prioritizing and batching requests.
     """
 
-    def __init__(self, cache: PagedAttentionCache):
+    def __init__(self, cache: PagedAttentionCache, safety_margin: float):
+        """Initializes the scheduler. The safety margin is the percentage of free blocks under which we stop
+        scheduling new prefill requests, so safety_margin = 0.1 means that when there is less than 10% of free blocks,
+        or equivalently when more than 90% of blocks are already allocated, we stop scheduling new prefill requests.
+        Setting safety_margin to 0.0 means no safety margin is applied."""
         self.cache = cache
+        self.safety_margin = safety_margin
         self._cancellation_lock = threading.Lock()
         # This is to compute the read cache used by a new request being scheduled
         self.read_cache_limit = None if self.cache.num_full_attention_groups else self.cache.config.sliding_window
@@ -200,7 +205,7 @@ class Scheduler(ABC):
         token_budget: int,
         cache_budget: int,
         request_ids_to_remove_from_waiting: set[str],
-        safety_margin: float = 0.0,
+        safety_margin: float,
     ) -> tuple[list[FutureRequestState], bool, bool, int, int]:
         """Schedules candidate requests for the current batch.
 
@@ -317,16 +322,11 @@ class Scheduler(ABC):
 # TODO: further common-ize the two classes
 class FIFOScheduler(Scheduler):
     """This scheduler processes requests in the order they arrive, meaning decoding requests has priority over
-    prefilling requests. Additionally, it includes a safety margin mechanism to prevent cache exhaustion. By default,
-    when 80% of the cache is full, new requests will not be scheduled to prioritize decoding active requests."""
+    prefilling requests."""
 
-    def __init__(self, cache: PagedAttentionCache, safety_margin: float = 0.2):
-        """Initializes the FIFO scheduler. The safety margin is the percentage of free blocks under which we stop
-        scheduling new prefill requests, so safety_margin = 0.1 means that when there is less than 10% of free blocks,
-        or equivalently when more than 90% of blocks are already allocated, we stop scheduling new prefill requests.
-        """
-        super().__init__(cache)
-        self.safety_margin = safety_margin
+    def __init__(self, cache: PagedAttentionCache, safety_margin: float = 0.15):
+        """Initializes the FIFO scheduler, with a default safety margin of 0.15 (ie. 15% of free blocks)."""
+        super().__init__(cache, safety_margin)
 
     def schedule_batch(
         self, token_budget: int, cache_budget: int
@@ -372,6 +372,10 @@ class PrefillFirstScheduler(Scheduler):
     """Scheduler that prioritizes split prefill requests over decoding requests. This scheduler ensures that split
     prefill requests (which are continuations of partially processed prompts) are completed before processing new
     decoding requests."""
+
+    def __init__(self, cache: PagedAttentionCache, safety_margin: float = 0.0):
+        """Initializes the prefill first scheduler, with a default safety margin of 0.0 (no safety margin)."""
+        super().__init__(cache, safety_margin)
 
     def schedule_batch(
         self, token_budget: int, cache_budget: int

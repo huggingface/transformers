@@ -1650,6 +1650,8 @@ class ContinuousBatchingConfig:
             If True, a default compile config will be used for paths that are not explicitly set.
         scheduler_type (`str`, *optional*, defaults to `"fifo"`):
             Scheduler type to use.
+        safety_margin (`float`, *optional*):
+            Safety margin used to limit the amount of offloading. Defaults to None (use class default).
         return_logprobs (`bool`, *optional*, defaults to `False`):
             Whether to return log probabilities along with the generated tokens.
         seed (`int | None`, *optional*):
@@ -1720,6 +1722,9 @@ class ContinuousBatchingConfig:
 
     # Scheduler type. FIFO by default. For all types available, checks SCHEDULER_MAPPING in scheduler.py
     scheduler_type: str = "fifo"
+    # Safety margin: if the number of free blocks falls below (safety_margin * num_blocks), then new prefill requests
+    # will not be scheduled to prioritize decoding active requests. Defaults to None (use class default).
+    safety_margin: float | None = None
 
     # Whether to generate log probabilities, which is the log of the softmax of the processed logits. If True, the log
     # probabilities will be returned along with the generated tokens in the generation output.
