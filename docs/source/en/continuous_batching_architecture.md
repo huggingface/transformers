@@ -138,11 +138,10 @@ When the cache has space again, the request resumes from where it left off with 
 
 Every generation step involves CPU overhead, from assembling the batch to dispatching GPU kernels and reading the results. CUDA graphs eliminate the overhead by recording the full GPU execution sequence once and replaying it for batches with matching shapes.
 
-Because the batch shapes change every step, the continuous batching system handles this with padding and caching.
+Because the batch shapes change every step, the continuous batching system handles this with padding and caching:
 
-1. Query lengths are padded to the nearest multiple of `q_padding_interval_size`.
-2. KV lengths are padded to the nearest multiple of `kv_padding_interval_size`.
-3. Recorded graphs are stored in an LRU cache of up to `max_cached_graphs` entries.
+- Query and KV lengths are padded to the nearest multiple of 2.
+- Recorded graphs are stored in an LRU cache of up to `max_cached_graphs` entries.
 
 When a batch's padded shape matches a cached graph, the graph replays without any CPU dispatch. New shapes trigger a new graph capture.
 
