@@ -17,8 +17,6 @@ if TYPE_CHECKING:
 
     from transformers import PreTrainedModel
 
-_LAYER_IDX_POSSIBLE_NAMES = ("layer_idx", "idx", "layer_id", "layer_number", "i", "_")
-
 
 @dataclass
 class _LayerInitContext:
@@ -118,7 +116,7 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
                 return orig_layer_init(self, config, *args, **kwargs)
 
             # --- Resolve layer index ---
-            layer_idx_possible_names = ([ctx.layer_idx_variable_name])
+            layer_idx_possible_names = [ctx.layer_idx_variable_name]
             layer_idx = _get_variable_from_passed_arguments(
                 func=orig_layer_init, args=(self, config, *args), kwargs=kwargs, names=layer_idx_possible_names
             )

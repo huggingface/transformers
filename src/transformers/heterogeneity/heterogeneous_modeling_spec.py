@@ -17,6 +17,8 @@ SkipDescriptor: TypeAlias = "dict[str | tuple[str, type], type[nn.Module]]"
 @dataclass
 class HeterogeneousModelingSpec:
     layer_cls: type[nn.Module]
+    # Layer-index argument or local variable name used by the model's layer construction path.
+    # Common names include `layer_idx`, `idx`, `layer_id`, `layer_number`, `i`, and `_`.
     layer_idx_variable_name: str
     skip_descriptors: dict[str, SkipDescriptor] | None = None
 
