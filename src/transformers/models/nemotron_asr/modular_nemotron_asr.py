@@ -866,14 +866,15 @@ class NemotronAsrEncoderSubsamplingConv2D(nn.Module):
         self.padding = (self.kernel_size - 1) // 2
         self.num_layers = int(math.log2(config.subsampling_factor))
 
-        # define layers
-        # All strided convs are causal (NeMo's `dw_striding` with `is_causal=True`): the first conv is a
-        # full causal Conv2d, followed by depthwise-causal + pointwise blocks. Every causal conv registers
-        # a unique `cache_key` so a single `NemotronAsrEncoderCausalConvPaddingCache` can back them all.
         self.layers = nn.ModuleList()
         self.layers.append(
             NemotronAsrEncoderCausalConv2D(
-                1, self.channels, kernel_size=self.kernel_size, stride=self.stride, padding=0, cache_key="subsampling.0"
+                1,
+                self.channels,
+                kernel_size=self.kernel_size,
+                stride=self.stride,
+                padding=0,
+                cache_key="subsampling.0",
             )
         )
         self.layers.append(nn.ReLU())
@@ -885,7 +886,6 @@ class NemotronAsrEncoderSubsamplingConv2D(nn.Module):
                     self.channels,
                     kernel_size=self.kernel_size,
                     stride=self.stride,
-                    padding=0,
                     groups=self.channels,
                     cache_key=f"subsampling.{idx + 1}",
                 )
@@ -895,10 +895,7 @@ class NemotronAsrEncoderSubsamplingConv2D(nn.Module):
             # activation
             self.layers.append(nn.ReLU())
 
-        self._pad_left = self.kernel_size - 1
-        self._pad_right = self.stride - 1
-        out_length = config.num_mel_bins
-        total_pad = self._pad_left + self._pad_right
+        total_pad = self.kernel_size + self.stride - 2
         for _ in range(self.num_layers):
             out_length = (out_length + total_pad - self.kernel_size) // self.stride + 1
         self.linear = nn.Linear(config.subsampling_conv_channels * out_length, config.hidden_size, bias=True)
