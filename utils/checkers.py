@@ -579,7 +579,7 @@ def main():
     if use_parallel and to_run:
         # --- Parallel execution ---
         results = {}
-        max_workers = len(to_run) if args.num_workers == 0 else args.num_workers
+        max_workers = min(len(to_run), os.cpu_count() or len(to_run)) if args.num_workers == 0 else args.num_workers
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_name = {
                 executor.submit(_run_checker_timed, name, args.fix): name
