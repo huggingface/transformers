@@ -79,8 +79,9 @@ class RfDetrDinov2Embeddings(nn.Module):
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size)) if config.use_mask_token else None
         self.patch_embeddings = RfDetrDinov2PatchEmbeddings(config)
-        num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
+        self.position_embeddings = nn.Parameter(
+            torch.randn(1, self.patch_embeddings.num_patches + 1, config.hidden_size)
+        )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
         self.config = config
