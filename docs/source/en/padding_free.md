@@ -35,7 +35,9 @@ Preparing the boundary kwargs up front removes the problems above and behaves id
 Use [`DataCollatorWithFlattening`] to flatten each batch and return the boundary information. Set `return_flash_attn_kwargs=True` so the collator precomputes the boundaries instead of leaving them to be inferred from `position_ids` at runtime. Pass it to [`Trainer`] and don't add an `attention_mask`, since the flattened batch already encodes the boundaries and a mask conflicts with the packed layout.
 
 > [!TIP]
-> Padding-free relies on a FlashAttention implementation for standard attention models. Install [flash-attn](https://github.com/Dao-AILab/flash-attention) and load the model with `attn_implementation="flash_attention_2"` (or `"flash_attention_3"`), since only the FlashAttention kernels expose the variable-length path that a flattened batch needs.
+> Padding-free relies on a FlashAttention implementation for standard attention models, since only the FlashAttention kernels expose the variable-length path that a flattened batch needs.
+>
+> Install the [kernels](./kernels) library, which fetches a prebuilt FlashAttention kernel without requiring a local build. It also works as a fallback when [flash-attn](https://github.com/Dao-AILab/flash-attention) isn't installed locally. Load the model with `attn_implementation="kernels-community/flash-attn2"`.
 
 ```python
 import torch
