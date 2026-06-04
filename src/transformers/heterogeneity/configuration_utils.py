@@ -153,7 +153,7 @@ def _validate_layer_indices(config: PreTrainedConfig, per_layer_overrides: dict[
     invalid_layer_indices = [
         layer_idx
         for layer_idx in per_layer_overrides
-        if type(layer_idx) is not int or layer_idx < 0 or layer_idx >= num_hidden_layers
+        if layer_idx < 0 or layer_idx >= num_hidden_layers
     ]
     if invalid_layer_indices:
         raise ValueError(
