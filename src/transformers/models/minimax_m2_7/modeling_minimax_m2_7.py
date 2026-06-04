@@ -122,7 +122,7 @@ class MiniMaxM2SparseMoeBlock(nn.Module):
         if self.training and self.jitter_noise > 0:
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        router_logits = self.gate(hidden_states)
+        router_logits = self.gate(hidden_states.to(self.gate.weight.dtype))
         top_k_index, top_k_weights = self.route_tokens_to_experts(router_logits)
         hidden_states = self.experts(hidden_states, top_k_index, top_k_weights.to(hidden_states.dtype))
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
@@ -319,7 +319,7 @@ class MiniMaxM2DecoderLayer(GradientCheckpointingLayer):
 
         self.self_attn = MiniMaxM2Attention(config, layer_idx)
 
-        self.block_sparse_moe = MiniMaxM2SparseMoeBlock(config)
+        self.mlp = MiniMaxM2SparseMoeBlock(config)
         self.input_layernorm = MiniMaxM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MiniMaxM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -353,7 +353,7 @@ class MiniMaxM2DecoderLayer(GradientCheckpointingLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states, _ = self.block_sparse_moe(hidden_states)
+        hidden_states, _ = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
         return hidden_states
@@ -373,11 +373,23 @@ class MiniMaxM2RotaryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        if self.rope_type == "default":
+            self.rope_init_fn = self.compute_default_rope_parameters
+        else:
+            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
+
+    def compute_default_rope_parameters(self, config=None, device=None, **kwargs):
+        cfg = config if config is not None else self.config
+        base = getattr(cfg, "rope_theta", 10000.0)
+        head_dim = getattr(cfg, "head_dim", None) or cfg.hidden_size // cfg.num_attention_heads
+        partial_rotary_factor = getattr(cfg, "partial_rotary_factor", 1.0)
+        dim = int(head_dim * partial_rotary_factor)
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim))
+        return inv_freq, 1.0
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -704,3 +716,4 @@ __all__ = [
     "MiniMaxM2ForSequenceClassification",
     "MiniMaxM2ForTokenClassification",
 ]
+
