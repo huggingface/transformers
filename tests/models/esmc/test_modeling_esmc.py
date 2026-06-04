@@ -121,9 +121,7 @@ class ESMCModelTester:
         result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
-    def create_and_check_for_token_classification(
-        self, config, input_ids, input_mask, sequence_labels, token_labels
-    ):
+    def create_and_check_for_token_classification(self, config, input_ids, input_mask, sequence_labels, token_labels):
         config.num_labels = self.num_labels
         model = ESMCForTokenClassification(config=config)
         model.to(torch_device)

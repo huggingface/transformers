@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was contributed to Hugging Face Transformers on 2026-06-04.*
 
 # ESMFold2
 
@@ -34,10 +35,13 @@ The model checkpoint is available on the Hugging Face Hub at
 ## Usage example
 
 ```python
+import torch
+
 from transformers import ESMFold2Model
 
 # Loading the model also downloads and attaches the ESMC backbone (config.esmc_id).
-model = ESMFold2Model.from_pretrained("biohub/ESMFold2").cuda().eval()
+# bf16 is the recommended inference precision.
+model = ESMFold2Model.from_pretrained("biohub/ESMFold2", dtype=torch.bfloat16).cuda().eval()
 
 pdb_string = model.infer_protein_as_pdb("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ")
 with open("prediction.pdb", "w") as f:
