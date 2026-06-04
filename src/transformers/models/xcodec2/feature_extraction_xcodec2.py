@@ -162,6 +162,8 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
         padded_audio = padded_inputs["audio"][:, None, :]
 
         # 2) Semantic encoder feature extraction (mel spectrogram) with normalization computed before padding
+        # NOTE (ebezzam): looping over the batch to match the original implementation with `torchaudio.compliance.kaldi.fbank`. However it does not support batched inputs.
+        # Original used `SeamlessM4TFeatureExtractor`, which also loops over individual audio, but was numpy-based.
         mel_features = []
         for i in range(batch_size):
             orig_len = int(padding_mask[i].sum().item()) if padding_mask is not None else padded_audio.shape[-1]
