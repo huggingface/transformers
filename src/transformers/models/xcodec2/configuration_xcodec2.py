@@ -86,8 +86,6 @@ class Xcodec2Config(PreTrainedConfig):
         elif self.semantic_model_config is None:
             self.semantic_model_config = CONFIG_MAPPING["wav2vec2-bert"](**self._default_semantic_config_kwargs)
 
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_theta": 10000.0, "rope_type": "default"}
 
         super().__post_init__(**kwargs)
 
