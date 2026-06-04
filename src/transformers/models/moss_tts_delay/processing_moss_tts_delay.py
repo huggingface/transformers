@@ -34,13 +34,15 @@ from .tts_robust_normalizer_single_script import normalize_tts_text
 
 logger = logging.get_logger(__name__)
 
-if is_torchaudio_available():
-    import torchaudio
-
-
 def _require_torchaudio():
     if not is_torchaudio_available():
         raise ImportError("MossTTSDelayProcessor requires torchaudio to load or resample waveform files.")
+    try:
+        import torchaudio
+    except Exception as error:
+        raise ImportError("MossTTSDelayProcessor could not import torchaudio.") from error
+
+    return torchaudio
 
 
 AUDIO_PLACEHOLDER = "<|audio|>"
@@ -751,7 +753,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
             if wav.shape[0] > 1:
                 wav = torch.mean(wav, dim=0, keepdim=True)
             if resample:
-                _require_torchaudio()
+                torchaudio = _require_torchaudio()
                 wav = torchaudio.functional.resample(
                     waveform=wav,
                     orig_freq=sampling_rate,
@@ -808,7 +810,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
         target_sr = int(self.model_config.sampling_rate)
         wav_list: list[torch.Tensor] = []
         for wav_path in wav_path_list:
-            _require_torchaudio()
+            torchaudio = _require_torchaudio()
             wav, sr = torchaudio.load(wav_path)
             if int(sr) != target_sr:
                 wav = torchaudio.functional.resample(
