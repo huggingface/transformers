@@ -502,12 +502,14 @@ def _run_distributed_worker(
     # distributed worker run on either backend depending on the environment.
     if torch.cuda.is_available():
         num_gpus = torch.cuda.device_count()
-    elif hasattr(torch, "xpu") and getattr(torch.xpu, "is_available", lambda: False)():
+    elif hasattr(torch, "xpu") and torch.xpu.is_available():
         num_gpus = torch.xpu.device_count()
     else:
         # No supported accelerator available; raise a clear error so callers see
         # the problem instead of silently getting a numeric rc.
-        raise RuntimeError("No supported accelerator available: CUDA or XPU required to run distributed worker")
+        raise RuntimeError(
+            "No supported accelerator available: CUDA or XPU or ROCM required to run distributed worker"
+        )
     # Redirect only stdout (`:1`) for ranks 1..N-1 to suppress duplicated generation chatter.
     # Stderr is left attached so worker tracebacks (OOM, NCCL, kernel crash) surface in the
     # subprocess stderr and the test failure message — `:3` would file-log both and turn any
@@ -523,16 +525,15 @@ def _run_distributed_worker(
     return result.returncode
 
 
-def require_cuda_capability_or_xpu(major: int, minor: int):
+def require_accelerator_capability(major: int, minor: int):
     """Decorator to require either CUDA with a minimum capability or XPU.
 
-    Usage: @require_cuda_capability_or_xpu(9, 0)
+    Usage: @require_accelerator_capability(9, 0)
     """
 
     def decorator(test_case):
         import torch
 
-        from transformers import is_torch_xpu_available
         from transformers.testing_utils import require_cuda_capability_at_least, require_torch_xpu
 
         # Prefer CUDA when available and check capability.
@@ -540,10 +541,10 @@ def require_cuda_capability_or_xpu(major: int, minor: int):
             return require_cuda_capability_at_least(major, minor)(test_case)
 
         # Fall back to XPU when available.
-        if is_torch_xpu_available():
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
             return require_torch_xpu(test_case)
 
-        return unittest.skip(reason=f"test requires CUDA >= {major}.{minor} or XPU")(test_case)
+        return unittest.skip(reason=f"test requires CUDA >= {major}.{minor} or XPU or ROCM")(test_case)
 
     return decorator
 
@@ -596,7 +597,7 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
 @require_torch
 @require_torch_n_accelerators(8)
 @require_torch_large_accelerator(memory=60)
-@require_cuda_capability_or_xpu(9, 0)
+@require_accelerator_capability(9, 0)
 @slow
 class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
     """Multi-device native FP8 generation on DSv4-Flash-Base.
