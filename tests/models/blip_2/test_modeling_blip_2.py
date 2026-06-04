@@ -475,12 +475,6 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_conditional_generation(*config_and_inputs)
 
-    @unittest.skip(
-        reason="Blip2QFormerModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
-    )
-    def test_eager_matches_sdpa_generate(self):
-        pass
-
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
@@ -505,6 +499,11 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
     @unittest.skip(reason="BLIP2 has no separate base model without a head.")
     def test_model_base_model_prefix(self):
         pass
+
+    def test_sdpa_can_dispatch_on_flash(self):
+        self.skipTest(
+            reason="QFormer is forced to fp32 via _keep_in_fp32_modules, incompatible with SDPA flash-only kernel"
+        )
 
     def test_sdpa_can_dispatch_composite_models(self):
         """
@@ -536,7 +535,7 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
                 self.assertTrue(model.language_model.config._attn_implementation == "sdpa")
                 self.assertTrue(model.vision_model.config._attn_implementation == "sdpa")
-                self.assertTrue(model.qformer.config._attn_implementation == "eager")
+                self.assertTrue(model.qformer.config._attn_implementation == "sdpa")
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
@@ -848,12 +847,6 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_conditional_generation(*config_and_inputs)
 
-    @unittest.skip(
-        reason="Blip2QFormerModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
-    )
-    def test_eager_matches_sdpa_generate(self):
-        pass
-
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
@@ -913,7 +906,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
                 self.assertTrue(model.language_model.config._attn_implementation == "eager")
                 self.assertTrue(model.vision_model.config._attn_implementation == "sdpa")
-                self.assertTrue(model.qformer.config._attn_implementation == "eager")
+                self.assertTrue(model.qformer.config._attn_implementation == "sdpa")
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
@@ -1129,6 +1122,11 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    def test_sdpa_can_dispatch_on_flash(self):
+        self.skipTest(
+            reason="QFormer is forced to fp32 via _keep_in_fp32_modules, incompatible with SDPA flash-only kernel"
+        )
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -1284,6 +1282,11 @@ class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
+    def test_sdpa_can_dispatch_on_flash(self):
+        self.skipTest(
+            reason="QFormer is forced to fp32 via _keep_in_fp32_modules, incompatible with SDPA flash-only kernel"
+        )
+
     def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -1423,6 +1426,11 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Blip2Model does not have input/output embeddings")
     def test_model_common_attributes(self):
         pass
+
+    def test_sdpa_can_dispatch_on_flash(self):
+        self.skipTest(
+            reason="QFormer is forced to fp32 via _keep_in_fp32_modules, incompatible with SDPA flash-only kernel"
+        )
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

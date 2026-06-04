@@ -504,12 +504,6 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(
-        reason="InstructBlipVideoQFormerModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
-    )
-    def test_eager_matches_sdpa_generate(self):
-        pass
-
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
@@ -538,6 +532,16 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     @unittest.skip(reason="InstructBLIP has no separate base model without a head.")
     def test_model_base_model_prefix(self):
         pass
+
+    def test_sdpa_can_dispatch_on_flash(self):
+        self.skipTest(
+            reason="QFormer is forced to fp32 via _keep_in_fp32_modules, incompatible with SDPA flash-only kernel"
+        )
+
+    def test_sdpa_can_compile_dynamic(self):
+        self.skipTest(
+            reason="QFormer's _keep_in_fp32_modules causes mixed precision incompatible with torch.compile dynamic shapes"
+        )
 
     def test_forward_signature(self):
         for model_class in self.all_model_classes:
@@ -608,7 +612,7 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
                 self.assertTrue(model.language_model.config._attn_implementation == "sdpa")
                 self.assertTrue(model.vision_model.config._attn_implementation == "sdpa")
-                self.assertTrue(model.qformer.config._attn_implementation == "eager")
+                self.assertTrue(model.qformer.config._attn_implementation == "sdpa")
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
