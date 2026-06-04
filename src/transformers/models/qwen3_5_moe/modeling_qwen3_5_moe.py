@@ -57,6 +57,7 @@ from ...utils.generic import (
 from ...utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_bilinear_indices_and_weights, get_vision_cu_seqlens, get_vision_position_ids
+from ..auto.modeling_auto import AutoModel
 from .configuration_qwen3_5_moe import Qwen3_5MoeConfig, Qwen3_5MoeTextConfig, Qwen3_5MoeVisionConfig
 
 
@@ -1108,11 +1109,11 @@ class Qwen3_5MoeVisionBlock(GradientCheckpointingLayer):
 class Qwen3_5MoeVisionModel(Qwen3_5MoePreTrainedModel):
     config: Qwen3_5MoeVisionConfig
     input_modalities = ("image", "video")
-    _no_split_modules = ["Qwen3_5MoeVisionBlock"]
     _can_record_outputs = {
         "hidden_states": Qwen3_5MoeVisionBlock,
         "attentions": Qwen3_5MoeVisionAttention,
     }
+    _no_split_modules = ["Qwen3_5MoeVisionBlock"]
 
     def __init__(self, config, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
@@ -1342,13 +1343,12 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
-    config: Qwen3_5MoeConfig
     _no_split_modules = ["Qwen3_5MoeDecoderLayer", "Qwen3_5MoeVisionBlock"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.visual = Qwen3_5MoeVisionModel._from_config(config.vision_config)
-        self.language_model = Qwen3_5MoeTextModel._from_config(config.text_config)
+        self.visual = AutoModel.from_config(config.vision_config)
+        self.language_model = AutoModel.from_config(config.text_config)
         self.rope_deltas = None  # cache rope_deltas here
 
         # Initialize weights and apply final processing
@@ -1906,7 +1906,6 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMi
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
-    config: Qwen3_5MoeConfig
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config):
