@@ -83,7 +83,7 @@ from transformers.trainer_utils import (
     set_seed,
     sort_checkpoints,
 )
-from transformers.utils import SAFE_WEIGHTS_NAME, logging
+from transformers.utils import CONFIG_NAME, SAFE_WEIGHTS_NAME, logging
 
 from .trainer_test_utils import (
     PATH_SAMPLE_TEXT,
@@ -2297,6 +2297,10 @@ class TrainerIntegrationWithHubBucketTester(unittest.TestCase):
                 self.assertEqual(bucket_ckpts, local_ckpts)
                 self.assertTrue(any(p.endswith("/optimizer.pt") for p in files))
                 self.assertTrue(any(p.endswith("/trainer_state.json") for p in files))
+                # The bucket also holds a loadable model snapshot at its root (parity with the model repo).
+                root_files = {p for p in files if "/" not in p}
+                self.assertIn(SAFE_WEIGHTS_NAME, root_files)
+                self.assertIn(CONFIG_NAME, root_files)
             finally:
                 delete_bucket(bucket_id, token=self._token, missing_ok=True)
 

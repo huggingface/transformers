@@ -576,7 +576,7 @@ class Trainer:
         # ---- 9. Hub & output ---------------------------------------------------------
         self.hub_model_id = None  # Set by init_hf_repo() when push_to_hub is enabled
         self._bucket_id = None  # Canonical id of the checkpoint bucket when push_to_bucket is enabled
-        self.push_in_progress = None  # Tracks the in-flight repo push
+        self.push_in_progress = None  # Tracks the in-flight push (repo and/or bucket)
         if self.args.push_to_hub:
             self.init_hf_repo()
         if self.args.push_to_bucket and self.is_world_process_zero():
@@ -4137,52 +4137,57 @@ class Trainer:
 
     def _push_from_checkpoint(self, checkpoint_folder: str) -> None:
         """Push model files to the repo and/or sync the checkpoint to the bucket, from a checkpoint folder."""
-        if not self.is_world_process_zero() or self.args.hub_strategy == HubStrategy.END:
+        if not self.is_world_process_zero():
             return
         # If we haven't finished the last push, we don't do this one unless args.hub_always_push=True.
         if not self.args.hub_always_push and self.push_in_progress is not None and not self.push_in_progress.is_done():
             return
 
+        push_to_repo = self.args.push_to_hub and (
+            self.args.hub_strategy != HubStrategy.END or self.control.should_training_stop
+        )
+        if not push_to_repo and not self.args.push_to_bucket:
+            return
+
         self.callback_handler.on_push_begin(self.args, self.state, self.control)
-        output_dir = self.args.output_dir
-
-        if self.args.save_strategy == SaveStrategy.STEPS:
-            commit_message = f"Training in progress, step {self.state.global_step}"
-        else:
-            commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
-
         push_jobs = []
 
-        # ---- Model snapshot -> model repo (only when publishing a repo) ----
-        if self.args.push_to_hub:
-            # To avoid a new synchronization of all model weights, we just copy the file from the checkpoint folder
-            modeling_files = [CONFIG_NAME, GENERATION_CONFIG_NAME, WEIGHTS_NAME, SAFE_WEIGHTS_NAME]
-            #  Add sharded checkpoints if we have an index
-            for index_file in [WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_INDEX_NAME]:
-                index_path = os.path.join(checkpoint_folder, index_file)
-                if os.path.isfile(index_path):
-                    modeling_files.append(index_file)
-                    with open(index_path) as f:
-                        index = json.loads(f.read())
-                    shard_files = list(set(index["weight_map"].values()))
-                    modeling_files.extend(shard_files)
-            if is_peft_available():
-                modeling_files.extend([ADAPTER_CONFIG_NAME, ADAPTER_WEIGHTS_NAME, ADAPTER_SAFE_WEIGHTS_NAME])
-            for modeling_file in modeling_files:
-                if os.path.isfile(os.path.join(checkpoint_folder, modeling_file)):
-                    shutil.copy(
-                        os.path.join(checkpoint_folder, modeling_file), os.path.join(output_dir, modeling_file)
-                    )
-            # Saving the processing class is fast and we don't know how many files it may have spawned, so we resave it to be sure.
-            if self.processing_class is not None:
-                self.processing_class.save_pretrained(output_dir)
-            # Same for the training arguments
-            torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
+        # ---- Prepare the loadable model snapshot at output_dir root (for the repo and/or the bucket) ----
+        # To avoid a new synchronization of all model weights, we just copy the file from the checkpoint folder
+        modeling_files = [CONFIG_NAME, GENERATION_CONFIG_NAME, WEIGHTS_NAME, SAFE_WEIGHTS_NAME]
+        #  Add sharded checkpoints if we have an index
+        for index_file in [WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_INDEX_NAME]:
+            index_path = os.path.join(checkpoint_folder, index_file)
+            if os.path.isfile(index_path):
+                modeling_files.append(index_file)
+                with open(index_path) as f:
+                    index = json.loads(f.read())
+                shard_files = list(set(index["weight_map"].values()))
+                modeling_files.extend(shard_files)
+        if is_peft_available():
+            modeling_files.extend([ADAPTER_CONFIG_NAME, ADAPTER_WEIGHTS_NAME, ADAPTER_SAFE_WEIGHTS_NAME])
+        for modeling_file in modeling_files:
+            if os.path.isfile(os.path.join(checkpoint_folder, modeling_file)):
+                shutil.copy(
+                    os.path.join(checkpoint_folder, modeling_file), os.path.join(self.args.output_dir, modeling_file)
+                )
+        # Saving the processing class is fast and we don't know how many files it may have spawned, so we resave it to be sure.
+        if self.processing_class is not None:
+            self.processing_class.save_pretrained(self.args.output_dir)
+        # Same for the training arguments
+        torch.save(self.args, os.path.join(self.args.output_dir, TRAINING_ARGS_NAME))
 
+        if push_to_repo:
+            if self.args.save_strategy == SaveStrategy.STEPS:
+                commit_message = f"Training in progress, step {self.state.global_step}"
+            else:
+                commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
+
+            # Model snapshot 
             push_jobs.append(
                 hf_api().upload_folder(
                     repo_id=self.hub_model_id,
-                    folder_path=output_dir,
+                    folder_path=self.args.output_dir,
                     commit_message=commit_message,
                     token=self.args.hub_token,
                     run_as_future=True,
@@ -4191,7 +4196,7 @@ class Trainer:
                 )
             )
 
-            # Full checkpoint -> repo (unchanged behavior, gated by hub_strategy).
+            # Full checkpoint
             if self.args.hub_strategy in [HubStrategy.CHECKPOINT, HubStrategy.ALL_CHECKPOINTS]:
                 repo_leaf = (
                     "last-checkpoint"
@@ -4210,16 +4215,13 @@ class Trainer:
                     )
                 )
 
-        # ---- checkpoint -> bucket (accumulates all checkpoints, independent of repo and hub_strategy) ----
-        # Each checkpoint is kept under its own checkpoint-<step>/ prefix (delete=False), uploaded async via
-        # huggingface_hub's thread pool (same as the repo push above) so it plugs into push_in_progress.
+        # Sync output_dir (model snapshot + checkpoints)
         if self.args.push_to_bucket:
-            leaf = Path(checkpoint_folder).name
             push_jobs.append(
                 hf_api().run_as_future(
                     hf_api().sync_bucket,
-                    checkpoint_folder,
-                    f"hf://buckets/{self._bucket_id}/{leaf}",
+                    self.args.output_dir,
+                    f"hf://buckets/{self._bucket_id}",
                     delete=False,
                     token=self.args.hub_token,
                     quiet=True,
