@@ -200,7 +200,7 @@ def fp8_linear(
             for dynamic (per-token) quant.
         output_dtype: desired output dtype.
     """
-    # DeepGEMM is CUDA-only, dynamic-only, and faster on FP4 / UE8M0 / 128×128 block FP8.
+    # DeepGEMM is CUDA-only, dynamic-only, and faster on FP4 or 128×128 block FP8.
     # Static activation (per-tensor scalar) is Triton-only — DeepGEMM rejects scalar SFs.
     deepgemm_preferred = (
         weight.device.type == "cuda"
@@ -208,7 +208,6 @@ def fp8_linear(
         and activation_scale is None
         and (
             weight.dtype == torch.int8
-            or weight_scale_inv.dtype == torch.float8_e8m0fnu
             or (block_size is not None and block_size[0] == block_size[1] == 128)
         )
     )
