@@ -423,6 +423,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("parakeet_ctc", "ParakeetCTCConfig"),
         ("parakeet_encoder", "ParakeetEncoderConfig"),
         ("parakeet_tdt", "ParakeetTDTConfig"),
+        ("param2moe", "Param2MoEConfig"),
         ("patchtsmixer", "PatchTSMixerConfig"),
         ("patchtst", "PatchTSTConfig"),
         ("pe_audio", "PeAudioConfig"),
