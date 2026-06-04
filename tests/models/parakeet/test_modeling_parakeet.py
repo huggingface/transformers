@@ -37,7 +37,9 @@ if is_torch_available():
         ParakeetEncoder,
         ParakeetEncoderConfig,
         ParakeetForCTC,
+        ParakeetForRNNT,
         ParakeetForTDT,
+        ParakeetRNNTConfig,
         ParakeetTDTConfig,
     )
     from transformers.loss.loss_tdt import tdt_loss
@@ -598,6 +600,228 @@ class ParakeetForTDTModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="ParakeetForTDT decoder is an LSTM prediction network without attention")
+    def test_flex_attention_with_grads(self):
+        pass
+
+    # Original function assumes vision+text model, so overwrite since Parakeet is audio+text
+    def test_sdpa_can_dispatch_composite_models(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        if not self._is_composite:
+            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
+
+        for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_sdpa = model_class.from_pretrained(tmpdirname)
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
+                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
+                model_eager = model_eager.eval().to(torch_device)
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
+
+                for name, submodule in model_eager.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        raise ValueError("The eager model should not have SDPA attention layers")
+
+
+class ParakeetForRNNTModelTester:
+    def __init__(
+        self,
+        parent,
+        encoder_kwargs=None,
+        is_training=True,
+        vocab_size=128,
+        decoder_hidden_size=32,
+        joint_hidden_size=32,
+        num_decoder_layers=1,
+        hidden_act="relu",
+        max_symbols_per_step=5,
+        pad_token_id=2,
+        num_prompts=0,
+        prompt_dictionary=None,
+    ):
+        if encoder_kwargs is None:
+            encoder_kwargs = {}
+
+        self.parent = parent
+        self.encoder_model_tester = ParakeetEncoderModelTester(parent, **encoder_kwargs)
+        self.is_training = is_training
+
+        self.batch_size = self.encoder_model_tester.batch_size
+        self.output_seq_length = self.encoder_model_tester.output_seq_length
+        self.num_hidden_layers = self.encoder_model_tester.num_hidden_layers
+        self.hidden_size = self.encoder_model_tester.hidden_size
+        self.seq_length = self.encoder_model_tester.output_seq_length
+        self.encoder_seq_length = self.encoder_model_tester.output_seq_length
+
+        self.vocab_size = vocab_size
+        self.decoder_hidden_size = decoder_hidden_size
+        self.joint_hidden_size = joint_hidden_size
+        self.num_decoder_layers = num_decoder_layers
+        self.hidden_act = hidden_act
+        self.max_symbols_per_step = max_symbols_per_step
+        self.pad_token_id = pad_token_id
+        self.blank_token_id = vocab_size - 1
+        self.num_prompts = num_prompts
+        self.prompt_dictionary = prompt_dictionary
+
+    def prepare_config_and_inputs(self):
+        _, input_features, attention_mask = self.encoder_model_tester.prepare_config_and_inputs()
+        config = self.get_config()
+        return config, input_features, attention_mask
+
+    def get_config(self):
+        return ParakeetRNNTConfig(
+            vocab_size=self.vocab_size,
+            decoder_hidden_size=self.decoder_hidden_size,
+            joint_hidden_size=self.joint_hidden_size,
+            num_decoder_layers=self.num_decoder_layers,
+            hidden_act=self.hidden_act,
+            max_symbols_per_step=self.max_symbols_per_step,
+            encoder_config=self.encoder_model_tester.get_config().to_dict(),
+            pad_token_id=self.pad_token_id,
+            blank_token_id=self.blank_token_id,
+            num_prompts=self.num_prompts,
+            prompt_dictionary=self.prompt_dictionary,
+        )
+
+    def create_and_check_model(self, config, inputs_dict):
+        model = ParakeetForRNNT(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(**inputs_dict)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.output_seq_length, self.encoder_model_tester.hidden_size),
+        )
+
+    def create_and_check_streaming_state(self, config, input_features, attention_mask):
+        """Build a cache-aware variant of the test config and check the streaming state shape.
+
+        The default tester uses an offline encoder (att_context_size=None); force a small
+        cache-aware context here so the code path is actually exercised rather than skipped.
+        """
+        from transformers.cache_utils import Cache
+        from transformers.models.parakeet.modeling_parakeet import ParakeetConv1dPaddingCache
+
+        config.encoder_config.att_context_size = [3, 1]
+        model = ParakeetForRNNT(config=config)
+        model.to(torch_device).eval()
+        target_lang = next(iter(self.prompt_dictionary)) if self.num_prompts else None
+        state = model.get_initial_streaming_state(
+            batch_size=self.batch_size, target_lang=target_lang, device=torch_device, dtype=torch.float32
+        )
+        self.parent.assertIn("past_key_values", state)
+        self.parent.assertIn("padding_cache", state)
+        self.parent.assertIn("last_token", state)
+        self.parent.assertIsInstance(state["past_key_values"], Cache)
+        self.parent.assertIsInstance(state["padding_cache"], ParakeetConv1dPaddingCache)
+        self.parent.assertEqual(len(state["past_key_values"].layers), self.num_hidden_layers)
+        self.parent.assertEqual(state["last_token"].shape, (self.batch_size, 1))
+        self.parent.assertEqual(state["last_token"].dtype, torch.long)
+
+    def prepare_config_and_inputs_for_common(self):
+        config, input_features, attention_mask = self.prepare_config_and_inputs()
+        decoder_input_ids = ids_tensor([self.batch_size, 1], self.vocab_size)
+        inputs_dict = {
+            "input_features": input_features,
+            "attention_mask": attention_mask,
+            "decoder_input_ids": decoder_input_ids,
+        }
+        return config, inputs_dict
+
+
+@require_torch
+class ParakeetForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (ParakeetForRNNT,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": ParakeetEncoder,
+            "automatic-speech-recognition": ParakeetForRNNT,
+        }
+        if is_torch_available()
+        else {}
+    )
+
+    test_attention_outputs = False
+    test_resize_embeddings = False
+    test_torch_exportable = False
+    _is_composite = True
+
+    @unittest.skip(reason="No available flash-SDPA kernels for Parakeet test shapes on this setup")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    def setUp(self):
+        self.model_tester = ParakeetForRNNTModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ParakeetRNNTConfig)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_streaming_state_init(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_streaming_state(*config_and_inputs)
+
+    def test_model_prompted(self):
+        """Smoke-test the prompt-conditioned code path (`num_prompts > 0`)."""
+        old_num, old_dict = self.model_tester.num_prompts, self.model_tester.prompt_dictionary
+        self.model_tester.num_prompts = 4
+        self.model_tester.prompt_dictionary = {"en-US": 0, "de-DE": 1, "es-ES": 2, "auto": 3}
+        try:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            inputs_dict["target_lang"] = "en-US"
+            self.model_tester.create_and_check_model(config, inputs_dict)
+        finally:
+            self.model_tester.num_prompts = old_num
+            self.model_tester.prompt_dictionary = old_dict
+
+    @unittest.skip(reason="ParakeetForRNNT does not use inputs_embeds")
+    def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip(
+        reason="ParakeetForRNNT is a transducer, not a standard encoder-decoder: no separate text config to set"
+    )
+    def test_attn_implementation_composite_models(self):
+        pass
+
+    @unittest.skip(
+        reason="ParakeetForRNNT is a transducer with an LSTM prediction network; "
+        "it does not expose encoder_hidden_states in the standard encoder-decoder sense"
+    )
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(
+        reason="ParakeetForRNNT is a transducer with an LSTM prediction network; "
+        "it does not expose encoder_hidden_states in the standard encoder-decoder sense"
+    )
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(
+        reason="ParakeetForRNNT has a custom generate() that is not fully compatible with GenerationTesterMixin"
+    )
+    def test_generation_tester_mixin_inheritance(self):
+        pass
+
+    @unittest.skip(reason="ParakeetForRNNT is a flat composite model without a separate base_model sub-module")
+    def test_model_base_model_prefix(self):
+        pass
+
+    @unittest.skip(reason="ParakeetForRNNT decoder is an LSTM prediction network without attention")
     def test_flex_attention_with_grads(self):
         pass
 

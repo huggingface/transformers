@@ -71,6 +71,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         win_length=400,
         preemphasis=0.97,
         padding_value=0.0,
+        do_normalize=True,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -79,6 +80,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         self.n_fft = n_fft
         self.win_length = win_length
         self.preemphasis = preemphasis
+        self.do_normalize = do_normalize
 
         # TODO: @eustlb, for now we use librosa to compute the mel filters
         # indeed mel_filter_bank uses np.float64 (while librosa uses np.float32), giving numerical differences
@@ -180,7 +182,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
                 pipeline.
             padding_value (`float`, *optional*, defaults to 0.0):
                 The value that is used to fill the padding values / vectors.
-            do_normalize (`bool`, *optional*, defaults to `False`):
+            do_normalize (`bool`, *optional*, defaults to `True`):
                 Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
                 improve the performance of the model.
             device (`str`, *optional*, defaults to `'cpu'`):
@@ -263,14 +265,20 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         )
         attention_mask = torch.arange(input_features.shape[1], device=device)[None, :] < features_lengths[:, None]
 
-        # normalize mel features, ignoring padding
+        # Optionally normalize mel features per-utterance (zero-mean, unit-variance), ignoring padding.
+        # The call-time `do_normalize` argument (if not None) overrides the instance default.
+        normalize = self.do_normalize if do_normalize is None else do_normalize
         mask = attention_mask.unsqueeze(-1)
-        input_features_masked = input_features * mask
-        mean = input_features_masked.sum(dim=1) / features_lengths.unsqueeze(-1)
-        mean = mean.unsqueeze(1)
-        variance = ((input_features_masked - mean) ** 2 * mask).sum(dim=1) / (features_lengths - 1).unsqueeze(-1)
-        std = torch.sqrt(variance).unsqueeze(1)
-        input_features = (input_features - mean) / (std + EPSILON)
+        if normalize:
+            input_features_masked = input_features * mask
+            # Mean uses n divisor; std uses Bessel-corrected n-1, both clamped to at least 1
+            # so single-frame / empty utterances don't divide by zero.
+            mean_denom = features_lengths.clamp_min(1).unsqueeze(-1)
+            std_denom = (features_lengths - 1).clamp_min(1).unsqueeze(-1)
+            mean = (input_features_masked.sum(dim=1) / mean_denom).unsqueeze(1)
+            variance = ((input_features_masked - mean) ** 2 * mask).sum(dim=1) / std_denom
+            std = torch.sqrt(variance.clamp_min(0.0)).unsqueeze(1)
+            input_features = (input_features - mean) / (std + EPSILON)
         input_features *= mask
 
         return BatchFeature(

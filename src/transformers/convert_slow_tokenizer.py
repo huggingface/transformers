@@ -1,4 +1,5 @@
 # Copyright 2018 The HuggingFace Inc. team.
+# Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1841,19 +1842,36 @@ class ParakeetConverter(SpmConverter):
 
     def tokenizer(self, proto):
         vocab_scores = self.vocab(proto)
+        model_type = proto.trainer_spec.model_type
 
-        bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
-        merges = generate_merges(bpe_vocab, vocab_scores)
-        tokenizer = Tokenizer(
-            BPE(
-                bpe_vocab,
-                merges,
-                unk_token=proto.trainer_spec.unk_piece,
-                fuse_unk=True,
-                byte_fallback=self.handle_byte_fallback,
-                dropout=None,
+        if model_type == 1:
+            # Unigram (e.g. parakeet-rnnt-1.1b's multilingual tokenizer).
+            tokenizer = Tokenizer(
+                Unigram(
+                    vocab_scores,
+                    unk_id=proto.trainer_spec.unk_id,
+                    byte_fallback=self.handle_byte_fallback,
+                )
             )
-        )
+        elif model_type == 2:
+            # BPE (e.g. cache-aware Parakeet checkpoints).
+            bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
+            merges = generate_merges(bpe_vocab, vocab_scores)
+            tokenizer = Tokenizer(
+                BPE(
+                    bpe_vocab,
+                    merges,
+                    unk_token=proto.trainer_spec.unk_piece,
+                    fuse_unk=True,
+                    byte_fallback=self.handle_byte_fallback,
+                    dropout=None,
+                )
+            )
+        else:
+            raise ValueError(
+                f"ParakeetConverter only supports Unigram (1) and BPE (2) sentencepiece models, "
+                f"got model_type={model_type}."
+            )
 
         # Add user defined symbols and control tokens from sentencepiece model
         spm_added_tokens = [

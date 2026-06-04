@@ -1,4 +1,5 @@
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -243,3 +244,147 @@ class ParakeetTDTGenerationMixin(GenerationMixin):
             sequences=outputs.sequences if isinstance(outputs, ModelOutput) else outputs,
             durations=durations,
         )
+
+
+@dataclass
+class ParakeetRNNTGenerateOutput(ModelOutput):
+    """
+    Outputs of Parakeet RNN-T generation.
+
+    Args:
+        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Generated token sequences (including blank tokens).
+        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*):
+            Encoder attention weights per layer.
+        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*):
+            Encoder hidden states per layer.
+    """
+
+    sequences: torch.LongTensor
+    attentions: tuple[tuple[torch.FloatTensor]] | None = None
+    hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
+
+
+class ParakeetRNNTGenerationMixin(GenerationMixin):
+    """Generation mixin for Parakeet RNN-T models.
+
+    Mirrors the TDT generation flow but emits one token per step with simpler advance rules:
+    blank → advance the encoder frame; non-blank → emit and stay on the same frame, with a
+    ``max_symbols_per_step`` guard that forces an advance after too many non-blank emissions
+    at the same frame.
+    """
+
+    def _get_stopping_criteria(self, *args, **kwargs):
+        criteria = super()._get_stopping_criteria(*args, **kwargs)
+        criteria.append(EncoderExhaustedCriteria(self))
+        return criteria
+
+    def _update_model_kwargs_for_generation(self, outputs, *args, **kwargs):
+        model_kwargs = super()._update_model_kwargs_for_generation(outputs, *args, **kwargs)
+
+        logits = outputs.logits[:, -1, :]
+        tokens = logits.argmax(dim=-1)
+        blank_mask = tokens == self.config.blank_token_id
+
+        # Count consecutive non-blank emissions at the current encoder frame.
+        symbols = model_kwargs["symbols_at_frame"]
+        symbols = torch.where(blank_mask, torch.zeros_like(symbols), symbols + 1)
+        force_advance = symbols >= self.max_symbols_per_step
+        # Reset the counter for elements that will advance this step.
+        symbols = torch.where(blank_mask | force_advance, torch.zeros_like(symbols), symbols)
+        model_kwargs["symbols_at_frame"] = symbols
+
+        advance = (blank_mask | force_advance).long()
+        model_kwargs["encoder_frame_idxs"] = model_kwargs["encoder_frame_idxs"] + advance
+
+        self._encoder_finished = model_kwargs["encoder_frame_idxs"] >= model_kwargs["encoder_valid_lengths"]
+        return model_kwargs
+
+    def _prepare_generated_length(
+        self,
+        generation_config,
+        has_default_max_length,
+        has_default_min_length,
+        model_input_name,
+        input_ids_length,
+        inputs_tensor,
+    ):
+        if has_default_max_length and generation_config.max_new_tokens is None:
+            encoder_seq_len = self.encoder._get_subsampling_output_length(
+                torch.tensor([inputs_tensor.shape[1]], device=inputs_tensor.device)
+            ).item()
+            generation_config.max_length = self.max_symbols_per_step * encoder_seq_len
+            has_default_max_length = False
+        return super()._prepare_generated_length(
+            generation_config,
+            has_default_max_length,
+            has_default_min_length,
+            model_input_name,
+            input_ids_length,
+            inputs_tensor,
+        )
+
+    def _prepare_model_inputs(self, *args, **kwargs):
+        inputs, input_name, model_kwargs = super()._prepare_model_inputs(*args, **kwargs)
+
+        # Pop the prompt-conditioning args so the inner forward (which gets one slice of the
+        # encoder output per step) doesn't receive them — we only need them to run the encoder.
+        target_lang = model_kwargs.pop("target_lang", None)
+        prompt_id = model_kwargs.pop("prompt_id", None)
+
+        encoder_outputs = self.get_audio_features(
+            input_features=inputs,
+            attention_mask=model_kwargs.get("attention_mask", None),
+            output_attention_mask=True,
+            target_lang=target_lang,
+            prompt_id=prompt_id,
+        )
+        model_kwargs["encoder_outputs"] = encoder_outputs
+
+        if encoder_outputs.attention_mask is not None:
+            encoder_valid_lengths = encoder_outputs.attention_mask.sum(-1)
+        else:
+            batch_size = encoder_outputs.last_hidden_state.shape[0]
+            encoder_valid_lengths = torch.full(
+                (batch_size,),
+                encoder_outputs.last_hidden_state.shape[1],
+                dtype=torch.long,
+                device=encoder_outputs.last_hidden_state.device,
+            )
+        model_kwargs["encoder_valid_lengths"] = encoder_valid_lengths
+
+        model_kwargs["encoder_frame_idxs"] = torch.zeros(inputs.shape[0], device=inputs.device, dtype=torch.long)
+        model_kwargs["symbols_at_frame"] = torch.zeros(inputs.shape[0], device=inputs.device, dtype=torch.long)
+
+        return inputs, input_name, model_kwargs
+
+    def _prepare_cache_for_generation(self, generation_config, model_kwargs, *args, **kwargs):
+        from .modeling_parakeet import ParakeetTDTDecoderCache
+
+        model_kwargs["decoder_cache"] = ParakeetTDTDecoderCache()
+
+    def prepare_inputs_for_generation(self, input_ids, *args, **kwargs):
+        from .modeling_parakeet import ParakeetEncoderModelOutput
+
+        model_inputs = super().prepare_inputs_for_generation(input_ids, *args, **kwargs)
+        encoder_frame_idxs = model_inputs.pop("encoder_frame_idxs").to(
+            model_inputs["encoder_outputs"].pooler_output.device
+        )
+        # symbols_at_frame is internal state; pop so it isn't passed to model.forward.
+        model_inputs.pop("symbols_at_frame", None)
+
+        pooler_output = model_inputs["encoder_outputs"].pooler_output
+        batch_size, max_encoder_len = pooler_output.shape[0], pooler_output.shape[1]
+        encoder_frame_idxs = encoder_frame_idxs.clamp(max=max_encoder_len - 1)
+        model_inputs["encoder_outputs"] = ParakeetEncoderModelOutput(
+            pooler_output=pooler_output[torch.arange(batch_size), encoder_frame_idxs, None],
+        )
+
+        return model_inputs
+
+    def generate(self, inputs=None, generation_config=None, **kwargs):
+        self._encoder_finished = None
+        outputs = super().generate(inputs=inputs, generation_config=generation_config, **kwargs)
+        del self._encoder_finished
+        sequences = outputs.sequences if isinstance(outputs, ModelOutput) else outputs
+        return ParakeetRNNTGenerateOutput(sequences=sequences)
