@@ -196,8 +196,9 @@ class ESMFold2IntegrationTest(TestCasePlus):
     @slow
     @require_torch_accelerator
     def test_inference_protein_folding(self):
-        # from_pretrained auto-loads the ESMC backbone (load_esmc=True by default).
-        model = ESMFold2Model.from_pretrained("biohub/ESMFold2").to(torch_device).eval()
+        # bf16 is the intended inference regime; from_pretrained auto-loads the
+        # ESMC backbone (load_esmc=True by default).
+        model = ESMFold2Model.from_pretrained("biohub/ESMFold2", dtype=torch.bfloat16).to(torch_device).eval()
 
         # Ubiquitin (PDB 1UBQ), a textbook well-folding 76-residue domain. These
         # diffusion folders draw several samples and the best-ranked is the
