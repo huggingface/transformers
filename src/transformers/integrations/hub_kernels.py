@@ -521,21 +521,25 @@ def allow_all_hub_kernels():
         ALLOW_ALL_KERNELS = False
 
 
-def make_kernel_init_parent_class(
+def make_parent_class_for_kernel_fusion(
     parent_cls: type,
     child_names: list[str],
     kernel_cls: type,
 ) -> type:
+    """
+    Create a new class that inherits from `parent_cls` and fuses the child modules specified in `child_names
+    with the provided `kernel_cls`.
+    The first child in `child_names` will be replaced with the `kernel_cls`, and the rest will be replaced with
+    `nn.Identity()` to keep the same interface.
+    """
     original_init = parent_cls.__init__
-    _child_names = list(child_names)
-    _kernel_cls = kernel_cls
 
     def patched_init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
-        children = [getattr(self, name) for name in _child_names]
-        kernel_instance = _kernel_cls(*children)
-        setattr(self, _child_names[0], kernel_instance)
-        for name in _child_names[1:]:
+        children = [getattr(self, name) for name in child_names]
+        kernel_instance = kernel_cls(*children)
+        setattr(self, child_names[0], kernel_instance)
+        for name in child_names[1:]:
             setattr(self, name, nn.Identity())
 
     patched_cls = type(f"Fused{parent_cls.__name__}", (parent_cls,), {"__init__": patched_init})
@@ -643,7 +647,9 @@ def register_kernel_replacements_and_fusions(
                     )
                 matched_any = True
                 module_cls = type(module)
-                patch_mapping[module_cls.__name__] = make_kernel_init_parent_class(module_cls, child_names, layout_cls)
+                patch_mapping[module_cls.__name__] = make_parent_class_for_kernel_fusion(
+                    module_cls, child_names, layout_cls
+                )
 
             if not matched_any:
                 raise ValueError(
