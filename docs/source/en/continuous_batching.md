@@ -271,7 +271,14 @@ Set `max_blocks_per_request=0` to disable the fast path and force every batch th
 cb_config = ContinuousBatchingConfig(max_blocks_per_request=0)
 ```
 
-The fast path requires FlashAttention 3. With other attention implementations, the manager logs a warning and falls back to the varlen path.
+The fast path relies on the `flash_attn_with_kvcache` kernel, which is available for two device and attention implementation combinations.
+
+| Device | `attn_implementation` |
+|---|---|
+| CUDA | `flash_attention_3` |
+| XPU | [flash_attention_2](https://huggingface.co/kernels-community/flash-attn2) |
+
+For any other combination, or when the kernel can't be imported, the manager falls back to the varlen path. It logs a warning only when you set `max_blocks_per_request` explicitly.
 
 ### CPU offloading
 
