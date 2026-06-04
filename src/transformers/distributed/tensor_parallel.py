@@ -386,17 +386,17 @@ class PackedColwiseParallel(TensorParallelLayer):
 
     @contextlib.contextmanager
     def context_around_forward(self, module):
-        # grouped_mm etc. needs plain tensors, so swap the params
-        to_swaps_params = [
-            (name, param) for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)
-        ]
-        for name, param in to_swaps_params:
-            module.register_parameter(name, torch.nn.Parameter(param.to_local(), requires_grad=param.requires_grad))
+        # grouped_mm etc needs plain tensors, so swap the params
+        to_swap_params = [(name, param) for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)]
+        for name, param in to_swap_params:
+            del module._parameters[name]
+            setattr(module, name, param.to_local())
         try:
             yield
         finally:
-            for name, param in to_swaps_params:
+            for name, param in to_swap_params:
                 # restore the original DTensor params
+                delattr(module, name)
                 module.register_parameter(name, param)
 
     def transform_output_post_forward(self, module, output, mesh):
@@ -508,16 +508,16 @@ class MoEExpertsParallel(TensorParallelLayer):
     @contextlib.contextmanager
     def context_around_forward(self, module):
         # grouped_mm experts forward needs plain tensors, so swap the params
-        to_swaps_params = [
-            (name, param) for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)
-        ]
-        for name, param in to_swaps_params:
-            module.register_parameter(name, torch.nn.Parameter(param.to_local(), requires_grad=param.requires_grad))
+        to_swap_params = [(name, param) for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)]
+        for name, param in to_swap_params:
+            del module._parameters[name]
+            setattr(module, name, param.to_local())
         try:
             yield
         finally:
-            for name, param in to_swaps_params:
-                # restore the original DTensor params
+            # restore the original DTensor params
+            for name, param in to_swap_params:
+                delattr(module, name)
                 module.register_parameter(name, param)
 
     def transform_output_post_forward(self, module, output, mesh):
