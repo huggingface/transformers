@@ -23,7 +23,7 @@ Supported models:
   - Per-tensor static: e.g. RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8
 """
 
-from functools import lru_cache
+from functools import cache
 
 import torch
 import torch.nn as nn
@@ -41,7 +41,7 @@ _FP8_MIN = torch.finfo(_FP8_DTYPE).min
 _FP8_MAX = torch.finfo(_FP8_DTYPE).max
 
 
-@lru_cache(maxsize=None)
+@cache
 def _can_use_fp8_kernel():
     """Check if we can use FP8 matmul (XPU or CUDA SM89+)."""
     if torch.xpu.is_available():
