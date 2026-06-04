@@ -158,7 +158,7 @@ def convert_and_write_model(input_dir: str, output_dir: str):
     missing, unexpected = model.load_state_dict(full_state_dict, strict=False, assign=True)
     # The lm_head is missing because it's tied
     if missing != ["lm_head.weight"]:
-        raise ValueError("Missing keys:\n{missing}")
+        raise ValueError(f"Missing keys:\n{missing}")
     if len(unexpected) > 0:
         raise ValueError(f"Unexpected keys:\n{unexpected}")
 
