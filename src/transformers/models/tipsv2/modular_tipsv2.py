@@ -14,8 +14,6 @@
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Any
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -32,11 +30,11 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_sentencepiece import SentencePieceBackend
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
+from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
-from ..clip.modeling_clip import _get_vector_norm, image_text_contrastive_loss
+from ..clip.modeling_clip import CLIPOutput, _get_vector_norm, image_text_contrastive_loss
 from ..dinov2_with_registers.configuration_dinov2_with_registers import Dinov2WithRegistersConfig
 from ..dinov2_with_registers.modeling_dinov2_with_registers import (
     Dinov2WithRegistersEmbeddings,
@@ -262,42 +260,8 @@ class Tipsv2Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring
-@dataclass
-class Tipsv2Output(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-        Contrastive loss for image-text similarity.
-    logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`, *optional*):
-        The cosine-similarity scores between `image_embeds` and `text_embeds`, scaled by the inverse temperature.
-    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`, *optional*):
-        The cosine-similarity scores between `text_embeds` and `image_embeds`, scaled by the inverse temperature.
-    text_embeds (`torch.FloatTensor` of shape `(text_batch_size, hidden_size)`, *optional*):
-        The normalized text embeddings obtained from masked mean pooling over [`Tipsv2TextModel`].
-    image_embeds (`torch.FloatTensor` of shape `(image_batch_size, hidden_size)`, *optional*):
-        The normalized image embeddings obtained from the CLS token of [`Tipsv2VisionModel`].
-    patch_tokens (`torch.FloatTensor` of shape `(image_batch_size, num_patches, hidden_size)`, *optional*):
-        The vision tower patch-token sequence before global pooling.
-    register_tokens (`torch.FloatTensor` of shape `(image_batch_size, num_register_tokens, hidden_size)`, *optional*):
-        The vision tower register-token sequence.
-    text_model_output (`BaseModelOutputWithPooling`, *optional*):
-        The output of the [`Tipsv2TextModel`].
-    vision_model_output (`BaseModelOutputWithPooling`, *optional*):
-        The output of the [`Tipsv2VisionModel`].
-    """
-
-    loss: torch.FloatTensor | None = None
-    logits_per_image: torch.FloatTensor | None = None
-    logits_per_text: torch.FloatTensor | None = None
-    text_embeds: torch.FloatTensor | None = None
-    image_embeds: torch.FloatTensor | None = None
-    patch_tokens: torch.FloatTensor | None = None
-    register_tokens: torch.FloatTensor | None = None
-    text_model_output: BaseModelOutputWithPooling | None = None
-    vision_model_output: BaseModelOutputWithPooling | None = None
-
-    def to_tuple(self) -> tuple[Any]:
-        return tuple(v.to_tuple() if isinstance(v, ModelOutput) else v for v in self.values())
+class Tipsv2Output(CLIPOutput):
+    pass
 
 
 class Tipsv2VisionEmbeddings(Dinov2WithRegistersEmbeddings):
@@ -827,8 +791,6 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
 
         vision_outputs = None
         image_embeds = None
-        patch_tokens = None
-        register_tokens = None
         if pixel_values is not None:
             vision_outputs = self.vision_model(
                 pixel_values=pixel_values,
@@ -838,11 +800,6 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
             )
             image_embeds = vision_outputs.pooler_output
             image_embeds = image_embeds / _get_vector_norm(image_embeds)
-
-            sequence_output = vision_outputs.last_hidden_state
-            num_register_tokens = self.config.vision_config.num_register_tokens
-            register_tokens = sequence_output[:, 1 : 1 + num_register_tokens]
-            patch_tokens = sequence_output[:, 1 + num_register_tokens :]
 
         text_outputs = None
         text_embeds = None
@@ -875,8 +832,6 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
             logits_per_text=logits_per_text,
             text_embeds=text_embeds,
             image_embeds=image_embeds,
-            patch_tokens=patch_tokens,
-            register_tokens=register_tokens,
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )

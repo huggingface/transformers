@@ -398,18 +398,6 @@ class Tipsv2ModelTester:
         )
         self.parent.assertEqual(result.image_embeds.shape, (self.vision_model_tester.batch_size, self.hidden_size))
         self.parent.assertEqual(result.text_embeds.shape, (self.text_model_tester.batch_size, self.hidden_size))
-        self.parent.assertEqual(
-            result.patch_tokens.shape,
-            (self.vision_model_tester.batch_size, self.vision_model_tester.num_patches, self.hidden_size),
-        )
-        self.parent.assertEqual(
-            result.register_tokens.shape,
-            (
-                self.vision_model_tester.batch_size,
-                self.vision_model_tester.num_register_tokens,
-                self.hidden_size,
-            ),
-        )
 
     def prepare_config_and_inputs_for_common(self):
         config, input_ids, attention_mask, pixel_values = self.prepare_config_and_inputs()
@@ -595,8 +583,10 @@ class Tipsv2ModelIntegrationTest(unittest.TestCase):
         vision_cfg = model.config.vision_config
         _, _, height, width = inputs["pixel_values"].shape
         num_patches = (height // vision_cfg.patch_size) * (width // vision_cfg.patch_size)
+        num_register_tokens = vision_cfg.num_register_tokens
+        patch_tokens = outputs.last_hidden_state[:, 1 + num_register_tokens :]
         self.assertEqual(outputs.image_embeds.shape, torch.Size([1, vision_cfg.hidden_size]))
-        self.assertEqual(outputs.patch_tokens.shape, torch.Size([1, num_patches, vision_cfg.hidden_size]))
+        self.assertEqual(patch_tokens.shape, torch.Size([1, num_patches, vision_cfg.hidden_size]))
         self.assertEqual(outputs.text_embeds.shape, torch.Size([4, model.config.text_config.hidden_size]))
         self.assertEqual(outputs.logits_per_image.shape, torch.Size([1, 4]))
         self.assertEqual(outputs.logits_per_text.shape, torch.Size([4, 1]))
@@ -608,7 +598,7 @@ class Tipsv2ModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_PATCH_TOKENS = Expectations({("cuda", None): [0.25287, -0.01092, -0.57542, 0.09660, -0.04010]})
         expected_patch_tokens = torch.tensor(EXPECTED_PATCH_TOKENS.get_expectation(), device=torch_device)
-        torch.testing.assert_close(outputs.patch_tokens[0, 0, :5], expected_patch_tokens, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(patch_tokens[0, 0, :5], expected_patch_tokens, rtol=1e-3, atol=1e-3)
 
         EXPECTED_TEXT_EMBEDS = Expectations({("cuda", None): [0.69319, 0.03710, 0.01194, 0.02136, -0.04281]})
         expected_text_embeds = torch.tensor(EXPECTED_TEXT_EMBEDS.get_expectation(), device=torch_device)
