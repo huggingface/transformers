@@ -92,11 +92,9 @@ class VideoPrismTextConfig(PreTrainedConfig):
     max_position_embeddings: int = 64
     hidden_act: str = "relu"
     layer_norm_eps: float = 1e-6
-    # This differs from `CLIPTokenizer`'s default and from openai/videoprism
-    # See https://github.com/huggingface/transformers/pull/24773#issuecomment-1632287538
-    pad_token_id: int | None = 1
-    bos_token_id: int | None = 49406
-    eos_token_id: int | list[int] | None = 49407
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
     num_text_layers: int = 12
     attention_probs_dropout_prob: float | int = 0.0
     apply_l2norm: bool = True

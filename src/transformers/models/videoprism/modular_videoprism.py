@@ -114,6 +114,9 @@ class VideoPrismTextConfig(SiglipTextConfig):
     max_position_embeddings: int = 64
     hidden_act: str = "relu"
     layer_norm_eps: float = 1e-6
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
     attention_probs_dropout_prob: float | int = 0.0
     apply_l2norm: bool = True
     qkv_bias: bool = True
@@ -206,6 +209,7 @@ class VideoPrismProcessorKwargs(ProcessingKwargs, total=False):
         "video_kwargs": {
             "size": {"height": 288, "width": 288},
             "do_normalize": False,
+            "do_sample_frames": True,
         },
     }
 

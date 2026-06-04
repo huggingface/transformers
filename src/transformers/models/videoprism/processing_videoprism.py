@@ -33,6 +33,7 @@ class VideoPrismProcessorKwargs(ProcessingKwargs, total=False):
         "video_kwargs": {
             "size": {"height": 288, "width": 288},
             "do_normalize": False,
+            "do_sample_frames": True,
         },
     }
 

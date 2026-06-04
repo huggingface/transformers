@@ -25,16 +25,17 @@ from safetensors.torch import load_file, save_file
 
 from transformers import (
     AutoModel,
-    AutoTokenizer,
     VideoPrismConfig,
     VideoPrismTextConfig,
     VideoPrismVisionConfig,
 )
 from transformers.models.codegen.modeling_codegen import create_sinusoidal_positions
 from transformers.models.videoprism.modeling_videoprism import VideoPrismClipModel, VideoPrismVisionModel
+from transformers.models.videoprism.tokenization_videoprism import VideoPrismTokenizer
 
-
+PATH = os.path.dirname(__file__)
 torch.set_printoptions(precision=10)
+HF_USER = "mhrdyn7"
 
 # backbone refers to VideoPrismVisionModel, lvt (original name) refers to VideoPrismClipModel
 COMMON_CONFIG_PARAMS = {
@@ -382,15 +383,38 @@ def read_and_preprocess_video(  # This function is from the original repo
     return frames
 
 
-def get_tokenizer(checkpoint_name=None):
-    TEXT_QUERY_CSV = "playing drums,sitting,playing flute,playing at playground,concert"  # @param {type: "string"}
-    PROMPT_TEMPLATE = "a video of {}."
+def download_spiece_model():
+    """ Downloads the sentencepiece.model file from the GCS bucket url given in the original repo"""
+    from tensorflow.io import gfile
 
-    text_queries = TEXT_QUERY_CSV.split(",")
-    text_queries = [PROMPT_TEMPLATE.format(t) for t in text_queries]
+    spiece_url = "gs://t5-data/vocabs/cc_en.32000/sentencepiece.model"
+    spiece_path =  os.path.join(PATH, "spiece.model")
 
-    tokenizer = AutoTokenizer.from_pretrained("MHRDYN7/" + checkpoint_name)
+    if not os.path.exists(spiece_path):
+        with gfile.GFile(spiece_url, "rb") as f:
+            model_bytes = f.read()
+        
+        with open(spiece_path, "wb") as f_out:
+            f_out.write(model_bytes)
 
+    return spiece_path
+
+
+def get_tokenizer(spiece_path=None):
+    """Build VideoPrismTokenizer from c4_en SentencePiece (GCS) in VideoPrism repo."""
+    text_query_csv = "playing drums,sitting,playing flute,playing at playground,concert"
+    prompt_template = "a video of {}."
+    text_queries = [prompt_template.format(t) for t in text_query_csv.split(",")]
+
+    spiece_path = spiece_path or download_spiece_model()
+    tokenizer_kwargs = VideoPrismTokenizer.convert_to_native_format(vocab_file=spiece_path, extra_ids=100)
+    tokenizer = VideoPrismTokenizer(
+        vocab=tokenizer_kwargs["vocab"],
+        extra_ids=100,
+        _spm_precompiled_charsmap=tokenizer_kwargs.get("_spm_precompiled_charsmap"),
+    )
+    # VideoPrism does not append </s> at the end of sequences (unlike default T5).
+    tokenizer._tokenizer.post_processor = None
     return tokenizer, text_queries
 
 
@@ -413,27 +437,50 @@ def ids_to_attention_mask(input_ids: torch.Tensor, pad_token_id: int = 0) -> tor
     return (input_ids != pad_token_id).long()
 
 
+def load_model(
+        model_name,
+        local_checkpoint,
+        text_config,
+        vision_config,
+        checkpoint_path,
+        repo_id
+    ):
+    if local_checkpoint:
+        model_config = (
+            vision_config
+            if "lvt" not in model_name
+            else VideoPrismConfig(text_config=text_config, vision_config=vision_config)
+        )
+        model = (
+            VideoPrismVisionModel._from_config(model_config, attn_implementation="eager") if "lvt" not in model_name else VideoPrismClipModel._from_config(model_config, attn_implementation="eager")
+        )
+        state_dict = load_file(checkpoint_path)
+        model.load_state_dict(state_dict)
+    else:
+        model = AutoModel.from_pretrained(repo_id, attn_implementation="eager")
+        model_config = model.config
+    return model.eval(), model_config
+
 @torch.no_grad()
 def convert_videoprism_checkpoint(
     model_name="lvt_base",
     pytorch_dump_folder_path="checkpoints/",
     convert=False,
-    load_model=True,
-    from_pretrained=False,
-    from_tokenizer=False,
-    load_video=True,
+    local_checkpoint=False,
     inference=True,
     upload=False,
 ):
     checkpoint = ORIGINAL_CHECKPOINTS[model_name]
-
     if "lvt" in model_name:
         vision_config = VideoPrismVisionConfig(**COMMON_CONFIG_PARAMS[model_name]["vision_config"])
         text_config = VideoPrismTextConfig(**COMMON_CONFIG_PARAMS[model_name]["text_config"])
+        tokenizer, text_queries = get_tokenizer()
     else:
         vision_config = VideoPrismVisionConfig(**COMMON_CONFIG_PARAMS[model_name])
+        text_config = None
 
     checkpoint_name = checkpoint["new_checkpoint_name"]
+    repo_id = f"{HF_USER}/{checkpoint_name}"
     checkpoint_path = os.path.join(pytorch_dump_folder_path, f"{checkpoint_name}.safetensors")
 
     if convert:
@@ -441,26 +488,17 @@ def convert_videoprism_checkpoint(
         hf_checkpoint = convert_params(flax_checkpoint, model_name)
         save_file(hf_checkpoint, checkpoint_path, metadata={"format": "safetensors"})
 
-    if load_model:
-        if not from_pretrained:
-            model_config = (
-                vision_config
-                if "lvt" not in model_name
-                else VideoPrismConfig(text_config=text_config, vision_config=vision_config)
-            )
-            model = (
-                VideoPrismVisionModel(model_config) if "lvt" not in model_name else VideoPrismClipModel(model_config)
-            )
-
-            model.config._attn_implementation = "eager"
-            state_dict = load_file(checkpoint_path)
-            model.load_state_dict(state_dict)
-        else:
-            model = AutoModel.from_pretrained("MHRDYN7/" + checkpoint_name)  # Hard-coded username of the contributer
-            model.config._attn_implementation = "eager"
-            model_config = model.config
-
-    if load_video:
+    if inference:
+        # Load model
+        model, model_config = load_model(
+            model_name,
+            local_checkpoint,
+            text_config,
+            vision_config,
+            checkpoint_path,
+            repo_id
+        )
+        # Load video using the original preprocessor
         VIDEO_FILE_PATH = "./src/transformers/models/videoprism/water_bottle_drumming.mp4"
         NUM_FRAMES = model_config.num_frames if "lvt" not in model_name else vision_config.num_frames
         FRAME_SIZE = 288
@@ -469,28 +507,24 @@ def convert_videoprism_checkpoint(
             target_num_frames=NUM_FRAMES,
             target_frame_size=[FRAME_SIZE, FRAME_SIZE],
         )
-
         input_vid = torch.tensor(frames).unsqueeze(0).permute(0, 1, 4, 2, 3)
 
-    if inference:
-        model.eval()
         if "lvt" not in model_name:
             outputs = model(input_vid)
             logits = outputs.last_hidden_state[0, :3, :3]
-            print(logits)
             assert torch.allclose(logits, EXPECTED_OUTPUTS[model_name], atol=1e-5), (
                 "The converted model logits do not match the expected logits."
             )
             print("Inference successful and logits match expected outputs.")
 
         else:
-            if from_tokenizer:
-                tokenizer, text_queries = get_tokenizer(checkpoint_name=checkpoint_name)
-                outputs = tokenizer(text_queries, max_length=64, padding="max_length", return_tensors="pt")
-                input_ids, mask = outputs["input_ids"], outputs["attention_mask"]
-            else:
-                input_ids = pad_and_stack(SENTENCES, pad_token_id=0, max_length=64)
-                mask = ids_to_attention_mask(input_ids)
+            outputs = tokenizer(text_queries, max_length=64, padding="max_length", return_tensors="pt")
+            input_ids, mask = outputs["input_ids"], outputs["attention_mask"]
+            input_ids_manual = pad_and_stack(SENTENCES, pad_token_id=0, max_length=64)
+            mask_manual = ids_to_attention_mask(input_ids_manual)
+            assert torch.equal(input_ids, input_ids_manual), "input ids don't match"
+            assert torch.equal(mask, mask_manual), "tokenized mask does not match"
+
             outputs = model(input_vid, input_ids, mask)
             video_logits = outputs.video_embeds[0, :9]
             text_logits = outputs.text_embeds[:, :3]
@@ -503,26 +537,47 @@ def convert_videoprism_checkpoint(
             print("Inference successful and logits match expected outputs.")
 
     if upload:
-        repo_id = f"MHRDYN7/{checkpoint_name}"
+        from transformers import LlavaOnevisionVideoProcessor, VideoPrismProcessor
+        if not inference:
+            model, model_config = load_model(
+                model_name,
+                local_checkpoint,
+                text_config,
+                vision_config,
+                checkpoint_path,
+                repo_id
+            )
         model.push_to_hub(repo_id)
-        print(f"Uploaded the model to the Hugging Face hub at {repo_id}.")
+        video_processor = LlavaOnevisionVideoProcessor(
+            size={"height": 288, "width": 288},
+            do_normalize=False,
+            do_sample_frames=True,
+            num_frames=16 if "lvt" not in model_name else 8,
+        )
 
+        if "lvt" not in model_name:
+            video_processor.push_to_hub(repo_id)
+        else:
+            processor = VideoPrismProcessor(video_processor=video_processor, tokenizer=tokenizer)
+            processor.push_to_hub(repo_id)
+        print(f"Uploaded the model to the Hugging Face hub at {repo_id}.")
 
 def main():
     """
     Typical workflow
     1. Convert and check a model out of the keys of `ORIGINAL_CHECKPOINTS` dictionary
-        - Set model_name="MODEL_NAME", convert=True (saves locally), load_model=True,
-        from_pretrained=False (loads local checkpoint), load_video=True, inference=True (compares to expected outputs).
+        - Set model_name="MODEL_NAME", convert=True (saves locally),
+        local_checkpoint=True (loads local ckpt), inference=True (compares with expectation tensor).
     2. If outputs match perfectly, upload the model to hub, run the script with
         - upload=True, convert=False, inference=False.
     3. If a checkpoint from hub needs to be teseted set
-        - convert=False, from_pretrained=True, load_video=True, inference=True
+        - convert=False, local_checkpoint=False, inference=True
+    Set HF_USER variable accordingly, otherwise the models will be loaded from the contributer's repo by default.
     """
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model_name",
-        default="lvt_large",
+        default="lvt_large", #backbone_base, backbone_large, lvt_base, lvt_large
         type=str,
         choices=ORIGINAL_CHECKPOINTS.keys(),
         help="Name of the model you'd like to convert.",
@@ -535,33 +590,15 @@ def main():
     )
     parser.add_argument(
         "--convert",
-        default=False,
+        default=True,
         type=bool,
         help="Whether to convert the original Flax checkpoint to Hugging Face format.",
     )
     parser.add_argument(
-        "--load_model",
+        "--local_checkpoint",
         default=True,
         type=bool,
-        help="Whether to load the converted model for inference.",
-    )
-    parser.add_argument(
-        "--from_pretrained",
-        default=False,
-        type=bool,
-        help="Whether to load the model weights from the Hugging Face hub if load_model=True. Loads local checkpoint (not in cache dir) if False.",
-    )
-    parser.add_argument(
-        "--from_tokenizer",
-        default=True,
-        type=bool,
-        help="Whether to use AutoTokenizer from the Hugging Face hub. Uses custom input_ids if False.",
-    )
-    parser.add_argument(
-        "--load_video",
-        default=True,
-        type=bool,
-        help="Whether to load and preprocess the sample video for inference.",
+        help="Whether to load the local model weights. Loads from `HF_USER`'s repo in hub if False.",
     )
     parser.add_argument(
         "--inference",
@@ -571,25 +608,18 @@ def main():
     )
     parser.add_argument(
         "--upload",
-        default=False,
+        default=True,
         type=bool,
         help="Whether to upload the converted model to the Hugging Face hub.",
     )
-
     args = parser.parse_args()
-
     convert_videoprism_checkpoint(
         model_name=args.model_name,
         pytorch_dump_folder_path=args.pytorch_dump_folder_path,
         convert=args.convert,
-        load_model=args.load_model,
-        from_pretrained=args.from_pretrained,
-        from_tokenizer=args.from_tokenizer,
-        load_video=args.load_video,
+        local_checkpoint=args.local_checkpoint,
         inference=args.inference,
         upload=args.upload,
     )
-
-
 if __name__ == "__main__":
     main()

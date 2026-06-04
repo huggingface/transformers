@@ -22,14 +22,14 @@ from huggingface_hub import HfApi
 from transformers import VideoPrismConfig, VideoPrismTextConfig, VideoPrismVisionConfig
 from transformers.testing_utils import (
     Expectations,
-    require_sentencepiece,
+    require_tokenizers,
     require_torch,
     require_vision,
     slow,
     torch_device,
 )
 from transformers.utils import (
-    is_sentencepiece_available,
+    is_tokenizers_available,
     is_torch_available,
     is_vision_available,
 )
@@ -56,7 +56,7 @@ if is_torch_available():
     )
 if is_vision_available():
     from transformers import LlavaOnevisionVideoProcessor
-if is_sentencepiece_available():
+if is_tokenizers_available():
     from transformers import VideoPrismTokenizer
 torch.set_printoptions(precision=10)
 
@@ -690,7 +690,7 @@ def prepare_texts():
 
 @require_vision
 @require_torch
-@require_sentencepiece
+@require_tokenizers
 class VideoPrismModelIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
