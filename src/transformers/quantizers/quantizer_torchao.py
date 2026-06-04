@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 import re
 from typing import TYPE_CHECKING
 
@@ -62,44 +63,12 @@ class TorchAoHfQuantizer(HfQuantizer):
 
     requires_calibration = False
     quantization_config: "TorchAoConfig"
-    _torchao_compat_patched = False
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
 
         size_digit = _fuzzy_match_size(type(self.quantization_config.quant_type).__name__)
         self.quantized_param_size = 0.5 if size_digit == "4" else 1
-
-        # Apply compatibility patches globally for torchao subclasses on load
-        self._apply_torchao_compat_patches()
-
-    @classmethod
-    def _apply_torchao_compat_patches(cls):
-        """Apply one-time monkey-patches for TorchAO tensor subclass compatibility.
-
-        TorchAO custom tensor subclasses (e.g. Float8Tensor) do not implement
-        `aten.normal_`. Since transformers calls `init.normal_` when initializing
-        missing parameters (e.g. tied target keys removed from checkpoint),
-        we override `torch.Tensor.normal_` to be a no-op for these subclasses.
-        """
-        # TODO: remove once torchao implements aten.normal_ for tensor subclasses
-        if cls._torchao_compat_patched:
-            return
-        try:
-            import torch
-            from torchao.utils import TorchAOBaseTensor
-
-            _orig_normal = torch.Tensor.normal_
-
-            def _safe_normal(self, mean=0, std=1, *, generator=None):
-                if isinstance(self, TorchAOBaseTensor):
-                    return self
-                return _orig_normal(self, mean, std, generator=generator)
-
-            torch.Tensor.normal_ = _safe_normal
-            cls._torchao_compat_patched = True
-        except ImportError:
-            pass
 
     def validate_environment(self, *args, **kwargs):
         if not is_torchao_available():
@@ -205,20 +174,33 @@ class TorchAoHfQuantizer(HfQuantizer):
         return TorchAoQuantize(self)
 
     def _discover_quantized_param_names(self) -> set[str]:
-        """Extract unique parameter names from torchao safetensors metadata.
-        
+        """Extract unique parameter names of quantized params from torchao safetensors metadata.
+
         The metadata keys are the original fully-qualified parameter names,
         e.g. "model.layers.0.self_attn.q_proj.weight" or
             "model.decoder.layers.0.experts.gate_up_proj".
+        Only entries representing tensor subclasses (not plain Tensors) are included.
         """
         if not hasattr(self, "metadata") or not self.metadata:
             return {"weight"}  # conservative fallback
-        
+
+        from torchao.prototype.safetensors.safetensors_utils import is_metadata_torchao
+
+        if not is_metadata_torchao(self.metadata):
+            raise ValueError("Invalid torchao safetensors metadata")
+
         param_names = set()
-        for meta_key in self.metadata:
-            if "." in meta_key:
-                param_names.add(meta_key.rsplit(".", 1)[-1])
-        
+        for meta_key, meta_value in self.metadata.items():
+            if "." not in meta_key:
+                continue
+            try:
+                meta = json.loads(meta_value)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if meta.get("_type") == "Tensor":
+                continue  # skip non-quantized params
+            param_names.add(meta_key.rsplit(".", 1)[-1])
+
         return param_names or {"weight"}
 
     def get_weight_conversions(self):
