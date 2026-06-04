@@ -64,7 +64,7 @@ class Tipsv2VisionConfig(BackboneConfigMixin, PreTrainedConfig):
     hidden_size: int = 768
     num_hidden_layers: int = 12
     num_attention_heads: int = 12
-    mlp_ratio: int = 4
+    mlp_ratio: int | float = 4  # float required for so400m14 checkpoint
     hidden_act: str = "gelu"
     hidden_dropout_prob: float | int = 0.0
     attention_probs_dropout_prob: float | int = 0.0
@@ -225,6 +225,10 @@ class Tipsv2Config(PreTrainedConfig):
                 vision_kwargs.update(VISION_FUNCTION_TO_KWARGS.get(kwargs.pop("vision_fn"), {}))
 
             text_kwargs = {new: kwargs.pop(old) for old, new in FLAT_TO_TEXT_CONFIG_KEYS.items() if old in kwargs}
+
+            # The vision MLP intermediate size equals text_mlp_dim; derive mlp_ratio for non-integer cases (e.g. so400m).
+            if "intermediate_size" in text_kwargs and "hidden_size" in vision_kwargs:
+                vision_kwargs.setdefault("mlp_ratio", text_kwargs["intermediate_size"] / vision_kwargs["hidden_size"])
 
             for key, value in vision_kwargs.items():
                 if key in vision_config_kwargs and value != vision_config_kwargs[key]:
