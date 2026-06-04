@@ -96,7 +96,7 @@ from .monkey_patching import apply_patches, patch_output_recorders
 from .pytorch_utils import id_tensor_storage
 from .quantizers import HfQuantizer
 from .quantizers.auto import get_hf_quantizer
-from .quantizers.quantizers_utils import get_module_from_name
+from .quantizers.quantizers_utils import get_module_from_name, maybe_quantize_on_init
 from .safetensors_conversion import auto_conversion
 from .utils import (
     ADAPTER_SAFE_WEIGHTS_NAME,
@@ -1346,6 +1346,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.config = config
         self.name_or_path = config.name_or_path
 
+        # Claim the "construction root" for on-the-fly quantization (see `maybe_quantize_on_init`). The outermost
+        # model's `__init__` runs before its submodules', so the first `PreTrainedModel` built in the tree claims the
+        # root; nested submodels (which share the same `config` object) see the marker already set and won't re-claim it.
+        if (
+            getattr(config, "quantization_config", None) is not None
+            and getattr(config, "_quantization_init_root", None) is None
+        ):
+            config._quantization_init_root = id(self)
+
         # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
         self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
@@ -1439,6 +1448,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Maybe initialize the weights and tie the keys
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
+
+        # If the config carries a `quantization_config`, quantize the freshly-initialized model in-place. This is a
+        # no-op unless `self` is the construction root (see `__init__`) and the model holds real (non-meta) weights,
+        # so `from_pretrained` - which builds on meta and runs its own quantization - is left untouched.
+        maybe_quantize_on_init(self)
 
     @property
     def tp_plan(self) -> dict[str, str]:
