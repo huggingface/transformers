@@ -67,16 +67,6 @@ class DeepGEMM:
 
 
 @functools.cache
-def is_deepgemm_available() -> bool:
-    """True iff `_load_deepgemm_kernel()` can succeed on this machine. Cached."""
-    try:
-        _load_deepgemm_kernel()
-        return True
-    except ImportError:
-        return False
-
-
-@functools.cache
 def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
     """Load DeepGEMM once; raise `ImportError` if env or any required symbol is missing.
 

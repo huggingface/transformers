@@ -30,7 +30,6 @@ from .deepgemm import (
     deepgemm_fp8_fp4_experts_forward,
     deepgemm_fp8_fp4_linear,
     deepgemm_fp8_fp4_megamoe_experts_forward,
-    is_deepgemm_available,
 )
 from .hub_kernels import lazy_load_kernel
 from .moe import ExpertsInterface, use_experts_implementation
@@ -227,7 +226,7 @@ def fp8_linear(
         or (block_size is not None and block_size[0] == block_size[1] == 128)
     )
 
-    if is_deepgemm_available() and deepgemm_compatible:
+    if deepgemm_compatible:
         try:
             return deepgemm_fp8_fp4_linear(
                 input,
@@ -242,8 +241,9 @@ def fp8_linear(
             # Forward the original reason so the user knows whether DeepGEMM is unavailable
             # (env/build issue) or refused this specific input (e.g. multi-device on SM100).
             logger.warning_once(f"DeepGEMM unavailable for this call, falling back to Triton. Reason: {e}")
+            deepgemm_required = False  # avoid checking compatibility again since we know the kernel is unavailable
 
-    if is_deepgemm_available() and deepgemm_required:
+    if deepgemm_required:
         if activation_scale is not None:
             raise RuntimeError(
                 "Static (per-tensor) activation quantization is not supported with FP4 weights — "
