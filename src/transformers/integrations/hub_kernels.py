@@ -17,6 +17,7 @@ import re
 import sys
 from collections.abc import Callable
 from contextlib import contextmanager
+from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING
 
@@ -542,31 +543,9 @@ def make_kernel_init_parent_class(
     return patched_cls
 
 
-def _try_load_kernel_class(repo_str: str, use_local: bool = False) -> type | None:
-    if ":" not in repo_str:
-        return None
-    repo_id, _, layer_name = repo_str.rpartition(":")
-    if not repo_id or not layer_name:
-        return None
-    try:
-        if use_local:
-            from pathlib import Path
-
-            package_name = repo_id.rstrip("/").split("/")[-1]
-            repo = LocalLayerRepository(
-                repo_path=Path(repo_id),
-                package_name=package_name,
-                layer_name=layer_name,
-            )
-        else:
-            repo = LayerRepository(repo_id=repo_id, layer_name=layer_name)
-        return repo.load()
-    except Exception:
-        return None
-
-
-def register_kernel_replacements(
+def register_kernel_replacements_and_fusions(
     cls: "type[PreTrainedModel]",
+    config: "PretrainedConfig",
     kernel_config: "KernelConfig",
 ) -> None:
     if not hasattr(cls, "config_class") or not hasattr(cls.config_class, "model_type"):
@@ -577,128 +556,85 @@ def register_kernel_replacements(
     new_mapping: dict = {}
 
     for layer_name, hub_repo in kernel_config.kernel_mapping.items():
-        # Fusion case: handled by register_kernel_fusions, leave it alone.
-        if isinstance(layer_name, tuple):
-            new_mapping[layer_name] = hub_repo
-            continue
-
         if isinstance(hub_repo, dict):
             if len(hub_repo.values()) != 1:
                 raise ValueError(
                     f"Expected exactly one kernel repo regardless of device/mode specificity, got {hub_repo}"
                 )
             repo_str = next(iter(hub_repo.values()))
-        else:
+            print("Here", repo_str)
+        elif isinstance(hub_repo, str):
             repo_str = hub_repo
-
-        kernel_cls = _try_load_kernel_class(repo_str, use_local=kernel_config.use_local_kernel)
-
-        if kernel_cls is None:
-            new_mapping[layer_name] = hub_repo
-            continue
-
-        # Look for a companion layout class named "{kernel_cls.__name__}Layout".
-        # If found, it handles __init__ (weight layout); kernel_cls handles forward.
-        kernel_mod = sys.modules.get(kernel_cls.__module__)
-        layout_cls = getattr(kernel_mod, f"{kernel_cls.__name__}Layout", None) if kernel_mod else None
-        if layout_cls is None:
-            # No layout class: stateless kernel, leave for kernels.kernelize.
-            new_mapping[layer_name] = hub_repo
-            continue
-
-        layout_cls.kernel_layer_name = kernel_cls.__name__
-        patch_mapping[layer_name] = layout_cls
-
-        # Keep the original repo string so kernelize can replace the layout's forward.
-        new_mapping[kernel_cls.__name__] = hub_repo
-
-        if hasattr(layout_cls, "conversion_mapping"):
-            existing = get_checkpoint_conversion_mapping(model_type)
-            transforms = list(layout_cls.conversion_mapping)
-            if existing is not None:
-                transforms = existing + transforms
-            register_checkpoint_conversion_mapping(model_type, transforms, overwrite=True)
-
-    if patch_mapping:
-        register_patch_mapping(patch_mapping, overwrite=True)
-
-    kernel_config.kernel_mapping = new_mapping
-
-
-def register_kernel_fusions(
-    cls: "type[PreTrainedModel]",
-    config: "PretrainedConfig",
-    kernel_config: "KernelConfig",
-) -> None:
-    if not hasattr(cls, "config_class") or not hasattr(cls.config_class, "model_type"):
-        raise ValueError(f"Model {cls.__name__} has no config_class or model_type.")
-    model_type = cls.config_class.model_type
-
-    new_mapping: dict = {}
-    for layer_name, hub_repo in kernel_config.kernel_mapping.items():
-        if not isinstance(layer_name, tuple) or not all(
-            isinstance(item, tuple) and len(item) == 2 for item in layer_name
-        ):
-            new_mapping[layer_name] = hub_repo
-            continue
-
-        glob_patterns = [item[1] for item in layer_name]
-        child_names = [p.rsplit(".", 1)[1] for p in glob_patterns]
-
-        # 1. Resolve the kernel class — accept a direct class reference or a repo string.
-        if isinstance(hub_repo, dict):
-            if len(hub_repo.values()) != 1:
-                raise ValueError(
-                    f"Expected exactly one kernel repo regardless of device/mode specificity, got {hub_repo}"
-                )
-            repo_str = next(iter(hub_repo.values()))
+            print("There", repo_str)
         else:
-            repo_str = hub_repo
+            raise ValueError(f"Invalid hub repo {hub_repo!r} for layer {layer_name!r}")
 
-        kernel_cls = _try_load_kernel_class(repo_str, use_local=kernel_config.use_local_kernel)
+        repo_id, _, layer_name_in_repo = repo_str.partition(":")
+        if not repo_id or not layer_name_in_repo:
+            raise ValueError(f"Invalid kernel repo string {repo_str!r} for layer {layer_name!r}")
+
+        if kernel_config.use_local_kernel:
+            package_name = repo_id.rstrip("/").split("/")[-1]
+            repo = LocalLayerRepository(
+                repo_path=Path(repo_id),
+                package_name=package_name,
+                layer_name=layer_name_in_repo,
+            )
+        else:
+            repo = LayerRepository(repo_id=repo_id, layer_name=layer_name_in_repo)
+
+        kernel_cls = repo.load()
 
         if kernel_cls is None:
             raise ValueError(f"Could not load kernel class from hub_repo={hub_repo!r}")
 
         kernel_mod = sys.modules.get(kernel_cls.__module__)
         layout_cls = getattr(kernel_mod, f"{kernel_cls.__name__}Layout", None) if kernel_mod else None
-        if layout_cls is None:
-            raise ValueError(
-                f"Fused kernel {kernel_cls.__name__!r} requires a companion layout class "
-                f"named '{kernel_cls.__name__}Layout' in the same module. "
-                f"Define it with __init__(self, {', '.join(child_names)}) to set up the "
-                f"fused parameter layout."
-            )
 
-        layout_cls.kernel_layer_name = kernel_cls.__name__
-
-        # 2. Meta-device scan — find parent classes that own all target children.
-        with torch.device("meta"):
-            meta_model = cls(config)
-
-        seen: set[type] = set()
-        patch_mapping: dict[str, type] = {}
-        for module in meta_model.modules():
-            module_cls = type(module)
-            if module_cls in seen:
+        # Case 1: no fusion.
+        if isinstance(layer_name, str):
+            # No layout class: stateless kernel, leave for kernels.kernelize.
+            if layout_cls is None:
+                new_mapping[layer_name] = repo_str
                 continue
-            if not all(hasattr(module, name) for name in child_names):
-                continue
-            seen.add(module_cls)
-            patch_mapping[module_cls.__name__] = make_kernel_init_parent_class(module_cls, child_names, layout_cls)
 
-        if not patch_mapping:
-            logger.warning(
-                f"No parent modules found containing children {child_names} for kernel fusion. "
-                f"Skipping tuple key {layer_name!r}."
-            )
-            new_mapping[layer_name] = hub_repo
-            continue
+            # Register the layout class as a monkey patch for the parent module containing the target layer.
+            layout_cls.kernel_layer_name = kernel_cls.__name__
+            patch_mapping[layer_name] = layout_cls
 
-        # 3. Register class-level monkey patches.
+            # Keep the original repo string so kernelize can replace the layout's forward.
+            new_mapping[kernel_cls.__name__] = repo_str
+
+        # Case 2: fusion.
+        elif isinstance(layer_name, tuple):
+            glob_patterns = [item[1] for item in layer_name]
+            child_names = [p.rsplit(".", 1)[1] for p in glob_patterns]
+
+            if layout_cls is None:
+                raise ValueError(
+                    f"Fused kernel {kernel_cls.__name__!r} requires a companion layout class "
+                    f"named '{kernel_cls.__name__}Layout' in the same module. "
+                    f"Define it with __init__(self, {', '.join(child_names)}) to set up the "
+                    f"fused parameter layout."
+                )
+
+            layout_cls.kernel_layer_name = kernel_cls.__name__
+
+            with torch.device("meta"):
+                meta_model = cls(config)
+
+            seen: set[type] = set()
+            for module in meta_model.modules():
+                module_cls = type(module)
+                if module_cls in seen:
+                    continue
+                if not all(hasattr(module, name) for name in child_names):
+                    continue
+                seen.add(module_cls)
+                patch_mapping[module_cls.__name__] = make_kernel_init_parent_class(module_cls, child_names, layout_cls)
+
         register_patch_mapping(patch_mapping, overwrite=True)
 
-        # 4. Register the layout's conversion_mapping if it declares one.
         if hasattr(layout_cls, "conversion_mapping"):
             existing = get_checkpoint_conversion_mapping(model_type)
             transforms = list(layout_cls.conversion_mapping)
@@ -706,9 +642,7 @@ def register_kernel_fusions(
                 transforms = existing + transforms
             register_checkpoint_conversion_mapping(model_type, transforms, overwrite=True)
 
-        # 5. Keep the original repo string: kernelize loads the forward-only kernel_cls
-        #    and replaces the layout instances' forward via kernel_layer_name.
-        new_mapping[kernel_cls.__name__] = hub_repo
+        new_mapping[kernel_cls.__name__] = repo_str
 
     kernel_config.kernel_mapping = new_mapping
 
@@ -716,11 +650,10 @@ def register_kernel_fusions(
 __all__ = [
     "LayerRepository",
     "get_kernel",
-    "register_kernel_fusions",
-    "register_kernel_replacements",
     "lazy_load_kernel",
     "register_kernel_mapping",
     "register_kernel_mapping_transformers",
+    "register_kernel_replacements_and_fusions",
     "replace_kernel_forward_from_hub",
     "use_kernel_forward_from_hub",
     "use_kernel_func_from_hub",
