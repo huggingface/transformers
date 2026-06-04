@@ -507,7 +507,10 @@ def main():
     )
     parser.add_argument("--list", action="store_true", help="List available checkers and exit.")
     parser.add_argument("--no-cache", action="store_true", help="Ignore the disk cache and re-run every checker.")
-    parser.add_argument("--parallel", action="store_true", help="Run checkers in parallel (one process per checker).")
+    parser.add_argument(
+        "--num-workers", type=int, default=1, metavar="N",
+        help="Number of parallel workers. 1 = sequential (default). 0 = one worker per checker.",
+    )
 
     args = parser.parse_args()
 
@@ -558,7 +561,7 @@ def main():
     total_start = time.perf_counter()
 
     # Parallel execution for check mode with multiple checkers; sequential for --fix.
-    use_parallel = args.parallel and not args.fix and len(names) > 1
+    use_parallel = not args.fix and args.num_workers != 1 and len(names) > 1
 
     # --- Cache pass (always sequential, fast) ---
     to_run = []
@@ -576,7 +579,8 @@ def main():
     if use_parallel and to_run:
         # --- Parallel execution ---
         results = {}
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(to_run)) as executor:
+        max_workers = len(to_run) if args.num_workers == 0 else args.num_workers
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_name = {
                 executor.submit(_run_checker_timed, name, args.fix): name
                 for name in to_run
