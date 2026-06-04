@@ -279,7 +279,6 @@ class ParakeetTDTGenerationMixin(ParakeetRNNTGenerationMixin):
         self._step_durations = []
         self._encoder_finished = None
 
-        # Bypass ParakeetRNNTGenerationMixin.generate (it tracks per-frame symbol counts we never use).
         outputs = GenerationMixin.generate(self, inputs=inputs, generation_config=generation_config, **kwargs)
         durations = torch.stack(self._step_durations, dim=1)  # (batch, steps)
         # Prepend a zero duration for the decoder_start_token_id that generate() prepends to sequences
