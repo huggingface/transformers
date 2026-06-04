@@ -143,7 +143,7 @@ To fine-tune the model, you must preprocess the data to match the format the mod
 4. **Converts** bounding boxes from `[x, y, w, h]` to normalized `[cx, cy, w, h]`
 5. **Pads** images to a uniform size and creates a `pixel_mask`
 
-Our transform reconstructs the COCO-style annotation dicts that the image processor expects from the dataset's `objects` column.
+The transform reconstructs the COCO-style annotation dicts that the image processor expects from the dataset's `objects` column.
 
 We use [`~datasets.Dataset.with_transform`] to apply preprocessing lazily (on-the-fly when samples are loaded), which avoids storing the entire processed dataset in memory.
 
