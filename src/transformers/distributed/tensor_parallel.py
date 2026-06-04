@@ -351,6 +351,31 @@ class PrepareModuleInput(TensorParallelLayer):
 # =============================================================================
 
 
+def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tensor) -> torch.Tensor:
+    """Stitch a local grad back onto the original DTensor parameter.
+
+    Used when the forward swap detaches the local leaf (``_StridedShard`` params) because
+    DTensor backward redistribute does not support that placement as a source.
+    """
+    tensor_meta = original_param._spec.tensor_meta
+    detached_grad = local_grad.detach()
+    with torch.no_grad():
+        if original_param.grad is None:
+            original_param.grad = DTensor.from_local(
+                detached_grad,
+                original_param.device_mesh,
+                original_param.placements,
+                run_check=False,
+                shape=tensor_meta.shape,
+                stride=tensor_meta.stride,
+            )
+        elif isinstance(original_param.grad, DTensor):
+            original_param.grad._local_tensor.add_(detached_grad)
+        else:
+            original_param.grad.add_(detached_grad)
+    return local_grad
+
+
 class PackedColwiseParallel(TensorParallelLayer):
     """Column-wise parallel style for fused linear weights packed along the output dimension."""
 
@@ -456,30 +481,6 @@ class MoEParamShard(TensorParallelLayer):
 
 
 if is_torch_available() and is_torch_greater_or_equal("2.5"):
-
-    def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tensor) -> torch.Tensor:
-        """Stitch a local grad back onto the original DTensor parameter.
-
-        Used when the forward swap detaches the local leaf (``_StridedShard`` params) because
-        DTensor backward redistribute does not support that placement as a source.
-        """
-        tensor_meta = original_param._spec.tensor_meta
-        detached_grad = local_grad.detach()
-        with torch.no_grad():
-            if original_param.grad is None:
-                original_param.grad = DTensor.from_local(
-                    detached_grad,
-                    original_param.device_mesh,
-                    original_param.placements,
-                    run_check=False,
-                    shape=tensor_meta.shape,
-                    stride=tensor_meta.stride,
-                )
-            elif isinstance(original_param.grad, DTensor):
-                original_param.grad._local_tensor.add_(detached_grad)
-            else:
-                original_param.grad.add_(detached_grad)
-        return local_grad
 
     class _AllReduceBackward(torch.autograd.Function):
         """Identity forward, allreduce-sum backward.
