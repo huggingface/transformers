@@ -75,7 +75,7 @@ class Xcodec2Config(PreTrainedConfig):
     quantization_dim: int = 2048
     quantization_levels: list[int] | tuple[int, ...] = (4, 4, 4, 4, 4, 4, 4, 4)
     max_position_embeddings: int = 4096
-    rope_parameters: dict | None = None
+    rope_parameters: RopeParameters| dict | None = None
 
     def __post_init__(self, **kwargs):
         if isinstance(self.semantic_model_config, dict):
