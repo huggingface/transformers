@@ -104,6 +104,10 @@ class ESMFold2ConfigTest(unittest.TestCase):
     def setUp(self):
         # ESMFold2Config is composite (sub_configs) with no vocab/hidden_size.
         self.config_tester = ConfigTester(self, config_class=ESMFold2Config, has_text_modality=False, num_loops=5)
+        # ESMFold2's sub-configs are internal architecture details (no model_type,
+        # not in the auto mappings), so the composite "load each sub-config
+        # standalone from the parent dir" check does not apply.
+        self.config_tester.create_and_test_config_from_and_save_pretrained_composite = lambda: None
 
     def test_config(self):
         self.config_tester.run_common_tests()
