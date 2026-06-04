@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from ..utils import is_compressed_tensors_available, is_torch_available, is_torch_xpu_available, logging
+from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -51,10 +51,8 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     quantization_config: CompressedTensorsConfig
 
     def __init__(self, quantization_config: CompressedTensorsConfig, **kwargs):
-        # For FP8 with GPU/XPU, we don't require calibration (online quantization is supported)
-        if _is_fp8_config(quantization_config) and (
-            is_torch_available() and (torch.cuda.is_available() or is_torch_xpu_available())
-        ):
+        # For FP8, we don't require calibration (online quantization is supported)
+        if _is_fp8_config(quantization_config):
             self.requires_calibration = False
 
         super().__init__(quantization_config, **kwargs)
@@ -69,13 +67,14 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         self.run_compressed = quantization_config.run_compressed
         self.quantization_config = quantization_config
 
-        # Detect FP8 and decide whether to use FP8 kernel path
-        self._use_fp8_kernel = False
+        # Detect FP8
+        self.is_fp8 = False
         self._fp8_dequantize = False
         self._activation_scheme = "dynamic"
         self._modules_to_not_convert_ct = []
 
         if _is_fp8_config(quantization_config):
+            self.is_fp8 = True
             ct_qconfig = quantization_config.quantization_config
             if ct_qconfig and ct_qconfig.ignore:
                 self._modules_to_not_convert_ct = list(ct_qconfig.ignore)
@@ -87,16 +86,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                         self._activation_scheme = "dynamic" if act.dynamic else "static"
                     break
 
-            if torch.cuda.is_available() or is_torch_xpu_available():
-                self._use_fp8_kernel = True
-                self.requires_calibration = False
-                logger.info("Compressed-tensors FP8 detected — using FP8 kernel path for acceleration.")
-            else:
-                logger.info(
-                    "Compressed-tensors FP8 detected but no GPU/XPU found. "
-                    "Falling back to default compressed-tensors path."
-                )
-
     def validate_environment(self, *args, **kwargs):
         if not is_compressed_tensors_available():
             raise ImportError(
@@ -105,12 +94,10 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             )
 
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if not self._use_fp8_kernel and dtype != torch.float16:
-            logger.info("We suggest you to set `dtype=torch.float16` for better efficiency with compressed_tensors.")
         return dtype
 
     def param_needs_quantization(self, model, param_name: str, **kwargs) -> bool:
-        if not self._use_fp8_kernel:
+        if not self.is_fp8:
             return False
         from ..integrations.compressed_tensors_fp8 import CompressedTensorsFP8Linear
 
@@ -122,12 +109,12 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         return False
 
     def param_element_size(self, model, param_name: str, param: "torch.Tensor") -> float:
-        if self._use_fp8_kernel and self.param_needs_quantization(model, param_name):
+        if self.is_fp8 and self.param_needs_quantization(model, param_name):
             return 1  # 8-bit
         return super().param_element_size(model, param_name, param)
 
     def _process_model_before_weight_loading(self, model, **kwargs):
-        if self._use_fp8_kernel:
+        if self.is_fp8:
             self._process_model_before_weight_loading_fp8(model, **kwargs)
         else:
             self._process_model_before_weight_loading_default(model, **kwargs)
@@ -159,7 +146,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
-        if self._use_fp8_kernel:
+        if self.is_fp8:
             return
 
         if self.quantization_config.is_quantization_compressed and not self.run_compressed:
@@ -182,7 +169,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self):
-        if self._use_fp8_kernel:
+        if self.is_fp8:
             return False
         return True
 
@@ -192,7 +179,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     def is_qat_trainable(self) -> bool:
         """Loaded Models can carry out quantization aware training"""
-        if self._use_fp8_kernel:
+        if self.is_fp8:
             return False
         # models need to be decompressed carry out qat
         return not self.run_compressed or not self.quantization_config.is_quantization_compressed
@@ -202,14 +189,14 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         return True
 
     def get_quantize_ops(self):
-        if not self._use_fp8_kernel or self.pre_quantized:
+        if not self.is_fp8 or self.pre_quantized:
             return None
         from ..integrations.compressed_tensors_fp8 import CompressedTensorsFP8PerRowQuantize
 
         return CompressedTensorsFP8PerRowQuantize(self)
 
     def get_weight_conversions(self):
-        if not self._use_fp8_kernel:
+        if not self.is_fp8:
             return []
 
         from ..core_model_loading import WeightConverter
