@@ -864,6 +864,33 @@ class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
         DynamicLayer.reorder_cache(self, beam_idx)
 
 
+class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, DynamicSlidingWindowLayer):
+    # The dynamic sliding attention part makes it non-compileable
+    is_compileable = False
+
+    def __init__(self, config: PreTrainedConfig | None = None):
+        DynamicSlidingWindowLayer.__init__(self, config)
+        LinearAttentionLayer.__init__(self)
+
+    def lazy_initialization(self, *args, **kwargs) -> None:
+        # When the Attention cache is used with `update`, `lazy_initialization` is called with 2 positional args
+        if len(args) == 2 and len(kwargs) == 0:
+            DynamicSlidingWindowLayer.lazy_initialization(self, *args)
+        # Otherwise, for the LinearAttention cache, when it's called in `update_conv_state` or `update_recurrent_state`,
+        # it's always called with 1 single kwarg (cause it needs to know if it's for the conv or ssm states)
+        if len(args) == 0 and len(kwargs) == 1:
+            LinearAttentionLayer.lazy_initialization(self, **kwargs)
+
+    def reset(self) -> None:
+        LinearAttentionLayer.reset(self)
+        DynamicSlidingWindowLayer.reset(self)
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        LinearAttentionLayer.reorder_cache(self, beam_idx)
+        DynamicSlidingWindowLayer.reorder_cache(self, beam_idx)
+
+
 # Pre-register the standard layer types (some classes are shared between multiple types,
 # e.g. ``DynamicSlidingWindowLayer`` covers both ``"sliding_attention"`` and
 # ``"chunked_attention"`` — those need an explicit map entry rather than the
@@ -883,6 +910,7 @@ LAYER_TYPE_CACHE_MAPPING.update(
         "moe": LinearAttentionLayer,
         # Hybrid layers (e.g. zamba / zamba2) carry both a linear-attention state and a dynamic-attention state.
         "hybrid": LinearAttentionAndFullAttentionLayer,
+        "hybrid_sliding": LinearAttentionAndSlidingWindowAttentionLayer,
     }
 )
 

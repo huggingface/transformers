@@ -665,6 +665,10 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("youtu", "YoutuConfig"),
         ("zamba", "ZambaConfig"),
         ("zamba2", "Zamba2Config"),
+        ("zaya", "ZayaConfig"),
+        ("zaya1_vl", "Zaya1VLConfig"),
+        ("zaya1_vl_text", "Zaya1VLTextConfig"),
+        ("zaya1_vl_vision", "Zaya1VLVisionConfig"),
         ("zoedepth", "ZoeDepthConfig"),
     ]
 )
@@ -889,6 +893,8 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("xclip_vision_model", "x_clip"),
         ("xlm-roberta", "xlm_roberta"),
         ("xlm-roberta-xl", "xlm_roberta_xl"),
+        ("zaya1_vl_text", "zaya1_vl"),
+        ("zaya1_vl_vision", "zaya1_vl"),
     ]
 )
 

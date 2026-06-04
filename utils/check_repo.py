@@ -89,6 +89,7 @@ PRIVATE_MODELS = [
     "Qwen2_5_VisionTransformerPretrainedModel",
     "Qwen3VLVisionModel",
     "Qwen3VLMoeVisionModel",
+    "Zaya1VLVisionModel",
     "Qwen3_5VisionModel",
     "Qwen3_5MoeVisionModel",
     "SwitchTransformersStack",
@@ -258,6 +259,7 @@ IGNORE_NON_TESTED = (
         "GlmOcrTextModel",  # Building part of bigger (tested) model
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
+        "Zaya1VLTextModel",  # Building part of bigger (tested) model
         "MiniCPMV4_6Model",  # Building part of bigger (tested) model. Tested implicitly through MiniCPMV4_6ForConditionalGeneration.
         "MiniCPMV4_6ForConditionalGeneration",  # Tested in MiniCPMV4_6ModelTest via VLMModelTest; check_repo doesn't detect VLMModelTest.conditional_generation_class.
         "InternVLVisionModel",  # Building part of bigger (tested) model
