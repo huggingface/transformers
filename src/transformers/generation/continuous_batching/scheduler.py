@@ -15,7 +15,6 @@ import threading
 from abc import ABC, abstractmethod
 from collections import deque
 
-from ...utils.metrics import attach_tracer, traced
 from .cache import PagedAttentionCache
 from .requests import FutureRequestState, RequestState, RequestStatus, logger
 
@@ -45,7 +44,6 @@ class Scheduler(ABC):
         self._requests_to_fork: list[RequestState] = []
         self.block_new_requests = False
 
-    @traced
     def add_waiting_request(self, state: RequestState):
         """Adds a request to the waiting list."""
         self.waiting_requests[state.request_id] = state
@@ -62,12 +60,10 @@ class Scheduler(ABC):
         Returns the list of scheduled requests in their "FutureRequestState" form, a boolean indicating if the decode
         fast path can be used, the total number of query tokens and the maximum number of kv tokens read."""
 
-    @traced
     def has_pending_requests(self) -> bool:
         """Checks if there are requests ready to be processed."""
         return bool(len(self.active_requests) or len(self.waiting_requests))
 
-    @traced
     def finish_request(self, request_id: str) -> None:
         """Completes processing of a request and frees its allocated cache blocks. This method is called
         when a request has finished generation or encountered an error.
@@ -75,47 +71,56 @@ class Scheduler(ABC):
         self.cache.free_blocks(request_id)
         self.active_requests.pop(request_id, None)
 
-    @traced
+    def pop_request_to_evict(self) -> tuple[str, RequestState]:
+        """Remove and return an active request chosen as the eviction victim for cache-pressure offload or soft reset.
+        Picks the newest active request when `block_new_requests` is set, else the oldest."""
+        if self.block_new_requests:
+            return self.active_requests.popitem()
+        request_id = next(iter(self.active_requests))
+        return request_id, self.active_requests.pop(request_id)
+
     def get_active_request_static_outputs(self, request_id: str) -> list[int]:
         """Gets generated tokens for an active request."""
         if request_id in self.active_requests:
             return self.active_requests[request_id].generated_tokens
         return []
 
-    @traced
     def set_request_cancellation(self, request_id: str):
         """Marks a request for cancellation."""
         with self._cancellation_lock:
             self._requests_to_cancel.add(request_id)
 
-    @traced
-    def clear_cancelled_requests(self):
+    def clear_cancelled_requests(self) -> list[RequestState]:
         """Remove all cancelled requests from active and waiting queues."""
+        cancelled_states = []
         with self._cancellation_lock:
             for request_id in self._requests_to_cancel:
-                self.active_requests.pop(request_id, None)
-                self.waiting_requests.pop(request_id, None)
+                state_a = self.active_requests.pop(request_id, None)
+                state_w = self.waiting_requests.pop(request_id, None)
+                # Invariant: a request is never in both queues; state_a or state_w picks the one it was in
+                state = state_a or state_w
+                if state is not None:
+                    cancelled_states.append(state)
                 if request_id in self.waiting_requests_order:
                     self.waiting_requests_order.remove(request_id)
                 self.cache.free_blocks(request_id)
             self._requests_to_cancel = set()
+        return cancelled_states
 
-    @traced
     def request_is_cancelled(self, request_id: str) -> bool:
         """Checks if a request has been cancelled or removed."""
         return request_id in self._requests_to_cancel or (
             request_id not in self.active_requests and request_id not in self.waiting_requests
         )
 
-    @traced
     def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int) -> bool:
         """Allocate additional cache blocks for a request if the currently allocated blocks are insufficient to
         accommodate the next tokens. It calculates how many blocks are needed based on the request's current
         cache occupancy and the number of tokens to be processed. The allocation itself is done by the CacheAllocator
         objects. Returns a boolean indicating if the allocation was successful or not.
         """
-        # 1. we check that the occupancy is less than the requested length
-        # 2. we allocate enough blocks to cover the requested length
+        # First we check that the occupancy is less than the requested length, then we allocate enough blocks to cover
+        # the requested length. This is done using `current_len` so it also works for offloaded requests.
         current_len = state.current_len()
         occupancy = state.allocated_blocks * self.cache.block_size - current_len
         if occupancy < len_next_tokens or state.allocated_blocks == 0:
@@ -130,7 +135,7 @@ class Scheduler(ABC):
         """Prepares a request for processing in the current batch. If prefix sharing is enabled, and the request was
         pending, this is where we look for a prefix match and split the request if found."""
         # If prefix sharing is enabled, we look for a prefix match and split the request if found
-        if self.cache.use_prefix_sharing and state.status == RequestStatus.PENDING:
+        if self.cache.use_prefix_sharing and state.status == RequestStatus.PENDING and not state.is_cpu_offloaded:
             prefill_length = self.cache.search_prefix_match(state.request_id, state.remaining_prefill_tokens)
             if prefill_length > 0:
                 self.active_requests[state.request_id] = state
@@ -285,6 +290,23 @@ class Scheduler(ABC):
         max_kv_read = original_cache_budget - cache_budget
         return scheduled_requests, one_allocation_failed, decode_fast_path, num_q_tokens, max_kv_read
 
+    def _get_waiting_candidates(self) -> list[RequestState]:
+        """Returns waiting requests in priority order. Since CPU-offloaded requests are cheaper to restore than fresh
+        requests, they get priority, but we interleave them with fresh request to not saturate new batches with only
+        offloaded requests."""
+        offloaded: deque[RequestState] = deque()
+        fresh: deque[RequestState] = deque()
+        for req_id in self.waiting_requests_order:
+            state = self.waiting_requests[req_id]
+            (offloaded if state.is_cpu_offloaded else fresh).append(state)
+        ordered: list[RequestState] = []
+        while offloaded or fresh:
+            if offloaded:
+                ordered.append(offloaded.popleft())
+            if fresh:
+                ordered.append(fresh.popleft())
+        return ordered
+
     def _cleanup_waiting_queue(self, request_ids_to_remove_from_waiting: set[str]) -> None:
         """Removes processed requests from the waiting queue order."""
         self.waiting_requests_order = deque(
@@ -293,7 +315,6 @@ class Scheduler(ABC):
 
 
 # TODO: further common-ize the two classes
-@attach_tracer()
 class FIFOScheduler(Scheduler):
     """This scheduler processes requests in the order they arrive, meaning decoding requests has priority over
     prefilling requests. Additionally, it includes a safety margin mechanism to prevent cache exhaustion. By default,
@@ -307,7 +328,6 @@ class FIFOScheduler(Scheduler):
         super().__init__(cache)
         self.safety_margin = safety_margin
 
-    @traced
     def schedule_batch(
         self, token_budget: int, cache_budget: int
     ) -> tuple[list[FutureRequestState] | None, bool, int, int]:
@@ -320,10 +340,9 @@ class FIFOScheduler(Scheduler):
             elif state.status == RequestStatus.PREFILLING:
                 second_priority_states.append(state)
 
-        # Add waiting requests to second priority
+        # Add waiting requests to second priority, with CPU-offloaded requests first
         if not self.block_new_requests:
-            for req_id in self.waiting_requests_order:
-                second_priority_states.append(self.waiting_requests[req_id])
+            second_priority_states.extend(self._get_waiting_candidates())
 
         candidates = priority_states + second_priority_states
         request_ids_to_remove_from_waiting = set()
@@ -349,13 +368,11 @@ class FIFOScheduler(Scheduler):
 
 # FIXME: prioritize adding from waiting reqs before scheduling `RequestStatus.DECODING` when cache space allows it
 # TODO: further consolidate the code by making more of it common. The reference Scheduler is FIFO, not this one.
-@attach_tracer()
 class PrefillFirstScheduler(Scheduler):
     """Scheduler that prioritizes split prefill requests over decoding requests. This scheduler ensures that split
     prefill requests (which are continuations of partially processed prompts) are completed before processing new
     decoding requests."""
 
-    @traced
     def schedule_batch(
         self, token_budget: int, cache_budget: int
     ) -> tuple[list[FutureRequestState] | None, bool, int, int]:
@@ -369,10 +386,9 @@ class PrefillFirstScheduler(Scheduler):
             elif state.status == RequestStatus.DECODING:
                 second_priority_states.append(state)
 
-        # Add waiting requests to second priority
+        # Add waiting requests to second priority, with CPU-offloaded requests first
         if not self.block_new_requests:
-            for req_id in self.waiting_requests_order:
-                second_priority_states.append(self.waiting_requests[req_id])
+            second_priority_states.extend(self._get_waiting_candidates())
 
         candidates = priority_states + second_priority_states
         request_ids_to_remove_from_waiting = set()

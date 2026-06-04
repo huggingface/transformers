@@ -13,13 +13,8 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-10-07 and added to Hugging Face Transformers on 2024-08-12.*
+*This model was published in HF papers on 2024-10-07 and contributed to Hugging Face Transformers on 2024-08-12.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # FalconMamba
 
@@ -35,14 +30,13 @@ The examples below demonstrate how to generate text with [`Pipeline`], [`AutoMod
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     "text-generation",
     model="tiiuae/falcon-mamba-7b-instruct",
-    dtype=torch.bfloat16,
     device=0
 )
 pipeline(
@@ -56,14 +50,13 @@ pipeline(
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-mamba-7b-instruct")
 model = AutoModelForCausalLM.from_pretrained(
     "tiiuae/falcon-mamba-7b-instruct",
-    dtype=torch.bfloat16,
     device_map="auto"
 )
 
@@ -88,12 +81,11 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4-bits.
 
 ```python
-import torch
-from transformers import AutoTokenizer, FalconMambaForCausalLM, BitsAndBytesConfig
+from transformers import AutoTokenizer, BitsAndBytesConfig, FalconMambaForCausalLM
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.bfloat16,
     bnb_4bit_quant_type="nf4",
     bnb_4bit_use_double_quant=True,
 )
@@ -101,7 +93,6 @@ quantization_config = BitsAndBytesConfig(
 tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-mamba-7b")
 model = FalconMambaForCausalLM.from_pretrained(
     "tiiuae/falcon-mamba-7b",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config,
 )

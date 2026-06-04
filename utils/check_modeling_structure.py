@@ -21,7 +21,7 @@ from pathlib import Path
 CHECKER_CONFIG = {
     "name": "modeling_structure",
     "label": "Modeling file structure",
-    "file_globs": [
+    "cache_globs": [
         "src/transformers/models/**/modeling_*.py",
         "src/transformers/models/**/modular_*.py",
         "src/transformers/models/**/configuration_*.py",

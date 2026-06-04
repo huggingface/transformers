@@ -13,13 +13,8 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-01-11 and added to Hugging Face Transformers on 2022-11-15.*
+*This model was published in HF papers on 2021-01-11 and contributed to Hugging Face Transformers on 2022-11-15.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # Switch Transformers
 
@@ -38,11 +33,11 @@ The example below demonstrates how to predict the masked token with [`Pipeline`]
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
+
 tokenizer = AutoTokenizer.from_pretrained("google/switch-base-8")
-model = AutoModelForSeq2SeqLM.from_pretrained("google/switch-base-8", device_map="auto", dtype=torch.float16)
+model = AutoModelForSeq2SeqLM.from_pretrained("google/switch-base-8", device_map="auto")
 
 input_text = "The capital of France is <extra_id_0>."
 input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(0)
@@ -58,10 +53,10 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes/) to only quantize the weights to 8-bits.
 
-```py
+```python
 # pip install bitsandbytes
-import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
+
 
 tokenizer = AutoTokenizer.from_pretrained("google/switch-base-8")
 quantization_config = BitsAndBytesConfig(load_in_8bit=True)

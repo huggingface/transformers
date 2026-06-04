@@ -42,7 +42,12 @@ class Qwen2AudioEncoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen2_audio_encoder"
-    attribute_map = {"num_hidden_layers": "encoder_layers"}
+    attribute_map = {
+        "num_hidden_layers": "encoder_layers",
+        "hidden_size": "d_model",
+        "num_attention_heads": "encoder_attention_heads",
+        "intermediate_size": "encoder_ffn_dim",
+    }
 
     num_mel_bins: int = 128
     encoder_layers: int = 32
@@ -93,6 +98,7 @@ class Qwen2AudioConfig(PreTrainedConfig):
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     audio_token_index: int = 151646
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):

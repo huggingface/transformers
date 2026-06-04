@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-07-01 and added to Hugging Face Transformers on 2025-06-25.*
+*This model was published in HF papers on 2025-07-01 and contributed to Hugging Face Transformers on 2025-06-25.*
 
 # GLM-V
 
@@ -64,15 +64,14 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="image-text-to-text",
     model="THUDM/GLM-4.1V-9B-Thinking",
     device=0,
-    dtype=torch.bfloat16
 )
 messages = [
     {
@@ -92,13 +91,12 @@ pipe(text=messages, max_new_tokens=20, return_full_text=False)
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import Glm4vForConditionalGeneration, AutoProcessor
+```python
+from transformers import AutoProcessor, Glm4vForConditionalGeneration
+
 
 model = Glm4vForConditionalGeneration.from_pretrained(
     "THUDM/GLM-4.1V-9B-Thinking",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -145,17 +143,14 @@ Using GLM-4.1V with video input is similar to using it with image input.
 The model can process video data and generate text based on the content of the video.
 
 ```python
-from transformers import AutoProcessor, Glm4vForConditionalGeneration
-from accelerate import Accelerator
-import torch
 
-device = Accelerator().device
+from transformers import AutoProcessor, Glm4vForConditionalGeneration
+
 
 processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
 model = Glm4vForConditionalGeneration.from_pretrained(
     pretrained_model_name_or_path="THUDM/GLM-4.1V-9B-Thinking",
-    dtype=torch.bfloat16,
-    device_map=device
+    device_map="auto"
 )
 
 messages = [

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-01-05 and added to Hugging Face Transformers on 2025-07-26.*
+*This model was contributed to Hugging Face Transformers on 2025-07-26.*
 
 # Evolla
 
@@ -31,11 +31,11 @@ Examples:
 
 ```python
 processor = EvollaProcessor.from_pretrained("westlake-repl/Evolla-10B-DPO-hf")
-model = EvollaForProteinText2Text.from_pretrained("westlake-repl/Evolla-10B-DPO-hf")
+model = EvollaForProteinText2Text.from_pretrained("westlake-repl/Evolla-10B-DPO-hf", device_map="auto")
 # aa_seq should have same length as foldseek
 protein_inputs = [
     {
-        
+
         "aa_seq": "MATGGRRG...",
         "foldseek": "###lqpfd...", # hashtag means the low-confidence foldseek tokens
     },

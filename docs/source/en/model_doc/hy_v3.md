@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-04-22.*
+*This model was contributed to Hugging Face Transformers on 2026-04-22.*
 
 # Hy3-preview
 
@@ -35,7 +35,8 @@ Key architectural features:
 - The model supports `gradient_checkpointing` to reduce memory during fine-tuning.
 
 ```python
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_id = "tencent/Hy3-preview"
 tokenizer = AutoTokenizer.from_pretrained(model_id)

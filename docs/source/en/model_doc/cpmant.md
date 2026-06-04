@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-09-16 and added to Hugging Face Transformers on 2023-04-12.*
+*This model was contributed to Hugging Face Transformers on 2023-04-12.*
 
 # CPMAnt
 
@@ -24,14 +24,13 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`C
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="openbmb/cpm-ant-10b",
-    dtype=torch.bfloat16,
 )
 pipe("今天天气很好，")
 ```
@@ -39,14 +38,13 @@ pipe("今天天气很好，")
 </hfoption>
 <hfoption id="CpmAntForCausalLM">
 
-```py
-import torch
+```python
 from transformers import CpmAntForCausalLM, CpmAntTokenizer
+
 
 tokenizer = CpmAntTokenizer.from_pretrained("openbmb/cpm-ant-10b")
 model = CpmAntForCausalLM.from_pretrained(
     "openbmb/cpm-ant-10b",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 input_ids = tokenizer("今天天气很好，", return_tensors="pt").to(model.device)

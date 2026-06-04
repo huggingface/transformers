@@ -46,6 +46,9 @@ env:
   CUDA_VISIBLE_DEVICES: 0,1
 
 
+permissions:
+  contents: read
+
 jobs:
   setup_check_new_failures:
     name: "Setup matrix for finding commits"
@@ -55,7 +58,7 @@ jobs:
       n_runners: ${{ steps.set-matrix.outputs.n_runners }}
       process: ${{ steps.set-matrix.outputs.process }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         continue-on-error: true
         with:
           name: ci_results_${{ inputs.job }}
@@ -127,16 +130,19 @@ jobs:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ci_results_${{ inputs.job }}
           path: /transformers/ci_results_${{ inputs.job }}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        env:
+          ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
         with:
           pattern: setup_values*
           path: setup_values
           merge-multiple: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare some setup values
         run: |
@@ -164,19 +170,25 @@ jobs:
       - name: Extract the base commit on `main` (of the merge commit created by Github) if it is a PR
         id: pr_info
         if: ${{ inputs.pr_number != '' }}
-        uses: actions/github-script@v6
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
+          COMMIT_SHA: ${{ inputs.commit_sha }}
         with:
-          script: |            
+          script: |
+            const pull_number = parseInt(process.env.PR_NUMBER, 10);
+            const commit_sha = process.env.COMMIT_SHA;
+
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: ${{ inputs.pr_number }}
+              pull_number,
             });
 
-            const { data: merge_commit }  = await github.rest.repos.getCommit({
+            const { data: merge_commit } = await github.rest.repos.getCommit({
               owner: pr.base.repo.owner.login,
               repo: pr.base.repo.name,
-              ref: '${{ inputs.commit_sha }}',
+              ref: commit_sha,
             });
 
             core.setOutput('merge_commit_base_sha', merge_commit.parents[0].sha);
@@ -228,6 +240,7 @@ jobs:
           n_runners: ${{ needs.setup_check_new_failures.outputs.n_runners }}
           run_idx: ${{ matrix.run_idx }}
           pr_number: ${{ inputs.pr_number }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 utils/check_bad_commit.py --start_commit "$START_SHA" --end_commit "$END_SHA" --file "ci_results_${job}/new_failures.json" --output_file "new_failures_with_bad_commit_${job}_${run_idx}.json"
 
       - name: Show results
@@ -240,7 +253,7 @@ jobs:
           cat "new_failures_with_bad_commit_${job}_${run_idx}.json"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}
           path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
@@ -255,16 +268,19 @@ jobs:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ci_results_${{ inputs.job }}
           path: /transformers/ci_results_${{ inputs.job }}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        env:
+          ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
         with:
           pattern: new_failures_with_bad_commit_${{ inputs.job }}*
           path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}
           merge-multiple: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check files
         working-directory: /transformers
@@ -351,7 +367,7 @@ jobs:
           cat new_failures_with_bad_commit.json
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: new_failures_with_bad_commit_${{ inputs.job }}
           path: |

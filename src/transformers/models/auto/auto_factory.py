@@ -21,8 +21,6 @@ from collections import OrderedDict
 from collections.abc import Iterator
 from typing import Any, TypeVar
 
-from huggingface_hub import repo_exists
-
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import (
@@ -31,6 +29,7 @@ from ...utils import (
     copy_func,
     extract_commit_hash,
     find_adapter_config_file,
+    hf_api,
     is_peft_available,
     is_torch_available,
     logging,
@@ -238,6 +237,16 @@ class _BaseAutoModelClass:
             return model_class._from_config(config, **kwargs)
         elif has_local_code:
             model_class = _get_model_class(config, cls._model_mapping)
+            if model_class.config_class == config.sub_configs.get("text_config", None):
+                # TODO: Validate that copying the parent quantization config to the text sub-config preserves
+                # modules_to_not_convert and skip-module matching when composite-model module prefixes differ.
+                parent_config = config
+                config = config.get_text_config()
+                # Check both `quantization_config` being present and also not null,
+                # as a `config.json` can have `"quantization_config": null` in it
+                parent_quant = getattr(parent_config, "quantization_config", None)
+                if parent_quant is not None:
+                    config.quantization_config = parent_quant
             return model_class._from_config(config, **kwargs)
 
         raise ValueError(
@@ -387,10 +396,11 @@ class _BaseAutoModelClass:
                 # modules_to_not_convert and skip-module matching when composite-model module prefixes differ.
                 parent_config = config
                 config = config.get_text_config()
-                # Propagate quantization_config from the composite parent config so that
-                # `get_hf_quantizer` can correctly detect the model as pre-quantized.
-                if hasattr(parent_config, "quantization_config"):
-                    config.quantization_config = parent_config.quantization_config
+                # Check both `quantization_config` being present and also not null,
+                # as a `config.json` can have `"quantization_config": null` in it
+                parent_quant = getattr(parent_config, "quantization_config", None)
+                if parent_quant is not None:
+                    config.quantization_config = parent_quant
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
@@ -452,7 +462,7 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         kwargs.pop("use_timm_backbone", None)
-        if not repo_exists(pretrained_model_name_or_path):
+        if not hf_api().repo_exists(pretrained_model_name_or_path):
             return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)

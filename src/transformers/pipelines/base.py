@@ -336,9 +336,11 @@ def load_assistant_model(
 
     # Finally, let's check the tokenizers: if the two models have different tokenizers, we need to keep the assistant
     # tokenizer
-    same_vocab_size = model.config.vocab_size == loaded_assistant_model.config.vocab_size
+    model_text_config = model.config.get_text_config()
+    assistant_text_config = loaded_assistant_model.config.get_text_config()
+    same_vocab_size = model_text_config.vocab_size == assistant_text_config.vocab_size
     same_special_tokens = all(
-        getattr(model.config, token) == getattr(loaded_assistant_model.config, token)
+        getattr(model_text_config, token) == getattr(assistant_text_config, token)
         for token in ("eos_token_id", "pad_token_id", "bos_token_id")
     )
     if same_vocab_size and same_special_tokens:
@@ -1098,7 +1100,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                     supported_models_names.append(model_name)
             if hasattr(supported_models, "_model_mapping"):
                 for model in supported_models._model_mapping._extra_content.values():
-                    if isinstance(model_name, tuple):
+                    if isinstance(model, tuple):
                         supported_models_names.extend([m.__name__ for m in model])
                     else:
                         supported_models_names.append(model.__name__)

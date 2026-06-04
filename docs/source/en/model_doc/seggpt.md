@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-04-06 and added to Hugging Face Transformers on 2024-02-26.*
+*This model was published in HF papers on 2023-04-06 and contributed to Hugging Face Transformers on 2024-02-26.*
 
 # SegGPT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -41,11 +38,13 @@ Here's how to use the model for one-shot semantic segmentation:
 ```python
 import torch
 from datasets import load_dataset
-from transformers import SegGptImageProcessor, SegGptForImageSegmentation
+
+from transformers import SegGptForImageSegmentation, SegGptImageProcessor
+
 
 checkpoint = "BAAI/seggpt-vit-large"
 image_processor = SegGptImageProcessor.from_pretrained(checkpoint)
-model = SegGptForImageSegmentation.from_pretrained(checkpoint)
+model = SegGptForImageSegmentation.from_pretrained(checkpoint, device_map="auto")
 
 dataset_id = "EduardoPacheco/FoodSeg103"
 ds = load_dataset(dataset_id, split="train")
@@ -58,9 +57,9 @@ image_prompt = ds[29]["image"]
 mask_prompt = ds[29]["label"]
 
 inputs = image_processor(
-    images=image_input, 
+    images=image_input,
     prompt_images=image_prompt,
-    segmentation_maps=mask_prompt, 
+    segmentation_maps=mask_prompt,
     num_labels=num_labels,
     return_tensors="pt"
 )

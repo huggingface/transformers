@@ -16,7 +16,7 @@ CHECKER_CONFIG = {
     "label": "Model dates",
     # Approximate: also reads docs/source/en/model_doc/*.md and uses git log + network
     # calls to GitHub/HuggingFace for commit dates and paper metadata.
-    "file_globs": ["src/transformers/models/**/__init__.py", "docs/source/en/model_doc/**/*.md"],
+    "cache_globs": ["src/transformers/models/**/__init__.py", "docs/source/en/model_doc/**/*.md"],
     "check_args": ["--check-only"],
     "fix_args": [],
 }
@@ -237,7 +237,7 @@ def _read_model_card_content(model_card: str) -> str:
 
 def _get_dates_pattern_match(content: str):
     """Search for the dates pattern in content and return match object"""
-    pattern = r"\n\*This model was released on (.*) and added to Hugging Face Transformers on (\d{4}-\d{2}-\d{2})\.\*"
+    pattern = r"\n\*This model was (?:published in HF papers on (.*) and )?contributed to Hugging Face Transformers on (\d{4}-\d{2}-\d{2})\.\*"
     return re.search(pattern, content)
 
 
@@ -268,7 +268,7 @@ def check_missing_dates(model_card_list: list[str]) -> list[str]:
 
 
 def check_incorrect_dates(model_card_list: list[str]) -> list[str]:
-    """Check which model cards have incorrect HF commit dates and return their names"""
+    """Check which model cards have incorrect model release/addition dates and return their names"""
     incorrect_dates = []
 
     for model_card in model_card_list:
@@ -279,11 +279,24 @@ def check_incorrect_dates(model_card_list: list[str]) -> list[str]:
         content = _read_model_card_content(model_card)
         match = _get_dates_pattern_match(content)
 
+        file_path = os.path.join(DOCS_PATH, model_card)
+        paper_link = get_paper_link(model_card=model_card, path=file_path)
+
+        if paper_link in ("No_paper", "blog"):
+            release_date = r"{release_date}"
+        else:
+            release_date = get_release_date(paper_link)
+
         if match:
+            # Preserve existing release date unless it's a placeholder
+            existing_release_date = match.group(1)
+            if existing_release_date not in (r"{release_date}", "None"):
+                release_date = existing_release_date
+
             existing_hf_date = match.group(2)
             actual_hf_date = get_first_commit_date(model_name=model_card)
 
-            if _dates_differ_significantly(existing_hf_date, actual_hf_date):
+            if _dates_differ_significantly(existing_hf_date, actual_hf_date) or existing_release_date != release_date:
                 incorrect_dates.append(model_card)
 
     return incorrect_dates
@@ -334,14 +347,20 @@ def insert_dates(model_card_list: list[str]):
 
             if _dates_differ_significantly(existing_hf_date, hf_commit_date) or existing_release_date != release_date:
                 old_line = match.group(0)
-                new_line = f"\n*This model was released on {release_date} and added to Hugging Face Transformers on {hf_commit_date}.*"
+                if release_date != r"{release_date}":
+                    new_line = f"\n*This model was published in HF papers on {release_date} and contributed to Hugging Face Transformers on {hf_commit_date}.*"
+                else:
+                    new_line = f"\n*This model was contributed to Hugging Face Transformers on {hf_commit_date}.*"
                 content = content.replace(old_line, new_line)
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(content)
         else:
             # Insert new dates line after copyright marker
             insert_index = markers[0].end()
-            date_info = f"\n*This model was released on {release_date} and added to Hugging Face Transformers on {hf_commit_date}.*"
+            if release_date != r"{release_date}":
+                date_info = f"\n*This model was published in HF papers on {release_date} and contributed to Hugging Face Transformers on {hf_commit_date}.*"
+            else:
+                date_info = f"\n*This model was contributed to Hugging Face Transformers on {hf_commit_date}.*"
             content = content[:insert_index] + date_info + content[insert_index:]
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(content)
