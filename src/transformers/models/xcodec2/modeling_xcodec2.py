@@ -30,11 +30,10 @@ import torch.nn.functional as F
 from torch.amp import autocast
 from torch.nn import Parameter
 
-from transformers.activations import ACT2FN
-
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -46,6 +45,7 @@ from .configuration_xcodec2 import Xcodec2Config
 
 
 @dataclass
+@auto_docstring
 class Xcodec2Output(ModelOutput):
     """
     Args:
@@ -68,6 +68,7 @@ class Xcodec2Output(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class Xcodec2EncoderOutput(ModelOutput):
     """
     Args:
@@ -88,6 +89,7 @@ class Xcodec2EncoderOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class Xcodec2DecoderOutput(ModelOutput):
     """
     Args:
@@ -168,13 +170,14 @@ class Xcodec2RotaryEmbedding(nn.Module):
 class Xcodec2MLP(nn.Module):
     def __init__(self, config: Xcodec2Config):
         super().__init__()
-        self.fc1 = nn.Linear(config.hidden_size, 4 * config.hidden_size, bias=False)
-        self.activation = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(4 * config.hidden_size, config.hidden_size, bias=False)
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
         return hidden_states
 
@@ -207,8 +210,21 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# RoPE is applied on the attention head rather than sequence dimension
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=2):
+@use_kernel_func_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=2):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 2):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
@@ -364,7 +380,7 @@ class Xcodec2DecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class SnakeBeta(nn.Module):
+class Xcodec2SnakeBeta(nn.Module):
     """
     A modified Snake function which uses separate parameters for the magnitude of the periodic components
     Shape:
@@ -392,7 +408,7 @@ class SnakeBeta(nn.Module):
         """
         Forward pass of the function.
         Applies the function to the input elementwise.
-        SnakeBeta ∶= x + 1/b * sin^2 (xa)
+        Xcodec2SnakeBeta ∶= x + 1/b * sin^2 (xa)
         """
         alpha = self.alpha.unsqueeze(0).unsqueeze(-1)  # line up with x to [B, C, T]
         beta = self.beta.unsqueeze(0).unsqueeze(-1)
@@ -504,7 +520,7 @@ class DownSample1d(nn.Module):
         return out
 
 
-class AntiAliasedActivation1d(nn.Module):
+class Xcodec2AntiAliasedActivation1d(nn.Module):
     def __init__(
         self,
         activation,
@@ -536,9 +552,9 @@ class Xcodec2ResidualUnit(nn.Module):
     def __init__(self, dimension, dilation):
         super().__init__()
         pad = ((7 - 1) * dilation) // 2
-        self.snake1 = AntiAliasedActivation1d(activation=SnakeBeta(dimension))
+        self.snake1 = Xcodec2AntiAliasedActivation1d(activation=Xcodec2SnakeBeta(dimension))
         self.conv1 = nn.Conv1d(dimension, dimension, kernel_size=7, dilation=dilation, padding=pad)
-        self.snake2 = AntiAliasedActivation1d(activation=SnakeBeta(dimension))
+        self.snake2 = Xcodec2AntiAliasedActivation1d(activation=Xcodec2SnakeBeta(dimension))
         self.conv2 = nn.Conv1d(dimension, dimension, kernel_size=1)
 
     def forward(self, hidden_state):
@@ -573,7 +589,7 @@ class Xcodec2EncoderBlock(nn.Module):
         self.res_unit1 = Xcodec2ResidualUnit(dimension // 2, dilation=1)
         self.res_unit2 = Xcodec2ResidualUnit(dimension // 2, dilation=3)
         self.res_unit3 = Xcodec2ResidualUnit(dimension // 2, dilation=9)
-        self.snake1 = AntiAliasedActivation1d(activation=SnakeBeta(dimension // 2))
+        self.snake1 = Xcodec2AntiAliasedActivation1d(activation=Xcodec2SnakeBeta(dimension // 2))
         self.conv1 = nn.Conv1d(
             dimension // 2, dimension, kernel_size=2 * stride, stride=stride, padding=math.ceil(stride / 2)
         )
@@ -604,7 +620,7 @@ class Xcodec2Encoder(nn.Module):
 
         self.block = nn.ModuleList(self.block)
         d_model = config.encoder_hidden_size * 2 ** len(config.downsampling_ratios)
-        self.snake1 = AntiAliasedActivation1d(activation=SnakeBeta(d_model))
+        self.snake1 = Xcodec2AntiAliasedActivation1d(activation=Xcodec2SnakeBeta(d_model))
         self.conv2 = nn.Conv1d(d_model, config.hidden_size, kernel_size=3, padding=1)
 
     def forward(self, hidden_state):
@@ -854,7 +870,7 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, SnakeBeta):
+        if isinstance(module, Xcodec2SnakeBeta):
             init.zeros_(module.alpha)
             init.zeros_(module.beta)
         elif isinstance(module, Xcodec2ISTFTHead):

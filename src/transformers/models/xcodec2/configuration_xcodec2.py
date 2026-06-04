@@ -57,6 +57,7 @@ class Xcodec2Config(PreTrainedConfig):
     encoder_hidden_size: int = 48
     downsampling_ratios: list[int] | tuple[int, ...] = (2, 2, 4, 4, 5)
     hidden_size: int = 1024
+    intermediate_size: int = 4096
     semantic_model_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
     sampling_rate: int = 16000

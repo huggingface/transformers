@@ -21,9 +21,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.amp import autocast
 
-from transformers.activations import ACT2FN
-
 from ... import initialization as init
+from ...integrations import use_kernel_func_from_hub
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -33,6 +32,7 @@ from ...utils import (
     can_return_tuple,
 )
 from ..auto import AutoModel
+from ..clip.modeling_clip import CLIPMLP
 from ..dac.modeling_dac import DacEncoder, DacEncoderBlock, DacResidualUnit
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRotaryEmbedding, rotate_half
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
@@ -46,6 +46,7 @@ from .configuration_xcodec2 import Xcodec2Config
 
 
 @dataclass
+@auto_docstring
 class Xcodec2Output(ModelOutput):
     """
     Args:
@@ -68,6 +69,7 @@ class Xcodec2Output(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class Xcodec2EncoderOutput(ModelOutput):
     """
     Args:
@@ -88,6 +90,7 @@ class Xcodec2EncoderOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class Xcodec2DecoderOutput(ModelOutput):
     """
     Args:
@@ -100,8 +103,21 @@ class Xcodec2DecoderOutput(ModelOutput):
     audio_values: torch.FloatTensor | None = None
 
 
-# RoPE is applied on the attention head rather than sequence dimension
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=2):
+@use_kernel_func_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=2):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 2):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
@@ -113,51 +129,44 @@ class Xcodec2RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class Xcodec2MLP(nn.Module):
+class Xcodec2MLP(CLIPMLP):
     def __init__(self, config: Xcodec2Config):
-        super().__init__()
-        self.fc1 = nn.Linear(config.hidden_size, 4 * config.hidden_size, bias=False)
-        self.activation = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(4 * config.hidden_size, config.hidden_size, bias=False)
-
-    def forward(self, hidden_states):
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+        super().__init__(config)
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
 
 
 class Xcodec2DecoderLayer(LlamaDecoderLayer):
     pass
 
 
-class SnakeBeta(SnakeBeta):
+class Xcodec2SnakeBeta(SnakeBeta):
     pass
 
 
-class AntiAliasedActivation1d(AntiAliasedActivation1d):
+class Xcodec2AntiAliasedActivation1d(AntiAliasedActivation1d):
     pass
 
 
 class Xcodec2ResidualUnit(DacResidualUnit):
     def __init__(self, dimension, dilation):
         super().__init__(dimension, dilation)
-        self.snake1 = AntiAliasedActivation1d(activation=SnakeBeta(dimension))
-        self.snake2 = AntiAliasedActivation1d(activation=SnakeBeta(dimension))
+        self.snake1 = Xcodec2AntiAliasedActivation1d(activation=Xcodec2SnakeBeta(dimension))
+        self.snake2 = Xcodec2AntiAliasedActivation1d(activation=Xcodec2SnakeBeta(dimension))
 
 
 class Xcodec2EncoderBlock(DacEncoderBlock):
     def __init__(self, config: Xcodec2Config, stride: int = 1, stride_index: int = 1):
         super().__init__(config, stride, stride_index)
         dimension = config.encoder_hidden_size * 2**stride_index
-        self.snake1 = AntiAliasedActivation1d(activation=SnakeBeta(dimension // 2))
+        self.snake1 = Xcodec2AntiAliasedActivation1d(activation=Xcodec2SnakeBeta(dimension // 2))
 
 
 class Xcodec2Encoder(DacEncoder):
     def __init__(self, config: Xcodec2Config):
         super().__init__(config)
         d_model = config.encoder_hidden_size * 2 ** len(config.downsampling_ratios)
-        self.snake1 = AntiAliasedActivation1d(activation=SnakeBeta(d_model))
+        self.snake1 = Xcodec2AntiAliasedActivation1d(activation=Xcodec2SnakeBeta(d_model))
 
 
 class Xcodec2ResNetBlock(nn.Module):
@@ -395,7 +404,7 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, SnakeBeta):
+        if isinstance(module, Xcodec2SnakeBeta):
             init.zeros_(module.alpha)
             init.zeros_(module.beta)
         elif isinstance(module, Xcodec2ISTFTHead):
