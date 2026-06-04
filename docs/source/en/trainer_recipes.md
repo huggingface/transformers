@@ -259,7 +259,7 @@ trainer = Trainer(
     model=model,
     args=TrainingArguments(
         push_to_bucket=True,
-        bucket_id="my-org/my-run",
+        bucket_id="my-org/my-run",   # optional, see below
         ...
     ),
     train_dataset=train_dataset,
@@ -267,9 +267,11 @@ trainer = Trainer(
 trainer.train()
 ```
 
-[`Trainer`] uploads each checkpoint to the bucket under its own `checkpoint-<step>/` prefix and keeps it there even after [`~TrainingArguments.save_total_limit`] rotates it off local disk.. The bucket accumulates every checkpoint. Uploads run asynchronously, so they don't block training.
+`bucket_id` is optional. When it isn't set, it defaults to `hub_model_id` if you provided one, otherwise to the `output_dir` name under your namespace (the same name [`Trainer`] would give the model repository).
 
-`push_to_bucket` is independent of `push_to_hub`. Use it on its own to store checkpoints without creating a model repository, or together with `push_to_hub` to also publish the model. 
+[`Trainer`] uploads each checkpoint to the bucket under its own `checkpoint-<step>/` prefix and keeps it there even after [`~TrainingArguments.save_total_limit`] rotates it off local disk. The bucket accumulates every checkpoint. Uploads run asynchronously, so they don't block training.
+
+`push_to_bucket` is independent of `push_to_hub`. Use it on its own to store checkpoints without creating a model repository, or together with `push_to_hub` to also publish the model.
 
 To resume from a bucket, pass its handle to `resume_from_checkpoint`. [`Trainer`] downloads the checkpoint into `output_dir` and continues from it. This helps when resuming on a fresh machine where nothing is on local disk yet. Pass the bucket root to resume from its latest checkpoint, or a full checkpoint handle to resume from a specific one:
 
