@@ -45,6 +45,17 @@ _FP8_MAX = torch.finfo(_FP8_DTYPE).max
 _UE8M0_SF_DTYPE = getattr(torch, "float8_e8m0fnu", None)
 
 
+def _ue8m0_sf_dtype():
+    """Return ``torch.float8_e8m0fnu`` or raise a clear error on torch without FP8 support.
+    """
+    if _UE8M0_SF_DTYPE is None:
+        raise RuntimeError(
+            "scale_fmt='ue8m0' requires torch.float8_e8m0fnu, which is only available in "
+            f"PyTorch >= 2.7 (found {torch.__version__}). Upgrade torch to use UE8M0 FP8 checkpoints."
+        )
+    return _UE8M0_SF_DTYPE
+
+
 def _first_attr(obj, *names):
     for name in names:
         if hasattr(obj, name):
@@ -279,7 +290,7 @@ class FP8Linear(nn.Linear):
             # If block size is None, it means that we are doing per-tensor quantization
             self.weight_scale_inv = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
         else:
-            sf_dtype = _UE8M0_SF_DTYPE if scale_fmt == "ue8m0" else torch.float32
+            sf_dtype = _ue8m0_sf_dtype() if scale_fmt == "ue8m0" else torch.float32
             scale_out_features = (out_features + self.block_size[0] - 1) // self.block_size[0]
             scale_in_features = (in_features + self.block_size[1] - 1) // self.block_size[1]
             self.weight_scale_inv = nn.Parameter(torch.empty(scale_out_features, scale_in_features, dtype=sf_dtype))
@@ -608,7 +619,7 @@ class FP8Experts(nn.Module):
         #   - weight is `int8`, K dim halved (2 e2m1 values per byte).
         #   - per-row SF at gran_k=32 (no block-wise SF; `block_size` ignored).
         is_fp4 = getattr(config, "expert_dtype", "fp8") == "fp4"
-        sf_dtype = _UE8M0_SF_DTYPE if scale_fmt == "ue8m0" else torch.float32
+        sf_dtype = _ue8m0_sf_dtype() if scale_fmt == "ue8m0" else torch.float32
         if is_fp4:
             alloc_kwargs = {
                 "weight_dtype": torch.int8,
@@ -866,7 +877,7 @@ class Fp8Quantize(ConversionOps):
         # matches the parameter allocation in `FP8Linear`/`FP8Experts`.
         if self.hf_quantizer.quantization_config.scale_fmt == "ue8m0":
             inv_scales = torch.pow(2.0, torch.ceil(torch.log2(inv_scales.clamp(min=torch.finfo(torch.float32).tiny))))
-            inv_scales = inv_scales.to(_UE8M0_SF_DTYPE)
+            inv_scales = inv_scales.to(_ue8m0_sf_dtype())
         scale_key = key.rsplit(".", 1)[0] + ".weight_scale_inv" if key.endswith("weight") else key + "_scale_inv"
         return {key: quantized, scale_key: inv_scales}
 
