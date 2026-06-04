@@ -46,28 +46,6 @@ FP4_VALUES = [
 ]
 
 
-@contextmanager
-def on_device(dev):
-    if is_torch_available():
-        import torch
-
-        if isinstance(dev, torch.Tensor):
-            dev = dev.device
-        elif isinstance(dev, str):
-            dev = torch.device(dev)
-        dev_type = getattr(dev, "type", None)
-        if dev_type == "cuda":
-            with torch.cuda.device(dev):
-                yield
-                return
-        if dev_type == "xpu" and hasattr(torch, "xpu"):
-            with torch.xpu.device(dev):
-                yield
-                return
-    # other: CPU
-    yield
-
-
 class Mxfp4Quantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
