@@ -42,7 +42,7 @@ logger = logging.get_logger(__name__)
 _FP8_DTYPE = torch.float8_e4m3fn
 _FP8_MIN = torch.finfo(_FP8_DTYPE).min
 _FP8_MAX = torch.finfo(_FP8_DTYPE).max
-_UE8M0_SF_DTYPE = torch.float8_e8m0fnu
+_UE8M0_SF_DTYPE = getattr(torch, "float8_e8m0fnu", None)
 
 
 def _first_attr(obj, *names):
@@ -222,7 +222,7 @@ def fp8_linear(
     deepgemm_required = weight.dtype == torch.int8
     deepgemm_compatible = activation_scale is None and (
         deepgemm_required
-        or weight_scale_inv.dtype == torch.float8_e8m0fnu
+        or (_UE8M0_SF_DTYPE is not None and weight_scale_inv.dtype == _UE8M0_SF_DTYPE)
         or (block_size is not None and block_size[0] == block_size[1] == 128)
     )
 
