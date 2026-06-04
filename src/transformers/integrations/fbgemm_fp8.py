@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from contextlib import contextmanager
 from functools import lru_cache
 
 from ..activations import ACT2FN
@@ -39,6 +40,25 @@ if is_fbgemm_gpu_available() and not _is_torch_xpu_available:
     import fbgemm_gpu.experimental.gen_ai  # noqa: F401
 
 logger = logging.get_logger(__name__)
+
+
+@contextmanager
+def on_device(tensor):
+    """Force the global current device to match ``tensor``'s device.
+
+    This keeps quantization kernel launches aligned with the input tensor device when the
+    process current device differs from the module placement.
+    """
+    device = getattr(tensor, "device", None)
+    device_type = getattr(device, "type", None)
+    if device_type == "cuda":
+        with torch.cuda.device(device):
+            yield
+    elif _is_torch_xpu_available and device_type == "xpu":
+        with torch.xpu.device(device):
+            yield
+    else:
+        yield
 
 
 class FbgemmFp8Quantize(ConversionOps):
@@ -69,7 +89,8 @@ class FbgemmFp8Quantize(ConversionOps):
                 flattened_param = transposed_param.reshape(-1, original_shape[-1])
 
                 # Quantize using per row instead of per column
-                new_value_flat, weight_scale_flat = quantize_fp8_per_row(flattened_param)
+                with on_device(flattened_param):
+                    new_value_flat, weight_scale_flat = quantize_fp8_per_row(flattened_param)
 
                 # Reshape back to original dimensions
                 new_value = new_value_flat.reshape(original_shape)
@@ -85,14 +106,16 @@ class FbgemmFp8Quantize(ConversionOps):
                 flattened_param = transposed_param.reshape(-1, original_shape[-1])
 
                 # Quantize using per column
-                new_value_flat, weight_scale_flat = quantize_fp8_per_row(flattened_param)
+                with on_device(flattened_param):
+                    new_value_flat, weight_scale_flat = quantize_fp8_per_row(flattened_param)
 
                 # Reshape back to original dimensions
                 new_value = new_value_flat.reshape(original_shape)
                 new_value = new_value.transpose(1, 2)
                 weight_scale = weight_scale_flat.reshape(original_shape[0], original_shape[1], 1)
         else:
-            new_value, weight_scale = quantize_fp8_per_row(value)
+            with on_device(value):
+                new_value, weight_scale = quantize_fp8_per_row(value)
             weight_scale = torch.nn.Parameter(weight_scale.view(weight_scale.shape[0], 1))
 
         return {target_key: torch.nn.Parameter(new_value), f"{target_key}_scale": weight_scale}
@@ -116,13 +139,14 @@ class FbgemmFp8Linear(torch.nn.Linear):
     def forward(self, x):
         # quantize_fp8_per_row will squash the leading dimensions, so save the desired shape here
         output_shape = (*x.shape[:-1], -1)
-        # x_quantized and x_scale are not necessarily on the same device as x, this is an issue.
-        # https://github.com/pytorch/FBGEMM/blob/e08af8539c391437f447173863df0f3f6f6f1855/fbgemm_gpu/experimental/gen_ai/src/quantize/quantize.cu#L1237C3-L1237C45
-        x_quantized, x_scale = quantize_fp8_per_row(x.view(-1, x.shape[-1]).contiguous(), scale_ub=self.input_scale_ub)
-        # moving x_quantized, x_scale here creates glibberish output ... However, if we move the output, it works
-        # x_quantized, x_scale = x_quantized.to(x.device), x_scale.to(x.device)
+        # Keep the current device aligned with the input tensor device while launching the quantization kernel.
+        # Keep the guard at the quantization call: moving the returned quantized tensors across devices after
+        # the launch is not equivalent and can produce incorrect output.
+        with on_device(x):
+            x_quantized, x_scale = quantize_fp8_per_row(
+                x.view(-1, x.shape[-1]).contiguous(), scale_ub=self.input_scale_ub
+            )
 
-        # The computation still happens on the device where self.weight is even if x_quantized is not on the same device as self.weight
         weight_scale_float32 = self.weight_scale.to(torch.float32)
         if _is_torch_xpu_available:
             output = torch._scaled_mm(
@@ -138,8 +162,6 @@ class FbgemmFp8Linear(torch.nn.Linear):
                 x_quantized, self.weight, x_scale, weight_scale_float32, use_fast_accum=True
             )
             output = output + self.bias if self.bias is not None else output
-        # Hacky for now, we have the output to the device of x
-        output = output.to(x.device)
         output = output.reshape(output_shape)
         del x_quantized, x_scale
         return output
@@ -189,9 +211,10 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
             expert_hidden = hidden_states[i]
             expert_hidden_reshaped = expert_hidden.reshape(-1, self.hidden_size)
             # Quantize for this expert
-            expert_quantized, expert_scale = quantize_fp8_per_row(
-                expert_hidden_reshaped, num_tokens, self.input_scale_ub
-            )
+            with on_device(expert_hidden_reshaped):
+                expert_quantized, expert_scale = quantize_fp8_per_row(
+                    expert_hidden_reshaped, num_tokens, self.input_scale_ub
+                )
             sharded_expert_dim = self.gate_up_proj.shape[-1] // 2
             gate_up_proj_scale_float32 = self.gate_up_proj_scale.to(torch.float32)
             if _is_torch_xpu_available:
@@ -228,7 +251,8 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
 
             activated = up * self.act_fn(gate)
 
-            activated_quantized, activated_scale = quantize_fp8_per_row(activated, num_tokens, self.input_scale_ub)
+            with on_device(activated):
+                activated_quantized, activated_scale = quantize_fp8_per_row(activated, num_tokens, self.input_scale_ub)
 
             down_proj_scale_float32 = self.down_proj_scale.to(torch.float32)
             if _is_torch_xpu_available:
