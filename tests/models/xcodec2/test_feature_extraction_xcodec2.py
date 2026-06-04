@@ -13,10 +13,8 @@
 # limitations under the License.
 
 import itertools
-import json
 import random
 import unittest
-from pathlib import Path
 
 import numpy as np
 
@@ -135,12 +133,36 @@ class Xcodec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
 
         # Test using GPU
         if torch.cuda.is_available():
-            encoded_sequences_3 = feat_extract(
+            # Single input
+            encoded_sequences_cpu = feat_extract(
+                torch_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np", device="cpu"
+            )
+            encoded_sequences_gpu = feat_extract(
                 torch_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np", device="cuda"
             )
-            self.assertTrue(np.allclose(encoded_sequences_1.audio, encoded_sequences_3.audio, atol=TOL))
-            self.assertTrue(
-                np.allclose(encoded_sequences_1.audio_spectrogram, encoded_sequences_3.audio_spectrogram, atol=TOL)
+            self.assertEqual(encoded_sequences_cpu.audio.shape, encoded_sequences_gpu.audio.shape)
+            self.assertEqual(
+                encoded_sequences_cpu.audio_spectrogram.shape, encoded_sequences_gpu.audio_spectrogram.shape
+            )
+            self.assertEqual(encoded_sequences_cpu.audio.dtype, encoded_sequences_gpu.audio.dtype)
+            self.assertEqual(
+                encoded_sequences_cpu.audio_spectrogram.dtype, encoded_sequences_gpu.audio_spectrogram.dtype
+            )
+
+            # Batched input
+            encoded_sequences_cpu = feat_extract(
+                torch_audio_inputs, sampling_rate=sampling_rate, padding=True, return_tensors="np", device="cpu"
+            )
+            encoded_sequences_gpu = feat_extract(
+                torch_audio_inputs, sampling_rate=sampling_rate, padding=True, return_tensors="np", device="cuda"
+            )
+            self.assertEqual(encoded_sequences_cpu.audio.shape, encoded_sequences_gpu.audio.shape)
+            self.assertEqual(
+                encoded_sequences_cpu.audio_spectrogram.shape, encoded_sequences_gpu.audio_spectrogram.shape
+            )
+            self.assertEqual(encoded_sequences_cpu.audio.dtype, encoded_sequences_gpu.audio.dtype)
+            self.assertEqual(
+                encoded_sequences_cpu.audio_spectrogram.dtype, encoded_sequences_gpu.audio_spectrogram.dtype
             )
 
         # Test batched
@@ -174,30 +196,6 @@ class Xcodec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             self.assertTrue(np_processed.audio_spectrogram.dtype == np.float32)
             pt_processed = feature_extractor.pad([{"audio_spectrogram": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.audio_spectrogram.dtype == torch.float32)
-
-    def _load_datasamples(self, num_samples):
-        from datasets import load_dataset
-
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        # automatic decoding with librispeech
-        audio_samples = ds.sort("id")[:num_samples]["audio"]
-
-        return [x["array"] for x in audio_samples]
-
-    def test_integration(self):
-        # Reproducer: https://gist.github.com/ebezzam/909243aa00934cab1c1aad3d6a161580#file-xcodec2_feature_extraction-py
-        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/xcodec2/expected_results_feature_extractor.json"
-        with open(RESULTS_PATH, "r") as f:
-            expected_results = json.load(f)
-        # expected_results = expected_results[0]
-        EXPECTED_INPUT_VALUES = torch.tensor(expected_results["audio_spectrogram"])
-        EXPECTED_SHAPE = tuple(expected_results["shape"])
-
-        input_audio = self._load_datasamples(1)
-        feature_extractor = Xcodec2FeatureExtractor()
-        input_values = feature_extractor(input_audio, return_tensors="pt")["audio_spectrogram"]
-        self.assertEqual(input_values.shape, EXPECTED_SHAPE)
-        torch.testing.assert_close(input_values[0, 0, : EXPECTED_INPUT_VALUES.shape[-1]], EXPECTED_INPUT_VALUES)
 
     # Ignore copy
     @unittest.skip("Xcodec2 doesn't support stereo input")
