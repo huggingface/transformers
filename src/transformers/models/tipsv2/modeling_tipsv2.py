@@ -536,42 +536,59 @@ class Tipsv2VisionModel(Tipsv2VisionPreTrainedModel):
         )
 
 
-class Tipsv2TextEmbeddings(nn.Module):
-    min_timescale: int = 1
-    max_timescale: int = 10_000
+class Tipsv2SinusoidalPositionalEmbedding(nn.Module):
+    """This module produces sinusoidal positional embeddings of any length."""
 
     def __init__(self, config: Tipsv2TextConfig):
         super().__init__()
-        self.config = config
-        self.embedding_dim = config.hidden_size
-        self.token_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.embed_scale = math.sqrt(config.hidden_size) if config.scale_sqrt_depth else 1.0
+        self.make_weights(
+            num_embeddings=config.max_position_embeddings, embedding_dim=config.hidden_size, padding_idx=None
+        )
+
+    def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: int | None = None):
+        emb_weights = self.get_embedding(num_embeddings, embedding_dim, padding_idx)
+        if hasattr(self, "weights"):
+            # in forward put the weights on the correct dtype and device of the param
+            emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
+
+        self.register_buffer("weights", emb_weights, persistent=False)
+
+    @staticmethod
+    def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: int | None = None):
+        """
+        Build sinusoidal embeddings. This matches the implementation in tensor2tensor, but differs slightly from the
+        description in Section 3.5 of "Attention Is All You Need".
+        """
+        half_dim = embedding_dim // 2
+        emb = math.log(10000) / (half_dim - 1)
+        emb = torch.exp(torch.arange(half_dim, dtype=torch.int64).float() * -emb)
+        emb = torch.arange(num_embeddings, dtype=torch.int64).float().unsqueeze(1) * emb.unsqueeze(0)
+        emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1)
+        if embedding_dim % 2 == 1:
+            # zero pad
+            emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
+        if padding_idx is not None:
+            emb[padding_idx, :] = 0
+        return emb.to(torch.get_default_dtype())
+
+    @torch.no_grad()
+    def forward(self, position_ids: torch.LongTensor) -> torch.Tensor:
+        return self.weights[position_ids]
+
+
+class Tipsv2TextEmbeddings(nn.Module):
+    def __init__(self, config: Tipsv2TextConfig):
+        super().__init__()
+        embed_dim = config.hidden_size
+
+        self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
+        self.position_embedding = Tipsv2SinusoidalPositionalEmbedding(config)
+
+        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
-
-    def _create_sinusoidal_position_embedding(
-        self, position_ids: torch.Tensor, dtype: torch.dtype, device: torch.device
-    ) -> torch.Tensor:
-        position = position_ids.to(device=device, dtype=torch.float32)
-        num_timescales = self.embedding_dim // 2
-        denominator = torch.maximum(
-            torch.tensor(num_timescales, dtype=torch.float32, device=device) - 1,
-            torch.tensor(1.0, dtype=torch.float32, device=device),
-        )
-        log_timescale_increment = (
-            torch.log(
-                torch.tensor(float(self.max_timescale) / float(self.min_timescale), dtype=torch.float32, device=device)
-            )
-            / denominator
-        )
-        inv_timescales = self.min_timescale * torch.exp(
-            torch.arange(num_timescales, dtype=torch.float32, device=device) * -log_timescale_increment
-        )
-        scaled_time = position[:, :, None] * inv_timescales[None, None, :]
-        signal = torch.cat((torch.sin(scaled_time), torch.cos(scaled_time)), dim=2)
-        signal = nn.functional.pad(signal, (0, self.embedding_dim % 2, 0, 0, 0, 0))
-        return signal.to(dtype=dtype)
+        self.embed_scale = math.sqrt(config.hidden_size) if config.scale_sqrt_depth else 1.0
 
     def forward(
         self,
@@ -595,11 +612,7 @@ class Tipsv2TextEmbeddings(nn.Module):
             inputs_embeds = self.token_embedding(input_ids)
 
         inputs_embeds = inputs_embeds * self.embed_scale
-        position_embeddings = self._create_sinusoidal_position_embedding(
-            position_ids=position_ids,
-            dtype=inputs_embeds.dtype,
-            device=inputs_embeds.device,
-        )
+        position_embeddings = self.position_embedding(position_ids).to(dtype=inputs_embeds.dtype)
         return inputs_embeds + position_embeddings
 
 
@@ -773,9 +786,18 @@ class Tipsv2TextPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         if isinstance(module, Tipsv2TextEmbeddings):
             init.normal_(module.token_embedding.weight, mean=0.0, std=self.config.initializer_range)
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+        elif isinstance(module, Tipsv2SinusoidalPositionalEmbedding):
+            num_embeddings, embedding_dim = module.weights.shape
+            embedding_weights = module.get_embedding(
+                num_embeddings=num_embeddings,
+                embedding_dim=embedding_dim,
+                padding_idx=None,
+            )
+            init.copy_(module.weights, embedding_weights)
         elif isinstance(module, nn.Linear):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
