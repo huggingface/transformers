@@ -378,19 +378,14 @@ class Tipsv2VisionEncoder(Dinov2WithRegistersEncoder):
     pass
 
 
-@auto_docstring(
-    custom_intro="""
-    The TIPSv2 vision tower without any projection head on top.
-    """
-)
 class Tipsv2VisionModel(Dinov2WithRegistersModel):
-    def __init__(self, config: Tipsv2VisionConfig):
-        super().__init__(config)
-        self.apply_layernorm = config.apply_layernorm
-        self.reshape_hidden_states = config.reshape_hidden_states
+    pass
 
 
-def tipsv2_text_eager_attention_forward(
+# Identical to CLIP's implementation but couldn't import it because the vision model
+# already requires eager_attention_forward from DINOv2 which results in modular
+# conflicts.
+def text_eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
@@ -508,7 +503,7 @@ class Tipsv2TextAttention(nn.Module):
         values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, tipsv2_text_eager_attention_forward
+            self.config._attn_implementation, text_eager_attention_forward
         )
 
         attn_output, attn_weights = attention_interface(
