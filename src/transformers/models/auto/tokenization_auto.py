@@ -220,6 +220,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("mluke", "MLukeTokenizer" if is_sentencepiece_available() else None),
         ("mm-grounding-dino", "BertTokenizer" if is_tokenizers_available() else None),
         ("mobilebert", "MobileBertTokenizer" if is_tokenizers_available() else None),
+        ("moss_tts_delay", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("mpnet", "MPNetTokenizer" if is_tokenizers_available() else None),
         ("mpt", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("mra", "RobertaTokenizer"),

@@ -377,6 +377,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("moonshine_streaming_encoder", "MoonshineStreamingEncoderConfig"),
         ("moshi", "MoshiConfig"),
         ("moshi_depth", "MoshiDepthConfig"),
+        ("moss_tts_delay", "MossTTSDelayConfig"),
         ("mpnet", "MPNetConfig"),
         ("mpt", "MptConfig"),
         ("mra", "MraConfig"),

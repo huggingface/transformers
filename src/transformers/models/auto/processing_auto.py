@@ -131,6 +131,7 @@ else:
             ("modernvbert", "Idefics3Processor"),
             ("moonshine", "Wav2Vec2Processor"),
             ("moonshine_streaming", "MoonshineStreamingProcessor"),
+            ("moss_tts_delay", "MossTTSDelayProcessor"),
             ("musicflamingo", "MusicFlamingoProcessor"),
             ("omdet-turbo", "OmDetTurboProcessor"),
             ("oneformer", "OneFormerProcessor"),
