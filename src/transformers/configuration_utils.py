@@ -447,15 +447,29 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         if key != "attribute_map" and key in super().__getattribute__("attribute_map"):
             key = super().__getattribute__("attribute_map")[key]
 
+        # In heterogeneous configs, per-layer attributes are ambiguous on the root config.
+        # Callers must read them from a concrete layer unless they explicitly opt into the global value.
         try:
             heterogeneity_spec = super().__getattribute__("_heterogeneity_spec")
         except AttributeError:
             pass
         else:
-            if key in heterogeneity_spec.per_layer_attributes:
+            try:
+                allow_global_per_layer_attribute_access = super().__getattribute__(
+                    "allow_global_per_layer_attribute_access"
+                )
+            except AttributeError:
+                allow_global_per_layer_attribute_access = False
+                if key == "allow_global_per_layer_attribute_access":
+                    return allow_global_per_layer_attribute_access
+
+            if not allow_global_per_layer_attribute_access and key in heterogeneity_spec.per_layer_attributes:
                 raise AttributeError(
-                    f"'{key}' is a per-layer attribute and varies across layers. "
-                    f"Access it via the individual layer configs instead (e.g. config.per_layer_config[i].{key})."
+                    f"'{key}' is a per-layer attribute and varies across layers. Access it via the individual layer "
+                    f"configs instead (e.g. config.per_layer_config[i].{key}). To read the global config value from "
+                    f"config.{key} anyway, set `allow_global_per_layer_attribute_access` to `True` on the config. "
+                    f"Warning: only do this if the caller can safely handle heterogeneous configs; code that assumes "
+                    f"a homogeneous model may use the global value incorrectly."
                 )
 
         return super().__getattribute__(key)
@@ -970,11 +984,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
     def __iter__(self):
-        per_layer_attributes = self.per_layer_attributes if self.is_heterogeneous else set()
         for key in self.__dict__:
-            # Per-layer attributes intentionally raise on direct access and should not be exposed by iteration.
-            if key in per_layer_attributes:
-                continue
+            if self.is_heterogeneous:
+                # Per-layer attributes intentionally raise on direct access and should not be exposed by iteration,
+                # unless `allow_global_per_layer_attribute_access` is True
+                if not self.allow_global_per_layer_attribute_access and key in self.per_layer_attributes:
+                    continue
             yield key
 
     def to_diff_dict(self) -> dict[str, Any]:

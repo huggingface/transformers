@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import torch
 
-from transformers.heterogeneity import ReturnEntry, get_skip_replacement
+from transformers.heterogeneity import ReturnEntry, SkipDescriptor, get_skip_replacement
 from transformers.models.gpt_oss.modeling_gpt_oss import (
     GptOssAttention,
     GptOssDecoderLayer,
@@ -266,7 +266,7 @@ class ModelFixture:
     pretrained_cls: type  # PreTrainedModel subclass — patched with _layer_cls / _skip_descriptors
     layer_cls: type  # layer class set as _layer_cls on the model
     ref_layer_cls: type  # skip-aware reference layer for building ground-truth models
-    skip_descriptors: dict  # skip type → {attr: replacement_cls}
+    skip_descriptors: dict[str, SkipDescriptor]  # skip type → {attr: replacement_cls}
 
 
 MODEL_FIXTURES = {

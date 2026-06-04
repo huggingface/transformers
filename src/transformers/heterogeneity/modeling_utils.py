@@ -9,6 +9,8 @@ from functools import wraps
 from types import MethodType
 from typing import TYPE_CHECKING, Any
 
+from transformers.heterogeneity.heterogeneous_modeling_spec import SkipDescriptor, get_heterogeneous_modeling_spec
+
 
 if TYPE_CHECKING:
     from torch import nn
@@ -21,7 +23,7 @@ _LAYER_IDX_POSSIBLE_NAMES = ("layer_idx", "idx", "layer_id", "layer_number", "i"
 @dataclass
 class _LayerInitContext:
     per_layer_skip_types: list[list[str]]
-    skip_descriptors: dict[str | tuple[str, type], type[nn.Module]]
+    skip_descriptors: dict[str, SkipDescriptor]
     per_layer_attributes: set[str]
     layer_idx_variable_name: str | None
 
@@ -33,10 +35,16 @@ _layer_patching_lock = threading.Lock()
 
 
 def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
-    """Apply the per-layer configurations during model construction.
+    """Apply heterogeneous per-layer modeling during model construction.
 
     Called automatically during ``PreTrainedModel.__init__`` when
     ``config.is_heterogeneous`` is ``True``.
+
+    The model must resolve to a ``HeterogeneousModelingSpec`` either by setting
+    ``_heterogeneous_modeling_spec`` on the model class, or by having a built-in
+    spec factory in ``transformers.heterogeneity.supported_models``.
+    The spec defines the decoder layer class to patch, an optional layer-index argument name,
+    and optional skip descriptors.
 
     The mechanism monkey-patches ``layer_cls.__init__`` and stores the per-model
     context in a ``ContextVar``.  The wrapper reads from the ``ContextVar``
@@ -48,7 +56,7 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
     2. It passes ``config.per_layer_config[layer_idx]`` to the original ``__init__``.
     3. For layers with a ``skip`` attribute, the
        corresponding sub-modules are replaced with no-op modules according to
-       the model's ``_skip_descriptors``.
+       ``HeterogeneousModelingSpec.skip_descriptors``.
     4. For layers with layer-specific attention masks, the layer ``forward``
        method is patched to select the mask matching that layer's configured
        mask key.
@@ -56,38 +64,36 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
     After model construction, ``clean_up_post_heterogeneous_modeling``
     resets the ``ContextVar``.
 
-    The model is expected to define:
-        ``_layer_cls``: The layer class to patch (e.g., ``LlamaDecoderLayer``).
-        ``_skip_descriptors`` (optional): A dict mapping skip type names to
-            dicts of ``{member_name_or_(name, class): ReplacementModule}``.
-        ``_layer_idx_variable_name`` (optional): The name of the layer-index
+    The resolved ``HeterogeneousModelingSpec`` contains:
+        ``layer_cls``: The layer class to patch, e.g. ``LlamaDecoderLayer``.
+        ``layer_idx_variable_name``: Optional name of the layer-index
             argument in ``layer_cls.__init__``, if not one of the common
             defaults (``layer_idx``, ``idx``, ``layer_id``, etc.).
+        ``skip_descriptors``: Optional dict mapping skip type names to
+            dicts of ``{member_name_or_(name, class): ReplacementModule}``.
 
     Args:
-        model: The model being constructed. Must have ``_layer_cls`` set and
-            a heterogeneous ``config``.
+        model: The model being constructed. Must have a heterogeneous ``config``
+            and a resolvable ``HeterogeneousModelingSpec`` with ``layer_cls`` set.
     """
-    layer_cls = getattr(model, "_layer_cls", None)
-    if layer_cls is None:
-        raise ValueError("Layer class is not set. Please set it by setting the `_layer_cls` attribute on the model.")
-
     if _layer_init_context.get() is not None:
         return
 
+    heterogeneous_modeling_spec = get_heterogeneous_modeling_spec(model)
+
     per_layer_skip_types = [layer_config.skip for layer_config in model.config.per_layer_config]
-    skip_descriptors = getattr(model, "_skip_descriptors", None) or {}
+    skip_descriptors = heterogeneous_modeling_spec.skip_descriptors or {}
     _validate_skip_descriptors(per_layer_skip_types, skip_descriptors)
 
     ctx = _LayerInitContext(
         per_layer_skip_types=per_layer_skip_types,
         skip_descriptors=skip_descriptors,
         per_layer_attributes=model.config.per_layer_attributes,
-        layer_idx_variable_name=getattr(model, "_layer_idx_variable_name", None),
+        layer_idx_variable_name=heterogeneous_modeling_spec.layer_idx_variable_name,
     )
     model._layer_init_context_token = _layer_init_context.set(ctx)
 
-    _patch_layer_init(layer_cls)
+    _patch_layer_init(heterogeneous_modeling_spec.layer_cls)
 
 
 def clean_up_post_heterogeneous_modeling(model: PreTrainedModel) -> None:
@@ -173,7 +179,7 @@ def _patch_layer_forward_for_attention_mask_selection(
 
 
 def _validate_skip_descriptors(
-    per_layer_skip_types: list[list[str]], skip_descriptors: dict[str | tuple[str, type], type[nn.Module]]
+    per_layer_skip_types: list[list[str]], skip_descriptors: dict[str, SkipDescriptor]
 ) -> None:
     skip_types = set(sum(per_layer_skip_types, []))
     missing_descriptors = skip_types - skip_descriptors.keys()
@@ -184,7 +190,7 @@ def _validate_skip_descriptors(
 def _apply_skip_descriptor(
     *,
     layer,
-    skip_descriptor: dict[str | tuple[str, type], type[nn.Module]],
+    skip_descriptor: SkipDescriptor,
     layer_idx: int,
 ):
     for key, replacement_module in skip_descriptor.items():
@@ -225,70 +231,3 @@ def _get_variable_from_stack(names: list[str]) -> Any:
                 return f.f_locals[name]
         f = f.f_back
     return None
-
-
-@dataclass
-class ReturnEntry:
-    arg_name: str
-    transform: Callable
-
-
-def get_skip_replacement(
-    cls: type[nn.Module],
-    to_return: ReturnEntry | list[ReturnEntry | None] | None,
-) -> type[nn.Module]:
-    import torch
-    from torch import nn
-
-    class NoOpReplacement(nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.register_buffer("weight", torch.empty(0), persistent=False)
-
-        def forward(self, *args, **kwargs):
-            if to_return is None:
-                return None
-
-            if isinstance(to_return, ReturnEntry):
-                local_to_return = [to_return]
-                return_tuple = False
-            else:
-                local_to_return = to_return
-                return_tuple = True
-
-            sig = inspect.signature(cls.forward)
-            try:
-                bound_arguments = sig.bind(self, *args, **kwargs)
-            except TypeError as e:
-                raise TypeError(f"{cls.__qualname__}.forward() {e}") from None
-            bound_arguments.apply_defaults()
-            outputs = [None] * len(local_to_return)
-            missing_names = []
-            for i, return_entry in enumerate(local_to_return):
-                if return_entry is None:
-                    outputs[i] = None
-                    continue
-
-                if return_entry.arg_name not in bound_arguments.arguments:
-                    missing_names.append(return_entry.arg_name)
-                    continue
-
-                try:
-                    outputs[i] = return_entry.transform(bound_arguments.arguments[return_entry.arg_name])
-                except Exception as e:
-                    arg_value = bound_arguments.arguments[return_entry.arg_name]
-                    raise type(e)(
-                        f"In the skip replacement for {cls.__qualname__}, failed to apply transform "
-                        f"{return_entry.transform!r} to argument '{return_entry.arg_name}' "
-                        f"(value type: {type(arg_value).__name__}): {e}"
-                    ) from e
-
-            if missing_names:
-                raise ValueError(
-                    f"In the skip replacement for {cls.__qualname__}, the following return entry arg names "
-                    f"are not parameters of {cls.__qualname__}.forward(): {missing_names}"
-                )
-
-            return tuple(outputs) if return_tuple else outputs[0]
-
-    return NoOpReplacement

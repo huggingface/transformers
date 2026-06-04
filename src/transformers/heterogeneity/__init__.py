@@ -3,12 +3,12 @@ from .configuration_utils import (
     get_per_layer_config,
     heterogeneous_to_dict_helper,
 )
+from .heterogeneous_modeling_spec import HeterogeneousModelingSpec, SkipDescriptor, get_heterogeneous_modeling_spec
 from .modeling_utils import (
-    ReturnEntry,
     apply_heterogeneous_modeling,
     clean_up_post_heterogeneous_modeling,
-    get_skip_replacement,
 )
+from .skip_utils import ReturnEntry, get_skip_replacement
 
 
 __all__ = [
@@ -17,6 +17,9 @@ __all__ = [
     "heterogeneous_to_dict_helper",
     "apply_heterogeneous_modeling",
     "clean_up_post_heterogeneous_modeling",
+    "get_heterogeneous_modeling_spec",
+    "HeterogeneousModelingSpec",
+    "SkipDescriptor",
     "get_skip_replacement",
     "ReturnEntry",
 ]

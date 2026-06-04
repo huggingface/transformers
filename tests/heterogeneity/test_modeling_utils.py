@@ -26,11 +26,15 @@ if is_torch_available():
         StaticCache,
     )
     from transformers.cache_utils import DynamicSlidingWindowLayer, StaticSlidingWindowLayer
-    from transformers.heterogeneity import ReturnEntry, get_skip_replacement
+    from transformers.heterogeneity import (
+        HeterogeneousModelingSpec,
+        ReturnEntry,
+        get_heterogeneous_modeling_spec,
+        get_skip_replacement,
+    )
     from transformers.masking_utils import create_chunked_causal_mask, create_sliding_window_causal_mask
     from transformers.models.gpt_oss.configuration_gpt_oss import GptOssConfig
     from transformers.models.gpt_oss.modeling_gpt_oss import GptOssForCausalLM
-    from transformers.models.llama.modeling_llama import LlamaPreTrainedModel
     from transformers.models.llama4.configuration_llama4 import Llama4TextConfig
     from transformers.models.llama4.modeling_llama4 import Llama4ForCausalLM
     from transformers.models.nemotron_h.configuration_nemotron_h import NemotronHConfig
@@ -127,15 +131,19 @@ def _tiny_nemotron_h_config(per_layer_config=None, **overrides):
 
 @contextmanager
 def _hetero_context(model_key):
-    """Temporarily set _layer_cls and _skip_descriptors on a model class.
+    """Temporarily set the heterogeneous modeling spec on a model class.
 
     Always sets both — unused skip descriptors are harmless (only validated against requested types).
     """
     fixture = MODEL_FIXTURES[model_key]
+    modeling_spec = HeterogeneousModelingSpec(
+        layer_cls=fixture.layer_cls,
+        layer_idx_variable_name=None,
+        skip_descriptors=fixture.skip_descriptors,
+    )
     with ExitStack() as stack:
-        stack.enter_context(patch.object(fixture.pretrained_cls, "_layer_cls", fixture.layer_cls, create=True))
         stack.enter_context(
-            patch.object(fixture.pretrained_cls, "_skip_descriptors", fixture.skip_descriptors, create=True)
+            patch.object(fixture.pretrained_cls, "_heterogeneous_modeling_spec", modeling_spec, create=True)
         )
         yield
 
@@ -393,6 +401,40 @@ class TestHeterogeneousModeling(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    def test_get_heterogeneous_modeling_spec_uses_custom_model_spec(self):
+        spec = HeterogeneousModelingSpec(layer_cls=torch.nn.Linear)
+
+        class CustomModel:
+            pass
+
+        CustomModel.__module__ = "remote_code.modeling_custom"
+        CustomModel._heterogeneous_modeling_spec = spec
+
+        self.assertIs(get_heterogeneous_modeling_spec(CustomModel()), spec)
+
+    def test_get_heterogeneous_modeling_spec_uses_supported_model_registry(self):
+        spec = HeterogeneousModelingSpec(layer_cls=torch.nn.Linear)
+
+        class BuiltInModel:
+            pass
+
+        BuiltInModel.__module__ = "transformers.models.test_model.modeling_test_model"
+
+        with patch.dict(
+            "transformers.heterogeneity.supported_models.MODEL_TO_SPEC_FACTORY",
+            {"test_model": lambda: spec},
+        ):
+            self.assertIs(get_heterogeneous_modeling_spec(BuiltInModel()), spec)
+
+    def test_get_heterogeneous_modeling_spec_raises_for_unsupported_builtin_model(self):
+        class UnsupportedModel:
+            pass
+
+        UnsupportedModel.__module__ = "transformers.models.fake.modeling_fake"
+
+        with self.assertRaisesRegex(ValueError, "No heterogeneous modeling spec is defined for `fake`"):
+            get_heterogeneous_modeling_spec(UnsupportedModel())
+
     @parameterized.expand(HETERO_CASES, name_func=_case_name)
     def test_structure(self, case):
         """Verify the entire model structure: skip replacements and weight shapes."""
@@ -511,27 +553,16 @@ class TestHeterogeneousModeling(unittest.TestCase):
         self.assertEqual(cache.layers[2].keys.shape[1], 1)
         self.assertEqual(cache.layers[3].keys.shape[1], 4)  # default
 
-    def test_error_layer_cls_not_set(self):
-        """Building a heterogeneous model without _layer_cls should raise ValueError."""
-        config = _tiny_llama_config(per_layer_config={0: {"intermediate_size": 64}})
-        orig = getattr(LlamaPreTrainedModel, "_layer_cls", None)
-        if hasattr(LlamaPreTrainedModel, "_layer_cls"):
-            delattr(LlamaPreTrainedModel, "_layer_cls")
-        try:
-            with self.assertRaisesRegex(ValueError, "Layer class is not set"):
-                _build_model(config, LlamaForCausalLM)
-        finally:
-            if orig is not None:
-                LlamaPreTrainedModel._layer_cls = orig
-
     def test_error_missing_skip_descriptor(self):
         """Requesting a skip type without a matching descriptor should raise ValueError."""
         config = _tiny_llama_config(per_layer_config={1: {"skip": ["attention"]}})
         fixture = MODEL_FIXTURES["llama"]
-        with (
-            patch.object(fixture.pretrained_cls, "_layer_cls", fixture.layer_cls, create=True),
-            patch.object(fixture.pretrained_cls, "_skip_descriptors", {}, create=True),
-        ):
+        modeling_spec = HeterogeneousModelingSpec(
+            layer_cls=fixture.layer_cls,
+            layer_idx_variable_name=None,
+            skip_descriptors={},
+        )
+        with patch.object(fixture.pretrained_cls, "_heterogeneous_modeling_spec", modeling_spec, create=True):
             with self.assertRaisesRegex(ValueError, "No-op descriptors are missing"):
                 _build_model(config, LlamaForCausalLM)
 

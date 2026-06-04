@@ -119,8 +119,38 @@ class TestHeterogeneousConfig(unittest.TestCase):
 
     def test_accessing_per_layer_attr_raises(self):
         config = _tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}, 1: {"num_key_value_heads": 1}})
-        with self.assertRaises(AttributeError):
+        with self.assertRaisesRegex(
+            AttributeError, "allow_global_per_layer_attribute_access.*global value incorrectly"
+        ):
             _ = config.num_key_value_heads
+
+    def test_allow_global_per_layer_attribute_access(self):
+        config = _tiny_llama_config(
+            per_layer_config={0: {"num_key_value_heads": 2}, 1: {"num_key_value_heads": 1}},
+            allow_global_per_layer_attribute_access=True,
+        )
+
+        self.assertEqual(config.num_key_value_heads, 4)
+        self.assertEqual(config.per_layer_config[0].num_key_value_heads, 2)
+        self.assertEqual(config.per_layer_config[1].num_key_value_heads, 1)
+        self.assertEqual(config.per_layer_config[2].num_key_value_heads, 4)
+
+    def test_iter_skips_per_layer_attributes_by_default(self):
+        config = _tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}, 1: {"num_key_value_heads": 1}})
+
+        keys = list(config)
+
+        self.assertFalse(config.allow_global_per_layer_attribute_access)
+        self.assertNotIn("num_key_value_heads", keys)
+        self.assertIn("hidden_size", keys)
+
+    def test_iter_includes_per_layer_attributes_when_global_access_allowed(self):
+        config = _tiny_llama_config(
+            per_layer_config={0: {"num_key_value_heads": 2}, 1: {"num_key_value_heads": 1}},
+            allow_global_per_layer_attribute_access=True,
+        )
+
+        self.assertIn("num_key_value_heads", list(config))
 
     def test_validation_missing_global_attr(self):
         # "fake_attr" in layer 0 but not in layer 1, and not global → should fail
