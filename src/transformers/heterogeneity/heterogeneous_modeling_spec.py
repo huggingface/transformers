@@ -17,7 +17,7 @@ SkipDescriptor: TypeAlias = "dict[str | tuple[str, type], type[nn.Module]]"
 @dataclass
 class HeterogeneousModelingSpec:
     layer_cls: type[nn.Module]
-    layer_idx_variable_name: str | None = None
+    layer_idx_variable_name: str
     skip_descriptors: dict[str, SkipDescriptor] | None = None
 
 

@@ -266,6 +266,7 @@ class ModelFixture:
     pretrained_cls: type  # PreTrainedModel subclass — patched with _layer_cls / _skip_descriptors
     layer_cls: type  # layer class set as _layer_cls on the model
     ref_layer_cls: type  # skip-aware reference layer for building ground-truth models
+    layer_idx_variable_name: str  # layer index argument/variable name
     skip_descriptors: dict[str, SkipDescriptor]  # skip type → {attr: replacement_cls}
 
 
@@ -274,6 +275,7 @@ MODEL_FIXTURES = {
         pretrained_cls=LlamaPreTrainedModel,
         layer_cls=LlamaDecoderLayer,
         ref_layer_cls=SkipAwareLlamaDecoderLayer,
+        layer_idx_variable_name="layer_idx",
         skip_descriptors={
             "attention": {
                 "input_layernorm": get_skip_replacement(
@@ -295,6 +297,7 @@ MODEL_FIXTURES = {
         pretrained_cls=GptOssPreTrainedModel,
         layer_cls=GptOssDecoderLayer,
         ref_layer_cls=SkipAwareGptOssDecoderLayer,
+        layer_idx_variable_name="layer_idx",
         skip_descriptors={
             "attention": {
                 "input_layernorm": get_skip_replacement(
@@ -318,6 +321,7 @@ MODEL_FIXTURES = {
         pretrained_cls=Llama4PreTrainedModel,
         layer_cls=Llama4TextDecoderLayer,
         ref_layer_cls=SkipAwareLlama4TextDecoderLayer,
+        layer_idx_variable_name="layer_idx",
         skip_descriptors={
             "attention": {
                 "input_layernorm": get_skip_replacement(
@@ -344,6 +348,7 @@ MODEL_FIXTURES = {
         pretrained_cls=NemotronHPreTrainedModel,
         layer_cls=NemotronHBlock,
         ref_layer_cls=SkipAwareNemotronHBlock,
+        layer_idx_variable_name="layer_idx",
         skip_descriptors={
             "mixer": {
                 "norm": get_skip_replacement(

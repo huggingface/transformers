@@ -22,14 +22,15 @@ _LAYER_IDX_POSSIBLE_NAMES = ("layer_idx", "idx", "layer_id", "layer_number", "i"
 
 @dataclass
 class _LayerInitContext:
+    layer_cls: type[nn.Module]
     per_layer_skip_types: list[list[str]]
     skip_descriptors: dict[str, SkipDescriptor]
     per_layer_attributes: set[str]
-    layer_idx_variable_name: str | None
+    layer_idx_variable_name: str
 
 
-_layer_init_context: contextvars.ContextVar[_LayerInitContext | None] = contextvars.ContextVar(
-    "_layer_init_context", default=None
+_layer_init_context: contextvars.ContextVar[tuple[_LayerInitContext, ...]] = contextvars.ContextVar(
+    "_layer_init_context", default=()
 )
 _layer_patching_lock = threading.Lock()
 
@@ -66,9 +67,8 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
 
     The resolved ``HeterogeneousModelingSpec`` contains:
         ``layer_cls``: The layer class to patch, e.g. ``LlamaDecoderLayer``.
-        ``layer_idx_variable_name``: Optional name of the layer-index
-            argument in ``layer_cls.__init__``, if not one of the common
-            defaults (``layer_idx``, ``idx``, ``layer_id``, etc.).
+        ``layer_idx_variable_name``: Name of the layer index argument in ``layer_cls.__init__``,
+            or the layer index variable from higher up the call stack.
         ``skip_descriptors``: Optional dict mapping skip type names to
             dicts of ``{member_name_or_(name, class): ReplacementModule}``.
 
@@ -76,9 +76,6 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
         model: The model being constructed. Must have a heterogeneous ``config``
             and a resolvable ``HeterogeneousModelingSpec`` with ``layer_cls`` set.
     """
-    if _layer_init_context.get() is not None:
-        return
-
     heterogeneous_modeling_spec = get_heterogeneous_modeling_spec(model)
 
     per_layer_skip_types = [layer_config.skip for layer_config in model.config.per_layer_config]
@@ -86,12 +83,13 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
     _validate_skip_descriptors(per_layer_skip_types, skip_descriptors)
 
     ctx = _LayerInitContext(
+        layer_cls=heterogeneous_modeling_spec.layer_cls,
         per_layer_skip_types=per_layer_skip_types,
         skip_descriptors=skip_descriptors,
         per_layer_attributes=model.config.per_layer_attributes,
         layer_idx_variable_name=heterogeneous_modeling_spec.layer_idx_variable_name,
     )
-    model._layer_init_context_token = _layer_init_context.set(ctx)
+    model._layer_init_context_token = _layer_init_context.set((*_layer_init_context.get(), ctx))
 
     _patch_layer_init(heterogeneous_modeling_spec.layer_cls)
 
@@ -115,14 +113,12 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
 
         @wraps(orig_layer_init)
         def _patched_layer_init(self, config, *args, **kwargs):
-            ctx = _layer_init_context.get()
+            ctx = next((ctx for ctx in reversed(_layer_init_context.get()) if ctx.layer_cls is layer_cls), None)
             if ctx is None or not getattr(config, "is_heterogeneous", False):
                 return orig_layer_init(self, config, *args, **kwargs)
 
             # --- Resolve layer index ---
-            layer_idx_possible_names = (
-                [ctx.layer_idx_variable_name] if ctx.layer_idx_variable_name else _LAYER_IDX_POSSIBLE_NAMES
-            )
+            layer_idx_possible_names = ([ctx.layer_idx_variable_name])
             layer_idx = _get_variable_from_passed_arguments(
                 func=orig_layer_init, args=(self, config, *args), kwargs=kwargs, names=layer_idx_possible_names
             )

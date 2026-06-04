@@ -24,6 +24,7 @@ if is_torch_available():
         DynamicCache,
         LlamaConfig,
         LlamaForCausalLM,
+        PreTrainedModel,
         StaticCache,
     )
     from transformers.cache_utils import DynamicSlidingWindowLayer, StaticSlidingWindowLayer
@@ -139,7 +140,7 @@ def _hetero_context(model_key):
     fixture = MODEL_FIXTURES[model_key]
     modeling_spec = HeterogeneousModelingSpec(
         layer_cls=fixture.layer_cls,
-        layer_idx_variable_name=None,
+        layer_idx_variable_name=fixture.layer_idx_variable_name,
         skip_descriptors=fixture.skip_descriptors,
     )
     with ExitStack() as stack:
@@ -179,6 +180,84 @@ def _build_reference(hetero_model, base_config, model_cls, model_key):
         ref.model.layers[i] = ref_layer_cls(hetero_config, layer_idx=i)
     ref.load_state_dict(hetero_model.state_dict())
     return ref.eval()
+
+
+if is_torch_available():
+    # Toy composite models for testing the nested model construction paths.
+    class _DefaultContextMarker(torch.nn.Module):
+        pass
+
+    class _SameLayerContextMarker(torch.nn.Module):
+        pass
+
+    class _OuterContextMarker(torch.nn.Module):
+        pass
+
+    class _InnerContextMarker(torch.nn.Module):
+        pass
+
+    def _init_toy_layer(layer, config, layer_idx):
+        torch.nn.Module.__init__(layer)
+        layer.layer_idx = layer_idx
+        layer.intermediate_size = config.intermediate_size
+        layer.context_marker = _DefaultContextMarker()
+
+    class _SameLayerToyLayer(torch.nn.Module):
+        def __init__(self, config, layer_idx):
+            _init_toy_layer(self, config, layer_idx)
+
+    class _OuterToyLayer(torch.nn.Module):
+        def __init__(self, config, layer_idx):
+            _init_toy_layer(self, config, layer_idx)
+
+    class _InnerToyLayer(torch.nn.Module):
+        def __init__(self, config, layer_idx):
+            _init_toy_layer(self, config, layer_idx)
+
+    def _toy_modeling_spec(layer_cls, marker_replacement_cls):
+        return HeterogeneousModelingSpec(
+            layer_cls=layer_cls,
+            layer_idx_variable_name="layer_idx",
+            skip_descriptors={"context_marker": {"context_marker": marker_replacement_cls}},
+        )
+
+    def _toy_config(intermediate_size, replace_context_marker=False):
+        layer_config = {"intermediate_size": intermediate_size}
+        if replace_context_marker:
+            layer_config["skip"] = ["context_marker"]
+        return _tiny_llama_config(per_layer_config={0: layer_config})
+
+    class _NestedSameLayerToyModel(PreTrainedModel):
+        config_class = LlamaConfig
+        _heterogeneous_modeling_spec = _toy_modeling_spec(_SameLayerToyLayer, _SameLayerContextMarker)
+
+        def __init__(self, config, inner_config=None):
+            super().__init__(config)
+            if inner_config is not None:
+                self.inner_model = _NestedSameLayerToyModel(inner_config)
+            self.layer = _SameLayerToyLayer(config, layer_idx=0)
+
+    class _ToyPreTrainedModel(PreTrainedModel):
+        config_class = LlamaConfig
+
+    class _InterleavedOuterToyModel(_ToyPreTrainedModel):
+        _heterogeneous_modeling_spec = _toy_modeling_spec(_OuterToyLayer, _OuterContextMarker)
+
+        def __init__(self, config, inner_config):
+            super().__init__(config)
+            self.inner_model = _InterleavedInnerToyModel(
+                inner_config,
+                outer_layer_factory=lambda: _OuterToyLayer(config, layer_idx=0),
+            )
+
+    class _InterleavedInnerToyModel(_ToyPreTrainedModel):
+        _heterogeneous_modeling_spec = _toy_modeling_spec(_InnerToyLayer, _InnerContextMarker)
+
+        def __init__(self, config, outer_layer_factory):
+            super().__init__(config)
+            # Build an outer-owned layer while the inner model context is active.
+            self.outer_layer_from_inner_init = outer_layer_factory()
+            self.layer = _InnerToyLayer(config, layer_idx=0)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -403,7 +482,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def test_get_heterogeneous_modeling_spec_uses_custom_model_spec(self):
-        spec = HeterogeneousModelingSpec(layer_cls=torch.nn.Linear)
+        spec = HeterogeneousModelingSpec(layer_cls=torch.nn.Linear, layer_idx_variable_name="layer_idx")
 
         class CustomModel:
             pass
@@ -414,7 +493,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
         self.assertIs(get_heterogeneous_modeling_spec(CustomModel()), spec)
 
     def test_get_heterogeneous_modeling_spec_uses_supported_model_registry(self):
-        spec = HeterogeneousModelingSpec(layer_cls=torch.nn.Linear)
+        spec = HeterogeneousModelingSpec(layer_cls=torch.nn.Linear, layer_idx_variable_name="layer_idx")
 
         class BuiltInModel:
             pass
@@ -558,12 +637,39 @@ class TestHeterogeneousModeling(unittest.TestCase):
         fixture = MODEL_FIXTURES["llama"]
         modeling_spec = HeterogeneousModelingSpec(
             layer_cls=fixture.layer_cls,
-            layer_idx_variable_name=None,
+            layer_idx_variable_name=fixture.layer_idx_variable_name,
             skip_descriptors={},
         )
         with patch.object(fixture.pretrained_cls, "_heterogeneous_modeling_spec", modeling_spec, create=True):
             with self.assertRaisesRegex(ValueError, "No-op descriptors are missing"):
                 _build_model(config, LlamaForCausalLM)
+
+    def test_model_with_same_layer_class_submodel_initializes_each_model_layers(self):
+        """A model containing a same-layer-class submodel should initialize each model's layers correctly."""
+        model = _NestedSameLayerToyModel(
+            _toy_config(intermediate_size=32),
+            inner_config=_toy_config(intermediate_size=64, replace_context_marker=True),
+        )
+
+        self.assertEqual(model.layer.intermediate_size, 32)
+        self.assertIsInstance(model.layer.context_marker, _DefaultContextMarker)
+        self.assertEqual(model.inner_model.layer.intermediate_size, 64)
+        self.assertIsInstance(model.inner_model.layer.context_marker, _SameLayerContextMarker)
+
+    def test_submodel_can_construct_outer_model_layer_during_initialization(self):
+        """A submodel should be able to construct an outer-model layer during its own initialization."""
+        model = _InterleavedOuterToyModel(
+            _toy_config(intermediate_size=32, replace_context_marker=True),
+            inner_config=_toy_config(intermediate_size=64, replace_context_marker=True),
+        )
+
+        outer_layer = model.inner_model.outer_layer_from_inner_init
+        inner_layer = model.inner_model.layer
+
+        self.assertEqual(outer_layer.intermediate_size, 32)
+        self.assertIsInstance(outer_layer.context_marker, _OuterContextMarker)
+        self.assertEqual(inner_layer.intermediate_size, 64)
+        self.assertIsInstance(inner_layer.context_marker, _InnerContextMarker)
 
     def test_sequential_heterogeneous_models_no_interference(self):
         """Two heterogeneous models built sequentially should each have correct per-layer weights."""
