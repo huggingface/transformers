@@ -226,7 +226,7 @@ Since each image has a different number of object instances, labels are variable
 
 ## Define evaluation metric: Mean IoU
 
-To track segmentation quality during training, we compute a **union-based mean IoU** at each evaluation epoch. For each image, we:
+To track segmentation quality during training, compute a *union-based mean IoU* at each evaluation epoch. For each image:
 
 1. Filter predicted masks by confidence score (> 0.5)
 2. Merge all predicted instance masks into a single binary "buildings" map
@@ -235,7 +235,7 @@ To track segmentation quality during training, we compute a **union-based mean I
 
 This gives a per-image metric of "how well does the model cover the buildings". We average it over the full validation set.
 
-We implement this as a [`Trainer`] subclass that runs an extra inference pass during evaluation to compute the metric:
+Implement this as a [`Trainer`] subclass that runs an extra inference pass during evaluation to compute the metric:
 
 ```py
 >>> import torch.nn.functional as F
@@ -301,7 +301,7 @@ We implement this as a [`Trainer`] subclass that runs an extra inference pass du
 
 ## Training
 
-Now that the data, model, and metrics are ready, we can set up training. A few important notes on the [`TrainingArguments`]:
+With the data, model, and metrics ready, set up training.. A few important notes on the [`TrainingArguments`]:
 
 - **`remove_unused_columns=False`**: Required because the default behavior would drop columns before our transform runs.
 - **`eval_do_concat_batches=False`**: Instance segmentation labels are variable-length dicts — they cannot be concatenated across batches.
@@ -359,7 +359,7 @@ Hugging Face Hub. Upon training completion, push the final model to the Hub as w
 
 ## Inference
 
-Now that you have a fine-tuned model, you can use it for inference on new satellite images. The workflow is:
+Now that you have a fine-tuned model, use it for inference on new satellite images. The workflow is:
 
 1. Preprocess the image with the image processor
 2. Run a forward pass through the model
@@ -389,7 +389,7 @@ The post-processing step converts the raw query outputs (logits + low-res masks)
 ...     print(f"  Building (score: {seg_info['score']:.3f})")
 ```
 
-Let's visualize the predictions. The segmentation map assigns each pixel a segment ID (-1 for background). We overlay each detected building with a random color:
+Visualize the predictions. The segmentation map assigns each pixel a segment ID (-1 for background). Overlay each detected building with a random color:
 
 ```py
 >>> fig, axes = plt.subplots(1, 2, figsize=(14, 6))

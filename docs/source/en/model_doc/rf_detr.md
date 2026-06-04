@@ -107,7 +107,7 @@ for result in results:
 You can use the [supervision](https://github.com/roboflow/supervision) library to visualize detection and segmentation results. Install it with `pip install supervision`.
 
 <hfoptions id="supervision">
-<hfoption id="Object Detection">
+<hfoption id="Object detection">
 
 ```python
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
