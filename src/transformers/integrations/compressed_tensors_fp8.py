@@ -23,6 +23,8 @@ Supported models:
   - Per-tensor static: e.g. RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8
 """
 
+from functools import lru_cache
+
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
@@ -39,7 +41,8 @@ _FP8_MIN = torch.finfo(_FP8_DTYPE).min
 _FP8_MAX = torch.finfo(_FP8_DTYPE).max
 
 
-def _use_fp8_kernel():
+@lru_cache(maxsize=None)
+def _can_use_fp8_kernel():
     """Check if we can use FP8 matmul (XPU or CUDA SM89+)."""
     if torch.xpu.is_available():
         return True
@@ -84,13 +87,11 @@ class CompressedTensorsFP8Linear(nn.Linear):
         activation_scheme: str = "dynamic",
         has_bias: bool = False,
         dtype=_FP8_DTYPE,
-        use_fp8_kernel: bool = True,
     ):
         super().__init__(in_features, out_features)
 
         self.has_bias = has_bias
         self.activation_scheme = activation_scheme
-        self.use_fp8_kernel = use_fp8_kernel
         self.weight = nn.Parameter(torch.empty(out_features, in_features, dtype=dtype))
 
         # Weight scale: per-channel (out_features, 1) or per-tensor (scalar → expanded at load)
@@ -109,7 +110,7 @@ class CompressedTensorsFP8Linear(nn.Linear):
         # Save shape for restoring after squashing batch dims
         output_shape = (*input.shape[:-1], -1)
 
-        if self.use_fp8_kernel:
+        if _can_use_fp8_kernel():
             # XPU or CUDA SM89+: FP8 kernel path (quantize activation + scaled_mm)
             x = input.reshape(-1, input.shape[-1])
             x_quantized, x_scale = _quantize_fp8_per_row(x)
@@ -150,7 +151,6 @@ def replace_with_compressed_tensors_fp8_linear(
     if dequantize:
         return model
 
-    use_fp8_kernel = _use_fp8_kernel()
     has_been_replaced = False
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
@@ -164,7 +164,6 @@ def replace_with_compressed_tensors_fp8_linear(
                     out_features=module.out_features,
                     activation_scheme=activation_scheme,
                     has_bias=module.bias is not None,
-                    use_fp8_kernel=use_fp8_kernel,
                     **module_kwargs,
                 )
             model.set_submodule(module_name, new_module)

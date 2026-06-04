@@ -85,13 +85,11 @@ The FP8 kernel path supports these quantization layouts.
 Transformers activates the FP8 kernel path automatically when the model's config specifies FP8 quantization and a supported GPU is available.
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model = AutoModelForCausalLM.from_pretrained(
     "RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic",
     device_map="auto",
-    dtype=torch.bfloat16,
 )
 tokenizer = AutoTokenizer.from_pretrained("RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic")
 inputs = tokenizer("Hello, how are you?", return_tensors="pt").to(model.device)
@@ -104,7 +102,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 Quantize a BF16 model to FP8 during loading by passing a [`CompressedTensorsConfig`] with an FP8 quantization scheme.
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, CompressedTensorsConfig
 from compressed_tensors.quantization import QuantizationScheme, QuantizationArgs, QuantizationType, QuantizationStrategy
 
@@ -122,7 +119,6 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen2.5-7B-Instruct",
     quantization_config=ct_config,
     device_map="auto",
-    dtype=torch.bfloat16,
 )
 ```
 
