@@ -31,8 +31,6 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
-    rope_interleave (`bool`, *optional*, defaults to `True`):
-        Whether main MLA rotary embeddings use interleaved pair layout.
     mlp_layer_types (`list`, *optional*):
         MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to `3` dense layers and then every `moe_layer_freq`-th layer sparse.
     moe_layer_freq (`int`, *optional*, defaults to 1):
@@ -49,8 +47,8 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         Explicit full/shared indexer pattern using `"F"`/`"S"` or `"full"`/`"shared"` values.
     index_skip_topk_offset (`int`, *optional*, defaults to 2):
         Offset used with `index_topk_freq` to decide which layers recompute top-k indices.
-    indexer_rope_interleave (`bool`, *optional*, defaults to `False`):
-        Whether DSA indexer rotary embeddings use interleaved pair layout.
+    indexer_rope_interleave (`bool`, *optional*, defaults to `True`):
+        DSA indexer rotary embeddings always use interleaved pair layout.
     indexer_types (`list[str]`, *optional*):
         Indexer mode for each layer (`"full"` or `"shared"`). Defaults to the pattern derived from `index_topk_freq` and `index_skip_topk_offset`.
 
@@ -124,7 +122,6 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = 1
     tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
-    rope_interleave: bool = True
     mlp_layer_types: list[str] | None = None
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
@@ -141,7 +138,7 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     index_topk_freq: int = 1
     index_topk_pattern: str | list[str] | None = None
     index_skip_topk_offset: int = 2
-    indexer_rope_interleave: bool = False
+    indexer_rope_interleave: bool = True
     indexer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):

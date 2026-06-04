@@ -109,7 +109,13 @@ SPECIAL_CASES_TO_ALLOW = {
     "Cohere2MoeConfig": ["rope_scaling", "sliding_window_pattern"],
     "CsmConfig": ["tie_codebooks_embeddings"],
     "DeepseekV2Config": ["norm_topk_prob"],
-    "GlmMoeDsaConfig": ["index_skip_topk_offset", "index_topk_freq", "index_topk_pattern", "moe_layer_freq"],
+    "GlmMoeDsaConfig": [
+        "index_skip_topk_offset",
+        "index_topk_freq",
+        "index_topk_pattern",
+        "moe_layer_freq",
+        "indexer_rope_interleave",
+    ],
     "DeepseekV4Config": [
         # All BC / config-compat surface that the modeling code never reads but
         # checkpoints in the wild expose (so we keep accepting them in `__init__`):
