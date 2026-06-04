@@ -458,15 +458,25 @@ class ContinuousBatchProcessor:
             state_to_fork = self.scheduler._requests_to_fork.pop()
             num_children = state_to_fork.num_children
             state_to_fork.num_children = 0
-            # Create the new request and add them to the scheduler
             new_request_ids = [f"{state_to_fork.request_id}__child#{i}" for i in range(num_children)]
+            # If there are not enough free blocks, some children are created as new pending requests rather than forked
+            num_to_fork = min(num_children, self.cache.compute_max_num_forks(state_to_fork.request_id))
+            num_to_schedule = num_children - num_to_fork
+            for _ in range(num_to_schedule):
+                new_request_id = new_request_ids.pop()
+                child_state = state_to_fork.create_equivalent_initial_request()
+                child_state.request_id = new_request_id
+                self.scheduler.add_waiting_request(child_state)
+            # Early stop if no forks can be done
+            if num_to_fork == 0:
+                continue
+            # Create the new request and add them to the scheduler
             for new_request_id in new_request_ids:
                 self.scheduler.active_requests[new_request_id] = state_to_fork.fork(new_request_id)
             # Fork the cache
             copy_src, copy_dst = self.cache.fork_request(state_to_fork.request_id, new_request_ids)
             copy_source.extend(copy_src)
             copy_destination.extend(copy_dst)
-            # FIXME: if fork cant be done, create a new pending request without forking instead of crashing everything
 
         # The copy induced by the fork is done in one go (if it's even needed)
         if copy_source:
