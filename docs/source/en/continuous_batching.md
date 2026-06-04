@@ -256,7 +256,7 @@ When active, the manager pads query and KV lengths to the next power of 2 so sha
 ```py
 cb_config = ContinuousBatchingConfig(
     use_cuda_graph=True,
-    max_cached_graphs=32,
+    max_cached_graphs=128,
 )
 ```
 
