@@ -43,8 +43,18 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
         Clamp bound applied to the gate and up projections of the SwiGLU-OAI activation.
     moe_layer_freq (`list[int]`, *optional*):
         Per-layer flags (`0`/`1`) selecting a dense MLP (`0`) or a sparse MoE block (`1`).
-    sparse_attention_config (`dict`, *optional*):
-        Configuration of the lightning sparse attention (top-k, indexer dims, local/init window, frequency).
+    index_n_heads (`int`, *optional*, defaults to 4):
+        Number of heads in the lightning indexer's dot-product scoring branch.
+    index_head_dim (`int`, *optional*, defaults to 128):
+        Per-head channel dimension of the lightning indexer.
+    index_block_size (`int`, *optional*, defaults to 128):
+        Number of key tokens pooled into a single scored block.
+    index_topk_blocks (`int`, *optional*, defaults to 16):
+        Number of top-scoring key blocks each query may attend to.
+    index_init_blocks (`int`, *optional*, defaults to 0):
+        Number of leading key blocks always kept visible.
+    index_local_blocks (`int`, *optional*, defaults to 1):
+        Number of key blocks immediately preceding the query always kept visible.
     num_mtp_modules (`int`, *optional*, defaults to 0):
         Number of multi-token-prediction modules in the checkpoint; ignored at inference.
     """
@@ -103,21 +113,41 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
     swiglu_alpha: float = 1.702
     swiglu_limit: float = 7.0
     moe_layer_freq: list[int] | None = None
-    sparse_attention_config: dict | None = None
+    index_n_heads: int = 4
+    index_head_dim: int = 128
+    index_block_size: int = 128
+    index_topk_blocks: int = 16
+    index_init_blocks: int = 0
+    index_local_blocks: int = 1
     layer_types: list[str] | None = None
     num_mtp_modules: int = 0
 
     def __post_init__(self, **kwargs):
+        # Older checkpoints ship the lightning-indexer hyperparameters as a nested
+        # ``sparse_attention_config`` dict; fold it into the flat ``index_*`` fields
+        # (and derive ``layer_types`` from its per-layer frequency) before the strict
+        # parent init runs, so model code only ever reads flat config attributes.
+        sparse_cfg = kwargs.pop("sparse_attention_config", None) or {}
         super().__post_init__(**kwargs)
+
+        for flat, legacy in {
+            "index_n_heads": "sparse_num_index_heads",
+            "index_head_dim": "sparse_index_dim",
+            "index_block_size": "sparse_block_size",
+            "index_topk_blocks": "sparse_topk_blocks",
+            "index_init_blocks": "sparse_init_block",
+            "index_local_blocks": "sparse_local_block",
+        }.items():
+            if legacy in sparse_cfg:
+                setattr(self, flat, sparse_cfg[legacy])
+
         # ``layer_types`` is the canonical per-layer attention dispatch: it tells
         # ``DynamicCache(config=...)`` which layers want the sparse cache and lets
-        # the decoder pick ``MiniMaxM3VLSparseAttention`` vs. plain attention. We
-        # derive it once here from ``sparse_attention_freq`` so model code never
-        # has to re-read the sparse-attention frequency list.
-        if self.layer_types is None and self.sparse_attention_config is not None:
-            freq = self.sparse_attention_config.get("sparse_attention_freq")
-            if freq is not None:
-                self.layer_types = ["minimax_m3_sparse" if f else "full_attention" for f in freq]
+        # the decoder pick ``MiniMaxM3VLSparseAttention`` vs. plain attention.
+        if self.layer_types is None and "sparse_attention_freq" in sparse_cfg:
+            self.layer_types = [
+                "minimax_m3_sparse" if f else "full_attention" for f in sparse_cfg["sparse_attention_freq"]
+            ]
         if self.layer_types is None:
             self.layer_types = ["full_attention"] * self.num_hidden_layers
 

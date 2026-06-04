@@ -454,6 +454,12 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
             WeightRenaming(source_patterns=r"^patch_merge_mlp\.", target_patterns="model.patch_merge."),
+            # The vision patch embed is the inherited ``Qwen2_5_VisionPatchEmbed``, whose conv
+            # is named ``proj``; the upstream checkpoint stores it as ``patch_embedding``.
+            WeightRenaming(
+                source_patterns=r"\.embeddings\.patch_embedding\.",
+                target_patterns=".embeddings.proj.",
+            ),
             # ---- text decoder: MoE block path + lightning index branch ----
             WeightRenaming(
                 source_patterns=r"\.block_sparse_moe\.",

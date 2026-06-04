@@ -52,6 +52,7 @@ class MiniMaxM3VLVisionText2TextModelTester:
         seq_length=7,
         ignore_index=-100,
         image_token_index=4,
+        video_token_index=5,
         is_training=True,
         text_config={
             "hidden_size": 32,
@@ -88,18 +89,12 @@ class MiniMaxM3VLVisionText2TextModelTester:
                 "rope_theta": 5000000.0,
                 "partial_rotary_factor": 0.5,
             },
-            "sparse_attention_config": {
-                "sparse_attention_freq": [0, 1],
-                "sparse_block_size": 8,
-                "sparse_disable_index_value": [0, 1],
-                "sparse_init_block": 0,
-                "sparse_index_dim": 16,
-                "sparse_local_block": 1,
-                "sparse_num_index_heads": 2,
-                "sparse_score_type": "max",
-                "sparse_topk_blocks": 4,
-                "use_sparse_attention": True,
-            },
+            "index_n_heads": 2,
+            "index_head_dim": 16,
+            "index_block_size": 8,
+            "index_topk_blocks": 4,
+            "index_init_blocks": 0,
+            "index_local_blocks": 1,
         },
         vision_config={
             "hidden_size": 32,
@@ -118,6 +113,7 @@ class MiniMaxM3VLVisionText2TextModelTester:
         self.batch_size = batch_size
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
+        self.video_token_index = video_token_index
         self.is_training = is_training
         self.text_config = text_config
         self.vision_config = vision_config
@@ -146,6 +142,7 @@ class MiniMaxM3VLVisionText2TextModelTester:
             text_config=self.text_config,
             vision_config=self.vision_config,
             image_token_index=self.image_token_index,
+            video_token_index=self.video_token_index,
             projector_hidden_size=self.text_config["hidden_size"],
         )
 
@@ -161,6 +158,7 @@ class MiniMaxM3VLVisionText2TextModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
         input_ids[input_ids == self.image_token_index] = self.pad_token_id
+        input_ids[input_ids == self.video_token_index] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = self.image_token_index
 
         inputs_dict = {
@@ -194,9 +192,15 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         else {}
     )
     _is_composite = True
-    # The vision tower packs every image's patches into a single sequence (batch dim 1),
-    # so ``last_hidden_state`` does not carry a per-image batch axis to shape-check.
+    # The vision tower packs every image's (and video frame's) patches into a single sequence
+    # (batch dim 1), so ``last_hidden_state`` does not carry a per-item batch axis to shape-check.
     skip_test_image_features_output_shape = True
+    skip_test_video_features_output_shape = True
+
+    # The indexer parameters only influence the argmax over compressed blocks (``topk``),
+    # which is non-differentiable — their gradients flow through a separate objective in
+    # the upstream training recipe, not the main causal-LM loss (same as DeepSeek-V4).
+    test_all_params_have_gradient = False
 
     def setUp(self):
         self.model_tester = MiniMaxM3VLVisionText2TextModelTester(self)
@@ -204,6 +208,38 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @unittest.skip(
+        reason=(
+            "Composite model whose text backbone is eager-only (Compressed Sparse Attention does "
+            "not compose with sdpa/flash/flex). The common test tries to switch the whole model to "
+            "sdpa, which the text backbone correctly rejects."
+        )
+    )
+    def test_can_set_attention_dynamically_composite_model(self):
+        pass
+
+    @unittest.skip(
+        reason=(
+            "The expert-packing converters fuse separate ``w1``/``w3`` checkpoints into a single "
+            "``gate_up_proj`` (MergeModulelist + Concatenate); there is no information-preserving "
+            "single source pattern for the base reverse test to check against. The real round-trip "
+            "is exercised by ``test_save_load``."
+        )
+    )
+    def test_reverse_loading_mapping(self):
+        pass
+
+    @unittest.skip(
+        reason=(
+            "The text backbone's indexer compresses windows of consecutive tokens *before* the "
+            "attention mask is applied — left-padding shifts the window boundaries so pad tokens "
+            "get folded into the pooled KV entries, and the resulting logits diverge from the "
+            "unpadded run by design (same limitation as DeepSeek-V4)."
+        )
+    )
+    def test_left_padding_compatibility(self):
+        pass
 
     def test_mismatching_num_image_tokens(self):
         """
@@ -239,22 +275,106 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
 
+    def test_video_forward(self):
+        """Video frames flow through the same vision tower as images and scatter into the video-token slots."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        batch_size = self.model_tester.batch_size
+        num_channels = self.model_tester.num_channels
+        temporal_patch_size = self.model_tester.temporal_patch_size
+        patch_size = self.model_tester.patch_size
+        merge_size = self.model_tester.spatial_merge_size
+
+        num_frames = 4
+        grid_t = num_frames // temporal_patch_size
+        grid_h = self.model_tester.image_size // patch_size
+        grid_w = self.model_tester.image_size // patch_size
+        patches_per_video = grid_t * grid_h * grid_w
+        # ``patch_merge`` groups ``merge_size**2`` patches, so each video yields this many tokens.
+        tokens_per_video = patches_per_video // (merge_size**2)
+
+        patch_dim = num_channels * (patch_size**2) * temporal_patch_size
+        pixel_values_videos = floats_tensor([batch_size * patches_per_video, patch_dim])
+        video_grid_thw = torch.tensor([[grid_t, grid_h, grid_w]] * batch_size, device=torch_device)
+        # The vision tower consumes exactly ``grid_t * grid_h * grid_w`` patches per video.
+        self.assertEqual(pixel_values_videos.shape[0], int(video_grid_thw.prod(dim=1).sum()))
+
+        input_ids = ids_tensor([batch_size, self.model_tester.seq_length], config.text_config.vocab_size - 2) + 2
+        input_ids[input_ids == self.model_tester.image_token_index] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.video_token_index] = self.model_tester.pad_token_id
+        # Carve out one contiguous block of video-token slots per sequence.
+        self.assertLessEqual(tokens_per_video, self.model_tester.seq_length)
+        input_ids[:, :tokens_per_video] = self.model_tester.video_token_index
+        attention_mask = torch.ones_like(input_ids)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    pixel_values_videos=pixel_values_videos,
+                    video_grid_thw=video_grid_thw,
+                )
+            self.assertIsNotNone(outputs)
+            self.assertIsNotNone(outputs.video_hidden_states)
+            self.assertEqual(outputs.video_hidden_states.shape[0], batch_size * tokens_per_video)
+
+    def test_mismatching_num_video_tokens(self):
+        """VLMs must raise when the number of videos doesn't match the number of video tokens in the text."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        batch_size = self.model_tester.batch_size
+        num_channels = self.model_tester.num_channels
+        temporal_patch_size = self.model_tester.temporal_patch_size
+        patch_size = self.model_tester.patch_size
+        merge_size = self.model_tester.spatial_merge_size
+
+        num_frames = 4
+        grid_t = num_frames // temporal_patch_size
+        grid_h = self.model_tester.image_size // patch_size
+        grid_w = self.model_tester.image_size // patch_size
+        patches_per_video = grid_t * grid_h * grid_w
+        tokens_per_video = patches_per_video // (merge_size**2)
+
+        patch_dim = num_channels * (patch_size**2) * temporal_patch_size
+        pixel_values_videos = floats_tensor([batch_size * patches_per_video, patch_dim])
+        video_grid_thw = torch.tensor([[grid_t, grid_h, grid_w]] * batch_size, device=torch_device)
+
+        input_ids = ids_tensor([batch_size, self.model_tester.seq_length], config.text_config.vocab_size - 2) + 2
+        input_ids[input_ids == self.model_tester.image_token_index] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.video_token_index] = self.model_tester.pad_token_id
+        # One fewer video-token slot than features -> mismatch.
+        input_ids[:, : tokens_per_video - 1] = self.model_tester.video_token_index
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            with self.assertRaisesRegex(ValueError, "Video features and video tokens do not match"):
+                _ = model(
+                    input_ids=input_ids,
+                    pixel_values_videos=pixel_values_videos,
+                    video_grid_thw=video_grid_thw,
+                )
+
 
 @slow
 @require_torch
 class MiniMaxM3VLIntegrationTest(unittest.TestCase):
     model_id = "MiniMaxAI/MiniMax-M3-preview"
 
-    def test_image_and_text_generation(self):
+    def _load_model(self):
         from transformers import AutoConfig, AutoModelForImageTextToText, FineGrainedFP8Config
 
         cfg = AutoConfig.from_pretrained(self.model_id)
         quant = FineGrainedFP8Config(
             activation_scheme="dynamic",
             weight_block_size=tuple(cfg.quantization_config["weight_block_size"]),
-            dequantize=True,
+            dequantize=False,
             modules_to_not_convert=cfg.quantization_config.get("ignored_layers"),
         )
+        # Native (non-dequantized) MXFP8 compute path: weights stay in float8_e4m3fn.
         quant.quant_method = "mxfp8"
         model = AutoModelForImageTextToText.from_pretrained(
             self.model_id,
@@ -264,24 +384,100 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         )
         model.eval()
         model.model.vision_tower.to(torch.bfloat16)
+        return model
 
-        processor = AutoProcessor.from_pretrained(self.model_id)
-        image = Image.new("RGB", (672, 672), (127, 127, 127))
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image"},
-                    {"type": "text", "text": "Describe this image briefly."},
-                ],
-            }
-        ]
-        text = processor.apply_chat_template(
+    @staticmethod
+    def _prompt(processor, question):
+        messages = [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": question}]}]
+        return processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=False, thinking_mode="disabled"
         )
+
+    def test_image_and_text_generation(self):
+        model = self._load_model()
+        processor = AutoProcessor.from_pretrained(self.model_id)
+        image = Image.new("RGB", (672, 672), (127, 127, 127))
+        text = self._prompt(processor, "Describe this image briefly.")
         inputs = processor(images=[image], text=text, return_tensors="pt").to(model.device)
         with torch.no_grad():
             output = model.generate(**inputs, max_new_tokens=32, do_sample=False)
         decoded = processor.batch_decode(output, skip_special_tokens=True)[0]
         self.assertIsInstance(decoded, str)
         self.assertGreater(len(decoded.strip()), 0)
+
+    def test_batched_padded_image_generation(self):
+        """Left-padded batch of two image+text prompts of differing lengths.
+
+        Mirrors the DeepSeek-V4 multi-prompt integration check, but additionally
+        exercises the padded-batch path: two distinct solid-color images with
+        prompts of different token lengths are batched together (forcing the
+        tokenizer to left-pad the shorter one). A correct run must describe each
+        image with its own color, proving the vision features stay aligned with
+        the right tokens across the padding and the MXFP8 MoE path.
+        """
+        model = self._load_model()
+        processor = AutoProcessor.from_pretrained(self.model_id)
+        # Decoder-only batched generation needs left padding so new tokens align.
+        processor.tokenizer.padding_side = "left"
+
+        red = Image.new("RGB", (672, 672), (200, 30, 30))
+        blue = Image.new("RGB", (672, 672), (30, 30, 200))
+        texts = [
+            self._prompt(processor, "What is the dominant color of this image? One word."),
+            self._prompt(processor, "Describe the color and mood of this image in a short sentence."),
+        ]
+        inputs = processor(images=[red, blue], text=texts, padding=True, return_tensors="pt").to(model.device)
+        # The two prompts differ in length, so the batch must have been padded.
+        self.assertEqual(inputs.input_ids.shape[0], 2)
+        with torch.no_grad():
+            output = model.generate(
+                **inputs, max_new_tokens=32, do_sample=False, pad_token_id=processor.tokenizer.pad_token_id
+            )
+        completions = processor.batch_decode(output[:, inputs.input_ids.size(1) :], skip_special_tokens=True)
+        self.assertEqual(len(completions), 2)
+        for completion in completions:
+            self.assertGreater(len(completion.strip()), 0)
+        # Each completion should name its own image's color, not the other's.
+        self.assertIn("red", completions[0].lower())
+        self.assertIn("blue", completions[1].lower())
+
+    def test_video_generation(self):
+        """End-to-end video path: the processor emits ``pixel_values_videos`` / ``video_grid_thw`` and the
+        model scatters the video features into the video-token slots before generating.
+
+        Uses a short synthetic clip rather than a network fetch: 672 is divisible by the vision tower's
+        ``patch_size * spatial_merge_size`` factor (28) and the frame count is a multiple of
+        ``temporal_patch_size``, so the video grid is well formed and the merged-patch count lines up
+        exactly with the expanded video tokens.
+        """
+        import numpy as np
+
+        model = self._load_model()
+        processor = AutoProcessor.from_pretrained(self.model_id)
+
+        num_frames = 4
+        video = np.zeros((num_frames, 672, 672, 3), dtype=np.uint8)
+        video[..., 0] = 200  # a solid red-ish clip
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "video"},
+                    {"type": "text", "text": "What is the dominant color in this video? Answer in one word."},
+                ],
+            }
+        ]
+        text = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=False, thinking_mode="disabled"
+        )
+        inputs = processor(videos=[video], text=text, return_tensors="pt").to(model.device)
+        # The processor must have produced the video tensors the model consumes.
+        self.assertIn("pixel_values_videos", inputs)
+        self.assertIn("video_grid_thw", inputs)
+        with torch.no_grad():
+            output = model.generate(**inputs, max_new_tokens=32, do_sample=False)
+        decoded = processor.batch_decode(output[:, inputs.input_ids.size(1) :], skip_special_tokens=True)[0]
+        self.assertIsInstance(decoded, str)
+        self.assertGreater(len(decoded.strip()), 0)
+        self.assertIn("red", decoded.lower())

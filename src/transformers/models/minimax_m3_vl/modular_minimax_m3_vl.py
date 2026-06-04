@@ -14,7 +14,6 @@
 """MiniMax M3 VL: vision tower + M3 (mixed sparse/dense MoE) text backbone."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -22,24 +21,30 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicLayer
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
-from ..clip.modeling_clip import CLIPAttention, CLIPEncoder, CLIPEncoderLayer, CLIPMLP
+from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoder, CLIPEncoderLayer
 from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
-from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel
+from ..llava.modeling_llava import (
+    LlavaCausalLMOutputWithPast,
+    LlavaForConditionalGeneration,
+    LlavaModel,
+    LlavaModelOutputWithPast,
+    LlavaMultiModalProjector,
+)
 from ..minimax_m2.configuration_minimax_m2 import MiniMaxM2Config
 from ..minimax_m2.modeling_minimax_m2 import (
     MiniMaxM2Attention,
-    MiniMaxM2Experts,
     MiniMaxM2ForCausalLM,
     MiniMaxM2Model,
     MiniMaxM2PreTrainedModel,
@@ -49,6 +54,8 @@ from ..minimax_m2.modeling_minimax_m2 import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..phimoe.modeling_phimoe import PhimoeExperts
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionPatchEmbed
 
 
 # ---------------------------------------------------------------------------
@@ -74,8 +81,18 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
         Clamp bound applied to the gate and up projections of the SwiGLU-OAI activation.
     moe_layer_freq (`list[int]`, *optional*):
         Per-layer flags (`0`/`1`) selecting a dense MLP (`0`) or a sparse MoE block (`1`).
-    sparse_attention_config (`dict`, *optional*):
-        Configuration of the lightning sparse attention (top-k, indexer dims, local/init window, frequency).
+    index_n_heads (`int`, *optional*, defaults to 4):
+        Number of heads in the lightning indexer's dot-product scoring branch.
+    index_head_dim (`int`, *optional*, defaults to 128):
+        Per-head channel dimension of the lightning indexer.
+    index_block_size (`int`, *optional*, defaults to 128):
+        Number of key tokens pooled into a single scored block.
+    index_topk_blocks (`int`, *optional*, defaults to 16):
+        Number of top-scoring key blocks each query may attend to.
+    index_init_blocks (`int`, *optional*, defaults to 0):
+        Number of leading key blocks always kept visible.
+    index_local_blocks (`int`, *optional*, defaults to 1):
+        Number of key blocks immediately preceding the query always kept visible.
     num_mtp_modules (`int`, *optional*, defaults to 0):
         Number of multi-token-prediction modules in the checkpoint; ignored at inference.
     """
@@ -103,7 +120,12 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
     swiglu_alpha: float = 1.702
     swiglu_limit: float = 7.0
     moe_layer_freq: list[int] | None = None
-    sparse_attention_config: dict | None = None
+    index_n_heads: int = 4
+    index_head_dim: int = 128
+    index_block_size: int = 128
+    index_topk_blocks: int = 16
+    index_init_blocks: int = 0
+    index_local_blocks: int = 1
     layer_types: list[str] | None = None
     num_mtp_modules: int = 0
     tie_word_embeddings: bool = False
@@ -113,16 +135,31 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
     rope_parameters: RopeParameters | dict | None = None
 
     def __post_init__(self, **kwargs):
+        # Older checkpoints ship the lightning-indexer hyperparameters as a nested
+        # ``sparse_attention_config`` dict; fold it into the flat ``index_*`` fields
+        # (and derive ``layer_types`` from its per-layer frequency) before the strict
+        # parent init runs, so model code only ever reads flat config attributes.
+        sparse_cfg = kwargs.pop("sparse_attention_config", None) or {}
         PreTrainedConfig.__post_init__(self, **kwargs)
+
+        for flat, legacy in {
+            "index_n_heads": "sparse_num_index_heads",
+            "index_head_dim": "sparse_index_dim",
+            "index_block_size": "sparse_block_size",
+            "index_topk_blocks": "sparse_topk_blocks",
+            "index_init_blocks": "sparse_init_block",
+            "index_local_blocks": "sparse_local_block",
+        }.items():
+            if legacy in sparse_cfg:
+                setattr(self, flat, sparse_cfg[legacy])
+
         # ``layer_types`` is the canonical per-layer attention dispatch: it tells
         # ``DynamicCache(config=...)`` which layers want the sparse cache and lets
-        # the decoder pick ``MiniMaxM3VLSparseAttention`` vs. plain attention. We
-        # derive it once here from ``sparse_attention_freq`` so model code never
-        # has to re-read the sparse-attention frequency list.
-        if self.layer_types is None and self.sparse_attention_config is not None:
-            freq = self.sparse_attention_config.get("sparse_attention_freq")
-            if freq is not None:
-                self.layer_types = ["minimax_m3_sparse" if f else "full_attention" for f in freq]
+        # the decoder pick ``MiniMaxM3VLSparseAttention`` vs. plain attention.
+        if self.layer_types is None and "sparse_attention_freq" in sparse_cfg:
+            self.layer_types = [
+                "minimax_m3_sparse" if f else "full_attention" for f in sparse_cfg["sparse_attention_freq"]
+            ]
         if self.layer_types is None:
             self.layer_types = ["full_attention"] * self.num_hidden_layers
 
@@ -204,7 +241,7 @@ class MiniMaxM3VLConfig(PreTrainedConfig):
 class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
     """Cache layer for M3 sparse-attention layers: a standard ``DynamicLayer``
     for the main attention plus an ``idx_keys`` slot holding the lightning
-    indexer's keys (one head, ``sparse_index_dim`` per token).
+    indexer's keys (one head, ``index_head_dim`` per token).
 
     Same dispatch story as DeepSeek-V4's ``DeepseekV4CSACache``: the class
     registers itself via ``layer_type = "minimax_m3_sparse"`` so
@@ -285,13 +322,13 @@ class MiniMaxM3VLDenseMLP(nn.Module):
         return self.down_proj(_swigluoai(gate_up, self.swiglu_alpha, self.swiglu_limit))
 
 
-class MiniMaxM3VLExperts(MiniMaxM2Experts):
-    """M3 experts: packed Mixtral layout, gated by the SwiGLU-OAI activation.
+class MiniMaxM3VLExperts(PhimoeExperts):
+    """M3 experts: standard packed-expert layout, gated by the SwiGLU-OAI activation.
 
-    The only architectural difference from [`MiniMaxM2Experts`] is the gate: M3
-    fuses gate and up with the clamped SwiGLU-OAI activation, which needs both
-    halves at once, so we route through the ``_apply_gate`` hook (also used by
-    the kernelized expert implementations) instead of a plain ``act_fn``.
+    Identical to [`PhimoeExperts`] except for the gate: M3 fuses gate and up with
+    the clamped SwiGLU-OAI activation, which needs both halves at once, so we route
+    through the ``_apply_gate`` hook (also honoured by the kernelized FP8 experts)
+    instead of a plain ``act_fn(gate) * up``.
     """
 
     def __init__(self, config: MiniMaxM3VLTextConfig):
@@ -301,6 +338,8 @@ class MiniMaxM3VLExperts(MiniMaxM2Experts):
         self.intermediate_dim = config.intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        # No ``act_fn``: M3 gates with SwiGLU-OAI via ``_apply_gate`` (the checkpoint's
+        # ``hidden_act="swigluoai"`` is not an ``ACT2FN`` key by design).
         self.swiglu_alpha = config.swiglu_alpha
         self.swiglu_limit = config.swiglu_limit
 
@@ -310,6 +349,9 @@ class MiniMaxM3VLExperts(MiniMaxM2Experts):
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
+        # Override [`PhimoeExperts.forward`], which bakes in ``act_fn(gate) * up``: the
+        # gate has to go through ``_apply_gate`` (SwiGLU-OAI) so the eager path matches
+        # the ``grouped_mm`` / ``batched_mm`` backends, which also route through it.
         final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
             expert_mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
@@ -318,8 +360,7 @@ class MiniMaxM3VLExperts(MiniMaxM2Experts):
         for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx]
-            current_state = self._apply_gate(F.linear(current_state, self.gate_up_proj[expert_idx]))
+            current_state = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
             current_state = F.linear(current_state, self.down_proj[expert_idx])
             current_state = current_state * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_state.to(final_hidden_states.dtype))
@@ -360,17 +401,6 @@ class MiniMaxM3VLSparseMoeBlock(MiniMaxM2SparseMoeBlock):
 # ---------------------------------------------------------------------------
 
 
-def _apply_partial_rope(
-    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, rotary_dim: int
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Rotate only the first ``rotary_dim`` channels of each head."""
-    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
-    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
-    cos_r, sin_r = cos[..., :rotary_dim], sin[..., :rotary_dim]
-    q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos_r, sin_r)
-    return torch.cat([q_rot, q_pass], dim=-1), torch.cat([k_rot, k_pass], dim=-1)
-
-
 class MiniMaxM3VLRotaryEmbedding(MiniMaxM2RotaryEmbedding):
     pass
 
@@ -378,15 +408,17 @@ class MiniMaxM3VLRotaryEmbedding(MiniMaxM2RotaryEmbedding):
 class MiniMaxM3VLAttention(MiniMaxM2Attention):
     """M3 attention: per-head Gemma QK-norm + partial RoPE.
 
-    Overrides the inherited FlexOlmo-style forward because:
-      * per-head QK norm requires reshaping to ``[..., num_heads, head_dim]``
-        before the norm (FlexOlmo applies a flat per-layer norm);
-      * RoPE rotates only the first ``rotary_dim`` channels of each head.
+    Overrides the inherited FlexOlmo-style forward because per-head QK norm
+    requires reshaping to ``[..., num_heads, head_dim]`` before the norm
+    (FlexOlmo applies a flat per-layer norm). The partial RoPE needs no special
+    handling: the rotary embedding already emits ``rotary_dim``-wide ``cos``/``sin``
+    (via ``partial_rotary_factor``), so the inherited ``apply_rotary_pos_emb`` —
+    which derives ``rotary_dim`` from ``cos.shape[-1]`` and passes the remaining
+    channels through unchanged — rotates exactly the first ``rotary_dim`` channels.
     """
 
     def __init__(self, config: MiniMaxM3VLTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.rotary_dim = config.rotary_dim
         # Replace the inherited (per-layer) q_norm/k_norm with per-head Gemma norms.
         self.q_norm = MiniMaxM3VLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = MiniMaxM3VLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
@@ -407,7 +439,7 @@ class MiniMaxM3VLAttention(MiniMaxM2Attention):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = _apply_partial_rope(query_states, key_states, cos, sin, self.rotary_dim)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
@@ -432,10 +464,10 @@ class MiniMaxM3VLAttention(MiniMaxM2Attention):
 class MiniMaxM3VLIndexer(nn.Module):
     r"""Lightning Indexer for MiniMax M3 sparse attention.
 
-    Scores key *blocks* of size ``sparse_block_size`` against each query with a
-    small ``sparse_num_index_heads``-head dot-product branch, then keeps, per
-    query, the top-``sparse_topk_blocks`` blocks plus the first
-    ``sparse_init_block`` blocks and the ``sparse_local_block`` blocks
+    Scores key *blocks* of size ``index_block_size`` against each query with a
+    small ``index_n_heads``-head dot-product branch, then keeps, per
+    query, the top-``index_topk_blocks`` blocks plus the first
+    ``index_init_blocks`` blocks and the ``index_local_blocks`` blocks
     immediately preceding the query (always visible). It returns a
     ``[B, 1, S_q, S_k]`` additive ``block_bias`` that is ``0`` at every allowed
     (query, key) pair and ``-inf`` elsewhere, to be summed onto the main
@@ -449,31 +481,51 @@ class MiniMaxM3VLIndexer(nn.Module):
 
     def __init__(self, config: MiniMaxM3VLTextConfig):
         super().__init__()
-        sparse_cfg = config.sparse_attention_config
-        self.num_heads = int(sparse_cfg["sparse_num_index_heads"])
-        self.head_dim = int(sparse_cfg["sparse_index_dim"])
-        self.block_size = int(sparse_cfg["sparse_block_size"])
-        self.topk_blocks = int(sparse_cfg["sparse_topk_blocks"])
-        self.init_blocks = int(sparse_cfg.get("sparse_init_block", 0))
-        self.local_blocks = int(sparse_cfg.get("sparse_local_block", 1))
-        self.score_type = sparse_cfg.get("sparse_score_type", "max")
+        self.config = config
+        self.q_proj = nn.Linear(config.hidden_size, config.index_n_heads * config.index_head_dim, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, config.index_head_dim, bias=False)
+        self.q_norm = MiniMaxM3VLRMSNorm(config.index_head_dim, eps=config.rms_norm_eps)
+        self.k_norm = MiniMaxM3VLRMSNorm(config.index_head_dim, eps=config.rms_norm_eps)
 
-        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
-        self.q_norm = MiniMaxM3VLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = MiniMaxM3VLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_ids: torch.Tensor | None,
+        past_key_values: Cache | None,
+        layer_idx: int,
+    ) -> torch.Tensor:
+        config = self.config
+        head_dim = config.index_head_dim
+        num_heads = config.index_n_heads
+        block = config.index_block_size
+        topk_blocks = config.index_topk_blocks
+        init_blocks = config.index_init_blocks
+        local_blocks = config.index_local_blocks
 
-    def _block_bias(self, idx_q: torch.Tensor, idx_k: torch.Tensor, q_positions: torch.Tensor) -> torch.Tensor:
-        r"""Build the ``[B, 1, S_q, S_k]`` top-k + init + local additive mask.
+        bsz, slen, _ = hidden_states.shape
+        idx_q = self.q_proj(hidden_states).view(bsz, slen, num_heads, head_dim)
+        idx_k = self.k_proj(hidden_states).view(bsz, slen, 1, head_dim)
+        idx_q = self.q_norm(idx_q).transpose(1, 2)  # [B, H_idx, Sq, D]
+        idx_k = self.k_norm(idx_k).transpose(1, 2)  # [B, 1, Sq, D]
+        cos, sin = position_embeddings
+        idx_q, idx_k = apply_rotary_pos_emb(idx_q, idx_k, cos[..., :head_dim], sin[..., :head_dim])
 
-        ``idx_q``: ``[B, H_idx, S_q, D]`` — only the *new* queries.
-        ``idx_k``: ``[B, 1, S_k, D]`` — the *full* cached key history.
-        ``q_positions``: ``[S_q]`` absolute positions of the queries, so the
-        causal block threshold lines up with the cached history during decode.
-        """
+        # Cache the indexer keys (one head, ``index_head_dim`` per token) so a
+        # decode-step query scores against the full history.
+        cache_layer: MiniMaxM3VLSparseCacheLayer | None = (
+            past_key_values.layers[layer_idx] if past_key_values is not None else None
+        )
+        idx_k = cache_layer.update_index(idx_k) if cache_layer is not None else idx_k
+        q_positions = torch.arange(slen, device=idx_q.device) if position_ids is None else position_ids[0]
+
+        # Build the ``[B, 1, S_q, S_k]`` top-k + init + local additive mask: ``0`` at every
+        # allowed (query, key) pair, ``-inf`` elsewhere. ``idx_q`` is ``[B, H_idx, S_q, D]``
+        # (only the new queries); ``idx_k`` is ``[B, 1, S_k, D]`` (the full cached history);
+        # ``q_positions`` are the absolute query positions so the causal block threshold
+        # lines up with the cache during decode.
         batch, heads, q_len, _ = idx_q.shape
         k_len = idx_k.shape[2]
-        block = self.block_size
         n_blocks = -(-k_len // block)  # ceil-div
         pad = n_blocks * block - k_len
 
@@ -484,8 +536,9 @@ class MiniMaxM3VLIndexer(nn.Module):
         if pad:
             scores = F.pad(scores, (0, pad), value=float("-inf"))
         scores = scores.view(batch, heads, q_len, n_blocks, block)
-        block_scores = scores.amax(dim=-1) if self.score_type == "max" else scores.softmax(dim=-1).sum(dim=-1)
-        block_scores = block_scores.amax(dim=1)  # -> [B, S_q, n_blocks]
+        block_scores = scores.amax(dim=-1).amax(
+            dim=1
+        )  # max-pool over block tokens, then over heads -> [B, S_q, n_blocks]
 
         # Block-level causality on absolute positions.
         q_block = q_positions // block  # [S_q]
@@ -496,43 +549,17 @@ class MiniMaxM3VLIndexer(nn.Module):
         # punch ``0`` at the selected blocks (top-k, then the always-on init and
         # local windows), then re-mask the future so a short history can't leak.
         bias = block_scores.new_full((batch, q_len, n_blocks), float("-inf"))
-        bias.scatter_(-1, block_scores.topk(min(self.topk_blocks, n_blocks), dim=-1).indices, 0.0)
-        if self.init_blocks > 0:
-            bias[..., : self.init_blocks] = 0.0
-        if self.local_blocks > 0:
-            local = torch.arange(self.local_blocks, device=idx_q.device)
+        bias.scatter_(-1, block_scores.topk(min(topk_blocks, n_blocks), dim=-1).indices, 0.0)
+        if init_blocks > 0:
+            bias[..., :init_blocks] = 0.0
+        if local_blocks > 0:
+            local = torch.arange(local_blocks, device=idx_q.device)
             local = (q_block.view(-1, 1) - local.view(1, -1)).clamp(min=0)  # [S_q, local]
             bias.scatter_(-1, local.unsqueeze(0).expand(batch, -1, -1), 0.0)
         bias = bias.masked_fill(future, float("-inf"))
 
         token_bias = bias.repeat_interleave(block, dim=-1)[..., :k_len]
         return token_bias.to(idx_q.dtype).unsqueeze(1)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        position_ids: torch.Tensor | None,
-        past_key_values: Cache | None,
-        layer_idx: int,
-    ) -> torch.Tensor:
-        bsz, slen, _ = hidden_states.shape
-        idx_q = self.q_proj(hidden_states).view(bsz, slen, self.num_heads, self.head_dim)
-        idx_k = self.k_proj(hidden_states).view(bsz, slen, 1, self.head_dim)
-        idx_q = self.q_norm(idx_q).transpose(1, 2)  # [B, H_idx, Sq, D]
-        idx_k = self.k_norm(idx_k).transpose(1, 2)  # [B, 1, Sq, D]
-        cos, sin = position_embeddings
-        idx_q, idx_k = apply_rotary_pos_emb(idx_q, idx_k, cos[..., : self.head_dim], sin[..., : self.head_dim])
-
-        # Cache the indexer keys (one head, ``sparse_index_dim`` per token) so a
-        # decode-step query scores against the full history.
-        cache_layer: MiniMaxM3VLSparseCacheLayer | None = (
-            past_key_values.layers[layer_idx] if past_key_values is not None else None
-        )
-        idx_k = cache_layer.update_index(idx_k) if cache_layer is not None else idx_k
-
-        q_positions = torch.arange(slen, device=idx_q.device) if position_ids is None else position_ids[0]
-        return self._block_bias(idx_q, idx_k, q_positions)
 
 
 class MiniMaxM3VLSparseAttention(MiniMaxM3VLAttention):
@@ -642,6 +669,15 @@ class MiniMaxM3VLPreTrainedModel(MiniMaxM2PreTrainedModel):
     input_modalities = ("image", "video", "text")
     # MTP modules ship in the upstream checkpoint but aren't part of this port.
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
+    # The text backbone's Compressed Sparse Attention gathers a variable, data-dependent
+    # set of compressed blocks per query (via the non-differentiable Lightning Indexer),
+    # which does not compose with flash/sdpa/flex kernels or a fixed-shape static cache /
+    # fullgraph compile. Custom eager attention only, same as DeepSeek-V4.
+    _supports_flash_attn = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
+    _can_compile_fullgraph = False
+    _supports_attention_backend = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -688,29 +724,26 @@ class MiniMaxM3VLForCausalLM(MiniMaxM2ForCausalLM):
 # ---------------------------------------------------------------------------
 
 
-class MiniMaxM3VLVisionEmbeddings(nn.Module):
-    """Conv3d patch embedding over a flat ``[N_patches, C * T * P * P]`` input."""
+class MiniMaxM3VLVisionEmbeddings(Qwen2_5_VisionPatchEmbed):
+    """Conv3d patch embedding over a flat ``[N_patches, C * T * P * P]`` input.
+
+    Identical to [`Qwen2_5_VisionPatchEmbed`]; only the constructor differs (it
+    reads the dims from the vision config). The upstream checkpoint stores the
+    conv as ``patch_embedding``, renamed to the inherited ``proj`` in the
+    conversion mapping.
+    """
 
     def __init__(self, config: MiniMaxM3VLVisionConfig):
-        super().__init__()
-        self.num_channels = config.num_channels
-        self.temporal_patch_size = config.temporal_patch_size
+        nn.Module.__init__(self)
         self.patch_size = config.patch_size
-        self.patch_embedding = nn.Conv3d(
-            in_channels=self.num_channels,
-            out_channels=config.hidden_size,
-            kernel_size=(self.temporal_patch_size, self.patch_size, self.patch_size),
-            stride=(self.temporal_patch_size, self.patch_size, self.patch_size),
-            bias=False,
-        )
+        self.temporal_patch_size = config.temporal_patch_size
+        self.in_channels = config.num_channels
+        self.embed_dim = config.hidden_size
 
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        n = pixel_values.shape[0]
-        pixel_values = pixel_values.view(
-            n, self.num_channels, self.temporal_patch_size, self.patch_size, self.patch_size
+        kernel_size = [self.temporal_patch_size, self.patch_size, self.patch_size]
+        self.proj = nn.Conv3d(
+            self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=False
         )
-        out = self.patch_embedding(pixel_values.to(self.patch_embedding.weight.dtype))
-        return out.reshape(n, -1)
 
 
 class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
@@ -768,6 +801,12 @@ class MiniMaxM3VLVisionAttention(CLIPAttention):
     """CLIP-style vision attention; the only difference from [`CLIPAttention`] is
     that queries and keys are rotated by the tower's 3D RoPE before the
     (interface-dispatched) scaled dot-product attention."""
+
+    def __init__(self, config: MiniMaxM3VLVisionConfig):
+        super().__init__(config)
+        # The vision tower has no grouped-query attention; the shared eager kernel
+        # still expects this attribute to drive its (no-op) ``repeat_kv``.
+        self.num_key_value_groups = 1
 
     def forward(
         self,
@@ -829,9 +868,7 @@ class MiniMaxM3VLVisionEncoderLayer(CLIPEncoderLayer):
 class MiniMaxM3VLVisionEncoder(CLIPEncoder):
     def __init__(self, config: MiniMaxM3VLVisionConfig):
         super().__init__(config)
-        self.layers = nn.ModuleList(
-            [MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(
         self,
@@ -895,6 +932,10 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
     def forward(
         self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithPooling:
+        r"""
+        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`):
+            The temporal, height and width of feature shape of each image.
+        """
         return self.vision_model(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
 
@@ -919,35 +960,59 @@ class MiniMaxM3VLPatchMerger(nn.Module):
         return self.linear_2(F.gelu(self.linear_1(x)))
 
 
-class MiniMaxM3VLMultiModalProjector(nn.Module):
-    """2-layer projector from vision hidden_size to text hidden_size."""
+class MiniMaxM3VLMultiModalProjector(LlavaMultiModalProjector):
+    """2-layer GELU projector from vision hidden_size to text hidden_size.
+
+    Same forward as [`LlavaMultiModalProjector`]; only the constructor differs —
+    M3 projects through ``projector_hidden_size`` rather than reusing
+    ``text_config.hidden_size`` for the inner dimension.
+    """
 
     def __init__(self, config: MiniMaxM3VLConfig):
-        super().__init__()
+        nn.Module.__init__(self)
         self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.projector_hidden_size, bias=True)
+        self.act = ACT2FN["gelu"]
         self.linear_2 = nn.Linear(config.projector_hidden_size, config.text_config.hidden_size, bias=True)
 
-    def forward(self, image_features: torch.Tensor) -> torch.Tensor:
-        return self.linear_2(F.gelu(self.linear_1(image_features)))
+
+class MiniMaxM3VLModelOutputWithPast(LlavaModelOutputWithPast):
+    r"""
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(num_image_patches, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    video_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(num_video_patches, hidden_size)`.
+        video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
+
+    video_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
-@auto_docstring(custom_intro="MiniMax M3 VL model output (without LM head).")
-class MiniMaxM3VLModelOutputWithPast(BaseModelOutputWithPast):
-    r"""image_hidden_states: Image features from the vision tower after projection."""
+class MiniMaxM3VLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
-    image_hidden_states: torch.FloatTensor | None = None
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(num_image_patches, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    video_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(num_video_patches, hidden_size)`.
+        video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
 
-
-@dataclass
-@auto_docstring(custom_intro="MiniMax M3 VL causal LM output.")
-class MiniMaxM3VLCausalLMOutputWithPast(ModelOutput):
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
+    video_hidden_states: torch.FloatTensor | None = None
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL backbone (vision + projector + text), without LM head.")
@@ -981,13 +1046,81 @@ class MiniMaxM3VLModel(LlavaModel):
         vision_outputs.pooler_output = self.patch_merge(hidden_states)
         return vision_outputs
 
+    @merge_with_config_defaults
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
+    )
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.Tensor,
+        **kwargs,
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor`):
+            The tensors corresponding to the input video frames.
+        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of each video's feature grid, used to build the vision 3D RoPE
+            and to merge patch features.
+        """
+        # Video frames flow through the same vision pipeline as images (the tower is
+        # grid-agnostic); only the placeholder token they scatter into differs.
+        vision_outputs = self.vision_tower(pixel_values=pixel_values_videos, image_grid_thw=video_grid_thw, **kwargs)
+        hidden_states = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
+        vision_outputs.pooler_output = self.patch_merge(hidden_states)
+        return vision_outputs
+
+    def get_placeholder_mask(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor | None = None,
+        video_features: torch.FloatTensor | None = None,
+    ):
+        """
+        Obtains the image/video placeholder masks from `input_ids` or `inputs_embeds`, and checks that the
+        placeholder token count matches the multimodal feature length. Raises if they differ.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+            special_video_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_video_mask = special_video_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+            special_video_mask = input_ids == self.config.video_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if image_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
+            )
+
+        n_video_tokens = special_video_mask.sum()
+        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if video_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_video_mask].numel() == video_features.numel(),
+                f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
+            )
+        return special_image_mask, special_video_mask
+
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.Tensor | None = None,
+        video_grid_thw: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -997,6 +1130,9 @@ class MiniMaxM3VLModel(LlavaModel):
         r"""
         image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
+            and to merge patch features.
+        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of each video's feature grid, used to build the vision 3D RoPE
             and to merge patch features.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -1010,8 +1146,20 @@ class MiniMaxM3VLModel(LlavaModel):
             image_features = self.get_image_features(
                 pixel_values=pixel_values, image_grid_thw=image_grid_thw
             ).pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
-            mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
-            inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
+
+        video_features = None
+        if pixel_values_videos is not None:
+            video_features = self.get_video_features(
+                pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw
+            ).pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+
+        image_mask, video_mask = self.get_placeholder_mask(
+            input_ids, inputs_embeds, image_features=image_features, video_features=video_features
+        )
+        if image_features is not None:
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
+        if video_features is not None:
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_features)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -1027,6 +1175,7 @@ class MiniMaxM3VLModel(LlavaModel):
             hidden_states=getattr(outputs, "hidden_states", None),
             attentions=getattr(outputs, "attentions", None),
             image_hidden_states=image_features,
+            video_hidden_states=video_features,
         )
 
 
@@ -1042,13 +1191,25 @@ class MiniMaxM3VLForConditionalGeneration(LlavaForConditionalGeneration):
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
+    def get_video_features(self, pixel_values_videos, video_grid_thw, **kwargs):
+        r"""
+        pixel_values_videos (`torch.FloatTensor`):
+            The tensors corresponding to the input video frames.
+        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of each video's feature grid, used to build the vision 3D RoPE
+            and to merge patch features.
+        """
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.Tensor | None = None,
+        video_grid_thw: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -1061,11 +1222,16 @@ class MiniMaxM3VLForConditionalGeneration(LlavaForConditionalGeneration):
         image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
             and to merge patch features.
+        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of each video's feature grid, used to build the vision 3D RoPE
+            and to merge patch features.
         """
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1087,7 +1253,38 @@ class MiniMaxM3VLForConditionalGeneration(LlavaForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
+            video_hidden_states=outputs.video_hidden_states,
         )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        pixel_values=None,
+        pixel_values_videos=None,
+        attention_mask=None,
+        logits_to_keep=None,
+        is_first_iteration=False,
+        **kwargs,
+    ):
+        # Overwritten -- pixel inputs are merged into the cache on the first step, so we
+        # only forward them once (image and video alike).
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            model_inputs["pixel_values"] = pixel_values
+            model_inputs["pixel_values_videos"] = pixel_values_videos
+
+        return model_inputs
 
 
 __all__ = [

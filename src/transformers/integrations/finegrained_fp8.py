@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import functools
+import types
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -22,12 +23,12 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 from ..activations import ACT2FN
-from ..core_model_loading import ConversionOps
+from ..core_model_loading import ConversionOps, _IdentityOp
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import logging
 from ..utils.import_utils import get_cuda_runtime_version, is_kernels_available, resolve_internal_import
 from .hub_kernels import lazy_load_kernel
-from .moe import ExpertsInterface, use_experts_implementation
+from .moe import ExpertsInterface, _default_apply_gate, use_experts_implementation
 
 
 logger = logging.get_logger(__name__)
@@ -671,7 +672,15 @@ class FP8Experts(nn.Module):
         self.activation_scheme = activation_scheme
         self.num_experts = _first_attr(config, "num_local_experts", "num_experts")
         self.intermediate_dim = _first_attr(config, "moe_intermediate_size", "intermediate_size")
-        self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
+        # Gated experts may carry a non-pointwise activation (e.g. SwiGLU-OAI) whose name
+        # has no ``ACT2FN`` entry and which is applied through ``_apply_gate`` instead; keep
+        # ``act_fn`` unset in that case rather than failing the lookup.
+        act_name = _first_attr(config, "hidden_activation", "hidden_act")
+        # NB: ``ACT2FN`` instantiates lazily in ``__getitem__``; ``.get`` would return the
+        # raw class, so we membership-check then index (and fall back to ``None``).
+        self.act_fn = None
+        if act_name in ACT2FN:
+            self.act_fn = ACT2FN[act_name]
 
         if self.has_gate:
             gu_proj_out, gu_proj_in = 2 * self.intermediate_dim, self.hidden_dim
@@ -795,6 +804,24 @@ class FP8ExpertsInterface(ExpertsInterface):
 ALL_FP8_EXPERTS_FUNCTIONS = FP8ExpertsInterface()
 
 
+def _inherit_custom_gate(new_module: nn.Module, source_module: nn.Module) -> None:
+    """Carry a model-specific gating function from ``source_module`` onto its FP8 replacement.
+
+    The FP8 experts forward calls ``self._apply_gate(gate_up)`` for gated experts. A model
+    that overrides ``_apply_gate`` (e.g. the SwiGLU-OAI gate) would otherwise lose it when the
+    module is swapped for the generic [`FP8Experts`], which defaults to ``act_fn(gate) * up``.
+    We rebind the source class' ``_apply_gate`` to the new module and copy the scalar attributes
+    it references (e.g. ``swiglu_alpha`` / ``swiglu_limit``).
+    """
+    source_gate = getattr(type(source_module), "_apply_gate", None)
+    if source_gate is None or source_gate in (_default_apply_gate, FP8Experts._apply_gate):
+        return
+    for name, value in vars(source_module).items():
+        if isinstance(value, (int, float, bool)) and not hasattr(new_module, name):
+            setattr(new_module, name, value)
+    new_module._apply_gate = types.MethodType(source_gate, new_module)
+
+
 def replace_with_fp8_linear(
     model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
 ):
@@ -842,6 +869,7 @@ def replace_with_fp8_linear(
                     has_gate=has_gate,
                     **module_kwargs,
                 )
+                _inherit_custom_gate(new_module, module)
             elif isinstance(module, nn.Linear):
                 new_module = FP8Linear(
                     in_features=module.in_features,
@@ -1063,3 +1091,45 @@ class Fp8Dequantize(ConversionOps):
         # checkpoint preserves the FP8 format (weight + per-block ``weight_scale_inv``)
         # whether the in-memory state stayed quantized or was dequantized for compute.
         return Fp8Quantize(self.hf_quantizer)
+
+
+class Mxfp8DequantizeScale(ConversionOps):
+    """Decode MXFP8 ``E8M0`` block scales (stored as ``torch.uint8``) to ``float32``.
+
+    Unlike :class:`Fp8Dequantize` — which folds the scale into the weight for the
+    full-precision (``dequantize=True``) path — the native FP8 compute path keeps
+    the weight in ``float8_e4m3fn`` and holds ``*_scale_inv`` as a ``float32``
+    parameter that is fed straight to ``w8a8_fp8_matmul``. MXFP8 checkpoints ship
+    each per-block scale as a single ``E8M0`` exponent byte whose real multiplier
+    is ``2 ** (byte - 127)``; copying the raw bytes into the ``float32`` parameter
+    would be silently wrong, so we unpack them here.
+
+    The op is elementwise and preserves the input keys, so it composes both as the
+    sole op of a plain ``nn.Linear`` scale converter (source/target share the
+    ``weight_scale_inv`` suffix, so the loader's prefix/suffix rename maps it to the
+    full name) and as the first op of an expert-packing chain (the following
+    ``MergeModulelist``/``Concatenate`` then pack the decoded per-expert scales
+    exactly like the weight side, since the ``[1, N]`` block keeps the row axis 1:1).
+    """
+
+    @torch.no_grad
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor] | torch.Tensor],
+        source_patterns: list[str] | None = None,
+        target_patterns: list[str] | None = None,
+        **kwargs,
+    ) -> dict[str, list[torch.Tensor] | torch.Tensor]:
+        def _decode(tensor: torch.Tensor) -> torch.Tensor:
+            if tensor.dtype == torch.uint8:
+                return (tensor.to(torch.float32) - 127.0).exp2()
+            return tensor.to(torch.float32)
+
+        result: dict[str, list[torch.Tensor] | torch.Tensor] = {}
+        for key, value in input_dict.items():
+            result[key] = [_decode(t) for t in value] if isinstance(value, list) else _decode(value)
+        return result
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return _IdentityOp()

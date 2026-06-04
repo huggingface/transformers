@@ -499,7 +499,9 @@ class DeepseekV4Indexer(nn.Module):
         layer_idx: int,
     ) -> torch.LongTensor:
         batch, seq_len, _ = hidden_states.shape
-        cache_layer: DeepseekV4CSACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
+        cache_layer: DeepseekV4CSACache | None = (
+            past_key_values.layers[layer_idx] if past_key_values is not None else None
+        )
         kv = self.kv_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
 
@@ -617,7 +619,9 @@ class DeepseekV4CSACompressor(nn.Module):
         layer_idx: int,
     ) -> torch.Tensor:
         batch, seq_len, _ = hidden_states.shape
-        cache_layer: DeepseekV4CSACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
+        cache_layer: DeepseekV4CSACache | None = (
+            past_key_values.layers[layer_idx] if past_key_values is not None else None
+        )
         kv = self.kv_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
 

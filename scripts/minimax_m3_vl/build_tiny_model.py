@@ -12,11 +12,11 @@ Run:  ``PYTHONPATH=src python scripts/minimax_m3_vl/build_tiny_model.py``
 from __future__ import annotations
 
 import argparse
-import os
+import warnings
 from pathlib import Path
 
 import torch
-import warnings
+
 
 warnings.filterwarnings("ignore")
 
