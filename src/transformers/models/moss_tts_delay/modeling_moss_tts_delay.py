@@ -30,7 +30,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..qwen3 import Qwen3Model
+from ..auto import AutoModel
 from .configuration_moss_tts_delay import MossTTSDelayConfig
 from .inference_utils import find_last_equal_C, sample_token
 
@@ -163,7 +163,7 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
 
         config.language_config.dtype = config.dtype
 
-        self.language_model = Qwen3Model(config.language_config)
+        self.language_model = AutoModel.from_config(config.language_config)
 
         # Audio VQ Embeddings (Extra channels)
         # Note: input_ids[..., 0] uses Qwen's embedding.
