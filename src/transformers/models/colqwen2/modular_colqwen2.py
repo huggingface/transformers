@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
 from dataclasses import dataclass
 
 from ...cache_utils import Cache
@@ -115,13 +116,15 @@ class ColQwen2Processor(ColPaliProcessor):
             if image_grid_thw is not None:
                 merge_length = self.image_processor.merge_size**2
                 index = 0
-                for i in range(len(texts_doc)):
-                    while self.image_token in texts_doc[i]:
-                        texts_doc[i] = texts_doc[i].replace(
-                            self.image_token, "<|placeholder|>" * (image_grid_thw[index].prod() // merge_length), 1
-                        )
-                        index += 1
-                    texts_doc[i] = texts_doc[i].replace("<|placeholder|>", self.image_token)
+
+                def expand(_match):
+                    nonlocal index
+                    num_image_tokens = image_grid_thw[index].prod() // merge_length
+                    index += 1
+                    return self.image_token * num_image_tokens
+
+                pattern = re.escape(self.image_token)
+                texts_doc = [re.sub(pattern, expand, text) for text in texts_doc]
 
             text_inputs = self.tokenizer(
                 texts_doc,

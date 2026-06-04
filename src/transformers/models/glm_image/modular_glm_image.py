@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+import re
 import warnings
 from collections.abc import Callable
 from typing import Any
@@ -1346,13 +1347,16 @@ class GlmImageProcessor(ProcessorMixin):
         # Replace image tokens with the correct number of placeholder tokens
         if not is_text_to_image:
             index = 0
-            for i in range(batch_size):
-                while self.image_token in text[i]:
-                    grid = image_grid_thw[index]
-                    num_image_tokens = int(grid[1] * grid[2])
-                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
+
+            def expand(_match):
+                nonlocal index
+                grid = image_grid_thw[index]
+                num_image_tokens = int(grid[1] * grid[2])
+                index += 1
+                return self.image_token * num_image_tokens
+
+            pattern = re.escape(self.image_token)
+            text = [re.sub(pattern, expand, text_i) for text_i in text]
 
         # Build prompt with target shape and combine grids in a single loop
         # Format: [sample0_source_grids..., sample0_target_grids, sample1_source_grids..., sample1_target_grids, ...]

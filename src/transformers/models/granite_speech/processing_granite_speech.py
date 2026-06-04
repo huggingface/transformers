@@ -13,6 +13,7 @@
 # limitations under the License.
 """Processor class for Granite Speech."""
 
+import re
 from typing import Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -73,19 +74,16 @@ class GraniteSpeechProcessor(ProcessorMixin):
 
             # Expand the audio placeholders to match the feature dims; this
             # is similar to how many VLMs handle image tokens, e.g., llava next
-            prompt_strings = []
             num_replaced = 0
-            for sample in text:
-                while self.audio_token in sample:
-                    sample = sample.replace(
-                        self.audio_token,
-                        "<placeholder>" * audio_embed_sizes[num_replaced],
-                        1,
-                    )
-                    num_replaced += 1
-                prompt_strings.append(sample)
 
-            prompt_strings = [sample.replace("<placeholder>", self.audio_token) for sample in prompt_strings]
+            def expand(_match):
+                nonlocal num_replaced
+                num_tokens = audio_embed_sizes[num_replaced]
+                num_replaced += 1
+                return self.audio_token * num_tokens
+
+            pattern = re.escape(self.audio_token)
+            prompt_strings = [re.sub(pattern, expand, sample) for sample in text]
         else:
             audio_inputs = {}
 

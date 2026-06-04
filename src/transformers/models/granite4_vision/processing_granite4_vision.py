@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
 from fractions import Fraction
 
 from ...feature_extraction_utils import BatchFeature
@@ -119,20 +120,19 @@ class Granite4VisionProcessor(ProcessorMixin):
         if image_inputs:
             image_sizes = iter(image_inputs["image_sizes"])
             height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
-            prompt_strings = []
-            for sample in text:
-                while self.image_token in sample:
-                    image_size = next(image_sizes)
-                    if not isinstance(image_size, (list, tuple)):
-                        # cast to list to avoid numerical precision errors when calculating unpadding
-                        image_size = image_size.tolist()
-                    orig_height, orig_width = image_size
-                    num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
-                    if self.vision_feature_select_strategy == "default":
-                        num_image_tokens -= 1
-                    sample = sample.replace(self.image_token, "<placeholder>" * num_image_tokens, 1)
-                prompt_strings.append(sample)
-            prompt_strings = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
+            def expand(_match):
+                image_size = next(image_sizes)
+                if not isinstance(image_size, (list, tuple)):
+                    # cast to list to avoid numerical precision errors when calculating unpadding
+                    image_size = image_size.tolist()
+                orig_height, orig_width = image_size
+                num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
+                if self.vision_feature_select_strategy == "default":
+                    num_image_tokens -= 1
+                return self.image_token * num_image_tokens
+
+            pattern = re.escape(self.image_token)
+            prompt_strings = [re.sub(pattern, expand, sample) for sample in text]
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)

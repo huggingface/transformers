@@ -16,6 +16,7 @@ Processor class for DeepSeek-OCR-2.
 """
 
 import math
+import re
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -91,13 +92,15 @@ class DeepseekOcr2Processor(ProcessorMixin):
         local_tokens = num_queries_local * num_queries_local
 
         crop_index = 0
-        for i in range(len(text)):
-            while self.image_token in text[i]:
-                num_tokens = global_tokens + local_tokens * num_crops_list[crop_index] + 1
-                text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_tokens, 1)
-                crop_index += 1
-            text[i] = text[i].replace("<|placeholder|>", self.image_token)
-        return text
+
+        def expand(_match):
+            nonlocal crop_index
+            num_tokens = global_tokens + local_tokens * num_crops_list[crop_index] + 1
+            crop_index += 1
+            return self.image_token * num_tokens
+
+        pattern = re.escape(self.image_token)
+        return [re.sub(pattern, expand, text_i) for text_i in text]
 
     @auto_docstring
     def __call__(
