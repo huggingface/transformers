@@ -72,6 +72,7 @@ if is_torch_available():
         BartForConditionalGeneration,
         BartTokenizer,
         DataCollatorWithFlattening,
+        GPT2Config,
         GPT2LMHeadModel,
         GPT2Tokenizer,
         ImageGPTForCausalImageModeling,
@@ -2888,6 +2889,29 @@ class GenerationIntegrationTests(unittest.TestCase):
         # so the output is on CPU; the generated tokens must still match the on-device run.
         self.assertEqual(on_cpu.device.type, "cpu")
         self.assertTrue(torch.equal(on_cpu, on_device.cpu()))
+
+    def test_static_cache_uses_max_cache_len_from_cache_config(self):
+        config = GPT2Config(
+            vocab_size=32,
+            n_embd=16,
+            n_layer=2,
+            n_head=2,
+            bos_token_id=0,
+            eos_token_id=-1,
+            pad_token_id=0,
+        )
+        model = GPT2LMHeadModel(config).to(torch_device).eval()
+        input_ids = torch.tensor([[0, 1, 2]], device=torch_device)
+
+        model.generate(
+            input_ids,
+            max_new_tokens=2,
+            cache_implementation="static",
+            cache_config={"max_cache_len": 32},
+        )
+
+        self.assertIsInstance(model._cache, StaticCache)
+        self.assertEqual(model._cache.max_cache_len, 32)
 
     def test_generation_config_deprecation(self):
         import logging as pylogging
