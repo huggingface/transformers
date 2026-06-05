@@ -25,7 +25,6 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -36,6 +35,7 @@ from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import (
     CLIPAttention,
+    CLIPEncoderLayer,
     CLIPOutput,
     CLIPTextEmbeddings,
     _get_vector_norm,
@@ -513,14 +513,11 @@ class Tipsv2TextMLP(nn.Module):
         return hidden_states
 
 
-class Tipsv2TextEncoderLayer(GradientCheckpointingLayer):
+class Tipsv2TextEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: Tipsv2TextConfig):
-        super().__init__()
-        self.embed_dim = config.hidden_size
+        super().__init__(config)
         self.self_attn = Tipsv2TextAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = Tipsv2TextMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
