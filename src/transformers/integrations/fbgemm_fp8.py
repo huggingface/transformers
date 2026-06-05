@@ -16,7 +16,7 @@ from functools import lru_cache
 
 from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
-from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
+from ..quantizers.quantizers_utils import get_module_from_name, on_device, should_convert_module
 from ..utils import (
     is_accelerate_available,
     is_fbgemm_gpu_available,
@@ -24,7 +24,6 @@ from ..utils import (
     is_torch_xpu_available,
     logging,
 )
-from .quantization_utils import on_device
 
 
 if is_torch_available():

@@ -20,8 +20,7 @@ if is_torch_available():
     from torch import nn
 
 from ..core_model_loading import ConversionOps, _IdentityOp
-from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
-from .quantization_utils import on_device
+from ..quantizers.quantizers_utils import get_module_from_name, on_device, should_convert_module
 
 
 logger = logging.get_logger(__name__)
