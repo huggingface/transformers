@@ -332,7 +332,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["image_processing_backends"] = ["PilBackend"]
     _import_structure["image_processing_base"] = ["ImageProcessingMixin"]
-    _import_structure["image_processing_outputs"] = ["SemanticSegmentationPostProcessorOutput"]
     _import_structure["image_processing_utils"] = ["BaseImageProcessor"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
 
