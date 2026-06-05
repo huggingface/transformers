@@ -300,12 +300,8 @@ class StaticLayer(CacheLayerMixin):
         devices, dtypes etc later on for each `update` (which could break the static dynamo addresses as well).
 
         If this is unwanted, one can call `early_initialization(...)` on the Cache directly, which will call this
-        function ahead-of-time (this is required for `torch.export` for example). Note that for `compile`, as we
-        internally don't compile the prefill, this is guaranteed to have been called already when compiling.
-        If compiling the prefill as well, e.g. calling `model.compile(...)` before `generate` with a static cache,
-        it is still supported in general, but without guarantees depending on the compilation options (e.g. cuda graphs,
-        i.e. `mode="reduce-overhead"` is known to fail). But it will in general work correctly, and prefill should
-        not be compiled anyway for performances!
+        function ahead-of-time (this is required for `torch.export` or for example). It is also required whenever the
+        prefill itself ends up in a compiled region (with chunked prefill for instance).
         """
         self.dtype, self.device = key_states.dtype, key_states.device
         self.max_batch_size, self.num_heads = key_states.shape[:2]

@@ -1918,12 +1918,36 @@ class GenerationMixin(ContinuousMixin):
                     f"and will be removed in v5.13. Please only use one of {STATIC_CACHE_IMPLEMENTATIONS}, "
                     "and the layer structure will be inferred automatically."
                 )
-            model_kwargs[cache_name] = self._prepare_static_cache(
+            cache_batch_size = max(generation_config.num_beams, generation_config.num_return_sequences) * batch_size
+            cache = self._prepare_static_cache(
                 cache_implementation=generation_config.cache_implementation,
-                batch_size=max(generation_config.num_beams, generation_config.num_return_sequences) * batch_size,
+                batch_size=cache_batch_size,
                 max_cache_len=max_cache_length,
                 model_kwargs=model_kwargs,
             )
+            # With chunked prefill, the prefill itself runs inside a compiled region.
+            # Initializing the cache eagerly here to avoid a recompilation on the second generate() call. See #46421.
+            if (
+                generation_config.prefill_chunk_size is not None
+                and isinstance(cache, StaticCache)
+                and not cache.is_initialized
+            ):
+                text_config = self.config.get_text_config(decoder=True)
+                head_dim = (
+                    getattr(text_config, "head_dim", None)
+                    or text_config.hidden_size // text_config.num_attention_heads
+                )
+                num_key_value_heads = (
+                    getattr(text_config, "num_key_value_heads", None) or text_config.num_attention_heads
+                )
+                cache.early_initialization(
+                    batch_size=cache_batch_size,
+                    num_heads=num_key_value_heads,
+                    head_dim=head_dim,
+                    dtype=self.dtype,
+                    device=self.device,
+                )
+            model_kwargs[cache_name] = cache
         elif generation_config.cache_implementation == "quantized":
             if self.config.is_encoder_decoder or not self._supports_default_dynamic_cache():
                 raise ValueError(

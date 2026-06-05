@@ -14,6 +14,7 @@
 
 import copy
 import unittest
+from unittest.mock import patch
 
 import pytest
 from packaging import version
@@ -487,6 +488,32 @@ class CacheHardIntegrationTest(unittest.TestCase):
         with CaptureStderr() as cap:
             model.generate(**inputs, max_new_tokens=2, cache_implementation="static")
         self.assertNotIn("cuda", cap.err.lower())
+
+    def test_chunked_prefill_initializes_static_cache_eagerly(self):
+        """
+        With chunked prefill the prefill runs inside a compiled region, where the static cache's lazy initialization
+        cannot tag its tensors via `torch._dynamo.mark_static_address`, so a later call recompiles. `generate` must
+        therefore initialize the static cache eagerly, and only when it compiles the prefill (i.e. when
+        `prefill_chunk_size` is set). Regression test for #46421.
+        """
+        model_repo = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_repo).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(model_repo)
+        inputs = tokenizer(["The quick brown fox jumps over the lazy dog"], return_tensors="pt").to(torch_device)
+        generation_kwargs = {"max_new_tokens": 3, "do_sample": False, "cache_implementation": "static"}
+
+        # Without chunked prefill, the static cache is left to lazily initialize on the (eager) prefill.
+        with patch.object(Cache, "early_initialization", autospec=True) as eager_init:
+            model.generate(**inputs, **generation_kwargs)
+        eager_init.assert_not_called()
+
+        # Drop the (now initialized) cache so the chunked-prefill call re-allocates and initializes a fresh one.
+        model._cache = None
+        # With chunked prefill, `generate` must initialize the static cache itself, before the prefill runs.
+        prefill_chunk_size = max(inputs.input_ids.shape[-1] // 2, 1)
+        with patch.object(Cache, "early_initialization", autospec=True, wraps=Cache.early_initialization) as init:
+            model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
+        init.assert_called_once()
 
     @require_torch_multi_accelerator
     @slow
