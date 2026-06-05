@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ...image_processing_backends import PilBackend
+from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import pad as np_pad
 from ...image_utils import (
@@ -31,9 +32,12 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, logging
+from ...utils import TensorType, auto_docstring, is_torch_available, logging
 from ...utils.import_utils import requires
 
+
+if is_torch_available():
+    import torch
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
@@ -262,8 +266,34 @@ class DPTImageProcessorPil(PilBackend):
         return processed_images
 
     @requires(backends=("torch",))
-    def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
-        """Converts the output of [`DPTForSemanticSegmentation`] into semantic segmentation maps."""
+    def post_process_semantic_segmentation(
+        self,
+        outputs,
+        target_sizes: list[tuple] | None = None,
+        return_segmentation_scores: bool = False,
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
+        """
+        Converts the output of [`DPTForSemanticSegmentation`] into semantic segmentation maps.
+
+        Args:
+            outputs ([`DPTForSemanticSegmentation`]):
+                Raw outputs of the model.
+            target_sizes (`list[tuple]`, *optional*):
+                A list of tuples (`tuple[int, int]`) containing the target size (height, width) of each image in the
+                batch. If unset, predictions will not be resized.
+            return_segmentation_scores (`bool`, *optional*, defaults to `False`):
+                Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
+                the returned list is a [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation`
+                (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
+
+        Returns:
+            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessorOutput]`: When
+            `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
+            segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
+            a list of [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation` (class IDs, shape
+            `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
+            `(height, width)` corresponds to the target size (if `target_sizes` is specified).
+        """
         import torch
 
         logits = outputs.logits
@@ -280,10 +310,22 @@ class DPTImageProcessorPil(PilBackend):
                     logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
-                semantic_segmentation.append(semantic_map)
+                semantic_segmentation.append(
+                    SemanticSegmentationPostProcessorOutput(
+                        segmentation=semantic_map, segmentation_scores=resized_logits[0]
+                    )
+                )
         else:
-            semantic_segmentation = logits.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+            semantic_segmentation = [
+                SemanticSegmentationPostProcessorOutput(
+                    segmentation=logits[i].argmax(dim=0), segmentation_scores=logits[i]
+                )
+                for i in range(logits.shape[0])
+            ]
+
+        if not return_segmentation_scores:
+            semantic_segmentation = [item.segmentation for item in semantic_segmentation]
+
         return semantic_segmentation
 
     @requires(backends=("torch",))
