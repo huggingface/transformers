@@ -160,7 +160,8 @@ class ModelRunner:
         logits = model(**batch_data).logits  # shape [1, seq_len, vocab_size]
 
         # Extract prediction + some padding (reduces the size from max_batch_tokens to max_requests_per_batch)
-        logits = logits[:, batch_data["logits_indices"], :]  # shape [1, num_logits, vocab_size]
+        logits_indices = batch_data["logits_indices"]  # shape [num_logits]
+        logits = logits[:, logits_indices, :]  # shape [1, num_logits, vocab_size]
         # Convert to fp32 to match generate
         logits = logits.float()  # shape [1, num_logits, vocab_size]
 
@@ -169,9 +170,10 @@ class ModelRunner:
             # Handle shape inconsistency between generate and continuous batching (dummy_dim is always 1)
             dummy_dim, num_logits, vocab_size = logits.shape
             logits_2d = logits.view(dummy_dim * num_logits, vocab_size)
-            input_ids_2d = batch_data["input_ids"].view(dummy_dim * num_logits)
+            sliced_input_ids = batch_data["input_ids"][0, logits_indices]  # shape [1, num_logits]
+            sliced_input_ids = sliced_input_ids.view(dummy_dim * num_logits)  # shape [num_logits]
             # Process with 2D tensors
-            logits_2d = self.logit_processor(input_ids_2d, logits_2d, batch_data["logits_processor_args"])
+            logits_2d = self.logit_processor(sliced_input_ids, logits_2d, batch_data["logits_processor_args"])
             # Reshape back to 3D
             scores = logits_2d.view(dummy_dim, num_logits, vocab_size)
         else:
@@ -236,9 +238,9 @@ class ModelRunner:
             num_requests = 1
             while True:
                 total_duration += self.run_one_warmup(model=model, num_q_tokens=num_requests, max_kv_read=None)
-                if num_requests >= self.cache.max_batch_tokens:
+                if num_requests >= self.cb_config.max_requests_per_batch:
                     break
-                num_requests = min(2 * num_requests, self.cache.max_batch_tokens)
+                num_requests = min(2 * num_requests, self.cb_config.max_requests_per_batch)
 
             # Switch to the other IO pair if this is async
             if isinstance(self.inputs_and_outputs, ContinuousBatchingAsyncIOs):

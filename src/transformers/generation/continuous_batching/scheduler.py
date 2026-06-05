@@ -414,7 +414,7 @@ class PrefillFirstScheduler(Scheduler):
                 token_budget,
                 cache_budget,
                 request_ids_to_remove_from_waiting,
-                safety_margin=0.0,
+                safety_margin=self.safety_margin,
             )
         )
 

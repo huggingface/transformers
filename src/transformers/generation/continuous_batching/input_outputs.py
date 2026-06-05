@@ -267,7 +267,7 @@ class ContinuousBatchingIOs:
         # Compute the slice to reset
         q_len = self.write_index_storage.size(-1) if full_reset else self.num_q_tokens
         kv_len = self.read_index_storage.size(-1) if full_reset else self.max_kv_read
-        b_size = self.max_requests_per_batch + 1 if full_reset else self.true_batch_size
+        b_size = self.max_requests_per_batch + 1 if full_reset else min(self.num_q_tokens, self.max_requests_per_batch)
 
         # Reset the attributes part of the bulk input tensor in one kernel
         self._bulk_input_tensor[: self.static_inputs, : q_len + 1].zero_()
@@ -415,7 +415,7 @@ class ContinuousBatchingIOs:
             if future_state.has_new_token:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
                 state.tokens_to_process = [TMP_TOKEN_ID]
-                self.req_id_to_new_token_position[state.request_id] = len(logits_indices) - 1
+                self.req_id_to_new_token_position[state.request_id] = logits_indices[-1]  # TODO: BUG: solve this
 
             self.requests_in_batch.append(future_state)
 

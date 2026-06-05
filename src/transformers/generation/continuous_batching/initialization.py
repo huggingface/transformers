@@ -86,7 +86,8 @@ def resolve_continuous_batching_config(
 
 
 def resolve_using_hints(cb_config: ContinuousBatchingConfig, workload_hints: WorkloadHints | None) -> None:
-    """Fills `max_blocks_per_request` from the workload hints, when the user did not set it explicitly."""
+    """Fills some attributes from the workload hints, when the user did not set it explicitly: `max_blocks_per_request`
+    and `max_requests_per_batch`."""
     # The max number of blocks per request is an even number large enough to hold the max request length
     if cb_config.max_blocks_per_request is None and workload_hints is not None:
         max_sequence_length = workload_hints.max_prompt_length + workload_hints.max_generated_length
@@ -102,9 +103,10 @@ def resolve_using_hints(cb_config: ContinuousBatchingConfig, workload_hints: Wor
         cb_config.max_requests_per_batch = max_requests_per_batch
 
 
-
 def resolve_without_hints(cb_config: ContinuousBatchingConfig) -> None:
     """Fills any remaining unset/sentinel attribute with a fallback default."""
+    if cb_config.max_requests_per_batch is None:
+        cb_config.max_requests_per_batch = FALLBACK_DEFAULTS["max_requests_per_batch"]
     if cb_config.max_blocks_per_request is None:
         cb_config.max_blocks_per_request = FALLBACK_DEFAULTS["max_blocks_per_request"]
     if cb_config.q_padding_interval_size == 0:

@@ -263,7 +263,7 @@ class ContinuousBatchingTopKLogitsWarper(ContinuousBatchingLogitsProcessor):
         return tensor_args
 
     def __call__(self, scores: torch.FloatTensor, tensor_arg: torch.Tensor) -> torch.FloatTensor:
-        """Applies top-k selection to the scores tensor (shape [N, V])."""
+        """Applies top-k selection to the scores tensor (shape [B, V])."""
         top_k = tensor_arg[: scores.size(0)]  # shape [B]
         # Sort descending, get threshold at position (top_k - 1) which is the k-th largest
         sorted_scores = torch.sort(scores, dim=-1, descending=True)[0]  # [B, V]
@@ -298,7 +298,7 @@ class ContinuousBatchingTopPLogitsWarper(ContinuousBatchingLogitsProcessor):
         return tensorized.view(dtype=torch.int32)
 
     def __call__(self, scores: torch.FloatTensor, tensor_arg: torch.Tensor) -> torch.FloatTensor:
-        """Applies top-p (nucleus) sampling to the scores tensor (shape [N, V])."""
+        """Applies top-p (nucleus) sampling to the scores tensor (shape [B, V])."""
         top_p = tensor_arg[: scores.size(0)].view(dtype=torch.float32)  # shape [B]
 
         # Sort logits in ascending order
