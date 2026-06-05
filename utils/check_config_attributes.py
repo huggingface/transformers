@@ -42,6 +42,25 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    # Loss hyperparameters consumed by the object detection loss (`OwlViTForObjectDetectionLoss`), not the modeling code.
+    "OwlViTConfig": [
+        "class_cost",
+        "bbox_cost",
+        "giou_cost",
+        "class_loss_coefficient",
+        "bbox_loss_coefficient",
+        "giou_loss_coefficient",
+        "focal_alpha",
+    ],
+    "Owlv2Config": [
+        "class_cost",
+        "bbox_cost",
+        "giou_cost",
+        "class_loss_coefficient",
+        "bbox_loss_coefficient",
+        "giou_loss_coefficient",
+        "focal_alpha",
+    ],
     "MiniCPMV4_6Config": ["drop_vision_last_layer"],
     "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
     "HYV3Config": ["output_router_logits"],
@@ -329,9 +348,11 @@ def check_config_attributes():
             cls
             for name, cls in inspect.getmembers(
                 inspect.getmodule(_config_class),
-                lambda x: inspect.isclass(x)
-                and issubclass(x, PreTrainedConfig)
-                and inspect.getmodule(x) == inspect.getmodule(_config_class),
+                lambda x: (
+                    inspect.isclass(x)
+                    and issubclass(x, PreTrainedConfig)
+                    and inspect.getmodule(x) == inspect.getmodule(_config_class)
+                ),
             )
         ]
         for config_class in config_classes_in_module:

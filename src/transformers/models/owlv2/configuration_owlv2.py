@@ -102,6 +102,23 @@ class Owlv2VisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="google/owlv2-base-patch16")
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
 class Owlv2Config(PreTrainedConfig):
+    r"""
+    class_cost (`float`, *optional*, defaults to 1.0):
+        Relative weight of the classification error in the Hungarian matching cost.
+    bbox_cost (`float`, *optional*, defaults to 5.0):
+        Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
+    giou_cost (`float`, *optional*, defaults to 2.0):
+        Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
+    class_loss_coefficient (`float`, *optional*, defaults to 2.0):
+        Relative weight of the classification loss in the object detection loss.
+    bbox_loss_coefficient (`float`, *optional*, defaults to 5.0):
+        Relative weight of the L1 bounding box loss in the object detection loss.
+    giou_loss_coefficient (`float`, *optional*, defaults to 2.0):
+        Relative weight of the generalized IoU loss in the object detection loss.
+    focal_alpha (`float`, *optional*, defaults to 0.25):
+        Alpha parameter in the focal loss used by `Owlv2ForObjectDetection`.
+    """
+
     model_type = "owlv2"
     sub_configs = {"text_config": Owlv2TextConfig, "vision_config": Owlv2VisionConfig}
 
@@ -111,6 +128,14 @@ class Owlv2Config(PreTrainedConfig):
     logit_scale_init_value: float = 2.6592
     return_dict: bool = True
     initializer_factor: float = 1.0
+    # Loss hyperparameters, used by `Owlv2ForObjectDetection` when `labels` are provided.
+    class_cost: float = 1.0
+    bbox_cost: float = 5.0
+    giou_cost: float = 2.0
+    class_loss_coefficient: float = 2.0
+    bbox_loss_coefficient: float = 5.0
+    giou_loss_coefficient: float = 2.0
+    focal_alpha: float = 0.25
 
     def __post_init__(self, **kwargs):
         if self.text_config is None:
