@@ -115,18 +115,6 @@ jobs:
         run: |
           apt-get install -y nano
 
-      - name: Store Slack infos
-        #because the SSH can be enabled dynamically if the workflow failed, so we need to store slack infos to be able to retrieve them during the waitforssh step
-        shell: bash
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-        run: |
-          echo "$GITHUB_ACTOR"
-          github_actor=$GITHUB_ACTOR
-          github_actor=${github_actor/'-'/'_'}
-          echo "$github_actor"
-          echo "github_actor=$github_actor" >> $GITHUB_ENV
-
       - name: Setup automatic environment for SSH login
         run: |
           # Create shared environment setup
@@ -157,25 +145,11 @@ jobs:
           echo 'source /root/.env_setup' >> /root/.bash_profile
           echo 'source /root/.env_setup' >> /root/.bashrc
 
-      - name: Store Slack infos
-        #because the SSH can be enabled dynamically if the workflow failed, so we need to store slack infos to be able to retrieve them during the waitforssh step
-        shell: bash
-        env:
-          user_slack_id: ${{ secrets[format('{0}_{1}', env.github_actor, 'SLACK_ID')] }}
-          default_slack_channel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
-        run: |
-          echo "$github_actor"
-          if [ "$user_slack_id" != "" ]; then
-            echo "SLACKCHANNEL=$user_slack_id" >> $GITHUB_ENV
-          else
-            echo "SLACKCHANNEL=$default_slack_channel" >> $GITHUB_ENV
-          fi
-        
       - name: Tailscale # In order to be able to SSH when a test fails
         uses: huggingface/tailscale-action@7d53c9737e53934c30290b5524d1c9b4a7c98c8a  # main
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
-          slackChannel: ${{ env.SLACKCHANNEL }}
+          slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
           slackToken: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
           waitForSSH: true
           sshTimeout: 15m
