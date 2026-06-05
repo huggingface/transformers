@@ -273,6 +273,15 @@ class TrainingArguments:
             Label smoothing factor to prevent overconfidence. Replaces hard 0/1 targets with soft
             targets: 0 becomes `ε/num_labels` and 1 becomes `1 - ε + ε/num_labels`, where
             ε = `label_smoothing_factor`. Zero means no smoothing. Typical range: 0.0 to 0.1.
+        mtp_loss_coef (`float`, *optional*, defaults to 0.0):
+            Coefficient applied to the Multi-Token Prediction (MTP) auxiliary loss returned
+            by the model as `output.mtp_loss`. The total loss becomes
+            `loss + mtp_loss_coef * mtp_loss`. The model is expected to return the
+            *unweighted* MTP loss (averaged over MTP layers and non-ignored tokens); the
+            Trainer is responsible for weighting. Set to `0.0` (default) to disable, which
+            keeps behavior identical for models that do not return an MTP loss. Typical
+            range: 0.0 to 1.0; common values in the DeepSeek / Qwen3.5 MTP literature are
+            0.1 to 0.3.
 
         > Mixed Precision Training
 
@@ -845,6 +854,19 @@ class TrainingArguments:
     )
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "Label smoothing factor to prevent overconfidence. Zero means no smoothing."}
+    )
+    mtp_loss_coef: float = field(
+        default=0.0,
+        metadata={
+            "help": (
+                "Coefficient applied to the Multi-Token Prediction auxiliary loss returned by the model "
+                "as `output.mtp_loss`. The total loss becomes `loss + mtp_loss_coef * mtp_loss`. The model "
+                "is expected to return the *unweighted* MTP loss (avg over MTP layers and non-ignored "
+                "tokens); the Trainer combines it. Set to 0.0 (default) to disable, preserving BC for "
+                "models that do not return an MTP loss. Typical range: 0.0 to 1.0; common values in the "
+                "DeepSeek / Qwen3.5 MTP literature are 0.1 to 0.3."
+            )
+        },
     )
 
     # --- Mixed Precision ---

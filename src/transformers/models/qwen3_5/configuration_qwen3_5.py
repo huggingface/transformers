@@ -18,10 +18,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
+from ...utils import auto_docstring
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring
+from ...utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
@@ -38,6 +39,17 @@ class Qwen3_5TextConfig(PreTrainedConfig):
         Number of key heads used in linear attention layers.
     linear_num_value_heads (`int`, *optional*, defaults to 32):
         Number of value heads used in linear attention layers.
+    num_nextn_predict_layers (`int`, *optional*, defaults to 0):
+        Number of Multi-Token Prediction (MTP) layers. `0` (default) disables MTP and
+        allocates no extra parameters, keeping behavior identical to a non-MTP model.
+        When `> 0`, that many `MtpLayer` instances are appended to the language model
+        head and trained jointly with the main model. Name aligned with the inference
+        side in #46229.
+    output_mtp_loss (`bool`, *optional*, defaults to False):
+        Training-only switch. When `True` and `num_nextn_predict_layers > 0`, the model
+        forward returns an additional unweighted `mtp_loss` tensor alongside `loss`.
+        Callers (e.g. `Trainer`) combine it with `loss` using their own weighting
+        coefficient.
 
     ```python
     >>> from transformers import Qwen3_5TextModel, Qwen3_5TextConfig
@@ -100,6 +112,15 @@ class Qwen3_5TextConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = None
     base_config_key = "text_config"
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
+
+    # === Multi-Token Prediction (MTP) training config ===
+    # Aligned with #46229: num_nextn_predict_layers is the canonical name across HF MTP modules.
+    # 0 (default) means MTP is disabled and no extra weights are allocated, preserving BC.
+    num_nextn_predict_layers: int = 0
+    # Training-only switch: when True, the model forward returns a separate raw `mtp_loss`
+    # tensor in the output (unweighted). Callers (e.g. `Trainer`) are expected to combine it
+    # with the main loss using their own coefficient (e.g. `TrainingArguments.mtp_loss_coef`).
+    output_mtp_loss: bool = False
 
     def __post_init__(self, **kwargs):
         kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC

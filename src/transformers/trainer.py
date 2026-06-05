@@ -2030,6 +2030,27 @@ class Trainer:
                 loss_scale //= pc.tp_size
             loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
 
+        # Multi-Token Prediction (MTP) auxiliary loss.
+        # Strategy mirrors #46229: the model returns the *unweighted* MTP loss (averaged
+        # over layers and non-ignored tokens) as a separate field on its output, and the
+        # Trainer is responsible for combining it with the main loss. This keeps the
+        # model forward signature clean and lets users tune the coefficient from the
+        # training command line without subclassing the model.
+        #
+        # We only do anything if both: (1) the user actually set a non-zero coefficient,
+        # and (2) the model returned a non-None `mtp_loss` tensor. Models that don't
+        # support MTP just pass through unchanged (BC-safe).
+        mtp_coef = getattr(self.args, "mtp_loss_coef", 0.0)
+        if mtp_coef and mtp_coef != 0.0:
+            mtp_loss = None
+            if isinstance(outputs, dict):
+                mtp_loss = outputs.get("mtp_loss")
+            else:
+                # Dataclass / ModelOutput / namedtuple — try attribute access first
+                mtp_loss = getattr(outputs, "mtp_loss", None)
+            if mtp_loss is not None:
+                loss = loss + mtp_coef * mtp_loss
+
         return (loss, outputs) if return_outputs else loss
 
     def compute_loss_context_manager(self) -> contextlib.ExitStack:

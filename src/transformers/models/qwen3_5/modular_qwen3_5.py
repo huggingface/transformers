@@ -28,7 +28,12 @@ from ...modeling_layers import (
     GenericForTokenClassification,
     GradientCheckpointingLayer,
 )
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, SequenceClassifierOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+    SequenceClassifierOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -74,6 +79,17 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
         Number of key heads used in linear attention layers.
     linear_num_value_heads (`int`, *optional*, defaults to 32):
         Number of value heads used in linear attention layers.
+    num_nextn_predict_layers (`int`, *optional*, defaults to 0):
+        Number of Multi-Token Prediction (MTP) layers. `0` (default) disables MTP and
+        allocates no extra parameters, keeping behavior identical to a non-MTP model.
+        When `> 0`, that many `MtpLayer` instances are appended to the language model
+        head and trained jointly with the main model. Name aligned with the inference
+        side in #46229.
+    output_mtp_loss (`bool`, *optional*, defaults to False):
+        Training-only switch. When `True` and `num_nextn_predict_layers > 0`, the model
+        forward returns an additional unweighted `mtp_loss` tensor alongside `loss`.
+        Callers (e.g. `Trainer`) combine it with `loss` using their own weighting
+        coefficient.
 
     ```python
     >>> from transformers import Qwen3_5TextModel, Qwen3_5TextConfig
@@ -120,6 +136,15 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
     num_experts = AttributeError()
     output_router_logits = AttributeError()
     router_aux_loss_coef = AttributeError()
+
+    # === Multi-Token Prediction (MTP) training config ===
+    # Aligned with #46229: num_nextn_predict_layers is the canonical name across HF MTP modules.
+    # 0 (default) means MTP is disabled and no extra weights are allocated, preserving BC.
+    num_nextn_predict_layers: int = 0
+    # Training-only switch: when True, the model forward returns a separate raw `mtp_loss`
+    # tensor in the output (unweighted). Callers (e.g. `Trainer`) are expected to combine it
+    # with the main loss using their own coefficient (e.g. `TrainingArguments.mtp_loss_coef`).
+    output_mtp_loss: bool = False
 
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
@@ -667,10 +692,249 @@ class Qwen3_5Model(Qwen3VLModel):
 class Qwen3_5ForCausalLM(Qwen3ForCausalLM):
     config: Qwen3_5TextConfig
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
+    _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock", "MtpLayer"]
 
     def __init__(self, config):
         super().__init__(config)
         self.model = Qwen3_5TextModel(config)
+        # === Multi-Token Prediction (MTP) training head ===
+        # Aligned with #46229: when `num_nextn_predict_layers > 0`, lazily construct
+        # MTP layers that share the main model's embed/lm_head/rotary embeddings.
+        # MTP is intentionally a separate, lightweight module list (not a PreTrainedModel)
+        # to keep the training forward simple; inference-side `MtpLayerStack` (#46229)
+        # builds on the same `MtpLayer` primitive.
+        self._mtp_layers: nn.ModuleList | None = None
+        if getattr(config, "num_nextn_predict_layers", 0) > 0:
+            self._init_mtp_layers()
+
+    def _init_mtp_layers(self) -> None:
+        import dataclasses
+
+        from ...generation.mtp import MtpLayer
+
+        text_config = self.config.get_text_config()
+        num = int(getattr(text_config, "num_nextn_predict_layers", 0))
+        if num <= 0:
+            self._mtp_layers = None
+            return
+
+        # MTP layers are addressed at layer_idx = num_hidden_layers + k, but the
+        # model's strict-config validation requires `len(layer_types) == num_hidden_layers`.
+        # Build a transient copy of the text config that *does* know about the MTP
+        # layers, so the inner decoder-layer constructor can index layer_types.
+        mtp_layer_types = list(text_config.layer_types or []) + ["full_attention"] * num
+        mtp_text_config = dataclasses.replace(
+            text_config,
+            num_hidden_layers=text_config.num_hidden_layers + num,
+            layer_types=mtp_layer_types,
+        )
+        # Carry over the attention implementation choice; the inner decoder layer reads
+        # `config._attn_implementation` and we don't want to lose the user's selection.
+        mtp_text_config._attn_implementation = getattr(text_config, "_attn_implementation", None)
+
+        # Discover the decoder layer class & first norm class from the main model so
+        # the MTP layer mirrors the exact same architecture (full attention /
+        # linear attention mix, RMSNorm variant, etc.).
+        reference_layer = self.model.layers[0]
+        layer_cls = type(reference_layer)
+        norm_cls = next(
+            (type(m) for n, m in reference_layer.named_modules() if n.endswith("input_layernorm")),
+            None,
+        )
+        if norm_cls is None:
+            raise ValueError(
+                "Qwen3.5 MTP training requires the main decoder layer to expose an `input_layernorm` module."
+            )
+
+        self._mtp_layers = nn.ModuleList(
+            [MtpLayer(mtp_text_config, layer_cls, norm_cls, text_config.num_hidden_layers + k) for k in range(num)]
+        )
+
+    def _compute_mtp_loss(
+        self,
+        input_ids: torch.Tensor,
+        main_hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        position_ids: torch.Tensor | None,
+        labels: torch.Tensor,
+    ) -> torch.Tensor:
+        """Compute raw (unweighted) MTP loss over all configured MTP layers.
+
+        For each MTP layer k (0-indexed), the model predicts `labels[t+k+1]` from
+        `main_hidden_states[:, t, :]` (the main hidden state at time t). We feed
+        `input_ids[:, t+1+k]` (shifted by k+1) as the next-token embedding.
+
+        The returned loss is the *raw* mean of per-MTP-layer losses; callers
+        (e.g. `Trainer`) decide the weighting via their own coefficient.
+        """
+        device = main_hidden_states.device
+        if self._mtp_layers is None or len(self._mtp_layers) == 0:
+            return torch.tensor(0.0, device=device, requires_grad=True)
+        if labels is None:
+            return torch.tensor(0.0, device=device, requires_grad=True)
+
+        # We do not have access to the cached position_embeddings from the main forward,
+        # so we recompute them here. Cost is one RoPE pass per MTP layer; minor vs. the
+        # attention itself, and avoids leaking internals of the main model.
+        embed = self.model.embed_tokens
+        rotary = self.model.rotary_emb
+
+        # `text_position_ids` is what the main forward passes to layers (shape (B, S)).
+        # The main model expands 1D/2D position_ids into the (4, B, S) mrope form first
+        # and then slices [0] to get the text positions. We mirror that here so the
+        # rotary embedding call below gets the right shape.
+        if position_ids is None:
+            position_ids = (
+                torch.arange(input_ids.shape[1], device=input_ids.device)
+                .view(1, 1, -1)
+                .expand(4, input_ids.shape[0], -1)
+            )
+        elif position_ids.ndim == 2:
+            position_ids = position_ids[None, ...].expand(4, *position_ids.shape)
+        if position_ids.ndim == 3 and position_ids.shape[0] == 4:
+            text_position_ids = position_ids[0]
+        else:
+            text_position_ids = position_ids
+
+        total_loss = torch.tensor(0.0, device=device)
+        current_hidden = main_hidden_states
+
+        for i, mtp_layer in enumerate(self._mtp_layers):
+            shift = i + 1
+            # Shifted input: token at position t+shift becomes the "next token" prediction
+            # for the main hidden at position t.
+            shifted_input_ids = torch.roll(input_ids, -shift, dims=1)
+            input_embeds = embed(shifted_input_ids)
+
+            # The MTP layer attends to the first `seq_len - shift` positions; later
+            # positions are invalid labels and would leak info beyond the end of the
+            # main sequence. We slice the inputs *and* recompute position embeddings
+            # for the sliced length so RoPE dimensions line up exactly.
+            seq_len = input_embeds.shape[1]
+            mtp_input_embeds = input_embeds[:, : seq_len - shift]
+            mtp_position_ids = text_position_ids[:, : seq_len - shift]
+            mtp_position_embeddings = rotary(mtp_input_embeds, position_ids=mtp_position_ids)
+
+            if attention_mask is not None:
+                if attention_mask.ndim == 4:
+                    mtp_attention_mask = attention_mask[..., : seq_len - shift, : seq_len - shift]
+                elif attention_mask.ndim == 2:
+                    mtp_attention_mask = attention_mask[:, : seq_len - shift]
+                else:
+                    mtp_attention_mask = attention_mask
+            else:
+                mtp_attention_mask = None
+
+            mtp_hidden = mtp_layer(
+                inputs_embeds=mtp_input_embeds,
+                previous_hidden_state=current_hidden[:, : seq_len - shift],
+                position_embeddings=mtp_position_embeddings,
+                attention_mask=mtp_attention_mask,
+                position_ids=mtp_position_ids,
+                past_key_values=None,
+            )
+
+            # Project to vocab & compute next-token loss vs. labels shifted by `shift`.
+            # The mtp_hidden was computed over the first `seq_len - shift` positions,
+            # so labels must be sliced to match (after rolling). Tail positions are
+            # masked to -100 so they never contribute even if length happened to match.
+            mtp_logits = self.lm_head(mtp_hidden)
+            shifted_labels = torch.roll(labels, -shift, dims=1)[:, : seq_len - shift].clone()
+            shifted_labels[:, -shift:] = -100  # ignore the rolled tail
+
+            layer_loss = self.loss_function(
+                logits=mtp_logits,
+                labels=shifted_labels,
+                vocab_size=self.config.vocab_size,
+            )
+            total_loss = total_loss + layer_loss
+            # The next MTP layer should be conditioned on this layer's hidden states,
+            # not the main hidden states. Concatenate along time so positions line up.
+            current_hidden = mtp_hidden
+
+        return total_loss / len(self._mtp_layers)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        output_mtp_loss: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        output_mtp_loss (`bool`, *optional*):
+            If True, the model will compute and return a separate raw `mtp_loss` tensor in the output
+            (unweighted). When `None` (default), falls back to `config.output_mtp_loss`.
+            Combining the main `loss` with `mtp_loss` is the caller's responsibility (typically the
+            `Trainer` via a coefficient like `mtp_loss_coef`).
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, Qwen3_5ForCausalLM
+
+        >>> model = Qwen3_5ForCausalLM.from_pretrained("Qwen/Qwen3_5-8B")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3_5-8B")
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
+        outputs: BaseModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+
+        mtp_loss = None
+        # Determine whether to compute MTP loss: explicit kwarg wins, else config default.
+        if output_mtp_loss is None:
+            output_mtp_loss = bool(getattr(self.config, "output_mtp_loss", False))
+        if output_mtp_loss and labels is not None and self._mtp_layers is not None:
+            mtp_loss = self._compute_mtp_loss(
+                input_ids=input_ids,
+                main_hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                labels=labels,
+            )
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            mtp_loss=mtp_loss,
+        )
 
 
 class Qwen3_5ForTokenClassification(GenericForTokenClassification, Qwen3_5PreTrainedModel):
