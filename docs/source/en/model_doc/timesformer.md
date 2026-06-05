@@ -43,6 +43,11 @@ the number of input frames per clip changes based on the model size so you shoul
 
 [[autodoc]] TimesformerConfig
 
+## TimesformerVideoProcessor
+
+[[autodoc]] TimesformerVideoProcessor
+    - preprocess
+
 ## TimesformerModel
 
 [[autodoc]] TimesformerModel
