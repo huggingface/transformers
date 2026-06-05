@@ -41,6 +41,7 @@ except ImportError:
     pad_input = None  # type: ignore[assignment]
     FLASH_ATTN_AVAILABLE = False
 
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS  # type: ignore[import]
 from .configuration_esmfold2 import ESMFold2Config
 
@@ -2081,8 +2082,19 @@ def compute_lm_hidden_states(
 # ===========================================================================
 # TriangleMultiplicativeUpdate
 # ===========================================================================
+@use_kernel_forward_from_hub("ESMFold2TriangleMultiplication")
 class TriangleMultiplicativeBlock(nn.Module):
-    """Triangle multiplicative update block with gated signal routing."""
+    """Triangle multiplicative update block with gated signal routing.
+
+    The O(N^3) triangular contraction below is the trunk's dominant cost. Loading
+    with ``ESMFold2Model.from_pretrained(..., device_map="cuda", use_kernels=True)``
+    (CUDA + inference) swaps the whole block forward for a fused Triton kernel from
+    the Hub (see the ``hub_kernels`` mapping); the pure-PyTorch ``forward`` here stays
+    as the reference/fallback. The kernel reads this module's parameters
+    (``norm_start``/``norm_mix``/``proj_bundle``/``proj_emit``/``proj_gate``) and
+    matches ``forward``'s ``(pair_grid, visibility)`` signature, returning the
+    residual-free delta.
+    """
 
     _FLOW_TO_EINSUM = {"outgoing": "bikd,bjkd->bijd", "incoming": "bkid,bkjd->bijd"}
     _VALID_FLOWS = ("outgoing", "incoming")

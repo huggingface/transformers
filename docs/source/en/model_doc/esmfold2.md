@@ -51,6 +51,26 @@ with open("prediction.pdb", "w") as f:
 `infer_protein` returns the raw outputs (atom coordinates, distogram logits and confidence metrics) as a dictionary if
 you need them instead of a PDB string. Generation is stochastic — set a manual seed for reproducible structures.
 
+## Faster inference with a fused kernel
+
+The folding trunk's dominant cost is the triangle-multiplication update. Passing `use_kernels=True` to
+[`~PreTrainedModel.from_pretrained`] swaps it for a fused Triton kernel loaded from the Hub via the
+[`kernels`](https://github.com/huggingface/kernels) library, leaving the prediction unchanged. It is inference-only and
+CUDA-only; on CPU or without the kernel installed the model transparently falls back to the pure-PyTorch implementation.
+Make sure the model is on a CUDA device when kernelization happens (e.g. with `device_map`).
+
+```python
+import torch
+
+from transformers import ESMFold2Model
+
+model = ESMFold2Model.from_pretrained(
+    "biohub/ESMFold2", dtype=torch.bfloat16, device_map="cuda", use_kernels=True
+).eval()
+
+pdb_string = model.infer_protein_as_pdb("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ")
+```
+
 ## ESMFold2Config
 
 [[autodoc]] ESMFold2Config
