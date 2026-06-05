@@ -416,7 +416,7 @@ class ContinuousBatchingIOs:
             if future_state.has_new_token:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
                 state.tokens_to_process = [TMP_TOKEN_ID]
-                self.req_id_to_new_token_position[state.request_id] = logits_indices[-1]  # TODO: BUG: solve this
+                self.req_id_to_new_token_position[state.request_id] = logits_indices[-1]
 
             self.requests_in_batch.append(future_state)
 
