@@ -53,7 +53,6 @@ if is_torch_available():
     import torch
     from torch.export import ExportedProgram
     from torch.onnx import ONNXProgram
-    from torch.onnx._internal.exporter import _core as _onnx_core
 
     from .. import masking_utils
 
@@ -62,7 +61,7 @@ if is_onnxscript_available():
     import onnx_ir
     from onnxscript.function_libs.torch_lib.ops.core import aten_index_put
     from onnxscript.onnx_opset import opset18 as op
-
+    from torch.onnx._internal.exporter import _core as _onnx_core
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -594,7 +593,7 @@ def _patch_prepare_for_export(original):
 
 
 _ONNX_PATCHES = []
-if is_torch_available():
+if is_onnxscript_available():
     _ONNX_PATCHES += [
         (_onnx_core, "_prepare_exported_program_for_export", _patch_prepare_for_export),
     ]
