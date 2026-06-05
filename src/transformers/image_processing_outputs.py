@@ -94,8 +94,9 @@ class SemanticSegmentationPostProcessorOutput(PostProcessorOutput):
             otherwise the model's native logit size.
         segmentation_scores (`torch.FloatTensor` of shape `(num_classes, height, width)`):
             Raw classification scores for each class at every pixel position.
-            Height and width are the same as for ``segmentation``.
+            Height and width are the same as for ``segmentation``. May be `None` in cases where per-class
+            scores are not available.
     """
 
     segmentation: "torch.Tensor"
-    segmentation_scores: "torch.Tensor"
+    segmentation_scores: "torch.Tensor | None"
