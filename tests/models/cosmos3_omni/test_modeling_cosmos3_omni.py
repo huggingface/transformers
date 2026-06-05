@@ -36,9 +36,9 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_torch,
+    require_torch_accelerator,
     slow,
     torch_device,
-    require_torch_accelerator,
 )
 
 from ...test_modeling_common import floats_tensor
