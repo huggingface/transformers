@@ -49,6 +49,7 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_bilinear_indices_and_weights, get_vision_cu_seqlens, get_vision_position_ids
+from ..auto.modeling_auto import AutoModel
 from .configuration_qwen3_vl import Qwen3VLConfig, Qwen3VLTextConfig, Qwen3VLVisionConfig
 
 
@@ -608,7 +609,6 @@ class Qwen3VLPreTrainedModel(PreTrainedModel):
 class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
     config: Qwen3VLVisionConfig
     input_modalities = ("image", "video")
-    _no_split_modules = ["Qwen3VLVisionBlock"]
     _can_record_outputs = {
         "hidden_states": Qwen3VLVisionBlock,
         "attentions": Qwen3VLVisionAttention,
@@ -741,7 +741,6 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
 class Qwen3VLTextModel(Qwen3VLPreTrainedModel):
     config: Qwen3VLTextConfig
     input_modalities = ("text",)
-    _no_split_modules = ["Qwen3VLTextDecoderLayer"]
 
     def __init__(self, config: Qwen3VLTextConfig):
         super().__init__(config)
@@ -863,13 +862,11 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
-    config: Qwen3VLConfig
-    _no_split_modules = ["Qwen3VLTextDecoderLayer", "Qwen3VLVisionBlock"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.visual = Qwen3VLVisionModel._from_config(config.vision_config)
-        self.language_model = Qwen3VLTextModel._from_config(config.text_config)
+        self.visual = AutoModel.from_config(config.vision_config)
+        self.language_model = AutoModel.from_config(config.text_config)
         self.rope_deltas = None  # cache rope_deltas here
 
         # Initialize weights and apply final processing
@@ -1283,7 +1280,6 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
-    config: Qwen3VLConfig
 
     def __init__(self, config):
         super().__init__(config)
