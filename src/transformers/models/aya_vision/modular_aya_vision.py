@@ -25,6 +25,7 @@ from transformers.models.llava.modeling_llava import (
 )
 
 from ...activations import ACT2FN
+from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
@@ -102,6 +103,7 @@ class AyaVisionModel(LlavaModel):
     # Unlike LLaVA, the model doesn't have to deal with Pixtral-style image states
     @merge_with_config_defaults
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -114,10 +116,9 @@ class AyaVisionModel(LlavaModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
         image_outputs = self.vision_tower(
             pixel_values,
-            output_hidden_states=True,  # Ignore arg on purpose
+            output_hidden_states=output_hidden_states,
             return_dict=True,
             **kwargs,
         )
