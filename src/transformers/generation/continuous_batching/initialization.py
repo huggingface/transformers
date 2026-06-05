@@ -28,6 +28,15 @@ from .requests import logger
 from .utils import WorkloadHints
 
 
+FALLBACK_DEFAULTS = {
+    "max_request_per_batch": 1024,
+    "max_blocks_per_request": 32,
+    "q_padding_interval_size": 64,
+    "kv_padding_interval_size": 64 * 256,  # 64 blocks of 256 tokens ie. 16384 tokens
+    "max_cached_graphs": 32,
+}
+
+
 def resolve_continuous_batching_config(
     config: PretrainedConfig,
     cb_config: ContinuousBatchingConfig,
@@ -83,18 +92,26 @@ def resolve_using_hints(cb_config: ContinuousBatchingConfig, workload_hints: Wor
         if max_sequence_length > 0:
             blocks_per_request = int(ceil(max_sequence_length / cb_config.block_size)) + 1
             cb_config.max_blocks_per_request = blocks_per_request + (blocks_per_request % 2)
+    # The maximum number of requests per batch is the minimum of the workload hints and the fallback default
+    if cb_config.max_request_per_batch is None and workload_hints is not None:
+        if workload_hints.num_requests > 0:  # guard against bad hints
+            max_request_per_batch = min(workload_hints.num_requests, FALLBACK_DEFAULTS["max_request_per_batch"])
+        else:
+            max_request_per_batch = FALLBACK_DEFAULTS["max_request_per_batch"]
+        cb_config.max_request_per_batch = max_request_per_batch
+
 
 
 def resolve_without_hints(cb_config: ContinuousBatchingConfig) -> None:
     """Fills any remaining unset/sentinel attribute with a fallback default."""
     if cb_config.max_blocks_per_request is None:
-        cb_config.max_blocks_per_request = 32
+        cb_config.max_blocks_per_request = FALLBACK_DEFAULTS["max_blocks_per_request"]
     if cb_config.q_padding_interval_size == 0:
-        cb_config.q_padding_interval_size = 64
+        cb_config.q_padding_interval_size = FALLBACK_DEFAULTS["q_padding_interval_size"]
     if cb_config.kv_padding_interval_size == 0:
-        cb_config.kv_padding_interval_size = 64 * 256  # 64 blocks of 256 tokens ie. 16384 tokens
+        cb_config.kv_padding_interval_size = FALLBACK_DEFAULTS["kv_padding_interval_size"]
     if cb_config.max_cached_graphs == 0:
-        cb_config.max_cached_graphs = 32
+        cb_config.max_cached_graphs = FALLBACK_DEFAULTS["max_cached_graphs"]
 
 
 def ensure_decode_fast_path_is_available(

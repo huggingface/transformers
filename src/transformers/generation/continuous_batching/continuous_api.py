@@ -967,7 +967,14 @@ class ContinuousBatchingManager:
             tp_plan=getattr(self.model, "tp_plan", {}),
             dtype=self.model.dtype,
         )
-        self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing  # update the approximation
+        # Update the approximation now that we know if there is prefix sharing
+        self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing
+        # And if there is no prefix sharing, we can cap the number of request per batch (1 request = 1 block at least)
+        if not self._use_prefix_sharing:
+            self.continuous_batching_config.max_request_per_batch = min(
+                self.continuous_batching_config.max_request_per_batch,
+                paged_attention_cache.num_blocks
+            )
 
         # Disable the decode path if the model has sliding window attention (TODO)
         if paged_attention_cache.num_sliding_attention_groups > 0:
@@ -980,10 +987,11 @@ class ContinuousBatchingManager:
             logger.warning(f"Scheduler '{scheduler_type}' not found. Defaulting to FIFO.")
             scheduler_cls = FIFOScheduler
         # Instantiate the actual scheduler
-        scheduler_kwrgs = {"cache": paged_attention_cache}
-        if self.continuous_batching_config.safety_margin is not None:
-            scheduler_kwrgs["safety_margin"] = self.continuous_batching_config.safety_margin
-        scheduler = scheduler_cls(**scheduler_kwrgs)
+        scheduler = scheduler_cls(
+            cache=paged_attention_cache,
+            safety_margin=self.continuous_batching_config.safety_margin,
+            max_request_per_batch=self.continuous_batching_config.max_request_per_batch
+        )
 
         # Create the batch processor
         batch_processor = ContinuousBatchProcessor(
@@ -1193,6 +1201,7 @@ class ContinuousMixin:
         workload_hints = WorkloadHints(
             max_prompt_length=max(len(input_ids) for input_ids in inputs),
             max_generated_length=max_new_tokens if max_new_tokens is not None else 0,
+            num_requests=num_requests,
         )
 
         # Prepare context managers for the main loop
