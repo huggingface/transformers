@@ -1198,6 +1198,12 @@ class ContinuousMixin:
             max_generated_length=max_new_tokens if max_new_tokens is not None else 0,
             num_requests=num_requests,
         )
+        if persistent_manager:
+            logger.warning(
+                "Since you passed `persistent_manager=True`, the manager will be kept alive after the generation is "
+                "finished. However, it was sized specifically for the requests passed in `generate_batch`. If you plan "
+                "to reuse the manager for a very different workload, you might want to create a new manager instead."
+            )
 
         # Prepare context managers for the main loop
         manager_cm = self.continuous_batching_context_manager(
