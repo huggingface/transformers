@@ -980,7 +980,7 @@ class ContinuousBatchingManager:
         scheduler = scheduler_cls(
             cache=paged_attention_cache,
             safety_margin=self.continuous_batching_config.safety_margin,
-            max_requests_per_batch=self.continuous_batching_config.max_requests_per_batch
+            max_requests_per_batch=self.continuous_batching_config.max_requests_per_batch,
         )
 
         # Create the batch processor

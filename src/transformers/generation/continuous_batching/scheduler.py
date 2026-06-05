@@ -211,7 +211,6 @@ class Scheduler(ABC):
         token_budget: int,
         cache_budget: int,
         request_ids_to_remove_from_waiting: set[str],
-        safety_margin: float,
     ) -> tuple[list[FutureRequestState], bool, bool, int, int]:
         """Schedules candidate requests for the current batch.
 
@@ -222,7 +221,7 @@ class Scheduler(ABC):
         scheduled_requests = []
         one_allocation_failed = False
         decode_fast_path = self.cache.max_blocks_per_request > 0  # best way to check if decode fast path availability
-        safety_margins = safety_margin * self.cache.num_blocks
+        safety_margins = self.safety_margin * self.cache.num_blocks
         original_token_budget, original_cache_budget = token_budget, cache_budget
         request_budget = self.max_requests_per_batch
 
@@ -362,7 +361,6 @@ class FIFOScheduler(Scheduler):
                 token_budget,
                 cache_budget,
                 request_ids_to_remove_from_waiting,
-                safety_margin=self.safety_margin,
             )
         )
 
@@ -414,7 +412,6 @@ class PrefillFirstScheduler(Scheduler):
                 token_budget,
                 cache_budget,
                 request_ids_to_remove_from_waiting,
-                safety_margin=self.safety_margin,
             )
         )
 
