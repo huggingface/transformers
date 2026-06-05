@@ -1083,7 +1083,11 @@ if __name__ == "__main__":
         ci_detail_url = f"https://api.github.com/repos/{repository_full_name}/commits/{commit_number}"
         ci_details = requests.get(ci_detail_url, headers=github_headers).json()
 
-        ci_author = ci_details["author"]["login"]
+        # We use `.get()` to avoid failures when the GitHub API returns an unexpected response (e.g. due to rate
+        # limiting, where the response won't contain the expected fields). It's preferred to continue the CI run
+        # without failing even if we can't retrieve the author info. That said, the GITHUB_TOKEN should always be
+        # set during CI runs to avoid hitting the rate limit in the first place.
+        ci_author = (ci_details.get("author") or {}).get("login")
 
         merged_by = None
         # Find the PR number (if any) and change the url to the actual PR page.
@@ -1093,10 +1097,11 @@ if __name__ == "__main__":
             ci_detail_url = f"https://api.github.com/repos/{repository_full_name}/pulls/{pr_number}"
             ci_details = requests.get(ci_detail_url, headers=github_headers).json()
 
-            ci_author = ci_details["user"]["login"]
+            ci_author = ci_details.get("user", {}).get("login") or ci_author
             ci_url = f"https://github.com/{repository_full_name}/pull/{pr_number}"
 
-            merged_by = ci_details["merged_by"]["login"]
+            merged_by_info = ci_details.get("merged_by")
+            merged_by = merged_by_info.get("login") if merged_by_info is not None else None
 
         if merged_by is None:
             ci_title = f"<{ci_url}|{ci_title}>\nAuthor: GH_{ci_author}"
