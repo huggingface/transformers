@@ -1100,7 +1100,7 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
 
         self.post_init()
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.encoder
 
     def get_decoder(self):
@@ -1207,8 +1207,8 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_encoder(self):
-        return self.model.get_encoder()
+    def get_encoder(self, modality: str | None = None):
+        return self.model.get_encoder(modality=modality)
 
     def get_decoder(self):
         return self.model.get_decoder()
