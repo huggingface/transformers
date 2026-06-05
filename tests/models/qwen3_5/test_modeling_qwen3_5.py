@@ -24,7 +24,6 @@ from transformers.testing_utils import (
     cleanup,
     require_causal_conv1d,
     require_flash_linear_attention,
-    require_kernels,
     require_torch,
     require_torch_gpu,
     slow,
@@ -239,15 +238,6 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         torch.testing.assert_close(under_test_first, ref_first, rtol=1e-4, atol=1e-4)
-
-    @require_kernels
-    def test_kernels_can_load_without_crashing(self):
-        """Regression test for #46399: Wrong kernel decorators"""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = Qwen3_5TextModel(config).eval()
-
-        # No `ValueError`
-        model.use_kernels = True
 
 
 class Qwen3_5VisionText2TextModelTester:

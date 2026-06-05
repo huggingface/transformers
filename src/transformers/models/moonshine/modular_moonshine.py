@@ -37,7 +37,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..glm.modeling_glm import GlmAttention, GlmRotaryEmbedding, apply_rotary_pos_emb
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel, eager_attention_forward
@@ -189,7 +189,6 @@ class MoonshineRotaryEmbedding(GlmRotaryEmbedding):
     pass
 
 
-@no_inherit_decorator
 class MoonshineAttention(GlmAttention):
     def __init__(
         self,

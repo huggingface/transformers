@@ -45,7 +45,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import maybe_autocast, merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto.modeling_auto import AutoModel
 from ..gemma3.modeling_gemma3 import (
@@ -781,6 +781,7 @@ class Gemma4VisionRotaryEmbedding(LlamaRotaryEmbedding):
         return cos, sin
 
 
+@no_inherit_decorator
 class Gemma4VisionAttention(Gemma3Attention):
     def __init__(self, config: Gemma4VisionConfig, layer_idx: int):
         super().__init__(self, config, layer_idx)
