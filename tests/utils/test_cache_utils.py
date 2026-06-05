@@ -141,6 +141,14 @@ class CacheTest(unittest.TestCase):
         # before the fix this raised `AttributeError`. It reflects the attention layer's state.
         self.assertTrue(cache.is_initialized)
 
+    def test_max_cache_len_ignores_linear_attention_layers(self):
+        """`max_cache_len` must skip linear attention layers (which have no such attribute), else the static-cache
+        reuse check in `_prepare_static_cache` raises `AttributeError` on a hybrid model."""
+        config = LlamaConfig(num_hidden_layers=2, num_attention_heads=4, num_key_value_heads=2, hidden_size=32)
+        config.layer_types = ["full_attention", "linear_attention"]
+        cache = StaticCache(config=config, max_cache_len=8)
+        self.assertEqual(cache.max_cache_len, 8)
+
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
     """Function to skip tests on failed cache prerequisites, given a cache implementation"""

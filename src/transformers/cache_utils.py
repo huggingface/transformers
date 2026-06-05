@@ -1203,8 +1203,9 @@ class Cache:
     @property
     def max_cache_len(self) -> int:
         """Return the maximum cache length of the cache"""
-        values = [layer.max_cache_len for layer in self.layers]
-        return max(values)
+        # Linear attention layers have no `max_cache_len`; skip them so a hybrid cache reports its attention layers'.
+        values = [layer.max_cache_len for layer in self.layers if hasattr(layer, "max_cache_len")]
+        return max(values) if values else 0
 
     @property
     def is_compileable(self) -> bool:
