@@ -18,7 +18,7 @@ r"""Utility to convert Gemma models from Orbax to HF Transformers checkpoint.
 python src/transformers/models/gemma4/convert_gemma4_weights.py \
     --variant='gemma-4-e2b' \
     --include_chat_template \
-    --include_response_schema \
+    --include_response_template \
     --tokenizer_path="$HOME/tokenizers/gemma4/gemma4_cleaned_262144.model" \
     --checkpoint_path="$HOME/gemma4/checkpoints/gemma_e2b_it_orbax" \
     --output_path="$HOME/gemma4/checkpoints/gemma_e2b_it_safetensors"
@@ -69,42 +69,34 @@ from transformers.utils.hub import cached_file
 _CHAT_TEMPLATE = pathlib.Path(cached_file("gg-hf-gg/gemma-4-E4B-it", "chat_template.jinja")).read_text()
 _CHAT_TEMPLATE_LARGE = pathlib.Path(cached_file("gg-hf-gg/gemma-4-31B-it", "chat_template.jinja")).read_text()
 
-_RESPONSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "role": {"const": "assistant"},
+_RESPONSE_TEMPLATE = {
+    "defaults": {"role": "assistant"},
+    # The chat template only emits `<|turn>model\n` when the previous message wasn't a tool_call/
+    # tool_response. After a tool_response the prefix just ends with `<tool_response|>` and the
+    # model continues from there, so we accept either anchor and truncate past the latest one.
+    "start_anchor": ["<|turn>model\n", "<tool_response|>"],
+    "fields": {
         "thinking": {
-            "type": "string",
-        },
-        "content": {
-            "type": "string",
+            "open": "<|channel>thought\n",
+            "close": "<channel|>",
+            "content": "text",
         },
         "tool_calls": {
-            "x-regex-iterator": r"<\|tool_call>(.*?)<tool_call\|>",
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "type": {"const": "function"},
-                    "function": {
-                        "type": "object",
-                        "x-regex": r"call\:(?P<name>\w+)(?P<arguments>\{.*\})",
-                        "properties": {
-                            "name": {
-                                "type": "string",
-                            },
-                            "arguments": {
-                                "type": "object",
-                                "x-parser": "gemma4-tool-call",
-                                "additionalProperties": {},
-                            },
-                        },
-                    },
-                },
+            "open_pattern": r"<\|tool_call>call:(?P<name>\w+)",
+            "close": "<tool_call|>",
+            "repeats": True,
+            "content": "json",
+            "content_args": {
+                "unquoted_keys": True,
+                "string_delims": [['<|"|>', '<|"|>']],
             },
+            "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
+        },
+        "content": {
+            "close": ["<turn|>", "<|tool_response>", "<eos>"],
+            "content": "text",
         },
     },
-    "x-regex": r"(\<\|channel\>thought\n(?P<thinking>.*?)\<channel\|\>)?(?P<tool_calls>\<\|tool_call\>.*\<tool_call\|\>)?(?P<content>(?:(?!\<turn\|\>)(?!\<\|tool_response\>).)+)?(?:\<turn\|\>|\<\|tool_response\>)?",
 }
 
 _DTYPES = {"float32", "bfloat16", "float16"}
@@ -388,10 +380,10 @@ _INCLUDE_CHAT_TEMPLATE = flags.DEFINE_bool(
     name="include_chat_template", default=False, help="If true, will save the default chat template with the tokenizer"
 )
 
-_INCLUDE_RESPONSE_SCHEMA = flags.DEFINE_bool(
-    name="include_response_schema",
+_INCLUDE_RESPONSE_TEMPLATE = flags.DEFINE_bool(
+    name="include_response_template",
     default=False,
-    help="If true, will save the default response schema with the tokenizer",
+    help="If true, will save the default response_template with the tokenizer",
 )
 
 _OUTPUT_PATH = flags.DEFINE_string(
@@ -1263,7 +1255,7 @@ def main(*args):
 
     chat_template = _CHAT_TEMPLATE_LARGE if variant in _LARGE_MODEL_VARIANTS else _CHAT_TEMPLATE
     chat_template_kwargs = {"chat_template": chat_template} if _INCLUDE_CHAT_TEMPLATE.value else {}
-    response_schema_kwargs = {"response_schema": _RESPONSE_SCHEMA} if _INCLUDE_RESPONSE_SCHEMA.value else {}
+    response_template_kwargs = {"response_template": _RESPONSE_TEMPLATE} if _INCLUDE_RESPONSE_TEMPLATE.value else {}
 
     sentencepiece_extractor = SentencePieceExtractor(_TOKENIZER_PATH.value)
     vocab, _, merges = sentencepiece_extractor.extract()
@@ -1293,7 +1285,7 @@ def main(*args):
             "etd_token": "<tool|>",
         },
         **chat_template_kwargs,
-        **response_schema_kwargs,
+        **response_template_kwargs,
     )
 
     # Update config multimodal token IDs from the tokenizer.
