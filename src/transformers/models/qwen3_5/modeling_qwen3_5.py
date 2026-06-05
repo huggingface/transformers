@@ -1625,7 +1625,6 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
         self.model = Qwen3_5TextModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
         # === Multi-Token Prediction (MTP) training head ===
         # Aligned with #46229: when `num_nextn_predict_layers > 0`, lazily construct
         # MTP layers that share the main model's embed/lm_head/rotary embeddings.
@@ -1638,6 +1637,88 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        output_mtp_loss: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        output_mtp_loss (`bool`, *optional*):
+            If True, the model will compute and return a separate raw `mtp_loss` tensor in the output
+            (unweighted). When `None` (default), falls back to `config.output_mtp_loss`.
+            Combining the main `loss` with `mtp_loss` is the caller's responsibility (typically the
+            `Trainer` via a coefficient like `mtp_loss_coef`).
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, Qwen3_5ForCausalLM
+
+        >>> model = Qwen3_5ForCausalLM.from_pretrained("Qwen/Qwen3_5-8B")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3_5-8B")
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
+        outputs: BaseModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+
+        mtp_loss = None
+        # Determine whether to compute MTP loss: explicit kwarg wins, else config default.
+        if output_mtp_loss is None:
+            output_mtp_loss = bool(getattr(self.config, "output_mtp_loss", False))
+        if output_mtp_loss and labels is not None and self._mtp_layers is not None:
+            mtp_loss = self._compute_mtp_loss(
+                input_ids=input_ids,
+                main_hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                labels=labels,
+            )
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            mtp_loss=mtp_loss,
+        )
 
     def _init_mtp_layers(self) -> None:
         import dataclasses
@@ -1785,90 +1866,6 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
             current_hidden = mtp_hidden
 
         return total_loss / len(self._mtp_layers)
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        output_mtp_loss: bool | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        output_mtp_loss (`bool`, *optional*):
-            If True, the model will compute and return a separate raw `mtp_loss` tensor in the output
-            (unweighted). When `None` (default), falls back to `config.output_mtp_loss`.
-            Combining the main `loss` with `mtp_loss` is the caller's responsibility (typically the
-            `Trainer` via a coefficient like `mtp_loss_coef`).
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, Qwen3_5ForCausalLM
-
-        >>> model = Qwen3_5ForCausalLM.from_pretrained("Qwen/Qwen3_5-8B")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3_5-8B")
-
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
-        outputs: BaseModelOutputWithPast = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        mtp_loss = None
-        # Determine whether to compute MTP loss: explicit kwarg wins, else config default.
-        if output_mtp_loss is None:
-            output_mtp_loss = bool(getattr(self.config, "output_mtp_loss", False))
-        if output_mtp_loss and labels is not None and self._mtp_layers is not None:
-            mtp_loss = self._compute_mtp_loss(
-                input_ids=input_ids,
-                main_hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                labels=labels,
-            )
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            mtp_loss=mtp_loss,
-        )
-
 
 class Qwen3_5ForTokenClassification(GenericForTokenClassification, Qwen3_5PreTrainedModel):
     config: Qwen3_5Config

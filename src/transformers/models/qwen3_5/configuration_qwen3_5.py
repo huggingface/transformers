@@ -22,7 +22,6 @@ from ...utils import auto_docstring
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
