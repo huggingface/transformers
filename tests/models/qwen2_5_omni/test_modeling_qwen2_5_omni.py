@@ -83,7 +83,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
             "initializer_range": 0.02,
         },
         audio_config={
-            "model_type": "qwen_omni_thinker_audio_encoder",
             "d_model": 32,
             "encoder_attention_heads": 4,
             "encoder_ffn_dim": 32,

@@ -48,6 +48,14 @@ if is_torch_available():
     import torch
 
     from ..modeling_utils import PreTrainedModel
+    from ..vision_utils import (
+        get_vision_bilinear_indices_and_weights,
+        get_vision_cu_seqlens,
+        get_vision_merged_shape,
+        get_vision_nearest_position_ids,
+        get_vision_position_ids,
+        get_vision_window_index,
+    )
 
 
 # Output flags that should be set on model.config, not passed as forward() kwargs.
@@ -287,8 +295,7 @@ def prepare_for_export(
     # Pre-compute data-dependent vision/audio tensors that use loops, .tolist(),
     # repeat_interleave, or itertools.groupby — untraceable by torch.export.
     with torch.no_grad():
-        _precompute_vision_inputs(model, inputs)
-        _precompute_audio_inputs(model, inputs)
+        _precompute_export_inputs(model, inputs)
 
     # Cast all input tensors to match the model's dtype and device (e.g. cache objects
     # created before the model was moved to bfloat16/CUDA by a backend preparation step).
@@ -362,93 +369,116 @@ def _find_submodule_attr(model: torch.nn.Module, name: str) -> Any | None:
     return None
 
 
-def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Pre-compute data-dependent vision tensors and inject them into inputs.
+# ── Export input preparers ────────────────────────────────────────────────────
+# Registry of `model_type -> (model, inputs) -> None` callables that precompute the
+# data-dependent tensors (cu_seqlens, position_ids, padded audio chunks, …) the model
+# would otherwise compute in its forward via `.tolist()` / `nonzero()` / etc. Inject
+# the results into `inputs` so the forward skips the untraceable branch.
 
-    Vision models use `grid_thw`-based loops, `repeat_interleave`, `itertools.groupby`,
-    and `.tolist()` that are not traceable by torch.export. This eagerly computes the
-    results and injects them so the forward can skip the untraceable branch.
+
+_EXPORT_INPUT_PREPARERS: dict[str, callable] = {}
+
+
+def register_export_input_preparer(*model_types: str):
+    """Register `fn(model, inputs) -> None` as the export-input preparer for these model_types."""
+
+    def decorator(fn):
+        for mt in model_types:
+            _EXPORT_INPUT_PREPARERS[mt] = fn
+        return fn
+
+    return decorator
+
+
+@register_export_input_preparer(
+    "qwen2_vl_vision",
+    "qwen2_5_vl_vision",
+    "qwen3_vl_vision",
+    "qwen3_vl_moe_vision",
+    "qwen3_5_vision",
+    "qwen3_5_moe_vision",
+    "qwen2_5_omni_vision_encoder",
+    "qwen3_omni_moe_vision_encoder",
+    "glm4v_vision",
+    "glm4v_moe_vision",
+    "glm46v",
+    "glm_image_vision",
+    "glm_ocr_vision",
+    "paddleocr_vl_vision",
+    "video_llama_3_vision",
+    "ernie4_5_vl_moe_vision",
+    "exaone4_5_vision",
+)
+def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+    """Precompute helpers driven by `grid_thw`: `cu_seqlens`, `position_ids`, plus optional
+    `window_index`/`cu_window_seqlens` (XNet-style window attn) and
+    `bilinear_indices`/`bilinear_weights` (interpolation-based merging).
+
+    Optional helpers are gated by the presence of their config attribute on the encoder
+    (`window_size`+`patch_size` for window attention, `num_grid_per_side` for bilinear),
+    so a model that doesn't use that feature won't get its kwarg injected.
     """
-    # Full-model level: get_rope_index (Qwen-VL, GLM-4V) computes position_ids
-    # from input_ids + grid_thw using data-dependent ops (groupby, nonzero).
-    if inputs.get("position_ids") is None and hasattr(model, "get_rope_index"):
-        input_ids = inputs.get("input_ids")
-        attn_mask = inputs.get("attention_mask")
-        is_prefill = attn_mask is None or input_ids is None or input_ids.shape[1] == attn_mask.shape[1]
-        if is_prefill:
-            rope_params = set(inspect.signature(model.get_rope_index).parameters)
-            rope_inputs = {k: inputs[k] for k in rope_params if k in inputs}
-            position_ids, _ = model.get_rope_index(**rope_inputs)
-            inputs["position_ids"] = position_ids
-
-    modeling_module = sys.modules[type(model).__module__]
-
-    # NaViT-style packed encoders carry per-image `(h, w)` as `target_sizes` instead of `grid_thw`.
-    # Run the nearest-position-id / window-index / merged-shape helpers on the synthesised
-    # `grid_thw = [1, h, w]` so the per-image Python loops move outside the traced graph.
-    target_sizes = inputs.get("target_sizes")
-    if target_sizes is not None:
-        device = target_sizes.device
-        num_patches_per_side = _find_submodule_attr(model, "num_patches_per_side")
-        if hasattr(modeling_module, "get_vision_nearest_position_ids") and num_patches_per_side is not None:
-            inputs["position_ids"] = modeling_module.get_vision_nearest_position_ids(
-                target_sizes, num_patches_per_side
-            ).to(device)
-
-        window_kernel_size = _find_submodule_attr(model, "window_kernel_size")
-        if hasattr(modeling_module, "get_vision_window_index") and window_kernel_size is not None:
-            grid_thw = torch.nn.functional.pad(target_sizes, (1, 0), value=1)
-            window_index, cu_window_seqlens = modeling_module.get_vision_window_index(
-                grid_thw, spatial_merge_size=1, window_size=window_kernel_size[0], patch_size=1
-            )
-            inputs["window_index"] = window_index.to(device)
-            inputs["cu_window_seqlens"] = cu_window_seqlens.to(device)
-            inputs["merged_shape"] = modeling_module.get_vision_merged_shape(target_sizes, window_kernel_size)
-
-    # Vision submodule level: precompute from grid_thw. Vision config attributes can live
-    # anywhere in the submodule tree (encoder, transformer, embeddings, …) — walk to find
-    # them rather than asking models to mirror state on the outer module just so the
-    # exporter can read it.
     grid_thw = inputs.get("grid_thw")
-    if grid_thw is not None:
-        spatial_merge_size = _find_submodule_attr(model, "spatial_merge_size")
-        if spatial_merge_size is None:
-            # Video-Llama-3 carries per-image merge sizes as an input tensor; PaddleOCR-VL has
-            # none (its encoder hard-codes `1` because spatial merging happens in the projector).
-            spatial_merge_size = inputs.get("merge_sizes", 1)
-
-        if hasattr(modeling_module, "get_vision_cu_seqlens"):
-            inputs["cu_seqlens"] = modeling_module.get_vision_cu_seqlens(grid_thw)
-
-        if hasattr(modeling_module, "get_vision_position_ids"):
-            inputs["position_ids"] = modeling_module.get_vision_position_ids(grid_thw, spatial_merge_size)
-
-        window_size = _find_submodule_attr(model, "window_size")
-        patch_size = _find_submodule_attr(model, "patch_size")
-        if hasattr(modeling_module, "get_vision_window_index") and window_size is not None and patch_size is not None:
-            inputs["window_index"], inputs["cu_window_seqlens"] = modeling_module.get_vision_window_index(
-                grid_thw, spatial_merge_size, window_size, patch_size
-            )
-
-        num_grid_per_side = _find_submodule_attr(model, "num_grid_per_side")
-        if hasattr(modeling_module, "get_vision_bilinear_indices_and_weights") and num_grid_per_side is not None:
-            inputs["bilinear_indices"], inputs["bilinear_weights"] = (
-                modeling_module.get_vision_bilinear_indices_and_weights(
-                    grid_thw, num_grid_per_side, spatial_merge_size
-                )
-            )
-
-
-def _precompute_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Precompute audio encoder inputs that use untraceable ops (.tolist(), nonzero(), loops)."""
-    modeling_module = sys.modules[type(model).__module__]
-
-    if not hasattr(modeling_module, "chunk_and_pad_features"):
+    if grid_thw is None:
         return
 
+    spatial_merge_size = _find_submodule_attr(model, "spatial_merge_size")
+    if spatial_merge_size is None:
+        # Video-Llama-3 carries per-image merge sizes as an input tensor; PaddleOCR-VL has
+        # none (its encoder hard-codes `1` because spatial merging happens in the projector).
+        spatial_merge_size = inputs.get("merge_sizes", 1)
+
+    inputs["cu_seqlens"] = get_vision_cu_seqlens(grid_thw)
+    inputs["position_ids"] = get_vision_position_ids(grid_thw, spatial_merge_size)
+
+    window_size = _find_submodule_attr(model, "window_size")
+    patch_size = _find_submodule_attr(model, "patch_size")
+    if window_size is not None and patch_size is not None:
+        inputs["window_index"], inputs["cu_window_seqlens"] = get_vision_window_index(
+            grid_thw, spatial_merge_size, window_size, patch_size
+        )
+
+    num_grid_per_side = _find_submodule_attr(model, "num_grid_per_side")
+    if num_grid_per_side is not None:
+        inputs["bilinear_indices"], inputs["bilinear_weights"] = get_vision_bilinear_indices_and_weights(
+            grid_thw, num_grid_per_side, spatial_merge_size
+        )
+
+
+@register_export_input_preparer("minicpmv4_6_vision")
+def _prepare_navit_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+    """NaViT-style packed encoders carry per-image `(h, w)` as `target_sizes` instead of `grid_thw`.
+    Synthesise `grid_thw = [1, h, w]` and run the nearest-position-id / window-index /
+    merged-shape helpers so the per-image Python loops move outside the traced graph."""
+    target_sizes = inputs.get("target_sizes")
+    if target_sizes is None:
+        return
+    device = target_sizes.device
+
+    num_patches_per_side = _find_submodule_attr(model, "num_patches_per_side")
+    if num_patches_per_side is not None:
+        inputs["position_ids"] = get_vision_nearest_position_ids(target_sizes, num_patches_per_side).to(device)
+
+    window_kernel_size = _find_submodule_attr(model, "window_kernel_size")
+    if window_kernel_size is not None:
+        grid_thw = torch.nn.functional.pad(target_sizes, (1, 0), value=1)
+        window_index, cu_window_seqlens = get_vision_window_index(
+            grid_thw, spatial_merge_size=1, window_size=window_kernel_size[0], patch_size=1
+        )
+        inputs["window_index"] = window_index.to(device)
+        inputs["cu_window_seqlens"] = cu_window_seqlens.to(device)
+        inputs["merged_shape"] = get_vision_merged_shape(target_sizes, window_kernel_size)
+
+
+@register_export_input_preparer("qwen2_5_omni_audio_encoder", "qwen3_omni_moe_audio_encoder")
+def _prepare_qwen_omni_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+    """Chunk-and-pad the audio features so the encoder's `.split(.tolist(), dim=0)` is replaced
+    by precomputed `padded_feature` + `chunk_lengths` (and matching `cu_seqlens`/`valid_indices`/
+    `pool_indices`) — all data-dependent ops happen outside the traced graph."""
     if "input_features" not in inputs or "feature_lens" not in inputs:
         return
 
+    modeling_module = sys.modules[type(model).__module__]
     feature_lens = inputs.pop("feature_lens")
     input_features = inputs.pop("input_features")
 
@@ -471,6 +501,31 @@ def _precompute_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> 
 
     if hasattr(modeling_module, "get_pool_indices"):
         inputs["pool_indices"] = modeling_module.get_pool_indices(feature_lens)
+
+
+def _precompute_export_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+    """Inject precomputed tensors for data-dependent ops the model would otherwise hit during tracing.
+
+    Two layers:
+    - Outer LLM rope index (`get_rope_index`) — generic `hasattr` probe; covers Qwen-VL / GLM-4V etc.
+    - Per-encoder preparer dispatched by `config.model_type` (see `register_export_input_preparer`).
+    """
+    # Outer-model: LLM rope index. Self-detecting via `hasattr` since model_type at this level
+    # varies (qwen2_vl vs qwen2_5_omni_thinker vs ...) and the get_rope_index signature is stable.
+    if inputs.get("position_ids") is None and hasattr(model, "get_rope_index"):
+        input_ids = inputs.get("input_ids")
+        attn_mask = inputs.get("attention_mask")
+        is_prefill = attn_mask is None or input_ids is None or input_ids.shape[1] == attn_mask.shape[1]
+        if is_prefill:
+            rope_params = set(inspect.signature(model.get_rope_index).parameters)
+            rope_inputs = {k: inputs[k] for k in rope_params if k in inputs}
+            position_ids, _ = model.get_rope_index(**rope_inputs)
+            inputs["position_ids"] = position_ids
+
+    # Encoder-level: dispatch by model_type.
+    model_type = getattr(getattr(model, "config", None), "model_type", None)
+    if preparer := _EXPORT_INPUT_PREPARERS.get(model_type):
+        preparer(model, inputs)
 
 
 @contextlib.contextmanager
