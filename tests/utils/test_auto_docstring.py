@@ -519,6 +519,9 @@ Parameters:
 
           Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
           heads.
+        - **mtp_loss** (`torch.FloatTensor` of shape `(1,)`, *optional*) -- Raw, unweighted multi-token prediction loss. Returned by models that support MTP training
+          (e.g. Qwen3.5) when `output_mtp_loss=True` is passed or `config.output_mtp_loss=True` is
+          set. Callers (e.g. `Trainer`) decide how to combine this with the main `loss`.
 
         Example:
 
