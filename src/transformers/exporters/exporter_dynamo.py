@@ -208,10 +208,17 @@ def _reshaped_vision_attention_forward(
         value_states = v_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
 
     if position_embeddings is not None:
-        cos, sin = position_embeddings
         model_module = sys.modules[type(self).__module__]
         apply_rotary_pos_emb_vision = getattr(model_module, "apply_rotary_pos_emb_vision")
-        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
+        if isinstance(position_embeddings, (tuple, list)):
+            # (cos, sin) tuple convention — e.g. MLCD, Qwen2VL after rotary expansion.
+            cos, sin = position_embeddings
+            query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
+        else:
+            # Single `rotary_pos_emb` tensor convention — Qwen2.5/3 Omni vision, where
+            # `apply_rotary_pos_emb_vision(states, rotary_pos_emb)` is per-states.
+            query_states = apply_rotary_pos_emb_vision(query_states.unsqueeze(0), position_embeddings).squeeze(0)
+            key_states = apply_rotary_pos_emb_vision(key_states.unsqueeze(0), position_embeddings).squeeze(0)
 
     seg_len = seq_length // num_segments
 

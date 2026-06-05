@@ -1742,6 +1742,11 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    def get_decoder(self):
+        # `base_model_prefix = "thinker"` means `self.base_model` falls back to `self`, so
+        # the default `get_decoder` can't find the LLM. The text model lives on `self.model`.
+        return self.model
+
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
