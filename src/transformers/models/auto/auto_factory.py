@@ -231,7 +231,7 @@ class _BaseAutoModelClass:
             # mappings in this case, or all future loads of that model will be the remote code model.
             if not has_local_code:
                 cls.register(config.__class__, model_class, exist_ok=True)
-                model_class.register_for_auto_class(auto_class=cls)
+            model_class.register_for_auto_class(auto_class=cls)
             _ = kwargs.pop("code_revision", None)
             model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class._from_config(config, **kwargs)
@@ -384,7 +384,7 @@ class _BaseAutoModelClass:
             # mappings in this case, or all future loads of that model will be the remote code model.
             if not has_local_code:
                 cls.register(config.__class__, model_class, exist_ok=True)
-                model_class.register_for_auto_class(auto_class=cls)
+            model_class.register_for_auto_class(auto_class=cls)
             model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
