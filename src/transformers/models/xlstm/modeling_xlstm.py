@@ -1323,7 +1323,7 @@ class xLSTMCache:
             The device on which the cache should be initialized. Should be the same as the layer.
 
     Attributes:
-        seqlen_offset: int
+        seqlen_offset: torch.Tensor
         dtype: torch.dtype
 
     Example:
@@ -1351,7 +1351,11 @@ class xLSTMCache:
         device: str | None = None,
         **kwargs,
     ):
-        self.seqlen_offset = 0
+        # Follows the static-cache convention (`StaticLayer.cumulative_length` in cache_utils.py):
+        # compile/export-friendly caches store the position counter as a tensor, not a Python int,
+        # so it stays a tensor leaf in the cache pytree across `+= shape[i]` operations rather
+        # than getting promoted to a SymInt during dynamic-shape tracing.
+        self.seqlen_offset = torch.tensor([0], dtype=int, device=device)
         self.dtype = dtype
         self.config = config
         self.rnn_state = {
