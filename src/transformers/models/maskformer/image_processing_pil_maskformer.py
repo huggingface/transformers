@@ -603,7 +603,8 @@ class MaskFormerImageProcessorPil(PilBackend):
             `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
             segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
             a list of [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation` (class IDs, shape
-            `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
+            `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
+            `(height, width)` corresponds to the target size (if `target_sizes` is specified).
         """
         requires_backends(self, "torch")
 

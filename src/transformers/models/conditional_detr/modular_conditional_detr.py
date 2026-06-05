@@ -180,7 +180,7 @@ class ConditionalDetrImageProcessor(DetrImageProcessor):
             return_segmentation_scores (`bool`, *optional*, defaults to `False`):
                 Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
                 the returned list is a [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation`
-                (class IDs) and `segmentation_scores`.
+                (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
 
         Returns:
             `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessorOutput]`: When
@@ -314,7 +314,7 @@ class ConditionalDetrImageProcessorPil(DetrImageProcessorPil):
             return_segmentation_scores (`bool`, *optional*, defaults to `False`):
                 Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
                 the returned list is a [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation`
-                (class IDs) and `segmentation_scores`.
+                (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
 
         Returns:
             `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessorOutput]`: When
