@@ -13,6 +13,7 @@
 # limitations under the License.
 """Video processor class for Videomt."""
 
+from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
 from ...utils import is_torch_available, requires_backends
 from ...video_processing_utils import BaseVideoProcessor
@@ -177,7 +178,8 @@ class VideomtVideoProcessor(BaseVideoProcessor):
         self,
         outputs,
         target_sizes: list[tuple[int, int]],
-    ) -> list["torch.Tensor"]:
+        return_segmentation_scores: bool = False,
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
         """
         Converts the output of [`VideomtForUniversalSegmentation`] into semantic segmentation predictions.
 
@@ -187,10 +189,18 @@ class VideomtVideoProcessor(BaseVideoProcessor):
             target_sizes (`list[tuple[int, int]]`):
                 List of `(height, width)` tuples corresponding to the requested final size of each prediction.
                 Length should match the number of frames in the output.
+            return_segmentation_scores (`bool`, *optional*, defaults to `False`):
+                Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
+                the returned list is a [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation`
+                (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
 
         Returns:
-            `list[torch.Tensor]`: A list of tensors, each of shape `(height, width)`, where each value is the
-            predicted class index for the corresponding pixel.
+            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessorOutput]`: When
+            `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
+            segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
+            a list of [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation` (class IDs, shape
+            `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
+            `(height, width)` corresponds to the target size.
         """
         requires_backends(self, ["torch"])
 
@@ -208,7 +218,15 @@ class VideomtVideoProcessor(BaseVideoProcessor):
 
         output_logits = self._resize_mask_logits(segmentation_logits, target_sizes)
 
-        return [logit.argmax(dim=0) for logit in output_logits]
+        semantic_segmentation = [
+            SemanticSegmentationPostProcessorOutput(segmentation=logit.argmax(dim=0), segmentation_scores=logit)
+            for logit in output_logits
+        ]
+
+        if not return_segmentation_scores:
+            semantic_segmentation = [item.segmentation for item in semantic_segmentation]
+
+        return semantic_segmentation
 
     def post_process_instance_segmentation(
         self,
