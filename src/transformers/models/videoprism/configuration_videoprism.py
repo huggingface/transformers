@@ -57,8 +57,8 @@ class VideoPrismVisionConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu_python"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-06
     qkv_bias: bool = True
@@ -74,8 +74,6 @@ class VideoPrismVisionConfig(PreTrainedConfig):
 @strict
 class VideoPrismTextConfig(PreTrainedConfig):
     r"""
-    num_text_layers (`int`, *optional*, defaults to 12):
-        Number of text transformer blocks.
     apply_l2norm (`bool`, *optional*, defaults to `True`):
         Whether to apply L2 normalization to the output of VideoPrismTextEncoder.
     attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
@@ -88,14 +86,15 @@ class VideoPrismTextConfig(PreTrainedConfig):
     vocab_size: int = 32000
     hidden_size: int = 768
     intermediate_size: int = 3072
+    num_hidden_layers: int = 12
     num_attention_heads: int = 12
     max_position_embeddings: int = 64
+
     hidden_act: str = "relu"
     layer_norm_eps: float = 1e-6
     pad_token_id: int | None = 0
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
-    num_text_layers: int = 12
     attention_probs_dropout_prob: float | int = 0.0
     apply_l2norm: bool = True
     qkv_bias: bool = True

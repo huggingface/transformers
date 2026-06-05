@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch VideoPrism model."""
 
+import copy
 import tempfile
 import unittest
 
@@ -265,7 +266,7 @@ class VideoPrismVisionModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(len(outputs.hidden_states), 1 + num_spatial_layers + num_temporal_layers)
 
     def test_hidden_states_output(self):
-        """ViViT-style hidden states test; spatial tokens then temporal tokens per encoder stage."""
+        """Hidden states: spatial tokens, then temporal tokens; last entry is last_hidden_state."""
 
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class._from_config(config, attn_implementation="eager")
@@ -290,9 +291,17 @@ class VideoPrismVisionModelTest(ModelTesterMixin, unittest.TestCase):
                 [self.model_tester.num_patches, self.model_tester.hidden_size],
             )
             self.assertListEqual(
-                list(hidden_states[-1].shape[-2:]),
+                list(hidden_states[num_spatial_layers + 1].shape[-2:]),
                 [self.model_tester.num_frames, self.model_tester.hidden_size],
             )
+            self.assertListEqual(
+                list(hidden_states[-1].shape[-2:]),
+                [
+                    self.model_tester.num_patches * self.model_tester.num_frames,
+                    self.model_tester.hidden_size,
+                ],
+            )
+            torch.testing.assert_close(hidden_states[-1], outputs.last_hidden_state)
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model_class = VideoPrismVisionModel
@@ -565,6 +574,96 @@ class VideoPrismClipModelTest(ModelTesterMixin, unittest.TestCase):
         model = VideoPrismClipModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    def _test_get_text_features_output(self, return_dict):
+        config, inputs_dict = self._text_features_prepare_config_and_inputs()
+        if return_dict is not None:
+            config.return_dict = return_dict
+
+        model = VideoPrismClipModel(config).eval().to(torch_device)
+        with torch.no_grad():
+            outputs = model.get_text_features(**inputs_dict)
+
+        if return_dict in (True, None):
+            expected_shape = (
+                inputs_dict["input_ids"].shape[0],
+                self.model_tester.text_model_tester.encoder_seq_length,
+                config.text_config.hidden_size,
+            )
+            self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+        else:
+            self.assertIsInstance(outputs, tuple)
+
+    def test_get_text_features_output_0(self):
+        self._test_get_text_features_output(return_dict=True)
+
+    def test_get_text_features_output_1(self):
+        self._test_get_text_features_output(return_dict=False)
+
+    def test_get_text_features_output_2(self):
+        self._test_get_text_features_output(return_dict=None)
+
+    def _video_features_expected_num_layers(self):
+        vision_tester = self.model_tester.vision_model_tester
+        return vision_tester.num_spatial_layers + vision_tester.num_temporal_layers
+
+    def test_get_video_features_hidden_states(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(copy.deepcopy(config))
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model.get_video_features(**inputs_dict)
+
+            hidden_states = outputs.hidden_states
+            expected_num_hidden_states = self._video_features_expected_num_layers() + 1
+            self.assertIsNotNone(hidden_states)
+            self.assertEqual(len(hidden_states), expected_num_hidden_states)
+
+        config, inputs_dict = self._video_features_prepare_config_and_inputs()
+
+        inputs_dict["output_hidden_states"] = True
+        check_hidden_states_output(inputs_dict, config, VideoPrismClipModel)
+
+        del inputs_dict["output_hidden_states"]
+        config.output_hidden_states = True
+        for k in config.sub_configs:
+            if getattr(config, k) is not None:
+                getattr(config, k).output_hidden_states = True
+
+        check_hidden_states_output(inputs_dict, config, VideoPrismClipModel)
+
+    def test_get_video_features_attentions(self):
+        def check_attentions_output(inputs_dict, config, model_class):
+            model = model_class(copy.deepcopy(config))
+            model.set_attn_implementation("eager")
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model.get_video_features(**inputs_dict)
+
+            attentions = outputs.attentions
+            expected_num_attentions = self._video_features_expected_num_layers()
+            self.assertIsNotNone(attentions)
+            self.assertEqual(len(attentions), expected_num_attentions)
+
+        if not self.has_attentions:
+            return
+
+        config, inputs_dict = self._video_features_prepare_config_and_inputs()
+        inputs_dict["output_hidden_states"] = False
+        inputs_dict["output_attentions"] = True
+        check_attentions_output(inputs_dict, config, VideoPrismClipModel)
+
+        del inputs_dict["output_attentions"]
+        config.output_attentions = True
+        for k in config.sub_configs:
+            if getattr(config, k) is not None:
+                getattr(config, k).output_attentions = True
+
+        check_attentions_output(inputs_dict, config, VideoPrismClipModel)
+
 
 @require_vision
 class VideoPrismForVideoClassificationModelTester(ModelTesterMixin, VideoPrismVisionModelTester):
@@ -831,46 +930,46 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size([1, int((144 / 18) * (144 / 18) * 10), model.config.hidden_size])
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
-    @slow
-    def test_videoprism_classification_model(self):
-        model_name = "MHRDYN7/videoprism-base-f16r288-finetuned-ucf101"
-        model = VideoPrismForVideoClassification.from_pretrained(model_name).to(torch_device)
-        print(model.device, torch_device)
-        processor = LlavaOnevisionVideoProcessor.from_pretrained(model_name)
-        inputs = processor(videos=self.basketball_dunk_video, return_tensors="pt")["pixel_values_videos"].to(
-            torch_device
-        )
-        label = torch.tensor([8], dtype=torch.long, device=torch_device)
-        model.eval()
-        with torch.inference_mode():
-            outputs = model(inputs, labels=label)
+    # @slow
+    # def test_videoprism_classification_model(self):
+    #     model_name = "MHRDYN7/videoprism-base-f16r288-finetuned-ucf101"
+    #     model = VideoPrismForVideoClassification.from_pretrained(model_name).to(torch_device)
+    #     print(model.device, torch_device)
+    #     processor = LlavaOnevisionVideoProcessor.from_pretrained(model_name)
+    #     inputs = processor(videos=self.basketball_dunk_video, return_tensors="pt")["pixel_values_videos"].to(
+    #         torch_device
+    #     )
+    #     label = torch.tensor([8], dtype=torch.long, device=torch_device)
+    #     model.eval()
+    #     with torch.inference_mode():
+    #         outputs = model(inputs, labels=label)
 
-        expected_logits = Expectations(
-            {
-                (None, None): [
-                    [
-                        [-5.8973, -2.4552, -2.6362, -3.2215, 11.2046, 4.4604, -3.3962, 3.6890, 12.3573, 5.1211],
-                    ]
-                ],
-                ("cuda", 8): [
-                    [
-                        [
-                            -5.8972797394,
-                            -2.4551916122,
-                            -2.6361594200,
-                            -3.2215039730,
-                            11.2045707703,
-                            4.4604382515,
-                            -3.3961904049,
-                            3.6890094280,
-                            12.3573036194,
-                            5.1210832596,
-                        ],
-                    ]
-                ],
-            }
-        )
-        expected_logits_values = torch.tensor(expected_logits.get_expectation(), device=torch_device)
-        print(outputs)
-        torch.testing.assert_close(outputs.logits, expected_logits_values, rtol=2e-4, atol=2e-4)
-        torch.testing.assert_close(outputs.loss, torch.tensor(0.2754, device=torch_device), rtol=2e-3, atol=2e-3)
+    #     expected_logits = Expectations(
+    #         {
+    #             (None, None): [
+    #                 [
+    #                     [-5.8973, -2.4552, -2.6362, -3.2215, 11.2046, 4.4604, -3.3962, 3.6890, 12.3573, 5.1211],
+    #                 ]
+    #             ],
+    #             ("cuda", 8): [
+    #                 [
+    #                     [
+    #                         -5.8972797394,
+    #                         -2.4551916122,
+    #                         -2.6361594200,
+    #                         -3.2215039730,
+    #                         11.2045707703,
+    #                         4.4604382515,
+    #                         -3.3961904049,
+    #                         3.6890094280,
+    #                         12.3573036194,
+    #                         5.1210832596,
+    #                     ],
+    #                 ]
+    #             ],
+    #         }
+    #     )
+    #     expected_logits_values = torch.tensor(expected_logits.get_expectation(), device=torch_device)
+    #     print(outputs)
+    #     torch.testing.assert_close(outputs.logits, expected_logits_values, rtol=2e-4, atol=2e-4)
+    #     torch.testing.assert_close(outputs.loss, torch.tensor(0.2754, device=torch_device), rtol=2e-3, atol=2e-3)

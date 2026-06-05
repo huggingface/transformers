@@ -320,18 +320,19 @@ def convert_params(flax_state_dict, model_name):
                 new_key = re.sub(r"layernormspatial", "layernorm1", new_key)
                 new_key = re.sub(r"layernormtemporal", "layernorm2", new_key)
                 new_key = re.sub(r"vision_encoder", "vision_model", new_key)
+                new_key = re.sub(r"_encoder", "_layers", new_key)
+                new_key = re.sub(r"text_layers", "layers", new_key)
 
                 if "lvt" not in model_name:
                     new_key = new_key.replace("video_model.vision_model.", "")
 
                 param = flax_state_dict[key]
-                if "_encoder." in new_key and param.ndim > 1:
+                if "layers." in new_key and param.ndim > 1:
                     # Split weights and biases layerwise
                     for layer in range(param.shape[0]):
-                        layer_key = new_key.replace("_encoder.", f"_encoder.{layer}.")
+                        layer_key = new_key.replace("layers.", f"layers.{layer}.")
                         new_param = transform_block_params(key, param[layer], hidden_size)
                         new_state_dict[layer_key] = torch.tensor(new_param).contiguous()
-
                 else:
                     # Transformation of non-layerwise parameters
                     new_param = transform_remaining_params(key, param, hidden_size)
@@ -345,13 +346,11 @@ def convert_params(flax_state_dict, model_name):
         r_softplus_0 = 1.442695041
         scale = torch.tensor(r_softplus_0 / (dim**0.5))
         new_state_dict["video_model.head.scale"] = scale
-
         # positional_embedding
         text_config = COMMON_CONFIG_PARAMS[model_name]["text_config"]
         num_pos, dim = 64, text_config["hidden_size"]  # Hardcoded num_pos
         positional_embedding = create_sinusoidal_positions(num_pos, dim)
         new_state_dict["text_model.embeddings.position_embedding"] = positional_embedding
-
         # position_ids
         new_state_dict["text_model.embeddings.position_ids"] = torch.arange(num_pos).expand((1, -1))
 
@@ -577,7 +576,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model_name",
-        default="lvt_large", #backbone_base, backbone_large, lvt_base, lvt_large
+        default="lvt_large", # backbone_base, backbone_large, lvt_base, lvt_large
         type=str,
         choices=ORIGINAL_CHECKPOINTS.keys(),
         help="Name of the model you'd like to convert.",
