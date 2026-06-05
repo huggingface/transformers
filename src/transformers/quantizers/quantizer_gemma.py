@@ -60,7 +60,7 @@ class GemmaQuantizer(HfQuantizer):
         # cache). Silence the unexpected-key warning.
         ignored = set(getattr(model, "_keys_to_ignore_on_load_unexpected", None) or [])
         ignored.update([r".*\.k_cache_scale$", r".*\.v_cache_scale$"])
-        model._keys_to_ignore_on_load_unexpected = ignored
+        model._keys_to_ignore_on_load_unexpected = ignored  # type: ignore[unresolved-attribute]
 
     @property
     def is_serializable(self):
