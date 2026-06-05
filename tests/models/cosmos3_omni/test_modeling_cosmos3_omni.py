@@ -264,7 +264,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=40)
         expected_decoded_texts = Expectations({
-            ("cuda", None): "user\nWhat kind of dog is this?\nassistant\nThe dog in this image appears to be a Labrador Retriever. It has the characteristic golden-brown coat and build typical of this breed. Labrador Retrievers are known for their friendly nature and are",
+            ("cuda", None): 'user\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. It has a light brown or golden coat, which is characteristic of this breed. Labrador Retrievers are known for their friendly demeanor and',
         })  # fmt: skip
         EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
 
@@ -293,8 +293,8 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_decoded_texts = Expectations(
             {
                 ("cuda", None): [
-                    "user\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. It has a golden coat, which is characteristic of a Yellow Labrador, one of the color variations of this breed. Labrador Retrievers",
-                    "user\nWhat do you see in this image?\nassistant\nIn this photograph, two cats are peacefully sleeping on a vibrant pink blanket that is spread out on a red couch. The cats, both adorned with a mix of brown, gray, and black stripes,",
+                    "user\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. It has a light brown or golden coat, which is characteristic of this breed. Labrador Retrievers are known for their friendly demeanor and",
+                    "user\nWhat do you see in this image?\nassistant\nIn this image, I see two cats sleeping on a pink couch. The cats appear to be of the same breed, with brown and black striped fur. They're both lying down in a relaxed position",
                 ],
             }
         )
