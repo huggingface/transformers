@@ -852,7 +852,9 @@ class Blip2TextEmbeddings(nn.Module):
 class Blip2QFormerModel(Blip2PreTrainedModel):
     config: Blip2QFormerConfig
 
-    _supports_flash_attn = False
+    _supports_attention_backend = True
+    _supports_sdpa = True
+    _supports_flash_attn = False  # Q-Former is kept in fp32, which blocks reliable Flash Attention dispatch.
     _supports_flex_attn = False
 
     _can_record_outputs = {

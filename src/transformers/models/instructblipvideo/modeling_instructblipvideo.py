@@ -713,6 +713,8 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
     instruction as input.
     """
 
+    _supports_attention_backend = True
+    _supports_sdpa = True
     _supports_flash_attn = False
     _supports_flex_attn = False
 
