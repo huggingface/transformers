@@ -34,7 +34,7 @@ from ..logits_process import LogitsProcessorList
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .distributed import DistributedHelper
-from .initialization import resolve_continuous_batching_config
+from .initialization import resolve_continuous_batching_config, update_cb_config_after_cache_creation
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
@@ -963,17 +963,8 @@ class ContinuousBatchingManager:
         )
         # Update the approximation now that we know if there is prefix sharing
         self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing
-        # Also cap the number of max requests per batch to the max tokens per batch
-        self.continuous_batching_config.max_request_per_batch = min(
-            self.continuous_batching_config.max_request_per_batch,
-            paged_attention_cache.max_batch_tokens
-        )
-        # And if there is no prefix sharing, we can cap the number of request per batch (1 request = 1 block at least)
-        if not self._use_prefix_sharing:
-            self.continuous_batching_config.max_request_per_batch = min(
-                self.continuous_batching_config.max_request_per_batch,
-                paged_attention_cache.num_blocks
-            )
+        # And update continuous batching config now that we have concrete values
+        update_cb_config_after_cache_creation(self.continuous_batching_config, paged_attention_cache)
 
         # Disable the decode path if the model has sliding window attention (TODO)
         if paged_attention_cache.num_sliding_attention_groups > 0:
