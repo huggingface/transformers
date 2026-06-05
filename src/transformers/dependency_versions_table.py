@@ -79,7 +79,7 @@ deps = {
     "torchaudio": "torchaudio",
     "torchvision": "torchvision",
     "pyctcdecode": "pyctcdecode>=0.4.0",
-    "tqdm": "tqdm>=4.27",
+    "tqdm": "tqdm>=4.60",
     "typer": "typer",
     "unidic": "unidic>=1.0.2",
     "unidic_lite": "unidic_lite>=1.0.7",
