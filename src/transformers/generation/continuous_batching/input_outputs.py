@@ -18,7 +18,8 @@ from typing import Any
 
 import torch
 
-from transformers.configuration_utils import ContinuousBatchingConfig, PretrainedConfig
+from transformers.configuration_utils import PretrainedConfig
+from transformers.generation.configuration_utils import ContinuousBatchingConfig
 
 from ...utils import get_available_devices
 from .cache import PagedAttentionCache
@@ -756,14 +757,11 @@ class ContinuousBatchingAsyncIOs:
         self,
         input_ids: torch.Tensor,  # shape [1, seq_len]
         carry_over_ids: torch.Tensor,  # shape [seq_len]
-        prev_output_ids: torch.Tensor,  # shape [1, num_out_tokens]
+        prev_output_ids: torch.Tensor,  # shape [1, max_batch_tokens + 1]
     ) -> None:
         """As explained in the infer_carry_over_ids method, we might need to carry over tokens just predicted in batch N
         before launching the forwar pass of batch N+1. This method performs the carry over, and is recorded in CUDA
         graphs if they are enabled."""
-        print(f"carry_over_ids: {carry_over_ids.shape}")
-        print(f"prev_output_ids: {prev_output_ids.shape}")
-        print(f"input_ids: {input_ids.shape}")
         # Compute tokens to carry over and the corresponding mask
         carried_over_ids = prev_output_ids[0, carry_over_ids]  # shape [seq_len]
         carried_over_mask = (carry_over_ids != -1).int()  # shape [seq_len]

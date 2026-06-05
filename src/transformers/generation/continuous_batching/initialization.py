@@ -24,7 +24,6 @@ from ...generation.configuration_utils import CompileConfig, ContinuousBatchingC
 from ...modeling_flash_attention_utils import lazy_import_paged_flash_attention
 from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
-from .cache import PagedAttentionCache
 from .requests import logger
 from .utils import WorkloadHints
 
@@ -276,14 +275,19 @@ def resolve_max_memory_percent(cb_config: ContinuousBatchingConfig, has_logit_pr
         cb_config.max_memory_percent = 0.8 if has_logit_processors else 0.9
 
 
-def update_cb_config_after_cache_creation(cb_config: ContinuousBatchingConfig, cache: PagedAttentionCache) -> None:
+def update_cb_config_after_cache_creation(
+    cb_config: ContinuousBatchingConfig,
+    num_blocks: int,
+    max_batch_tokens: int,
+    use_prefix_sharing: bool,
+) -> None:
     """Updates the continuous batching config with the concrete values infered during the creation of the cache."""
     # Memoize concrete values
-    cb_config.num_blocks = cache.num_blocks
-    cb_config.max_batch_tokens = cache.max_batch_tokens
+    cb_config.num_blocks = num_blocks
+    cb_config.max_batch_tokens = max_batch_tokens
     # Cap the number of max requests per batch to the max tokens per batch
-    cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, cache.max_batch_tokens)
+    cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, max_batch_tokens)
     # And if there is no prefix sharing, we can cap the number of request per batch (1 request = 1 block at least)
-    if not cache.use_prefix_sharing:
-        cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, cache.num_blocks)
+    if not use_prefix_sharing:
+        cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, num_blocks)
     # TODO: should we algin the max number of request per batch to a multiple of 32 ?
