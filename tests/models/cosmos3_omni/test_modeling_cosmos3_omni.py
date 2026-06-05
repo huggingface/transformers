@@ -264,7 +264,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=40)
         expected_decoded_texts = Expectations({
-            ("cuda", None): "user\nWhat kind of dog is this?\nassistant\nThe dog in this image appears to be a Labrador Retriever. It has the characteristic tan or golden-brown coat color, which is typical for this breed. The dog's size and build also",
+            ("cuda", None): "user\nWhat kind of dog is this?\nassistant\nThe dog in this image appears to be a Labrador Retriever. It has the characteristic golden-brown coat and build typical of this breed. Labrador Retrievers are known for their friendly nature and are",
         })  # fmt: skip
         EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
 
@@ -285,6 +285,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
             return_tensors="pt",
             padding=True,
+            padding_side="left",
         ).to(torch_device, torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=40)
@@ -292,8 +293,8 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_decoded_texts = Expectations(
             {
                 ("cuda", None): [
-                    "user\nWhat kind of dog is this?\nassistant\n<think>\n\n:\n\nThe image depicts a dog sitting on a sandy beach, interacting with a person. To identify the breed, let's analyze the visual characteristics of the dog in the image:\n\n1. **",
-                    "user\nWhat do you see in this image?\nassistant\nThe image depicts two cats lounging on a bright pink couch. The cat on the left is a black and tan tabby with a green collar, lying on its side with its paws up and",
+                    "user\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. It has a golden coat, which is characteristic of a Yellow Labrador, one of the color variations of this breed. Labrador Retrievers",
+                    "user\nWhat do you see in this image?\nassistant\nIn this photograph, two cats are peacefully sleeping on a vibrant pink blanket that is spread out on a red couch. The cats, both adorned with a mix of brown, gray, and black stripes,",
                 ],
             }
         )
