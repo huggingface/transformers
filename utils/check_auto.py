@@ -225,6 +225,7 @@ def get_all_processor_mappings(config_mapping: dict[str, str]):
 
     all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES"] = merged_image_processor_mapping
     del all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES_PIL"]
+    del all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES_TV"]
     check_duplicates(MISSING_IMAGE_PROCESSOR_MAPPING_NAMES, merged_image_processor_mapping)
 
     return all_mappings
