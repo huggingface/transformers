@@ -21,8 +21,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-from huggingface_hub import create_repo
-
 from .. import __version__
 from ..utils import (
     GENERATION_CONFIG_NAME,
@@ -30,6 +28,7 @@ from ..utils import (
     PushToHubMixin,
     cached_file,
     extract_commit_hash,
+    hf_api,
     is_torch_available,
     logging,
 )
@@ -866,7 +865,7 @@ class GenerationConfig(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         output_config_file = os.path.join(save_directory, config_file_name)
@@ -1670,6 +1669,9 @@ class ContinuousBatchingConfig:
             Remove unsupported logits processors instead of erroring. Default is True.
         disable_nccl_graph_mixing (`bool`, *optional*, defaults to `True`):
             Disable NCCL's safety net for parallel graph-captured comms. Never happens in CB and gives TP a perf boost.
+        cpu_group_timeout (`float`, *optional*, defaults to 300.0):
+            The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None
+            for no timeout. Default is 300 seconds.
     """
 
     # Size of each KV cache block
@@ -1750,6 +1752,11 @@ class ContinuousBatchingConfig:
     # CUDA graph with NCCL communication at the same time as 1. another CUDA graph with captured comms 2. an eager comm.
     # This is turned on by default because the above never happens in CB and this gives a nice perf boost.
     disable_nccl_graph_mixing: bool = True
+
+    # The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None for
+    # no timeout. Default is 300 seconds. This exists because dist has a gloo timeout of 30 minutes, which is way too
+    # long for almost all use cases.
+    cpu_group_timeout: float | None = 300.0
 
     def __post_init__(self):
         # Only turn off graph mixing support if TP is on

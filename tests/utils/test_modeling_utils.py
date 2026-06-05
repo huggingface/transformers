@@ -336,34 +336,38 @@ if is_torch_available():
     class TestOffline(unittest.TestCase):
         def test_offline(self):
             with tempfile.TemporaryDirectory() as tmpdir:
-                # First offline load should fail
-                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
-                    with pytest.raises(OSError):
+                # TODO: only necessary for read-only cache systems; replace with a shared helper
+                with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmpdir}):
+                    # First offline load should fail
+                    with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
+                        with pytest.raises(OSError):
+                            AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
+
+                    # Enable online mode for download
+                    with patch("huggingface_hub.constants.HF_HUB_OFFLINE", False):
+                        snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
+
+                    # Load again in offline mode - should work now
+                    with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
                         AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
-
-                # Enable online mode for download
-                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", False):
-                    snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
-
-                # Load again in offline mode - should work now
-                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
-                    AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
         def test_local_files_only(self):
             with tempfile.TemporaryDirectory() as tmpdir:
-                # Empty cache => fail to load from cache
-                with pytest.raises(OSError):
+                # TODO: only necessary for read-only cache systems; replace with a shared helper
+                with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmpdir}):
+                    # Empty cache => fail to load from cache
+                    with pytest.raises(OSError):
+                        AutoModelForImageClassification.from_pretrained(
+                            TINY_IMAGE_CLASSIF, cache_dir=tmpdir, local_files_only=True
+                        )
+
+                    # Populate cache
+                    snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
+
+                    # Load again from cache => success
                     AutoModelForImageClassification.from_pretrained(
                         TINY_IMAGE_CLASSIF, cache_dir=tmpdir, local_files_only=True
                     )
-
-                # Populate cache
-                snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
-
-                # Load again from cache => success
-                AutoModelForImageClassification.from_pretrained(
-                    TINY_IMAGE_CLASSIF, cache_dir=tmpdir, local_files_only=True
-                )
 
 
 # Need to be serializable, which means they cannot be in a test class method
@@ -974,68 +978,83 @@ class ModelUtilsTest(TestCasePlus):
 
     def test_checkpoint_variant_hub(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaises(EnvironmentError):
-                _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-variant", cache_dir=tmp_dir)
-            model = BertModel.from_pretrained(
-                "hf-internal-testing/tiny-random-bert-variant", cache_dir=tmp_dir, variant="v2", use_safetensors=False
-            )
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                with self.assertRaises(EnvironmentError):
+                    _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-variant", cache_dir=tmp_dir)
+                model = BertModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-bert-variant",
+                    cache_dir=tmp_dir,
+                    variant="v2",
+                    use_safetensors=False,
+                )
         self.assertIsNotNone(model)
 
     def test_checkpoint_variant_hub_sharded(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaises(EnvironmentError):
-                _ = BertModel.from_pretrained(
-                    "hf-internal-testing/tiny-random-bert-variant-sharded", cache_dir=tmp_dir
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                with self.assertRaises(EnvironmentError):
+                    _ = BertModel.from_pretrained(
+                        "hf-internal-testing/tiny-random-bert-variant-sharded", cache_dir=tmp_dir
+                    )
+                model = BertModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-bert-variant-sharded",
+                    cache_dir=tmp_dir,
+                    variant="v2",
+                    use_safetensors=False,
                 )
-            model = BertModel.from_pretrained(
-                "hf-internal-testing/tiny-random-bert-variant-sharded",
-                cache_dir=tmp_dir,
-                variant="v2",
-                use_safetensors=False,
-            )
         self.assertIsNotNone(model)
 
     def test_checkpoint_variant_hub_safe(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaises(EnvironmentError):
-                _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-variant-safe", cache_dir=tmp_dir)
-            model = BertModel.from_pretrained(
-                "hf-internal-testing/tiny-random-bert-variant-safe", cache_dir=tmp_dir, variant="v2"
-            )
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                with self.assertRaises(EnvironmentError):
+                    _ = BertModel.from_pretrained(
+                        "hf-internal-testing/tiny-random-bert-variant-safe", cache_dir=tmp_dir
+                    )
+                model = BertModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-bert-variant-safe", cache_dir=tmp_dir, variant="v2"
+                )
         self.assertIsNotNone(model)
 
     def test_checkpoint_variant_hub_sharded_safe(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaises(EnvironmentError):
-                _ = BertModel.from_pretrained(
-                    "hf-internal-testing/tiny-random-bert-variant-sharded-safe", cache_dir=tmp_dir
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                with self.assertRaises(EnvironmentError):
+                    _ = BertModel.from_pretrained(
+                        "hf-internal-testing/tiny-random-bert-variant-sharded-safe", cache_dir=tmp_dir
+                    )
+                model = BertModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-bert-variant-sharded-safe", cache_dir=tmp_dir, variant="v2"
                 )
-            model = BertModel.from_pretrained(
-                "hf-internal-testing/tiny-random-bert-variant-sharded-safe", cache_dir=tmp_dir, variant="v2"
-            )
         self.assertIsNotNone(model)
 
     def test_checkpoint_variant_save_load(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model = BertModel.from_pretrained(
-                "hf-internal-testing/tiny-random-bert-variant",
-                cache_dir=tmp_dir,
-                variant="v2",
-                use_safetensors=False,
-            )
-            weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["safetensors"])
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                model = BertModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-bert-variant",
+                    cache_dir=tmp_dir,
+                    variant="v2",
+                    use_safetensors=False,
+                )
+                weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["safetensors"])
 
-            model.save_pretrained(tmp_dir, variant="v2")
-            # saving will create a variant checkpoint
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
+                model.save_pretrained(tmp_dir, variant="v2")
+                # saving will create a variant checkpoint
+                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
 
-            model.save_pretrained(tmp_dir)
-            # saving shouldn't delete variant checkpoints
-            weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["safetensors"])
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
+                model.save_pretrained(tmp_dir)
+                # saving shouldn't delete variant checkpoints
+                weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["safetensors"])
+                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
 
-            # there should be a normal checkpoint
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+                # there should be a normal checkpoint
+                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
 
         self.assertIsNotNone(model)
 
@@ -1277,29 +1296,33 @@ class ModelUtilsTest(TestCasePlus):
 
         # test that only safetensors if both available and use_safetensors=False
         with tempfile.TemporaryDirectory() as tmp_dir:
-            CLIPTextModel.from_pretrained(
-                "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
-                subfolder="text_encoder",
-                use_safetensors=False,
-                cache_dir=tmp_dir,
-            )
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                CLIPTextModel.from_pretrained(
+                    "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
+                    subfolder="text_encoder",
+                    use_safetensors=False,
+                    cache_dir=tmp_dir,
+                )
 
-            all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
-            self.assertTrue(any(f.endswith("bin") for f in all_downloaded_files))
-            self.assertFalse(any(f.endswith("safetensors") for f in all_downloaded_files))
+                all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
+                self.assertTrue(any(f.endswith("bin") for f in all_downloaded_files))
+                self.assertFalse(any(f.endswith("safetensors") for f in all_downloaded_files))
 
         # test that no safetensors if both available and use_safetensors=True
         with tempfile.TemporaryDirectory() as tmp_dir:
-            CLIPTextModel.from_pretrained(
-                "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
-                subfolder="text_encoder",
-                use_safetensors=True,
-                cache_dir=tmp_dir,
-            )
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                CLIPTextModel.from_pretrained(
+                    "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
+                    subfolder="text_encoder",
+                    use_safetensors=True,
+                    cache_dir=tmp_dir,
+                )
 
-            all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
-            self.assertTrue(any(f.endswith("safetensors") for f in all_downloaded_files))
-            self.assertFalse(any(f.endswith("bin") for f in all_downloaded_files))
+                all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
+                self.assertTrue(any(f.endswith("safetensors") for f in all_downloaded_files))
+                self.assertFalse(any(f.endswith("bin") for f in all_downloaded_files))
 
         # test no model file found when use_safetensors=None (default when safetensors package available)
         with self.assertRaises(OSError) as missing_model_file_error:
