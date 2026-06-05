@@ -104,7 +104,7 @@ class DynamoExporter(HfExporter):
         return exported_program
 
 
-# ── Untraceable pattern patches ────────────────────────────────────────────
+# ── Stage 1: Model patches ────────────────────────────────────────────────────
 # Reversible patches applied by `patch_untraceable_patterns` during
 # `torch.export` tracing. Each replaces a non-exportable model pattern
 # (data-dependent control flow, in-place ops on views, etc.) with an
@@ -303,7 +303,7 @@ def patch_untraceable_patterns(model: PreTrainedModel):
             setattr(module, attr, original)
 
 
-# ── Pytree registration ─────────────────────────────────────────────────────
+# ── Stage 2: Pytree registration ─────────────────────────────────────────────
 # torch.export needs pytree flatten/unflatten for Cache objects and other
 # custom types. The generic flattener serialises any object to a JSON-native
 # context (bools, ints, strings, dicts, lists) while collecting tensors into
@@ -489,7 +489,7 @@ def register_cache_pytrees_for_model(model: PreTrainedModel):
         _register_pytree_node(ImageList)
 
 
-# ── Model signature patch ──────────────────────────────────────────────────
+# ── Stage 3: Model signature patch ──────────────────────────────────────────
 # Replaces `model.forward` with a flat explicit signature derived from the
 # inputs dict so `torch.export` does not expand `**kwargs` into a large bundle.
 
@@ -520,7 +520,7 @@ def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
         model.forward = original_forward
 
 
-# ── Dynamic shapes ──────────────────────────────────────────────────────────
+# ── Stage 4: Dynamic shapes ─────────────────────────────────────────────────
 # Automatic `Dim.AUTO` inference for all tensor and cache inputs when
 # `DynamoConfig.dynamic` is True and no explicit `dynamic_shapes` are provided.
 
@@ -555,7 +555,7 @@ def get_auto_dynamic_shapes(inputs: Any) -> Any:
     return None
 
 
-# ── State cleanup ───────────────────────────────────────────────────────────
+# ── Stage 5: State cleanup ──────────────────────────────────────────────────
 # torch.export traces forward with FakeTensors, which can leave non-Cache stateful
 # tensor attributes as FakeTensors after tracing. A subsequent eager forward on
 # the same module then hits shape/dtype mismatches when it reuses the stale state.

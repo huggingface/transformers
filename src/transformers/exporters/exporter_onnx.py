@@ -18,16 +18,19 @@
 Extends `DynamoExporter` with four extra stages that convert an `ExportedProgram`
 into an ONNX model via `torch.onnx.export`:
 
-1. **Torch patches** (`patch_torch_ops`): monkey-patch PyTorch ops at tracing
-   time to avoid problematic decompositions or unsupported patterns.
-2. **FX graph patches** (`patch_fx_graph`): rewrite the FX graph produced by
-   `torch.export` before `run_decompositions` to remove or replace nodes
-   that cannot be lowered to ONNX.
+1. **Torch patches** (`_TORCH_PATCHES` + `_ONNX_PATCHES` via `patch_attrs`):
+   reversibly monkey-patch PyTorch ops at tracing time, plus the private
+   `torch.onnx` decomposition hook, so `torch.export` and `torch.onnx.export`
+   emit ONNX-lowerable patterns. Reverted on exit.
+2. **FX graph fixes** (`_FX_NODE_FIXES` via `apply_fx_node_fixes`): per-node
+   in-place rewrites on the `GraphModule` between `torch.export` and
+   `torch.onnx.export` to drop or replace nodes ONNX can't lower (alias,
+   in-place ops, dead comparisons, `_assert_*`, …).
 3. **ONNX translations** (`_ONNX_TRANSLATION_TABLE`): custom onnxscript
-   functions registered via `custom_translation_table` to override the
-   default torchlib lowering for specific aten ops.
-4. **ONNX IR patches** (`patch_onnx_ir`): post-export fixes to the ONNX IR
-   for ORT compatibility.
+   functions registered via `custom_translation_table` that override the
+   default torchlib lowering for specific aten ops where it's buggy or missing.
+4. **ONNX IR fixes** (`_IR_FIXES` via `apply_onnx_ir_fixes`): post-export
+   in-place fixes on the `ONNXProgram` IR for ORT compatibility.
 """
 
 from __future__ import annotations
@@ -43,13 +46,14 @@ from ..utils import logging
 from ..utils.export_config import OnnxConfig
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .exporter_dynamo import DynamoExporter
-from .utils import duplicate_leaf_tensors, get_leaf_tensors
+from .utils import apply_fx_node_fixes, duplicate_leaf_tensors, get_leaf_tensors, patch_attrs
 
 
 if is_torch_available():
     import torch
     from torch.export import ExportedProgram
     from torch.onnx import ONNXProgram
+    from torch.onnx._internal.exporter import _core as _onnx_core
 
     from .. import masking_utils
 
@@ -90,12 +94,12 @@ class OnnxExporter(DynamoExporter):
     required_packages = ["torch", "onnx", "onnxscript"]
 
     def export(self, model: PreTrainedModel, sample_inputs: dict[str, Any]) -> ONNXProgram:
-        with patch_model_outputs(model), patch_torch_ops(), patch_onnx_decomposition():
+        with patch_model_outputs(model), patch_attrs(_TORCH_PATCHES), patch_attrs(_ONNX_PATCHES):
             exported_program: ExportedProgram = super().export(model, sample_inputs)
             with torch.no_grad():
                 sample_outputs = model(**copy.deepcopy(sample_inputs))
             inputs_names, outputs_names = get_inputs_outputs_names(sample_inputs, sample_outputs)
-            patch_fx_graph(exported_program.graph_module)
+            apply_fx_node_fixes(exported_program.graph_module, _FX_NODE_FIXES)
             onnx_program: ONNXProgram = torch.onnx.export(
                 exported_program,
                 args=(),
@@ -110,7 +114,7 @@ class OnnxExporter(DynamoExporter):
                 optimize=self.export_config.optimize,
             )
 
-        patch_onnx_ir(onnx_program)
+        apply_onnx_ir_fixes(onnx_program)
         return onnx_program
 
 
@@ -158,12 +162,9 @@ def get_inputs_outputs_names(inputs: dict[str, Any], outputs: Any) -> tuple[list
 
 
 # ── Stage 1: Torch patches ─────────────────────────────────────────────────────
-# Monkey-patches applied during torch.export tracing.
-# Each _patch_* function is a factory: receives the original op and returns the
-# replacement, closing over the original.
-#
-# _TORCH_PATCHES is a list of (object, attr, factory) triples.
-# patch_torch_ops installs them and restores on exit.
+# Shared exporter contract: _TORCH_PATCHES is a list of (obj, attr, factory) triples;
+# each factory receives the original op and returns the replacement. Installation
+# and restoration are handled by `utils.patch_attrs`.
 #
 # To add a new patch: define a _patch_* factory and append to _TORCH_PATCHES.
 
@@ -400,23 +401,7 @@ if is_torch_available():
     ]
 
 
-@contextmanager
-def patch_torch_ops():
-    """Context manager: install torch patches for ONNX export."""
-    originals = []
-    for obj, attr, factory in _TORCH_PATCHES:
-        original = getattr(obj, attr)
-        originals.append((obj, attr, original))
-        setattr(obj, attr, factory(original))
-
-    try:
-        yield
-    finally:
-        for obj, attr, original in originals:
-            setattr(obj, attr, original)
-
-
-# ── Stage 2: FX graph patches ──────────────────────────────────────────────────
+# ── Stage 2: FX graph fixes ──────────────────────────────────────────────────
 # Rewrite FX nodes between torch.export (stage 1) and run_decompositions.
 # Each fixer: (gm, node) -> bool. Return True = node consumed, stop.
 #
@@ -582,35 +567,13 @@ _FX_NODE_FIXES = [
 ]
 
 
-def patch_fx_graph(graph_module: torch.fx.GraphModule) -> None:
-    """Apply FX node fixes to all sub-GraphModules, then eliminate dead code."""
-    for gm in graph_module.modules():
-        if not isinstance(gm, torch.fx.GraphModule):
-            continue
-        for node in list(gm.graph.nodes):
-            if node.op != "call_function":
-                continue
-            for fix in _FX_NODE_FIXES:
-                if fix(gm, node):
-                    break
-        # PyTorch DCE can crash on orphaned symbolic size nodes (KeyError/SystemError
-        # in erase_node._update_args_kwargs). Harmless: remaining dead code is cleaned
-        # up by the ONNX optimizer.
-        try:
-            gm.graph.eliminate_dead_code()
-        except (SystemError, KeyError):
-            pass
-        gm.recompile()
-
-
-@contextmanager
-def patch_onnx_decomposition():
-    """Wrap the ONNX internal decomposition step so `patch_fx_graph` runs after it.
+def _patch_prepare_for_export(original):
+    """Run the FX node fixes immediately after the ONNX internal decomposition step.
 
     `torch.onnx.export` internally calls `run_decompositions` with the ONNX
     decomposition table, which can introduce new symbolic-guard nodes (e.g.
     `operator.le(sym_size, int_oo)`). These overflow during ONNX translation.
-    This context manager hooks into that step to apply our FX fixes immediately after.
+    Wrapping the prepare step lets us apply our FX fixes immediately after.
 
     <Tip warning={true}>
 
@@ -621,20 +584,20 @@ def patch_onnx_decomposition():
 
     </Tip>
     """
-    from torch.onnx._internal.exporter import _core
 
-    original = _core._prepare_exported_program_for_export
-
-    def _prepare_and_patch(ep, *, registry):
+    def patch(ep, *, registry):
         result = original(ep, registry=registry)
-        patch_fx_graph(result.graph_module)
+        apply_fx_node_fixes(result.graph_module, _FX_NODE_FIXES)
         return result
 
-    _core._prepare_exported_program_for_export = _prepare_and_patch
-    try:
-        yield
-    finally:
-        _core._prepare_exported_program_for_export = original
+    return patch
+
+
+_ONNX_PATCHES = []
+if is_torch_available():
+    _ONNX_PATCHES += [
+        (_onnx_core, "_prepare_exported_program_for_export", _patch_prepare_for_export),
+    ]
 
 
 # ── Stage 3: Custom ONNX translations ─────────────────────────────────────────
@@ -695,8 +658,10 @@ if is_onnxscript_available():
         }
     )
 
-# ── Stage 4: ONNX IR patches ──────────────────────────────────────────────────
-# Post-export fixes to the ONNX IR for ORT compatibility.
+# ── Stage 4: ONNX IR fixes ────────────────────────────────────────────────────
+# Post-export fixes to the ONNX IR for ORT compatibility. Each fix has signature
+# `(graph_like) -> None` and is applied to both the top-level graph and every
+# function via `apply_onnx_ir_fixes`.
 #
 # To add a new fix: implement _fix_ir_* and append to _IR_FIXES.
 
@@ -713,9 +678,9 @@ _IR_FIXES = [
 ]
 
 
-def patch_onnx_ir(onnx_program: ONNXProgram) -> None:
-    """Apply ONNX IR fixes to the exported program for ORT compatibility."""
+def apply_onnx_ir_fixes(onnx_program: ONNXProgram) -> None:
+    """Apply each `(graph_like) -> None` IR fix to the main graph and every function."""
+    graphs = [onnx_program.model.graph, *onnx_program.model.functions.values()]
     for fix in _IR_FIXES:
-        fix(onnx_program.model.graph)
-        for func in onnx_program.model.functions.values():
-            fix(func)
+        for graph in graphs:
+            fix(graph)

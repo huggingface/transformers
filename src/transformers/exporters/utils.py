@@ -62,6 +62,66 @@ if is_torch_available():
     _LEAF_SKIP_TYPES += (enum.Enum, torch.SymInt, torch.SymFloat, torch.SymBool)
 
 
+# ── Shared patch primitives ────────────────────────────────────────────────
+# Reversible attribute swaps used by every exporter to install torch op patches
+# and ExecuTorch pass softenings. Each exporter declares its own list of patches;
+# the install/uninstall loop and the single-attr context manager live here so
+# the contract — (obj, attr, factory) triples with factory(original) -> replacement —
+# is identical across backends.
+
+
+@contextlib.contextmanager
+def patch_attr(obj: Any, attr: str, factory: Any):
+    """Swap `obj.attr` with `factory(original)` for the duration of the block."""
+    original = getattr(obj, attr)
+    setattr(obj, attr, factory(original))
+    try:
+        yield
+    finally:
+        setattr(obj, attr, original)
+
+
+@contextlib.contextmanager
+def patch_attrs(patches: list[tuple[Any, str, callable]]):
+    """Install `(obj, attr, factory)` patches for the duration of the block.
+
+    Plural form of `patch_attr` — each `factory(original)` returns the replacement
+    callable. Originals are restored on exit, even if the body raises.
+    """
+    with contextlib.ExitStack() as stack:
+        for obj, attr, factory in patches:
+            stack.enter_context(patch_attr(obj, attr, factory))
+        yield
+
+
+def apply_fx_node_fixes(graph_module, fixes: list[callable]) -> None:
+    """Walk every call_function node and apply the first matching fix, then DCE.
+
+    Each fix has signature `(gm, node) -> bool`. Returning `True` means the fix consumed
+    the node — no further fixes run against it. Fixes are expected to be disjoint by
+    `node.target`; if multiple could apply, list order decides.
+
+    After the walk, `Graph.eliminate_dead_code` runs on every sub-GraphModule and
+    `gm.recompile()` is called once. PyTorch DCE occasionally raises `SystemError` /
+    `KeyError` from `erase_node._update_args_kwargs` on orphaned symbolic-size nodes —
+    we swallow both; any survivors are handled by the downstream backend optimizer.
+    """
+    for gm in graph_module.modules():
+        if not isinstance(gm, torch.fx.GraphModule):
+            continue
+        for node in list(gm.graph.nodes):
+            if node.op != "call_function":
+                continue
+            for fix in fixes:
+                if fix(gm, node):
+                    break
+        try:
+            gm.graph.eliminate_dead_code()
+            gm.recompile()
+        except (SystemError, KeyError):
+            pass
+
+
 # ── Recursive structure traversal ──────────────────────────────────────────
 # All tensor utilities share this traversal. _map_leaf_tensors applies a function
 # to every tensor leaf; _iter_leaf_tensors yields (path, tensor) pairs.
@@ -246,41 +306,44 @@ def prepare_for_export(
 # Split multi-modal models into independently exportable submodules (vision encoder,
 # projector, language model) by capturing each submodule's forward inputs during a single pass.
 
-# Well-known submodule attribute names for multi-modal architectures.
-_MULTIMODAL_LM_NAMES = ("language_model", "text_model", "lm_head")
+# Projector attribute names — no canonical accessor on `PreTrainedModel`, kept as a heuristic.
+# Encoders and language model are resolved via `get_encoder(modality)` / `get_decoder()`.
 _MULTIMODAL_PROJECTOR_NAMES = ("multi_modal_projector", "connector", "embed_vision", "embed_audio")
-_MULTIMODAL_ENCODER_NAMES = (
-    "vision_encoder",
-    "image_encoder",
-    "audio_encoder",
-    "vision_model",
-    "vision_tower",
-    "audio_tower",
-    "visual",
-)
-_MULTIMODAL_SUBMODULE_NAMES = _MULTIMODAL_ENCODER_NAMES + _MULTIMODAL_PROJECTOR_NAMES + _MULTIMODAL_LM_NAMES
-_WRAPPER_ATTRS = ("model", "vlm")
+_MULTIMODAL_LM_HEAD_NAMES = ("lm_head",)
 
 
 def _find_multimodal_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Module]:
-    """Return `{attr_name: module}` for all known multi-modal submodule names found on the model.
+    """Return `{attr_name: module}` for multi-modal submodules found on `model`.
 
-    Checks `model` first, then known wrapper attributes (`model.model`, `model.vlm`, …).
-    Only returns results when at least one modal encoder AND one language model are
-    found — otherwise the model is not multi-modal and should be exported as a single unit.
+    Uses the canonical `PreTrainedModel.get_encoder("image"/"audio")` and `get_decoder()`
+    accessors for encoders and the language model. Projectors and `lm_head` are looked
+    up by name on `model` and its `base_model` (e.g. `LlavaModel` under `LlavaForConditionalGeneration`).
+
+    Only returns results when at least one modal encoder AND a language model are found —
+    otherwise the model is not multi-modal and should be exported as a single unit.
     """
-    roots = [model] + [getattr(model, attr, None) for attr in _WRAPPER_ATTRS]
     found: dict[str, torch.nn.Module] = {}
-    for root in roots:
-        if root is None:
-            continue
-        for name in _MULTIMODAL_SUBMODULE_NAMES:
+
+    has_encoder = False
+    for modality in ("image", "audio"):
+        encoder = model.get_encoder(modality=modality)
+        # `get_encoder` returns `self` as the "no match" fallback, and some models keep
+        # `self.audio_tower = None` / `self.vision_tower = None` when the corresponding
+        # sub-config is absent — `hasattr` is True but `getattr` is None.
+        if encoder is not None and encoder is not model:
+            found[f"{modality}_encoder"] = encoder
+            has_encoder = True
+
+    decoder = model.get_decoder()
+    if decoder is not None and decoder is not model:
+        found["language_model"] = decoder
+
+    for root in {model, model.base_model}:
+        for name in _MULTIMODAL_PROJECTOR_NAMES + _MULTIMODAL_LM_HEAD_NAMES:
             if name not in found and getattr(root, name, None) is not None:
                 found[name] = getattr(root, name)
 
-    has_encoder = any(name in found for name in _MULTIMODAL_ENCODER_NAMES)
-    has_lm = any(name in found for name in _MULTIMODAL_LM_NAMES)
-    if not (has_encoder and has_lm):
+    if not has_encoder or "language_model" not in found:
         return {}
 
     return found
@@ -485,7 +548,7 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
 
     Returns:
         `dict[str, tuple[torch.nn.Module, dict]]`: One `name: (module, inputs)`
-        entry per detected submodule, in the order they appear in `_MULTIMODAL_SUBMODULE_NAMES`.
+        entry per detected submodule (image/audio encoder, projector, language model, lm_head).
 
     Raises:
         `ValueError`: if no known multi-modal submodules are found on the model.
@@ -494,7 +557,7 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
     if not submodules:
         raise ValueError(
             f"decompose_multimodal found no multi-modal submodules on {type(model).__name__}. "
-            f"Expected one or more of: {_MULTIMODAL_SUBMODULE_NAMES}."
+            f"Expected an image/audio encoder + language model, found neither."
         )
 
     try:
