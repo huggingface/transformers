@@ -99,9 +99,10 @@ class Mask2FormerImageProcessor(MaskFormerImageProcessor):
                     )
                 )
         else:
+            semantic_map = segmentation.argmax(dim=1)
             semantic_segmentation = [
                 SemanticSegmentationPostProcessorOutput(
-                    segmentation=segmentation[i].argmax(dim=0), segmentation_scores=segmentation[i]
+                    segmentation=semantic_map[i], segmentation_scores=segmentation[i]
                 )
                 for i in range(batch_size)
             ]
@@ -395,9 +396,10 @@ class Mask2FormerImageProcessorPil(MaskFormerImageProcessorPil):
                     )
                 )
         else:
+            semantic_map = segmentation.argmax(dim=1)
             semantic_segmentation = [
                 SemanticSegmentationPostProcessorOutput(
-                    segmentation=segmentation[i].argmax(dim=0), segmentation_scores=segmentation[i]
+                    segmentation=semantic_map[i], segmentation_scores=segmentation[i]
                 )
                 for i in range(batch_size)
             ]
