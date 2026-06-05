@@ -1077,6 +1077,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("vibevoice_asr", "VibeVoiceAsrProcessor"),
         ("video_llama_3", "VideoLlama3Processor"),
         ("video_llava", "VideoLlavaProcessor"),
+        ("videoprism", "VideoPrismProcessor"),
         ("vilt", "ViltProcessor"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
         ("voxtral", "VoxtralProcessor"),

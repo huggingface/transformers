@@ -33,6 +33,7 @@ from transformers.models.codegen.modeling_codegen import create_sinusoidal_posit
 from transformers.models.videoprism.modeling_videoprism import VideoPrismClipModel, VideoPrismVisionModel
 from transformers.models.videoprism.tokenization_videoprism import VideoPrismTokenizer
 
+
 PATH = os.path.dirname(__file__)
 torch.set_printoptions(precision=10)
 HF_USER = "mhrdyn7"
@@ -377,16 +378,16 @@ def read_and_preprocess_video(  # This function is from the original repo
 
 
 def download_spiece_model():
-    """ Downloads the sentencepiece.model file from the GCS bucket url given in the original repo"""
+    """Downloads the sentencepiece.model file from the GCS bucket url given in the original repo"""
     from tensorflow.io import gfile
 
     spiece_url = "gs://t5-data/vocabs/cc_en.32000/sentencepiece.model"
-    spiece_path =  os.path.join(PATH, "spiece.model")
+    spiece_path = os.path.join(PATH, "spiece.model")
 
     if not os.path.exists(spiece_path):
         with gfile.GFile(spiece_url, "rb") as f:
             model_bytes = f.read()
-        
+
         with open(spiece_path, "wb") as f_out:
             f_out.write(model_bytes)
 
@@ -430,14 +431,7 @@ def ids_to_attention_mask(input_ids: torch.Tensor, pad_token_id: int = 0) -> tor
     return (input_ids != pad_token_id).long()
 
 
-def load_model(
-        model_name,
-        local_checkpoint,
-        text_config,
-        vision_config,
-        checkpoint_path,
-        repo_id
-    ):
+def load_model(model_name, local_checkpoint, text_config, vision_config, checkpoint_path, repo_id):
     if local_checkpoint:
         model_config = (
             vision_config
@@ -445,7 +439,9 @@ def load_model(
             else VideoPrismConfig(text_config=text_config, vision_config=vision_config)
         )
         model = (
-            VideoPrismVisionModel._from_config(model_config, attn_implementation="eager") if "lvt" not in model_name else VideoPrismClipModel._from_config(model_config, attn_implementation="eager")
+            VideoPrismVisionModel._from_config(model_config, attn_implementation="eager")
+            if "lvt" not in model_name
+            else VideoPrismClipModel._from_config(model_config, attn_implementation="eager")
         )
         state_dict = load_file(checkpoint_path)
         model.load_state_dict(state_dict)
@@ -453,6 +449,7 @@ def load_model(
         model = AutoModel.from_pretrained(repo_id, attn_implementation="eager")
         model_config = model.config
     return model.eval(), model_config
+
 
 @torch.no_grad()
 def convert_videoprism_checkpoint(
@@ -484,12 +481,7 @@ def convert_videoprism_checkpoint(
     if inference:
         # Load model
         model, model_config = load_model(
-            model_name,
-            local_checkpoint,
-            text_config,
-            vision_config,
-            checkpoint_path,
-            repo_id
+            model_name, local_checkpoint, text_config, vision_config, checkpoint_path, repo_id
         )
         # Load video using the original preprocessor
         VIDEO_FILE_PATH = "./src/transformers/models/videoprism/water_bottle_drumming.mp4"
@@ -531,14 +523,10 @@ def convert_videoprism_checkpoint(
 
     if upload:
         from transformers import LlavaOnevisionVideoProcessor, VideoPrismProcessor
+
         if not inference:
             model, model_config = load_model(
-                model_name,
-                local_checkpoint,
-                text_config,
-                vision_config,
-                checkpoint_path,
-                repo_id
+                model_name, local_checkpoint, text_config, vision_config, checkpoint_path, repo_id
             )
         model.push_to_hub(repo_id)
         video_processor = LlavaOnevisionVideoProcessor(
@@ -555,6 +543,7 @@ def convert_videoprism_checkpoint(
             processor.push_to_hub(repo_id)
         print(f"Uploaded the model to the Hugging Face hub at {repo_id}.")
 
+
 def main():
     """
     Typical workflow
@@ -570,7 +559,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model_name",
-        default="backbone_large", # backbone_base, backbone_large, lvt_base, lvt_large
+        default="backbone_large",  # backbone_base, backbone_large, lvt_base, lvt_large
         type=str,
         choices=ORIGINAL_CHECKPOINTS.keys(),
         help="Name of the model you'd like to convert.",
@@ -614,5 +603,7 @@ def main():
         inference=args.inference,
         upload=args.upload,
     )
+
+
 if __name__ == "__main__":
     main()

@@ -712,7 +712,9 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids, inputs_embeds=inputs_embeds)
 
         if attention_mask is not None:
-            cls_padding = torch.ones(hidden_states.shape[0], 1, device=attention_mask.device, dtype=attention_mask.dtype)
+            cls_padding = torch.ones(
+                hidden_states.shape[0], 1, device=attention_mask.device, dtype=attention_mask.dtype
+            )
             attention_mask = torch.cat((attention_mask, cls_padding), dim=1)
             attention_mask = create_causal_mask(
                 config=self.config,
@@ -724,7 +726,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         for layer in self.layers:
             hidden_states = layer(hidden_states, attention_mask, **kwargs)
         hidden_states = self.layernorm(hidden_states)
-        
+
         text_embeddings = hidden_states[:, -1]
         if self.config.apply_l2norm:
             text_embeddings = l2norm(text_embeddings, dim=-1)
@@ -872,9 +874,7 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         video_model_outputs = self.get_video_features(
             pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )
-        text_model_outputs = self.get_text_features(
-            input_ids=input_ids, attention_mask=attention_mask, **kwargs
-        )
+        text_model_outputs = self.get_text_features(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
         video_embeddings = video_model_outputs.pooler_output
         text_embeddings = text_model_outputs.pooler_output

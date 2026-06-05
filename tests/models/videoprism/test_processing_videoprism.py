@@ -29,9 +29,7 @@ VIDEO_PRISM_LVT_CHECKPOINT = "MHRDYN7/videoprism-lvt-base-f16r288"
 NUM_FRAMES = 16
 FRAME_SIZE = 288
 
-TENNIS_VIDEO_URL = (
-    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
-)
+TENNIS_VIDEO_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
 
 EXPECTED_TENNIS_PIXEL_SLICE = torch.tensor(
     [
