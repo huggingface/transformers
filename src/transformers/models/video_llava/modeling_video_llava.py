@@ -174,7 +174,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         pixel_values_images: torch.FloatTensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -190,7 +189,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         """
         image_outputs = self.image_tower(
             pixel_values_images,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
             **kwargs,
         )
@@ -223,7 +221,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         self,
         pixel_values_videos: torch.FloatTensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -239,7 +236,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         pixel_values = pixel_values_videos.reshape(batch_size_vid * num_frames, channels, height, width)
         video_outputs = self.video_tower(
             pixel_values,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
             **kwargs,
         )

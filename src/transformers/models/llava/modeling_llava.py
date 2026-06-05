@@ -148,13 +148,11 @@ class LlavaModel(LlavaPreTrainedModel):
         pixel_values: torch.FloatTensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         image_outputs = self.vision_tower(
             pixel_values,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
             **kwargs,
         )

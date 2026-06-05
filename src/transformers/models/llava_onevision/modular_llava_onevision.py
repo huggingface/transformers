@@ -495,7 +495,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         vision_feature_select_strategy: str | None = None,
         vision_aspect_ratio: str | None = None,
         batch_num_images: torch.LongTensor | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -532,7 +531,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         image_outputs = self.vision_tower(
             pixel_values,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
             **kwargs,
         )
@@ -570,7 +568,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         pixel_values: torch.FloatTensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -588,7 +585,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         pixel_values = pixel_values.view(batch_size * frames, channels, height, width)
         vision_outputs = self.vision_tower(
             pixel_values,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
             **kwargs,
         )

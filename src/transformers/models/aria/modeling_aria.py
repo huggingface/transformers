@@ -904,14 +904,12 @@ class AriaModel(AriaPreTrainedModel):
         pixel_values: torch.FloatTensor,
         pixel_mask: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] = -1,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
         image_outputs = self.vision_tower(
             pixel_values,
             patch_attention_mask=patch_attention_mask,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
             **kwargs,
         )
