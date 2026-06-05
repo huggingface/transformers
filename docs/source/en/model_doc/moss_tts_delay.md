@@ -23,17 +23,23 @@ OpenMOSS. The model uses a Qwen3 language backbone and predicts delayed audio co
 ## Usage
 
 ```python
+from scipy.io.wavfile import write
+
 from transformers import AutoProcessor, AutoModelForTextToWaveform
 
 
 model_id = "OpenMOSS-Team/MOSS-TTS-v1.5"
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
+model = AutoModelForTextToWaveform.from_pretrained(model_id, dtype="auto", device_map="auto")
 
 message = processor.build_user_message(text="Hello from MOSS-TTS.", language="English")
 inputs = processor([message]).to(model.device)
-outputs = model.generate(**inputs, max_new_tokens=256)
+outputs = model.generate(**inputs, max_new_tokens=1024)
+
+messages = processor.decode(outputs)
+audio_values = messages[0].audio_codes_list[0]
+write("moss_tts.wav", processor.model_config.sampling_rate, audio_values.cpu().numpy())
 ```
 
 ## MossTTSDelayConfig
