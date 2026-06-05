@@ -678,7 +678,6 @@ class ESMFold2Model(PreTrainedModel):
         structure_output = self.structure_head.sample(
             z_trunk=z,
             s_inputs=x_inputs,
-            s_trunk=None,
             relative_position_encoding=relative_position_encoding,
             ref_pos=ref_pos,
             ref_charge=ref_charge,
