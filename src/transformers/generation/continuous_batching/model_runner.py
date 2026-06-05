@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
 import time
 from collections.abc import Callable
 from contextlib import nullcontext
@@ -158,57 +156,56 @@ class ModelRunner:
         # Perform carry-over (no-op for synchronous batching)
         self.inputs_and_outputs.carry_over_tokens(batch_data["input_ids"], carry_over_ids, prev_output_ids)
 
-        # Run model forward pass and convert to fp32 to match generate
-        logits = model(**batch_data).logits.float()
+        # Run model forward pass
+        logits = model(**batch_data).logits  # shape [1, seq_len, vocab_size]
+
+        # Extract prediction + some padding (reduces the size from max_batch_tokens to max_request_per_batch)
+        logits = logits[:, batch_data["logits_indices"], :]  # shape [1, num_logits, vocab_size]
+        # Convert to fp32 to match generate
+        logits = logits.float()  # shape [1, num_logits, vocab_size]
 
         # Process logits if there are any logit processors
         if self.logit_processor.do_processing:
             # Handle shape inconsistency between generate and continuous batching (dummy_dim is always 1)
-            dummy_dim, num_tokens, vocab_size = logits.shape
-            logits_2d = logits.view(dummy_dim * num_tokens, vocab_size)
-            input_ids_2d = batch_data["input_ids"].view(dummy_dim * num_tokens)
+            dummy_dim, num_logits, vocab_size = logits.shape
+            logits_2d = logits.view(dummy_dim * num_logits, vocab_size)
+            input_ids_2d = batch_data["input_ids"].view(dummy_dim * num_logits)
             # Process with 2D tensors
             logits_2d = self.logit_processor(input_ids_2d, logits_2d, batch_data["logits_processor_args"])
             # Reshape back to 3D
-            scores = logits_2d.view(dummy_dim, num_tokens, vocab_size)
+            scores = logits_2d.view(dummy_dim, num_logits, vocab_size)
         else:
             scores = logits
 
         # Sample next tokens
-        self._sample(scores, batch_data["logits_indices"], output_ids)
+        self._sample(scores, output_ids)
 
-    def _sample(self, scores: torch.Tensor, logits_indices: torch.Tensor, output_ids: torch.Tensor) -> None:
+    def _sample(self, scores: torch.Tensor, output_ids: torch.Tensor) -> None:
         """Private method to sample next tokens from the scores."""
         # Apply softmax if we are sampling or if we are generating log probabilities
         if self.do_sample or self.return_logprobs:
-            probs = nn.functional.softmax(scores[0], dim=-1)  # shape [seq_len, vocab_size]
+            probs = nn.functional.softmax(scores[0], dim=-1)  # shape [num_logits, vocab_size]
         else:
-            probs = scores.squeeze(0)  # shape [seq_len, vocab_size]
+            probs = scores.squeeze(0)  # shape [num_logits, vocab_size]
 
         # Retrieve next tokens through sampling or argmax
         if self.do_sample:
-            next_tokens = torch.multinomial(probs, num_samples=1)  # shape [seq_len, 1]
+            next_tokens = torch.multinomial(probs, num_samples=1)  # shape [num_logits, 1]
         else:
-            next_tokens = torch.argmax(probs, dim=-1, keepdim=True)  # shape [seq_len, 1]
+            next_tokens = torch.argmax(probs, dim=-1, keepdim=True)  # shape [num_logits, 1]
 
         # Maybe retrieve log probabilities
         if self.return_logprobs:
             per_token_probs = probs.gather(dim=1, index=next_tokens).squeeze(-1)
-            logprobs = per_token_probs.log()  # shape [seq_len]
+            logprobs = per_token_probs.log()  # shape [num_logits]
 
         # Always remove the extra dimension for the gather
-        next_tokens = next_tokens.squeeze(-1)  # shape [seq_len]
+        next_tokens = next_tokens.squeeze(-1)  # shape [num_logits]
 
-        # Get seq_len dimension to slice the logits indices
-        tokens = next_tokens.size(0)
-        # Shuffle the next tokens to match the order of the batch's requests
-        indices = logits_indices[:tokens]
-        next_tokens = next_tokens[indices]
         # Copy the next tokens and maybe their logprobs to the static output tensor
+        tokens = next_tokens.size(0)
         output_ids[0, :tokens].copy_(next_tokens)
         if self.return_logprobs:
-            # Shuffle the logprobs the same way as the next tokens
-            logprobs = logprobs[indices]
             # In order to match the dtype of output_ids, we cast the fp32 logprobs as int32 without changing the
             # underlying data. It's just a trick to use the same storage for both tensors.
             output_ids[1, :tokens].copy_(logprobs.view(dtype=torch.int32))

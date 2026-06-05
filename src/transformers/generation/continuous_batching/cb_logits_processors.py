@@ -193,6 +193,7 @@ class ContinuousBatchingLogitsProcessorList:
         for processor in self.logits_processor:
             if isinstance(processor, ContinuousBatchingLogitsProcessor):
                 tensorized_arg = processor.prepare_tensor_args(requests_in_batch)
+                # TODO: FIXME: investigate if this does slow down sync generation
                 arg_storage[current_arg_id, : tensorized_arg.size(0)] = tensorized_arg.to(arg_storage.device)
                 current_arg_id += 1
         return arg_storage
@@ -228,14 +229,14 @@ class ContinuousBatchingTemperatureLogitsWarper(ContinuousBatchingLogitsProcesso
         data = []
         for request in requests_in_batch:
             temp = request.state.logit_processor_kwargs.get("temperature", self.temperature)
-            data.extend([temp] * request.query_length)
+            data.append(temp)
         tensorized = torch.tensor(data, dtype=torch.float32, device="cpu")
         # View the output with the bulk storage dtype (int32) but keeps the underlying data the same
         return tensorized.view(dtype=torch.int32)
 
     def __call__(self, scores: torch.FloatTensor, tensor_arg: torch.Tensor) -> torch.FloatTensor:
-        temperatures = tensor_arg[: scores.size(0)].view(dtype=torch.float32)  # shape [N]
-        return scores / temperatures.unsqueeze(-1)  # broadcast [N, 1] over [N, V]
+        temperatures = tensor_arg[: scores.size(0)].view(dtype=torch.float32)  # shape [B]
+        return scores / temperatures.unsqueeze(-1)  # broadcast [B, 1] over [B, V]
 
 
 class ContinuousBatchingTopKLogitsWarper(ContinuousBatchingLogitsProcessor):
@@ -256,18 +257,18 @@ class ContinuousBatchingTopKLogitsWarper(ContinuousBatchingLogitsProcessor):
         for request in requests_in_batch:
             top_k = request.state.logit_processor_kwargs.get("top_k", self.top_k)
             top_k = max(top_k, self.min_tokens_to_keep)
-            top_ks.extend([top_k] * request.query_length)
+            top_ks.append(top_k)
         # Prepare tensor arg with int32 as the main type
         tensor_args = torch.tensor(top_ks, dtype=torch.int32, device="cpu")
         return tensor_args
 
     def __call__(self, scores: torch.FloatTensor, tensor_arg: torch.Tensor) -> torch.FloatTensor:
         """Applies top-k selection to the scores tensor (shape [N, V])."""
-        top_k = tensor_arg[: scores.size(0)]  # shape [N]
+        top_k = tensor_arg[: scores.size(0)]  # shape [B]
         # Sort descending, get threshold at position (top_k - 1) which is the k-th largest
-        sorted_scores = torch.sort(scores, dim=-1, descending=True)[0]  # [N, V]
-        top_k_indices = (top_k - 1).unsqueeze(-1).to(dtype=torch.int64)  # [N, 1]
-        thresholds = sorted_scores.gather(dim=-1, index=top_k_indices)  # [N, 1]
+        sorted_scores = torch.sort(scores, dim=-1, descending=True)[0]  # [B, V]
+        top_k_indices = (top_k - 1).unsqueeze(-1).to(dtype=torch.int64)  # [B, 1]
+        thresholds = sorted_scores.gather(dim=-1, index=top_k_indices)  # [B, 1]
         return scores.masked_fill(scores < thresholds, self.filter_value)
 
 
@@ -291,22 +292,22 @@ class ContinuousBatchingTopPLogitsWarper(ContinuousBatchingLogitsProcessor):
         for request in requests_in_batch:
             # Retrieve config for this request
             top_p = request.state.logit_processor_kwargs.get("top_p", self.top_p)
-            top_ps.extend([top_p] * request.query_length)
+            top_ps.append(top_p)
         # Store top_p as float32 viewed as int32 to match the bulk storage dtype
         tensorized = torch.tensor(top_ps, dtype=torch.float32, device="cpu")
         return tensorized.view(dtype=torch.int32)
 
     def __call__(self, scores: torch.FloatTensor, tensor_arg: torch.Tensor) -> torch.FloatTensor:
         """Applies top-p (nucleus) sampling to the scores tensor (shape [N, V])."""
-        top_p = tensor_arg[: scores.size(0)].view(dtype=torch.float32)  # shape [N]
+        top_p = tensor_arg[: scores.size(0)].view(dtype=torch.float32)  # shape [B]
 
         # Sort logits in ascending order
-        sorted_logits, sorted_indices = torch.sort(scores, descending=False, dim=-1)  # [N, V]
-        cumulative_probs = sorted_logits.softmax(dim=-1).cumsum(dim=-1)  # [N, V]
+        sorted_logits, sorted_indices = torch.sort(scores, descending=False, dim=-1)  # [B, V]
+        cumulative_probs = sorted_logits.softmax(dim=-1).cumsum(dim=-1)  # [B, V]
 
         # Remove tokens with cumulative probability <= (1 - top_p)
-        threshold = (1 - top_p).unsqueeze(-1)  # [N, 1]
-        sorted_indices_to_remove = cumulative_probs <= threshold  # [N, V]
+        threshold = (1 - top_p).unsqueeze(-1)  # [B, 1]
+        sorted_indices_to_remove = cumulative_probs <= threshold  # [B, V]
 
         # Keep at least min_tokens_to_keep (always keep the last tokens in sorted order = highest prob)
         sorted_indices_to_remove[..., -self.min_tokens_to_keep :] = False
