@@ -32,7 +32,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.import_utils import resolve_internal_import
 from ...utils.output_capturing import capture_outputs
 from ..jamba.modeling_jamba import JambaAttentionDecoderLayer
@@ -124,6 +124,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+@no_inherit_decorator
 class BambaAttention(LlamaAttention):
     pass
 

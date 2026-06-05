@@ -34,7 +34,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernelized_func
+from ...integrations import use_experts_implementation
 from ...masking_utils import (
     create_bidirectional_mask,
     create_causal_mask,
@@ -908,7 +908,6 @@ def apply_multidimensional_rope(
     return torch.cat(y_parts, dim=-1)
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class Gemma4VisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
