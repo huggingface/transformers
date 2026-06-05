@@ -300,7 +300,7 @@ class StaticLayer(CacheLayerMixin):
         devices, dtypes etc later on for each `update` (which could break the static dynamo addresses as well).
 
         If this is unwanted, one can call `early_initialization(...)` on the Cache directly, which will call this
-        function ahead-of-time (this is required for `torch.export` or for example). It is also required whenever the
+        function ahead-of-time (this is required for `torch.export` for example). It is also required whenever the
         prefill itself ends up in a compiled region (with chunked prefill for instance).
         """
         self.dtype, self.device = key_states.dtype, key_states.device
