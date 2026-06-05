@@ -712,7 +712,7 @@ class ContinuousBatchingAsyncIOs:
     def infer_carry_over_ids(self) -> torch.Tensor:
         """Infers the ids of the tokens to carry over from batch N to batch N+1. In asynchronous batching mode, we can
         schedule a request for batch N+1 without knowing the token predicted for that request in batch N. For that
-        reason, we might need to carry over tokens just predicted in batch N before launching the forwar pass of batch
+        reason, we might need to carry over tokens just predicted in batch N before launching the forward pass of batch
         N+1. This method computes the ids of the tokens to carry over."""
         next_req_id_to_new_token_position = self.io_pairs[self.current_pair].host_io.req_id_to_new_token_position
         prev_req_id_to_new_token_position = self.io_pairs[1 - self.current_pair].host_io.req_id_to_new_token_position
@@ -752,7 +752,7 @@ class ContinuousBatchingAsyncIOs:
             current_pair.device_io.output_ids,
         )
 
-    # TODO: this should be moved to the model runner, and have it called conditionned on optionnal carry over ids
+    # TODO: this should be moved to the model runner, and have it called conditioned on optional carry over ids
     def carry_over_tokens(
         self,
         input_ids: torch.Tensor,  # shape [1, seq_len]
@@ -760,7 +760,7 @@ class ContinuousBatchingAsyncIOs:
         prev_output_ids: torch.Tensor,  # shape [1, max_batch_tokens + 1]
     ) -> None:
         """As explained in the infer_carry_over_ids method, we might need to carry over tokens just predicted in batch N
-        before launching the forwar pass of batch N+1. This method performs the carry over, and is recorded in CUDA
+        before launching the forward pass of batch N+1. This method performs the carry over, and is recorded in CUDA
         graphs if they are enabled."""
         # Compute tokens to carry over and the corresponding mask
         carried_over_ids = prev_output_ids[0, carry_over_ids]  # shape [seq_len]
@@ -774,7 +774,7 @@ class ContinuousBatchingAsyncIOs:
     # This is called during compute, so we always pick the device IO in the IO pair
     @property
     def output_ids(self) -> torch.Tensor:
-        # The output ids are used to copy_ the infered tokens: they need to be on the device
+        # The output ids are used to copy_ the inferred tokens: they need to be on the device
         return self.io_pairs[self.current_pair].device_io.output_ids
 
     def get_graph(self) -> torch.cuda.CUDAGraph | None:
