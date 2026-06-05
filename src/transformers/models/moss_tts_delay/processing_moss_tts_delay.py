@@ -12,27 +12,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import os
 import re
 from dataclasses import dataclass
 from typing import Any, cast
 
-import torch
-
 from ... import (
     AutoConfig,
     AutoTokenizer,
     BatchFeature,
-    MossAudioTokenizerModel,
     PreTrainedTokenizerBase,
     ProcessorMixin,
 )
-from ...utils import auto_docstring, is_torchaudio_available, logging
+from ...utils import auto_docstring, is_torch_available, is_torchaudio_available, logging
 from .configuration_moss_tts_delay import MossTTSDelayConfig
 from .tts_robust_normalizer_utils import normalize_tts_text
 
 
+if is_torch_available():
+    import torch
+
+    from ... import MossAudioTokenizerModel
+
+
 logger = logging.get_logger(__name__)
+
+
+def _require_torch():
+    if not is_torch_available():
+        raise ImportError("MossTTSDelayProcessor requires PyTorch.")
+    return torch
 
 
 def _require_torchaudio():
@@ -196,6 +207,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *args, **kwargs):
+        _require_torch()
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs.pop("_from_auto", None)
 
@@ -252,6 +264,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with MOSS-TTS input ids and attention mask.
         """
+        _require_torch()
         conversations = args[0] if len(args) > 0 else kwargs.pop("conversations")
         mode: str = kwargs.pop("mode", "generation")
         apply_chat_template: bool = kwargs.pop("apply_chat_template", True)
