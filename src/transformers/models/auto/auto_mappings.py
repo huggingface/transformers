@@ -274,6 +274,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("hunyuan_v1_moe", "HunYuanMoEV1Config"),
         ("hy_v3", "HYV3Config"),
         ("hyperclovax", "HyperCLOVAXConfig"),
+        ("hyperclovax_vision_v2", "HyperCLOVAXVisionV2Config"),
         ("ibert", "IBertConfig"),
         ("idefics", "IdeficsConfig"),
         ("idefics2", "Idefics2Config"),

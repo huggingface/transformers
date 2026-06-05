@@ -750,4 +750,5 @@ __all__ = [
     "Qwen2_5_VLPreTrainedModel",
     "Qwen2_5_VLProcessor",
     "Qwen2_5_VLTextModel",  # noqa: F822
+    "Qwen2_5_VisionTransformerPretrainedModel",
 ]

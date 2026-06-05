@@ -973,6 +973,11 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "hyperclovax_vision_v2": [
+            WeightRenaming(r"^model.language_model.lm_head", r"lm_head"),
+            WeightRenaming(r"^model.mm_projector", r"model.projector"),
+            PrefixChange(prefix_to_remove="model", model_prefix="model.language_model"),
+        ],
         "nomic_bert": [
             WeightRenaming(r"encoder.layers", r"layers"),
             WeightRenaming(r"emb_ln", r"embeddings.LayerNorm"),
