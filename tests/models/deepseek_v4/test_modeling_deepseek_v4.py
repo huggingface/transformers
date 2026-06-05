@@ -19,9 +19,11 @@ from parameterized import parameterized
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
+    backend_device_count,
     require_cuda_capability_at_least,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_large_accelerator,
     require_torch_n_accelerators,
     slow,
@@ -498,7 +500,10 @@ def _run_distributed_worker(
         expected=expected,
         add_special_tokens=add_special_tokens,
     )
-    num_gpus = torch.cuda.device_count()
+    # Reuse the test-suite-selected accelerator backend.
+    num_gpus = backend_device_count(torch_device)
+    if num_gpus < 1:
+        raise RuntimeError(f"No visible devices for torch_device={torch_device!r}")
     # Redirect only stdout (`:1`) for ranks 1..N-1 to suppress duplicated generation chatter.
     # Stderr is left attached so worker tracebacks (OOM, NCCL, kernel crash) surface in the
     # subprocess stderr and the test failure message — `:3` would file-log both and turn any
@@ -515,7 +520,8 @@ def _run_distributed_worker(
 
 
 @require_torch
-@require_torch_n_accelerators(8)
+@require_torch_gpu
+@require_torch_n_accelerators(n=8)
 @require_torch_large_accelerator(memory=64)
 @require_cuda_capability_at_least(10, 0)
 @slow
@@ -560,8 +566,9 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
 
 
 @require_torch
-@require_torch_n_accelerators(8)
-@require_torch_large_accelerator(memory=64)
+@require_torch_accelerator
+@require_torch_n_accelerators(n=8)
+@require_torch_large_accelerator(memory=60)
 @require_cuda_capability_at_least(9, 0)
 @slow
 class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
@@ -583,9 +590,12 @@ class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
     expected_primes = "2, 3, 5, 7, 11, 13, 17, 19, 23, 29"
 
     def test_v4_flash_base_fp8_generation(self):
+        runtime_dispatches = (
+            ("eager", "grouped_mm", "deepgemm") if torch.cuda.is_available() else ("eager", "grouped_mm")
+        )
         rc = _run_distributed_worker(
             loadtime_dispatch=None,
-            runtime_dispatches=("eager", "grouped_mm", "deepgemm"),
+            runtime_dispatches=runtime_dispatches,
             model_id=self.model_id,
             prompt=self.prompt,
             expected=self.expected_primes,
