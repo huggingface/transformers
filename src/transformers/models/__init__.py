@@ -78,6 +78,7 @@ if TYPE_CHECKING:
     from .convbert import *
     from .convnext import *
     from .convnextv2 import *
+    from .cosmos3_reasoner import *
     from .cpm import *
     from .cpmant import *
     from .csm import *
