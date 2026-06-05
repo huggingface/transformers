@@ -123,6 +123,7 @@ else:
             ("pp_ocrv6_tiny_rec", {"torchvision": "PPOCRV6SmallRecImageProcessor"}),
             ("pvt_v2", {"torchvision": "PvtImageProcessor", "pil": "PvtImageProcessorPil"}),
             ("qianfan_ocr", {"torchvision": "GotOcr2ImageProcessor", "pil": "GotOcr2ImageProcessorPil"}),
+            ("hunyuan_vl", {"torchvision": "HunYuanVLImageProcessorFast", "pil": "HunYuanVLImageProcessor"}),
             ("qwen2_5_omni", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("qwen2_5_vl", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("qwen3_5", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
