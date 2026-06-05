@@ -12,13 +12,10 @@ Unless required by applicable law or agreed to in writing, software distributed 
 rendered properly in your Markdown viewer.
 
 specific language governing permissions and limitations under the License. -->
-*This model was released on 2023-08-25 and added to Hugging Face Transformers on 2023-09-26.*
+*This model was published in HF papers on 2023-08-25 and contributed to Hugging Face Transformers on 2023-09-26.*
 
 # Nougat
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 

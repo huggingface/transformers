@@ -9,13 +9,10 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2023-12-08 and added to Hugging Face Transformers on 2023-11-30.*
+*This model was published in HF papers on 2023-12-08 and contributed to Hugging Face Transformers on 2023-11-30.*
 
 # SeamlessM4T-v2
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 

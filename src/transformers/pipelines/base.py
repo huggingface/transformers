@@ -52,6 +52,7 @@ from ..utils import (
     logging,
 )
 from ..utils.chat_template_utils import Chat, is_valid_message
+from ..video_processing_utils import BaseVideoProcessor
 
 
 GenericTensor = Union[list["GenericTensor"], "torch.Tensor"]
@@ -336,9 +337,11 @@ def load_assistant_model(
 
     # Finally, let's check the tokenizers: if the two models have different tokenizers, we need to keep the assistant
     # tokenizer
-    same_vocab_size = model.config.vocab_size == loaded_assistant_model.config.vocab_size
+    model_text_config = model.config.get_text_config()
+    assistant_text_config = loaded_assistant_model.config.get_text_config()
+    same_vocab_size = model_text_config.vocab_size == assistant_text_config.vocab_size
     same_special_tokens = all(
-        getattr(model.config, token) == getattr(loaded_assistant_model.config, token)
+        getattr(model_text_config, token) == getattr(assistant_text_config, token)
         for token in ("eos_token_id", "pad_token_id", "bos_token_id")
     )
     if same_vocab_size and same_special_tokens:
@@ -644,6 +647,7 @@ def build_pipeline_init_args(
     has_tokenizer: bool = False,
     has_feature_extractor: bool = False,
     has_image_processor: bool = False,
+    has_video_processor: bool = False,
     has_processor: bool = False,
     supports_binary_output: bool = True,
 ) -> str:
@@ -667,6 +671,11 @@ def build_pipeline_init_args(
         image_processor ([`BaseImageProcessor`]):
             The image processor that will be used by the pipeline to encode data for the model. This object inherits from
             [`BaseImageProcessor`]."""
+    if has_video_processor:
+        docstring += r"""
+        video_processor ([`BaseVideoProcessor`]):
+            The video processor that will be used by the pipeline to encode video data for the model. This object
+            inherits from [`BaseVideoProcessor`]."""
     if has_processor:
         docstring += r"""
         processor ([`ProcessorMixin`]):
@@ -758,6 +767,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
     # - False (the class is never used by the pipeline and should not be loaded even if present)
     _load_processor = None
     _load_image_processor = None
+    _load_video_processor = None
     _load_feature_extractor = None
     _load_tokenizer = None
 
@@ -772,6 +782,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         tokenizer: PreTrainedTokenizer | None = None,
         feature_extractor: PreTrainedFeatureExtractor | None = None,
         image_processor: BaseImageProcessor | None = None,
+        video_processor: BaseVideoProcessor | None = None,
         processor: ProcessorMixin | None = None,
         task: str = "",
         device: int | torch.device | None = None,
@@ -786,6 +797,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         self.tokenizer = tokenizer
         self.feature_extractor = feature_extractor
         self.image_processor = image_processor
+        self.video_processor = video_processor
         self.processor = processor
 
         # `accelerate` device map
@@ -1098,7 +1110,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                     supported_models_names.append(model_name)
             if hasattr(supported_models, "_model_mapping"):
                 for model in supported_models._model_mapping._extra_content.values():
-                    if isinstance(model_name, tuple):
+                    if isinstance(model, tuple):
                         supported_models_names.extend([m.__name__ for m in model])
                     else:
                         supported_models_names.append(model.__name__)

@@ -9,7 +9,8 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow') }}
   cancel-in-progress: true
-permissions: read-all
+permissions:
+  contents: read
 
 env:
   HF_HOME: /mnt/cache
@@ -27,7 +28,7 @@ env:
 jobs:
   get-pr-number:
     name: Get PR number
-    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap", "3outeille", "IlyasMoutawwakil", "tarekziade", "yonigozlan"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
+    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap", "3outeille", "IlyasMoutawwakil", "tarekziade", "yonigozlan", "guarin"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
     uses: ./.github/workflows/get-pr-number.yml
 
   get-pr-info:
@@ -67,10 +68,11 @@ jobs:
       models: ${{ steps.models_to_run.outputs.models }}
       quantizations: ${{ steps.models_to_run.outputs.quantizations }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: "0"
           ref: "refs/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge"
+          persist-credentials: false
 
       - name: Verify merge commit SHA
         env:
@@ -213,7 +215,7 @@ jobs:
     if: ${{ always() && needs.create_run.result == 'success' }}
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: new_failures_with_bad_commit_{run_models_gpu,run_quantization_torch_gpu}
           path: ./new_failures

@@ -72,6 +72,9 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
             # Note that this branch will almost never be run, so we do not import packages for nothing here
             package = importlib.import_module(pkg_name)
             package_version = getattr(package, "__version__", "N/A")
+            # No version + no __file__ means a namespace package (PEP 420) shadowing on sys.path, not a real install.
+            if package_version == "N/A" and getattr(package, "__file__", None) is None:
+                package_exists = False
         logger.debug(f"Detected {pkg_name} version: {package_version}")
 
     if return_version:
@@ -135,6 +138,7 @@ XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.15.0"
+COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
 KERNELS_MIN_VERSION = "0.10.2"
@@ -222,14 +226,28 @@ def is_cuda_platform() -> bool:
 def get_cuda_runtime_version() -> tuple[int, int]:
     """Return the CUDA runtime version as (major, minor).
 
-    Unlike ``torch.version.cuda`` which reports the compile-time version,
-    this queries ``cudaRuntimeGetVersion`` from ``libcudart.so`` to get the
-    actual runtime version installed on the system.
+    Prefers a direct query of ``cudaRuntimeGetVersion`` via ``libcudart.so``. If that's
+    not on the system loader path (common with pip-installed torch that bundles its own
+    CUDA runtime), falls back to ``torch.version.cuda`` — which equals the bundled
+    runtime's version for pip wheels. Returns ``(0, 0)`` for CPU-only torch.
     """
     import ctypes
 
+    try:
+        cudart = ctypes.CDLL("libcudart.so")
+    except OSError:
+        if not is_torch_available():
+            return 0, 0
+        import torch
+
+        cuda_version = getattr(torch.version, "cuda", None)
+        if cuda_version is None:
+            return 0, 0
+
+        major, minor, *_ = cuda_version.split(".")
+        return int(major), int(minor)
+
     version = ctypes.c_int()
-    cudart = ctypes.CDLL("libcudart.so")
     cudart.cudaRuntimeGetVersion(ctypes.byref(version))
     return version.value // 1000, (version.value % 1000) // 10
 
@@ -505,6 +523,26 @@ def is_torch_neuron_available(check_device: bool = False) -> bool:
 
 
 @lru_cache
+def is_torch_tpu_available(check_device: bool = False) -> bool:
+    import torch
+
+    if importlib.util.find_spec("torch_tpu") is None:
+        return False
+
+    if check_device:
+        try:
+            import torch_tpu  # noqa: F401
+
+            if hasattr(torch, "tpu") and torch.tpu.is_available():
+                return torch.tpu.device_count() >= 1
+            return False
+        except RuntimeError:
+            return False
+
+    return hasattr(torch, "tpu") and torch.tpu.is_available()
+
+
+@lru_cache
 def is_torch_bf16_gpu_available() -> bool:
     if not is_torch_available():
         return False
@@ -528,6 +566,9 @@ def is_torch_bf16_gpu_available() -> bool:
         return torch.mlu.is_bf16_supported()
     if is_torch_neuron_available() and hasattr(torch, "neuron"):
         return torch.neuron.is_bf16_supported()
+    if is_torch_tpu_available():
+        # bfloat16 is always supported on TPUs; torch.tpu has no is_bf16_supported()
+        return True
     return False
 
 
@@ -948,7 +989,7 @@ def is_flash_attn_2_available() -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
     # FA4 is also distributed under "flash_attn", hence we need to check the naming here
     is_available = is_available and "flash-attn" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])
     ]
 
     if not is_available or not (is_torch_cuda_available() or is_torch_mlu_available()):
@@ -967,7 +1008,7 @@ def is_flash_attn_3_available() -> bool:
     is_available = _is_package_available("flash_attn_interface")[0]
     # Resolving and ensuring the proper name of FA3 being associated
     is_available = is_available and "flash-attn-3" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn_interface"]
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn_interface", [])
     ]
     return is_available and is_torch_cuda_available()
 
@@ -979,7 +1020,7 @@ def is_flash_attn_4_available() -> bool:
     # NOTE: FA2 seems to distribute the `cute` subdirectory even if only FA2 has been installed
     #       -> check for the proper (normalized) distribution name
     is_available = is_available and "flash-attn-4" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])
     ]
 
     return is_available and is_torch_cuda_available()
@@ -990,7 +1031,7 @@ def is_flash_attn_greater_or_equal(library_version: str) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
     # FA4 is also distributed under "flash_attn", hence we need to check the naming here
     is_available = is_available and "flash-attn" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])
     ]
 
     if not is_available:
@@ -1130,8 +1171,9 @@ def is_qutlass_available():
 
 
 @lru_cache
-def is_compressed_tensors_available() -> bool:
-    return _is_package_available("compressed_tensors")[0]
+def is_compressed_tensors_available(min_version: str = COMPRESSED_TENSORS_MIN_VERSION) -> bool:
+    is_available, compressed_tensors_version = _is_package_available("compressed_tensors", return_version=True)
+    return is_available and version.parse(compressed_tensors_version) >= version.parse(min_version)
 
 
 @lru_cache
@@ -1338,16 +1380,6 @@ def is_mistral_common_available() -> bool:
 
 
 @lru_cache
-def is_opentelemetry_available() -> bool:
-    try:
-        return _is_package_available("opentelemetry")[0] and version.parse(
-            importlib.metadata.version("opentelemetry-api")
-        ) >= version.parse("1.30.0")
-    except Exception as _:
-        return False
-
-
-@lru_cache
 def is_pynvml_available() -> bool:
     return _is_package_available("pynvml")[0]
 
@@ -1521,6 +1553,16 @@ def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: 
         return
 
     import torch
+
+    # When tracing, msg may be an f-string with tensor values that dynamo can't trace
+    # (callable/isinstance on it breaks). Check compilation first and use torch._check
+    # without msg (it only serves as a compiler hint in that case).
+    if is_tracing():
+        if isinstance(cond, torch.Tensor):
+            torch._check_tensor_all(cond)
+        else:
+            torch._check(cond)
+        return
 
     if not callable(msg):
         # torch._check requires msg to be a callable but we want to keep the API simple for users
