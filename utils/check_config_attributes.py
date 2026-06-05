@@ -182,15 +182,9 @@ SPECIAL_CASES_TO_ALLOW = {
     "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
     "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
     "Zamba2Config": ["use_mamba_kernels", "use_mem_eff_path"],
-    # type: architecture-variant marker (validated, "release"-only). The other
-    # three are training/experimental recipe knobs not consulted by the core
-    # single-sequence inference path (per-loop LM dropout reads lm_encoder.lm_dropout).
-    "ESMFold2Config": [
-        "disable_msa_features",
-        "force_lm_dropout_during_inference",
-        "lm_dropout",
-        "type",
-    ],
+    # type: architecture-variant marker (validated, "release"-only), read in
+    # __post_init__ which the checker can't scan.
+    "ESMFold2Config": ["type"],
     # ESMFold2 sub-configs: their fields are threaded into submodules as explicit
     # dims (e.g. ESMFold2AtomEncoder(d_atom=cfg.inputs.atom_encoder.d_atom, ...)),
     # never read as `config.<attr>`, so the checker's heuristic can't trace them.

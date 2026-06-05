@@ -709,8 +709,6 @@ class ESMFold2AtomEncoder(nn.Module):
         atom_to_token: Tensor,
         r_l: Tensor | None = None,
         pred_r1: Tensor | None = None,
-        s_i: Tensor | None = None,
-        z_ij: Tensor | None = None,
         num_diffusion_samples: int = 1,
         return_intermediates: bool = False,
         inference_cache: dict | None = None,
@@ -914,7 +912,6 @@ class AttentionPairBias(nn.Module):
         a: Tensor,
         s: Tensor | None,
         z: Tensor,
-        beta: Tensor | float = 0.0,
         attention_mask: Tensor | None = None,
         num_diffusion_samples: int = 1,
     ) -> Tensor:
@@ -1059,7 +1056,6 @@ class DiffusionTransformer(nn.Module):
         a: Tensor,
         s: Tensor | None,
         z: Tensor,
-        beta: Tensor | float = 0.0,
         attention_mask: Tensor | None = None,
         num_diffusion_samples: int = 1,
         return_intermediates: bool = False,
@@ -1071,7 +1067,6 @@ class DiffusionTransformer(nn.Module):
                 x,
                 s,
                 z,
-                beta,
                 attention_mask=attention_mask,
                 num_diffusion_samples=num_diffusion_samples,
             )
@@ -1124,7 +1119,6 @@ class DiffusionConditioning(nn.Module):
         self,
         t_hat: Tensor,
         s_inputs: Tensor,
-        s_trunk: Tensor | None,
         z_trunk: Tensor,
         relative_position_encoding: Tensor,
         sigma_data: float | None = None,
@@ -1270,7 +1264,6 @@ class DiffusionModule(nn.Module):
         ref_space_uid: Tensor,
         tok_idx: Tensor,
         s_inputs: Tensor,
-        s_trunk: Tensor | None,
         z_trunk: Tensor,
         relative_position_encoding: Tensor,
         asym_id: Tensor,
@@ -1281,7 +1274,6 @@ class DiffusionModule(nn.Module):
         sigma_data: float | None = None,
         token_attention_mask: Tensor | None = None,
         num_diffusion_samples: int = 1,
-        return_token_repr: bool = False,
         return_atom_repr: bool = False,
         inference_cache: dict[str, Tensor] | None = None,
     ) -> dict[str, Tensor | None]:
@@ -1295,7 +1287,6 @@ class DiffusionModule(nn.Module):
         s, z = self.conditioning(
             t_hat=t,
             s_inputs=s_inputs,
-            s_trunk=s_trunk,
             z_trunk=z_trunk,
             relative_position_encoding=relative_position_encoding,
             sigma_data=sigma,
@@ -1317,7 +1308,6 @@ class DiffusionModule(nn.Module):
             ref_atom_name_chars=ref_atom_name_chars,
             atom_to_token=tok_idx,
             r_l=r_noisy,
-            s_i=s_trunk,
             num_diffusion_samples=num_diffusion_samples,
             return_intermediates=return_atom_repr,
             inference_cache=inference_cache,
@@ -1331,7 +1321,6 @@ class DiffusionModule(nn.Module):
             a,
             s,
             z,
-            beta=0.0,
             attention_mask=token_attention_mask,
             num_diffusion_samples=num_diffusion_samples,
         )
@@ -1366,7 +1355,6 @@ class DiffusionModule(nn.Module):
 
         return {
             "x_denoised": out,
-            "token_repr": a if return_token_repr else None,
             "atom_intermediates": atom_intermediates,
         }
 
@@ -1509,7 +1497,6 @@ class DiffusionStructureHead(nn.Module):
         self,
         z_trunk: Tensor,
         s_inputs: Tensor,
-        s_trunk: Tensor | None,
         relative_position_encoding: Tensor,
         ref_pos: Tensor,
         ref_charge: Tensor,
@@ -1567,7 +1554,6 @@ class DiffusionStructureHead(nn.Module):
         )
 
         x_denoised_prev: Tensor | None = None
-        token_repr: Tensor | None = None
         diff_atom_intermediates: Tensor | None = None
 
         step_pairs = list(zip(schedule[:-1], schedule[1:], gammas[1:]))
@@ -1595,7 +1581,6 @@ class DiffusionStructureHead(nn.Module):
                 ref_space_uid=ref_space_uid,
                 tok_idx=tok_idx,
                 s_inputs=s_inputs,
-                s_trunk=s_trunk,
                 z_trunk=z_trunk,
                 relative_position_encoding=relative_position_encoding,
                 asym_id=asym_id,
@@ -1605,13 +1590,11 @@ class DiffusionStructureHead(nn.Module):
                 sym_id=sym_id,
                 token_attention_mask=token_attention_mask,
                 num_diffusion_samples=num_diffusion_samples,
-                return_token_repr=True,
                 return_atom_repr=request_atom_repr,
                 inference_cache=inference_cache,
             )
 
             x_denoised = dm_out["x_denoised"]
-            token_repr = dm_out["token_repr"]
             if request_atom_repr:
                 diff_atom_intermediates = dm_out.get("atom_intermediates")
 
@@ -1644,7 +1627,6 @@ class DiffusionStructureHead(nn.Module):
 
         result: dict[str, Tensor | None] = {
             "sample_atom_coords": x,
-            "diff_token_repr": token_repr,
         }
         if return_atom_repr:
             result["diff_atom_intermediates"] = diff_atom_intermediates
@@ -1872,13 +1854,11 @@ class LanguageModelShim(nn.Module):
         )
         self.base_z_combine = nn.Parameter(torch.zeros(num_layers + 1))
 
-    def forward(self, hidden_states: Tensor, *, lm_dropout: float = 0.0) -> Tensor:
+    def forward(self, hidden_states: Tensor) -> Tensor:
         """Project pre-computed ESMC hidden states to pair representation.
 
         Args:
             hidden_states: [B, L, num_layers+1, d_model] from ESMC 6B.
-            lm_dropout: Dropout probability applied to the pair
-                representation after ``base_z_mlp``.
 
         Returns:
             [B, L, L, d_pair] pair representation.
@@ -1890,8 +1870,6 @@ class LanguageModelShim(nn.Module):
         weights = self.base_z_combine.softmax(0)  # [81]
         lm_z = (weights @ lm_z).squeeze(-2)  # [B, L, d_z]
         lm_z = self.base_z_mlp(lm_z)  # [B, L, L, d_z]
-        if lm_dropout > 0:
-            lm_z = F.dropout(lm_z, p=lm_dropout, training=True)
         return lm_z
 
 
