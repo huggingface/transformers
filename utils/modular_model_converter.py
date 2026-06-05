@@ -987,18 +987,25 @@ def replace_class_node(
     if "nn.Module" in new_class_bases_names and "GradientCheckpointingLayer" in new_class_bases_names:
         new_class_bases = [k for k in new_class_bases if get_full_attribute_name(k.value) != "nn.Module"]
 
-    # Use class decorators redefined in modular file if any.
-    # Strip `no_inherit_decorator` sentinel and drop parent decorators if found.
-    modular_decorators = [
-        dec
-        for dec in modular_class_node.decorators
-        if "no_inherit_decorator" not in mapper.python_module.code_for_node(dec)
+    # 3 different possibilities for decorators (in order of priority)
+    #   1. Force to inherit no decorator at all via special `no_inherit_decorator` (sole decorator)
+    #   2. Take the decorators attached in the modular file
+    #   3. Inherit all existing decorators of the parent
+    new_class_decorators = []
+    no_decorators_forced = "no_inherit_decorator" in [
+        mapper.python_module.code_for_node(dec) for dec in modular_class_node.decorators
     ]
-    new_class_decorators = (
-        modular_decorators
-        if modular_decorators or len(modular_class_node.decorators) > 0
-        else original_modeling_node.decorators
-    )
+    if no_decorators_forced:
+        if len(modular_class_node.decorators) > 1:
+            raise ValueError(
+                "Detected the force of not inheriting any decorators via `no_inherit_decorator` but "
+                f"found multiple decorators: {modular_class_node.decorators}. Please make sure to only "
+                "attach the `no_inherit_decorator`!"
+            )
+    elif len(modular_class_node.decorators) > 0:
+        new_class_decorators = modular_class_node.decorators
+    else:
+        new_class_decorators = original_modeling_node.decorators
 
     # Compute new class docstring
     original_modeling_docstring = [
@@ -1101,7 +1108,7 @@ def replace_class_node(
             new_decorators = modular_node.decorators if len(modular_node.decorators) > 0 else node.decorators
 
             # Keep return annotation in modular if any, else original return annotation
-            new_return_annotation = modular_node.returns or node.returns
+            new_return_annotation = modular_node.returns if modular_node.returns else node.returns
 
             # Update the method node
             node = node.with_changes(
