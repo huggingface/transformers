@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, get_type_hints, overload
 from zipfile import is_zipfile
 
 import torch
-from huggingface_hub import create_repo, is_offline_mode, split_torch_state_dict_into_shards
+from huggingface_hub import is_offline_mode, split_torch_state_dict_into_shards
 from packaging import version
 from safetensors import safe_open
 from safetensors.torch import load as _safe_load_bytes
@@ -122,7 +122,7 @@ from .utils import (
     logging,
 )
 from .utils.generic import GeneralInterface, is_flash_attention_requested, split_attention_implementation
-from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files
+from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files, hf_api
 from .utils.import_utils import (
     is_flash_attn_greater_or_equal,
     is_huggingface_hub_greater_or_equal,
@@ -2212,6 +2212,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             else experts_implementation.get("", self.config._experts_implementation)
         )
 
+        # MegaMoE is locked at load time: its TP plan is baked into `base_model_tp_plan`
+        # by `update_tp_plan` (and isn't re-evaluated) and `setup_megamoe_weights`
+        # mutates the expert weights into UTCCP layout on first forward. Either side of
+        # a switch would silently produce garbage, so reject it with a clear pointer.
+        current = self.config._experts_implementation
+        if "deepgemm_megamoe" in (current, requested_implementation) and current != requested_implementation:
+            raise RuntimeError(
+                f"Cannot switch experts implementation from {current!r} to {requested_implementation!r} "
+                "at runtime: `deepgemm_megamoe` is a load-time choice. Reload via "
+                "`from_pretrained(..., experts_implementation=...)` to switch."
+            )
+
         if requested_implementation != self.config._experts_implementation:
             requested_implementation = self._check_and_adjust_experts_implementation(requested_implementation)
             # Apply the change (on the internal attr, to avoid setting it recursively)
@@ -3385,7 +3397,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory_path.split(os.path.sep)[-1])
             create_pr = kwargs.pop("create_pr", False)
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         metadata = {}

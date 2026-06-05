@@ -26,3 +26,62 @@
       title: Distribuire
     - local: serialization
       title: Exportarea pentru producție
+    - isExpanded: false
+      sections:
+      - local: contributing
+        title: Contribuie la Transformers
+      - local: modular_transformers
+        title: Adaugă un model cu transformers modulare
+      - local: multimodal_processing
+        title: Procesatoare multimodale
+      - local: add_vision_processing_components
+        title: Componente de procesare vizuală
+      - local: add_audio_processing_components
+        title: Componente de procesare audio
+      - local: modeling_rules
+        title: Regulile de structură a modelului
+      - local: model_output_tracing
+        title: Urmărirea output-urilor intermediare ale modelului
+      - local: auto_docstring
+        title: Auto-generarea docstring-urilor
+      - local: testing
+        title: Scrierea testelor pentru modele
+      - local: pr_checks
+        title: Verificările pentru pull request
+      - local: add_new_model
+        title: Contribuția legacy la modele
+      title: Contribuie
+    title: Models
+  - isExpanded: false
+    sections:
+    - local: fast_tokenizers
+      title: Tokenizere
+    - local: custom_tokenizers
+      title: Personalizarea Tokenizerelor
+    - local: tokenizer_summary
+      title: Algoritmi de Tokenization
+    - local: image_processors
+      title: Procesatoare de imagini
+    - local: video_processors
+      title: Procesatoare video
+    - local: backbones
+      title: Backbone-uri
+    - local: feature_extractors
+      title: Feature extractors
+    - local: processors
+      title: Procesatoare
+    title: Preprocesatoare
+  title: Clase de bază
+- isExpanded: true
+  sections:
+  - isExpanded: false
+    sections:
+    - local: pipeline_tutorial
+      title: Pipeline
+    - local: pipeline_gradio
+      title: Aplicații de Machine learning
+    - local: pipeline_webserver
+      title: Inferență pe web server
+    - local: add_new_pipeline
+      title: Adăugarea unui nou pipeline
+    title: API-ul Pipeline

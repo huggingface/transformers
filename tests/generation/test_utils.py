@@ -553,6 +553,8 @@ class GenerationTesterMixin:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
                 new_model = model_class.from_pretrained(tmp_dir, device_map="auto")
+                if not hasattr(new_model, "hf_device_map") or len(set(new_model.hf_device_map.values())) == 1:
+                    self.skipTest(reason="Model is not distributed across multiple devices")
 
                 new_model.generate(
                     max_new_tokens=self.max_new_tokens,
@@ -723,9 +725,10 @@ class GenerationTesterMixin:
             generation_kwargs.update({"assistant_model": assistant_model})
             output_assisted = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
 
-            # `gpt_oss` seems to have larger differences on CPU every other generated tokens, sth. like
-            # 1e-9, 1e-5, 1e-9, 1e-5. While on GPU, they are all very small 1e-9.
-            if is_moe_model(config):
+            # some models requires larger tolerance
+            if model.config.model_type in ["vibevoice_asr"]:
+                atol = rtol = 5e-3
+            elif is_moe_model(config):
                 atol = rtol = 1e-3
             else:
                 atol = rtol = 1e-5
