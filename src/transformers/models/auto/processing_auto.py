@@ -62,7 +62,6 @@ else:
             ("mm-grounding-dino", "GroundingDinoProcessor"),
             ("modernvbert", "Idefics3Processor"),
             ("moonshine", "Wav2Vec2Processor"),
-            ("moss_tts_delay", "MossTTSDelayProcessor"),
             ("qwen3_5", "Qwen3VLProcessor"),
             ("qwen3_5_moe", "Qwen3VLProcessor"),
             ("qwen3_vl_moe", "Qwen3VLProcessor"),

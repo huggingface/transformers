@@ -1025,6 +1025,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("minicpmv4_6", "MiniCPMV4_6Processor"),
         ("mllama", "MllamaProcessor"),
         ("moonshine_streaming", "MoonshineStreamingProcessor"),
+        ("moss_tts_delay", "MossTTSDelayProcessor"),
         ("musicflamingo", "MusicFlamingoProcessor"),
         ("musicgen", "MusicgenProcessor"),
         ("musicgen_melody", "MusicgenMelodyProcessor"),
