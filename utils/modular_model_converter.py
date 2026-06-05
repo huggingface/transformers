@@ -990,11 +990,14 @@ def replace_class_node(
     # Use class decorators redefined in modular file if any.
     # Strip `no_inherit_decorator` sentinel and drop parent decorators if found.
     modular_decorators = [
-        dec for dec in modular_class_node.decorators
+        dec
+        for dec in modular_class_node.decorators
         if "no_inherit_decorator" not in mapper.python_module.code_for_node(dec)
     ]
     new_class_decorators = (
-        modular_decorators if modular_decorators or len(modular_class_node.decorators) > 0 else original_modeling_node.decorators
+        modular_decorators
+        if modular_decorators or len(modular_class_node.decorators) > 0
+        else original_modeling_node.decorators
     )
 
     # Compute new class docstring
@@ -1098,7 +1101,7 @@ def replace_class_node(
             new_decorators = modular_node.decorators if len(modular_node.decorators) > 0 else node.decorators
 
             # Keep return annotation in modular if any, else original return annotation
-            new_return_annotation = modular_node.returns if modular_node.returns else node.returns
+            new_return_annotation = modular_node.returns or node.returns
 
             # Update the method node
             node = node.with_changes(

@@ -333,6 +333,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         output = self.out_proj(core_attn_out)
         return output
 
+
 @no_inherit_decorator
 class Qwen3_5Attention(Qwen3NextAttention):
     pass

@@ -276,6 +276,7 @@ class LagunaSparseMoeBlock(Qwen3MoeSparseMoeBlock):
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states
 
+
 @no_inherit_decorator
 class LagunaAttention(AfmoeAttention):
     """Afmoe-style SWA/GQA attention with Laguna-specific gating and per-layer head count."""

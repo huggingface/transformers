@@ -128,6 +128,7 @@ class Glm4MoeConfig(PreTrainedConfig):
 class Glm4MoeRotaryEmbedding(GlmRotaryEmbedding):
     pass
 
+
 @no_inherit_decorator
 class Glm4MoeAttention(CohereAttention):
     def __init__(self, config: Glm4MoeConfig, layer_idx: int | None = None):

@@ -188,6 +188,7 @@ class MoonshineDecoderMLP(nn.Module):
 class MoonshineRotaryEmbedding(GlmRotaryEmbedding):
     pass
 
+
 @no_inherit_decorator
 class MoonshineAttention(GlmAttention):
     def __init__(

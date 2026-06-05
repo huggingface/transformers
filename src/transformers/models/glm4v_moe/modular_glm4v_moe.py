@@ -139,6 +139,7 @@ class Glm4vMoeConfig(Glm4vConfig):
     image_token_id: int = 151363
     video_token_id: int = 151364
 
+
 @no_inherit_decorator
 class Glm4vMoeTextAttention(Glm4Attention):
     def __init__(self, config: Glm4vMoeTextConfig, layer_idx: int | None = None):
