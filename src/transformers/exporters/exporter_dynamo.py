@@ -20,7 +20,7 @@ models exportable. The export pipeline uses five sections, in execution order:
 
 1. **Model patches** (`patch_untraceable_patterns`): reversible patches applied
    during tracing to replace non-exportable model patterns (data-dependent loops,
-   in-place ops, mask checks) with export-safe equivalents.
+   in-place ops, mask checks) with export-safe equivalents. Modeling codes themselves are not updated because these are too specifc. In general we do try to have compliant code tho.
 2. **Pytree registration** (`register_cache_pytrees_for_model`): flatten/unflatten
    hooks (via `torch.utils._pytree.register_pytree_node`) for Cache subclasses and
    custom containers so `torch.export` can trace through them.
