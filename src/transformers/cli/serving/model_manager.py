@@ -256,9 +256,11 @@ class ModelManager:
             "dtype": self.dtype,
             "device_map": self.device,
             "trust_remote_code": self.trust_remote_code,
-            "quantization_config": self.get_quantization_config(),
             "tqdm_class": tqdm_class,
         }
+        quantization_config = self.get_quantization_config()
+        if quantization_config is not None:
+            model_kwargs["quantization_config"] = quantization_config
 
         if progress_callback is not None:
             progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
