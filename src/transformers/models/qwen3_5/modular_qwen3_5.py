@@ -936,6 +936,7 @@ class Qwen3_5ForCausalLM(Qwen3ForCausalLM):
 
         return total_loss / len(self._mtp_layers)
 
+
 class Qwen3_5ForTokenClassification(GenericForTokenClassification, Qwen3_5PreTrainedModel):
     config: Qwen3_5Config
 

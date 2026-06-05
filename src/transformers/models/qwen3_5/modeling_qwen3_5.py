@@ -1637,6 +1637,7 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1866,6 +1867,7 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
             current_hidden = mtp_hidden
 
         return total_loss / len(self._mtp_layers)
+
 
 class Qwen3_5ForTokenClassification(GenericForTokenClassification, Qwen3_5PreTrainedModel):
     config: Qwen3_5Config

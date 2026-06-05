@@ -18,10 +18,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
-from ...utils import auto_docstring
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
