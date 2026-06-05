@@ -17,6 +17,7 @@ import inspect
 import unittest
 from functools import cached_property
 
+import pytest
 import requests
 
 from transformers import VitPoseBackboneConfig, VitPoseConfig
@@ -143,6 +144,15 @@ class VitPoseModelTester:
             result_flipped.heatmaps.shape, (self.batch_size, self.num_labels, expected_height, expected_width)
         )
 
+    def create_and_check_for_pose_estimation_without_graph_break(self, config, pixel_values, labels, flip_pairs):
+        model = VitPoseForPoseEstimation(config)
+        model.to(torch_device)
+        model.eval()
+
+        torch.compiler.reset()
+        model = torch.compile(model, fullgraph=True)
+        model(pixel_values, flip_pairs=flip_pairs)
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -224,6 +234,12 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_pose_estimation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_pose_estimation(*config_and_inputs)
+
+    @slow
+    @pytest.mark.torch_compile_test
+    def test_for_post_estimation_without_graph_break(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_pose_estimation_without_graph_break(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
