@@ -56,6 +56,7 @@ if is_torch_available():
         convert_and_export_with_cache,
         pipeline,
     )
+    from transformers.cache_utils import LinearAttentionLayer, StaticLayer
     from transformers.integrations.executorch import export_with_dynamic_cache
 
 
@@ -108,6 +109,37 @@ class CacheTest(unittest.TestCase):
         cached_keys, cached_values = mqa_static_cache.update(*_random_kvs(mqa_config), 0)
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
+
+    def test_early_initialization_does_not_corrupt_linear_attention_layers(self):
+        """
+        Regression test: `early_initialization` initialized *every* layer through the attention `(num_heads, head_dim)`
+        key/value layout, but linear attention layers track their own statically-shaped conv/recurrent states. So it
+        pre-allocated their `conv_states` with the wrong shape (a spurious 0-length axis) and flagged them
+        initialized; the first real `update_conv_state` then hit `conv_states.copy_(...)` with mismatched shapes and
+        raised a `RuntimeError` (the customer-facing failure, observed e.g. on Neuron). Linear attention layers must
+        be left untouched so they lazily take the correct shape on their first update.
+        """
+        config = LlamaConfig(num_hidden_layers=2, num_attention_heads=4, num_key_value_heads=2, hidden_size=32)
+        config.layer_types = ["full_attention", "linear_attention"]
+        cache = StaticCache(config=config, max_cache_len=8)
+        self.assertIsInstance(cache.layers[0], StaticLayer)
+        linear_layer = cache.layers[1]
+        self.assertIsInstance(linear_layer, LinearAttentionLayer)
+
+        cache.early_initialization(batch_size=1, num_heads=2, head_dim=8, dtype=torch.float32, device=torch_device)
+        # The attention layer is initialized via the key/value layout, as expected.
+        self.assertTrue(cache.layers[0].is_initialized)
+
+        # Simulate the first forward updating the linear layer's conv state with its real (conv) shape. Before the
+        # fix, `early_initialization` had pre-allocated `conv_states` with the wrong key/value shape, so this raised
+        # `RuntimeError: ... must match ...`; with the fix the layer lazily takes the correct shape here instead.
+        conv_states = torch.zeros((1, 8, 4), dtype=torch.float32, device=torch_device)  # (batch, channels, kernel)
+        updated_conv_states = linear_layer.update_conv_state(conv_states)
+        self.assertEqual(updated_conv_states.shape, conv_states.shape)
+
+        # The cache-level `is_initialized` must also tolerate linear attention layers (which don't expose the flag);
+        # before the fix this raised `AttributeError`. It reflects the attention layer's state.
+        self.assertTrue(cache.is_initialized)
 
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):

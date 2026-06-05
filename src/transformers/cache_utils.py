@@ -1061,6 +1061,17 @@ class Cache:
             )
 
         for layer, layer_num_heads, layer_head_dim in zip(self.layers, num_heads, head_dim):
+            # Only attention layers use the `(num_heads, head_dim)` key/value layout and an `is_initialized` flag, so
+            # they are the only ones we can early-initialize here. Linear attention layers (mamba/conv/...) track their
+            # own conv/recurrent states, whose shapes (conv kernel size, SSM state size, ...) are not derivable from
+            # `(num_heads, head_dim)`, so there is no correct way to early-init them through this path: they are
+            # skipped and lazily initialize from the real states on their first update. (Consequence: under chunked
+            # prefill they may still trigger a recompile, since that lazy init then happens inside the compiled
+            # region.) Already-initialized layers are skipped too, so this is a no-op on a reused cache, which
+            # preserves the static tensor addresses across `compile` calls.
+            is_initialized = getattr(layer, "is_initialized", None)
+            if is_initialized is None or is_initialized:
+                continue
             # Note that the initialization needs all dimensions (except -2), as well as device and dtype, so we use
             # this fake tensor approach. It has size 0 on the -2 dimension, so it does not allocate any data (it only
             # creates an empty tensor with correct shape, dtype and device), which is very efficient and practical
@@ -1206,7 +1217,11 @@ class Cache:
     @property
     def is_initialized(self) -> bool:
         """Return whether the cache data is initialized"""
-        return len(self.layers) > 0 and all(layer.is_initialized for layer in self.layers)
+        # Layers without an `is_initialized` flag (e.g. linear attention layers, which track their own conv/recurrent
+        # states) don't use this lazy-init mechanism, so skip them; a hybrid cache then reflects its attention layers.
+        flags = [getattr(layer, "is_initialized", None) for layer in self.layers]
+        flags = [flag for flag in flags if flag is not None]
+        return len(flags) > 0 and all(flags)
 
     @property
     def is_sliding(self) -> list[bool]:
