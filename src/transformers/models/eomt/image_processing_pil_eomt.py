@@ -18,6 +18,7 @@ import math
 import numpy as np
 
 from ...image_processing_backends import PilBackend
+from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import PaddingMode, get_size_with_aspect_ratio
 from ...image_transforms import pad as np_pad
@@ -492,10 +493,36 @@ class EomtImageProcessorPil(PilBackend):
         return resized_logits
 
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: list[tuple[int, int]], size: dict[str, int] | None = None
-    ) -> np.ndarray:
-        """Post-processes model outputs into final semantic segmentation prediction."""
+        self,
+        outputs,
+        target_sizes: list[tuple[int, int]],
+        size: dict[str, int] | None = None,
+        return_segmentation_scores: bool = False,
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
+        """
+        Converts the output of [`EomtForUniversalSegmentation`] into semantic segmentation maps.
 
+        Args:
+            outputs ([`EomtForUniversalSegmentation`]):
+                Raw outputs of the model.
+            target_sizes (`list[tuple[int, int]]`):
+                A list of tuples (`tuple[int, int]`) containing the target size (height, width) of each image in the
+                batch.
+            size (`dict[str, int]`, *optional*):
+                The size to which the intermediate masks are interpolated. Defaults to `self.size`.
+            return_segmentation_scores (`bool`, *optional*, defaults to `False`):
+                Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
+                the returned list is a [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation`
+                (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
+
+        Returns:
+            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessorOutput]`: When
+            `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
+            segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
+            a list of [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation` (class IDs, shape
+            `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
+            `(height, width)` corresponds to the target size.
+        """
         size = size if size is not None else self.size
 
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
@@ -525,8 +552,15 @@ class EomtImageProcessorPil(PilBackend):
                 )
                 output_logits.append(resized_logits[0])
 
-        preds = [logit.argmax(dim=0) for logit in output_logits]
-        return preds
+        semantic_segmentation = [
+            SemanticSegmentationPostProcessorOutput(segmentation=logit.argmax(dim=0), segmentation_scores=logit)
+            for logit in output_logits
+        ]
+
+        if not return_segmentation_scores:
+            semantic_segmentation = [item.segmentation for item in semantic_segmentation]
+
+        return semantic_segmentation
 
     def post_process_panoptic_segmentation(
         self,
