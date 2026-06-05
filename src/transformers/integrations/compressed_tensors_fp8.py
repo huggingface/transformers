@@ -191,9 +191,6 @@ class CompressedTensorsScaleConvert(ConversionOps):
     The conversion also reshapes the scale: scalar → (1, 1), 1D (N,) → (N, 1).
     """
 
-    def __init__(self, hf_quantizer):
-        self.hf_quantizer = hf_quantizer
-
     def convert(self, input_dict, **kwargs):
         # The key in input_dict is the source_pattern string (e.g. "weight_scale$")
         scale_key = next(k for k in input_dict if "weight_scale" in k)
@@ -221,9 +218,6 @@ class CompressedTensorsScaleConvert(ConversionOps):
 class CompressedTensorsActivationScaleConvert(ConversionOps):
     """Rename compressed-tensors `input_scale` to `activation_scale`."""
 
-    def __init__(self, hf_quantizer):
-        self.hf_quantizer = hf_quantizer
-
     def convert(self, input_dict, **kwargs):
         scale = input_dict["input_scale"][0]
         return {"activation_scale": scale.to(torch.float32)}
@@ -236,37 +230,72 @@ class CompressedTensorsActivationScaleConvert(ConversionOps):
 class CompressedTensorsFp8Dequantize(ConversionOps):
     """Dequantize compressed-tensors FP8 weights back to BF16.
 
-    Used when `dequantize=True`: loads FP8 weights + scale, produces BF16 weights.
+    Folds the per-channel / per-tensor ``weight_scale`` into the FP8 weight,
+    producing a BF16 tensor. Prepended to a converter chain for layers that
+    cannot stay in FP8 (e.g. merged MoE experts, which are not ``nn.Linear``):
+    it pairs each weight with its sibling scale *by index* and preserves the
+    per-expert list structure so the downstream merge / concat ops still see
+    one tensor per expert.
     """
 
-    def __init__(self, hf_quantizer):
-        self.hf_quantizer = hf_quantizer
+    @staticmethod
+    def _scale_pattern_for(weight_pattern: str) -> str:
+        # Strip the optional ``$`` regex anchor so we can match the underlying name.
+        anchored = weight_pattern.endswith("$")
+        base = weight_pattern[:-1] if anchored else weight_pattern
+        if base.endswith(".weight"):
+            scale = base[: -len(".weight")] + ".weight_scale"
+        elif base == "weight":
+            scale = "weight_scale"
+        else:
+            scale = base + "_scale"
+        return scale + "$" if anchored else scale
 
-    def convert(self, input_dict, full_layer_name=None, **kwargs):
-        if len(input_dict) < 2:
-            weight_key = next(k for k in input_dict if "weight" in k)
-            return {full_layer_name: input_dict[weight_key]}
-
-        weight_key = next(k for k in input_dict if k.endswith("weight") or k.endswith("weight$"))
-        scale_key = next(k for k in input_dict if "weight_scale" in k and "inv" not in k)
-        quantized = input_dict[weight_key][0]
-        scale = input_dict[scale_key][0]
-
+    @staticmethod
+    def _dequantize_one(quantized: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
         quantized_float = quantized.to(torch.float32)
-        if scale.dim() == 0:
-            # Per-tensor: scalar scale
-            dequantized = quantized_float * scale
-        elif scale.dim() == 1:
-            # Per-channel: (N,) scale, broadcast over K dimension
+        if scale.dim() == 1:
+            # Per-channel: (N,) scale, broadcast over the K dimension.
             dequantized = quantized_float * scale.unsqueeze(-1)
         else:
+            # Per-tensor scalar or already-broadcastable scale.
             dequantized = quantized_float * scale
+        return dequantized.to(torch.bfloat16)
 
-        return {full_layer_name: dequantized.to(torch.bfloat16)}
+    def convert(self, input_dict, full_layer_name=None, **kwargs):
+        weight_keys = [k for k in input_dict if "weight" in k and "weight_scale" not in k]
+        scale_keys = [k for k in input_dict if "weight_scale" in k]
+
+        # No scale alongside (e.g. RMSNorm weights that match the weight pattern but
+        # ship no scale) — pass the weight through untouched.
+        if not scale_keys:
+            weight_key = weight_keys[0]
+            return {full_layer_name: input_dict[weight_key]}
+
+        # Dequantize each weight pattern that has a sibling scale, pairing per-expert
+        # tensors by index and preserving the list structure for downstream merge ops.
+        # Scale entries are dropped so only weights remain in the chain.
+        result: dict = {}
+        for key in weight_keys:
+            scale_key = self._scale_pattern_for(key)
+            if scale_key not in input_dict:
+                result[key] = input_dict[key]
+                continue
+            weights = input_dict[key]
+            scales = input_dict[scale_key]
+            weights = weights if isinstance(weights, list) else [weights]
+            scales = scales if isinstance(scales, list) else [scales]
+            if len(weights) != len(scales):
+                raise ValueError(
+                    f"CompressedTensorsFp8Dequantize: weight/scale count mismatch for {key} "
+                    f"({len(weights)} weights vs {len(scales)} scales)."
+                )
+            result[key] = [self._dequantize_one(w, s) for w, s in zip(weights, scales)]
+        return result
 
     @property
     def reverse_op(self):
-        return _IdentityOp()
+        return CompressedTensorsFP8PerRowQuantize()
 
 
 class CompressedTensorsFP8PerRowQuantize(ConversionOps):
@@ -279,9 +308,6 @@ class CompressedTensorsFP8PerRowQuantize(ConversionOps):
 
     Used when loading a BF16 model with CompressedTensorsConfig for online FP8.
     """
-
-    def __init__(self, hf_quantizer):
-        self.hf_quantizer = hf_quantizer
 
     def convert(self, input_dict, **kwargs):
         # input_dict = {target_key: [bf16_weight_tensor]}
@@ -310,4 +336,4 @@ class CompressedTensorsFP8PerRowQuantize(ConversionOps):
 
     @property
     def reverse_op(self):
-        return _IdentityOp()
+        return CompressedTensorsFp8Dequantize()

@@ -69,7 +69,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         # Detect FP8
         self.is_fp8 = False
-        self._fp8_dequantize = False
         self._activation_scheme = "dynamic"
         self._modules_to_not_convert_ct = []
 
@@ -140,7 +139,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             model,
             modules_to_not_convert=self.modules_to_not_convert,
             activation_scheme=self._activation_scheme,
-            dequantize=self._fp8_dequantize,
+            dequantize=False,
             pre_quantized=self.pre_quantized,
         )
 
@@ -193,34 +192,74 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             return None
         from ..integrations.compressed_tensors_fp8 import CompressedTensorsFP8PerRowQuantize
 
-        return CompressedTensorsFP8PerRowQuantize(self)
+        return CompressedTensorsFP8PerRowQuantize()
 
     def get_weight_conversions(self):
-        if not self.is_fp8:
+        """Generic fallback converter for plain ``nn.Linear`` FP8 weights.
+
+        Renames ``weight_scale`` → ``weight_scale_inv`` (and reshapes it for the
+        row-wise kernel) *without* dequantizing, so the weight stays in FP8 and
+        runs through :class:`CompressedTensorsFP8Linear`.
+        """
+        if not self.is_fp8 or not self.pre_quantized:
             return []
 
         from ..core_model_loading import WeightConverter
-        from ..integrations.compressed_tensors_fp8 import (
-            CompressedTensorsFp8Dequantize,
-            CompressedTensorsScaleConvert,
-        )
+        from ..integrations.compressed_tensors_fp8 import CompressedTensorsScaleConvert
 
-        if self.pre_quantized and self._fp8_dequantize:
-            return [
-                WeightConverter(
-                    source_patterns=["weight$", "weight_scale"],
-                    target_patterns="weight",
-                    operations=[CompressedTensorsFp8Dequantize(self)],
+        return [
+            WeightConverter(
+                source_patterns=["weight_scale$"],
+                target_patterns=["weight_scale_inv"],
+                operations=[CompressedTensorsScaleConvert()],
+            ),
+        ]
+
+    def update_weight_conversions(self, weight_conversions):
+        """Walk the model-provided conversion pipeline so FP8 scales are handled
+        alongside their weights.
+
+        Plain ``nn.Linear`` weights stay in FP8: the generic
+        ``weight_scale$ → weight_scale_inv`` converter from
+        :meth:`get_weight_conversions` keeps the scale next to the FP8 weight.
+
+        For models whose converters *merge* weights (e.g. MoE experts via a
+        ``MergeModulelist`` / concat op), the merged tensor cannot be an FP8
+        ``nn.Linear`` and is therefore not replaced by
+        :class:`CompressedTensorsFP8Linear`. For each such converter we anchor the
+        weight patterns, attach the sibling ``*.weight_scale`` sources to the same
+        bucket, and prepend a :class:`CompressedTensorsFp8Dequantize` op so the
+        per-expert (weight, scale) pairs are folded into BF16 *before* the merge /
+        concat ops collapse the per-expert structure.
+        """
+        if not self.is_fp8 or not self.pre_quantized:
+            return weight_conversions + self.get_weight_conversions()
+
+        from ..core_model_loading import WeightConverter
+        from ..integrations.compressed_tensors_fp8 import CompressedTensorsFp8Dequantize
+
+        updated: list = []
+        for conv in weight_conversions:
+            # Only WeightConverter has ``.operations`` to extend; WeightRenaming
+            # rules just pass through untouched.
+            if not isinstance(conv, WeightConverter):
+                updated.append(conv)
+                continue
+
+            weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
+            if weight_sources:
+                anchored_weight = [p + "$" for p in weight_sources]
+                scale_sources = [p[: -len(".weight")] + ".weight_scale$" for p in weight_sources]
+                other = [p for p in conv.source_patterns if not p.endswith(".weight")]
+                new_sources = anchored_weight + scale_sources + other
+                new_ops = [CompressedTensorsFp8Dequantize()] + list(conv.operations)
+                conv = WeightConverter(
+                    source_patterns=new_sources,
+                    target_patterns=conv._original_target_patterns,
+                    operations=new_ops,
                 )
-            ]
+            updated.append(conv)
 
-        if self.pre_quantized:
-            return [
-                WeightConverter(
-                    source_patterns=["weight_scale$"],
-                    target_patterns=["weight_scale_inv"],
-                    operations=[CompressedTensorsScaleConvert(self)],
-                ),
-            ]
-
-        return []
+        # Generic fallback for plain nn.Linear FP8 weights (kept in FP8).
+        updated.extend(self.get_weight_conversions())
+        return updated
