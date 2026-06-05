@@ -1863,6 +1863,59 @@ def get_class_node_and_dependencies(
     return nodes_to_add, file_type, new_imports
 
 
+def strip_orphaned_kernelized_func_decorators(body: dict) -> dict:
+    """Remove @use_kernelized_func(fn) from class decorators when fn is defined at module
+    level in the same generated file without @use_kernel_func_from_hub.
+
+    Root cause: replace_class_node() falls back to the parent class decorators when the
+    modular subclass declares none. A parent may have @use_kernelized_func(fn) wired to a
+    kernel-decorated fn, but if the generated file redefines fn locally (e.g. a partial-RoPE
+    variant) without @use_kernel_func_from_hub, kernelize() crashes: attach_hidden_kernels()
+    expects an nn.Module in _hidden_kernels but finds a plain function instead.
+
+    Calling this before get_needed_imports lets the existing scope analysis also drop the
+    now-unused use_kernelized_func import automatically.
+    """
+    kernel_decorated: set[str] = set()
+    all_local_funcs: set[str] = set()
+
+    for key, item in body.items():
+        node = item["node"]
+        if not m.matches(node, m.FunctionDef()):
+            continue
+        all_local_funcs.add(key)
+        for dec in node.decorators:
+            if m.matches(dec.decorator, m.Call(func=m.Name("use_kernel_func_from_hub"))):
+                kernel_decorated.add(key)
+                break
+
+    undecorated_local_funcs = all_local_funcs - kernel_decorated
+    if not undecorated_local_funcs:
+        return body
+
+    new_body = {}
+    for key, item in body.items():
+        node = item["node"]
+        if m.matches(node, m.ClassDef()):
+            new_decs, changed = [], False
+            for dec in node.decorators:
+                if m.matches(dec.decorator, m.Call(func=m.Name("use_kernelized_func"))):
+                    args = dec.decorator.args
+                    if (
+                        len(args) == 1
+                        and m.matches(args[0].value, m.Name())
+                        and args[0].value.value in undecorated_local_funcs
+                    ):
+                        changed = True
+                        continue
+                new_decs.append(dec)
+            if changed:
+                item = {**item, "node": node.with_changes(decorators=new_decs)}
+        new_body[key] = item
+
+    return new_body
+
+
 def create_modules(
     modular_mapper: ModularFileMapper,
     file_path: str | None = None,
@@ -1930,6 +1983,7 @@ def create_modules(
 
     # Find the correct imports, and write the new modules
     for file, body in files.items():
+        body = strip_orphaned_kernelized_func_decorators(body)
         new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
         needed_imports = get_needed_imports(body, all_imports)
 
