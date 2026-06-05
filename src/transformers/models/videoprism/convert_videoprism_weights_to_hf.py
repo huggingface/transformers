@@ -338,14 +338,8 @@ def convert_params(flax_state_dict, model_name):
                     new_param = transform_remaining_params(key, param, hidden_size)
                     new_state_dict[new_key] = torch.tensor(new_param).contiguous()
 
-    # Last step is to add the buffers named "scale", "positional_embedding" and "position_ids"
+    # Last step is to add buffers for text positional embeddings (scale is a computed float in the pooling head)
     if "lvt" in model_name:
-        # scale (used inside VideoPrismMultiheadAttentionPoolingHead)
-        # dim is the dimension of a single attention head, which is hidden_size / num_attention_heads
-        dim = int(vision_config["intermediate_size"] / vision_config["num_attention_heads"])
-        r_softplus_0 = 1.442695041
-        scale = torch.tensor(r_softplus_0 / (dim**0.5))
-        new_state_dict["video_model.head.scale"] = scale
         # positional_embedding
         text_config = COMMON_CONFIG_PARAMS[model_name]["text_config"]
         num_pos, dim = 64, text_config["hidden_size"]  # Hardcoded num_pos

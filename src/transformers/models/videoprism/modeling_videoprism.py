@@ -361,7 +361,6 @@ class VideoPrismAttention(nn.Module):
     def __init__(self, config: VideoPrismVisionConfig | VideoPrismTextConfig):
         super().__init__()
         self.config = config
-        self.num_attention_heads = config.num_attention_heads
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.attention_dropout = config.attention_probs_dropout_prob
         self.scaling = self.head_dim**-0.5
@@ -372,6 +371,7 @@ class VideoPrismAttention(nn.Module):
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
         self.num_key_value_groups = 1.0
+        self.attn_logit_softcapping = config.attn_logit_softcapping
 
     def forward(
         self,
@@ -398,12 +398,12 @@ class VideoPrismAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            softcap=self.attn_logit_softcapping,
             **kwargs,
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-
         return attn_output, attn_weights
 
 
@@ -503,8 +503,6 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
         elif isinstance(module, VideoPrismMultiheadAttentionPoolingHead):
             init.zeros_(module.per_dim_scale)
             init.lecun_normal_(module.pooling_attention_query)
-            scale = module.scale.new_tensor(1.442695041 / (module.attention_head_size**0.5))
-            init.copy_(module.scale, scale)
 
         elif isinstance(module, VideoPrismTextEmbeddings):
             position_embedding = create_sinusoidal_positions(
@@ -554,7 +552,6 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithSpatialAndTemporalStates:
-        kwargs.setdefault("softcap", self.config.attn_logit_softcapping)
         if pixel_values_videos is None:
             raise ValueError("You have to specify pixel_values_videos")
 
@@ -591,22 +588,21 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__()
         self.config = config
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.intermediate_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.dropout_prob = config.attention_probs_dropout_prob
-        self.num_key_value_groups = 1.0
-        # PerDimScale
-        self.per_dim_scale = nn.Parameter(torch.zeros(self.attention_head_size))
-        r_softplus_0 = 1.442695041
-        scale = torch.tensor(r_softplus_0 / (self.attention_head_size**0.5))
-        self.register_buffer("scale", scale)
+        self.head_dim = config.intermediate_size // config.num_attention_heads
+        self.attention_dropout = config.attention_probs_dropout_prob
+        self.scaling = self.head_dim**-0.5
         self.is_causal = False
+
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
+        self.num_key_value_groups = 1.0
+        self.attn_logit_softcapping = None
+        self.per_dim_scale = nn.Parameter(torch.zeros(self.head_dim))
+        r_softplus_0 = 1.442695041
+        self.scale = r_softplus_0 / (self.head_dim**0.5)
         self.pooling_attention_query = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.q_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.qkv_bias)
-        self.k_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.qkv_bias)
-        self.v_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.qkv_bias)
-        self.o_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.qkv_bias)
         self.layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
@@ -616,16 +612,12 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         kwargs.setdefault("is_causal", False)
-        input_shape = hidden_states.shape[:-1]
-        batch_size = input_shape[0]
-        hidden_shape = (*input_shape, -1, self.attention_head_size)
+        batch_size = hidden_states.shape[0]
+        hidden_shape = (batch_size, hidden_states.shape[1], -1, self.head_dim)
 
         query = self.pooling_attention_query.expand(batch_size, -1, -1)
-        query_layer = self.q_proj(query).view(batch_size, 1, -1, self.attention_head_size).transpose(1, 2)
-
-        softplus = nn.functional.softplus(self.per_dim_scale)
-        scale = self.scale.to(query_layer.dtype) * softplus
-        query_states = query_layer * scale.expand(*query_layer.shape)
+        query_layer = self.q_proj(query).view(batch_size, 1, -1, self.head_dim).transpose(1, 2)
+        query_states = query_layer * self.scale * nn.functional.softplus(self.per_dim_scale)
 
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
@@ -640,8 +632,9 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
             key_states,
             value_states,
             attention_mask,
-            scaling=1.0,
-            dropout=0.0 if not self.training else self.dropout_prob,
+            scaling=1.0,  # head_size scaling has already been applied to the query
+            dropout=0.0 if not self.training else self.attention_dropout,
+            softcap=self.attn_logit_softcapping,
             **kwargs,
         )
 
@@ -675,7 +668,6 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         self.embeddings = VideoPrismTextEmbeddings(config)
         self.layers = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_hidden_layers)])
         self.layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.is_causal = True
         self.post_init()
 
     @merge_with_config_defaults
@@ -689,8 +681,6 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
-        kwargs.setdefault("softcap", self.config.attn_logit_softcapping)
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -748,7 +738,6 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
-        kwargs.setdefault("softcap", self.config.attn_logit_softcapping)
         vision_model_outputs = self.vision_model(
             pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )
@@ -756,7 +745,6 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
         for layer in self.auxiliary_layers:
             auxiliary_hidden_states = layer(auxiliary_hidden_states, **kwargs)
 
-        kwargs["softcap"] = None
         head_output = self.head(auxiliary_hidden_states, **kwargs)
         video_embeddings = head_output[0]
         if self.config.apply_l2norm:
@@ -933,12 +921,10 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
-        kwargs.setdefault("softcap", self.config.attn_logit_softcapping)
         vision_model_outputs = self.vision_model(
             pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )
         sequence_output = vision_model_outputs.last_hidden_state
-        kwargs["softcap"] = None
         pooled_output = self.head(sequence_output, **kwargs)[0]
         logits = self.classifier(pooled_output)
         loss = None
