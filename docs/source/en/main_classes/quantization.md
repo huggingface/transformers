@@ -117,3 +117,7 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 ## SinqConfig
 
 [[autodoc]] SinqConfig
+
+## GgufQuantizeConfig
+
+[[autodoc]] GgufQuantizeConfig

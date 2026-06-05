@@ -546,6 +546,33 @@ def _add_variant(weights_name: str, variant: str | None = None) -> str:
     return weights_name
 
 
+def _maybe_auto_detect_gguf(pretrained_model_name_or_path: str, **download_kwargs) -> str | None:
+    """Return a GGUF filename if ``pretrained_model_name_or_path`` resolves
+    unambiguously to one — a direct ``.gguf`` path, a local dir containing
+    exactly one ``.gguf``, or a Hub repo containing exactly one ``.gguf``.
+    Otherwise return ``None`` (multiple variants → caller must pass
+    ``gguf_file=`` explicitly to disambiguate)."""
+    if pretrained_model_name_or_path.lower().endswith(".gguf"):
+        return pretrained_model_name_or_path
+    if os.path.isdir(pretrained_model_name_or_path):
+        local_ggufs = [f for f in os.listdir(pretrained_model_name_or_path) if f.lower().endswith(".gguf")]
+        return local_ggufs[0] if len(local_ggufs) == 1 else None
+    # Hub repo: list files without downloading.
+    try:
+        from huggingface_hub import HfApi
+
+        api = HfApi()
+        files = api.list_repo_files(
+            pretrained_model_name_or_path,
+            token=download_kwargs.get("token"),
+            revision=download_kwargs.get("revision"),
+        )
+    except Exception:
+        return None
+    ggufs = [f for f in files if f.lower().endswith(".gguf")]
+    return ggufs[0] if len(ggufs) == 1 else None
+
+
 def _get_resolved_checkpoint_files(
     pretrained_model_name_or_path: str | os.PathLike | None,
     variant: str | None,
@@ -4104,6 +4131,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # For BC on torch_dtype argument
         if torch_dtype is not None:
             dtype = dtype if dtype is not None else torch_dtype
+        # Track whether the user explicitly passed dtype: relevant for the GGUF
+        # path, where the default keeps weights native (Metal kernels) and an
+        # explicit dtype= switches to dequantize-on-load.
+        dtype_was_explicit = dtype is not None
         if dtype is None:
             dtype = "auto"
 
@@ -4137,6 +4168,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             device_map, device_mesh, tp_size = initialize_tensor_parallelism(
                 tp_plan, tp_size=tp_size, device_mesh=device_mesh, device_map=device_map
             )
+
+        # Auto-detect ``.gguf`` when the caller passes a Hub repo (or a local
+        # directory) that contains exactly one GGUF file — saves them from
+        # having to spell out ``gguf_file=`` for GGUF-only repos.
+        if gguf_file is None and isinstance(pretrained_model_name_or_path, str):
+            gguf_file = _maybe_auto_detect_gguf(pretrained_model_name_or_path, **download_kwargs_with_commit)
 
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
@@ -4190,23 +4227,23 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if "experts_implementation" in kwargs:
             config._experts_implementation = kwargs.pop("experts_implementation")
 
+        # ``gguf_file=`` is shorthand for ``quantization_config=GgufQuantizeConfig(gguf_file=...)``.
+        # Building that config here lets the standard ``get_hf_quantizer`` dispatch below own
+        # quantizer construction (and its `validate_environment`) — no GGUF special-case after this.
+        if gguf_file is not None:
+            from .utils.quantization_config import GgufQuantizeConfig
+
+            quantization_config = GgufQuantizeConfig.from_gguf_file(
+                gguf_file, quantization_config, dequantize=dtype_was_explicit
+            )
+
         hf_quantizer, config, device_map = get_hf_quantizer(
             config, quantization_config, device_map, weights_only, user_agent
         )
 
-        if gguf_file:
-            if hf_quantizer is not None:
-                raise ValueError(
-                    "You cannot combine Quantization and loading a model from a GGUF file, try again by making sure you did not passed a `quantization_config` or that you did not load a quantized model from the Hub."
-                )
-            if device_map is not None and (
-                (isinstance(device_map, dict) and "disk" in device_map.values()) or "disk" in device_map
-            ):
-                raise RuntimeError(
-                    "One or more modules is configured to be mapped to disk. Disk offload is not supported for models "
-                    "loaded from GGUF files."
-                )
-
+        # ``use_kernels`` controls the model-wide kernel resolver (attention /
+        # RMSNorm / ...); it's independent from the GGUF kernels, which load
+        # via ``integrations.gguf_kernels.ensure_metal_kernels`` regardless.
         if kernel_config is not None and not use_kernels:
             logger.warning_once(
                 "A kernel_config was provided but use_kernels is False; setting use_kernels=True automatically. To suppress this warning, explicitly set use_kernels to True."
@@ -4225,24 +4262,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             tqdm_class=tqdm_class,
         )
 
+        # Quantizers that own an on-disk state load (today only GGUF) get a hook
+        # to do it themselves — no transformers-side GGUF branch. The hook only
+        # fires when the quantizer has a file to load (``gguf_file=`` path); the
+        # on-the-fly path leaves the standard safetensors loader alone.
+        if gguf_file is not None and hf_quantizer is not None and hasattr(hf_quantizer, "load_checkpoint_state"):
+            state_dict = hf_quantizer.load_checkpoint_state(checkpoint_files[0])
+
         is_quantized = hf_quantizer is not None
 
         # Find the correct dtype based on current state
         config, dtype = _get_dtype(
             dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only, hf_quantizer
         )
-
-        if gguf_file:
-            from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
-
-            # we need a dummy model to get the state_dict - for this reason, we keep the state_dict as if it was
-            # passed directly as a kwarg from now on
-            with torch.device("meta"):
-                dummy_model = cls(config)
-
-            state_dict = load_gguf_checkpoint(
-                checkpoint_files[0], return_tensors=True, model_to_load=dummy_model, torch_dtype=dtype
-            )["tensors"]
 
         config.name_or_path = pretrained_model_name_or_path
 

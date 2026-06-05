@@ -344,11 +344,15 @@ class _BaseAutoModelClass:
                 **kwargs,
             )
 
-            # if torch_dtype=auto was passed here, ensure to pass it on
-            if kwargs_orig.get("torch_dtype", None) == "auto":
-                kwargs["torch_dtype"] = "auto"
-            if kwargs_orig.get("dtype", None) == "auto":
-                kwargs["dtype"] = "auto"
+            # Pass user-specified dtype through to the model loader. The config
+            # also records it (so non-quantized loads work today), but the GGUF
+            # path needs to distinguish "user explicitly requested a dtype"
+            # (→ dequantize) from "config.json happens to record a dtype"
+            # (→ stay native). Restore from kwargs_orig to keep that signal.
+            if "torch_dtype" in kwargs_orig:
+                kwargs["torch_dtype"] = kwargs_orig["torch_dtype"]
+            if "dtype" in kwargs_orig:
+                kwargs["dtype"] = kwargs_orig["dtype"]
             if kwargs_orig.get("quantization_config", None) is not None:
                 kwargs["quantization_config"] = kwargs_orig["quantization_config"]
 
