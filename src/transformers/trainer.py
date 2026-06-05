@@ -2820,6 +2820,13 @@ class Trainer:
             metrics = self.compute_metrics(
                 EvalPrediction(predictions=all_preds, label_ids=all_labels, **eval_set_kwargs)
             )
+        elif self.compute_metrics is not None and all_labels is None:
+            logger.warning(
+                "The `compute_metrics` function is provided, but no labels were found in the evaluation dataset. "
+                "As a result, metrics will not be computed. Please ensure your dataset contains a column named 'labels' "
+                "or explicitly set `label_names` in your `TrainingArguments`."
+            )
+            metrics = {} if metrics is None else metrics
         elif metrics is None:
             metrics = {}
 
