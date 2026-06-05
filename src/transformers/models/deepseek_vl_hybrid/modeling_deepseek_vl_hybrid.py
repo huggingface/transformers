@@ -24,6 +24,7 @@ import torch
 import torch.nn as nn
 
 from ... import initialization as init
+from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
@@ -287,6 +288,7 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def get_image_features(
         self,
@@ -402,7 +404,7 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
     ):
         high_res_outputs = self.high_res_vision_model(
             pixel_values=pixel_values,
-            output_hidden_states=True,  # Ignore arg on purpose
+            output_hidden_states=output_hidden_states,
             return_dict=True,
             **kwargs,
         )

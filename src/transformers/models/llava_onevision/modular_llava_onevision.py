@@ -19,6 +19,7 @@ import torch
 import torchvision.transforms.v2.functional as tvF
 from torch import nn
 
+from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -482,6 +483,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -530,7 +532,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         image_outputs = self.vision_tower(
             pixel_values,
-            output_hidden_states=True,  # Ignore arg on purpose
+            output_hidden_states=output_hidden_states,
             return_dict=True,
             **kwargs,
         )
@@ -559,6 +561,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower, apply multimodal projection and pooling."
     )
@@ -585,7 +588,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         pixel_values = pixel_values.view(batch_size * frames, channels, height, width)
         vision_outputs = self.vision_tower(
             pixel_values,
-            output_hidden_states=True,  # Ignore arg on purpose
+            output_hidden_states=output_hidden_states,
             return_dict=True,
             **kwargs,
         )
@@ -845,6 +848,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
 
     @merge_with_config_defaults
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def get_image_features(
         self,

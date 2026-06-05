@@ -170,9 +170,13 @@ def filter_output_hidden_states(forward_function):
         output_hidden_states = kwargs.get("output_hidden_states", getattr(self.config, "output_hidden_states", False))
         kwargs["output_hidden_states"] = True
         output = forward_function(self, *args, **kwargs)
-        if not output_hidden_states:
-            filtered_output_data = {k: v for k, v in output.items() if k != "hidden_states"}
-            output = type(output)(**filtered_output_data)
+        # `output` may be a tuple
+        if not output_hidden_states and not isinstance(output, tuple):
+            # filter output data
+            extra_attributes = {k: v for k, v in vars(output).items() if k not in output and not k.startswith("_")}
+            output = type(output)(**{k: v for k, v in output.items() if k != "hidden_states"})
+            for key, value in extra_attributes.items():
+                setattr(output, key, value)
         return output
 
     return wrapper

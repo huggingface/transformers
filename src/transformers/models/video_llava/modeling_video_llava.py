@@ -20,6 +20,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -164,6 +165,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -188,7 +190,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         """
         image_outputs = self.image_tower(
             pixel_values_images,
-            output_hidden_states=True,  # Ignore arg on purpose
+            output_hidden_states=output_hidden_states,
             return_dict=True,
             **kwargs,
         )
@@ -213,6 +215,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
     )
@@ -236,7 +239,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         pixel_values = pixel_values_videos.reshape(batch_size_vid * num_frames, channels, height, width)
         video_outputs = self.video_tower(
             pixel_values,
-            output_hidden_states=True,  # Ignore arg on purpose
+            output_hidden_states=output_hidden_states,
             return_dict=True,
             **kwargs,
         )
@@ -385,6 +388,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
 
     @merge_with_config_defaults
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def get_image_features(
         self,

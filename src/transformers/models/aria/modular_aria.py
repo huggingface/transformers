@@ -862,7 +862,7 @@ class AriaModel(LlavaModel):
         image_outputs = self.vision_tower(
             pixel_values,
             patch_attention_mask=patch_attention_mask,
-            output_hidden_states=True,  # Ignore arg on purpose
+            output_hidden_states=output_hidden_states,
             return_dict=True,
             **kwargs,
         )

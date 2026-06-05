@@ -27,6 +27,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
@@ -345,6 +346,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -393,7 +395,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
 
         image_outputs = self.vision_tower(
             pixel_values,
-            output_hidden_states=True,  # Ignore arg on purpose
+            output_hidden_states=output_hidden_states,
             return_dict=True,
             **kwargs,
         )
@@ -551,6 +553,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower, apply multimodal projection and pooling."
     )
@@ -577,7 +580,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         pixel_values = pixel_values.view(batch_size * frames, channels, height, width)
         vision_outputs = self.vision_tower(
             pixel_values,
-            output_hidden_states=True,  # Ignore arg on purpose
+            output_hidden_states=output_hidden_states,
             return_dict=True,
             **kwargs,
         )
@@ -642,6 +645,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
 
     @merge_with_config_defaults
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def get_image_features(
         self,
@@ -818,6 +822,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
 
     @merge_with_config_defaults
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def get_video_features(
         self,
