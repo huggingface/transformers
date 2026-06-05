@@ -992,9 +992,9 @@ def replace_class_node(
     #   2. Take the decorators attached in the modular file
     #   3. Inherit all existing decorators of the parent
     new_class_decorators = []
-    no_decorators_forced = "no_inherit_decorator" in [
-        mapper.python_module.code_for_node(dec) for dec in modular_class_node.decorators
-    ]
+
+    decorator_names = [mapper.python_module.code_for_node(dec.decorator) for dec in modular_class_node.decorators]
+    no_decorators_forced = "no_inherit_decorator" in decorator_names
     if no_decorators_forced:
         if len(modular_class_node.decorators) > 1:
             raise ValueError(
@@ -1002,7 +1002,7 @@ def replace_class_node(
                 f"found multiple decorators: {modular_class_node.decorators}. Please make sure to only "
                 "attach the `no_inherit_decorator`!"
             )
-    elif len(modular_class_node.decorators) > 0:
+    elif decorator_names:
         new_class_decorators = modular_class_node.decorators
     else:
         new_class_decorators = original_modeling_node.decorators
