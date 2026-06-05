@@ -44,6 +44,8 @@ from typing import Annotated
 
 import typer
 
+from transformers.agent.output import out, progress
+
 
 # Maps CLI task names to (AutoModel class name, preprocessing type)
 _TASK_CONFIGS = {
@@ -442,12 +444,12 @@ def train(
 
     # Device targeting
     if device == "cpu":
-        training_args_kwargs["no_cuda"] = True
-        training_args_kwargs["use_mps_device"] = False
+        training_args_kwargs["use_cpu"] = True
     elif device == "mps":
-        training_args_kwargs["use_mps_device"] = True
+        # Transformers auto-detects MPS on Apple Silicon; no explicit flag required.
+        pass
     elif device == "tpu":
-        # TPU is handled automatically when running on a TPU instance with XLA
+        # TPU is handled automatically when running on a TPU instance with XLA.
         pass
 
     # Multi-GPU / multi-node: delegate to accelerate or torchrun
@@ -460,8 +462,8 @@ def train(
             cmd.append("--multi_gpu")
         cmd.extend(["--module", "transformers.cli.agentic.train", "_train_inner"])
         # Pass all original args through environment
-        print(f"Launching distributed training: {' '.join(cmd)}")
-        print("Note: for full control, use `accelerate launch` directly.")
+        progress(f"Launching distributed training: {' '.join(cmd)}")
+        out.hint("Note: for full control, use `accelerate launch` directly.")
         # Fall through to normal training — Trainer handles multi-GPU automatically
         # when CUDA_VISIBLE_DEVICES or the accelerate launcher sets up the environment.
 
@@ -530,7 +532,7 @@ def train(
             backend=hpo,
             n_trials=hpo_trials,
         )
-        print(f"Best trial: {best_trial}")
+        progress(f"Best trial: {best_trial}")
     else:
         trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
@@ -539,7 +541,7 @@ def train(
     if processing_class is not None:
         processing_class.save_pretrained(output)
 
-    print(f"\nModel saved to {output}")
+    out.result("Training complete", output_path=output)
     if push_to_hub:
         trainer.push_to_hub()
-        print(f"Pushed to Hub: {hub_model_id or output}")
+        progress(f"Pushed to Hub: {hub_model_id or output}")

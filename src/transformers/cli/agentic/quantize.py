@@ -34,6 +34,8 @@ from typing import Annotated
 
 import typer
 
+from transformers.agent.output import out, progress
+
 
 _QUANTIZATION_METHODS = ("bnb-4bit", "bnb-8bit", "gptq", "awq")
 
@@ -94,21 +96,21 @@ def quantize(
             bnb_4bit_compute_dtype="bfloat16",
             bnb_4bit_quant_type="nf4",
         )
-        print(f"Loading {model} in 4-bit (BitsAndBytes NF4)...")
+        progress(f"Loading {model} in 4-bit (BitsAndBytes NF4)...")
         loaded_model = AutoModelForCausalLM.from_pretrained(model, **model_kwargs)
         loaded_model.save_pretrained(output)
         tokenizer.save_pretrained(output)
-        print(f"Quantized model saved to {output}")
+        out.result("Saved quantized model", method="bnb-4bit", output_path=output)
 
     elif method == "bnb-8bit":
         from transformers import BitsAndBytesConfig
 
         model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
-        print(f"Loading {model} in 8-bit (BitsAndBytes)...")
+        progress(f"Loading {model} in 8-bit (BitsAndBytes)...")
         loaded_model = AutoModelForCausalLM.from_pretrained(model, **model_kwargs)
         loaded_model.save_pretrained(output)
         tokenizer.save_pretrained(output)
-        print(f"Quantized model saved to {output}")
+        out.result("Saved quantized model", method="bnb-8bit", output_path=output)
 
     # --- GPTQ ---
     elif method == "gptq":
@@ -116,7 +118,7 @@ def quantize(
 
         if calibration_dataset is None:
             calibration_dataset = "wikitext"
-            print("No --calibration-dataset specified, defaulting to 'wikitext'.")
+            out.warning("No --calibration-dataset specified, defaulting to 'wikitext'.")
 
         from datasets import load_dataset
 
@@ -131,11 +133,11 @@ def quantize(
         )
         model_kwargs["quantization_config"] = quantization_config
 
-        print(f"Quantizing {model} with GPTQ ({bits}-bit, group_size={group_size})...")
+        progress(f"Quantizing {model} with GPTQ ({bits}-bit, group_size={group_size})...")
         loaded_model = AutoModelForCausalLM.from_pretrained(model, **model_kwargs)
         loaded_model.save_pretrained(output)
         tokenizer.save_pretrained(output)
-        print(f"GPTQ-quantized model saved to {output}")
+        out.result("Saved quantized model", method="gptq", output_path=output)
 
     # --- AWQ ---
     elif method == "awq":
@@ -147,14 +149,14 @@ def quantize(
         )
         model_kwargs["quantization_config"] = quantization_config
 
-        print(f"Quantizing {model} with AWQ ({bits}-bit, group_size={group_size})...")
+        progress(f"Quantizing {model} with AWQ ({bits}-bit, group_size={group_size})...")
         loaded_model = AutoModelForCausalLM.from_pretrained(model, **model_kwargs)
         loaded_model.save_pretrained(output)
         tokenizer.save_pretrained(output)
-        print(f"AWQ-quantized model saved to {output}")
+        out.result("Saved quantized model", method="awq", output_path=output)
 
     if push_to_hub:
         repo_id = hub_model_id or output
         loaded_model.push_to_hub(repo_id, token=token)
         tokenizer.push_to_hub(repo_id, token=token)
-        print(f"Pushed to Hub: {repo_id}")
+        progress(f"Pushed to Hub: {repo_id}")

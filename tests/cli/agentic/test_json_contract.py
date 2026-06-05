@@ -53,8 +53,8 @@ JSON_CAPABLE_COMMANDS = EXPECTED_COMMANDS - {
     "generate",
     "detect-watermark",
     "tokenize",  # has its own --json, see explicit test below
-    "embed",     # writes raw embeddings via --output (.npy/.json)
-    "depth",     # writes a depth map PNG via --output
+    "embed",  # writes raw embeddings via --output (.npy/.json)
+    "depth",  # writes a depth map PNG via --output
     "inspect-forward",
 }
 
@@ -62,9 +62,7 @@ JSON_CAPABLE_COMMANDS = EXPECTED_COMMANDS - {
 def test_every_json_capable_command_has_a_json_flag():
     import inspect as _inspect
 
-    callbacks_by_resolved_name = {
-        fn.__name__.replace("_", "-"): fn for fn in _agentic_callbacks()
-    }
+    callbacks_by_resolved_name = {fn.__name__.replace("_", "-"): fn for fn in _agentic_callbacks()}
 
     missing = []
     for name in sorted(JSON_CAPABLE_COMMANDS):
@@ -87,8 +85,8 @@ def test_every_json_capable_command_has_a_json_flag():
 
 @dataclass
 class JsonCase:
-    name: str            # display name (also the pytest id)
-    args: list[str]      # CLI args, including the command name and ``--json``
+    name: str  # display name (also the pytest id)
+    args: list[str]  # CLI args, including the command name and ``--json``
     expects_list: bool = False
     expects_dict: bool = False
     required_keys: tuple[str, ...] = field(default_factory=tuple)
@@ -102,8 +100,10 @@ CASES: list[JsonCase] = [
         name="classify-supervised",
         args=[
             "classify",
-            "--model", "hf-internal-testing/tiny-random-DistilBertForSequenceClassification",
-            "--text", "hello world",
+            "--model",
+            "hf-internal-testing/tiny-random-DistilBertForSequenceClassification",
+            "--text",
+            "hello world",
             "--json",
         ],
         expects_list=True,
@@ -113,9 +113,12 @@ CASES: list[JsonCase] = [
         name="qa",
         args=[
             "qa",
-            "--model", "hf-internal-testing/tiny-random-DistilBertForQuestionAnswering",
-            "--question", "who?",
-            "--context", "Alice met Bob.",
+            "--model",
+            "hf-internal-testing/tiny-random-DistilBertForQuestionAnswering",
+            "--question",
+            "who?",
+            "--context",
+            "Alice met Bob.",
             "--json",
         ],
         expects_dict=True,
@@ -125,8 +128,10 @@ CASES: list[JsonCase] = [
         name="tokenize",
         args=[
             "tokenize",
-            "--model", "hf-internal-testing/tiny-random-gpt2",
-            "--text", "Hello, world!",
+            "--model",
+            "hf-internal-testing/tiny-random-gpt2",
+            "--text",
+            "Hello, world!",
             "--json",
         ],
         expects_dict=True,

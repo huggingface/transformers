@@ -24,16 +24,16 @@ from typing import Annotated
 
 import typer
 
+from transformers.agent.output import out, progress
+
 from ._common import (
     DeviceOpt,
     DtypeOpt,
-    JsonOpt,
     ModelOpt,
     RevisionOpt,
     TokenOpt,
     TrustOpt,
     _load_pretrained,
-    format_output,
     load_image,
     load_video,
 )
@@ -51,7 +51,6 @@ def image_classify(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """Classify an image.
 
@@ -121,7 +120,7 @@ def image_classify(
         ]
         result = sorted(scored, key=lambda x: x["score"], reverse=True)
 
-    print(format_output(result, output_json))
+    out.table(result)
 
 
 def detect(
@@ -134,7 +133,6 @@ def detect(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """Detect objects in an image.
 
@@ -226,7 +224,7 @@ def detect(
             }
         )
 
-    print(format_output(result, output_json))
+    out.table(result)
 
 
 def segment(
@@ -241,7 +239,6 @@ def segment(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """Segment an image.
 
@@ -312,7 +309,10 @@ def segment(
             "iou_scores": outputs.iou_scores[0, 0].tolist(),
         }
 
-    print(format_output(result, output_json))
+    if isinstance(result, list):
+        out.table(result)
+    else:
+        out.dict(result)
 
 
 def depth(
@@ -375,9 +375,10 @@ def depth(
             depth_norm = depth_np * 0.0
         depth_img = Image.fromarray(depth_norm.astype("uint8"))
         depth_img.save(output)
-        print(f"Depth map saved to {output} (size: {depth_map.shape[0]}x{depth_map.shape[1]})")
+        progress(f"Depth map saved to {output}")
+        out.result("Depth map saved", size=f"{depth_map.shape[0]}x{depth_map.shape[1]}", output_path=output)
     else:
-        print(f"Depth map size: {depth_map.shape[0]}x{depth_map.shape[1]}")
+        out.result("Depth map computed", size=f"{depth_map.shape[0]}x{depth_map.shape[1]}")
 
 
 def keypoints(
@@ -388,7 +389,6 @@ def keypoints(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """Match keypoints between two images.
 
@@ -425,7 +425,7 @@ def keypoints(
     pipe = pipeline("keypoint-matching", **pipe_kwargs)
     result = pipe(img1, img2)
 
-    print(format_output(result, output_json))
+    out.dict(result if isinstance(result, dict) else {"matches": result})
 
 
 def video_classify(
@@ -437,7 +437,6 @@ def video_classify(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """Classify a video.
 
@@ -476,4 +475,4 @@ def video_classify(
         for val, idx in zip(top_values, top_indices)
     ]
 
-    print(format_output(result, output_json))
+    out.table(result)

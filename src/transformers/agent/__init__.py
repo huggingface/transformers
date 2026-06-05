@@ -12,14 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...utils.import_utils import is_serve_available
-from .utils import Modality
-
-
-# The server machinery depends on the serve extras (fastapi, openai, ...).
-# Importing this package must stay safe without them — `transformers.cli.serve`
-# imports `.utils` at module level (and therefore runs this __init__) just to
-# build the CLI, and only pulls in the server lazily when `serve` actually runs.
-if is_serve_available():
-    from .model_manager import ModelManager
-    from .server import build_server
+from .output import answer, out, progress

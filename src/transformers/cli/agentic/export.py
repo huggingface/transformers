@@ -34,6 +34,8 @@ from typing import Annotated
 
 import typer
 
+from transformers.agent.output import out, progress
+
 
 _EXPORT_FORMATS = ("onnx", "gguf", "executorch")
 
@@ -94,9 +96,9 @@ def _export_onnx(
     if token is not None:
         export_kwargs["token"] = token
 
-    print(f"Exporting {model} to ONNX at {output}...")
+    progress(f"Exporting {model} to ONNX at {output}...")
     main_export(**export_kwargs)
-    print(f"ONNX model saved to {output}")
+    out.result("Export complete", format="onnx", output_path=output)
 
 
 def _export_gguf(model: str, output: str, trust_remote_code: bool, token: str | None):
@@ -111,17 +113,17 @@ def _export_gguf(model: str, output: str, trust_remote_code: bool, token: str | 
     if token:
         common_kwargs["token"] = token
 
-    print(f"Loading {model}...")
+    progress(f"Loading {model}...")
     loaded_model = AutoModelForCausalLM.from_pretrained(model, **common_kwargs)
     tokenizer = AutoTokenizer.from_pretrained(model, **common_kwargs)
 
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    print(f"Saving as GGUF to {output}...")
+    progress(f"Saving as GGUF to {output}...")
     loaded_model.save_pretrained(output_path, gguf_file=output_path.name if output.endswith(".gguf") else None)
     tokenizer.save_pretrained(output_path)
-    print(f"GGUF model saved to {output}")
+    out.result("Export complete", format="gguf", output_path=output)
 
 
 def _export_executorch(model: str, output: str, trust_remote_code: bool, token: str | None):
@@ -144,7 +146,7 @@ def _export_executorch(model: str, output: str, trust_remote_code: bool, token: 
     if token:
         common_kwargs["token"] = token
 
-    print(f"Loading {model}...")
+    progress(f"Loading {model}...")
     loaded_model = AutoModelForCausalLM.from_pretrained(model, **common_kwargs)
     tokenizer = AutoTokenizer.from_pretrained(model, **common_kwargs)
 
@@ -161,4 +163,4 @@ def _export_executorch(model: str, output: str, trust_remote_code: bool, token: 
     with open(output_path, "wb") as f:
         f.write(et_program.buffer)
 
-    print(f"ExecuTorch model saved to {output}")
+    out.result("Export complete", format="executorch", output_path=output)
