@@ -948,6 +948,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("voxtral_realtime", "VoxtralRealtimeFeatureExtractor"),
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),
         ("whisper", "WhisperFeatureExtractor"),
+        ("xcodec2", "Xcodec2FeatureExtractor"),
     ]
 )
 
