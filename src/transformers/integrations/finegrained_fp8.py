@@ -26,7 +26,7 @@ from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import logging
-from ..utils.import_utils import is_kernels_available
+from ..utils.import_utils import is_kernels_available, is_torchdynamo_compiling
 from .deepgemm import (
     deepgemm_fp8_fp4_experts_forward,
     deepgemm_fp8_fp4_linear,
@@ -70,7 +70,7 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
     Raises `ImportError` if the `kernels` package is missing, or the kernel or required
     symbols cannot be found.
     """
-    if not torch.compiler.is_compiling():
+    if not is_torchdynamo_compiling():
         if not is_kernels_available():
             raise ImportError(
                 "finegrained-fp8 kernel requires the `kernels` package. Install it with `pip install -U kernels`."

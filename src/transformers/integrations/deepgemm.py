@@ -33,7 +33,12 @@ from dataclasses import dataclass
 import torch
 
 from ..utils import logging
-from ..utils.import_utils import get_cuda_runtime_version, is_kernels_available, resolve_internal_import
+from ..utils.import_utils import (
+    get_cuda_runtime_version,
+    is_kernels_available,
+    is_torchdynamo_compiling,
+    resolve_internal_import,
+)
 from .hub_kernels import lazy_load_kernel
 from .tensor_parallel import to_local
 
@@ -73,27 +78,30 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
     `requires_sm100` raises a Blackwell-specific error for callers (FP4 / Mega MoE)
     that won't work on Hopper, instead of the generic SM90+ message.
     """
-    if not is_kernels_available():
-        raise ImportError("DeepGEMM kernel requires the `kernels` package. Install it with `pip install -U kernels`.")
-    if not torch.cuda.is_available():
-        raise ImportError("DeepGEMM kernel requires CUDA, but CUDA is not available.")
+    if not is_torchdynamo_compiling():
+        if not is_kernels_available():
+            raise ImportError(
+                "DeepGEMM kernel requires the `kernels` package. Install it with `pip install -U kernels`."
+            )
+        if not torch.cuda.is_available():
+            raise ImportError("DeepGEMM kernel requires CUDA, but CUDA is not available.")
 
-    major, minor = torch.cuda.get_device_capability()
-    # DeepGEMM ships kernels only for SM90 (Hopper) and SM100 (Blackwell); anything
-    # else — Ada (SM89), Ampere (SM80), or future archs (SM110+) — has no build.
-    allowed = (10,) if requires_sm100 else (9, 10)
-    if major not in allowed:
-        arch = "Blackwell (SM100)" if requires_sm100 else "Hopper (SM90) or Blackwell (SM100)"
-        raise ImportError(f"DeepGEMM requires {arch}; current device is SM{major}{minor}.")
+        major, minor = torch.cuda.get_device_capability()
+        # DeepGEMM ships kernels only for SM90 (Hopper) and SM100 (Blackwell); anything
+        # else — Ada (SM89), Ampere (SM80), or future archs (SM110+) — has no build.
+        allowed = (10,) if requires_sm100 else (9, 10)
+        if major not in allowed:
+            arch = "Blackwell (SM100)" if requires_sm100 else "Hopper (SM90) or Blackwell (SM100)"
+            raise ImportError(f"DeepGEMM requires {arch}; current device is SM{major}{minor}.")
 
-    # Per the DeepGEMM README: SM90 needs CUDA 12.3+, SM100 needs CUDA 12.9+.
-    cuda_major, cuda_minor = get_cuda_runtime_version()
-    min_cuda = (12, 9) if major == 10 else (12, 3)
-    if (cuda_major, cuda_minor) < min_cuda:
-        raise ImportError(
-            f"DeepGEMM on SM{major}{minor} requires CUDA runtime ≥ {min_cuda[0]}.{min_cuda[1]}, "
-            f"found {cuda_major}.{cuda_minor}."
-        )
+        # Per the DeepGEMM README: SM90 needs CUDA 12.3+, SM100 needs CUDA 12.9+.
+        cuda_major, cuda_minor = get_cuda_runtime_version()
+        min_cuda = (12, 9) if major == 10 else (12, 3)
+        if (cuda_major, cuda_minor) < min_cuda:
+            raise ImportError(
+                f"DeepGEMM on SM{major}{minor} requires CUDA runtime ≥ {min_cuda[0]}.{min_cuda[1]}, "
+                f"found {cuda_major}.{cuda_minor}."
+            )
 
     kernel = lazy_load_kernel("deep-gemm")
     if kernel is None:
