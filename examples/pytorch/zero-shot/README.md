@@ -79,6 +79,26 @@ The resulting model can be seen here: https://huggingface.co/danelcsb/grounding-
 Note that you can replace the model and dataset by simply setting the `model_name_or_path` and `dataset_name` arguments respectively, with model or dataset from the [hub](https://huggingface.co/). 
 For dataset, make sure it provides labels in the same format as [CPPE-5](https://huggingface.co/datasets/cppe-5) dataset and boxes are provided in [COCO format](https://albumentations.ai/docs/getting_started/bounding_boxes_augmentation/#coco).
 
+These scripts work out of the box with the Grounding DINO family of models, which share the same processor and detection loss:
+- [Grounding DINO](https://huggingface.co/docs/transformers/main/en/model_doc/grounding-dino) (e.g. `IDEA-Research/grounding-dino-tiny`)
+- [MM Grounding DINO](https://huggingface.co/docs/transformers/main/en/model_doc/mm-grounding-dino) (e.g. `openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg`)
+
+For example, to fine-tune MM Grounding DINO instead, just change `--model_name_or_path`:
+
+```bash
+python run_zero_shot_object_detection.py \
+    --model_name_or_path openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg \
+    --dataset_name cppe-5 \
+    --do_train true \
+    --do_eval true \
+    --output_dir mm-grounding-dino-tiny-finetuned-cppe-5 \
+    --eval_do_concat_batches false \
+    --ignore_mismatched_sizes true \
+    --remove_unused_columns false
+```
+
+> Note: other `AutoModelForZeroShotObjectDetection` models (OWL-ViT, OWLv2, OmDet-Turbo) are not supported by these scripts yet, as they do not implement an object detection training loss.
+
 Note that zero-shot inference output is not the same output format as object-detection output. In order to compute the evaluation metric performance such as mean average precision, we have to modify the output little bit.
 
 | Train method | Batch size | freeze_text_backbone | freeze_backbone | precision | MSDA kernels | GPU Memory Usage (GB) | Time (s/epoch) |
