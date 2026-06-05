@@ -38,6 +38,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
     torch_device,
+    require_torch_accelerator,
 )
 
 from ...test_modeling_common import floats_tensor
@@ -262,7 +263,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
             self.messages, tokenize=True, return_dict=True, add_generation_prompt=True, return_tensors="pt"
         ).to(torch_device, torch.bfloat16)
 
-        output = model.generate(**inputs, max_new_tokens=40)
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=40)
         expected_decoded_texts = Expectations({
             ("cuda", None): 'user\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. It has a light brown or golden coat, which is characteristic of this breed. Labrador Retrievers are known for their friendly demeanor and',
         })  # fmt: skip
@@ -273,6 +274,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
+    @require_torch_accelerator
     def test_small_model_integration_batched(self):
         model = Cosmos3OmniForConditionalGeneration.from_pretrained(
             "nvidia/Cosmos3-Nano", dtype="bfloat16", device_map=torch_device
@@ -288,7 +290,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
             padding_side="left",
         ).to(torch_device, torch.bfloat16)
 
-        output = model.generate(**inputs, max_new_tokens=40)
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=40)
 
         expected_decoded_texts = Expectations(
             {
