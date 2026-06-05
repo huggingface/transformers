@@ -9,13 +9,9 @@
 
 from __future__ import annotations
 
-import random
 from collections.abc import Callable
-from contextlib import contextmanager
 from functools import partial
-from typing import cast
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -24,66 +20,28 @@ from torch.utils.checkpoint import checkpoint
 
 
 try:
-    from flash_attn import (  # type: ignore[import]
+    from flash_attn import (
         flash_attn_func,
         flash_attn_varlen_func,
     )
-    from flash_attn.bert_padding import (  # type: ignore[import]
+    from flash_attn.bert_padding import (
         index_first_axis,
         pad_input,
     )
 
     FLASH_ATTN_AVAILABLE = True
 except ImportError:
-    flash_attn_func = None  # type: ignore[assignment]
-    flash_attn_varlen_func = None  # type: ignore[assignment]
-    index_first_axis = None  # type: ignore[assignment]
-    pad_input = None  # type: ignore[assignment]
+    flash_attn_func = None
+    flash_attn_varlen_func = None
+    index_first_axis = None
+    pad_input = None
     FLASH_ATTN_AVAILABLE = False
 
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS  # type: ignore[import]
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs
 from .configuration_esmfold2 import ESMFold2Config
-
-
-class LayerNorm(nn.LayerNorm):
-    """LayerNorm pinned to float32.
-
-    Normalization statistics are numerically sensitive, so this computes in
-    float32 and keeps its weights in float32 even when the model is loaded in a
-    lower precision (the explicit ``dtype`` overrides ``from_pretrained(dtype=...)``).
-    Inputs/outputs keep their original dtype, so it drops into a bf16 model
-    transparently. This is the standard Transformers idiom (matmuls run in the
-    model dtype; norms stay fp32) and replaces the model's former reliance on
-    autocast to keep norms in fp32.
-    """
-
-    def __init__(self, *args, **kwargs):
-        kwargs.setdefault("dtype", torch.float32)
-        super().__init__(*args, **kwargs)
-
-    def forward(self, x: Tensor) -> Tensor:
-        return super().forward(x.float()).to(x.dtype)
-
-
-class DropoutResidual(nn.Module):
-    """``residual + dropout(delta)`` with row/col-shared dropout."""
-
-    def __init__(self, r: float, batch_dim: int) -> None:
-        super().__init__()
-        assert batch_dim in (1, 2), f"batch_dim must be 1 or 2, got {batch_dim}"
-        self._batch_dim = batch_dim
-        self._r = r
-        self._impl = nn.Dropout(r)
-
-    def forward(self, residual: Tensor, delta: Tensor) -> Tensor:
-        # Row/col-shared dropout via [1, ...] mask broadcast.
-        if self._r == 0.0 or not self.training:
-            return residual + delta
-        shape = list(delta.shape)
-        shape[self._batch_dim] = 1
-        mask = self._impl(delta.new_ones(shape))
-        return residual + delta * mask
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +180,7 @@ class TransitionLayer(nn.Module):
     def __init__(self, d_model: int, n: int, eps: float = 1e-5) -> None:
         super().__init__()
         hidden = n * d_model
-        self.norm = LayerNorm(d_model, eps=eps)
+        self.norm = nn.LayerNorm(d_model, eps=eps, dtype=torch.float32)
         self.a_proj = nn.Linear(d_model, hidden, bias=False)
         self.b_proj = nn.Linear(d_model, hidden, bias=False)
         self.out_proj = nn.Linear(hidden, d_model, bias=False)
@@ -284,10 +242,6 @@ class FourierEmbedding(nn.Module):
 # ===========================================================================
 
 
-def _compute_swiglu_hidden_size(d_model: int, expansion_ratio: int) -> int:
-    return expansion_ratio * d_model
-
-
 class SwiGLU(nn.Module):
     """SwiGLU with packed w12 and output w3."""
 
@@ -315,7 +269,7 @@ class SwiGLUMLP(SwiGLU):
     """SwiGLU MLP with packed weights, no bias."""
 
     def __init__(self, d_model: int, expansion_ratio: int = 4, bias: bool = False) -> None:
-        hidden = _compute_swiglu_hidden_size(d_model, expansion_ratio)
+        hidden = expansion_ratio * d_model
         super().__init__(in_features=d_model, hidden_features=hidden, out_features=d_model, bias=bias)
 
 
@@ -324,8 +278,11 @@ class SwiGLUMLP(SwiGLU):
 # ===========================================================================
 
 
-def _rotate_half(x: Tensor) -> Tensor:
-    x1, x2 = x.chunk(2, dim=-1)
+# Copied from transformers.models.esm.modeling_esm.rotate_half
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
 
@@ -341,7 +298,7 @@ def apply_rotary_emb_3d(x: Tensor, cos: Tensor, sin: Tensor) -> Tensor:
     cos = cos.unsqueeze(2).repeat(1, 1, 1, 2)
     sin = sin.unsqueeze(2).repeat(1, 1, 1, 2)
     return torch.cat(
-        [x[..., :ro_dim] * cos + _rotate_half(x[..., :ro_dim]) * sin, x[..., ro_dim:]],
+        [x[..., :ro_dim] * cos + rotate_half(x[..., :ro_dim]) * sin, x[..., ro_dim:]],
         dim=-1,
     )
 
@@ -418,28 +375,42 @@ class SwiGLUFFN(nn.Module):
 # ===========================================================================
 
 
+# Copied from transformers.models.llama.modeling_llama.repeat_kv
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+# Copied from transformers.models.llama.modeling_llama.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
-    query: Tensor,
-    key: Tensor,
-    value: Tensor,
-    attention_mask: Tensor | None,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
-) -> tuple[Tensor, Tensor]:
-    """Reference attention used as the eager backend / fallback for the v5
-    attention interface. Inputs/outputs follow the ``ALL_ATTENTION_FUNCTIONS``
-    convention: ``query``/``key``/``value`` are ``[B, H, S, Dh]`` and the
-    returned context is ``[B, S, H, Dh]``. ESMFold2 has no grouped-query
-    attention, so there is no ``repeat_kv``."""
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
+
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value)
+    attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
+
     return attn_output, attn_weights
 
 
@@ -499,16 +470,10 @@ class SWA3DRoPEAttention(nn.Module):
                 attention_params[3],
                 attention_params[4],
             )
-            q_unpad = index_first_axis(  # type: ignore[misc]
-                q.reshape(-1, self.n_heads, self.head_dim), indices
-            )
-            k_unpad = index_first_axis(  # type: ignore[misc]
-                k.reshape(-1, self.n_heads, self.head_dim), indices
-            )
-            v_unpad = index_first_axis(  # type: ignore[misc]
-                v.reshape(-1, self.n_heads, self.head_dim), indices
-            )
-            out_unpad = flash_attn_varlen_func(  # type: ignore[misc]
+            q_unpad = index_first_axis(q.reshape(-1, self.n_heads, self.head_dim), indices)
+            k_unpad = index_first_axis(k.reshape(-1, self.n_heads, self.head_dim), indices)
+            v_unpad = index_first_axis(v.reshape(-1, self.n_heads, self.head_dim), indices)
+            out_unpad = flash_attn_varlen_func(
                 q_unpad,
                 k_unpad,
                 v_unpad,
@@ -519,9 +484,9 @@ class SWA3DRoPEAttention(nn.Module):
                 softmax_scale=self.scale,
                 window_size=(self.half_window, self.half_window),
             )
-            out = pad_input(out_unpad, indices, B, N)  # type: ignore[misc]
+            out = pad_input(out_unpad, indices, B, N)
         elif use_flash:
-            out = flash_attn_func(  # type: ignore[misc]
+            out = flash_attn_func(
                 q,
                 k,
                 v,
@@ -557,7 +522,7 @@ class SWA3DRoPEAttention(nn.Module):
             )
             out = out * valid.unsqueeze(-1).unsqueeze(-1)
 
-        out = out.to(input_dtype).reshape(B, N, -1)  # type: ignore[union-attr]
+        out = out.to(input_dtype).reshape(B, N, -1)
         out = out * torch.sigmoid(self.gate_proj(x_input))
         return self.out_proj(out)
 
@@ -567,11 +532,11 @@ class SWA3DRoPEAttention(nn.Module):
 # ===========================================================================
 
 
-def _rms_adaln_raw(x: Tensor, scale: Tensor, shift: Tensor) -> Tensor:
+def _rms_adaln(x: Tensor, scale: Tensor, shift: Tensor) -> Tensor:
     return F.rms_norm(x, (x.shape[-1],)) * (1 + scale) + shift
 
 
-def _gated_residual_raw(x: Tensor, gate: Tensor, y: Tensor) -> Tensor:
+def _gated_residual(x: Tensor, gate: Tensor, y: Tensor) -> Tensor:
     return x + gate * y
 
 
@@ -587,12 +552,8 @@ class SWAAtomBlock(nn.Module):
         n_heads: int,
         half_window: int = 64,
         expansion_ratio: int = 2,
-        use_compile_fusions: bool = False,
     ) -> None:
         super().__init__()
-        self.attn_norm = nn.RMSNorm(d_atom, elementwise_affine=False)
-        self.ffn_norm = nn.RMSNorm(d_atom, elementwise_affine=False)
-
         adaln_linear = nn.Linear(d_atom, 6 * d_atom, bias=False)
         nn.init.zeros_(adaln_linear.weight)
         self.adaln_modulation = nn.Sequential(nn.SiLU(), adaln_linear)
@@ -600,22 +561,19 @@ class SWAAtomBlock(nn.Module):
         self.attn = SWA3DRoPEAttention(d_atom, n_heads, half_window=half_window)
         self.ffn = SwiGLUFFN(d_atom, expansion_ratio)
 
-        self._rms_adaln = torch.compile(_rms_adaln_raw) if use_compile_fusions else _rms_adaln_raw
-        self._gated_residual = torch.compile(_gated_residual_raw) if use_compile_fusions else _gated_residual_raw
-
     def forward(self, x: Tensor, c_l: Tensor, attention_params: tuple) -> Tensor:
         mod = self.adaln_modulation(c_l)
         if mod.dim() == 2:
             mod = mod.unsqueeze(1)
         shift_a, scale_a, gate_a, shift_f, scale_f, gate_f = mod.chunk(6, dim=-1)
 
-        attn_input = self._rms_adaln(x, scale_a, shift_a)
+        attn_input = _rms_adaln(x, scale_a, shift_a)
         attn_out = self.attn(attn_input, attention_params)
-        x = self._gated_residual(x, gate_a, attn_out)
+        x = _gated_residual(x, gate_a, attn_out)
 
-        ffn_input = self._rms_adaln(x, scale_f, shift_f)
+        ffn_input = _rms_adaln(x, scale_f, shift_f)
         ffn_out = self.ffn(ffn_input)
-        x = self._gated_residual(x, gate_f, ffn_out)
+        x = _gated_residual(x, gate_f, ffn_out)
         return x
 
 
@@ -719,7 +677,7 @@ class ESMFold2AtomEncoder(nn.Module):
         self.structure_prediction = structure_prediction
 
         self.atom_linear = nn.Linear(ATOM_FEATURE_DIM, d_atom, bias=False)
-        self.atom_norm = LayerNorm(d_atom)
+        self.atom_norm = nn.LayerNorm(d_atom, dtype=torch.float32)
 
         if structure_prediction:
             self.coords_linear = nn.Linear(6, d_atom, bias=False)
@@ -874,7 +832,7 @@ class ESMFold2AtomDecoder(nn.Module):
             uid_rope_base_frequency=uid_rope_base_frequency,
         )
 
-        self.norm = LayerNorm(d_atom)
+        self.norm = nn.LayerNorm(d_atom, dtype=torch.float32)
         self.output_linear = nn.Linear(d_atom, XYZ_DIMS, bias=False)
 
     def forward(
@@ -940,7 +898,7 @@ class AttentionPairBias(nn.Module):
             nn.init.zeros_(self.out_gate.weight)
             nn.init.constant_(self.out_gate.bias, -2.0)
         else:
-            self.pre_norm = LayerNorm(d_model, eps=1e-5)
+            self.pre_norm = nn.LayerNorm(d_model, eps=1e-5, dtype=torch.float32)
 
         self.q_proj = nn.Linear(d_model, d_model, bias=True)
         self.kv_proj = nn.Linear(d_model, 2 * d_model, bias=False)
@@ -948,7 +906,7 @@ class AttentionPairBias(nn.Module):
         self.out_proj = nn.Linear(d_model, d_model, bias=False)
 
         if d_pair > 0:
-            self.pair_norm = LayerNorm(d_pair, eps=1e-5)
+            self.pair_norm = nn.LayerNorm(d_pair, eps=1e-5, dtype=torch.float32)
             self.pair_bias_proj = nn.Linear(d_pair, num_heads, bias=False)
 
     def forward(
@@ -1031,7 +989,7 @@ class ConditionedTransitionBlock(nn.Module):
             nn.init.zeros_(self.output_gate.weight)
             nn.init.constant_(self.output_gate.bias, -2.0)
         else:
-            self.pre_norm = LayerNorm(d_model, eps=1e-5)
+            self.pre_norm = nn.LayerNorm(d_model, eps=1e-5, dtype=torch.float32)
 
         self.lin_swish = nn.Linear(d_model, 2 * hidden, bias=False)
         self.lin_out = nn.Linear(hidden, d_model, bias=False)
@@ -1147,16 +1105,16 @@ class DiffusionConditioning(nn.Module):
         self.c_s = c_s
         self.c_s_inputs = c_s_inputs
 
-        self.z_input_norm = LayerNorm(2 * c_z, eps=layer_norm_eps)
+        self.z_input_norm = nn.LayerNorm(2 * c_z, eps=layer_norm_eps, dtype=torch.float32)
         self.z_proj = nn.Linear(2 * c_z, c_z, bias=False)
         self.z_transitions = nn.ModuleList(
             [TransitionLayer(c_z, n=transition_multiplier, eps=layer_norm_eps) for _ in range(2)]
         )
 
-        self.s_input_norm = LayerNorm(c_s_inputs, eps=layer_norm_eps)
+        self.s_input_norm = nn.LayerNorm(c_s_inputs, eps=layer_norm_eps, dtype=torch.float32)
         self.s_proj = nn.Linear(c_s_inputs, c_s, bias=False)
         self.fourier = FourierEmbedding(fourier_dim)
-        self.noise_norm = LayerNorm(fourier_dim, eps=layer_norm_eps)
+        self.noise_norm = nn.LayerNorm(fourier_dim, eps=layer_norm_eps, dtype=torch.float32)
         self.noise_proj = nn.Linear(fourier_dim, c_s, bias=False)
         self.s_transitions = nn.ModuleList(
             [TransitionLayer(c_s, n=transition_multiplier, eps=layer_norm_eps) for _ in range(2)]
@@ -1297,8 +1255,8 @@ class DiffusionModule(nn.Module):
             use_conditioning=True,
         )
 
-        self.s_step_norm = LayerNorm(c_token)
-        self.token_norm = LayerNorm(c_token)
+        self.s_step_norm = nn.LayerNorm(c_token, dtype=torch.float32)
+        self.token_norm = nn.LayerNorm(c_token, dtype=torch.float32)
 
     def forward(
         self,
@@ -1901,15 +1859,17 @@ class LanguageModelShim(nn.Module):
 
     Contains:
     - base_z_combine: nn.Parameter [num_layers+1]
-    - base_z_linear: Sequential(LayerNorm(d_model), Linear(d_model, d_z, bias=False))
-    - base_z_mlp: Sequential(SingleToPair(d_z, d_z, d_z), LayerNorm(d_z))
+    - base_z_linear: Sequential(nn.LayerNorm(d_model), Linear(d_model, d_z, bias=False))
+    - base_z_mlp: Sequential(SingleToPair(d_z, d_z, d_z), nn.LayerNorm(d_z))
     """
 
     def __init__(self, d_z: int = 256, d_model: int = 2560, num_layers: int = 80) -> None:
         super().__init__()
 
-        self.base_z_mlp = nn.Sequential(SingleToPair(d_z, d_z, d_z), LayerNorm(d_z))
-        self.base_z_linear = nn.Sequential(LayerNorm(d_model), nn.Linear(d_model, d_z, bias=False))
+        self.base_z_mlp = nn.Sequential(SingleToPair(d_z, d_z, d_z), nn.LayerNorm(d_z, dtype=torch.float32))
+        self.base_z_linear = nn.Sequential(
+            nn.LayerNorm(d_model, dtype=torch.float32), nn.Linear(d_model, d_z, bias=False)
+        )
         self.base_z_combine = nn.Parameter(torch.zeros(num_layers + 1))
 
     def forward(self, hidden_states: Tensor, *, lm_dropout: float = 0.0) -> Tensor:
@@ -1933,37 +1893,6 @@ class LanguageModelShim(nn.Module):
         if lm_dropout > 0:
             lm_z = F.dropout(lm_z, p=lm_dropout, training=True)
         return lm_z
-
-
-# ===========================================================================
-# Reproducibility helper (mirrors evolutionaryscale.utils.reproducibility)
-# ===========================================================================
-
-
-@contextmanager
-def _seed_context(seed: int | None, *, cuda: bool = True):
-    """Temporarily seed Python, NumPy, and PyTorch RNGs."""
-    if seed is None:
-        yield
-        return
-    py_state = random.getstate()
-    np_state = np.random.get_state()
-    torch_state = torch.get_rng_state()
-    cuda_states = torch.cuda.get_rng_state_all() if cuda and torch.cuda.is_available() else None
-    seed = int(seed) % (2**32)
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if cuda and torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-    try:
-        yield
-    finally:
-        random.setstate(py_state)
-        np.random.set_state(np_state)
-        torch.set_rng_state(torch_state)
-        if cuda_states is not None:
-            torch.cuda.set_rng_state_all(cuda_states)
 
 
 # ===========================================================================
@@ -2108,8 +2037,8 @@ class TriangleMultiplicativeBlock(nn.Module):
         self.latent_channels = latent_channels
         self.flow = flow
         self._einsum_equation = self._FLOW_TO_EINSUM[flow]
-        self.norm_start = LayerNorm(self.input_channels, eps=_EPS)
-        self.norm_mix = LayerNorm(self.latent_channels, eps=_EPS)
+        self.norm_start = nn.LayerNorm(self.input_channels, eps=_EPS, dtype=torch.float32)
+        self.norm_mix = nn.LayerNorm(self.latent_channels, eps=_EPS, dtype=torch.float32)
         self.proj_bundle = nn.Linear(self.input_channels, 4 * self.latent_channels, bias=False)
         self.proj_emit = nn.Linear(self.latent_channels, self.input_channels, bias=False)
         self.proj_gate = nn.Linear(self.input_channels, self.input_channels, bias=False)
@@ -2117,7 +2046,7 @@ class TriangleMultiplicativeBlock(nn.Module):
         # Default chunked for memory on long sequences; tests override with
         # ``set_chunk_size(None)`` for the unchunked path under bit-exact bf16
         # parity checks.
-        self._chunk_size: int | None = 64
+        self._chunk_size: int | None = _DEFAULT_CHUNK_SIZE
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self._chunk_size = chunk_size
@@ -2179,14 +2108,14 @@ class TriangleMultiplicativeUpdate(nn.Module):
 
 
 class Transition(nn.Module):
-    """LN + SwiGLU FFN with addmm-fused residual; optional Triton LN+w12+SwiGLU kernel."""
+    """LayerNorm + SwiGLU feed-forward residual block, chunked along the token axis."""
 
     def __init__(self, d_model: int, expansion_ratio: int = 4) -> None:
         super().__init__()
-        self.norm = LayerNorm(d_model)
+        self.norm = nn.LayerNorm(d_model, dtype=torch.float32)
         self.ffn = SwiGLUMLP(d_model, expansion_ratio=expansion_ratio, bias=False)
         # Default chunked; set_chunk_size(None) disables for bit-exact parity tests.
-        self._chunk_size: int | None = 64
+        self._chunk_size: int | None = _DEFAULT_CHUNK_SIZE
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self._chunk_size = chunk_size
@@ -2210,8 +2139,6 @@ class PairUpdateBlock(nn.Module):
         self.tri_mul_out = TriangleMultiplicativeUpdate(dim=d_pair, _outgoing=True)
         self.tri_mul_in = TriangleMultiplicativeUpdate(dim=d_pair, _outgoing=False)
         self.pair_transition = Transition(d_pair, expansion_ratio=expansion_ratio)
-        # Row-shared dropout-residual; r=0 for inference (HF model is inference-only).
-        self.row_drop = DropoutResidual(0.0, batch_dim=1)
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self.tri_mul_out.set_chunk_size(chunk_size)
@@ -2219,8 +2146,9 @@ class PairUpdateBlock(nn.Module):
         self.pair_transition.set_chunk_size(chunk_size)
 
     def forward(self, pair: Tensor, pair_attention_mask: Tensor | None = None) -> Tensor:
-        pair = self.row_drop(pair, self.tri_mul_out(pair, mask=pair_attention_mask))
-        pair = self.row_drop(pair, self.tri_mul_in(pair, mask=pair_attention_mask))
+        # HF model is inference-only, so the trained row-shared dropout (r=0) is a no-op.
+        pair = pair + self.tri_mul_out(pair, mask=pair_attention_mask)
+        pair = pair + self.tri_mul_in(pair, mask=pair_attention_mask)
         pair = self.pair_transition(pair)
         return pair
 
@@ -2236,13 +2164,13 @@ class FoldingTrunk(nn.Module):
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         for block in self.blocks:
-            cast(PairUpdateBlock, block).set_chunk_size(chunk_size)
+            block.set_chunk_size(chunk_size)
 
     def forward(self, pair: Tensor, pair_attention_mask: Tensor | None = None) -> Tensor:
         for block in self.blocks:
             fn = partial(block, pair_attention_mask=pair_attention_mask)
             if torch.is_grad_enabled():
-                pair = checkpoint(fn, pair, use_reentrant=False)  # pyright: ignore
+                pair = checkpoint(fn, pair, use_reentrant=False)
             else:
                 pair = fn(pair)
         return pair
@@ -2276,7 +2204,7 @@ class OuterProductMean(nn.Module):
         super().__init__()
         self.d_hidden = d_hidden
         self.divide_outer_before_proj = divide_outer_before_proj
-        self.norm = LayerNorm(d_msa)
+        self.norm = nn.LayerNorm(d_msa, dtype=torch.float32)
         self.W = nn.Linear(d_msa, 2 * d_hidden, bias=False)
         self.Wout = nn.Linear(d_hidden * d_hidden, d_pair, bias=True)
         # Off for bit-exact bf16; ``set_chunk_size(64)`` for long sequences.
@@ -2317,8 +2245,10 @@ class MSAPairWeightedAveraging(nn.Module):
         super().__init__()
         self.n_heads = n_heads
         self.head_width = head_width
-        self.norm_single = LayerNorm(d_msa)
-        self.compute_bias = nn.Sequential(LayerNorm(d_pair), nn.Linear(d_pair, n_heads, bias=False))
+        self.norm_single = nn.LayerNorm(d_msa, dtype=torch.float32)
+        self.compute_bias = nn.Sequential(
+            nn.LayerNorm(d_pair, dtype=torch.float32), nn.Linear(d_pair, n_heads, bias=False)
+        )
         self.Wv = nn.Linear(d_msa, n_heads * head_width, bias=False)
         self.Wgate = nn.Linear(d_msa, n_heads * head_width, bias=False)
         self.Wout = nn.Linear(n_heads * head_width, d_msa, bias=False)
