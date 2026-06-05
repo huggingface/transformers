@@ -1976,7 +1976,7 @@ class GemmaQuantizationConfig(QuantizationConfigMixin):
     """Quantization config for pre-quantized Gemma checkpoints.
 
     Args:
-        num_bits (`int`, *optional*, defaults to `4`):
+        num_bits (`int`, *optional*, defaults to 4):
             Bit width applied to modules that don't match any pattern in
             `module_quant_configs`, and to matched entries that omit `num_bits`.
         quantize_embeddings (`bool`, *optional*, defaults to `False`):
