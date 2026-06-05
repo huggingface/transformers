@@ -21,6 +21,7 @@ from transformers import DataCollatorWithFlattening, is_torch_available
 from transformers.testing_utils import (
     require_causal_conv1d,
     require_flash_linear_attention,
+    require_kernels,
     require_torch,
     require_torch_gpu,
     require_torch_multi_gpu,
@@ -84,6 +85,14 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
         head_v_dim = config.linear_value_head_dim
 
         return (batch_size, num_v_heads, head_k_dim, head_v_dim)
+
+    @require_kernels
+    def test_kernelize_does_not_crash(self):
+        """Regression for #46399: use_kernels=True raised ValueError because @use_kernelized_func
+        referenced apply_rotary_pos_emb which lacked @use_kernel_func_from_hub."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Qwen3NextModel(config).to(device=torch_device)
+        model.use_kernels = True
 
     @unittest.skip("Qwen3-Next hybrid linear-attention cache is not compatible with quantized cache yet.")
     def test_generate_with_quant_cache(self):

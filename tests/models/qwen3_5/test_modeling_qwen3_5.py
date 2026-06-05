@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     cleanup,
     require_causal_conv1d,
     require_flash_linear_attention,
+    require_kernels,
     require_torch,
     require_torch_gpu,
     slow,
@@ -96,6 +97,14 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
         head_v_dim = config.linear_value_head_dim
 
         return (batch_size, num_v_heads, head_k_dim, head_v_dim)
+
+    @require_kernels
+    def test_kernelize_does_not_crash(self):
+        """Regression for #46399: use_kernels=True raised ValueError because @use_kernelized_func
+        referenced apply_rotary_pos_emb which lacked @use_kernel_func_from_hub."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Qwen3_5TextModel(config).to(device=torch_device)
+        model.use_kernels = True
 
     def test_attention_outputs(self):
         "Needs to be overwritten as Qwen3.5 alternates between attention layers and gated deltanet layers."
