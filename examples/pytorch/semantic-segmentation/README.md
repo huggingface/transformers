@@ -101,6 +101,10 @@ In order to use `segments/sidewalk-semantic`:
  - Log in to Hugging Face with `hf auth login` (token can be accessed [here](https://huggingface.co/settings/tokens)).
  - Accept terms of use for `sidewalk-semantic` on [dataset page](https://huggingface.co/datasets/segments/sidewalk-semantic).
 
+> [!TIP]
+> For distributed training with the Trainer, launch this script with a distributed launcher such as
+> `accelerate launch` or `torchrun` instead of plain `python`.
+
 ```bash
 python run_semantic_segmentation.py \
     --model_name_or_path nvidia/mit-b0 \
