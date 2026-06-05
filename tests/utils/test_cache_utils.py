@@ -583,6 +583,25 @@ class CacheHardIntegrationTest(unittest.TestCase):
             model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
         init.assert_called_once()
 
+        # Under TP, eager init is still used but the head count is sharded by `_tp_size` (one device per rank).
+        tc = model.config.get_text_config(decoder=True)
+        num_kv_heads = getattr(tc, "num_key_value_heads", None) or tc.num_attention_heads
+        model._cache = None
+        model._tp_size = num_kv_heads  # divides evenly -> 1 head per rank
+        with patch.object(Cache, "early_initialization", autospec=True) as tp_init:
+            model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
+        tp_init.assert_called_once()
+        self.assertEqual(tp_init.call_args.kwargs["num_heads"], 1)
+        model._tp_size = None
+
+        # A multi-device `device_map` (single `model.device` can't cover all layers) skips eager init -> lazy.
+        model._cache = None
+        model.hf_device_map = {"a": 0, "b": 1}
+        with patch.object(Cache, "early_initialization", autospec=True) as md_init:
+            model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
+        md_init.assert_not_called()
+        del model.hf_device_map
+
     @require_torch_multi_accelerator
     @slow
     def test_static_cache_multi_accelerator(self):

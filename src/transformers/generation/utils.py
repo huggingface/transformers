@@ -1934,22 +1934,26 @@ class GenerationMixin(ContinuousMixin):
             )
             # With chunked prefill, the prefill itself runs inside a compiled region.
             # Initializing the cache eagerly here to avoid a recompilation on the second generate() call. See #46421.
+            # It uses a single device and `num_heads // tp_size`, so only when the model is not device-mapped across
+            # devices and the heads shard evenly; otherwise fall back to lazy init.
+            text_config = self.config.get_text_config(decoder=True)
+            tp_size = getattr(self, "_tp_size", None) or 1
+            num_key_value_heads = getattr(text_config, "num_key_value_heads", None) or text_config.num_attention_heads
+            device_mapped = hasattr(self, "hf_device_map") and len(set(self.hf_device_map.values())) > 1
+            compatible = not device_mapped and num_key_value_heads % tp_size == 0
             if (
                 generation_config.prefill_chunk_size is not None
                 and isinstance(cache, StaticCache)
                 and not cache.is_initialized
+                and compatible
             ):
-                text_config = self.config.get_text_config(decoder=True)
                 head_dim = (
                     getattr(text_config, "head_dim", None)
                     or text_config.hidden_size // text_config.num_attention_heads
                 )
-                num_key_value_heads = (
-                    getattr(text_config, "num_key_value_heads", None) or text_config.num_attention_heads
-                )
                 cache.early_initialization(
                     batch_size=cache_batch_size,
-                    num_heads=num_key_value_heads,
+                    num_heads=num_key_value_heads // tp_size,
                     head_dim=head_dim,
                     dtype=self.dtype,
                     device=self.device,
