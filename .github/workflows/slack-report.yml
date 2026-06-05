@@ -41,7 +41,8 @@ permissions:
 jobs:
   send_results:
     name: Send results to webhook
-    runs-on: ubuntu-22.04
+    runs-on:
+      group: aws-general-8-plus
     if: always() && !cancelled()
     steps:
       - name: Preliminary job status
