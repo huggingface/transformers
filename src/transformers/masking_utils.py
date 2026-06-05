@@ -1504,8 +1504,14 @@ def create_masks_for_generate(
 
     # If the attribute exist, we need several masks
     if hasattr(effective_config, "layer_types"):
+        layer_types = effective_config.layer_types
+        # Hybrid models with a layer type that has no registered attention-mask function (e.g. `linear_attention`
+        # in Qwen3.5 / Qwen3-Next) build their own per-layer masks in the forward, so their masks cannot be
+        # pre-built here. Defer to the model by returning the raw attention mask, rather than raising a `KeyError`.
+        if any(layer_type not in LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING for layer_type in layer_types):
+            return attention_mask
         causal_masks = {}
-        for layer_pattern in set(effective_config.layer_types):
+        for layer_pattern in set(layer_types):
             causal_masks[layer_pattern] = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[layer_pattern](**mask_kwargs)
         return causal_masks
     # In this case, all layers are sliding
