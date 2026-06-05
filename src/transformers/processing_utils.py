@@ -80,7 +80,7 @@ from .video_utils import VideoInput, VideoMetadataType, make_batched_videos
 if is_torch_available():
     import torch
 
-    from .modeling_utils import PreTrainedAudioTokenizerBase, PreTrainedModel
+    from .modeling_utils import PreTrainedAudioTokenizerBase
 
 if is_vision_available():
     from .image_utils import PILImageResampling
@@ -128,7 +128,7 @@ MODALITY_TO_BASE_CLASS_MAPPING = {
     "audio_tokenizer": (
         "HiggsAudioV2TokenizerModel",
         "DacModel",
-        "PreTrainedModel",
+        "MossAudioTokenizerModel",
     ),  # TODO: @eustlb, to be replaced with PreTrainedAudioTokenizerBase
     "audio_processor": "FeatureExtractionMixin",
     "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonBackend"),
@@ -613,9 +613,7 @@ class ProcessorMixin(PushToHubMixin):
         # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights
         if (audio_tokenizer := kwargs.pop("audio_tokenizer", None)) is not None:
             proper_class = self.check_argument_for_proper_class("audio_tokenizer", audio_tokenizer)
-            if not (
-                is_torch_available() and isinstance(audio_tokenizer, (PreTrainedAudioTokenizerBase, PreTrainedModel))
-            ):
+            if not (is_torch_available() and isinstance(audio_tokenizer, PreTrainedAudioTokenizerBase)):
                 raise ValueError(
                     f"Tried to use `{proper_class}` for audio tokenization. However, this class is not"
                     " registered for audio tokenization."

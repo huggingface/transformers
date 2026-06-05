@@ -320,6 +320,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("moonshine", "MoonshineModel"),
         ("moonshine_streaming", "MoonshineStreamingModel"),
         ("moshi", "MoshiModel"),
+        ("moss-audio-tokenizer", "MossAudioTokenizerModel"),
         ("moss_tts_delay", "MossTTSDelayModel"),
         ("mpnet", "MPNetModel"),
         ("mpt", "MptModel"),
@@ -1898,6 +1899,7 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
     [
         ("dac", "DacModel"),
         ("higgs_audio_v2_tokenizer", "HiggsAudioV2TokenizerModel"),
+        ("moss-audio-tokenizer", "MossAudioTokenizerModel"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
     ]
 )

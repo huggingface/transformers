@@ -21,7 +21,13 @@ from transformers.testing_utils import require_torch, torch_device
 if is_torch_available():
     import torch
 
-    from transformers import MossTTSDelayConfig, MossTTSDelayProcessor, PreTrainedModel, PreTrainedTokenizerBase
+    from transformers import (
+        MossAudioTokenizerConfig,
+        MossAudioTokenizerModel,
+        MossTTSDelayConfig,
+        MossTTSDelayProcessor,
+        PreTrainedTokenizerBase,
+    )
 
 
 if is_torch_available():
@@ -83,13 +89,26 @@ if is_torch_available():
                 return self.encode(rendered)
             return rendered
 
-    class FakeMossAudioTokenizer(PreTrainedModel):
-        config_class = MossTTSDelayConfig
-
+    class FakeMossAudioTokenizer(MossAudioTokenizerModel):
         def __init__(self):
-            super().__init__(MossTTSDelayConfig())
+            super().__init__(
+                MossAudioTokenizerConfig(
+                    sampling_rate=16000,
+                    downsample_rate=4,
+                    encoder_kwargs=[{"module_type": "PatchedPretransform", "patch_size": 4}],
+                    decoder_kwargs=[{"module_type": "PatchedPretransform", "patch_size": 4}],
+                    quantizer_kwargs={
+                        "input_dim": 4,
+                        "rvq_dim": 4,
+                        "output_dim": 4,
+                        "num_quantizers": 2,
+                        "codebook_size": 16,
+                        "codebook_dim": 2,
+                        "quantizer_type": "rlfq",
+                    },
+                )
+            )
             self.name_or_path = "fake-moss-audio-tokenizer"
-            self.proj = torch.nn.Linear(1, 1)
 
 
 @require_torch
@@ -184,7 +203,7 @@ class MossTTSDelayProcessorTest(unittest.TestCase):
         self.assertEqual(output["input_ids"].shape[-1], processor.model_config.n_vq + 1)
         self.assertEqual(output["attention_mask"].dtype, torch.bool)
 
-    def test_audio_tokenizer_accepts_pretrained_model(self):
+    def test_audio_tokenizer_accepts_moss_audio_tokenizer_model(self):
         processor = self.get_processor(audio_tokenizer=FakeMossAudioTokenizer())
 
         self.assertIsNotNone(processor.audio_tokenizer)

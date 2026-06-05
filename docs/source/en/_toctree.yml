@@ -1103,6 +1103,8 @@
         title: Moonshine Streaming
       - local: model_doc/moshi
         title: Moshi
+      - local: model_doc/moss-audio-tokenizer
+        title: MOSS Audio Tokenizer
       - local: model_doc/moss_tts_delay
         title: MOSS-TTS Delay
       - local: model_doc/musicgen

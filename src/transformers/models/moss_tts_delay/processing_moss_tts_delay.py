@@ -21,9 +21,9 @@ import torch
 
 from ... import (
     AutoConfig,
-    AutoModel,
     AutoTokenizer,
     BatchFeature,
+    MossAudioTokenizerModel,
     PreTrainedTokenizerBase,
     ProcessorMixin,
 )
@@ -151,7 +151,7 @@ USER_MESSAGE_FIELDS = (
 @auto_docstring
 class MossTTSDelayProcessor(ProcessorMixin):
     tokenizer_class = "AutoTokenizer"
-    audio_tokenizer_class = "AutoModel"
+    audio_tokenizer_class = "MossAudioTokenizerModel"
 
     tokenizer: PreTrainedTokenizerBase
     audio_tokenizer: Any
@@ -164,7 +164,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
         **kwargs,
     ):
         r"""
-        audio_tokenizer (`PreTrainedModel`, *optional*):
+        audio_tokenizer (`MossAudioTokenizerModel`, *optional*):
             Audio tokenizer model used to encode reference waveforms into audio codebook tokens.
         model_config (`MossTTSDelayConfig`, *optional*):
             MOSS-TTS Delay model configuration used for special audio token ids and VQ channel settings.
@@ -233,7 +233,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
             trust_remote_code=trust_remote_code,
             **kwargs,
         )
-        audio_tokenizer = AutoModel.from_pretrained(
+        audio_tokenizer = MossAudioTokenizerModel.from_pretrained(
             audio_tokenizer_name_or_path,
             trust_remote_code=trust_remote_code,
             **kwargs,
