@@ -38,7 +38,7 @@ class ContinuousBatchingLogitsProcessor(ABC):
         pass
 
     @abstractmethod
-    def prepare_tensor_args(self, requests_in_batch: list[FutureRequestState]) -> torch.Tensor:
+    def prepare_tensor_args(self, requests_with_new_token: list[FutureRequestState]) -> torch.Tensor:
         pass
 
     @abstractmethod
@@ -189,10 +189,12 @@ class ContinuousBatchingLogitsProcessorList:
     def prepare_tensor_args(
         self, requests_in_batch: list[FutureRequestState], arg_storage: torch.Tensor
     ) -> torch.Tensor:
+        # Since the logits processors are applied to new tokens only, we skip requests that don't have a new token
+        requests_with_new_token = [request for request in requests_in_batch if request.has_new_token]
         current_arg_id = 0
         for processor in self.logits_processor:
             if isinstance(processor, ContinuousBatchingLogitsProcessor):
-                tensorized_arg = processor.prepare_tensor_args(requests_in_batch)
+                tensorized_arg = processor.prepare_tensor_args(requests_with_new_token)
                 # TODO: FIXME: investigate if this does slow down sync generation
                 arg_storage[current_arg_id, : tensorized_arg.size(0)] = tensorized_arg.to(arg_storage.device)
                 current_arg_id += 1
@@ -225,9 +227,9 @@ class ContinuousBatchingTemperatureLogitsWarper(ContinuousBatchingLogitsProcesso
         default.fill_(self.temperature)
         int32_tensor.copy_(default.view(dtype=torch.int32))
 
-    def prepare_tensor_args(self, requests_in_batch: list[FutureRequestState]) -> torch.Tensor:
+    def prepare_tensor_args(self, requests_with_new_token: list[FutureRequestState]) -> torch.Tensor:
         data = []
-        for request in requests_in_batch:
+        for request in requests_with_new_token:
             temp = request.state.logit_processor_kwargs.get("temperature", self.temperature)
             data.append(temp)
         tensorized = torch.tensor(data, dtype=torch.float32, device="cpu")
@@ -252,9 +254,9 @@ class ContinuousBatchingTopKLogitsWarper(ContinuousBatchingLogitsProcessor):
         """Fills the given tensor int32 tensor with the default top_k."""
         int32_tensor.fill_(self.top_k)
 
-    def prepare_tensor_args(self, requests_in_batch: list[FutureRequestState]) -> torch.Tensor:
+    def prepare_tensor_args(self, requests_with_new_token: list[FutureRequestState]) -> torch.Tensor:
         top_ks = []
-        for request in requests_in_batch:
+        for request in requests_with_new_token:
             top_k = request.state.logit_processor_kwargs.get("top_k", self.top_k)
             top_k = max(top_k, self.min_tokens_to_keep)
             top_ks.append(top_k)
@@ -287,9 +289,9 @@ class ContinuousBatchingTopPLogitsWarper(ContinuousBatchingLogitsProcessor):
         default.fill_(self.top_p)
         int32_tensor.copy_(default.view(dtype=torch.int32))
 
-    def prepare_tensor_args(self, requests_in_batch: list[FutureRequestState]) -> torch.Tensor:
+    def prepare_tensor_args(self, requests_with_new_token: list[FutureRequestState]) -> torch.Tensor:
         top_ps = []
-        for request in requests_in_batch:
+        for request in requests_with_new_token:
             # Retrieve config for this request
             top_p = request.state.logit_processor_kwargs.get("top_p", self.top_p)
             top_ps.append(top_p)
