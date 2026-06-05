@@ -916,6 +916,36 @@ def common_partial_suffix(str1: str, str2: str) -> str:
     return common_suffix
 
 
+def get_decorators_to_keep(
+    mapper: ModelFileMapper,
+    modular_node: cst.ClassDef | cst.FunctionDef,
+    original_node: cst.ClassDef | cst.FunctionDef | None = None,
+) -> list[cst.Decorator]:
+    """Get decorators to keep when merging a modular class or function with its original definition.
+
+    There are 3 different possibilities for decorators, in order of priority:
+        1. Force no inherited decorators via special `no_inherit_decorator` (sole decorator).
+        2. Take the decorators attached in the modular file.
+        3. Inherit all existing decorators of the parent/original node, if any.
+    """
+    decorator_names = [mapper.python_module.code_for_node(dec.decorator) for dec in modular_node.decorators]
+    no_decorators_forced = "no_inherit_decorator" in decorator_names
+
+    if no_decorators_forced:
+        if len(modular_node.decorators) > 1:
+            raise ValueError(
+                "Detected `no_inherit_decorator` together with other decorators. "
+                f"Found decorators: {decorator_names}. Please make sure to use `no_inherit_decorator` "
+                "as the sole decorator."
+            )
+        return []
+
+    if modular_node.decorators:
+        return modular_node.decorators
+
+    return original_node.decorators if original_node is not None else []
+
+
 def replace_class_node(
     mapper: ModelFileMapper, modular_class_node: cst.ClassDef, renamed_super_class: str, original_super_class: str
 ) -> cst.ClassDef:
@@ -987,25 +1017,8 @@ def replace_class_node(
     if "nn.Module" in new_class_bases_names and "GradientCheckpointingLayer" in new_class_bases_names:
         new_class_bases = [k for k in new_class_bases if get_full_attribute_name(k.value) != "nn.Module"]
 
-    # 3 different possibilities for decorators (in order of priority)
-    #   1. Force to inherit no decorator at all via special `no_inherit_decorator` (sole decorator)
-    #   2. Take the decorators attached in the modular file
-    #   3. Inherit all existing decorators of the parent
-    new_class_decorators = []
-
-    decorator_names = [mapper.python_module.code_for_node(dec.decorator) for dec in modular_class_node.decorators]
-    no_decorators_forced = "no_inherit_decorator" in decorator_names
-    if no_decorators_forced:
-        if len(modular_class_node.decorators) > 1:
-            raise ValueError(
-                "Detected the force of not inheriting any decorators via `no_inherit_decorator` but "
-                f"found multiple decorators: {modular_class_node.decorators}. Please make sure to only "
-                "attach the `no_inherit_decorator`!"
-            )
-    elif decorator_names:
-        new_class_decorators = modular_class_node.decorators
-    else:
-        new_class_decorators = original_modeling_node.decorators
+    # Keep decorators according to the modular/original merge priority
+    new_class_decorators = get_decorators_to_keep(mapper, modular_class_node, original_modeling_node)
 
     # Compute new class docstring
     original_modeling_docstring = [
@@ -1104,8 +1117,8 @@ def replace_class_node(
                 new_param_list = list({**original_modeling_params, **modular_params}.values())
                 new_params = new_params.with_changes(params=new_param_list, star_kwarg=node.params.star_kwarg)
 
-            # Keep decorators in modular if any, else original decorators
-            new_decorators = modular_node.decorators if len(modular_node.decorators) > 0 else node.decorators
+            # Keep decorators according to the modular/original merge priority
+            new_decorators = get_decorators_to_keep(mapper, modular_node, node)
 
             # Keep return annotation in modular if any, else original return annotation
             new_return_annotation = modular_node.returns if modular_node.returns else node.returns
