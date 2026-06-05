@@ -471,25 +471,26 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
     _no_split_modules = [
         "VideoPrismSpatialEmbeddings",
         "VideoPrismTemporalEmbeddings",
-        "VideoPrismSpatialEncoder",
-        "VideoPrismTemporalEncoder",
-        "VideoPrismAuxiliaryEncoder",
-        "VideoPrismTextEncoder",
+        "VideoPrismLayer",
+        "VideoPrismTextEmbeddings",
         "VideoPrismMultiheadAttentionPoolingHead",
-    ]  # todo gotta change the class names
+    ]
     # sdpa is disabled because it does not support attention capping
     # used in eager and logits are too far off
     _supports_sdpa = False
     _supports_flash_attn = True
+    _supports_flex_attn = True
     _supports_attention_backend = True
-    _supports_flex_attention = True
+    _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": VideoPrismLayer,
         "attentions": VideoPrismAttention,
     }
+    _input_embed_layer = "patch_embeddings"
 
     @torch.no_grad()
     def _init_weights(self, module):
+        """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv3d)):
             init.lecun_normal_(module.weight)
@@ -603,7 +604,6 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
         r_softplus_0 = 1.442695041
         self.scale = r_softplus_0 / (self.head_dim**0.5)
         self.pooling_attention_query = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -640,7 +640,6 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
 
         attn_output = attn_output.reshape(batch_size, 1, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        attn_output = self.layernorm(attn_output)
         return attn_output, attn_weights
 
 
@@ -722,6 +721,7 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
         self.vision_model = VideoPrismVisionModel._from_config(config)
         self.auxiliary_layers = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_auxiliary_layers)])
         self.head = VideoPrismMultiheadAttentionPoolingHead(config)
+        self.head_layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
@@ -746,7 +746,7 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
             auxiliary_hidden_states = layer(auxiliary_hidden_states, **kwargs)
 
         head_output = self.head(auxiliary_hidden_states, **kwargs)
-        video_embeddings = head_output[0]
+        video_embeddings = self.head_layernorm(head_output[0])
         if self.config.apply_l2norm:
             video_embeddings = l2norm(video_embeddings, dim=-1)
 
@@ -903,6 +903,9 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
         super().__init__(config)
         self.vision_model = VideoPrismVisionModel._from_config(config)
         self.head = VideoPrismMultiheadAttentionPoolingHead(config)
+        if hasattr(config, "head_dim"):
+            del config.head_dim
+        self.head_layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         self.post_init()
 
@@ -925,7 +928,7 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
             pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )
         sequence_output = vision_model_outputs.last_hidden_state
-        pooled_output = self.head(sequence_output, **kwargs)[0]
+        pooled_output = self.head_layernorm(self.head(sequence_output, **kwargs)[0])
         logits = self.classifier(pooled_output)
         loss = None
         if labels is not None:

@@ -203,10 +203,10 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"params/auxiliary_encoder/transformers_stack/x_layers/ff_layer/layer_norm/(bias|scale)": r"video_model.auxiliary_encoder.layernorm_after.\1",
     r"params/auxiliary_encoder/transformers_stack/x_layers/layer_norm/(bias|scale)": r"video_model.auxiliary_encoder.layernorm_before.\1",
     r"params/auxiliary_encoder/transformers_stack/x_layers/self_attention/(key|post|query|value)/(b|w)": r"video_model.auxiliary_encoder.attention.\1.\2",
-    # Attention Pooler
+    # Attention pooler
     r"params/contrastive_vision_pooler/pooling_attention/(query|key|value|post)/(b|w)": r"video_model.head.\1.\2",
     r"params/contrastive_vision_pooler/pooling_attention/per_dim_scale/per_dim_scale": r"video_model.head.per_dim_scale",
-    r"params/contrastive_vision_pooler/pooling_attention_layer_norm/(bias|scale)": r"video_model.head.layernorm.\1",
+    r"params/contrastive_vision_pooler/pooling_attention_layer_norm/(bias|scale)": r"video_model.head_layernorm.\1",
     r"params/contrastive_vision_pooler/pooling_attention_query": r"video_model.head.pooling_attention_query",
     # Text Encoder
     r"params/text_encoder/cls_emb": r"text_model.embeddings.cls_emb",
@@ -258,7 +258,7 @@ def transform_block_params(key, param, hidden_size):
     return new_param
 
 
-def transform_remaining_params(key, param, hidden_size):
+def transform_remaining_params(key, param, hidden_size, intermediate_size):
     # Vision Encoder specific transformations
     if re.fullmatch(r"params(/vision_encoder)?/patch_projection/linear/kernel", key):
         # Hard-coded number of patches
@@ -267,15 +267,15 @@ def transform_remaining_params(key, param, hidden_size):
     elif re.fullmatch(r"params(/vision_encoder)?/(spatial|temporal)_pos_emb/emb_var", key):
         new_param = np.expand_dims(param, 0)
 
-    # Contrastive Vision Pooler specific transformations
+    # Contrastive vision pooler: projections use intermediate_size (not hidden_size)
     elif re.fullmatch(r"params/contrastive_vision_pooler/pooling_attention_query", key):
         new_param = param.reshape(1, 1, -1)
 
     elif re.fullmatch(r"params/contrastive_vision_pooler/pooling_attention/(query|key|value)/w", key):
-        new_param = param.reshape(hidden_size, -1).T
+        new_param = param.reshape(hidden_size, intermediate_size).T
 
     elif re.fullmatch(r"params/contrastive_vision_pooler/pooling_attention/post/w", key):
-        new_param = param.reshape(hidden_size, -1)
+        new_param = param.reshape(hidden_size, intermediate_size)
 
     elif re.fullmatch(r"params/contrastive_vision_pooler/pooling_attention/(query|key|value|post)/b", key):
         new_param = param.reshape(-1)
@@ -292,9 +292,11 @@ def convert_params(flax_state_dict, model_name):
     if "lvt" in model_name:
         vision_config = COMMON_CONFIG_PARAMS[model_name]["vision_config"]
         hidden_size = vision_config["hidden_size"]
+        intermediate_size = vision_config["intermediate_size"]
     else:
         config = COMMON_CONFIG_PARAMS[model_name]
         hidden_size = config["hidden_size"]
+        intermediate_size = config["intermediate_size"]
 
     for key in flax_state_dict:
         for original_pattern, new_pattern in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
@@ -335,17 +337,15 @@ def convert_params(flax_state_dict, model_name):
                         new_state_dict[layer_key] = torch.tensor(new_param).contiguous()
                 else:
                     # Transformation of non-layerwise parameters
-                    new_param = transform_remaining_params(key, param, hidden_size)
+                    new_param = transform_remaining_params(key, param, hidden_size, intermediate_size)
                     new_state_dict[new_key] = torch.tensor(new_param).contiguous()
 
-    # Last step is to add buffers for text positional embeddings (scale is a computed float in the pooling head)
+    # Text positional embeddings (pooling scale is a computed float, not a checkpoint weight)
     if "lvt" in model_name:
-        # positional_embedding
         text_config = COMMON_CONFIG_PARAMS[model_name]["text_config"]
         num_pos, dim = 64, text_config["hidden_size"]  # Hardcoded num_pos
         positional_embedding = create_sinusoidal_positions(num_pos, dim)
         new_state_dict["text_model.embeddings.position_embedding"] = positional_embedding
-        # position_ids
         new_state_dict["text_model.embeddings.position_ids"] = torch.arange(num_pos).expand((1, -1))
 
     return new_state_dict
@@ -570,7 +570,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model_name",
-        default="lvt_large", # backbone_base, backbone_large, lvt_base, lvt_large
+        default="backbone_large", # backbone_base, backbone_large, lvt_base, lvt_large
         type=str,
         choices=ORIGINAL_CHECKPOINTS.keys(),
         help="Name of the model you'd like to convert.",
