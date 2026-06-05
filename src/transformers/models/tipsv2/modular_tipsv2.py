@@ -20,7 +20,6 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import PILImageResampling
@@ -34,6 +33,7 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import (
+    CLIPMLP,
     CLIPAttention,
     CLIPEncoderLayer,
     CLIPOutput,
@@ -497,13 +497,7 @@ class Tipsv2TextAttention(CLIPAttention):
         return attn_output, attn_weights
 
 
-class Tipsv2TextMLP(nn.Module):
-    def __init__(self, config: Tipsv2TextConfig):
-        super().__init__()
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
+class Tipsv2TextMLP(CLIPMLP):
     def forward(self, hidden_states: torch.Tensor, valid_mask: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)

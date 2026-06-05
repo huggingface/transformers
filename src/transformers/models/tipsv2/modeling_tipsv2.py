@@ -694,8 +694,9 @@ class Tipsv2TextAttention(nn.Module):
 
 
 class Tipsv2TextMLP(nn.Module):
-    def __init__(self, config: Tipsv2TextConfig):
+    def __init__(self, config):
         super().__init__()
+        self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
