@@ -12,14 +12,13 @@ companion ``esm`` package.
 """
 
 import math
-from typing import cast
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from ...modeling_utils import PreTrainedModel  # type: ignore[import]
+from ...modeling_utils import PreTrainedModel
 from .configuration_esmfold2 import ESMFold2Config
 from .modeling_esmfold2_common import (
     CHAR_VOCAB_SIZE,
@@ -29,13 +28,12 @@ from .modeling_esmfold2_common import (
     FoldingTrunk,
     InputsEmbedder,
     LanguageModelShim,
-    LayerNorm,
     MSAPairWeightedAveraging,
     OuterProductMean,
     ResIdxAsymIdSymIdEntityIdEncoding,
     RowAttentionPooling,
     SWA3DRoPEAttention,
-    SwiGLUMLP,
+    Transition,
     TriangleMultiplicativeUpdate,
     _categorical_mean,
     _compute_intra_token_idx,
@@ -47,36 +45,6 @@ from .modeling_esmfold2_common import (
 
 _EPS = 1e-6
 _NONPOLYMER_ID = 4
-
-# Default for the triangle / OPM / pair-transition L² ops. Caps peak memory
-# so L≈2k folds on an 80 GB GPU (~76 GB peak at chunk=128 for L=1438;
-# chunk=64 leaves headroom for the largest foldbench targets). Override via
-# ``model.set_chunk_size(...)``; pass None to disable chunking (faster for
-# short L but OOM-prone past ~600).
-_DEFAULT_CHUNK_SIZE = 64
-
-
-class PairTransition(nn.Module):
-    """LayerNorm + SwiGLU feed-forward residual block on the pair representation."""
-
-    def __init__(self, d_model: int, expansion_ratio: int = 4) -> None:
-        super().__init__()
-        self.norm = LayerNorm(d_model)
-        self.ffn = SwiGLUMLP(d_model, expansion_ratio=expansion_ratio, bias=False)
-        self._chunk_size: int | None = _DEFAULT_CHUNK_SIZE
-
-    def set_chunk_size(self, chunk_size: int | None) -> None:
-        self._chunk_size = chunk_size
-
-    def forward(self, x: Tensor) -> Tensor:
-        if self._chunk_size is None or x.shape[1] <= self._chunk_size:
-            return self.ffn(self.norm(x))
-        out: list[Tensor] = []
-        for s in range(0, x.shape[1], self._chunk_size):
-            e = min(s + self._chunk_size, x.shape[1])
-            sl = x[:, s:e]
-            out.append(self.ffn(self.norm(sl)))
-        return torch.cat(out, dim=1)
 
 
 class ConfidenceHead(nn.Module):
@@ -95,7 +63,7 @@ class ConfidenceHead(nn.Module):
         self.register_buffer("boundaries", boundaries)
         self.dist_bin_pairwise_embed = nn.Embedding(ch.distogram_bins, d_pair)
 
-        self.s_norm = LayerNorm(d_single)
+        self.s_norm = nn.LayerNorm(d_single, dtype=torch.float32)
         self.s_inputs_to_single = nn.Linear(d_inputs, d_single, bias=False)
         self.s_to_z = nn.Linear(d_inputs, d_pair, bias=False)
         self.s_to_z_transpose = nn.Linear(d_inputs, d_pair, bias=False)
@@ -103,8 +71,8 @@ class ConfidenceHead(nn.Module):
         self.s_to_z_prod_in2 = nn.Linear(d_inputs, d_pair, bias=False)
         self.s_to_z_prod_out = nn.Linear(d_pair, d_pair, bias=False)
         self.s_input_to_s = nn.Linear(d_inputs, d_single, bias=False)
-        self.s_inputs_norm = LayerNorm(d_inputs)
-        self.z_norm = LayerNorm(d_pair)
+        self.s_inputs_norm = nn.LayerNorm(d_inputs, dtype=torch.float32)
+        self.z_norm = nn.LayerNorm(d_pair, dtype=torch.float32)
 
         self.row_attention_pooling = RowAttentionPooling(d_pair=d_pair, d_single=d_single)
 
@@ -112,17 +80,17 @@ class ConfidenceHead(nn.Module):
         self.folding_trunk = FoldingTrunk(n_layers=pf.n_layers, d_pair=d_pair, expansion_ratio=4)
 
         # Heads.
-        self.plddt_ln = LayerNorm(d_single)
+        self.plddt_ln = nn.LayerNorm(d_single, dtype=torch.float32)
         max_atoms_per_token = 23
         self.plddt_weight = nn.Parameter(torch.zeros(max_atoms_per_token, d_single, ch.num_plddt_bins))
 
-        self.pae_ln = LayerNorm(d_pair)
+        self.pae_ln = nn.LayerNorm(d_pair, dtype=torch.float32)
         self.pae_head = nn.Linear(d_pair, ch.num_pae_bins, bias=False)
 
-        self.pde_ln = LayerNorm(d_pair)
+        self.pde_ln = nn.LayerNorm(d_pair, dtype=torch.float32)
         self.pde_head = nn.Linear(d_pair, ch.num_pde_bins, bias=False)
 
-        self.resolved_ln = LayerNorm(d_single)
+        self.resolved_ln = nn.LayerNorm(d_single, dtype=torch.float32)
         # 2 = resolved logits ([unresolved, resolved]).
         self.resolved_weight = nn.Parameter(torch.zeros(max_atoms_per_token, d_single, 2))
 
@@ -351,7 +319,7 @@ class ESMFold2Model(PreTrainedModel):
         else:
             self.lm_encoder = None
 
-        self.parcae_input_norm = LayerNorm(d_pair)
+        self.parcae_input_norm = nn.LayerNorm(d_pair, dtype=torch.float32)
         self.parcae_log_a = nn.Parameter(torch.zeros(d_pair))
         parcae_decay_init = math.sqrt(1.0 / 5.0)
         parcae_delta_init = -math.log(parcae_decay_init)
@@ -429,10 +397,10 @@ class ESMFold2Model(PreTrainedModel):
         """Compile L²-heavy blocks. ``mode='fixed_seqlen'`` recompiles per L; ``'dynamic_seqlen'`` compiles once."""
         import torch._dynamo
 
-        torch._dynamo.config.cache_size_limit = 512  # type: ignore[attr-defined]
-        torch._dynamo.config.accumulated_cache_size_limit = 512  # type: ignore[attr-defined]
+        torch._dynamo.config.cache_size_limit = 512
+        torch._dynamo.config.accumulated_cache_size_limit = 512
         # capture_scalar_outputs avoids graph breaks at .item() in atom-attention path.
-        torch._dynamo.config.capture_scalar_outputs = True  # type: ignore[attr-defined]
+        torch._dynamo.config.capture_scalar_outputs = True
 
         if dynamic is None:
             dynamic = mode == "dynamic_seqlen"
@@ -453,7 +421,7 @@ class ESMFold2Model(PreTrainedModel):
 
         def _maybe_compile(module: nn.Module) -> None:
             if isinstance(module, compile_targets):
-                module.forward = torch.compile(module.forward, **kwargs)  # type: ignore[assignment]
+                module.forward = torch.compile(module.forward, **kwargs)
 
         self.apply(_maybe_compile)
 
@@ -794,10 +762,10 @@ class MSAEncoderBlock(nn.Module):
         self.outer_product_mean = OuterProductMean(d_msa, d_hidden, d_pair)
         if not is_final_block:
             self.msa_pair_weighted_averaging = MSAPairWeightedAveraging(d_msa, d_pair, n_heads_msa, msa_head_width)
-            self.msa_transition = PairTransition(d_msa, expansion_ratio=4)
+            self.msa_transition = Transition(d_msa, expansion_ratio=4)
         self.tri_mul_out = TriangleMultiplicativeUpdate(dim=d_pair, _outgoing=True)
         self.tri_mul_in = TriangleMultiplicativeUpdate(dim=d_pair, _outgoing=False)
-        self.pair_transition = PairTransition(d_pair, expansion_ratio=4)
+        self.pair_transition = Transition(d_pair, expansion_ratio=4)
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self.outer_product_mean.set_chunk_size(chunk_size)
@@ -817,10 +785,10 @@ class MSAEncoderBlock(nn.Module):
         pair = pair + self.outer_product_mean(m, msa_attention_mask)
         if not self.is_final_block:
             m = m + self.msa_pair_weighted_averaging(m, pair, pair_attention_mask)
-            m = m + self.msa_transition(m)
+            m = self.msa_transition(m)
         pair = pair + self.tri_mul_out(pair, mask=pair_attention_mask)
         pair = pair + self.tri_mul_in(pair, mask=pair_attention_mask)
-        pair = pair + self.pair_transition(pair)
+        pair = self.pair_transition(pair)
         return m, pair
 
 
@@ -856,7 +824,7 @@ class MSAEncoder(nn.Module):
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         for block in self.blocks:
-            cast(MSAEncoderBlock, block).set_chunk_size(chunk_size)
+            block.set_chunk_size(chunk_size)
 
     def forward(
         self,
