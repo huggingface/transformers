@@ -207,29 +207,29 @@ class BeitImageProcessorPil(PilBackend):
             if isinstance(target_sizes, torch.Tensor):
                 target_sizes = target_sizes.numpy()
 
-            post_process_outputs = []
+            semantic_segmentation = []
 
             for idx in range(len(logits)):
                 resized_logits = F.interpolate(
                     logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
-                post_process_outputs.append(
+                semantic_segmentation.append(
                     SemanticSegmentationPostProcessorOutput(
                         segmentation=semantic_map, segmentation_scores=resized_logits[0]
                     )
                 )
         else:
             seg_maps = logits.argmax(dim=1)
-            post_process_outputs = [
+            semantic_segmentation = [
                 SemanticSegmentationPostProcessorOutput(segmentation=seg_maps[i], segmentation_scores=logits[i])
                 for i in range(logits.shape[0])
             ]
 
         if not return_segmentation_scores:
-            post_process_outputs = [item.segmentation for item in post_process_outputs]
+            semantic_segmentation = [item.segmentation for item in semantic_segmentation]
 
-        return post_process_outputs
+        return semantic_segmentation
 
 
 __all__ = ["BeitImageProcessorPil"]

@@ -587,28 +587,28 @@ class MaskFormerImageProcessor(TorchvisionBackend):
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
 
-            post_process_outputs = []
+            semantic_segmentation = []
             for idx in range(batch_size):
                 resized_logits = torch.nn.functional.interpolate(
                     segmentation[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
-                post_process_outputs.append(
+                semantic_segmentation.append(
                     SemanticSegmentationPostProcessorOutput(
                         segmentation=semantic_map, segmentation_scores=resized_logits[0]
                     )
                 )
         else:
             seg_maps = segmentation.argmax(dim=1)
-            post_process_outputs = [
+            semantic_segmentation = [
                 SemanticSegmentationPostProcessorOutput(segmentation=seg_maps[i], segmentation_scores=segmentation[i])
                 for i in range(batch_size)
             ]
 
         if not return_segmentation_scores:
-            post_process_outputs = [item.segmentation for item in post_process_outputs]
+            semantic_segmentation = [item.segmentation for item in semantic_segmentation]
 
-        return post_process_outputs
+        return semantic_segmentation
 
     # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.post_process_instance_segmentation
     def post_process_instance_segmentation(
