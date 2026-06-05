@@ -19,7 +19,6 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -697,7 +696,7 @@ class GlmMoeDsaRotaryEmbedding(nn.Module):
     @staticmethod
     def compute_default_rope_parameters(
         config: GlmMoeDsaConfig | None = None,
-        device: Optional["torch.device"] = None,
+        device=None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
         """
@@ -714,15 +713,14 @@ class GlmMoeDsaRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        dim = int(head_dim * partial_rotary_factor)
+        head_dim = config.qk_rope_head_dim
+        attention_factor = 1.0
 
-        attention_factor = 1.0  # Unused in this type of RoPE
+        if head_dim == 0:
+            return torch.empty(0, device=device), attention_factor
 
-        # Compute the inverse frequencies
         inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+            base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / head_dim)
         )
         return inv_freq, attention_factor
 
