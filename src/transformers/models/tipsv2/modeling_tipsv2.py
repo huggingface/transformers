@@ -641,6 +641,8 @@ def text_eager_attention_forward(
 
 
 class Tipsv2TextAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
     def __init__(self, config: Tipsv2TextConfig):
         super().__init__()
         self.config = config
@@ -651,9 +653,9 @@ class Tipsv2TextAttention(nn.Module):
         self.dropout = config.attention_dropout
         self.is_causal = False
 
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def forward(
@@ -662,6 +664,7 @@ class Tipsv2TextAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Input shape: Batch x Time x Channel"""
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 

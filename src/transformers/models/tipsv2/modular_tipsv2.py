@@ -34,7 +34,13 @@ from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
-from ..clip.modeling_clip import CLIPOutput, CLIPTextEmbeddings, _get_vector_norm, image_text_contrastive_loss
+from ..clip.modeling_clip import (
+    CLIPAttention,
+    CLIPOutput,
+    CLIPTextEmbeddings,
+    _get_vector_norm,
+    image_text_contrastive_loss,
+)
 from ..dinov2_with_registers.configuration_dinov2_with_registers import Dinov2WithRegistersConfig
 from ..dinov2_with_registers.modeling_dinov2_with_registers import (
     Dinov2WithRegistersEmbeddings,
@@ -383,30 +389,6 @@ class Tipsv2VisionModel(Dinov2WithRegistersModel):
     pass
 
 
-# Identical to CLIP's implementation but couldn't import it because the vision model
-# already requires eager_attention_forward from DINOv2 which results in modular
-# conflicts.
-def text_eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, attn_weights
-
-
 class Tipsv2SinusoidalPositionalEmbedding(Speech2TextSinusoidalPositionalEmbedding):
     def __init__(self, config: Tipsv2TextConfig):
         nn.Module.__init__(self)
@@ -453,21 +435,33 @@ class Tipsv2TextEmbeddings(CLIPTextEmbeddings):
         return inputs_embeds + position_embeddings
 
 
-class Tipsv2TextAttention(nn.Module):
-    def __init__(self, config: Tipsv2TextConfig):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
-        self.is_causal = False
+# Identical to CLIP's implementation but couldn't import it because the vision model
+# already requires eager_attention_forward from DINOv2 which results in modular
+# conflicts.
+def text_eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
+
+
+class Tipsv2TextAttention(CLIPAttention):
+    def __init__(self, config: Tipsv2TextConfig):
+        super().__init__(config)
 
     def forward(
         self,
