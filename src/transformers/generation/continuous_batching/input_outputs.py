@@ -486,12 +486,12 @@ class ContinuousBatchingIOs:
         )
 
         # If there is padding, make sure the padding sequences have length 0 (ie. cumulative lengths plateau)
-        if use_padding:
+        if use_padding:  # TODO: add per-path padding
+            self.max_seqlen_q = q_size  # keep max_seqlen_q > 1 so FA skips the seqlen_q==1 GQA reshape on padded q
             kwargs.cu_seq_lens_q[self.true_batch_size + 1 :] = self.total_seqlen_q
-            # Additionally, if there are CUDA graphs, we need to pad max_seqlen so graph capture will work regardless of
-            # the future Q / KV lengths of the next batches
+            # Additionally, if there are CUDA graphs, we need to pad max_seqlen_k so graph capture will work regardless
+            # of the future Q / KV lengths of the next batches
             if not self.use_block_table and self.use_cuda_graph_varlen:
-                self.max_seqlen_q = q_size
                 self.max_seqlen_k = {
                     layer_type: pad_to_pow2(self.max_seqlen_k[layer_type], self.cache.num_pages, 1024)
                     for layer_type in self.max_seqlen_k.keys()
