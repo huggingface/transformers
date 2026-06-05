@@ -19,7 +19,6 @@ import threading
 from abc import abstractmethod
 from collections.abc import Callable, Generator
 from contextlib import contextmanager, nullcontext
-from math import ceil
 from time import perf_counter
 from typing import Any
 
@@ -250,24 +249,19 @@ class ContinuousBatchProcessor:
         self.max_batch_tokens = cache.max_batch_tokens
 
         # Setup inputs and outputs
-        use_cuda_graph_varlen, _ = self.cb_config.cuda_graph_booleans
         io_kwargs = {
             "cache": cache,
             "config": config,
+            "continuous_batching_config": continuous_batching_config,
             "device": model_device,
             "model_dtype": model_dtype,
-            "return_logprobs": self.return_logprobs,
             "logit_processor": self.logit_processor,
-            "use_cuda_graph_varlen": use_cuda_graph_varlen,
         }
         self.use_async_batching = self.cb_config.use_async_batching
 
         if self.use_async_batching:
-            # Since in async there are 2 IO pairs, there are also 2 graph buffers: we divide the max_cached_graphs by 2
-            io_kwargs["max_graphs"] = ceil(self.cb_config.max_cached_graphs / 2)
             self.inputs_and_outputs = ContinuousBatchingAsyncIOs(**io_kwargs)
         else:
-            io_kwargs["max_graphs"] = self.cb_config.max_cached_graphs
             self.inputs_and_outputs = ContinuousBatchingIOs(**io_kwargs)
 
         # Offloading manager: handles CPU offloading, soft reset, and restoration

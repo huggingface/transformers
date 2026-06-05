@@ -18,7 +18,7 @@ from typing import Any
 
 import torch
 
-from transformers.configuration_utils import PretrainedConfig
+from transformers.configuration_utils import ContinuousBatchingConfig, PretrainedConfig
 
 from ...utils import get_available_devices
 from .cache import PagedAttentionCache
@@ -97,31 +97,27 @@ class ContinuousBatchingIOs:
         self,
         cache: PagedAttentionCache,
         config: PretrainedConfig,
+        continuous_batching_config: ContinuousBatchingConfig,
         device: torch.device,
         model_dtype: torch.dtype,
-        max_graphs: int,
-        return_logprobs: bool,
         logit_processor: ContinuousBatchingLogitsProcessorList,
-        use_cuda_graph_varlen: bool = False,
     ) -> None:
         """Initialize the continuous batching I/O manager. Args:
         - cache: The [`PagedAttentionCache`] instance managing the KV cache. Meant to be unique.
         - config: The model's pretrained configuration.
+        - continuous_batching_config: The continuous batching configuration.
         - device: The device to allocate tensors on. If the device is CPU, then the memory is pinned.
         - model_dtype: The data type for model computations.
-        - max_graphs: Maximum number of CUDA graphs to cache. Uses LRU eviction when full.
-        - return_logprobs: Whether to return log probabilities along with the token IDs.
         - logit_processor: The [`ContinuousBatchingLogitsProcessorList`] object used to process the logits.
-        - use_cuda_graph_varlen: Whether CUDA graphs are enabled for the varlen (prefill) path.
         """
         # Memoize attributes
         self.cache = cache
         self.device = device
         self.config = config
         self.model_dtype = model_dtype
-        self.use_cuda_graph_varlen = use_cuda_graph_varlen
+        self.use_cuda_graph_varlen = continuous_batching_config.cuda_graph_booleans[0]
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
-        self.return_logprobs = return_logprobs
+        self.return_logprobs = continuous_batching_config.return_logprobs
         # Setup input-related accumulators
         self.num_q_tokens = 0  # number of query tokens in the batch. Can be padded.
         self.max_kv_read = 0  # number of KV tokens read from cache (maxed across all groups). Can be padded.
@@ -132,7 +128,7 @@ class ContinuousBatchingIOs:
         # Setup other accumulators
         self.requests_in_batch: list[FutureRequestState] = []
         self.req_id_to_new_token_position: dict[str, int] = {}  # only used for async API
-        self.graphs: CudaGraphBuffer = CudaGraphBuffer(max_graphs)
+        self.graphs: CudaGraphBuffer = CudaGraphBuffer(continuous_batching_config.max_cached_graphs)
         self._trash_index = cache.trash_index
         # Setup static tensors and compute stream
         self._setup_static_tensors(logit_processor=logit_processor)
@@ -564,33 +560,27 @@ class HostDeviceIOPair:
         self,
         cache: PagedAttentionCache,
         config: PretrainedConfig,
+        continuous_batching_config: ContinuousBatchingConfig,
         device: torch.device,
         model_dtype: torch.dtype,
-        max_graphs: int,
-        return_logprobs: bool,
         logit_processor: ContinuousBatchingLogitsProcessorList,
-        use_cuda_graph_varlen: bool = False,
     ) -> None:
         # The host IO has automatic pinned memory because it is created on the CPU
         self.host_io = ContinuousBatchingIOs(
-            cache,
-            config,
-            torch.device("cpu"),
-            model_dtype,
-            max_graphs,
-            return_logprobs,
-            logit_processor,
-            use_cuda_graph_varlen,
+            cache=cache,
+            config=config,
+            continuous_batching_config=continuous_batching_config,
+            device=torch.device("cpu"),
+            model_dtype=model_dtype,
+            logit_processor=logit_processor,
         )
         self.device_io = ContinuousBatchingIOs(
-            cache,
-            config,
-            device,
-            model_dtype,
-            max_graphs,
-            return_logprobs,
-            logit_processor,
-            use_cuda_graph_varlen,
+            cache=cache,
+            config=config,
+            continuous_batching_config=continuous_batching_config,
+            device=device,
+            model_dtype=model_dtype,
+            logit_processor=logit_processor,
         )
         # Create events only on CUDA devices
         self.h2d_over = torch.cuda.Event() if torch.cuda.is_available() else None
@@ -663,12 +653,10 @@ class ContinuousBatchingAsyncIOs:
         self,
         cache: PagedAttentionCache,
         config: PretrainedConfig,
+        continuous_batching_config: ContinuousBatchingConfig,
         device: torch.device,
         model_dtype: torch.dtype,
-        max_graphs: int,
-        return_logprobs: bool,
         logit_processor: ContinuousBatchingLogitsProcessorList,
-        use_cuda_graph_varlen: bool = False,
     ) -> None:
         # Async batching needs streams to function, so check is CUDA is available
         if not torch.cuda.is_available():
@@ -677,14 +665,12 @@ class ContinuousBatchingAsyncIOs:
         self.current_pair = 0
         self.io_pairs = [
             HostDeviceIOPair(
-                cache,
-                config,
-                device,
-                model_dtype,
-                max_graphs,
-                return_logprobs,
-                logit_processor,
-                use_cuda_graph_varlen,
+                cache=cache,
+                config=config,
+                continuous_batching_config=continuous_batching_config,
+                device=device,
+                model_dtype=model_dtype,
+                logit_processor=logit_processor,
             )
             for _ in range(2)
         ]
