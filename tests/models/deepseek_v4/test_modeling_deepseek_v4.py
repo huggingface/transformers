@@ -20,9 +20,10 @@ from parameterized import parameterized
 from transformers import is_torch_available
 from transformers.testing_utils import (
     backend_device_count,
-    get_device_properties,
+    require_cuda_capability_at_least,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_large_accelerator,
     require_torch_n_accelerators,
     slow,
@@ -518,38 +519,11 @@ def _run_distributed_worker(
     return result.returncode
 
 
-def require_accelerator_capability(requirements: dict[str, tuple[int, int]]):
-    """Decorator to require backend-specific minimum accelerator capability.
-
-    Usage: @require_accelerator_capability({"cuda": (9, 0), "xpu": (3, 0)})
-    """
-
-    def decorator(test_case):
-        device_type, major, minor = get_device_properties()
-        required = requirements.get(device_type)
-        if required is None:
-            expected = ", ".join(sorted(requirements))
-            return unittest.skip(reason=f"test requires one of backends: {expected}; got {device_type!r}")(test_case)
-
-        req_major, req_minor = required
-        current = (major if major is not None else 0, minor if minor is not None else 0)
-        minimum = (req_major, req_minor)
-        if current < minimum:
-            return unittest.skip(
-                reason=(
-                    f"test requires {device_type} capability >= {req_major}.{req_minor}; got {current[0]}.{current[1]}"
-                )
-            )(test_case)
-
-        return test_case
-
-    return decorator
-
-
 @require_torch
-@require_torch_n_accelerators(8)
+@require_torch_gpu
+@require_torch_n_accelerators(n=8)
 @require_torch_large_accelerator(memory=64)
-@require_accelerator_capability({"cuda": (10, 0)})
+@require_cuda_capability_at_least(10, 0)
 @slow
 class DeepseekV4FlashIntegrationTest(unittest.TestCase):
     """Multi-device native FP4 generation on DSv4-Flash, via `torchrun` + EP=8.
@@ -592,9 +566,10 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
 
 
 @require_torch
-@require_torch_n_accelerators(8)
+@require_torch_accelerator
+@require_torch_n_accelerators(n=8)
 @require_torch_large_accelerator(memory=60)
-@require_accelerator_capability({"cuda": (9, 0), "xpu": (3, 0)})
+@require_cuda_capability_at_least(9, 0)
 @slow
 class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
     """Multi-device native FP8 generation on DSv4-Flash-Base.
