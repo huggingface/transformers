@@ -121,8 +121,14 @@ def _fake_classes():
 def test_load_pretrained_default_device_uses_device_map_auto():
     model_cls, proc_cls = _fake_classes()
     _common._load_pretrained(
-        model_cls, proc_cls, "some/model", device=None, dtype="auto",
-        trust_remote_code=False, token=None, revision=None,
+        model_cls,
+        proc_cls,
+        "some/model",
+        device=None,
+        dtype="auto",
+        trust_remote_code=False,
+        token=None,
+        revision=None,
     )
     kwargs = model_cls.from_pretrained.call_args.kwargs
     assert kwargs.get("device_map") == "auto"
@@ -134,8 +140,14 @@ def test_load_pretrained_default_device_uses_device_map_auto():
 def test_load_pretrained_cpu_does_not_set_device_map():
     model_cls, proc_cls = _fake_classes()
     _common._load_pretrained(
-        model_cls, proc_cls, "some/model", device="cpu", dtype="auto",
-        trust_remote_code=False, token=None, revision=None,
+        model_cls,
+        proc_cls,
+        "some/model",
+        device="cpu",
+        dtype="auto",
+        trust_remote_code=False,
+        token=None,
+        revision=None,
     )
     assert "device_map" not in model_cls.from_pretrained.call_args.kwargs
 
@@ -143,8 +155,14 @@ def test_load_pretrained_cpu_does_not_set_device_map():
 def test_load_pretrained_explicit_cuda_sets_device_map():
     model_cls, proc_cls = _fake_classes()
     _common._load_pretrained(
-        model_cls, proc_cls, "some/model", device="cuda:0", dtype="auto",
-        trust_remote_code=False, token=None, revision=None,
+        model_cls,
+        proc_cls,
+        "some/model",
+        device="cuda:0",
+        dtype="auto",
+        trust_remote_code=False,
+        token=None,
+        revision=None,
     )
     assert model_cls.from_pretrained.call_args.kwargs.get("device_map") == "cuda:0"
 
@@ -155,8 +173,14 @@ def test_load_pretrained_dtype_is_resolved_against_torch():
 
     model_cls, proc_cls = _fake_classes()
     _common._load_pretrained(
-        model_cls, proc_cls, "some/model", device="cpu", dtype="float16",
-        trust_remote_code=False, token=None, revision=None,
+        model_cls,
+        proc_cls,
+        "some/model",
+        device="cpu",
+        dtype="float16",
+        trust_remote_code=False,
+        token=None,
+        revision=None,
     )
     assert model_cls.from_pretrained.call_args.kwargs["torch_dtype"] is torch.float16
 
@@ -164,8 +188,14 @@ def test_load_pretrained_dtype_is_resolved_against_torch():
 def test_load_pretrained_propagates_common_kwargs_to_both_classes():
     model_cls, proc_cls = _fake_classes()
     _common._load_pretrained(
-        model_cls, proc_cls, "some/model", device="cpu", dtype="auto",
-        trust_remote_code=True, token="hf_xxx", revision="main",
+        model_cls,
+        proc_cls,
+        "some/model",
+        device="cpu",
+        dtype="auto",
+        trust_remote_code=True,
+        token="hf_xxx",
+        revision="main",
     )
     for cls in (model_cls, proc_cls):
         kw = cls.from_pretrained.call_args.kwargs
@@ -177,8 +207,14 @@ def test_load_pretrained_propagates_common_kwargs_to_both_classes():
 def test_load_pretrained_calls_eval_on_model():
     model_cls, proc_cls = _fake_classes()
     model, _ = _common._load_pretrained(
-        model_cls, proc_cls, "some/model", device="cpu", dtype="auto",
-        trust_remote_code=False, token=None, revision=None,
+        model_cls,
+        proc_cls,
+        "some/model",
+        device="cpu",
+        dtype="auto",
+        trust_remote_code=False,
+        token=None,
+        revision=None,
     )
     model.eval.assert_called_once()
 

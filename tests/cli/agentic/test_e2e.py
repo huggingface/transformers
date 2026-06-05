@@ -58,8 +58,10 @@ require_compatible_mistral_common = pytest.mark.skipif(
 def test_classify_supervised(cli, extract_json):
     result = cli(
         "classify",
-        "--model", "hf-internal-testing/tiny-random-DistilBertForSequenceClassification",
-        "--text", "hello world",
+        "--model",
+        "hf-internal-testing/tiny-random-DistilBertForSequenceClassification",
+        "--text",
+        "hello world",
         "--json",
     )
     assert result.exit_code == 0, result.output
@@ -72,8 +74,10 @@ def test_classify_supervised(cli, extract_json):
 def test_ner(cli, extract_json):
     result = cli(
         "ner",
-        "--model", "hf-internal-testing/tiny-random-BertForTokenClassification",
-        "--text", "Alice met Bob in Paris.",
+        "--model",
+        "hf-internal-testing/tiny-random-BertForTokenClassification",
+        "--text",
+        "Alice met Bob in Paris.",
         "--json",
     )
     assert result.exit_code == 0, result.output
@@ -88,8 +92,10 @@ def test_ner(cli, extract_json):
 def test_token_classify(cli, extract_json):
     result = cli(
         "token-classify",
-        "--model", "hf-internal-testing/tiny-random-BertForTokenClassification",
-        "--text", "The cat sat.",
+        "--model",
+        "hf-internal-testing/tiny-random-BertForTokenClassification",
+        "--text",
+        "The cat sat.",
         "--json",
     )
     assert result.exit_code == 0, result.output
@@ -103,9 +109,12 @@ def test_token_classify(cli, extract_json):
 def test_qa(cli, extract_json):
     result = cli(
         "qa",
-        "--model", "hf-internal-testing/tiny-random-DistilBertForQuestionAnswering",
-        "--question", "Who?",
-        "--context", "Alice met Bob in Paris.",
+        "--model",
+        "hf-internal-testing/tiny-random-DistilBertForQuestionAnswering",
+        "--question",
+        "Who?",
+        "--context",
+        "Alice met Bob in Paris.",
         "--json",
     )
     assert result.exit_code == 0, result.output
@@ -117,9 +126,12 @@ def test_qa(cli, extract_json):
 def test_summarize(cli, extract_json):
     result = cli(
         "summarize",
-        "--model", "hf-internal-testing/tiny-random-BartForConditionalGeneration",
-        "--text", "Lorem ipsum dolor sit amet.",
-        "--max-length", "8",
+        "--model",
+        "hf-internal-testing/tiny-random-BartForConditionalGeneration",
+        "--text",
+        "Lorem ipsum dolor sit amet.",
+        "--max-length",
+        "8",
         "--json",
     )
     assert result.exit_code == 0, result.output
@@ -133,9 +145,12 @@ def test_translate(cli, extract_json):
     # shape testing (output is gibberish on random weights, which is fine).
     result = cli(
         "translate",
-        "--model", "hf-internal-testing/tiny-random-T5ForConditionalGeneration",
-        "--text", "Hello world.",
-        "--max-length", "8",
+        "--model",
+        "hf-internal-testing/tiny-random-T5ForConditionalGeneration",
+        "--text",
+        "Hello world.",
+        "--max-length",
+        "8",
         "--json",
     )
     assert result.exit_code == 0, result.output
@@ -147,9 +162,12 @@ def test_translate(cli, extract_json):
 def test_fill_mask(cli, extract_json):
     result = cli(
         "fill-mask",
-        "--model", "hf-internal-testing/tiny-random-DistilBertForMaskedLM",
-        "--text", "The capital of France is [MASK].",
-        "--top-k", "3",
+        "--model",
+        "hf-internal-testing/tiny-random-DistilBertForMaskedLM",
+        "--text",
+        "The capital of France is [MASK].",
+        "--top-k",
+        "3",
         "--json",
     )
     assert result.exit_code == 0, result.output
@@ -162,8 +180,10 @@ def test_fill_mask(cli, extract_json):
 def test_fill_mask_without_mask_token_errors(cli):
     result = cli(
         "fill-mask",
-        "--model", "hf-internal-testing/tiny-random-DistilBertForMaskedLM",
-        "--text", "No mask here.",
+        "--model",
+        "hf-internal-testing/tiny-random-DistilBertForMaskedLM",
+        "--text",
+        "No mask here.",
     )
     assert result.exit_code != 0
 
@@ -175,9 +195,12 @@ def test_fill_mask_without_mask_token_errors(cli):
 def test_generate_basic(cli):
     result = cli(
         "generate",
-        "--model", "hf-internal-testing/tiny-random-OPTForCausalLM",
-        "--prompt", "Hello",
-        "--max-new-tokens", "4",
+        "--model",
+        "hf-internal-testing/tiny-random-OPTForCausalLM",
+        "--prompt",
+        "Hello",
+        "--max-new-tokens",
+        "4",
     )
     assert result.exit_code == 0, result.output
 
@@ -186,9 +209,12 @@ def test_generate_basic(cli):
 def test_generate_stream(cli):
     result = cli(
         "generate",
-        "--model", "hf-internal-testing/tiny-random-OPTForCausalLM",
-        "--prompt", "Hello",
-        "--max-new-tokens", "4",
+        "--model",
+        "hf-internal-testing/tiny-random-OPTForCausalLM",
+        "--prompt",
+        "Hello",
+        "--max-new-tokens",
+        "4",
         "--stream",
     )
     assert result.exit_code == 0, result.output
@@ -201,8 +227,10 @@ def test_generate_stream(cli):
 def test_tokenize(cli, extract_json):
     result = cli(
         "tokenize",
-        "--model", "hf-internal-testing/tiny-random-gpt2",
-        "--text", "Hello, world!",
+        "--model",
+        "hf-internal-testing/tiny-random-gpt2",
+        "--text",
+        "Hello, world!",
         "--json",
     )
     assert result.exit_code == 0, result.output
@@ -228,9 +256,12 @@ def test_embed_text(cli, tmp_path):
     output_path = tmp_path / "emb.npy"
     result = cli(
         "embed",
-        "--model", "hf-internal-testing/tiny-random-BertModel",
-        "--text", "hello",
-        "--output", str(output_path),
+        "--model",
+        "hf-internal-testing/tiny-random-BertModel",
+        "--text",
+        "hello",
+        "--output",
+        str(output_path),
     )
     assert result.exit_code == 0, result.output
     assert output_path.exists() and output_path.stat().st_size > 0
@@ -240,8 +271,10 @@ def test_embed_text(cli, tmp_path):
 def test_embed_text_no_output_prints_preview(cli):
     result = cli(
         "embed",
-        "--model", "hf-internal-testing/tiny-random-BertModel",
-        "--text", "hello",
+        "--model",
+        "hf-internal-testing/tiny-random-BertModel",
+        "--text",
+        "hello",
     )
     assert result.exit_code == 0, result.output
     assert "Embedding shape" in result.output
@@ -251,7 +284,8 @@ def test_embed_text_no_output_prints_preview(cli):
 def test_embed_no_input_errors(cli):
     result = cli(
         "embed",
-        "--model", "hf-internal-testing/tiny-random-BertModel",
+        "--model",
+        "hf-internal-testing/tiny-random-BertModel",
     )
     assert result.exit_code != 0
 
@@ -265,8 +299,10 @@ def test_classify_reads_from_file(cli, extract_json, tmp_path):
     file_path.write_text("hello from file")
     result = cli(
         "classify",
-        "--model", "hf-internal-testing/tiny-random-DistilBertForSequenceClassification",
-        "--file", str(file_path),
+        "--model",
+        "hf-internal-testing/tiny-random-DistilBertForSequenceClassification",
+        "--file",
+        str(file_path),
         "--json",
     )
     assert result.exit_code == 0, result.output
@@ -284,9 +320,12 @@ def test_image_classify(cli, extract_json):
     # have only 2 — so we ask for 2 to keep the assertion exact.
     result = cli(
         "image-classify",
-        "--model", "hf-internal-testing/tiny-random-BeitForImageClassification",
-        "--image", str(PNG_FIXTURE),
-        "--top-k", "2",
+        "--model",
+        "hf-internal-testing/tiny-random-BeitForImageClassification",
+        "--image",
+        str(PNG_FIXTURE),
+        "--top-k",
+        "2",
         "--json",
     )
     assert result.exit_code == 0, result.output
@@ -302,9 +341,12 @@ def test_image_classify(cli, extract_json):
 def test_detect(cli, extract_json):
     result = cli(
         "detect",
-        "--model", "hf-internal-testing/tiny-random-DetrForObjectDetection",
-        "--image", str(PNG_FIXTURE),
-        "--threshold", "0.0",
+        "--model",
+        "hf-internal-testing/tiny-random-DetrForObjectDetection",
+        "--image",
+        str(PNG_FIXTURE),
+        "--threshold",
+        "0.0",
         "--json",
     )
     assert result.exit_code == 0, result.output
@@ -321,9 +363,12 @@ def test_depth(cli, tmp_path):
     output_path = tmp_path / "depth.png"
     result = cli(
         "depth",
-        "--model", "hf-internal-testing/tiny-random-DPTForDepthEstimation",
-        "--image", str(PNG_FIXTURE),
-        "--output", str(output_path),
+        "--model",
+        "hf-internal-testing/tiny-random-DPTForDepthEstimation",
+        "--image",
+        str(PNG_FIXTURE),
+        "--output",
+        str(output_path),
     )
     assert result.exit_code == 0, result.output
     assert output_path.exists() and output_path.stat().st_size > 0
@@ -336,9 +381,12 @@ def test_embed_image(cli, tmp_path):
     output_path = tmp_path / "emb.npy"
     result = cli(
         "embed",
-        "--model", "hf-internal-testing/tiny-random-ViTModel",
-        "--image", str(PNG_FIXTURE),
-        "--output", str(output_path),
+        "--model",
+        "hf-internal-testing/tiny-random-ViTModel",
+        "--image",
+        str(PNG_FIXTURE),
+        "--output",
+        str(output_path),
     )
     assert result.exit_code == 0, result.output
     assert output_path.exists() and output_path.stat().st_size > 0
@@ -364,8 +412,10 @@ def test_transcribe(cli, extract_json, short_wav):
     # — still a slow-marked test, but reliable.
     result = cli(
         "transcribe",
-        "--model", "openai/whisper-tiny",
-        "--audio", str(short_wav),
+        "--model",
+        "openai/whisper-tiny",
+        "--audio",
+        str(short_wav),
         "--json",
     )
     assert result.exit_code == 0, result.output
@@ -380,9 +430,12 @@ def test_audio_classify(cli, extract_json, short_wav):
     # doesn't match a 1s wav; use a plain audio classifier instead.
     result = cli(
         "audio-classify",
-        "--model", "hf-internal-testing/tiny-random-Data2VecAudioForSequenceClassification",
-        "--audio", str(short_wav),
-        "--top-k", "2",
+        "--model",
+        "hf-internal-testing/tiny-random-Data2VecAudioForSequenceClassification",
+        "--audio",
+        str(short_wav),
+        "--top-k",
+        "2",
         "--json",
     )
     assert result.exit_code == 0, result.output
@@ -408,9 +461,12 @@ def test_audio_classify(cli, extract_json, short_wav):
 def test_caption(cli, extract_json):
     result = cli(
         "caption",
-        "--model", "hf-internal-testing/tiny-random-LlavaForConditionalGeneration",
-        "--image", str(PNG_FIXTURE),
-        "--max-new-tokens", "4",
+        "--model",
+        "hf-internal-testing/tiny-random-LlavaForConditionalGeneration",
+        "--image",
+        str(PNG_FIXTURE),
+        "--max-new-tokens",
+        "4",
         "--json",
     )
     assert result.exit_code == 0, result.output
