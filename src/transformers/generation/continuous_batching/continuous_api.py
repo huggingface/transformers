@@ -963,6 +963,11 @@ class ContinuousBatchingManager:
         )
         # Update the approximation now that we know if there is prefix sharing
         self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing
+        # Also cap the number of max requests per batch to the max tokens per batch
+        self.continuous_batching_config.max_request_per_batch = min(
+            self.continuous_batching_config.max_request_per_batch,
+            paged_attention_cache.max_batch_tokens
+        )
         # And if there is no prefix sharing, we can cap the number of request per batch (1 request = 1 block at least)
         if not self._use_prefix_sharing:
             self.continuous_batching_config.max_request_per_batch = min(
