@@ -21,7 +21,7 @@ The Transformers docs live under `docs/source/<lang>/` and are built with [doc-b
 > [!TIP]
 > You usually don't need to build the docs locally. When you open a PR that touches files under `docs/`, a bot builds a preview and posts the link as a comment on the PR.
 
-Build locally for a faster iteration loop, or while drafting changes before you open a PR.
+Build locally for a faster iteration loop, or while drafting changes before you open a PR.This is especially useful for large documentation updates.
 
 ## Building and previewing locally
 
