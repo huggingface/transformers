@@ -183,6 +183,12 @@ class CircleCIJob:
             {"run": " && ".join(self.install_steps)},
             {
                 "run": {
+                    "name": "Install `datasets@main`",
+                    "command": 'pip uninstall datasets -y && pip install "datasets @ git+https://github.com/huggingface/datasets@main#egg=datasets"',
+                }
+            },
+            {
+                "run": {
                     "name": "Download NLTK files",
                     "command": """python -c "import nltk; nltk.download('punkt', quiet=True)" """,
                 }
