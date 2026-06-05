@@ -523,9 +523,15 @@ class HiggsAudioV2Model(HiggsAudioV2PreTrainedModel):
                 if audio_input_ids_mask is not None
                 else audio_embeds
             )
-            inputs_embeds = inputs_embeds.masked_scatter(
-                audio_token_mask[..., None].expand_as(inputs_embeds), audio_embeds.to(inputs_embeds.device)
-            )
+            mask = audio_token_mask[..., None].expand_as(inputs_embeds)
+            num_ones = mask.sum().item()
+            if audio_embeds.numel() >= num_ones:
+                inputs_embeds = inputs_embeds.masked_scatter(mask, audio_embeds.to(inputs_embeds.device))
+            elif audio_embeds.numel() > 0:
+                source = audio_embeds.to(inputs_embeds.device)
+                repeats = (num_ones + source.numel() - 1) // source.numel()
+                source = source.repeat(repeats)[:num_ones]
+                inputs_embeds = inputs_embeds.masked_scatter(mask, source)
         elif audio_input_ids is not None:
             inputs_embeds = audio_embeds
 
