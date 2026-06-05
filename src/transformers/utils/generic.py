@@ -1050,6 +1050,13 @@ def check_model_inputs(func):
     logger.warning_once("The `check_model_inputs` decorator is deprecated in favor of `merge_with_config_defaults`.")
     return merge_with_config_defaults(func)
 
+def no_inherit_decorator(cls):
+    """
+    Sentinel decorator for modular model files. Prevents the modular converter 
+    from propagating parent class decorators to this class in the generated 
+    modeling file. This decorator is stripped from the generated output automatically.
+    """
+    return cls
 
 class GeneralInterface(MutableMapping):
     """

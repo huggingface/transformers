@@ -987,9 +987,14 @@ def replace_class_node(
     if "nn.Module" in new_class_bases_names and "GradientCheckpointingLayer" in new_class_bases_names:
         new_class_bases = [k for k in new_class_bases if get_full_attribute_name(k.value) != "nn.Module"]
 
-    # Use class decorators redefined in modular file if any
+    # Use class decorators redefined in modular file if any.
+    # Strip `no_inherit_decorator` sentinel and drop parent decorators if found.
+    modular_decorators = [
+        dec for dec in modular_class_node.decorators
+        if "no_inherit_decorator" not in mapper.python_module.code_for_node(dec)
+    ]
     new_class_decorators = (
-        modular_class_node.decorators if len(modular_class_node.decorators) > 0 else original_modeling_node.decorators
+        modular_decorators if modular_decorators or len(modular_class_node.decorators) > 0 else original_modeling_node.decorators
     )
 
     # Compute new class docstring

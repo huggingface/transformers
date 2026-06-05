@@ -20,6 +20,7 @@ from torch import nn
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
+from ...utils.generic import no_inherit_decorator
 from ..cohere.modeling_cohere import CohereAttention
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3DecoderLayer,
@@ -127,7 +128,7 @@ class Glm4MoeConfig(PreTrainedConfig):
 class Glm4MoeRotaryEmbedding(GlmRotaryEmbedding):
     pass
 
-
+@no_inherit_decorator
 class Glm4MoeAttention(CohereAttention):
     def __init__(self, config: Glm4MoeConfig, layer_idx: int | None = None):
         nn.Module.__init__(self)

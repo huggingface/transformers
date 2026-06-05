@@ -32,7 +32,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_bilinear_indices_and_weights, get_vision_cu_seqlens, get_vision_position_ids
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
@@ -333,7 +333,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         output = self.out_proj(core_attn_out)
         return output
 
-
+@no_inherit_decorator
 class Qwen3_5Attention(Qwen3NextAttention):
     pass
 
