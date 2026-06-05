@@ -37,22 +37,23 @@ class MossAudioTokenizerConfig(PreTrainedConfig):
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
-    Args:
-        sampling_rate (`int`, *optional*, defaults to 24000):
-            The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
-        downsample_rate (`int`, *optional*, defaults to 1920):
-            Total downsampling rate from waveform to tokens.
-        causal_transformer_context_duration (`float`, *optional*, defaults to 10.0):
-            Context duration in seconds for causal transformer.
-        encoder_kwargs (`list[dict]`, *optional*):
-            List of encoder module configurations. Each dict specifies a module type and its parameters.
-        decoder_kwargs (`list[dict]`, *optional*):
-            List of decoder module configurations in execution order.
-        quantizer_type (`str`, *optional*, defaults to `"rvq"`):
-            Quantizer type. Options include `"rvq"`, `"spec_rvq"`, `"rlfq"`, `"random_prefix_rlfq"`.
-        quantizer_kwargs (`dict`, *optional*):
-            Configuration for the quantizer including `input_dim`, `rvq_dim`, `output_dim`, `num_quantizers`,
-            `codebook_size`, and `codebook_dim`.
+    version (`str`, *optional*):
+        Version string accepted for checkpoint compatibility.
+    sampling_rate (`int`, *optional*, defaults to 24000):
+        The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
+    downsample_rate (`int`, *optional*, defaults to 1920):
+        Total downsampling rate from waveform to tokens.
+    causal_transformer_context_duration (`float`, *optional*, defaults to 10.0):
+        Context duration in seconds for causal transformer.
+    encoder_kwargs (`list[dict]`, *optional*):
+        List of encoder module configurations. Each dict specifies a module type and its parameters.
+    decoder_kwargs (`list[dict]`, *optional*):
+        List of decoder module configurations in execution order.
+    quantizer_type (`str`, *optional*, defaults to `"rlfq"`):
+        Quantizer type. Options include `"rvq"`, `"spec_rvq"`, `"rlfq"`, `"random_prefix_rlfq"`.
+    quantizer_kwargs (`dict`, *optional*):
+        Configuration for the quantizer including `input_dim`, `rvq_dim`, `output_dim`, `num_quantizers`,
+        `codebook_size`, and `codebook_dim`.
 
     Example:
 
@@ -95,6 +96,25 @@ class MossAudioTokenizerConfig(PreTrainedConfig):
         quantizer_kwargs: dict[str, Any] | None = None,
         **kwargs,
     ):
+        r"""
+        version (`str`, *optional*):
+            Version string accepted for checkpoint compatibility.
+        sampling_rate (`int`, *optional*, defaults to 24000):
+            The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
+        downsample_rate (`int`, *optional*, defaults to 1920):
+            Total downsampling rate from waveform to tokens.
+        causal_transformer_context_duration (`int` or `float`, *optional*, defaults to 10.0):
+            Context duration in seconds for causal transformer.
+        encoder_kwargs (`list[dict]`, *optional*):
+            List of encoder module configurations. Each dict specifies a module type and its parameters.
+        decoder_kwargs (`list[dict]`, *optional*):
+            List of decoder module configurations in execution order.
+        quantizer_type (`str`, *optional*, defaults to `"rlfq"`):
+            Quantizer type. Options include `"rvq"`, `"spec_rvq"`, `"rlfq"`, `"random_prefix_rlfq"`.
+        quantizer_kwargs (`dict`, *optional*):
+            Configuration for the quantizer including `input_dim`, `rvq_dim`, `output_dim`, `num_quantizers`,
+            `codebook_size`, and `codebook_dim`.
+        """
         # Some checkpoints might include an incorrect/legacy `model_type` (e.g. "speech_tokenizer").
         # We drop it to avoid overriding the class-level `model_type`.
         kwargs.pop("model_type", None)

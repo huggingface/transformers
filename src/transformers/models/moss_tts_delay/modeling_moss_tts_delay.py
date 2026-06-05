@@ -33,14 +33,8 @@ from ...utils import (
 from ..auto import AutoModel
 from .configuration_moss_tts_delay import MossTTSDelayConfig
 from .inference_utils import find_last_equal_C, sample_token
+from .processing_moss_tts_delay import AssistantMessage, MossTTSDelayProcessor, UserMessage
 
-
-try:
-    from .processing_moss_tts_delay import AssistantMessage, MossTTSDelayProcessor, UserMessage
-except Exception:
-    UserMessage = None
-    AssistantMessage = None
-    MossTTSDelayProcessor = None
 
 logger = logging.get_logger(__name__)
 
