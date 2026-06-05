@@ -30,11 +30,11 @@ from ...generation import GenerationConfig
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ..nemotron_h import NemotronHForCausalLM
 from ..radio import RADIOModel
 from .audio_model import SoundEncoder, SoundProjection
 from .configuration_nemotron_h_nano_omni import NemotronH_Nano_Omni_Reasoning_V3_Config
 from .evs import EfficientVideoSampling
-from .modeling_nemotron_h import NemotronHForCausalLM
 
 
 logger = logging.get_logger(__name__)

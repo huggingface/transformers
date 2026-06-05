@@ -11,23 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Modular definition of NemotronH_Nano_Omni_Reasoning_V3.
-
-This file is the source-of-truth for the multimodal Omni wrapper. Running
-`python utils/modular_model_converter.py --files src/transformers/models/nemotron_h_nano_omni/modular_nemotron_h_nano_omni.py`
-regenerates `modeling_nemotron_h_nano_omni.py` next to it.
-
-The Omni model is a *composition* (not an inheritance) of:
-  - `RADIOModel` from `..radio.modeling_radio` (vision tower),
-  - vendored `NemotronHForCausalLM` from `.modeling_nemotron_h` (language model),
-  - Parakeet-based `SoundEncoder` / `SoundProjection` (audio tower, optional),
-  - `EfficientVideoSampling` for token pruning on video.
-
-The forward fuses vision/audio/video token embeddings into the LM's input
-embedding table at the positions tagged by the image/sound context token IDs,
-then delegates to `language_model.generate(...)` for autoregressive decoding.
-"""
-
 from __future__ import annotations
 
 import warnings
@@ -42,11 +25,11 @@ from ...generation import GenerationConfig
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ..nemotron_h import NemotronHForCausalLM
 from ..radio import RADIOModel
 from .audio_model import SoundEncoder, SoundProjection
 from .configuration_nemotron_h_nano_omni import NemotronH_Nano_Omni_Reasoning_V3_Config
 from .evs import EfficientVideoSampling
-from .modeling_nemotron_h import NemotronHForCausalLM
 
 
 logger = logging.get_logger(__name__)

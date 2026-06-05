@@ -13,8 +13,8 @@
 # limitations under the License.
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..nemotron_h import NemotronHConfig
 from ..radio.configuration_radio import RADIOConfig
-from .configuration_nemotron_h import NemotronHConfig
 
 
 __all__ = ["NemotronH_Nano_Omni_Reasoning_V3_Config", "SoundConfig"]
