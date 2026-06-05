@@ -174,9 +174,8 @@ def inspect(
         transformers inspect meta-llama/Llama-3.2-1B-Instruct
         transformers --format json inspect meta-llama/Llama-3.2-1B-Instruct
     """
-    from huggingface_hub.cli._output import OutputFormatWithAuto
-
     from transformers import AutoConfig
+    from transformers.agent.output import OutputFormatWithAuto
 
     kwargs = {}
     if token is not None:

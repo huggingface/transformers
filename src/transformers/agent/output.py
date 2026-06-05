@@ -29,7 +29,12 @@ directly for everything else — see ``huggingface_hub.cli._output``.
 
 import sys
 
-from huggingface_hub.cli._output import OutputFormatWithAuto, out
+
+try:  # huggingface_hub <= 1.16
+    from huggingface_hub.cli._output import OutputFormatWithAuto, out
+except ImportError:  # huggingface_hub >= 1.17 merged the *WithAuto enum into OutputFormat
+    from huggingface_hub.cli._output import OutputFormat as OutputFormatWithAuto
+    from huggingface_hub.cli._output import out
 
 
 def answer(value: str, key: str = "answer") -> None:

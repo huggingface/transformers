@@ -57,6 +57,11 @@ if is_serve_available():
 
         reasoning_content: str | None = None
 
+    class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
+        generation_config: str
+        seed: int
+        chat_template_kwargs: dict
+
 
 from .utils import (
     BaseGenerateManager,
@@ -73,12 +78,6 @@ from .utils import (
 
 if TYPE_CHECKING:
     from transformers import GenerationConfig, PreTrainedModel, PreTrainedTokenizerFast, ProcessorMixin
-
-
-class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
-    generation_config: str
-    seed: int
-    chat_template_kwargs: dict
 
 
 # Fields accepted by the OpenAI schema but not yet supported.

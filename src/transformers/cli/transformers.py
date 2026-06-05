@@ -14,14 +14,36 @@
 """Transformers CLI."""
 
 from huggingface_hub import check_cli_update, typer_factory
-from huggingface_hub.cli._cli_utils import FormatWithAutoOpt, OutputFormatWithAuto
 
+from transformers.agent.output import OutputFormatWithAuto
 from transformers.cli.add_new_model_like import add_new_model_like
 from transformers.cli.agentic.app import register_agentic_commands
 from transformers.cli.chat import Chat
 from transformers.cli.download import download
 from transformers.cli.serve import Serve
 from transformers.cli.system import env, version
+
+
+try:  # huggingface_hub <= 1.16 ships a ready-made root --format option
+    from huggingface_hub.cli._cli_utils import FormatWithAutoOpt
+except ImportError:  # huggingface_hub >= 1.17 removed it; rebuild the equivalent.
+    # 1.17's typer group consumes --format only *after* the subcommand
+    # (`transformers version --format json`); the root option keeps the
+    # documented `transformers --format json <command>` form working too.
+    from typing import Annotated
+
+    import typer
+
+    from transformers.agent.output import out
+
+    def _apply_format(value: OutputFormatWithAuto) -> OutputFormatWithAuto:
+        out.set_mode(value)
+        return value
+
+    FormatWithAutoOpt = Annotated[
+        OutputFormatWithAuto,
+        typer.Option("--format", help="Output format.", callback=_apply_format),
+    ]
 
 
 app = typer_factory(help="Transformers CLI")
