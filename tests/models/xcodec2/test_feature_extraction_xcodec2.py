@@ -49,7 +49,6 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 @require_torch
 class Xcodec2FeatureExtractionTester:
-    # Ignore copy
     def __init__(
         self,
         parent,
@@ -71,7 +70,6 @@ class Xcodec2FeatureExtractionTester:
         self.feature_size = feature_size
         self.sampling_rate = sampling_rate
 
-    # Ignore copy
     def prepare_feat_extract_dict(self):
         return {
             "feature_size": self.feature_size,
@@ -197,7 +195,6 @@ class Xcodec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             pt_processed = feature_extractor.pad([{"audio_spectrogram": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.audio_spectrogram.dtype == torch.float32)
 
-    # Ignore copy
     @unittest.skip("Xcodec2 doesn't support stereo input")
     def test_integration_stereo(self):
         pass

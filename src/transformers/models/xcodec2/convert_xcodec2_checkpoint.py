@@ -67,20 +67,19 @@ STATE_DICT_MAPPING = {
     r"\.downsample\.lowpass\.filter":                                               r".downsample.filter",
 
     # ── Quantizer: lives on main model, not inside decoder ──
-    r"^generator\.quantizer\.layers\.0\.":                                          r"quantizer.finite_scalar_quantization.",
+    r"^generator\.quantizer\.layers\.0\.":                                          r"quantizer.quantizer.",
     r"^generator\.quantizer\.":                                                     r"quantizer.",
 
     # ── Decoder (generator -> acoustic_decoder) ──
     # -- Handle backbone components: now directly in decoder (no backbone. prefix)
-    r"^generator\.backbone\.prior_net\.0\.":                                       r"acoustic_decoder.prior_resnet_block1.",
-    r"^generator\.backbone\.prior_net\.1\.":                                       r"acoustic_decoder.prior_resnet_block2.",
-    r"^generator\.backbone\.post_net\.0\.":                                        r"acoustic_decoder.post_resnet_block1.",
-    r"^generator\.backbone\.post_net\.1\.":                                        r"acoustic_decoder.post_resnet_block2.",
+    r"^generator\.backbone\.prior_net\.":                                          r"acoustic_decoder.prior_net.",
+    r"^generator\.backbone\.post_net\.":                                           r"acoustic_decoder.post_net.",
+    r"^generator\.backbone\.final_layer_norm\.":                                   r"acoustic_decoder.norm.",
     r"^generator\.backbone\.":                                                      r"acoustic_decoder.",
     # -- General generator mapping
     r"^generator\.":                                                                r"acoustic_decoder.",
     # -- ISTFT head: out -> linear
-    r"acoustic_decoder\.head\.out\.":                                                        r"acoustic_decoder.head.linear.",
+    r"acoustic_decoder\.head\.out\.":                                              r"acoustic_decoder.head.linear.",
     # -- Transformer layers: transformers -> layers
     r"\.transformers\.":                                                            r".layers.",
     r"\.att\.c_proj\.":                                                             r".self_attn.o_proj.",

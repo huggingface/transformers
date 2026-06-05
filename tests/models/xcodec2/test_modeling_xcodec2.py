@@ -144,6 +144,7 @@ class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     test_resize_embeddings = False
     pipeline_model_mapping = {"feature-extraction": Xcodec2Model} if is_torch_available() else {}
+    additional_model_inputs = ["audio_spectrogram", "spectrogram_mask"]
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not support returning hidden states
@@ -183,19 +184,6 @@ class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["audio", "audio_spectrogram", "padding_mask"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
-
-    def test_gradient_checkpointing_backward_compatibility(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            if not model_class.supports_gradient_checkpointing:
-                continue
-
-            config.text_encoder.gradient_checkpointing = True
-            config.audio_encoder.gradient_checkpointing = True
-            config.decoder.gradient_checkpointing = True
-            model = model_class(config)
-            self.assertTrue(model.is_gradient_checkpointing)
 
     @unittest.skip("XCodec2 does not have `inputs_embeds` logics")
     def test_model_get_set_embeddings(self):
@@ -248,7 +236,7 @@ class Xcodec2IntegrationTest(unittest.TestCase):
         exp_codec_error = float(raw_data["codec_error"])
 
         model_id = "bezzam/xcodec2"
-        model = Xcodec2Model.from_pretrained(model_id).to(torch_device).eval()
+        model = Xcodec2Model.from_pretrained(model_id, attn_implementation="eager").to(torch_device).eval()
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -291,7 +279,7 @@ class Xcodec2IntegrationTest(unittest.TestCase):
         exp_codec_errors = raw_data["codec_errors"]
 
         model_id = "bezzam/xcodec2"
-        model = Xcodec2Model.from_pretrained(model_id).to(torch_device).eval()
+        model = Xcodec2Model.from_pretrained(model_id, attn_implementation="eager").to(torch_device).eval()
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
