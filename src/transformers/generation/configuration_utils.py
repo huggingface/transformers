@@ -1619,7 +1619,7 @@ class ContinuousBatchingConfig:
             Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache. When `None`,
             resolved at runtime to 0.9 if there is no logit processing and 0.8 if there is, to leave headroom for
             vocabulary-sized temporary tensors.
-        max_request_per_batch (`int`, *optional*):
+        max_requests_per_batch (`int`, *optional*):
             Maximum number of requests per batch. Auto-inferred from workload hints when `None`, with fallback of 1024.
         max_blocks_per_request (`int`, *optional*):
             Maximum blocks per request, used in the `flash_attn_with_kvcache` fast decode path to dimension
@@ -1692,7 +1692,7 @@ class ContinuousBatchingConfig:
 
     # The maximum number of requests in a batch. Helps limiting the memory footprint of the logits, which scale with the
     # vocabulary size.
-    max_request_per_batch: int | None = None
+    max_requests_per_batch: int | None = None
 
     # This is only used in the flash_attn_with_kvcache fast decode path to dimension the block table. If it is set to 0,
     # the fast decode path will not be used. Auto-inferred from GPU memory when `None` (default).

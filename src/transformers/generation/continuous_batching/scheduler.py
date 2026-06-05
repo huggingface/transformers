@@ -26,20 +26,20 @@ class Scheduler(ABC):
     schedulers implement different strategies for prioritizing and batching requests.
     """
 
-    def __init__(self, cache: PagedAttentionCache, safety_margin: float, max_request_per_batch: int):
+    def __init__(self, cache: PagedAttentionCache, safety_margin: float, max_requests_per_batch: int):
         """Initializes the scheduler. The safety margin is the percentage of free blocks under which we stop
         scheduling new prefill requests, so safety_margin = 0.1 means that when there is less than 10% of free blocks,
         or equivalently when more than 90% of blocks are already allocated, we stop scheduling new prefill requests.
         Setting safety_margin to 0.0 means no safety margin is applied."""
         self.cache = cache
         self.safety_margin = safety_margin
-        self.max_request_per_batch = max_request_per_batch
+        self.max_requests_per_batch = max_requests_per_batch
         self._cancellation_lock = threading.Lock()
         # Check args
         if safety_margin < 0 or safety_margin > 1:
             raise ValueError(f"Got {safety_margin = } but expected a value in [0, 1]")
-        if max_request_per_batch < 1:
-            raise ValueError(f"Got {max_request_per_batch = } but expected a value >= 1")
+        if max_requests_per_batch < 1:
+            raise ValueError(f"Got {max_requests_per_batch = } but expected a value >= 1")
         # This is to compute the read cache used by a new request being scheduled
         self.read_cache_limit = None if self.cache.num_full_attention_groups else self.cache.config.sliding_window
         self.max_decode_fast_path_length = self.cache.max_blocks_per_request * self.cache.block_size
@@ -224,7 +224,7 @@ class Scheduler(ABC):
         decode_fast_path = self.cache.max_blocks_per_request > 0  # best way to check if decode fast path availability
         safety_margins = safety_margin * self.cache.num_blocks
         original_token_budget, original_cache_budget = token_budget, cache_budget
-        request_budget = self.max_request_per_batch
+        request_budget = self.max_requests_per_batch
 
         for state in candidates:
             num_free_blocks = self.cache.get_num_free_blocks()
@@ -332,11 +332,11 @@ class FIFOScheduler(Scheduler):
     """This scheduler processes requests in the order they arrive, meaning decoding requests has priority over
     prefilling requests."""
 
-    def __init__(self, cache: PagedAttentionCache, safety_margin: float | None, max_request_per_batch: int):
+    def __init__(self, cache: PagedAttentionCache, safety_margin: float | None, max_requests_per_batch: int):
         """Initializes the FIFO scheduler, with a default safety margin of 0.15 (ie. 15% of free blocks)."""
         if safety_margin is None:
             safety_margin = 0.15
-        super().__init__(cache, safety_margin, max_request_per_batch)
+        super().__init__(cache, safety_margin, max_requests_per_batch)
 
     def schedule_batch(
         self, token_budget: int, cache_budget: int
@@ -383,11 +383,11 @@ class PrefillFirstScheduler(Scheduler):
     prefill requests (which are continuations of partially processed prompts) are completed before processing new
     decoding requests."""
 
-    def __init__(self, cache: PagedAttentionCache, safety_margin: float | None, max_request_per_batch: int):
+    def __init__(self, cache: PagedAttentionCache, safety_margin: float | None, max_requests_per_batch: int):
         """Initializes the prefill first scheduler, with a default safety margin of 0.0 (no safety margin)."""
         if safety_margin is None:
             safety_margin = 0.0
-        super().__init__(cache, safety_margin, max_request_per_batch)
+        super().__init__(cache, safety_margin, max_requests_per_batch)
 
     def schedule_batch(
         self, token_budget: int, cache_budget: int

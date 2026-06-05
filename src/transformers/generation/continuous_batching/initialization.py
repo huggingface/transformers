@@ -30,7 +30,7 @@ from .utils import WorkloadHints
 
 
 FALLBACK_DEFAULTS = {
-    "max_request_per_batch": 1024,
+    "max_requests_per_batch": 1024,
     "max_blocks_per_request": 32,
     "q_padding_interval_size": 64,
     "kv_padding_interval_size": 64 * 256,  # 64 blocks of 256 tokens ie. 16384 tokens
@@ -94,12 +94,12 @@ def resolve_using_hints(cb_config: ContinuousBatchingConfig, workload_hints: Wor
             blocks_per_request = int(ceil(max_sequence_length / cb_config.block_size)) + 1
             cb_config.max_blocks_per_request = blocks_per_request + (blocks_per_request % 2)
     # The maximum number of requests per batch is the minimum of the workload hints and the fallback default
-    if cb_config.max_request_per_batch is None and workload_hints is not None:
+    if cb_config.max_requests_per_batch is None and workload_hints is not None:
         if workload_hints.num_requests > 0:  # guard against bad hints
-            max_request_per_batch = min(workload_hints.num_requests, FALLBACK_DEFAULTS["max_request_per_batch"])
+            max_requests_per_batch = min(workload_hints.num_requests, FALLBACK_DEFAULTS["max_requests_per_batch"])
         else:
-            max_request_per_batch = FALLBACK_DEFAULTS["max_request_per_batch"]
-        cb_config.max_request_per_batch = max_request_per_batch
+            max_requests_per_batch = FALLBACK_DEFAULTS["max_requests_per_batch"]
+        cb_config.max_requests_per_batch = max_requests_per_batch
 
 
 
@@ -280,8 +280,8 @@ def update_cb_config_after_cache_creation(cb_config: ContinuousBatchingConfig, c
     cb_config.num_blocks = cache.num_blocks
     cb_config.max_batch_tokens = cache.max_batch_tokens
     # Cap the number of max requests per batch to the max tokens per batch
-    cb_config.max_request_per_batch = min(cb_config.max_request_per_batch, cache.max_batch_tokens)
+    cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, cache.max_batch_tokens)
     # And if there is no prefix sharing, we can cap the number of request per batch (1 request = 1 block at least)
     if not cache.use_prefix_sharing:
-        cb_config.max_request_per_batch = min(cb_config.max_request_per_batch, cache.num_blocks)
+        cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, cache.num_blocks)
     # TODO: should we algin the max number of request per batch to a multiple of 32 ?
