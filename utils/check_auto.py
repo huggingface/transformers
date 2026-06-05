@@ -183,7 +183,7 @@ def get_all_processor_mappings(config_mapping: dict[str, str]):
         ),
         "image_processing": (
             "TorchvisionBackend",
-            "IMAGE_PROCESSOR_MAPPING_NAMES",
+            "IMAGE_PROCESSOR_MAPPING_NAMES_TV",
             MISSING_IMAGE_PROCESSOR_MAPPING_NAMES,
         ),
         "video_processing": (
@@ -207,19 +207,20 @@ def get_all_processor_mappings(config_mapping: dict[str, str]):
             parent_class_name=parent_class_name,
         )
 
-        # Make sure users aren't duplicating the same keys manually and skip image processor until merged
+        # Make sure users aren't duplicating the same keys manually
+        # Skip image processor until pil <-> tv backend are merged into one mapping
         if "image_processing" not in processor_filename:
             check_duplicates(all_mappings[mapping_name], missing_mapping_names)
 
     merged_image_processor_mapping = {}
     for model_type in config_mapping:
-        slow_processor_name = all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES_PIL"].get(model_type)
-        fast_processor_name = all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES"].get(model_type)
+        pil_processor_name = all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES_PIL"].get(model_type)
+        tv_processor_name = all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES_TV"].get(model_type)
 
-        if slow_processor_name is not None or fast_processor_name is not None:
+        if pil_processor_name is not None or tv_processor_name is not None:
             merged_image_processor_mapping[model_type] = {
-                **({"pil": slow_processor_name} if slow_processor_name else {}),
-                **({"torchvision": fast_processor_name} if fast_processor_name else {}),
+                **({"pil": pil_processor_name} if pil_processor_name else {}),
+                **({"torchvision": tv_processor_name} if tv_processor_name else {}),
             }
 
     all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES"] = merged_image_processor_mapping
@@ -274,7 +275,7 @@ def check_duplicates(mapping_for_special_models: dict[str, Any], auto_mapping: d
 
 
 def main(overwrite: bool):
-    # 1. Read existing file content if available
+    # Read existing file content if available
     old_content = ""
     if os.path.exists(AUTO_FILENAME):
         old_content = open(AUTO_FILENAME, "r").read()
