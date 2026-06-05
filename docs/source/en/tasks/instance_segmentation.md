@@ -233,7 +233,7 @@ To track segmentation quality during training, compute a *union-based mean IoU* 
 3. Merge all ground-truth instance masks into a single binary map
 4. Compute Intersection-over-Union between the two maps
 
-This gives a per-image metric of "how well does the model cover the buildings". We average it over the full validation set.
+This gives a per-image metric of "how well does the model cover the buildings", which is averaged over the full validation set.
 
 Implement this as a [`Trainer`] subclass that runs an extra inference pass during evaluation to compute the metric:
 
