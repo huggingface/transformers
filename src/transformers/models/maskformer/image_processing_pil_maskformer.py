@@ -19,7 +19,7 @@ from typing import Any
 import numpy as np
 
 from ...image_processing_backends import PilBackend
-from ...image_processing_outputs import SemanticSegmentationPostProcessOutput
+from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import PaddingMode, get_size_with_aspect_ratio
 from ...image_transforms import pad as np_pad
@@ -582,7 +582,7 @@ class MaskFormerImageProcessorPil(PilBackend):
 
     def post_process_semantic_segmentation(
         self, outputs, target_sizes: list[tuple[int, int]] | None = None, return_segmentation_scores: bool = False
-    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessOutput]":
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
         """
         Converts the output of [`MaskFormerForInstanceSegmentation`] into semantic segmentation maps. Only supports
         PyTorch.
@@ -595,14 +595,14 @@ class MaskFormerImageProcessorPil(PilBackend):
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
             return_segmentation_scores (`bool`, *optional*, defaults to `False`):
                 Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
-                the returned list is a [`SemanticSegmentationPostProcessOutput`] with fields `segmentation`
+                the returned list is a [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation`
                 (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
 
         Returns:
-            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessOutput]`: When
+            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessorOutput]`: When
             `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
             segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
-            a list of [`SemanticSegmentationPostProcessOutput`] with fields `segmentation` (class IDs, shape
+            a list of [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation` (class IDs, shape
             `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
         """
         requires_backends(self, "torch")
@@ -632,14 +632,14 @@ class MaskFormerImageProcessorPil(PilBackend):
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
                 post_process_outputs.append(
-                    SemanticSegmentationPostProcessOutput(
+                    SemanticSegmentationPostProcessorOutput(
                         segmentation=semantic_map, segmentation_scores=resized_logits[0]
                     )
                 )
         else:
             seg_maps = segmentation.argmax(dim=1)
             post_process_outputs = [
-                SemanticSegmentationPostProcessOutput(segmentation=seg_maps[i], segmentation_scores=segmentation[i])
+                SemanticSegmentationPostProcessorOutput(segmentation=seg_maps[i], segmentation_scores=segmentation[i])
                 for i in range(batch_size)
             ]
 

@@ -17,7 +17,7 @@ import unittest
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from transformers.image_processing_outputs import PostProcessOutput
+from transformers.image_processing_outputs import PostProcessorOutput
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
@@ -30,19 +30,19 @@ if is_torch_available():
 
 
 @dataclass
-class SubclassPostProcessOutput(PostProcessOutput):
+class SubclassPostProcessorOutput(PostProcessorOutput):
     scores: "torch.Tensor"
     labels: "torch.Tensor"
 
 
-class PostProcessOutputTest(unittest.TestCase):
+class PostProcessorOutputTest(unittest.TestCase):
     def test_base_class_direct_instantiation(self):
-        obj = PostProcessOutput({"a": 1, "b": 2})
+        obj = PostProcessorOutput({"a": 1, "b": 2})
         self.assertEqual(obj["a"], 1)
         self.assertEqual(obj["b"], 2)
 
     def test_subclass_without_dataclass_raises(self):
-        class BadSubclass(PostProcessOutput):
+        class BadSubclass(PostProcessorOutput):
             pass
 
         with self.assertRaises(TypeError):
@@ -50,7 +50,7 @@ class PostProcessOutputTest(unittest.TestCase):
 
     def test_subclass_with_dataclass_does_not_raise(self):
         @dataclass
-        class GoodSubclass(PostProcessOutput):
+        class GoodSubclass(PostProcessorOutput):
             value: int
 
         obj = GoodSubclass(value=42)
@@ -58,11 +58,11 @@ class PostProcessOutputTest(unittest.TestCase):
 
 
 @require_torch
-class SubclassPostProcessOutputTest(unittest.TestCase):
+class SubclassPostProcessorOutputTest(unittest.TestCase):
     def _make_output(self, batch_size=2, num_labels=3):
         scores = torch.rand(batch_size, num_labels)
         labels = torch.randint(0, num_labels, (batch_size,))
-        return SubclassPostProcessOutput(scores=scores, labels=labels)
+        return SubclassPostProcessorOutput(scores=scores, labels=labels)
 
     def test_attribute_access(self):
         obj = self._make_output()
@@ -178,14 +178,14 @@ class SubclassPostProcessOutputTest(unittest.TestCase):
     def test_copy(self):
         obj = self._make_output()
         obj_copy = copy.copy(obj)
-        self.assertIsInstance(obj_copy, SubclassPostProcessOutput)
+        self.assertIsInstance(obj_copy, SubclassPostProcessorOutput)
         self.assertIs(obj_copy.scores, obj.scores)
         self.assertIs(obj_copy.labels, obj.labels)
 
     def test_deepcopy(self):
         obj = self._make_output()
         obj_copy = copy.deepcopy(obj)
-        self.assertIsInstance(obj_copy, SubclassPostProcessOutput)
+        self.assertIsInstance(obj_copy, SubclassPostProcessorOutput)
         self.assertIsNot(obj_copy.scores, obj.scores)
         self.assertIsNot(obj_copy.labels, obj.labels)
         self.assertTrue(torch.equal(obj_copy.scores, obj.scores))

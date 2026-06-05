@@ -335,7 +335,7 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             self.assertEqual(segmentation[0].shape, target_sizes[0])
 
-            # return_segmentation_scores=True: returns list of SemanticSegmentationPostProcessOutput
+            # return_segmentation_scores=True: returns list of SemanticSegmentationPostProcessorOutput
             segmentation = image_processor.post_process_semantic_segmentation(outputs, return_segmentation_scores=True)
             self.assertEqual(len(segmentation), self.image_processor_tester.batch_size)
             self.assertEqual(

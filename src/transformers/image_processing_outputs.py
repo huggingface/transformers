@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     import torch
 
 
-class PostProcessOutput(UserDict):
+class PostProcessorOutput(UserDict):
     """Base class for image processor post-processing outputs.
 
     Behaves like a dict, so fields are accessible via both attribute access (``output.segmentation``)
@@ -32,7 +32,7 @@ class PostProcessOutput(UserDict):
     Example::
 
         @dataclass
-        class SemanticSegmentationPostProcessOutput(PostProcessOutput):
+        class SemanticSegmentationPostProcessorOutput(PostProcessorOutput):
             segmentation: torch.Tensor
             segmentation_scores: torch.Tensor
     """
@@ -40,16 +40,16 @@ class PostProcessOutput(UserDict):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Subclasses of PostProcessOutput must use the @dataclass decorator
+        # Subclasses of PostProcessorOutput must use the @dataclass decorator
         # This check is done in __init__ because the @dataclass decorator operates after __init_subclass__
-        # issubclass() would return True for issubclass(PostProcessOutput, PostProcessOutput) when False is needed
-        # Just need to check that the current class is not PostProcessOutput
-        is_post_process_output_subclass = self.__class__ != PostProcessOutput
+        # issubclass() would return True for issubclass(PostProcessorOutput, PostProcessorOutput) when False is needed
+        # Just need to check that the current class is not PostProcessorOutput
+        is_post_process_output_subclass = self.__class__ != PostProcessorOutput
 
         if is_post_process_output_subclass and not is_dataclass(self):
             raise TypeError(
                 f"{self.__module__}.{self.__class__.__name__} is not a dataclass."
-                f" Subclasses of {PostProcessOutput.__name__} must use the @dataclass decorator."
+                f" Subclasses of {PostProcessorOutput.__name__} must use the @dataclass decorator."
             )
 
     def __post_init__(self):
@@ -84,7 +84,7 @@ class PostProcessOutput(UserDict):
 
 
 @dataclass
-class SemanticSegmentationPostProcessOutput(PostProcessOutput):
+class SemanticSegmentationPostProcessorOutput(PostProcessorOutput):
     """
     Output of a semantic segmentation post-processing step.
 

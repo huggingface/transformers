@@ -22,7 +22,7 @@
 import numpy as np
 
 from ...image_processing_backends import PilBackend
-from ...image_processing_outputs import SemanticSegmentationPostProcessOutput
+from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -177,7 +177,7 @@ class SegformerImageProcessorPil(PilBackend):
     @requires(backends=("torch",))
     def post_process_semantic_segmentation(
         self, outputs, target_sizes: list[tuple] | None = None, return_segmentation_scores: bool = False
-    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessOutput]":
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
         """
         Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps.
 
@@ -189,14 +189,14 @@ class SegformerImageProcessorPil(PilBackend):
                 predictions will not be resized.
             return_segmentation_scores (`bool`, *optional*, defaults to `False`):
                 Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
-                the returned list is a [`SemanticSegmentationPostProcessOutput`] with fields `segmentation`
+                the returned list is a [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation`
                 (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
 
         Returns:
-            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessOutput]`: When
+            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessorOutput]`: When
             `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
             segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
-            a list of [`SemanticSegmentationPostProcessOutput`] with fields `segmentation` (class IDs, shape
+            a list of [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation` (class IDs, shape
             `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
         """
         import torch
@@ -222,14 +222,14 @@ class SegformerImageProcessorPil(PilBackend):
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
                 post_process_outputs.append(
-                    SemanticSegmentationPostProcessOutput(
+                    SemanticSegmentationPostProcessorOutput(
                         segmentation=semantic_map, segmentation_scores=resized_logits[0]
                     )
                 )
         else:
             seg_maps = logits.argmax(dim=1)
             post_process_outputs = [
-                SemanticSegmentationPostProcessOutput(segmentation=seg_maps[i], segmentation_scores=logits[i])
+                SemanticSegmentationPostProcessorOutput(segmentation=seg_maps[i], segmentation_scores=logits[i])
                 for i in range(logits.shape[0])
             ]
 
