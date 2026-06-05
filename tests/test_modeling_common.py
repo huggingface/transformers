@@ -53,6 +53,7 @@ from transformers.integrations.deepspeed import (
 )
 from transformers.integrations.moe import (
     batched_mm_experts_forward,
+    deepgemm_bf16_experts_forward,
     grouped_mm_experts_forward,
     sonicmoe_experts_forward,
 )
@@ -118,6 +119,7 @@ from transformers.utils import (
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
+from transformers.utils.import_utils import get_cuda_runtime_version
 from transformers.utils.output_capturing import CompileableContextVar
 
 from .exporters.test_utils import ExportTesterMixin
@@ -132,8 +134,8 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
-    from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
     from transformers.integrations.accelerate import compute_module_sizes
+    from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
 
@@ -607,6 +609,17 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
             # we also need nvidia-cutlass-dsl and apache-tvm-ffi
             mocks["sonicmoe"] = Mock(wraps=sonicmoe_experts_forward)
             implementations.append("sonicmoe")
+
+        if (
+            dtype == torch.bfloat16
+            and is_kernels_available()
+            and torch.cuda.is_available()
+            and torch.cuda.get_device_capability() >= (9, 0)
+            and get_cuda_runtime_version() >= (12, 3)
+        ):
+            # DeepGEMM BF16 grouped forward requires Hopper+, CUDA runtime 12.3+, and bf16 hidden states
+            mocks["deepgemm"] = Mock(wraps=deepgemm_bf16_experts_forward)
+            implementations.append("deepgemm")
 
         outputs = {}
         # This is needed because we call the functions through the interface's global mapping

@@ -104,7 +104,6 @@ _import_structure = {
     "debug_utils": [],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
-    "distributed": [],
     "dynamic_module_utils": [],
     "exporters": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
@@ -834,15 +833,18 @@ else:
         # Also map XImageProcessorFast -> XImageProcessor for backward compat with old class names.
         def getattr_factory(target):
             def _getattr(name):
-                new_name = name.removesuffix("Fast")
-                logger.warning(
-                    "Accessing `%s` from `%s`. Returning `%s` instead. Behavior may be "
-                    "different and this alias will be removed in future versions.",
-                    name,
-                    target,
-                    new_name,
-                )
-                return getattr(importlib.import_module(target, __name__), new_name)
+                if name.endswith("Fast"):
+                    new_name = name.removesuffix("Fast")
+                    logger.warning_once(
+                        "Accessing `%s` from `%s`. Returning `%s` instead. Behavior may be "
+                        "different and this alias will be removed in future versions.",
+                        name,
+                        target,
+                        new_name,
+                    )
+                    return getattr(importlib.import_module(target, __name__), new_name)
+                # Silently forward non-Fast names to target (transparent alias behavior)
+                return getattr(importlib.import_module(target, __name__), name)
 
             return _getattr
 

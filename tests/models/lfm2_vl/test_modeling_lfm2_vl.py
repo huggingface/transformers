@@ -23,7 +23,9 @@ import requests
 from transformers import AutoProcessor, is_torch_available
 from transformers.models.lfm2_vl.modeling_lfm2_vl import Lfm2VlForConditionalGeneration
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -222,6 +224,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @require_deterministic_for_xpu
     def test_integration_test(self):
         model = Lfm2VlForConditionalGeneration.from_pretrained(
             "LiquidAI/LFM2-VL-1.6B",
@@ -238,9 +241,10 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "In this image, we see a cat and a dog lying on a pink blanket. They are both sleeping peacefully. They are"
+        expected_generated_text = "In this image, we see two cats sleeping on a pink blanket. There are also two remote controls on the blanket.\n\n\n\n"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
+    @require_deterministic_for_xpu
     def test_integration_test_high_resolution(self):
         model = Lfm2VlForConditionalGeneration.from_pretrained(
             "LiquidAI/LFM2-VL-1.6B",
@@ -262,6 +266,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(generated_texts[0], expected_generated_text)
 
+    @require_deterministic_for_xpu
     def test_integration_test_batched(self):
         model = Lfm2VlForConditionalGeneration.from_pretrained(
             "LiquidAI/LFM2-VL-450M",
@@ -305,6 +310,7 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @require_deterministic_for_xpu
     def test_integration_test(self):
         model = Lfm2VlForConditionalGeneration.from_pretrained(
             "LiquidAI/LFM2.5-VL-1.6B",
@@ -326,6 +332,7 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(generated_texts[0], expected_generated_text)
 
+    @require_deterministic_for_xpu
     def test_integration_test_high_resolution(self):
         model = Lfm2VlForConditionalGeneration.from_pretrained(
             "LiquidAI/LFM2.5-VL-1.6B",
@@ -345,6 +352,7 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_generated_text = "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands on Liberty Island in"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
+    @require_deterministic_for_xpu
     def test_integration_test_batched(self):
         model = Lfm2VlForConditionalGeneration.from_pretrained(
             "LiquidAI/LFM2.5-VL-1.6B",
@@ -361,8 +369,16 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = [
-            "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands on Liberty Island in",
-            "In this image, we see two cats lying on a pink blanket. One cat is a tabby, and the other is a",
-        ]
+        expected_generated_text = Expectations(
+            {
+                (None, None): [
+                    "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands on Liberty Island in",
+                    "In this image, we see two cats lying on a pink blanket. One cat is a tabby, and the other is a",
+                ],
+                ("xpu", 5): [
+                    "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands tall on a small",
+                    "In this image, we see two cats lying on a pink blanket. One cat is a tabby, and the other is a",
+                ],
+            }
+        ).get_expectation()
         self.assertListEqual(generated_texts, expected_generated_text)

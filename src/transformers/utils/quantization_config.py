@@ -1109,8 +1109,6 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             0-1 float percentage of model compression
         ignore (`typing.Union[typing.list[str], NoneType]`, *optional*):
             layer names or types to not quantize, supports regex prefixed by 're:'
-        sparsity_config (`typing.dict[str, typing.Any]`, *optional*):
-            configuration for sparsity compression
         quant_method (`str`, *optional*, defaults to `"compressed-tensors"`):
             do not override, should be compressed-tensors
         run_compressed (`bool`, *optional*, defaults to `True`): alter submodules (usually linear) in order to
@@ -1125,20 +1123,17 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         kv_cache_scheme: Optional["QuantizationArgs"] = None,  # noqa: F821
         global_compression_ratio: float | None = None,
         ignore: list[str] | None = None,
-        sparsity_config: dict[str, Any] | None = None,
         quant_method: str = "compressed-tensors",
         run_compressed: bool = True,
         **kwargs,
     ):
         if is_compressed_tensors_available():
-            from compressed_tensors.config import SparsityCompressionConfig
             from compressed_tensors.quantization import QuantizationConfig
         else:
             raise ImportError(
-                "compressed_tensors is not installed and is required for compressed-tensors quantization. Please install it with `pip install compressed-tensors`."
+                "compressed-tensors>=0.15.0 is required for compressed-tensors quantization. Please install it with `pip install compressed-tensors>=0.15.0`."
             )
         self.quantization_config = None
-        self.sparsity_config = None
 
         self.run_compressed = run_compressed
 
@@ -1157,26 +1152,12 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                 }
             )
 
-        if sparsity_config:
-            self.sparsity_config = SparsityCompressionConfig.load_from_registry(
-                sparsity_config.get("format"), **sparsity_config
-            )
-
         self.quant_method = QuantizationMethod.COMPRESSED_TENSORS
 
     def post_init(self):
-        if self.run_compressed:
-            if self.is_sparsification_compressed:
-                logger.warning(
-                    "`run_compressed` is only supported for quantized_compressed models"
-                    " and not for sparsified models. Setting `run_compressed=False`"
-                )
-                self.run_compressed = False
-            elif not self.is_quantization_compressed:
-                logger.warning(
-                    "`run_compressed` is only supported for compressed models. Setting `run_compressed=False`"
-                )
-                self.run_compressed = False
+        if self.run_compressed and not self.is_quantization_compressed:
+            logger.warning("`run_compressed` is only supported for compressed models. Setting `run_compressed=False`")
+            self.run_compressed = False
 
     @classmethod
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
@@ -1199,10 +1180,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         """
 
         if "quantization_config" in config_dict:
-            config_dict = dict(
-                sparsity_config=config_dict.get("sparsity_config"),
-                **config_dict["quantization_config"],
-            )
+            config_dict = config_dict["quantization_config"]
 
         return super().from_dict(config_dict, return_unused_kwargs=return_unused_kwargs, **kwargs)
 
@@ -1218,11 +1196,6 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             quantization_config = self.quantization_config.model_dump()
         else:
             quantization_config["quant_method"] = QuantizationMethod.COMPRESSED_TENSORS
-
-        if self.sparsity_config is not None:
-            quantization_config["sparsity_config"] = self.sparsity_config.model_dump()
-        else:
-            quantization_config["sparsity_config"] = {}
 
         return quantization_config
 
@@ -1260,18 +1233,6 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
         qc = self.quantization_config
         return self.is_quantized and (qc is not None and qc.quantization_status == QuantizationStatus.COMPRESSED)
-
-    @property
-    def is_sparsification_compressed(self):
-        from compressed_tensors.config import (
-            CompressionFormat,
-            SparsityCompressionConfig,
-        )
-
-        return (
-            isinstance(self.sparsity_config, SparsityCompressionConfig)
-            and self.sparsity_config.format != CompressionFormat.dense.value
-        )
 
 
 @dataclass
@@ -1686,6 +1647,9 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             Whether to dequantize the model during loading.
         modules_to_not_convert (`list`, *optional*):
             A list of module names that should not be converted during quantization.
+        scale_fmt (`str`, *optional*, defaults to `"float"`):
+            Storage dtype of the per-block weight scales: `"float"` (fp32, V3-style) or
+            `"ue8m0"` (1-byte `torch.float8_e8m0fnu`, V4-style).
     """
 
     def __init__(
@@ -1694,6 +1658,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         weight_block_size: tuple[int, int] = (128, 128),
         dequantize: bool = False,
         modules_to_not_convert: list | None = None,
+        scale_fmt: str = "float",
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.FP8
@@ -1701,6 +1666,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         self.activation_scheme = activation_scheme
         self.weight_block_size = weight_block_size
         self.dequantize = dequantize
+        self.scale_fmt = scale_fmt
         self.post_init()
 
     def post_init(self):
@@ -1714,6 +1680,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError("weight_block_size must be a tuple of two integers")
         if self.weight_block_size is not None and (self.weight_block_size[0] <= 0 or self.weight_block_size[1] <= 0):
             raise ValueError("weight_block_size must be a tuple of two positive integers")
+        if self.scale_fmt not in ("float", "ue8m0"):
+            raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
 
     def get_loading_attributes(self):
         return {"dequantize": self.dequantize, "modules_to_not_convert": self.modules_to_not_convert}
