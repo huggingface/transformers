@@ -105,6 +105,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("convbert", "ConvBertConfig"),
         ("convnext", "ConvNextConfig"),
         ("convnextv2", "ConvNextV2Config"),
+        ("cosmos3_omni", "Cosmos3OmniConfig"),
         ("cpmant", "CpmAntConfig"),
         ("csm", "CsmConfig"),
         ("csm_depth_decoder_model", "CsmDepthDecoderConfig"),
