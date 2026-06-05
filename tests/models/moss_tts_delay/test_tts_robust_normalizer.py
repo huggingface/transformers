@@ -14,7 +14,7 @@
 
 import unittest
 
-from transformers.models.moss_tts_delay.tts_robust_normalizer_single_script import normalize_tts_text
+from transformers.models.moss_tts_delay.tts_robust_normalizer_utils import normalize_tts_text
 
 
 NORMALIZER_TEST_CASES = [

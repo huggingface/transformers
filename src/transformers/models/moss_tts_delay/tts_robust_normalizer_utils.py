@@ -1,37 +1,50 @@
-#!/usr/bin/env python3
-
+# Copyright 2026 OpenMOSS and the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
-TTS 输入鲁棒性正则化器（非语义 TN）
+Robust TTS input normalizer for non-semantic text normalization.
 
-目标
-----
-1. 只做“鲁棒性清洗”，不做数字/单位/日期/金额等语义展开。
-2. 优先保护高风险 token，避免把 `.map`、`app.js.map`、`v2.3.1`、URL、Email、@mention、#hashtag 清坏。
-3. 保留 `[]` / `{}` 的内容，为后续声音事件、控制标签留接口。
-4. 对结构性符号做“替换而非删除”：
-   - `【】 / 〖〗 / 『』 / 「」` 在结构位置转成句边界。
-   - `《》` 只在“独立标题/栏目名”场景拆开；嵌入式标题保持不变。
-   - `—— / -- / ——...` 转成句边界。
-   - `-> / => / →` 等流程连接符转成中文逗号，避免 TTS 读入崩溃。
-5. 对社交平台常见噪声做弱归一化：
-   - `...... / ……` -> `。`
+Goals
+-----
+1. Only perform robustness cleanup; do not expand numbers, units, dates, amounts, or other semantic content.
+2. Prefer protecting high-risk tokens to avoid corrupting `.map`, `app.js.map`, `v2.3.1`, URLs, email addresses,
+   @mentions, and #hashtags.
+3. Preserve the contents of `[]` and `{}` so they remain available for future sound events and control tags.
+4. Replace structural symbols instead of deleting them:
+   - Convert `【】`, `〖〗`, `『』`, and `「」` in structural positions into sentence boundaries.
+   - Split `《》` only in standalone title or section-name contexts; keep embedded titles unchanged.
+   - Convert `——`, `--`, and `——...` into sentence boundaries.
+   - Convert flow connectors such as `->`, `=>`, and `→` into Chinese commas to avoid feeding unstable raw symbols to
+     TTS.
+5. Lightly normalize common social-platform noise:
+   - `......` and `……` -> `。`
    - `？？？！！！` -> `？！`
    - `！！！` -> `！`
-6. 空格按脚本类型处理：
-   - 西文片段内部：连续空格压缩为 1 个。
-   - 汉字 / 日文假名片段内部：删除空格。
-   - 汉字 / 日文假名 与“拉丁字母类 token / 受保护 token”相邻：保留或补 1 个空格。
-   - 汉字 / 日文假名 与纯数字相邻：不强行补空格。
-7. 轻量处理 Markdown 与换行：
+6. Handle spaces according to script type:
+   - Inside Western text spans, collapse consecutive spaces to one space.
+   - Inside Chinese-character and Japanese-kana spans, remove spaces.
+   - Between Chinese characters or Japanese kana and Latin-like or protected tokens, preserve or add one space.
+   - Between Chinese characters or Japanese kana and plain digits, do not force a space.
+7. Lightly handle Markdown and newlines:
    - `[text](url)` -> `text url`
-   - 去掉标题 `#`、引用 `>`、列表前缀
-   - 换行转句边界 `。`
+   - Remove heading `#`, quote `>`, and list prefixes.
+   - Convert newlines into sentence boundaries, `。`.
 
-非目标
-------
-1. 不决定“应该怎么读”。
-2. 不删除 `[] / {}` 内容。
-3. 不做 HTML/SSML/语义标签解释。
+Non-goals
+---------
+1. Do not decide how content should be spoken.
+2. Do not remove the contents of `[]` or `{}`.
+3. Do not interpret HTML, SSML, or semantic tags.
 """
 
 from __future__ import annotations
@@ -41,17 +54,17 @@ import unicodedata
 
 
 # ---------------------------
-# 基础常量与正则
+# Base constants and regular expressions
 # ---------------------------
 
-# 不依赖空格分词的脚本：汉字 + 日文假名
+# Scripts that do not rely on whitespace tokenization: Chinese characters and Japanese kana.
 _CJK_CHARS = r"\u3400-\u4dbf\u4e00-\u9fff\u3040-\u30ff"
 _CJK = f"[{_CJK_CHARS}]"
 
-# 保护占位符
+# Placeholder used for protected spans.
 _PROT = r"___PROT\d+___"
 
-# 需要保护的高风险 token
+# High-risk tokens that should be protected from normalization.
 _URL_RE = re.compile(r"https?://[^\s\u3000，。！？；、）】》〉」』]+")
 _EMAIL_RE = re.compile(r"(?<![\w.+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?![\w.-])")
 _MENTION_RE = re.compile(r"(?<![A-Za-z0-9_])@[A-Za-z0-9_]{1,32}")
@@ -61,7 +74,7 @@ _HASHTAG_RE = re.compile(r"(?<![A-Za-z0-9_])#(?!\s)[^\s#]+")
 # `.map` / `.env` / `.gitignore`
 _DOT_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9_])\.(?=[A-Za-z0-9._-]*[A-Za-z0-9])[A-Za-z0-9._-]+")
 
-# `app.js.map` / `index.d.ts` / `v2.3.1` / `foo/bar-baz.py` 等
+# `app.js.map`, `index.d.ts`, `v2.3.1`, `foo/bar-baz.py`, and similar tokens.
 _FILELIKE_RE = re.compile(
     r"(?<![A-Za-z0-9_])"
     r"(?=[A-Za-z0-9._/+:-]*[A-Za-z])"
@@ -70,20 +83,21 @@ _FILELIKE_RE = re.compile(
     r"(?![A-Za-z0-9_])"
 )
 
-# 参与“中英混排边界补空格”的 token：必须至少含 1 个拉丁字母，或本身就是受保护 token
+# Tokens that participate in adding spaces at mixed CJK/Latin boundaries. They must contain at least one Latin letter
+# or be protected placeholders.
 _LATINISH = rf"(?:{_PROT}|(?=[A-Za-z0-9._/+:-]*[A-Za-z])[A-Za-z0-9][A-Za-z0-9._/+:-]*)"
 
-# 零宽字符
+# Zero-width characters.
 _ZERO_WIDTH_RE = re.compile(r"[\u200b-\u200d\ufeff]")
 
 
 # ---------------------------
-# 主函数
+# Public entry point
 # ---------------------------
 
 
 def normalize_tts_text(text: str) -> str:
-    """对 TTS 输入做鲁棒性正则化。"""
+    """Apply robust normalization to TTS input text."""
     text = _base_cleanup(text)
     text = _normalize_markdown_and_lines(text)
     text, protected = _protect_spans(text)
@@ -98,7 +112,7 @@ def normalize_tts_text(text: str) -> str:
 
 
 # ---------------------------
-# 具体规则
+# Normalization rules
 # ---------------------------
 
 
@@ -115,7 +129,7 @@ def _base_cleanup(text: str) -> str:
 
 
 def _normalize_markdown_and_lines(text: str) -> str:
-    # Markdown 链接：[text](url) -> text url
+    # Markdown links: [text](url) -> text url.
     text = re.sub(r"\[([^\[\]]+?)\]\((https?://[^)\s]+)\)", r"\1 \2", text)
 
     lines = []
@@ -124,10 +138,10 @@ def _normalize_markdown_and_lines(text: str) -> str:
         if not line:
             continue
 
-        line = re.sub(r"^#{1,6}\s+", "", line)  # 标题
-        line = re.sub(r"^>\s+", "", line)  # 引用
-        line = re.sub(r"^[-*+]\s+", "", line)  # 无序列表
-        line = re.sub(r"^\d+[.)]\s+", "", line)  # 有序列表
+        line = re.sub(r"^#{1,6}\s+", "", line)  # Heading.
+        line = re.sub(r"^>\s+", "", line)  # Block quote.
+        line = re.sub(r"^[-*+]\s+", "", line)  # Unordered list.
+        line = re.sub(r"^\d+[.)]\s+", "", line)  # Ordered list.
         lines.append(line)
 
     return "。".join(lines) if lines else ""
@@ -162,37 +176,37 @@ def _restore_spans(text: str, protected: list[str]) -> str:
 
 
 def _normalize_spaces(text: str) -> str:
-    # 统一空白
+    # Normalize whitespace.
     text = re.sub(r"[ \t\r\f\v]+", " ", text)
 
-    # 汉字 / 日文片段内部：删除空格
+    # Remove spaces inside Chinese/Japanese spans.
     text = re.sub(rf"({_CJK})\s+(?={_CJK})", r"\1", text)
 
-    # 汉字 / 日文 与纯数字之间：删除空格（不强行保留）
+    # Remove spaces between Chinese/Japanese text and plain digits; do not force spaces there.
     text = re.sub(rf"({_CJK})\s+(?=\d)", r"\1", text)
     text = re.sub(rf"(\d)\s+(?={_CJK})", r"\1", text)
 
-    # 汉字 / 日文 与拉丁字母类 token / protected token 相邻：保留或补 1 个空格
+    # Keep or add one space between Chinese/Japanese text and Latin-like or protected tokens.
     text = re.sub(rf"({_CJK})(?=({_LATINISH}))", r"\1 ", text)
     text = re.sub(rf"(({_LATINISH}))(?={_CJK})", r"\1 ", text)
 
-    # 再压一遍连续空格
+    # Collapse repeated spaces again.
     text = re.sub(r" {2,}", " ", text)
 
-    # 中文标点前后不保留空格
+    # Do not keep spaces around CJK punctuation.
     text = re.sub(r"\s+([，。！？；：、”’」』】）》])", r"\1", text)
     text = re.sub(r"([（【「『《“‘])\s+", r"\1", text)
     text = re.sub(r"([，。！？；：、])\s*", r"\1", text)
 
-    # ASCII 标点前不留空格；后面的英文空格不强改
+    # Do not keep spaces before ASCII punctuation; do not force changes to following English spacing.
     text = re.sub(r"\s+([,.;!?])", r"\1", text)
 
     return re.sub(r" {2,}", " ", text).strip()
 
 
 def _normalize_structural_punctuation(text: str) -> str:
-    # 结构性括号：在“结构位置”解包并转成句边界
-    # 连续块要支持收敛，因此做两轮
+    # Structural brackets: unwrap them in structural positions and convert them to sentence boundaries.
+    # Run two passes so consecutive blocks can converge.
     for _ in range(2):
         text = re.sub(
             r"(^|[。！？!?；;]\s*)[【〖『「]([^】〗』」]+)[】〗』」]\s*",
@@ -200,38 +214,38 @@ def _normalize_structural_punctuation(text: str) -> str:
             text,
         )
 
-    # 《》只处理独立标题，不处理嵌入式标题
-    # 例：重磅。《新品发布》——现在开始！ -> 重磅。新品发布。现在开始！
+    # Only process standalone titles in 《》; leave embedded titles unchanged.
+    # Example: News.《Product launch》——Starting now! -> News.Product launch.Starting now!
     text = re.sub(
         r"(^|[。！？!?；;]\s*)《([^》]+)》(?=\s*(?:___PROT\d+___|[—–―-]{2,}|$|[。！？!?；;，,]))",
         r"\1\2",
         text,
     )
 
-    # 流程 / 映射箭头：转成中文逗号，保留链路结构但避免把 `->` 原样喂给 TTS。
+    # Flow or mapping arrows: convert to a Chinese comma, preserving link structure while avoiding raw `->` in TTS.
     text = re.sub(
         r"\s*(?:<[-=]+>|[-=]+>|<[-=]+|[→←↔⇒⇐⇔⟶⟵⟷⟹⟸⟺↦↤↪↩])\s*",
         "，",
         text,
     )
 
-    # 长破折号 / 多连字符：转句边界
+    # Long dashes or repeated hyphens: convert to sentence boundaries.
     text = re.sub(r"\s*(?:—|–|―|-){2,}\s*", "。", text)
 
     return text
 
 
 def _normalize_repeated_punctuation(text: str) -> str:
-    # 省略号 / 连续句点
+    # Ellipses and repeated periods.
     text = re.sub(r"(?:\.{3,}|…{2,}|……+)", "。", text)
 
-    # 同类重复标点
+    # Repeated punctuation of the same type.
     text = re.sub(r"[。．]{2,}", "。", text)
     text = re.sub(r"[，,]{2,}", "，", text)
     text = re.sub(r"[!！]{2,}", "！", text)
     text = re.sub(r"[?？]{2,}", "？", text)
 
-    # 混合问叹号：收敛到 ？！
+    # Mixed question/exclamation marks: converge to ?!.
     def _mixed_qe(match: re.Match[str]) -> str:
         s = match.group(0)
         has_q = any(ch in s for ch in "?？")

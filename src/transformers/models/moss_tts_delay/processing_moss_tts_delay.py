@@ -29,7 +29,7 @@ from ... import (
 )
 from ...utils import auto_docstring, is_torchaudio_available, logging
 from .configuration_moss_tts_delay import MossTTSDelayConfig
-from .tts_robust_normalizer_single_script import normalize_tts_text
+from .tts_robust_normalizer_utils import normalize_tts_text
 
 
 logger = logging.get_logger(__name__)
@@ -544,7 +544,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
         truncation: bool,
     ) -> torch.Tensor:
         """
-        此时的 content 已经是带上了对话格式
+        At this point, `content` already includes the conversation format.
         """
         if role == "user":
             audio_gen_slot_token = audio_delay_slot_token = self.audio_user_slot_token
@@ -688,8 +688,8 @@ class MossTTSDelayProcessor(ProcessorMixin):
 
     def decode(self, output: list[tuple[int, torch.Tensor]]):
         """
-        1. 这里不管怎样，都需要一个完整的 assistant generation ids;
-        2. 支持从任意位置进行截断；
+        1. This always requires complete assistant generation ids.
+        2. Truncation from any position is supported.
         """
 
         genearted_messages = []
