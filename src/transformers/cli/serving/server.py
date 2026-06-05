@@ -61,7 +61,6 @@ def build_server(
     Returns:
         A FastAPI app ready to be passed to uvicorn.
     """
-    from ...cli import serve_zerogpu
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -96,30 +95,23 @@ def build_server(
         response.headers[X_REQUEST_ID] = request_id
         return response
 
-    # ---- ZeroGPU ----
-
-    @serve_zerogpu.zerogpu_decorator
-    async def _handle_request(handler, *args):
-        return await handler.handle_request(*args)
-
     # ---- Routes ----
 
     @app.post("/v1/chat/completions")
     async def chat_completions(request: Request, body: dict):
-        return await _handle_request(chat_handler, body, request.state.request_id)
+        return await chat_handler.handle_request(body, request.state.request_id)
 
     @app.post("/v1/completions")
     async def completions(request: Request, body: dict):
-        return await _handle_request(completion_handler, body, request.state.request_id)
+        return await completion_handler.handle_request(body, request.state.request_id)
 
     @app.post("/v1/responses")
     async def responses(request: Request, body: dict):
-        return await _handle_request(response_handler, body, request.state.request_id)
+        return await response_handler.handle_request(body, request.state.request_id)
 
     @app.post("/v1/audio/transcriptions")
     async def audio_transcriptions(request: Request):
-        args = await transcription_handler.parse_request(request)
-        return await _handle_request(transcription_handler, *args)
+        return await transcription_handler.handle_request(request)
 
     @app.post("/load_model")
     async def load_model(body: dict):
