@@ -19,7 +19,7 @@ import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-from huggingface_hub import is_offline_mode, model_info
+from huggingface_hub import is_offline_mode
 
 from ..configuration_utils import PreTrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
@@ -39,6 +39,7 @@ from ..utils import (
     cached_file,
     extract_commit_hash,
     find_adapter_config_file,
+    hf_api,
     is_kenlm_available,
     is_peft_available,
     is_pyctcdecode_available,
@@ -306,7 +307,7 @@ def get_task(model: str, token: str | None = None, **deprecated_kwargs) -> str:
     if is_offline_mode():
         raise RuntimeError("You cannot infer task automatically within `pipeline` when using offline mode")
     try:
-        info = model_info(model, token=token)
+        info = hf_api().model_info(model, token=token)
     except Exception as e:
         raise RuntimeError(f"Instantiating a pipeline without a task set raised an error: {e}")
     if not info.pipeline_tag:
