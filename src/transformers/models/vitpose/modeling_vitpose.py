@@ -104,7 +104,7 @@ def flip_back(output_flipped, flip_pairs, target_type="gaussian-heatmap"):
     channels = 1
     if target_type == "combined-target":
         channels = 3
-        output_flipped = output_flipped.clone()
+        output_flipped = output_flipped.clone()  # clone to avoid mutation of output_flipped argument
         output_flipped[:, 1::3, ...] = -output_flipped[:, 1::3, ...]
     output_flipped = output_flipped.reshape(batch_size, -1, channels, height, width)
     output_flipped_back = output_flipped.clone()
