@@ -200,15 +200,6 @@ class ESMFold2Config(PreTrainedConfig):
         Number of trunk loops for iterative refinement.
     num_diffusion_samples (`int`, *optional*, defaults to 8):
         Number of parallel structure predictions to generate.
-    disable_msa_features (`bool`, *optional*, defaults to `False`):
-        When `True`, zero out MSA-derived `profile` and `deletion_mean` before
-        the inputs embedder.
-    lm_dropout (`float`, *optional*, defaults to 0.0):
-        Dropout probability on LM pair embeddings. When > 0, dropout is applied
-        with `training=True` (including at inference) to match the binder-design
-        training recipe.
-    force_lm_dropout_during_inference (`bool`, *optional*, defaults to `False`):
-        When `True`, apply `lm_dropout` even under `model.eval()`.
     lm_d_model (`int`, *optional*, defaults to 2560):
         Hidden size of the ESMC language-model backbone.
     lm_num_layers (`int`, *optional*, defaults to 80):
@@ -268,9 +259,6 @@ class ESMFold2Config(PreTrainedConfig):
     n_relative_chain_bins: int | None = 2
     num_loops: int | None = 10
     num_diffusion_samples: int | None = 8
-    disable_msa_features: bool | None = False
-    lm_dropout: float | None = 0.0
-    force_lm_dropout_during_inference: bool | None = False
     lm_d_model: int | None = 2560
     lm_num_layers: int | None = 80
     esmc_id: str | None = _DEFAULT_ESMC_HF_REPO
