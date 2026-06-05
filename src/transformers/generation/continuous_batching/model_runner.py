@@ -85,7 +85,7 @@ class ModelRunner:
             max_kv_read = pad_to_interval(max_kv_read, self.cb_config.kv_padding_interval_size, self.cache.num_pages)
         # For decode fast path batches, we pad using powers of 2 and use no KV
         else:
-            num_q_tokens = pad_to_pow2(num_q_tokens, self.cache.max_blocks_per_request)
+            num_q_tokens = pad_to_pow2(num_q_tokens, self.cb_config.max_requests_per_batch)
             max_kv_read = 0
         return num_q_tokens, max_kv_read
 
