@@ -35,6 +35,7 @@ from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import (
     CLIPMLP,
     CLIPAttention,
+    CLIPEncoder,
     CLIPEncoderLayer,
     CLIPOutput,
     CLIPTextEmbeddings,
@@ -536,12 +537,10 @@ class Tipsv2TextEncoderLayer(CLIPEncoderLayer):
         return hidden_states
 
 
-class Tipsv2TextEncoder(nn.Module):
+class Tipsv2TextEncoder(CLIPEncoder):
     def __init__(self, config: Tipsv2TextConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         self.layers = nn.ModuleList([Tipsv2TextEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(
         self,

@@ -743,6 +743,14 @@ class Tipsv2TextEncoderLayer(GradientCheckpointingLayer):
 
 
 class Tipsv2TextEncoder(nn.Module):
+    """
+    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
+    [`Tipsv2TextEncoderLayer`].
+
+    Args:
+        config: Tipsv2TextConfig
+    """
+
     def __init__(self, config: Tipsv2TextConfig):
         super().__init__()
         self.config = config
