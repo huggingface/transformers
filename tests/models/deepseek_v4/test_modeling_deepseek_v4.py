@@ -450,9 +450,20 @@ def main() -> int:
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
     inputs = tokenizer(PROMPT, return_tensors="pt", add_special_tokens=ADD_SPECIAL_TOKENS).to(model.device)
 
+    # FP8 only: Triton multi-expert kernels generate wrong tokens after DeepGEMM has run on
+    # the same module (root cause unknown — per-row kernel outputs measure bit-perfect, yet
+    # end-to-end generation degrades; not reproducible with DeepGEMM disabled). Force the
+    # Triton fallback in `fp8_linear` for batched_mm / grouped_mm so attention/MLP linears
+    # stay Triton-only too. FP4 is unaffected and keeps DeepGEMM for performance.
+    is_fp8 = getattr(model.config, "expert_dtype", "fp8") != "fp4"
+
     failed = []
     for dispatch in RUNTIME_DISPATCHES:
         model.set_experts_implementation(dispatch)
+        if is_fp8 and dispatch in ("batched_mm", "grouped_mm"):
+            os.environ["TRANSFORMERS_DISABLE_DEEPGEMM"] = "1"
+        else:
+            os.environ.pop("TRANSFORMERS_DISABLE_DEEPGEMM", None)
         dist.barrier()
         with torch.no_grad():
             out = model.generate(

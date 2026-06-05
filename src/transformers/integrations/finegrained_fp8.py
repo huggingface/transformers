@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import functools
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -200,13 +201,17 @@ def fp8_linear(
             for dynamic (per-token) quant.
         output_dtype: desired output dtype.
     """
-    # DeepGEMM is CUDA-only, dynamic-only, and faster on FP4 or 128×128 block FP8.
-    # Static activation (per-tensor scalar) is Triton-only — DeepGEMM rejects scalar SFs.
+    # DeepGEMM is CUDA-only, dynamic-only, SM90+ only, FP4/FP8-block-128-only.
+    # ``TRANSFORMERS_DISABLE_DEEPGEMM=1`` forces the Triton fallback — used by the FP8 MoE
+    # batched_mm / grouped_mm paths to avoid a still-unexplained DeepGEMM-vs-Triton
+    # interaction that degrades end-to-end generation on B200 (per-row kernel outputs
+    # still measure bit-perfect, but final tokens drift; not reproducible with DeepGEMM off).
     deepgemm_preferred = (
         activation_scale is None
         and weight.device.type == "cuda"
         and torch.cuda.get_device_properties().major >= 9
         and (weight.dtype == torch.int8 or (block_size is not None and block_size[0] == block_size[1] == 128))
+        and os.environ.get("TRANSFORMERS_DISABLE_DEEPGEMM", "0") != "1"
     )
 
     if deepgemm_preferred:
