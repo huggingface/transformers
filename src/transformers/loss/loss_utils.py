@@ -23,6 +23,7 @@ from .loss_deimv2 import Deimv2ForObjectDetectionLoss
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
 from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
 from .loss_lw_detr import LwDetrForObjectDetectionLoss
+from .loss_omdet_turbo import OmDetTurboForObjectDetectionLoss
 from .loss_owlvit import OwlViTForObjectDetectionLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
 
@@ -163,6 +164,7 @@ LOSS_MAPPING = {
     "MMGroundingDinoForObjectDetection": GroundingDinoForObjectDetectionLoss,
     "OwlViTForObjectDetection": OwlViTForObjectDetectionLoss,
     "Owlv2ForObjectDetection": OwlViTForObjectDetectionLoss,
+    "OmDetTurboForObjectDetection": OmDetTurboForObjectDetectionLoss,
     "ConditionalDetrForSegmentation": DeformableDetrForSegmentationLoss,
     "RTDetrForObjectDetection": RTDetrForObjectDetectionLoss,
     "RTDetrV2ForObjectDetection": RTDetrForObjectDetectionLoss,

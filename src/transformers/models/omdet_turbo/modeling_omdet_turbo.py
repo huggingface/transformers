@@ -110,6 +110,8 @@ class OmDetTurboObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor`):
         The loss value.
+    loss_dict (`Dict`, *optional*):
+        A dictionary containing the individual losses. Useful for logging.
     decoder_coord_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
         The predicted coordinates logits of the objects.
     decoder_class_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes)`):
@@ -145,6 +147,7 @@ class OmDetTurboObjectDetectionOutput(ModelOutput):
     """
 
     loss: torch.FloatTensor | None = None
+    loss_dict: dict | None = None
     decoder_coord_logits: torch.FloatTensor | None = None
     decoder_class_logits: torch.FloatTensor | None = None
     init_reference_points: torch.FloatTensor | None = None
@@ -1509,7 +1512,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         tasks_input_ids: torch.LongTensor,
         tasks_attention_mask: torch.LongTensor,
         classes_structure: torch.LongTensor,
-        labels: torch.LongTensor | None = None,
+        labels: list[dict[str, torch.Tensor]] | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -1540,6 +1543,12 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
             and which should not.
         classes_structure (torch.LongTensor of shape `(batch_size)`):
             Structure of the classes. This tensor indicates the number of classes for each task.
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+            following 2 keys: `class_labels` and `boxes` (the class labels and bounding boxes of an image in the batch
+            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+            in the image,)`, indexing into the candidate classes, and the boxes a `torch.FloatTensor` of shape `(number
+            of bounding boxes in the image, 4)` in normalized `(center_x, center_y, width, height)` format.
 
         Examples:
 
@@ -1581,16 +1590,13 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         Detected cat with confidence 0.65 at location [12.7, 53.8, 315.5, 475.3]
         Detected remote with confidence 0.57 at location [333.4, 75.6, 370.7, 187.0]
         ```"""
-        if labels is not None:
-            raise NotImplementedError("Training is not implemented yet")
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        loss = None
+        loss, loss_dict = None, None
         image_features = self.vision_backbone(pixel_values)
         encoder_outputs = self.encoder(
             image_features,
@@ -1616,11 +1622,27 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
             return_dict=return_dict,
         )
 
+        if labels is not None:
+            # `decoder_coords`/`decoder_classes` are stacked over the decoder layers `(num_layers, batch, ...)`; the
+            # last layer holds the final predictions and the others are used for the auxiliary losses.
+            decoder_coords = decoder_outputs.decoder_coords if return_dict else decoder_outputs[3]
+            decoder_classes = decoder_outputs.decoder_classes if return_dict else decoder_outputs[4]
+            loss, loss_dict, _ = self.loss_function(
+                logits=decoder_classes[-1],
+                labels=labels,
+                device=pixel_values.device,
+                pred_boxes=decoder_coords[-1],
+                config=self.config,
+                outputs_class=decoder_classes,
+                outputs_coord=decoder_coords,
+            )
+
         if not return_dict:
             return tuple(
                 output
                 for output in [
                     loss,
+                    loss_dict,
                     decoder_outputs[3][-1],
                     decoder_outputs[4][-1],
                     decoder_outputs[7],
@@ -1639,6 +1661,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
 
         return OmDetTurboObjectDetectionOutput(
             loss=loss,
+            loss_dict=loss_dict,
             decoder_coord_logits=decoder_outputs.decoder_coords[-1],
             decoder_class_logits=decoder_outputs.decoder_classes[-1],
             init_reference_points=decoder_outputs.init_reference_points,
