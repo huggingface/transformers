@@ -136,10 +136,11 @@ def predictions_from_outputs(model_type, outputs, labels, processor, enc, cat_to
         )
         for res in results:
             text_labels = res.get("text_labels") or res.get("labels")
+            device = res["boxes"].device
             if len(text_labels) and isinstance(text_labels[0], str):
-                label_ids = torch.tensor([cat_to_id.get(t, 0) for t in text_labels], dtype=torch.long)
+                label_ids = torch.tensor([cat_to_id.get(t, 0) for t in text_labels], dtype=torch.long, device=device)
             else:
-                label_ids = torch.as_tensor(text_labels, dtype=torch.long)
+                label_ids = torch.as_tensor(text_labels, dtype=torch.long, device=device)
             preds.append({"boxes": res["boxes"], "scores": res["scores"], "labels": label_ids})
     return preds
 
@@ -167,6 +168,7 @@ def render_sample(model, processor, model_type, image, categories, cat_to_id, de
     with torch.no_grad():
         out = model(**enc, labels=None) if model_type != "grounding_dino" else model(**enc)
     preds = predictions_from_outputs(model_type, out, labels, processor, enc, cat_to_id)[0]
+    preds = {k: v.cpu() for k, v in preds.items()}
     drawn = image.copy()
     draw = ImageDraw.Draw(drawn)
     keep = preds["scores"] >= score_threshold
