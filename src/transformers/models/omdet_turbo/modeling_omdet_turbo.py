@@ -1046,7 +1046,9 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
         total_embeddings = []
         for idx, _ in enumerate(classes_input_ids):
             cache_key = self._get_cache_key_at_index(classes_input_ids, classes_attention_mask, idx)
-            if self.language_cache_class.has(cache_key):
+            # The cache stores graph-bearing tensors, so it is bypassed during training to avoid reusing stale
+            # autograd graphs across steps (and to keep gradients flowing through the language backbone).
+            if not self.training and self.language_cache_class.has(cache_key):
                 total_embeddings.append(self.language_cache_class.get(cache_key))
             else:
                 total_embeddings.append(None)
@@ -1059,7 +1061,8 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
             for idx, emb in enumerate(embeddings):
                 idx_to_put = not_cached_index[idx]
                 total_embeddings[idx_to_put] = emb
-                self.language_cache_class.put(not_cached_classes[idx], emb)
+                if not self.training:
+                    self.language_cache_class.put(not_cached_classes[idx], emb)
 
         total_class_embs = torch.stack(total_embeddings).to(self.device)
         return total_class_embs
@@ -1071,7 +1074,8 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
         total_task_masks = []
         for idx, _ in enumerate(tasks_input_ids):
             cache_key = self._get_cache_key_at_index(tasks_input_ids, tasks_attention_mask, idx)
-            if self.language_cache_prompt.has(cache_key):
+            # Bypass the cache during training (see `get_cached_class_embeddings`).
+            if not self.training and self.language_cache_prompt.has(cache_key):
                 task_feature, task_mask = self.language_cache_prompt.get(cache_key)
                 total_task_features.append(task_feature)
                 total_task_masks.append(task_mask)
@@ -1092,7 +1096,8 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
                 cur_mask = torch.unsqueeze(masks[idx], dim=0).to(self.device)
                 total_task_features[idx_to_put] = emb
                 total_task_masks[idx_to_put] = cur_mask
-                self.language_cache_prompt.put(not_cached_tasks[idx], (emb, cur_mask))
+                if not self.training:
+                    self.language_cache_prompt.put(not_cached_tasks[idx], (emb, cur_mask))
 
         # pad before concat if needed
         max_len = max(task.shape[0] for task in total_task_features)
