@@ -15,7 +15,7 @@
 
 """Shared export utilities used by all exporter backends.
 
-Organised into six sections (search for the `# ── Name ──` banners):
+Organised into five sections (search for the `# ── Name ──` banners):
 
 - **Patch and fix registries** — backend-keyed `_PATCHES` / `_FX_NODE_FIXES` /
   `_FX_PROGRAM_FIXES` populated via `@register_patch` / `@register_fx_node_fix` /
@@ -26,14 +26,12 @@ Organised into six sections (search for the `# ── Name ──` banners):
 - **Public tensor utilities** — `get_leaf_tensors`, `duplicate_leaf_tensors`,
   `cast_leaf_tensors`, and `prepare_for_export` (sets attention/experts impl,
   patches non-exportable patterns, strips output flags).
-- **Multi-modal submodule discovery** — `is_multimodal` + helpers that locate
-  the vision/audio encoder, language model, projector, and `lm_head` on a model.
 - **Export input preparers** — `@register_export_input_preparer(model_type)`
   registry that precomputes the per-encoder kwargs (`cu_seqlens`, `position_ids`,
   audio chunks, …) the model would otherwise need data-dependent ops for.
-- **Decomposition** — `decompose_prefill_decode` (split a generative forward into
-  prefill + decode) and `decompose_multimodal` (split a multimodal forward into
-  one entry per submodule), backed by `_capture_forward`.
+- **Decomposition** — `decompose_prefill_decode` (split a generative forward
+  into prefill + decode) and `decompose_multimodal` + `is_multimodal` (split a
+  multimodal forward into one entry per submodule), backed by `_capture_forward`.
 """
 
 from __future__ import annotations
@@ -396,56 +394,11 @@ def prepare_for_export(
     return model, inputs
 
 
-# ── Multi-modal submodule discovery ──────────────────────────────────────────
-# Helpers that locate the vision/audio encoder, language model, projector, and `lm_head`
-# on a multimodal model. Used by `decompose_multimodal` below.
-
-# Projector attribute names — no canonical accessor on `PreTrainedModel`, kept as a heuristic.
-# Encoders and language model are resolved via `get_encoder(modality)` / `get_decoder()`.
-_MULTIMODAL_PROJECTOR_NAMES = ("multi_modal_projector", "connector", "embed_vision", "embed_audio")
-_MULTIMODAL_LM_HEAD_NAMES = ("lm_head",)
-
-
-def _find_multimodal_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Module]:
-    """Return `{attr_name: module}` for multi-modal submodules found on `model`.
-
-    Uses the canonical `PreTrainedModel.get_encoder("image"/"audio")` and `get_decoder()`
-    accessors for encoders and the language model. Projectors and `lm_head` are looked
-    up by name on `model` and its `base_model` (e.g. `LlavaModel` under `LlavaForConditionalGeneration`).
-
-    Only returns results when at least one modal encoder AND a language model are found —
-    otherwise the model is not multi-modal and should be exported as a single unit.
-    """
-    found: dict[str, torch.nn.Module] = {}
-
-    has_encoder = False
-    for modality in ("image", "audio"):
-        encoder = model.get_encoder(modality=modality)
-        # `get_encoder` returns `self` as the "no match" fallback, and some models keep
-        # `self.audio_tower = None` / `self.vision_tower = None` when the corresponding
-        # sub-config is absent — `hasattr` is True but `getattr` is None.
-        if encoder is not None and encoder is not model:
-            found[f"{modality}_encoder"] = encoder
-            has_encoder = True
-
-    decoder = model.get_decoder()
-    if decoder is not None and decoder is not model:
-        found["language_model"] = decoder
-
-    for root in {model, model.base_model}:
-        for name in _MULTIMODAL_PROJECTOR_NAMES + _MULTIMODAL_LM_HEAD_NAMES:
-            if name not in found and getattr(root, name, None) is not None:
-                found[name] = getattr(root, name)
-
-    if not has_encoder or "language_model" not in found:
-        return {}
-
-    return found
-
-
-def is_multimodal(model: PreTrainedModel) -> bool:
-    """Returns `True` if the model is multi-modal with modal encoders and a language model."""
-    return bool(_find_multimodal_submodules(model))
+# ── Export input preparers ────────────────────────────────────────────────────
+# Registry of `model_type -> (model, inputs) -> None` callables that precompute the
+# data-dependent tensors (cu_seqlens, position_ids, padded audio chunks, …) the model
+# would otherwise compute in its forward via `.tolist()` / `nonzero()` / etc. Inject
+# the results into `inputs` so the forward skips the untraceable branch.
 
 
 def _find_submodule_attr(model: torch.nn.Module, name: str) -> Any | None:
@@ -454,13 +407,6 @@ def _find_submodule_attr(model: torch.nn.Module, name: str) -> Any | None:
         if (value := getattr(module, name, None)) is not None:
             return value
     return None
-
-
-# ── Export input preparers ────────────────────────────────────────────────────
-# Registry of `model_type -> (model, inputs) -> None` callables that precompute the
-# data-dependent tensors (cu_seqlens, position_ids, padded audio chunks, …) the model
-# would otherwise compute in its forward via `.tolist()` / `nonzero()` / etc. Inject
-# the results into `inputs` so the forward skips the untraceable branch.
 
 
 _EXPORT_INPUT_PREPARERS: dict[str, callable] = {}
@@ -699,6 +645,54 @@ def decompose_prefill_decode(
         "prefill": (copy.copy(model), calls[0]),
         "decode": (copy.copy(model), calls[1]),
     }
+
+
+# Projector attribute names — no canonical accessor on `PreTrainedModel`, kept as a heuristic.
+# Encoders and language model are resolved via `get_encoder(modality)` / `get_decoder()`.
+_MULTIMODAL_PROJECTOR_NAMES = ("multi_modal_projector", "connector", "embed_vision", "embed_audio")
+_MULTIMODAL_LM_HEAD_NAMES = ("lm_head",)
+
+
+def _find_multimodal_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Module]:
+    """Return `{attr_name: module}` for multi-modal submodules found on `model`.
+
+    Uses the canonical `PreTrainedModel.get_encoder("image"/"audio")` and `get_decoder()`
+    accessors for encoders and the language model. Projectors and `lm_head` are looked
+    up by name on `model` and its `base_model` (e.g. `LlavaModel` under `LlavaForConditionalGeneration`).
+
+    Only returns results when at least one modal encoder AND a language model are found —
+    otherwise the model is not multi-modal and should be exported as a single unit.
+    """
+    found: dict[str, torch.nn.Module] = {}
+
+    has_encoder = False
+    for modality in ("image", "audio"):
+        encoder = model.get_encoder(modality=modality)
+        # `get_encoder` returns `self` as the "no match" fallback, and some models keep
+        # `self.audio_tower = None` / `self.vision_tower = None` when the corresponding
+        # sub-config is absent — `hasattr` is True but `getattr` is None.
+        if encoder is not None and encoder is not model:
+            found[f"{modality}_encoder"] = encoder
+            has_encoder = True
+
+    decoder = model.get_decoder()
+    if decoder is not None and decoder is not model:
+        found["language_model"] = decoder
+
+    for root in {model, model.base_model}:
+        for name in _MULTIMODAL_PROJECTOR_NAMES + _MULTIMODAL_LM_HEAD_NAMES:
+            if name not in found and getattr(root, name, None) is not None:
+                found[name] = getattr(root, name)
+
+    if not has_encoder or "language_model" not in found:
+        return {}
+
+    return found
+
+
+def is_multimodal(model: PreTrainedModel) -> bool:
+    """Returns `True` if the model is multi-modal with modal encoders and a language model."""
+    return bool(_find_multimodal_submodules(model))
 
 
 def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict[str, tuple[torch.nn.Module, dict]]:
