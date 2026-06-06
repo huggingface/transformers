@@ -611,7 +611,16 @@ def _aten_index_put(
     values: TReal,
     accumulate: bool = False,
 ) -> TReal:
-    """Bool-mask index_put via cumsum-gather-where; delegates other cases to torchlib."""
+    """Bool-mask index_put via broadcast-and-Where; delegates other cases to torchlib.
+
+    For `self[bool_mask] = values`, torchlib's default lowering flattens both sides and
+    Gathers `values` by a cumulative-True-count to place each value at its destination
+    — but that assumes `values.numel() == bool_mask.sum()`. The dominant transformers
+    usage is `tensor[~mask] = 0` / `tensor[mask] = embed_vec`, where `values` is a scalar
+    or a vector that broadcasts against `self.shape`. For those, `Expand(values, Shape(self))`
+    + `Where(mask, expanded, self)` is both correct and ORT-friendly (no out-of-bounds
+    Gather when `values.numel() == 1`).
+    """
     bool_mask = indices[0]
     is_bool = (
         bool_mask is not None and getattr(getattr(bool_mask, "type", None), "dtype", None) == onnx_ir.DataType.BOOL
@@ -621,15 +630,8 @@ def _aten_index_put(
     for _ in range(len(self.shape) - len(bool_mask.shape)):
         bool_mask = op.Unsqueeze(bool_mask, op.Constant(value_ints=[-1]))
     expanded_mask = op.Expand(bool_mask, op.Shape(self))
-    flat_mask = op.Reshape(expanded_mask, op.Constant(value_ints=[-1]))
-    flat_mask_int = op.Cast(flat_mask, to=7)  # INT64
-    cs = op.CumSum(flat_mask_int, op.Constant(value_ints=[0]))
-    positions = op.Clip(op.Sub(cs, op.Constant(value_ints=[1])), op.Constant(value_ints=[0]))
-    flat_values = op.Reshape(values, op.Constant(value_ints=[-1]))
-    gathered = op.Gather(flat_values, positions)
-    flat_self = op.Reshape(self, op.Constant(value_ints=[-1]))
-    result = op.Where(flat_mask, gathered, flat_self)
-    return op.Reshape(result, op.Shape(self))
+    expanded_values = op.Expand(values, op.Shape(self))
+    return op.Where(expanded_mask, expanded_values, self)
 
 
 def _aten_bincount(self: INT64, weights=None, minlength: int = 0) -> INT64:

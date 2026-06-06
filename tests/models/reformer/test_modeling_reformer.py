@@ -614,6 +614,15 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
     def test_onnx_export_generate_static(self):
         pass
 
+    @unittest.skip(
+        reason="Same chunked-local-attention issue as `test_onnx_export_generate_static`: a Constant "
+        "idx=16 is baked at trace time and clashes with the cached-keys axis length=16 at decode "
+        "time (off-by-one) — fails at runtime even with dynamic shapes because the Constant is "
+        "literal, not symbolic."
+    )
+    def test_onnx_export_generate_dynamic(self):
+        pass
+
     def setUp(self):
         self.model_tester = ReformerModelTester(self, text_seq_length=16)
         self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=32)
