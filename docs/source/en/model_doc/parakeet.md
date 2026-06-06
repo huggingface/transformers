@@ -33,6 +33,11 @@ Parakeet models, [introduced by NVIDIA NeMo](https://developer.nvidia.com/blog/p
     - 1D convolution projection from encoder hidden size to vocabulary size (for optimal NeMo compatibility).
     - CTC loss computation for training.
     - Greedy CTC decoding for inference.
+- [**ParakeetForRNNT**](#parakeetforrnnt): a Fast Conformer Encoder + an RNN-T (RNN Transducer) decoder
+  - **RNN-T Decoder**: Standard neural transducer:
+    - LSTM prediction network maintains language context across token predictions.
+    - Joint network combines encoder and decoder outputs.
+    - Greedy transducer decoding for inference: a blank emission advances the encoder frame by one, a non-blank emission stays on the same frame.
 - [**ParakeetForTDT**](#parakeetfortdt): a Fast Conformer Encoder + a TDT (Token Duration Transducer) decoder
   - **TDT Decoder**: Jointly predicts tokens and their durations, enabling efficient decoding:
     - LSTM prediction network maintains language context across token predictions.
@@ -81,6 +86,81 @@ inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sam
 inputs.to(model.device, dtype=model.dtype)
 outputs = model.generate(**inputs)
 print(processor.decode(outputs))
+```
+
+</hfoption>
+</hfoptions>
+
+### `ParakeetForRNNT` usage
+
+<hfoptions id="rnnt-usage">
+<hfoption id="Pipeline">
+
+Parakeet RNN-T transcribes without casing or punctuation (like CTC), and the model can also perform token timestamping.
+
+```py
+from transformers import pipeline
+
+pipe = pipeline("automatic-speech-recognition", model="nvidia/parakeet-rnnt-0.6b")
+out = pipe("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
+print(out)
+# {'text': 'yesterday it was thirty five degrees in barcelona but today the temperature will go down to minus twenty degrees'}
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+from transformers import AutoModelForRNNT, AutoProcessor
+from datasets import load_dataset, Audio
+
+model_id = "nvidia/parakeet-rnnt-0.6b"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForRNNT.from_pretrained(model_id, dtype="auto", device_map="auto")
+
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+speech_samples = [el['array'] for el in ds["audio"][:5]]
+
+inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs.to(model.device, dtype=model.dtype)
+output = model.generate(**inputs, return_dict_in_generate=True)
+print(processor.decode(output.sequences, skip_special_tokens=True))
+```
+
+</hfoption>
+<hfoption id="Timestamping">
+
+Unlike TDT (which predicts a per-token duration), each RNN-T token is emitted at a single encoder frame, so its start and end span exactly one frame.
+
+```py
+from datasets import Audio, load_dataset
+from transformers import AutoModelForRNNT, AutoProcessor
+
+model_id = "nvidia/parakeet-rnnt-0.6b"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForRNNT.from_pretrained(model_id, dtype="auto", device_map="auto")
+
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+speech_samples = [el['array'] for el in ds["audio"][:1]]
+
+inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs.to(model.device, dtype=model.dtype)
+output = model.generate(**inputs, return_dict_in_generate=True)
+decoded_output, decoded_timestamps = processor.decode(
+    output.sequences,
+    durations=output.durations,
+    skip_special_tokens=True,
+)
+print("Transcription:", decoded_output)
+print("\nTimestamped tokens:", decoded_timestamps)
+
+"""
+Transcription: ['mister quilter is the apostle of the middle classes and we are glad to welcome his gospel']
+
+Timestamped tokens: [[{'token': 'm', 'start': 0.4, 'end': 0.48}, {'token': 'is', 'start': 0.56, 'end': 0.64}, {'token': 'ter', 'start': 0.56, 'end': 0.64}, {'token': ' qu', 'start': 0.72, 'end': 0.8}, {'token': 'il', 'start': 0.96, 'end': 1.04}, {'token': 'ter', 'start': 1.12, 'end': 1.2}, {'token': ' is', 'start': 1.36, 'end': 1.44}, {'token': ' the', 'start': 1.52, 'end': 1.6}, {'token': ' ap', 'start': 1.68, 'end': 1.76}, {'token': 'o', 'start': 1.76, 'end': 1.84}, {'token': 'st', 'start': 1.84, 'end': 1.92}, {'token': 'le', 'start': 2.0, 'end': 2.08}, {'token': ' of', 'start': 2.16, 'end': 2.24}, {'token': ' the', 'start': 2.24, 'end': 2.32}, {'token': ' m', 'start': 2.4, 'end': 2.48}, {'token': 'id', 'start': 2.48, 'end': 2.56}, {'token': 'd', 'start': 2.56, 'end': 2.64}, {'token': 'le', 'start': 2.56, 'end': 2.64}, {'token': ' cl', 'start': 2.8, 'end': 2.88}, {'token': 'ass', 'start': 2.88, 'end': 2.96}, {'token': 'es', 'start': 3.12, 'end': 3.2}, {'token': ' and', 'start': 3.28, 'end': 3.36}, {'token': ' we', 'start': 3.44, 'end': 3.52}, {'token': ' are', 'start': 3.6, 'end': 3.68}, {'token': ' gl', 'start': 3.84, 'end': 3.92}, {'token': 'ad', 'start': 3.92, 'end': 4.0}, {'token': ' to', 'start': 4.08, 'end': 4.16}, {'token': ' we', 'start': 4.24, 'end': 4.32}, {'token': 'l', 'start': 4.32, 'end': 4.4}, {'token': 'c', 'start': 4.4, 'end': 4.48}, {'token': 'ome', 'start': 4.48, 'end': 4.56}, {'token': ' his', 'start': 4.72, 'end': 4.8}, {'token': ' go', 'start': 4.96, 'end': 5.04}, {'token': 's', 'start': 5.04, 'end': 5.12}, {'token': 'pe', 'start': 5.2, 'end': 5.28}, {'token': 'l', 'start': 5.36, 'end': 5.44}]]
+"""
 ```
 
 </hfoption>
@@ -269,6 +349,37 @@ print("Loss:", outputs.loss.item())
 outputs.loss.backward()
 ```
 
+### RNN-T Training
+
+```py
+from datasets import Audio, load_dataset
+import torch
+from transformers import AutoModelForRNNT, AutoProcessor
+
+model_id = "nvidia/parakeet-rnnt-0.6b"
+NUM_SAMPLES = 4
+
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForRNNT.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model.train()
+
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+speech_samples = [el['array'] for el in ds["audio"][:NUM_SAMPLES]]
+text_samples = ds["text"][:NUM_SAMPLES]
+
+# passing `text` to the processor will prepare inputs' `labels` key
+inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs.to(model.device, dtype=model.dtype)
+
+outputs = model(**inputs)
+print("Loss:", outputs.loss.item())
+outputs.loss.backward()
+```
+
+> [!NOTE]
+> Computing the RNN-T loss requires [torchaudio](https://pytorch.org/audio) (`pip install torchaudio`).
+
 ### TDT Training
 
 ```py
@@ -321,6 +432,10 @@ outputs.loss.backward()
 
 [[autodoc]] ParakeetCTCConfig
 
+## ParakeetRNNTConfig
+
+[[autodoc]] ParakeetRNNTConfig
+
 ## ParakeetTDTConfig
 
 [[autodoc]] ParakeetTDTConfig
@@ -332,6 +447,10 @@ outputs.loss.backward()
 ## ParakeetForCTC
 
 [[autodoc]] ParakeetForCTC
+
+## ParakeetForRNNT
+
+[[autodoc]] ParakeetForRNNT
 
 ## ParakeetForTDT
 
