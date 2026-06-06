@@ -400,6 +400,8 @@ def _patch_expand(original):
         return original(self, *sizes).clone(memory_format=torch.contiguous_format)
 
     return patch
+
+
 # ── Stage 3: ExecuTorch patches ───────────────────────────────────────────────
 # Reversible swaps of ExecuTorch internals (passes, verifiers, op dicts) that crash
 # on legitimate dynamic-shape patterns: `SpecPropPass.update_placeholder_tensor_specs`,
@@ -832,5 +834,3 @@ def _fix_sym_pow_as_mul(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     node.replace_all_uses_with(running)
     gm.graph.erase_node(node)
     return True
-
-
