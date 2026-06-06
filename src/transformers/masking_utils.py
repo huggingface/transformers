@@ -1410,8 +1410,12 @@ def create_masks_for_generate(
 
     # If the attribute exist, we need several masks
     if hasattr(effective_config, "layer_types"):
+        layer_patterns = set(effective_config.layer_types)
+        if not layer_patterns <= LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING.keys():
+            return attention_mask
+
         causal_masks = {}
-        for layer_pattern in set(effective_config.layer_types):
+        for layer_pattern in layer_patterns:
             causal_masks[layer_pattern] = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[layer_pattern](**mask_kwargs)
         return causal_masks
     # In this case, all layers are sliding

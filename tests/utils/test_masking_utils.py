@@ -32,6 +32,7 @@ if is_torch_available():
         create_bidirectional_mask,
         create_causal_mask,
         create_chunked_causal_mask,
+        create_masks_for_generate,
         find_packed_sequence_indices,
     )
 
@@ -147,6 +148,22 @@ class MaskTest(unittest.TestCase):
 
         # We compatre the str representations, as the BlockMask objects themselves cannot easily be compared
         self.assertEqual(causal_mask.to_string(), EXPECTED_BLOCK_MASK.to_string())
+
+
+    def test_create_masks_for_generate_unknown_layer_type_returns_attention_mask(self):
+        config = LlamaConfig()
+        config.layer_types = ["full_attention", "linear_attention"]
+        attention_mask = torch.ones((1, 4), dtype=torch.long)
+
+        mask = create_masks_for_generate(
+            config=config,
+            inputs_embeds=torch.empty((1, 4), dtype=torch.float32),
+            attention_mask=attention_mask,
+            cache_position=torch.arange(4),
+            past_key_values=None,
+        )
+
+        self.assertIs(mask, attention_mask)
 
     def test_find_packed_sequence_indices(self):
         position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 0, 1, 2, 3]])
