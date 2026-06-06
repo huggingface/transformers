@@ -247,6 +247,9 @@ class _BaseAutoModelClass:
                 parent_quant = getattr(parent_config, "quantization_config", None)
                 if parent_quant is not None:
                     config.quantization_config = parent_quant
+                parent_dtype = getattr(parent_config, "dtype", None)
+                if parent_dtype is not None and getattr(config, "dtype", None) is None:
+                    config.dtype = parent_dtype
             return model_class._from_config(config, **kwargs)
 
         raise ValueError(
@@ -401,6 +404,9 @@ class _BaseAutoModelClass:
                 parent_quant = getattr(parent_config, "quantization_config", None)
                 if parent_quant is not None:
                     config.quantization_config = parent_quant
+                parent_dtype = getattr(parent_config, "dtype", None)
+                if parent_dtype is not None and getattr(config, "dtype", None) is None:
+                    config.dtype = parent_dtype
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )

@@ -421,6 +421,16 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         self.assertIsInstance(model, Qwen3_5ForCausalLM)
         self.assertIsInstance(model.config, Qwen3_5TextConfig)
 
+    def test_automodelforcausallm_propagates_dtype(self):
+        config = self.model_tester.get_config()
+        config.dtype = torch.float32  # set on composite config
+        full_model = Qwen3_5ForConditionalGeneration(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            full_model.save_pretrained(tmp_dir)
+            model = AutoModelForCausalLM.from_pretrained(tmp_dir)  # no dtype kwarg
+        for name, param in model.named_parameters():
+            self.assertEqual(param.dtype, torch.float32, msg=f"{name} has dtype {param.dtype}")
+
     @unittest.skip(
         "Conversion only for the `CausalLM` loading from saved `ConditionalLM`, doesn't apply to simple VLM"
     )
