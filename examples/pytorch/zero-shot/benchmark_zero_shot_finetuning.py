@@ -180,14 +180,18 @@ def postprocess_predictions(model_type, outputs, labels, processor, enc, categor
     cat_clean = [c.lower() for c in categories]
     preds = []
     for r in results:
-        text_labels = r.get("text_labels") or r.get("labels")
+        boxes, scores = r["boxes"], r["scores"]
+        n = boxes.shape[0]
+        # keep box/score/label counts aligned (post_process can return a phrase list of a different length)
+        text_labels = list(r.get("text_labels") or r.get("labels") or [])[:n]
         ids = []
         for t in text_labels:
             t = str(t).strip().lower()
             mid = next((i for i, c in enumerate(cat_clean) if t and (t == c or t in c or c in t)), 0)
             ids.append(mid)
+        ids += [0] * (n - len(ids))
         preds.append(
-            {"boxes": r["boxes"], "scores": r["scores"], "labels": torch.tensor(ids, device=r["boxes"].device)}
+            {"boxes": boxes, "scores": scores[:n], "labels": torch.tensor(ids, device=boxes.device, dtype=torch.long)}
         )
     return preds
 
