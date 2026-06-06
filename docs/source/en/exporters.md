@@ -347,26 +347,26 @@ the generation loop. We are actively working to reduce the glue required between
 <details>
 <summary>What <code>export_for_generation</code> does under the hood</summary>
 
+[`~exporters.utils.decompose_for_generation`] runs `model.generate(**inputs, max_new_tokens=2)`
+once and hooks `model.forward` to capture the real prefill and decode kwargs (and the
+per-submodule kwargs via hooks on each encoder / projector / language model if the model is
+multi-modal). That's why it works for any architecture — decoder-only, SSM, encoder-decoder,
+multi-modal — without per-model glue. `export_for_generation` is a one-liner over it.
+
+Call `decompose_for_generation` directly when you want to do something between decomposing
+and exporting — run an eager forward for verification, swap a submodule's inputs, skip a stage:
+
 ```python
-from transformers.exporters.utils import decompose_multimodal, decompose_prefill_decode, is_multimodal
+from transformers.exporters.utils import decompose_for_generation
 
-# 1. Split into prefill and decode stages (runs model.generate() for 2 tokens, captures kwargs).
-stages = decompose_prefill_decode(model, inputs)
-prefill_model, prefill_inputs = stages["prefill"]
+components = decompose_for_generation(model, inputs)
+# {"image_encoder": (submodel, fwd_kwargs), "language_model": (...), ..., "decode": (...)}
 
-# 2. If the prefill is multi-modal, further split it into one entry per submodule.
-if is_multimodal(prefill_model):
-    components = decompose_multimodal(prefill_model, prefill_inputs)
-else:
-    components = {"prefill": stages["prefill"]}
-components["decode"] = stages["decode"]
-
-# 3. Export each component independently.
-exported = {name: exporter.export(submodel, subinputs) for name, (submodel, subinputs) in components.items()}
+exported = {}
+for name, (submodel, subinputs) in components.items():
+    eager_outputs = submodel(**subinputs)
+    exported[name] = exporter.export(submodel, subinputs)
 ```
-
-Useful if you need to skip a stage, swap one submodule's inputs, or debug a single component
-in isolation.
 
 </details>
 
@@ -491,5 +491,7 @@ arbitrary skipping, and new entries should reference a specific upstream bug.
 [[autodoc]] transformers.exporters.utils.decompose_prefill_decode
 
 [[autodoc]] transformers.exporters.utils.decompose_multimodal
+
+[[autodoc]] transformers.exporters.utils.decompose_for_generation
 
 [[autodoc]] transformers.exporters.utils.is_multimodal

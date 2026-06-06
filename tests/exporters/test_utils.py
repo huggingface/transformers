@@ -25,8 +25,8 @@ from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.utils import (
+    decompose_for_generation,
     decompose_multimodal,
-    decompose_prefill_decode,
     get_leaf_tensors,
     is_multimodal,
 )
@@ -350,16 +350,7 @@ class ExportGenerateTesterMixin:
         model = model_class(config).eval().to(torch_device)
         set_model_for_less_flaky_test(model)
 
-        # create prefill/decode copies of the model
-        stages = decompose_prefill_decode(model, inputs_dict)
-
-        if is_multimodal(model):
-            prefill_model, prefill_inputs = stages["prefill"]
-            components = decompose_multimodal(prefill_model, prefill_inputs)
-            components["decode"] = stages["decode"]
-            return components
-
-        return stages
+        return decompose_for_generation(model, inputs_dict)
 
     # ──────────────────── torch.export tests ─────────────────────
 

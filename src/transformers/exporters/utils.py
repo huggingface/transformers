@@ -737,3 +737,33 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
         for name, module in submodules.items()
         if submodule_inputs[name]  # skip submodules not called (e.g. lm_head on base models)
     }
+
+
+def decompose_for_generation(
+    model: PreTrainedModel, inputs: dict[str, Any]
+) -> dict[str, tuple[torch.nn.Module, dict]]:
+    """Decompose a generative model into independently exportable `(model, forward_inputs)` pairs.
+
+    Runs `decompose_prefill_decode` to capture prefill and decode forward kwargs from a real
+    `model.generate(**inputs, max_new_tokens=2)`. If the prefill is multi-modal (per `is_multimodal`),
+    further splits it into one entry per submodule (vision/audio encoder, projector, language model,
+    `lm_head`) via `decompose_multimodal`.
+
+    Args:
+        model: Generative model. Must support `model.generate(**inputs)`.
+        inputs: **Generate** kwargs — what you'd pass to `model.generate(**inputs)`.
+
+    Returns:
+        `{component_name: (submodel, forward_inputs)}`. Keys are `"prefill"` / `"decode"` for
+        plain generative models and `"<modality>_encoder"` / `"multi_modal_projector"` /
+        `"language_model"` / `"lm_head"` / `"decode"` for multi-modal generative models.
+    """
+    stages = decompose_prefill_decode(model, inputs)
+    prefill_model, prefill_inputs = stages["prefill"]
+
+    if not is_multimodal(prefill_model):
+        return stages
+
+    components = decompose_multimodal(prefill_model, prefill_inputs)
+    components["decode"] = stages["decode"]
+    return components

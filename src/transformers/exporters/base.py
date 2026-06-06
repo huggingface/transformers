@@ -21,7 +21,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from ..utils.export_config import ExportConfigMixin
-from .utils import decompose_multimodal, decompose_prefill_decode, is_multimodal
+from .utils import decompose_for_generation
 
 
 if TYPE_CHECKING:
@@ -84,39 +84,36 @@ class HfExporter(ABC):
 
     def export_for_generation(self, model: PreTrainedModel, sample_inputs: dict) -> dict[str, object]:
         """
-        Decompose a generative model into independently exportable components and export each.
+        Decompose a generative model and export each component independently.
 
-        Splits the forward into prefill and decode via [`~exporters.utils.decompose_prefill_decode`],
-        and if the prefill is multi-modal (per [`~exporters.utils.is_multimodal`]) further splits it
-        into one entry per submodule (vision/audio encoder, projector, language model, `lm_head`)
-        via [`~exporters.utils.decompose_multimodal`]. Each component is then passed through
-        [`~HfExporter.export`].
+        Thin wrapper around [`~exporters.utils.decompose_for_generation`] that calls
+        [`~HfExporter.export`] on every returned `(submodel, forward_inputs)` pair. If you need
+        the intermediate `(submodel, forward_inputs)` pairs (for verification, custom inputs,
+        skipping a stage, …), call [`~exporters.utils.decompose_for_generation`] directly.
 
         Args:
             model ([`PreTrainedModel`]):
                 The generative model to export. Must support `model.generate(**sample_inputs)`.
             sample_inputs (`dict[str, Any]`):
-                **Generate** kwargs — what you'd pass to `model.generate(**sample_inputs)` (typically
-                `input_ids` + `attention_mask`, plus any modality inputs like `pixel_values` /
-                `input_features` for multi-modal models). Per-stage forward kwargs (with
-                `past_key_values`, `cache_position`, etc.) are captured internally by running
-                `model.generate(**sample_inputs, max_new_tokens=2)`. If you already have explicit
-                forward kwargs for a single stage, use [`~HfExporter.export`] directly instead.
+                **Generate** kwargs — what you'd pass to `model.generate(**sample_inputs)`
+                (typically `input_ids` + `attention_mask`, plus any modality inputs like
+                `pixel_values` / `input_features` for multi-modal models). Per-stage forward
+                kwargs are captured internally.
 
         Returns:
-            `dict[str, Any]`: `{component_name: backend_specific_artifact}`. The keys are
-            `"prefill"` / `"decode"` for plain generative models and
-            `"<modality>_encoder"` / `"multi_modal_projector"` / `"language_model"` / `"lm_head"` / `"decode"`
-            for multi-modal generative models. Values are whatever [`~HfExporter.export`] returns
-            for the concrete backend (`ExportedProgram`, `ONNXProgram`, `ExecutorchProgramManager`).
+            `dict[str, Any]`: `{component_name: backend_specific_artifact}` — same keys as
+            [`~exporters.utils.decompose_for_generation`]. Values are whatever
+            [`~HfExporter.export`] returns for the concrete backend (`ExportedProgram`,
+            `ONNXProgram`, `ExecutorchProgramManager`).
         """
-        stages = decompose_prefill_decode(model, sample_inputs)
-        prefill_model, prefill_inputs = stages["prefill"]
-
-        if is_multimodal(prefill_model):
-            components = decompose_multimodal(prefill_model, prefill_inputs)
-        else:
-            components = {"prefill": stages["prefill"]}
-        components["decode"] = stages["decode"]
-
-        return {name: self.export(submodel, subinputs) for name, (submodel, subinputs) in components.items()}
+        components = decompose_for_generation(model, sample_inputs)
+        exported: dict[str, object] = {}
+        for name, (submodel, subinputs) in components.items():
+            try:
+                exported[name] = self.export(submodel, subinputs)
+            except Exception as e:
+                raise RuntimeError(
+                    f"{type(self).__name__}.export failed on component '{name}' "
+                    f"(submodel={type(submodel).__name__}, input keys={list(subinputs)})."
+                ) from e
+        return exported
