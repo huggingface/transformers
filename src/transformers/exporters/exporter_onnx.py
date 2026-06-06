@@ -15,22 +15,25 @@
 
 """ONNX exporter.
 
-Extends `DynamoExporter` with four extra stages that convert an `ExportedProgram`
+Extends `DynamoExporter` with five extra stages that convert an `ExportedProgram`
 into an ONNX model via `torch.onnx.export`:
 
-1. **Torch patches** (`_TORCH_PATCHES` + `_ONNX_PATCHES` via `patch_attrs`):
-   reversibly monkey-patch PyTorch ops at tracing time, plus the private
-   `torch.onnx` decomposition hook, so `torch.export` and `torch.onnx.export`
+1. **Torch patches** (`_PATCHES["onnx"]` via `apply_patches("onnx")`): reversibly
+   monkey-patch `torch` ops at tracing time so `torch.export` and `torch.onnx.export`
    emit ONNX-lowerable patterns. Reverted on exit.
-2. **FX graph fixes** (`_FX_NODE_FIXES` via `apply_fx_node_fixes`): per-node
-   in-place rewrites on the `GraphModule` between `torch.export` and
-   `torch.onnx.export` to drop or replace nodes ONNX can't lower (alias,
-   in-place ops, dead comparisons, `_assert_*`, …).
-3. **ONNX translations** (`_ONNX_TRANSLATION_TABLE`): custom onnxscript
-   functions registered via `custom_translation_table` that override the
-   default torchlib lowering for specific aten ops where it's buggy or missing.
-4. **ONNX IR fixes** (`_IR_FIXES` via `apply_onnx_ir_fixes`): post-export
-   in-place fixes on the `ONNXProgram` IR for ORT compatibility.
+2. **ONNX patches** (`_PATCHES["onnx"]` via `apply_patches("onnx")`): reversibly
+   hook `torch.onnx` internals — specifically `_prepare_exported_program_for_export`,
+   so the FX node fixes (stage 3) run again right after `run_decompositions`.
+   Same registry as stage 1, installed by the same `apply_patches` call.
+3. **FX node fixes** (`_FX_NODE_FIXES["onnx"]` via `apply_fx_node_fixes("onnx", gm)`):
+   per-node in-place rewrites on the `GraphModule` to drop or replace nodes ONNX
+   can't lower (alias, in-place ops, dead comparisons, `_assert_*`, …). Triggered
+   both directly after `torch.export` and indirectly via the stage 2 hook.
+4. **ONNX translations** (`_ONNX_TRANSLATION_TABLE`): custom onnxscript functions
+   passed as `custom_translation_table` that override the default torchlib
+   lowering for specific aten ops where it's buggy or missing.
+5. **ONNX IR fixes** (`_IR_FIXES` via `apply_onnx_ir_fixes`): post-export in-place
+   fixes on the `ONNXProgram` IR for ORT compatibility.
 """
 
 from __future__ import annotations
@@ -46,7 +49,14 @@ from ..utils import logging
 from ..utils.export_config import OnnxConfig
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .exporter_dynamo import DynamoExporter
-from .utils import apply_fx_node_fixes, duplicate_leaf_tensors, get_leaf_tensors, patch_attrs
+from .utils import (
+    apply_fx_node_fixes,
+    apply_patches,
+    duplicate_leaf_tensors,
+    get_leaf_tensors,
+    register_fx_node_fix,
+    register_patch,
+)
 
 
 if is_torch_available():
@@ -61,7 +71,6 @@ if is_onnxscript_available():
     import onnx_ir
     from onnxscript.function_libs.torch_lib.ops.core import aten_index_put
     from onnxscript.onnx_opset import opset18 as op
-    from torch.onnx._internal.exporter import _core as _onnx_core
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -93,12 +102,10 @@ class OnnxExporter(DynamoExporter):
     required_packages = ["torch", "onnx", "onnxscript"]
 
     def export(self, model: PreTrainedModel, sample_inputs: dict[str, Any]) -> ONNXProgram:
-        with patch_model_outputs(model), patch_attrs(_TORCH_PATCHES), patch_attrs(_ONNX_PATCHES):
+        with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("onnx"):
             exported_program: ExportedProgram = super().export(model, sample_inputs)
-            with torch.no_grad():
-                sample_outputs = model(**copy.deepcopy(sample_inputs))
-            inputs_names, outputs_names = get_inputs_outputs_names(sample_inputs, sample_outputs)
-            apply_fx_node_fixes(exported_program.graph_module, _FX_NODE_FIXES)
+            inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
+            apply_fx_node_fixes("onnx", exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
                 exported_program,
                 args=(),
@@ -123,51 +130,46 @@ class OnnxExporter(DynamoExporter):
 
 @contextmanager
 def patch_model_outputs(model):
-    """Temporarily wrap `model.forward` to return a flat `dict[str, Tensor]` with duplicated outputs.
-
-    This is distinct from `patch_model` in `exporter_dynamo` which rewrites
-    the forward signature for `torch.export` arity matching. This wrapper handles
-    ONNX-specific output flattening and tensor deduplication.
+    """Wrap `model.forward` to return a flat `dict[str, Tensor]` with duplicated outputs,
+    and capture the input/output tensor names from the traced forward in the yielded
+    `(inputs_names, outputs_names)` lists.
     """
 
+    inputs_names: list[str] = []
+    outputs_names: list[str] = []
     original_forward = model.forward
 
     @functools.wraps(original_forward)
     def patched_forward(*args, **kwargs):
-        outputs = original_forward(*args, **kwargs)
-        return get_leaf_tensors(duplicate_leaf_tensors(outputs))
+        outputs = get_leaf_tensors(duplicate_leaf_tensors(original_forward(*args, **kwargs)))
+        inputs_names.extend(get_leaf_tensors(kwargs).keys())
+        outputs_names.extend(outputs.keys())
+        return outputs
 
     try:
         model.forward = patched_forward
-        yield
+        yield inputs_names, outputs_names
     finally:
         model.forward = original_forward
 
 
-def get_inputs_outputs_names(inputs: dict[str, Any], outputs: Any) -> tuple[list[str], list[str]]:
-    """Resolve I/O tensor names, disambiguating collisions with input./output. prefixes.
-
-    Args:
-        inputs: The forward kwargs (already passed to the model).
-        outputs: The model outputs from the same forward call.
-    """
-    inputs_names = list(get_leaf_tensors(inputs).keys())
-    outputs_names = list(get_leaf_tensors(outputs).keys())
+def disambiguate_io_names(inputs_names: list[str], outputs_names: list[str]) -> tuple[list[str], list[str]]:
+    """Prefix any name that appears in both lists with `input.` / `output.`."""
     for name in set(inputs_names).intersection(set(outputs_names)):
         inputs_names[inputs_names.index(name)] = f"input.{name}"
         outputs_names[outputs_names.index(name)] = f"output.{name}"
-
     return inputs_names, outputs_names
 
 
 # ── Stage 1: Torch patches ─────────────────────────────────────────────────────
-# Shared exporter contract: _TORCH_PATCHES is a list of (obj, attr, factory) triples;
-# each factory receives the original op and returns the replacement. Installation
-# and restoration are handled by `utils.patch_attrs`.
+# Each `_patch_*(original)` factory is registered via `@register_patch("onnx", path)`,
+# where `path` is the dotted Python path of the attribute to swap (e.g. `"torch.where"`,
+# `"torch.Tensor.unsqueeze"`). Installation and restoration go through `apply_patches`.
 #
-# To add a new patch: define a _patch_* factory and append to _TORCH_PATCHES.
+# To add a new patch: define a `_patch_*` factory and decorate it.
 
 
+@register_patch("onnx", "torch.where")
 def _patch_where(original):
     """Normalize dtypes and scalars in torch.where."""
 
@@ -188,6 +190,8 @@ def _patch_where(original):
     return patch
 
 
+@register_patch("onnx", "torch.unsqueeze")
+@register_patch("onnx", "torch.Tensor.unsqueeze")
 def _patch_unsqueeze(original):
     """Support complex tensors in torch.unsqueeze."""
 
@@ -201,6 +205,7 @@ def _patch_unsqueeze(original):
     return patch
 
 
+@register_patch("onnx", "torch.nn.functional.scaled_dot_product_attention")
 def _patch_scaled_dot_product_attention(original):
     """Handle GQA/MHA head mismatch and 5D blocked attention tensors."""
 
@@ -224,6 +229,7 @@ def _patch_scaled_dot_product_attention(original):
     return patch
 
 
+@register_patch("onnx", "transformers.masking_utils._vmap_expansion_sdpa")
 def _patch_broadcast_mask_expansion(_original):
     """Replace vmap-based mask expansion with broadcast expansion."""
 
@@ -240,6 +246,7 @@ def _patch_broadcast_mask_expansion(_original):
     return patch
 
 
+@register_patch("onnx", "torch.nn.RMSNorm.forward")
 def _patch_rms_norm_forward(original):
     """Use non-fused RMS normalization when elementwise_affine is False."""
 
@@ -252,6 +259,7 @@ def _patch_rms_norm_forward(original):
     return patch
 
 
+@register_patch("onnx", "torch.randperm")
 def _patch_randperm(original):
     """Implement randperm via argsort(rand(n)) — no ONNX decomposition for aten.randperm."""
 
@@ -283,6 +291,19 @@ def _patch_cummax_or_cummin(original, *, mode: str):
     return patch
 
 
+@register_patch("onnx", "torch.cummax")
+@register_patch("onnx", "torch.Tensor.cummax")
+def _patch_cummax(original):
+    return _patch_cummax_or_cummin(original, mode="max")
+
+
+@register_patch("onnx", "torch.cummin")
+@register_patch("onnx", "torch.Tensor.cummin")
+def _patch_cummin(original):
+    return _patch_cummax_or_cummin(original, mode="min")
+
+
+@register_patch("onnx", "torch.bucketize")
 def _patch_bucketize(original):
     """Vectorized bucketize avoiding scalar-constant tensors that cause alias/detach issues."""
 
@@ -300,6 +321,7 @@ def _patch_bucketize(original):
     return patch
 
 
+@register_patch("onnx", "torch.searchsorted")
 def _patch_searchsorted(original):
     """Decompose searchsorted via broadcast comparison + sum — no ONNX op for searchsorted.
 
@@ -321,6 +343,7 @@ def _patch_searchsorted(original):
     return patch
 
 
+@register_patch("onnx", "torch.full")
 def _patch_full(original):
     """Force dtype=torch.long when fill_value is int and no dtype specified (ONNX defaults to float32)."""
 
@@ -335,6 +358,7 @@ def _patch_full(original):
     return patch
 
 
+@register_patch("onnx", "torch.masked.mean")
 def _patch_masked_mean(original):
     """Manual masked mean: avoids sum/int_count Div type mismatch in ONNX."""
 
@@ -347,6 +371,7 @@ def _patch_masked_mean(original):
     return patch
 
 
+@register_patch("onnx", "torch.masked.var")
 def _patch_masked_var(original):
     """Manual masked var: avoids sum/int_count Div type mismatch in ONNX."""
 
@@ -363,6 +388,7 @@ def _patch_masked_var(original):
     return patch
 
 
+@register_patch("onnx", "torch.Tensor.masked_scatter")
 def _patch_masked_scatter(original):
     """Cumsum-gather-where strategy for masked_scatter (avoids ScatterND ORT failures)."""
 
@@ -376,40 +402,52 @@ def _patch_masked_scatter(original):
     return patch
 
 
-# (object, attribute, factory) triples installed by patch_torch_ops.
-_TORCH_PATCHES = []
-if is_torch_available():
-    _TORCH_PATCHES += [
-        (torch, "where", _patch_where),
-        (torch, "unsqueeze", _patch_unsqueeze),
-        (torch.Tensor, "unsqueeze", _patch_unsqueeze),
-        (torch.nn.functional, "scaled_dot_product_attention", _patch_scaled_dot_product_attention),
-        (masking_utils, "_vmap_expansion_sdpa", _patch_broadcast_mask_expansion),
-        (torch.nn.RMSNorm, "forward", _patch_rms_norm_forward),
-        (torch, "randperm", _patch_randperm),
-        (torch, "cummax", lambda orig: _patch_cummax_or_cummin(orig, mode="max")),
-        (torch, "cummin", lambda orig: _patch_cummax_or_cummin(orig, mode="min")),
-        (torch.Tensor, "cummax", lambda orig: _patch_cummax_or_cummin(orig, mode="max")),
-        (torch.Tensor, "cummin", lambda orig: _patch_cummax_or_cummin(orig, mode="min")),
-        (torch, "bucketize", _patch_bucketize),
-        (torch, "searchsorted", _patch_searchsorted),
-        (torch.Tensor, "masked_scatter", _patch_masked_scatter),
-        (torch, "full", _patch_full),
-        (torch.masked, "mean", _patch_masked_mean),
-        (torch.masked, "var", _patch_masked_var),
-    ]
+# ── Stage 2: ONNX patches ──────────────────────────────────────────────────────
+# Reversible swaps of `torch.onnx` internals via `@register_patch("onnx", path)`.
+# Currently a single hook that intercepts the private `_prepare_exported_program_for_export`
+# step so the FX node fixes (stage 3) run immediately after `run_decompositions` —
+# any new symbolic-guard nodes the ONNX decomposition introduces get repaired before
+# the FX → ONNX lowering picks them up.
 
 
-# ── Stage 2: FX graph fixes ──────────────────────────────────────────────────
-# Rewrite FX nodes between torch.export (stage 1) and run_decompositions.
-# Each fixer: (gm, node) -> bool. Return True = node consumed, stop.
-#
-# To add a new fix: define _fix_* and append to _FX_NODE_FIXES.
+@register_patch("onnx", "torch.onnx._internal.exporter._core._prepare_exported_program_for_export")
+def _patch_prepare_for_export(original):
+    """Run the FX node fixes immediately after the ONNX internal decomposition step.
+
+    `torch.onnx.export` internally calls `run_decompositions` with the ONNX
+    decomposition table, which can introduce new symbolic-guard nodes (e.g.
+    `operator.le(sym_size, int_oo)`). These overflow during ONNX translation.
+    Wrapping the prepare step lets us apply our FX fixes immediately after.
+
+    <Tip warning={true}>
+
+    This hooks `torch.onnx._internal.exporter._core._prepare_exported_program_for_export`,
+    a private PyTorch API. It may break on PyTorch version upgrades. If it does,
+    find the new entry point in `torch/onnx/_internal/exporter/_core.py`
+    where `ExportedProgram.run_decompositions` is called and hook there instead.
+
+    </Tip>
+    """
+
+    def patch(ep, *, registry):
+        result = original(ep, registry=registry)
+        apply_fx_node_fixes("onnx", result.graph_module)
+        return result
+
+    return patch
+
+
+# ── Stage 3: FX node fixes ───────────────────────────────────────────────────
+# `@register_fx_node_fix("onnx")` on `(gm, node) -> bool` per-node fixers, applied
+# in place by `apply_fx_node_fixes("onnx", gm)`. Return `True` to consume the node;
+# DCE runs at the end of the walk. Triggered twice in the pipeline: once explicitly
+# after `torch.export`, once via the stage 2 patch after `run_decompositions`.
 
 
 _COMPARISON_OPS = frozenset({operator.le, operator.lt, operator.ge, operator.gt, operator.eq, operator.ne})
 
 
+@register_fx_node_fix("onnx")
 def _fix_dead_comparison(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Erase or constant-fold comparison nodes involving symbolic infinities.
 
@@ -438,6 +476,7 @@ def _fix_dead_comparison(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     return False
 
 
+@register_fx_node_fix("onnx")
 def _fix_alias(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Replace alias(x) -> x to break the alias -> detach_ -> index_put_ chain."""
     if node.target is not torch.ops.aten.alias.default:
@@ -447,6 +486,7 @@ def _fix_alias(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     return True
 
 
+@register_fx_node_fix("onnx")
 def _fix_detach_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Replace in-place detach_ with out-of-place detach."""
     if node.target is not torch.ops.aten.detach_.default:
@@ -458,6 +498,7 @@ def _fix_detach_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     return True
 
 
+@register_fx_node_fix("onnx")
 def _fix_index_put_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Replace in-place index_put_ with out-of-place index_put."""
     if node.target is not torch.ops.aten.index_put_.default:
@@ -482,6 +523,7 @@ if is_torch_available():
     )
 
 
+@register_fx_node_fix("onnx")
 def _fix_assertion(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Erase assertion / shape-constraint nodes that have no ONNX equivalent."""
     if node.target not in _ASSERTION_OPS:
@@ -490,6 +532,7 @@ def _fix_assertion(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     return True
 
 
+@register_fx_node_fix("onnx")
 def _fix_fill_diagonal_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Replace in-place fill_diagonal_ with out-of-place equivalent."""
     if node.target is not torch.ops.aten.fill_diagonal_.default:
@@ -509,6 +552,7 @@ def _fix_fill_diagonal_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) ->
     return True
 
 
+@register_fx_node_fix("onnx")
 def _fix_triu_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Replace in-place triu_ with out-of-place triu."""
     if node.target is not torch.ops.aten.triu_.default:
@@ -520,6 +564,7 @@ def _fix_triu_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     return True
 
 
+@register_fx_node_fix("onnx")
 def _fix_sort_stable(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Replace aten.sort.stable with aten.sort.default (which has ONNX translation)."""
     if node.target is not torch.ops.aten.sort.stable:
@@ -534,6 +579,7 @@ def _fix_sort_stable(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     return True
 
 
+@register_fx_node_fix("onnx")
 def _fix_remainder_scalar(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Rewrite remainder.Scalar to remainder.Tensor when the 'scalar' arg is actually a tensor.
 
@@ -553,57 +599,10 @@ def _fix_remainder_scalar(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool
     return True
 
 
-_FX_NODE_FIXES = [
-    _fix_alias,
-    _fix_assertion,
-    _fix_dead_comparison,
-    _fix_detach_inplace,
-    _fix_fill_diagonal_inplace,
-    _fix_index_put_inplace,
-    _fix_remainder_scalar,
-    _fix_sort_stable,
-    _fix_triu_inplace,
-]
-
-
-def _patch_prepare_for_export(original):
-    """Run the FX node fixes immediately after the ONNX internal decomposition step.
-
-    `torch.onnx.export` internally calls `run_decompositions` with the ONNX
-    decomposition table, which can introduce new symbolic-guard nodes (e.g.
-    `operator.le(sym_size, int_oo)`). These overflow during ONNX translation.
-    Wrapping the prepare step lets us apply our FX fixes immediately after.
-
-    <Tip warning={true}>
-
-    This hooks `torch.onnx._internal.exporter._core._prepare_exported_program_for_export`,
-    a private PyTorch API. It may break on PyTorch version upgrades. If it does,
-    find the new entry point in `torch/onnx/_internal/exporter/_core.py`
-    where `ExportedProgram.run_decompositions` is called and hook there instead.
-
-    </Tip>
-    """
-
-    def patch(ep, *, registry):
-        result = original(ep, registry=registry)
-        apply_fx_node_fixes(result.graph_module, _FX_NODE_FIXES)
-        return result
-
-    return patch
-
-
-_ONNX_PATCHES = []
-if is_onnxscript_available():
-    _ONNX_PATCHES += [
-        (_onnx_core, "_prepare_exported_program_for_export", _patch_prepare_for_export),
-    ]
-
-
-# ── Stage 3: Custom ONNX translations ─────────────────────────────────────────
-# Override the default torchlib lowering for specific aten ops.
-#
-# To add a new translation: implement an _aten_* function and add to
-# _ONNX_TRANSLATION_TABLE.
+# ── Stage 4: ONNX translations ────────────────────────────────────────────────
+# Custom onnxscript `_aten_*` functions registered in `_ONNX_TRANSLATION_TABLE`
+# that override `torchlib`'s default lowering for specific aten ops where the
+# default is buggy or missing. Passed to `torch.onnx.export` as `custom_translation_table`.
 
 
 def _aten_index_put(
@@ -657,12 +656,17 @@ if is_onnxscript_available():
         }
     )
 
-# ── Stage 4: ONNX IR fixes ────────────────────────────────────────────────────
-# Post-export fixes to the ONNX IR for ORT compatibility. Each fix has signature
-# `(graph_like) -> None` and is applied to both the top-level graph and every
-# function via `apply_onnx_ir_fixes`.
+
+# ── Stage 5: ONNX IR fixes ────────────────────────────────────────────────────
+# Post-export in-place fixes to the `ONNXProgram` IR for ORT compatibility. Each
+# fix has signature `(graph_like) -> None` and is applied to both the top-level
+# graph and every function via `apply_onnx_ir_fixes`.
 #
-# To add a new fix: implement _fix_ir_* and append to _IR_FIXES.
+# Unlike the other stages, this one is a plain `_IR_FIXES` list rather than a
+# decorator-driven registry — there's currently only one entry and we expect ORT
+# to fix the underlying bug upstream soon, so the registry boilerplate isn't worth it.
+#
+# To add a new fix: implement `_fix_ir_*` and append to `_IR_FIXES`.
 
 
 def _fix_ir_topk_sorted(graph_like: onnx_ir.Graph) -> None:

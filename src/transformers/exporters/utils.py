@@ -13,18 +13,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Shared export utilities used by multiple exporter backends.
+"""Shared export utilities used by all exporter backends.
 
-Backend-agnostic helpers used by Dynamo, ONNX, and ExecuTorch exporters:
+Organised into six sections (search for the `# ── Name ──` banners):
 
-- `get_leaf_tensors`: recursively extract all leaf tensors from nested outputs.
-- `prepare_for_export`: configure model config, attention/experts implementations,
-  and patch non-exportable module behaviours before any export.
-- `decompose_prefill_decode`: run `model.generate()` and capture the forward kwargs
-  for the prefill and decode steps.
-- `decompose_multimodal`: capture inputs to every known multi-modal submodule (vision
-  tower, projector, language model, ...) via a single forward pass, returning one
-  `{name: (module, inputs)}` entry per component for independent export.
+- **Patch and fix registries** — backend-keyed `_PATCHES` / `_FX_NODE_FIXES` /
+  `_FX_PROGRAM_FIXES` populated via `@register_patch` / `@register_fx_node_fix` /
+  `@register_fx_program_fix`, applied via `apply_patches` / `apply_fx_node_fixes` /
+  `apply_fx_program_fixes`.
+- **Recursive structure traversal** — internal helpers (`_map_leaf_tensors`,
+  `_iter_leaf_tensors`) that drive every other tensor utility.
+- **Public tensor utilities** — `get_leaf_tensors`, `duplicate_leaf_tensors`,
+  `cast_leaf_tensors`, and `prepare_for_export` (sets attention/experts impl,
+  patches non-exportable patterns, strips output flags).
+- **Multi-modal submodule discovery** — `is_multimodal` + helpers that locate
+  the vision/audio encoder, language model, projector, and `lm_head` on a model.
+- **Export input preparers** — `@register_export_input_preparer(model_type)`
+  registry that precomputes the per-encoder kwargs (`cu_seqlens`, `position_ids`,
+  audio chunks, …) the model would otherwise need data-dependent ops for.
+- **Decomposition** — `decompose_prefill_decode` (split a generative forward into
+  prefill + decode) and `decompose_multimodal` (split a multimodal forward into
+  one entry per submodule), backed by `_capture_forward`.
 """
 
 from __future__ import annotations
@@ -34,7 +43,6 @@ import copy
 import enum
 import functools
 import inspect
-import sys
 from typing import Any
 
 from ..utils import logging
@@ -58,24 +66,16 @@ if is_torch_available():
     )
 
 
-# Output flags that should be set on model.config, not passed as forward() kwargs.
-_OUTPUT_FLAGS = ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss")
+# ── Patch and fix registries ────────────────────────────────────────────────
+# Single contract across exporters: `_PATCHES[backend]` lists `(obj, attr, factory)` triples
+# to install reversibly, and `_FX_NODE_FIXES[backend]` lists `(gm, node) -> bool` fixers to
+# apply in place. Each exporter populates its slot at module load (via `@register_patch` /
+# `@register_fx_node_fix` decorators, or direct list-append for cases that can't be expressed
+# as dotted paths). The export pipeline drives them via the backend-keyed helpers below.
 
-
-_LEAF_SKIP_TYPES = (type,)
-if is_torch_available():
-    # Types that should not be recursed into when extracting leaf tensors.
-    # Sym* types carry PyTorch shape_env internals that cause infinite recursion;
-    # Enums are scalars with no tensor fields.
-    _LEAF_SKIP_TYPES += (enum.Enum, torch.SymInt, torch.SymFloat, torch.SymBool)
-
-
-# ── Shared patch primitives ────────────────────────────────────────────────
-# Reversible attribute swaps used by every exporter to install torch op patches
-# and ExecuTorch pass softenings. Each exporter declares its own list of patches;
-# the install/uninstall loop and the single-attr context manager live here so
-# the contract — (obj, attr, factory) triples with factory(original) -> replacement —
-# is identical across backends.
+_PATCHES: dict[str, list[tuple[Any, str, callable]]] = {}
+_FX_NODE_FIXES: dict[str, list[callable]] = {}
+_FX_PROGRAM_FIXES: dict[str, list[callable]] = {}
 
 
 @contextlib.contextmanager
@@ -102,8 +102,83 @@ def patch_attrs(patches: list[tuple[Any, str, callable]]):
         yield
 
 
-def apply_fx_node_fixes(graph_module, fixes: list[callable]) -> None:
-    """Walk every call_function node and apply the first matching fix, then DCE.
+@contextlib.contextmanager
+def apply_patches(backend: str):
+    """Install `_PATCHES[backend]` for the duration of the block."""
+    with patch_attrs(_PATCHES.get(backend, [])):
+        yield
+
+
+def register_fx_node_fix(backend: str):
+    """Append the decorated `(gm, node) -> bool` fix to `_FX_NODE_FIXES[backend]`."""
+
+    def decorator(fn):
+        _FX_NODE_FIXES.setdefault(backend, []).append(fn)
+        return fn
+
+    return decorator
+
+
+def register_fx_program_fix(backend: str):
+    """Append the decorated `(exported_program) -> None` fix to `_FX_PROGRAM_FIXES[backend]`.
+
+    Use this for fixes that need program-level context (range_constraints, graph_signature,
+    state_dict) — the per-node `_FX_NODE_FIXES` shape only sees one node at a time.
+    """
+
+    def decorator(fn):
+        _FX_PROGRAM_FIXES.setdefault(backend, []).append(fn)
+        return fn
+
+    return decorator
+
+
+def apply_fx_program_fixes(backend: str, exported_program) -> None:
+    """Apply `_FX_PROGRAM_FIXES[backend]` to `exported_program` (in place)."""
+    for fix in _FX_PROGRAM_FIXES.get(backend, []):
+        fix(exported_program)
+
+
+def register_patch(backend: str, path: str):
+    """Append the decorated `factory(original)` to `_PATCHES[backend]`.
+
+    `path` is a dotted Python path like `"torch.where"` or `"torch.Tensor.unsqueeze"`. The
+    rightmost segment is the attribute to swap; the rest is the object that owns it. The
+    path is resolved at decoration time — submodules are imported lazily, falling back to
+    `getattr` for class attributes. If the chain can't be resolved (e.g. the backend isn't
+    installed), registration is silently skipped so the module still imports.
+    """
+
+    def decorator(fn):
+        obj_path, _, attr = path.rpartition(".")
+        try:
+            obj = _resolve_dotted_path(obj_path)
+        except (ImportError, AttributeError):
+            return fn
+        _PATCHES.setdefault(backend, []).append((obj, attr, fn))
+        return fn
+
+    return decorator
+
+
+def _resolve_dotted_path(path: str):
+    """Resolve a dotted Python path to the actual object — importing submodules where
+    possible, falling back to `getattr` for class attributes (e.g. `torch.Tensor`)."""
+    import importlib
+
+    parts = path.split(".")
+    obj = importlib.import_module(parts[0])
+    for part in parts[1:]:
+        try:
+            obj = importlib.import_module(f"{obj.__name__}.{part}")
+        except (ImportError, AttributeError):
+            obj = getattr(obj, part)
+    return obj
+
+
+def apply_fx_node_fixes(backend: str, graph_module) -> None:
+    """Walk every call_function node and apply the first matching `_FX_NODE_FIXES[backend]`
+    fix, then DCE.
 
     Each fix has signature `(gm, node) -> bool`. Returning `True` means the fix consumed
     the node — no further fixes run against it. Fixes are expected to be disjoint by
@@ -114,6 +189,7 @@ def apply_fx_node_fixes(graph_module, fixes: list[callable]) -> None:
     `KeyError` from `erase_node._update_args_kwargs` on orphaned symbolic-size nodes —
     we swallow both; any survivors are handled by the downstream backend optimizer.
     """
+    fixes = _FX_NODE_FIXES.get(backend, [])
     for gm in graph_module.modules():
         if not isinstance(gm, torch.fx.GraphModule):
             continue
@@ -133,6 +209,13 @@ def apply_fx_node_fixes(graph_module, fixes: list[callable]) -> None:
 # ── Recursive structure traversal ──────────────────────────────────────────
 # All tensor utilities share this traversal. _map_leaf_tensors applies a function
 # to every tensor leaf; _iter_leaf_tensors yields (path, tensor) pairs.
+
+# Types that should not be recursed into when extracting leaf tensors. Sym* types
+# carry PyTorch shape_env internals that cause infinite recursion; Enums are scalars
+# with no tensor fields.
+_LEAF_SKIP_TYPES: tuple[type, ...] = (type,)
+if is_torch_available():
+    _LEAF_SKIP_TYPES += (enum.Enum, torch.SymInt, torch.SymFloat, torch.SymBool)
 
 
 def _map_leaf_tensors(obj: Any, fn: callable) -> Any:
@@ -216,6 +299,10 @@ def cast_leaf_tensors(obj: Any, dtype: torch.dtype, device: torch.device) -> Any
         return tensor.to(dtype=dtype, device=device) if tensor.is_floating_point() else tensor.to(device=device)
 
     return _map_leaf_tensors(obj, _cast)
+
+
+# Output flags that should be set on `model.config`, not passed as forward() kwargs.
+_OUTPUT_FLAGS = ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss")
 
 
 def prepare_for_export(
@@ -309,9 +396,9 @@ def prepare_for_export(
     return model, inputs
 
 
-# ── Multi-modal decomposition ─────────────────────────────────────────────────
-# Split multi-modal models into independently exportable submodules (vision encoder,
-# projector, language model) by capturing each submodule's forward inputs during a single pass.
+# ── Multi-modal submodule discovery ──────────────────────────────────────────
+# Helpers that locate the vision/audio encoder, language model, projector, and `lm_head`
+# on a multimodal model. Used by `decompose_multimodal` below.
 
 # Projector attribute names — no canonical accessor on `PreTrainedModel`, kept as a heuristic.
 # Encoders and language model are resolved via `get_encoder(modality)` / `get_decoder()`.
@@ -470,37 +557,54 @@ def _prepare_navit_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any])
         inputs["merged_shape"] = get_vision_merged_shape(target_sizes, window_kernel_size)
 
 
-@register_export_input_preparer("qwen2_5_omni_audio_encoder", "qwen3_omni_moe_audio_encoder")
-def _prepare_qwen_omni_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Chunk-and-pad the audio features so the encoder's `.split(.tolist(), dim=0)` is replaced
-    by precomputed `padded_feature` + `chunk_lengths` (and matching `cu_seqlens`/`valid_indices`/
-    `pool_indices`) — all data-dependent ops happen outside the traced graph."""
+@register_export_input_preparer("qwen2_5_omni_audio_encoder")
+def _prepare_qwen2_5_omni_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+    """Replace `input_features`/`feature_lens` with the precomputed `padded_feature`, `chunk_lengths`,
+    `cu_seqlens`, `valid_indices`, `pool_indices` — so the encoder's `.split(.tolist(), dim=0)` and
+    related data-dependent ops happen outside the traced graph."""
+    from ..models.qwen2_5_omni.modeling_qwen2_5_omni import (
+        chunk_and_pad_features,
+        get_audio_cu_seqlens,
+        get_pool_indices,
+        get_valid_indices,
+    )
+
     if "input_features" not in inputs or "feature_lens" not in inputs:
         return
 
-    modeling_module = sys.modules[type(model).__module__]
     feature_lens = inputs.pop("feature_lens")
     input_features = inputs.pop("input_features")
 
-    padded_feature, chunk_lengths = modeling_module.chunk_and_pad_features(
-        input_features, feature_lens, model.n_window
-    )
+    padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, model.n_window)
     inputs["padded_feature"] = padded_feature
     inputs["chunk_lengths"] = chunk_lengths
+    inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths)
+    inputs["valid_indices"] = get_valid_indices(chunk_lengths)
+    inputs["pool_indices"] = get_pool_indices(feature_lens)
 
-    if hasattr(modeling_module, "get_audio_cu_seqlens"):
-        fn = modeling_module.get_audio_cu_seqlens
-        fn_params = set(inspect.signature(fn).parameters)
-        if "feature_lens" in fn_params:
-            inputs["cu_seqlens"] = fn(chunk_lengths, feature_lens, model.n_window_infer, model.n_window)
-        else:
-            inputs["cu_seqlens"] = fn(chunk_lengths)
 
-    if hasattr(modeling_module, "get_valid_indices"):
-        inputs["valid_indices"] = modeling_module.get_valid_indices(chunk_lengths)
+@register_export_input_preparer("qwen3_omni_moe_audio_encoder")
+def _prepare_qwen3_omni_moe_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+    """Same shape as `_prepare_qwen2_5_omni_audio_inputs` but `get_audio_cu_seqlens` takes
+    `(chunk_lengths, feature_lens, n_window_infer, n_window)` instead of `(chunk_lengths,)`,
+    and there is no `get_pool_indices`."""
+    from ..models.qwen3_omni_moe.modeling_qwen3_omni_moe import (
+        chunk_and_pad_features,
+        get_audio_cu_seqlens,
+        get_valid_indices,
+    )
 
-    if hasattr(modeling_module, "get_pool_indices"):
-        inputs["pool_indices"] = modeling_module.get_pool_indices(feature_lens)
+    if "input_features" not in inputs or "feature_lens" not in inputs:
+        return
+
+    feature_lens = inputs.pop("feature_lens")
+    input_features = inputs.pop("input_features")
+
+    padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, model.n_window)
+    inputs["padded_feature"] = padded_feature
+    inputs["chunk_lengths"] = chunk_lengths
+    inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths, feature_lens, model.n_window_infer, model.n_window)
+    inputs["valid_indices"] = get_valid_indices(chunk_lengths)
 
 
 def _precompute_export_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
@@ -526,6 +630,14 @@ def _precompute_export_inputs(model: torch.nn.Module, inputs: dict[str, Any]) ->
     model_type = getattr(getattr(model, "config", None), "model_type", None)
     if preparer := _EXPORT_INPUT_PREPARERS.get(model_type):
         preparer(model, inputs)
+
+
+# ── Decomposition ─────────────────────────────────────────────────────────────
+# Split a model into independently exportable components. `decompose_prefill_decode`
+# captures the prefill and decode forward kwargs from a real `model.generate()` call;
+# `decompose_multimodal` runs a single forward and captures per-submodule kwargs (one
+# entry per encoder / projector / language model). Both rely on `_capture_forward` to
+# wrap a target submodule and record every call's kwargs.
 
 
 @contextlib.contextmanager

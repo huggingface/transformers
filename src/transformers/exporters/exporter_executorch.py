@@ -19,17 +19,19 @@ edge deployment. The export pipeline runs:
 
 1. **Backend preparation** (`_BACKEND_PREPARE`): `prepare_for_xnnpack` / `prepare_for_cuda`
    move the model to the target device/dtype and build the partitioner list.
-2. **Torch op patches** (`_TORCH_PATCHES` via `patch_attrs`): reversibly swap ops
-   unsupported by ExecuTorch backends (`split_copy`, `topk`, `avg_pool2d`, …) with
-   decomposed equivalents, then `torch.export.export` the model. Reverted on exit.
-3. **FX graph fixes** (`fix_fx_graph`): apply `_FX_PROGRAM_FIXES` then
-   `_FX_NODE_FIXES` on the resulting `ExportedProgram` in place — repair shape
-   bounds, placeholder metadata, op args, and replace Python sym ops with their
-   `executorch_prim.*` equivalents.
-4. **Upstream-pass softenings** (`_EXECUTORCH_PATCHES` via `patch_attrs`): reversibly
-   replace ExecuTorch passes (`SpecPropPass`, `PruneEmptyTensorsPass`, `eval_upper_bound`,
-   …) with versions that don't crash on legitimate dynamic-shape patterns, then call
-   `to_edge_transform_and_lower` and `to_executorch`. Reverted on exit.
+2. **Torch patches** (`_PATCHES["executorch"]` via `apply_patches("executorch")`):
+   reversibly swap `torch` ops the ExecuTorch backends can't accept (`split_copy`, `topk`,
+   `avg_pool2d`, …) with decomposed equivalents. Reverted on exit.
+3. **ExecuTorch patches** (`_PATCHES["executorch"]` via `apply_patches("executorch")`):
+   reversibly swap ExecuTorch internals (`SpecPropPass`, `PruneEmptyTensorsPass`,
+   `eval_upper_bound`, …) with versions that don't crash on legitimate dynamic-shape
+   patterns. Same registry as stage 2, installed by the same `apply_patches` call.
+4. **FX program fixes** (`apply_fx_program_fixes("executorch", ep)`): repair the
+   `ExportedProgram` in place where the fix needs program-level context — widen
+   `int_oo` upper bounds in `range_constraints`, fill missing placeholder `meta["val"]`.
+5. **FX node fixes** (`apply_fx_node_fixes("executorch", ep.graph_module)`): per-node
+   in-place rewrites — swap Python sym ops for their `executorch_prim.*` equivalents,
+   rewrite `pow` as a `mul` chain, normalize amax/max negative dim, force contiguous clone.
 """
 
 from __future__ import annotations
@@ -42,7 +44,14 @@ from ..utils import logging
 from ..utils.export_config import ExecutorchConfig
 from ..utils.import_utils import is_executorch_available, is_torch_available
 from .exporter_dynamo import DynamoExporter
-from .utils import apply_fx_node_fixes, patch_attrs
+from .utils import (
+    apply_fx_node_fixes,
+    apply_fx_program_fixes,
+    apply_patches,
+    register_fx_node_fix,
+    register_fx_program_fix,
+    register_patch,
+)
 
 
 if is_torch_available():
@@ -54,12 +63,11 @@ if is_torch_available():
 
 
 if is_executorch_available():
-    from executorch import exir
     from executorch.backends.cuda.cuda_backend import CudaBackend
     from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
-    from executorch.backends.xnnpack.operators.node_visitor import _node_visitor_dict
     from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
     from executorch.exir.capture._config import EdgeCompileConfig, ExecutorchBackendConfig
+    from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
     from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
 
 if TYPE_CHECKING:
@@ -96,9 +104,10 @@ class ExecutorchExporter(DynamoExporter):
 
         model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
 
-        with patch_attrs(_TORCH_PATCHES), patch_attrs(_EXECUTORCH_PATCHES):
+        with apply_patches("executorch"):
             exported_program: ExportedProgram = super().export(model, sample_inputs)
-            fix_fx_graph(exported_program)
+            apply_fx_program_fixes("executorch", exported_program)
+            apply_fx_node_fixes("executorch", exported_program.graph_module)
             edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
                 exported_program, partitioner=partitioner, compile_config=_get_edge_compile_config()
             )
@@ -191,12 +200,15 @@ _BACKEND_PREPARE = {
 }
 
 
-# ── Stage 2: Torch op patches ─────────────────────────────────────────────────
-# Shared exporter contract: _TORCH_PATCHES is a list of (obj, attr, factory) triples;
-# each factory receives the original op and returns the replacement. Installation
-# and restoration are handled by `utils.patch_attrs`.
+# ── Stage 2: Torch patches ────────────────────────────────────────────────────
+# Reversible swaps of `torch` ops the ExecuTorch backends can't lower (`split_copy`,
+# `topk(k>dim)`, non-divisible `avg_pool2d`, `dropout`, in-place `view`, GQA-shaped
+# SDPA …). Each `_patch_*(original)` factory is registered via
+# `@register_patch("executorch", "dotted.path")` and installed through `apply_patches`.
 
 
+@register_patch("executorch", "torch.split")
+@register_patch("executorch", "torch.Tensor.split")
 def _patch_split(original):
     """Narrow-based split (split_copy not supported by CUDA backend)."""
 
@@ -222,6 +234,8 @@ def _patch_split(original):
     return patch
 
 
+@register_patch("executorch", "torch.chunk")
+@register_patch("executorch", "torch.Tensor.chunk")
 def _patch_chunk(original):
     """Narrow-based chunk (delegates to split patch)."""
 
@@ -234,6 +248,8 @@ def _patch_chunk(original):
     return patch
 
 
+@register_patch("executorch", "torch.topk")
+@register_patch("executorch", "torch.Tensor.topk")
 def _patch_topk(original):
     """Argsort-based topk fallback."""
 
@@ -248,6 +264,8 @@ def _patch_topk(original):
     return patch
 
 
+@register_patch("executorch", "torch.detach")
+@register_patch("executorch", "torch.Tensor.detach")
 def _patch_detach(_original):
     """No-op detach."""
 
@@ -257,6 +275,7 @@ def _patch_detach(_original):
     return patch
 
 
+@register_patch("executorch", "torch.nn.functional.avg_pool2d")
 def _patch_avg_pool2d(original):
     """Decompose avg_pool2d as depthwise conv2d (no CUDA ExecuTorch kernel)."""
 
@@ -283,6 +302,7 @@ def _patch_avg_pool2d(original):
     return patch
 
 
+@register_patch("executorch", "torch.nn.functional.scaled_dot_product_attention")
 def _patch_scaled_dot_product_attention(original):
     """Manual matmul+softmax fallback for cases unsupported by the ExecuTorch CUDA backend.
 
@@ -332,6 +352,7 @@ def _patch_scaled_dot_product_attention(original):
     return patch
 
 
+@register_patch("executorch", "torch.nn.functional.dropout")
 def _patch_dropout(_original):
     """No-op dropout for inference export."""
 
@@ -341,6 +362,8 @@ def _patch_dropout(_original):
     return patch
 
 
+@register_patch("executorch", "torch.bernoulli")
+@register_patch("executorch", "torch.Tensor.bernoulli")
 def _patch_bernoulli(_original):
     """Sample Bernoulli via ``rand_like`` + comparison.
 
@@ -361,6 +384,7 @@ def _patch_bernoulli(_original):
     return patch
 
 
+@register_patch("executorch", "torch.Tensor.expand")
 def _patch_expand(original):
     """Force a contiguous copy after ``expand``.
 
@@ -376,258 +400,17 @@ def _patch_expand(original):
         return original(self, *sizes).clone(memory_format=torch.contiguous_format)
 
     return patch
+# ── Stage 3: ExecuTorch patches ───────────────────────────────────────────────
+# Reversible swaps of ExecuTorch internals (passes, verifiers, op dicts) that crash
+# on legitimate dynamic-shape patterns: `SpecPropPass.update_placeholder_tensor_specs`,
+# `eval_upper_bound`, `dim_order_from_stride`, XNNPACK squeeze/unsqueeze, complex-dtype
+# validator, edge-dialect sym-op allowlist. Same registry as Stage 2 — each
+# `_patch_*(original)` factory is registered via `@register_patch("executorch", path)`
+# and installed by the single `apply_patches("executorch")` wrapping the export.
 
 
-# (object, attribute, factory) triples installed by patch_torch_ops.
-_TORCH_PATCHES = []
-if is_torch_available():
-    _TORCH_PATCHES += [
-        (torch, "split", _patch_split),
-        (torch.Tensor, "split", _patch_split),
-        (torch, "chunk", _patch_chunk),
-        (torch.Tensor, "chunk", _patch_chunk),
-        (torch, "topk", _patch_topk),
-        (torch.Tensor, "topk", _patch_topk),
-        (torch, "detach", _patch_detach),
-        (torch.Tensor, "detach", _patch_detach),
-        (torch.nn.functional, "avg_pool2d", _patch_avg_pool2d),
-        (torch.nn.functional, "scaled_dot_product_attention", _patch_scaled_dot_product_attention),
-        (torch.nn.functional, "dropout", _patch_dropout),
-        (torch, "bernoulli", _patch_bernoulli),
-        (torch.Tensor, "bernoulli", _patch_bernoulli),
-        (torch.Tensor, "expand", _patch_expand),
-    ]
-
-
-# ── Stage 3: FX graph fixes ─────────────────────────────────────────────────
-# Two fix lists, applied in place between ``torch.export.export`` and ``to_edge_transform_and_lower``:
-# - ``_FX_PROGRAM_FIXES``: `(exported_program) -> None` — fixes that need program-level
-#   context (range_constraints, graph_signature, state_dict).
-# - ``_FX_NODE_FIXES``: `(gm, node) -> bool` per-node fixers driven by ``utils.apply_fx_node_fixes``.
-#   Same contract as ``exporter_onnx.py``.
-
-_MAX_DIM_MULTIPLIER = 4  # upper bound = max(lower * multiplier, floor)
-_MAX_DIM_FLOOR = 1024  # minimum upper bound for any dynamic dim
-
-
-def _as_int(x, default: int = 0) -> int:
-    """Best-effort ``int(x)`` for sympy values, with a fallback for infinities.
-
-    ``int(sympy.oo / -oo / IntInfinity)`` raises ``OverflowError`` → falls through
-    to ``AttributeError`` on ``'Infinity'._mpf_``. Catch both so unbounded ends
-    fall back to ``default`` instead of propagating sympy's internals.
-    """
-    try:
-        return int(x)
-    except (TypeError, ValueError, OverflowError, AttributeError):
-        return default
-
-
-def _fix_range_constraints(exported_program: ExportedProgram) -> None:
-    """Cap ``int_oo`` upper bounds for ExecuTorch compatibility.
-
-    Uses ``max(lower * 4, trace_value * 4, 1024)`` per dim — keeps bounds
-    proportional to actual sample sizes so XNNPACK memory planning doesn't
-    overflow, while still covering trace-time values (e.g. VLM image tokens).
-    """
-    # Collect all range dicts that need patching: range_constraints (torch.export
-    # verifiers) + shape_env.var_to_range (ExecuTorch sym_shape_eval_pass).
-    range_dicts = [exported_program._range_constraints]
-    var_to_val = {}
-    for node in exported_program.graph_module.graph.nodes:
-        val = node.meta.get("val")
-        if isinstance(val, torch.Tensor) and hasattr(val, "fake_mode"):
-            shape_env = val.fake_mode.shape_env
-            range_dicts.append(shape_env.var_to_range)
-            var_to_val = getattr(shape_env, "backed_var_to_val", None) or shape_env.var_to_val
-            break  # all nodes share the same shape_env, so we only need one
-
-    for rd in range_dicts:
-        for sym, vr in rd.items():
-            if isinstance(vr.upper, IntInfinity):
-                lower = _as_int(vr.lower, 2)
-                trace_val = _as_int(var_to_val.get(sym), 0)
-                upper = max(lower * _MAX_DIM_MULTIPLIER, trace_val * _MAX_DIM_MULTIPLIER, _MAX_DIM_FLOOR)
-                rd[sym] = ValueRanges(vr.lower, upper)
-
-
-def _fix_missing_placeholder_vals(exported_program: ExportedProgram) -> None:
-    """Ensure parameter/buffer/lifted-constant placeholders have a tensor ``meta["val"]``.
-
-    ExecuTorch's ``SpecPropPass`` builds ``node.meta["spec"]`` from ``meta["val"]``
-    via ``TensorSpec.from_tensor``. If ``val`` is ``None`` (or a non-tensor) for a
-    placeholder that the graph signature marks as a parameter/buffer/lifted
-    constant, ``spec`` stays ``None`` and a later ``spec.const = True`` crashes
-    with ``AttributeError``. Fill in the missing val from the actual state-dict
-    tensor so the spec round-trips correctly.
-    """
-    sig = exported_program.graph_signature
-    state_dict = exported_program.state_dict
-    constants = getattr(exported_program, "constants", {}) or {}
-
-    sources = (
-        (sig.inputs_to_parameters, state_dict),
-        (sig.inputs_to_buffers, state_dict),
-        (sig.inputs_to_lifted_tensor_constants, constants),
-    )
-
-    for node in exported_program.graph_module.graph.nodes:
-        if node.op != "placeholder" or not isinstance(node.target, str):
-            continue
-        if isinstance(node.meta.get("val"), torch.Tensor):
-            continue
-        for input_map, store in sources:
-            fqn = input_map.get(node.target)
-            if fqn is None:
-                continue
-            tensor = store.get(fqn)
-            if isinstance(tensor, torch.Tensor):
-                node.meta["val"] = tensor
-            break
-
-
-def _fix_amax_dim(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Rewrite negative ``dim`` indices on max/amax ops to positive ones.
-
-    XNNPACK's ``op_max_dim`` visitor compares ``node.args[1]`` directly against
-    2 and 3 without normalizing, so a ``dim=-1`` call on a 4-D tensor fails with
-    ``amax.default only supports dim == 2 or dim == 3`` even though dim 3 is
-    what was meant. Done for both ``aten.amax.default`` and ``aten.max.dim``
-    (which gets folded into amax later during lowering).
-    """
-    if node.target not in (torch.ops.aten.amax.default, torch.ops.aten.max.dim) or len(node.args) < 2:
-        return False
-    input_node = node.args[0]
-    input_val = input_node.meta.get("val") if hasattr(input_node, "meta") else None
-    rank = input_val.dim() if isinstance(input_val, torch.Tensor) else None
-    if rank is None:
-        return False
-    dim_arg = node.args[1]
-    if isinstance(dim_arg, int) and dim_arg < 0:
-        new_args = list(node.args)
-        new_args[1] = rank + dim_arg
-        node.args = tuple(new_args)
-        return True
-    if isinstance(dim_arg, (list, tuple)) and any(isinstance(d, int) and d < 0 for d in dim_arg):
-        new_dims = [d + rank if isinstance(d, int) and d < 0 else d for d in dim_arg]
-        new_args = list(node.args)
-        new_args[1] = type(dim_arg)(new_dims)
-        node.args = tuple(new_args)
-        return True
-    return False
-
-
-def _fix_python_sym_op(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Swap Python sym ops (``torch.sym_min``, ``math.ceil``, ...) for their
-    ``executorch_prim.*`` equivalents.
-
-    The edge-dialect verifier rejects Python ``FunctionType`` ops other than
-    ``alloc`` (``verifier.py:317``). ExecuTorch has its own pass
-    (``EdgeToBackendOpsPass``) that swaps these, but it only runs during
-    ``to_executorch``, after the edge verifier already runs in
-    ``to_edge_transform_and_lower``. Apply the same swap here.
-
-    Only ``torch.sym_*`` and ``math.*`` targets are swapped — ``operator.add`` /
-    ``mul`` / etc. are also used for tensor-tensor ops, where the ``Scalar``
-    overload fails at runtime with ``Cannot cast NotImplemented to number``.
-    """
-    if node.target not in _PYTHON_SYM_OP_REPLACEMENTS:
-        return False
-    node.target = _PYTHON_SYM_OP_REPLACEMENTS[node.target]
-    return True
-
-
-def _fix_clone_memory_format(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Force ``contiguous_format`` on ``aten.clone`` whose input has a non-standard dim order.
-
-    ``Tensor.clone()`` defaults to ``preserve_format`` and inherits the source's stride
-    layout. When a cache tensor has been transposed earlier (dim order e.g. ``[1, 0, 2, 3]``),
-    the clone inherits it and ExecuTorch's ``dim_order_from_stride`` fails to map it to a
-    ``torch.memory_format``. Only rewrite clones whose input ``meta["val"]`` is non-contiguous
-    so we don't disturb the (much more common) clones of already-contiguous tensors — those
-    can otherwise get optimised into pass-through nodes that XNNPACK rejects.
-    """
-    if node.target is not torch.ops.aten.clone.default:
-        return False
-    if node.kwargs.get("memory_format") is not None:
-        return False
-    input_val = node.args[0].meta.get("val") if hasattr(node.args[0], "meta") else None
-    if not (isinstance(input_val, torch.Tensor) and not input_val.is_contiguous()):
-        return False
-    node.kwargs = {**node.kwargs, "memory_format": torch.contiguous_format}
-    return True
-
-
-def _fix_sym_pow_as_mul(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Replace ``operator.pow(sym_int, n)`` with a chain of ``executorch_prim.mul.Scalar``.
-
-    The emitter has no entry for ``operator.pow`` (no ``executorch_prim.pow``), so a
-    ``sym_size ** 2`` in model code (e.g. seamless_m4t's relative positional bias)
-    raises ``invalid target for call_function <built-in function pow>`` at to_executorch.
-    Rewrite small-integer exponents (n >= 1) as a multiplication chain — the
-    ``executorch_prim.mul.Scalar`` op accepts SymInt operands.
-    """
-    if node.target is not operator.pow:
-        return False
-    base, exp = node.args
-    if not isinstance(exp, int) or exp < 1:
-        return False
-    if _MUL_SCALAR is None:
-        return False
-    with gm.graph.inserting_before(node):
-        running = base
-        for _ in range(exp - 1):
-            running = gm.graph.call_function(_MUL_SCALAR, (running, base))
-    node.replace_all_uses_with(running)
-    gm.graph.erase_node(node)
-    return True
-
-
-_PYTHON_SYM_OP_REPLACEMENTS = {}
-_MUL_SCALAR = None
-if is_executorch_available():
-    # ExecuTorch ships a Python → executorch_prim sym-op mapping for many ops; we only
-    # auto-swap a deliberate allowlist. Excludes `operator.add`/`mul`/... — those also
-    # appear in tensor-tensor contexts and crash at runtime with
-    # `Cannot cast NotImplemented to number`.
-    _full_mapping = exir.passes.executorch_prim_ops_registry._PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
-    _PYTHON_SYM_OP_REPLACEMENTS = {
-        target: _full_mapping[target]
-        for target in (torch.sym_float, torch.sym_max, torch.sym_min, math.ceil, math.trunc, round)
-        if target in _full_mapping
-    }
-    # `executorch_prim.mul.Scalar` is referenced explicitly when rewriting `operator.pow`
-    # as a chain of multiplications. Looked up against the *full* mapping rather than the
-    # allowlist — `operator.mul` is unsafe to auto-swap but safe when we construct it.
-    _MUL_SCALAR = _full_mapping.get(operator.mul)
-    del _full_mapping
-
-
-_FX_PROGRAM_FIXES = [
-    _fix_range_constraints,
-    _fix_missing_placeholder_vals,
-]
-
-_FX_NODE_FIXES = [
-    _fix_python_sym_op,
-    _fix_sym_pow_as_mul,
-    _fix_amax_dim,
-    _fix_clone_memory_format,
-]
-
-
-def fix_fx_graph(exported_program: ExportedProgram) -> None:
-    """Apply program-level patches then per-node fixes on ``exported_program`` (in place)."""
-    for fx_fix in _FX_PROGRAM_FIXES:
-        fx_fix(exported_program)
-    apply_fx_node_fixes(exported_program.graph_module, _FX_NODE_FIXES)
-
-
-# ── Stage 4: Upstream-pass softenings ─────────────────────────────────────────
-# Same factory pattern as Stage 2: each _patch_* receives the original and returns
-# the replacement. _EXECUTORCH_PATCHES lists (obj, attr, factory).
-
-
+@register_patch("executorch", "executorch.exir.sym_util.eval_upper_bound")
+@register_patch("executorch", "executorch.exir.passes.sym_shape_eval_pass.eval_upper_bound")
 def _patch_eval_upper_bound(original):
     """Constraint-based bound, then trace hint, then ``_MAX_DIM_FLOOR``.
 
@@ -649,6 +432,9 @@ def _patch_eval_upper_bound(original):
     return patch
 
 
+@register_patch(
+    "executorch", "executorch.exir.passes.prune_empty_tensors_pass.PruneEmptyTensorsPass.remove_empty_tensors_from_cat"
+)
 def _patch_remove_empty_tensors_from_cat(_original):
     """Replacement for ``PruneEmptyTensorsPass.remove_empty_tensors_from_cat``.
 
@@ -717,6 +503,7 @@ def _make_squeeze_define_node(original):
     return patch
 
 
+@register_patch("executorch", "executorch.exir.verification.verifier._check_tensor_args_matching_op_allowed_dtype")
 def _patch_check_tensor_args_dtype(original):
     """Suppress complex-dtype violations in
     ``_check_tensor_args_matching_op_allowed_dtype``.
@@ -740,6 +527,10 @@ def _patch_check_tensor_args_dtype(original):
     return patch
 
 
+@register_patch("executorch", "executorch.exir.tensor.dim_order_from_stride")
+@register_patch("executorch", "executorch.exir.tensor_layout.dim_order_from_stride")
+@register_patch("executorch", "executorch.exir.emit._emitter.dim_order_from_stride")
+@register_patch("executorch", "executorch.exir.passes.replace_view_copy_with_view_pass.dim_order_from_stride")
 def _patch_dim_order_from_stride(_original):
     """Replacement for ``executorch.exir.tensor.dim_order_from_stride``.
 
@@ -772,6 +563,7 @@ def _patch_dim_order_from_stride(_original):
     return patch
 
 
+@register_patch("executorch", "executorch.exir.passes.spec_prop_pass.SpecPropPass.update_placeholder_tensor_specs")
 def _patch_update_placeholder_tensor_specs(_original):
     """Replacement for ``SpecPropPass.update_placeholder_tensor_specs``.
 
@@ -807,6 +599,8 @@ def _patch_update_placeholder_tensor_specs(_original):
     return patch
 
 
+@register_patch("executorch", "executorch.exir.passes.executorch_prim_ops_registry._EXECUTORCH_SYM_OPS")
+@register_patch("executorch", "executorch.exir.verification.verifier._EXECUTORCH_SYM_OPS")
 def _extend_sym_ops_allowlist(original):
     """Return the edge-dialect sym-op allowlist extended with sym ops that have no `executorch_prim.*`
     equivalent (`sym_ite`, `sym_not`, `sym_int`, `sym_sum`, `sym_float`).
@@ -816,47 +610,227 @@ def _extend_sym_ops_allowlist(original):
     return original | {torch.sym_ite, torch.sym_not, torch.sym_int, torch.sym_sum, torch.sym_float}
 
 
-_EXECUTORCH_PATCHES = []
-if is_executorch_available():
-    _EXECUTORCH_PATCHES += [
-        # ConstraintBasedSymShapeEvalPass imports eval_upper_bound at module load,
-        # so we need to rebind both `sym_util.eval_upper_bound` (the canonical home)
-        # and `sym_shape_eval_pass.eval_upper_bound` (the imported copy).
-        (exir.sym_util, "eval_upper_bound", _patch_eval_upper_bound),
-        (exir.passes.sym_shape_eval_pass, "eval_upper_bound", _patch_eval_upper_bound),
-        (
-            exir.passes.prune_empty_tensors_pass.PruneEmptyTensorsPass,
-            "remove_empty_tensors_from_cat",
-            _patch_remove_empty_tensors_from_cat,
-        ),
-        (
-            exir.passes.spec_prop_pass.SpecPropPass,
-            "update_placeholder_tensor_specs",
-            _patch_update_placeholder_tensor_specs,
-        ),
-        # XNNPACK's conv1d_unsqueeze_pass wraps conv1d in unsqueeze/conv2d/squeeze; the
-        # squeeze then trips the "reshape only supports 1 dynamic dimension" check when
-        # the surrounding tensor has multiple dynamic dims (audio / speech models where
-        # batch and time are both dynamic). Drop the check — squeeze/unsqueeze of a
-        # size-1 dim doesn't actually change dynamism. Classes go via the
-        # ``_node_visitor_dict`` lookup because ``@register_node_visitor`` rebinds the
-        # decorated name to ``None``.
-        (_node_visitor_dict["aten.squeeze_copy.dim"], "define_node", _make_squeeze_define_node),
-        (_node_visitor_dict["aten.unsqueeze_copy.default"], "define_node", _make_squeeze_define_node),
-        # Allow complex64 / complex128 through the edge dtype validator — used by
-        # FFT in fnet and complex rotary embeddings in deepseek_v2.
-        (exir.verification.verifier, "_check_tensor_args_matching_op_allowed_dtype", _patch_check_tensor_args_dtype),
-        # Tolerate unbacked SymInt strides when sorting for dim_order (splinter).
-        # ``dim_order_from_stride`` is imported by name in several modules; patch
-        # every binding so the soft-guard version is hit regardless of call site.
-        (exir.tensor, "dim_order_from_stride", _patch_dim_order_from_stride),
-        (exir.tensor_layout, "dim_order_from_stride", _patch_dim_order_from_stride),
-        (exir.emit._emitter, "dim_order_from_stride", _patch_dim_order_from_stride),
-        (exir.passes.replace_view_copy_with_view_pass, "dim_order_from_stride", _patch_dim_order_from_stride),
-        # Extend the edge-dialect sym-op allowlist with trace-time-only ops that have no
-        # ``executorch_prim.*`` equivalent. Both bindings — the source module and the
-        # verifier's `from ... import _EXECUTORCH_SYM_OPS` — point at the same set, so
-        # we rebind both to a new extended set so neither read site sees the old object.
-        (exir.passes.executorch_prim_ops_registry, "_EXECUTORCH_SYM_OPS", _extend_sym_ops_allowlist),
-        (exir.verification.verifier, "_EXECUTORCH_SYM_OPS", _extend_sym_ops_allowlist),
-    ]
+@register_patch("executorch", "executorch.backends.xnnpack.operators.node_visitor._node_visitor_dict")
+def _patch_squeeze_node_visitors(original):
+    """Swap the squeeze/unsqueeze visitor entries in ``_node_visitor_dict`` with subclasses
+    whose ``define_node`` skips the strict reshape check.
+
+    XNNPACK's ``conv1d_unsqueeze_pass`` wraps conv1d in unsqueeze/conv2d/squeeze; the squeeze
+    then trips the "reshape only supports 1 dynamic dimension" check when the surrounding
+    tensor has multiple dynamic dims (audio / speech models). Squeeze/unsqueeze of a size-1
+    dim doesn't actually change dynamism, so skip the check.
+
+    The visitor classes live behind a dict-key lookup because ``@register_node_visitor``
+    rebinds the decorated class name to ``None`` — there's no dotted path to them. Instead,
+    swap the whole dict for a copy where the two affected keys point at subclasses with the
+    patched method, so the production classes stay untouched.
+    """
+    new = dict(original)
+    for key in ("aten.squeeze_copy.dim", "aten.unsqueeze_copy.default"):
+        cls = original[key]
+        new[key] = type(cls.__name__, (cls,), {"define_node": _make_squeeze_define_node(cls.define_node)})
+    return new
+
+
+# ── Stage 4: FX program fixes ─────────────────────────────────────────────────
+# `@register_fx_program_fix("executorch")` on `(exported_program) -> None` callables
+# applied in place between ``torch.export.export`` and ``to_edge_transform_and_lower``.
+# Program-level fixes need context the per-node walk doesn't have: `range_constraints`,
+# `graph_signature`, `state_dict`.
+
+_MAX_DIM_MULTIPLIER = 4  # upper bound = max(lower * multiplier, floor)
+_MAX_DIM_FLOOR = 1024  # minimum upper bound for any dynamic dim
+
+
+def _as_int(x, default: int = 0) -> int:
+    """Best-effort ``int(x)`` for sympy values, with a fallback for infinities.
+
+    ``int(sympy.oo / -oo / IntInfinity)`` raises ``OverflowError`` → falls through
+    to ``AttributeError`` on ``'Infinity'._mpf_``. Catch both so unbounded ends
+    fall back to ``default`` instead of propagating sympy's internals.
+    """
+    try:
+        return int(x)
+    except (TypeError, ValueError, OverflowError, AttributeError):
+        return default
+
+
+@register_fx_program_fix("executorch")
+def _fix_range_constraints(exported_program: ExportedProgram) -> None:
+    """Cap ``int_oo`` upper bounds for ExecuTorch compatibility.
+
+    Uses ``max(lower * 4, trace_value * 4, 1024)`` per dim — keeps bounds
+    proportional to actual sample sizes so XNNPACK memory planning doesn't
+    overflow, while still covering trace-time values (e.g. VLM image tokens).
+    """
+    # Collect all range dicts that need patching: range_constraints (torch.export
+    # verifiers) + shape_env.var_to_range (ExecuTorch sym_shape_eval_pass).
+    range_dicts = [exported_program._range_constraints]
+    var_to_val = {}
+    for node in exported_program.graph_module.graph.nodes:
+        val = node.meta.get("val")
+        if isinstance(val, torch.Tensor) and hasattr(val, "fake_mode"):
+            shape_env = val.fake_mode.shape_env
+            range_dicts.append(shape_env.var_to_range)
+            var_to_val = getattr(shape_env, "backed_var_to_val", None) or shape_env.var_to_val
+            break  # all nodes share the same shape_env, so we only need one
+
+    for rd in range_dicts:
+        for sym, vr in rd.items():
+            if isinstance(vr.upper, IntInfinity):
+                lower = _as_int(vr.lower, 2)
+                trace_val = _as_int(var_to_val.get(sym), 0)
+                upper = max(lower * _MAX_DIM_MULTIPLIER, trace_val * _MAX_DIM_MULTIPLIER, _MAX_DIM_FLOOR)
+                rd[sym] = ValueRanges(vr.lower, upper)
+
+
+@register_fx_program_fix("executorch")
+def _fix_missing_placeholder_vals(exported_program: ExportedProgram) -> None:
+    """Ensure parameter/buffer/lifted-constant placeholders have a tensor ``meta["val"]``.
+
+    ExecuTorch's ``SpecPropPass`` builds ``node.meta["spec"]`` from ``meta["val"]``
+    via ``TensorSpec.from_tensor``. If ``val`` is ``None`` (or a non-tensor) for a
+    placeholder that the graph signature marks as a parameter/buffer/lifted
+    constant, ``spec`` stays ``None`` and a later ``spec.const = True`` crashes
+    with ``AttributeError``. Fill in the missing val from the actual state-dict
+    tensor so the spec round-trips correctly.
+    """
+    sig = exported_program.graph_signature
+    state_dict = exported_program.state_dict
+    constants = getattr(exported_program, "constants", {}) or {}
+
+    sources = (
+        (sig.inputs_to_parameters, state_dict),
+        (sig.inputs_to_buffers, state_dict),
+        (sig.inputs_to_lifted_tensor_constants, constants),
+    )
+
+    for node in exported_program.graph_module.graph.nodes:
+        if node.op != "placeholder" or not isinstance(node.target, str):
+            continue
+        if isinstance(node.meta.get("val"), torch.Tensor):
+            continue
+        for input_map, store in sources:
+            fqn = input_map.get(node.target)
+            if fqn is None:
+                continue
+            tensor = store.get(fqn)
+            if isinstance(tensor, torch.Tensor):
+                node.meta["val"] = tensor
+            break
+
+
+# ── Stage 5: FX node fixes ────────────────────────────────────────────────────
+# `@register_fx_node_fix("executorch")` on `(gm, node) -> bool` per-node fixers,
+# applied in place by ``apply_fx_node_fixes("executorch", gm)`` right after the
+# program fixes. Return ``True`` to consume the node; DCE runs at the end of the walk.
+
+
+@register_fx_node_fix("executorch")
+def _fix_amax_dim(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Rewrite negative ``dim`` indices on max/amax ops to positive ones.
+
+    XNNPACK's ``op_max_dim`` visitor compares ``node.args[1]`` directly against
+    2 and 3 without normalizing, so a ``dim=-1`` call on a 4-D tensor fails with
+    ``amax.default only supports dim == 2 or dim == 3`` even though dim 3 is
+    what was meant. Done for both ``aten.amax.default`` and ``aten.max.dim``
+    (which gets folded into amax later during lowering).
+    """
+    if node.target not in (torch.ops.aten.amax.default, torch.ops.aten.max.dim) or len(node.args) < 2:
+        return False
+    input_node = node.args[0]
+    input_val = input_node.meta.get("val") if hasattr(input_node, "meta") else None
+    rank = input_val.dim() if isinstance(input_val, torch.Tensor) else None
+    if rank is None:
+        return False
+    dim_arg = node.args[1]
+    if isinstance(dim_arg, int) and dim_arg < 0:
+        new_args = list(node.args)
+        new_args[1] = rank + dim_arg
+        node.args = tuple(new_args)
+        return True
+    if isinstance(dim_arg, (list, tuple)) and any(isinstance(d, int) and d < 0 for d in dim_arg):
+        new_dims = [d + rank if isinstance(d, int) and d < 0 else d for d in dim_arg]
+        new_args = list(node.args)
+        new_args[1] = type(dim_arg)(new_dims)
+        node.args = tuple(new_args)
+        return True
+    return False
+
+
+@register_fx_node_fix("executorch")
+def _fix_python_sym_op(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Swap Python sym ops (``torch.sym_min``, ``math.ceil``, ...) for their
+    ``executorch_prim.*`` equivalents.
+
+    The edge-dialect verifier rejects Python ``FunctionType`` ops other than
+    ``alloc`` (``verifier.py:317``). ExecuTorch has its own pass
+    (``EdgeToBackendOpsPass``) that swaps these, but it only runs during
+    ``to_executorch``, after the edge verifier already runs in
+    ``to_edge_transform_and_lower``. Apply the same swap here.
+
+    Only ``torch.sym_*`` and ``math.*`` targets are swapped — ``operator.add`` /
+    ``mul`` / etc. are also used for tensor-tensor ops, where the ``Scalar``
+    overload fails at runtime with ``Cannot cast NotImplemented to number``.
+    """
+    if node.target not in (torch.sym_float, torch.sym_max, torch.sym_min, math.ceil, math.trunc, round):
+        return False
+    replacement = _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS.get(node.target)
+    if replacement is None:
+        return False
+    node.target = replacement
+    return True
+
+
+@register_fx_node_fix("executorch")
+def _fix_clone_memory_format(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Force ``contiguous_format`` on ``aten.clone`` whose input has a non-standard dim order.
+
+    ``Tensor.clone()`` defaults to ``preserve_format`` and inherits the source's stride
+    layout. When a cache tensor has been transposed earlier (dim order e.g. ``[1, 0, 2, 3]``),
+    the clone inherits it and ExecuTorch's ``dim_order_from_stride`` fails to map it to a
+    ``torch.memory_format``. Only rewrite clones whose input ``meta["val"]`` is non-contiguous
+    so we don't disturb the (much more common) clones of already-contiguous tensors — those
+    can otherwise get optimised into pass-through nodes that XNNPACK rejects.
+    """
+    if node.target is not torch.ops.aten.clone.default:
+        return False
+    if node.kwargs.get("memory_format") is not None:
+        return False
+    input_val = node.args[0].meta.get("val") if hasattr(node.args[0], "meta") else None
+    if not (isinstance(input_val, torch.Tensor) and not input_val.is_contiguous()):
+        return False
+    node.kwargs = {**node.kwargs, "memory_format": torch.contiguous_format}
+    return True
+
+
+@register_fx_node_fix("executorch")
+def _fix_sym_pow_as_mul(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Replace ``operator.pow(sym_int, n)`` with a chain of ``executorch_prim.mul.Scalar``.
+
+    The emitter has no entry for ``operator.pow`` (no ``executorch_prim.pow``), so a
+    ``sym_size ** 2`` in model code (e.g. seamless_m4t's relative positional bias)
+    raises ``invalid target for call_function <built-in function pow>`` at to_executorch.
+    Rewrite small-integer exponents (n >= 1) as a multiplication chain — the
+    ``executorch_prim.mul.Scalar`` op accepts SymInt operands.
+    """
+    if node.target is not operator.pow:
+        return False
+    base, exp = node.args
+    if not isinstance(exp, int) or exp < 1:
+        return False
+    # `operator.mul` is kept out of `_fix_python_sym_op`'s allowlist (it crashes on
+    # tensor-tensor calls), but the `executorch_prim.mul.Scalar` overload is fine when
+    # we construct the chain ourselves with SymInt operands.
+    mul_scalar = _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS.get(operator.mul)
+    if mul_scalar is None:
+        return False
+    with gm.graph.inserting_before(node):
+        running = base
+        for _ in range(exp - 1):
+            running = gm.graph.call_function(mul_scalar, (running, base))
+    node.replace_all_uses_with(running)
+    gm.graph.erase_node(node)
+    return True
+
+
