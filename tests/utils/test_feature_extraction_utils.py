@@ -88,6 +88,15 @@ class BatchFeatureTester(unittest.TestCase):
             batch_stacked["input_values"], np.array([[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]])
         )
 
+        # from nested list of arrays, as returned by video/image processors
+        nested_numpy_data = [
+            [[np.ones((2, 3)), np.zeros((2, 3))]],
+            [[np.full((2, 3), 2), np.full((2, 3), 3)]],
+        ]
+        batch_nested = BatchFeature({"pixel_values": nested_numpy_data}, tensor_type="np")
+        self.assertIsInstance(batch_nested["pixel_values"], np.ndarray)
+        self.assertEqual(batch_nested["pixel_values"].shape, (2, 1, 2, 2, 3))
+
     @require_torch
     def test_batch_feature_pytorch_conversion(self):
         """Test conversion to PyTorch tensors from various input types."""
@@ -115,6 +124,24 @@ class BatchFeatureTester(unittest.TestCase):
         batch_stacked = BatchFeature({"pixel_values": numpy_arrays}, tensor_type="pt")
         self.assertIsInstance(batch_stacked["pixel_values"], torch.Tensor)
         self.assertEqual(batch_stacked["pixel_values"].shape, (3, 3, 10, 10))
+
+        # Nested lists of tensors should stack recursively.
+        nested_tensors = [
+            [[torch.ones(2, 3), torch.zeros(2, 3)]],
+            [[torch.full((2, 3), 2), torch.full((2, 3), 3)]],
+        ]
+        batch_nested_tensors = BatchFeature({"pixel_values": nested_tensors}, tensor_type="pt")
+        self.assertIsInstance(batch_nested_tensors["pixel_values"], torch.Tensor)
+        self.assertEqual(batch_nested_tensors["pixel_values"].shape, (2, 1, 2, 2, 3))
+
+        # Nested lists of numpy arrays should be converted to one array before torch conversion.
+        nested_numpy_arrays = [
+            [[np.ones((2, 3)), np.zeros((2, 3))]],
+            [[np.full((2, 3), 2), np.full((2, 3), 3)]],
+        ]
+        batch_nested_numpy = BatchFeature({"pixel_values": nested_numpy_arrays}, tensor_type="pt")
+        self.assertIsInstance(batch_nested_numpy["pixel_values"], torch.Tensor)
+        self.assertEqual(batch_nested_numpy["pixel_values"].shape, (2, 1, 2, 2, 3))
 
     @require_torch
     def test_batch_feature_error_handling(self):

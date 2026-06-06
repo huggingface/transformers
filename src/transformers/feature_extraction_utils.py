@@ -19,6 +19,7 @@ import copy
 import json
 import os
 from collections import UserDict
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, TypeVar, Union
 
 import numpy as np
@@ -53,6 +54,12 @@ PreTrainedFeatureExtractor = Union["SequenceFeatureExtractor"]
 
 # type hinting: specifying the type of feature extractor class that inherits from FeatureExtractionMixin
 SpecificFeatureExtractorType = TypeVar("SpecificFeatureExtractorType", bound="FeatureExtractionMixin")
+
+
+def _has_nested_leaf(value: Any, predicate: Callable[[Any], bool]) -> bool:
+    if isinstance(value, (list, tuple)) and len(value) > 0:
+        return _has_nested_leaf(value[0], predicate)
+    return predicate(value)
 
 
 class BatchFeature(UserDict):
@@ -118,24 +125,22 @@ class BatchFeature(UserDict):
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             import torch
 
+            def stack_nested_tensors(value):
+                if isinstance(value, (list, tuple)):
+                    return torch.stack([stack_nested_tensors(item) for item in value])
+                return value
+
             def as_tensor(value):
                 if torch.is_tensor(value):
                     return value
 
                 # stack list of tensors if tensor_type is PyTorch (# torch.tensor() does not support list of tensors)
-                if isinstance(value, (list, tuple)) and len(value) > 0 and torch.is_tensor(value[0]):
-                    return torch.stack(value)
+                if _has_nested_leaf(value, torch.is_tensor):
+                    return stack_nested_tensors(value)
 
-                # convert list of numpy arrays to numpy array (stack) if tensor_type is Numpy
-                if isinstance(value, (list, tuple)) and len(value) > 0:
-                    if isinstance(value[0], np.ndarray):
-                        value = np.array(value)
-                    elif (
-                        isinstance(value[0], (list, tuple))
-                        and len(value[0]) > 0
-                        and isinstance(value[0][0], np.ndarray)
-                    ):
-                        value = np.array(value)
+                # Convert nested numpy arrays before torch conversion for faster tensor creation.
+                if _has_nested_leaf(value, lambda item: isinstance(item, np.ndarray)):
+                    value = np.array(value)
                 if isinstance(value, np.ndarray):
                     return torch.from_numpy(value)
                 else:
