@@ -100,8 +100,6 @@ class OwlViTVisionConfig(PreTrainedConfig):
 @strict
 class OwlViTConfig(PreTrainedConfig):
     r"""
-    class_cost (`float`, *optional*, defaults to 1.0):
-        Relative weight of the classification error in the Hungarian matching cost.
     bbox_cost (`float`, *optional*, defaults to 5.0):
         Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
     giou_cost (`float`, *optional*, defaults to 2.0):

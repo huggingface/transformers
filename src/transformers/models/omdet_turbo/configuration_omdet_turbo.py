@@ -86,8 +86,6 @@ class OmDetTurboConfig(PreTrainedConfig):
         The cache size for the classes and prompts caches.
     auxiliary_loss (`bool`, *optional*, defaults to `True`):
         Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
-    class_cost (`float`, *optional*, defaults to 1.0):
-        Relative weight of the classification error in the Hungarian matching cost.
     bbox_cost (`float`, *optional*, defaults to 5.0):
         Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
     giou_cost (`float`, *optional*, defaults to 2.0):
@@ -98,8 +96,6 @@ class OmDetTurboConfig(PreTrainedConfig):
         Relative weight of the L1 bounding box loss in the object detection loss.
     giou_loss_coefficient (`float`, *optional*, defaults to 2.0):
         Relative weight of the generalized IoU loss in the object detection loss.
-    focal_alpha (`float`, *optional*, defaults to 0.25):
-        Alpha parameter in the focal loss.
 
     Examples:
 
