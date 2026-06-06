@@ -219,6 +219,28 @@ def move_to_device(enc, labels, device):
     return enc, labels
 
 
+@torch.no_grad()
+def evaluate(model, eval_loader, processor, model_type, categories, device):
+    """Return (avg eval loss, mAP, mAP@50) over the eval set."""
+    model.eval()
+    eval_losses = []
+    metric = MeanAveragePrecision(box_format="xyxy")
+    for enc, labels in eval_loader:
+        enc, labels = move_to_device(enc, labels, device)
+        out = model(**enc, labels=labels)
+        if out.loss is not None:
+            eval_losses.append(float(out.loss.detach()))
+        preds = [
+            {k: v.cpu() for k, v in p.items()}
+            for p in postprocess_predictions(model_type, out, labels, processor, enc, categories)
+        ]
+        tgts = [{k: v.cpu() for k, v in t.items()} for t in targets_for_metric(labels)]
+        metric.update(preds, tgts)
+    m = metric.compute()
+    avg_loss = round(float(np.mean(eval_losses)), 4) if eval_losses else None
+    return avg_loss, round(float(m["map"]), 4), round(float(m["map_50"]), 4)
+
+
 def render_sample(model, processor, model_type, image, bbox, cat, categories, device, score_threshold=0.3):
     model.eval()
     collator = Collator(processor, model_type, categories, augment=False)
@@ -253,6 +275,7 @@ def main():
     parser.add_argument("--learning_rate", type=float, default=1e-4)
     parser.add_argument("--freeze_backbones", action="store_true", default=True)
     parser.add_argument("--no_freeze_backbones", dest="freeze_backbones", action="store_false")
+    parser.add_argument("--early_stopping_patience", type=int, default=4, help="Stop if val mAP stalls (0=off).")
     parser.add_argument("--num_sample_images", type=int, default=3)
     parser.add_argument("--output_dir", default="zsod-finetune")
     parser.add_argument("--push_to_hub_repo", default=None)
@@ -300,7 +323,12 @@ def main():
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(params, lr=args.learning_rate, weight_decay=1e-4)
 
-    history = []
+    # Vanilla (pretrained, before any gradient step) baseline -- this is the true zero-shot AP.
+    v_loss, v_map, v_map50 = evaluate(model, eval_loader, processor, args.model_type, categories, device)
+    history = [{"epoch": -1, "train_loss": None, "eval_loss": v_loss, "eval_map": v_map, "eval_map_50": v_map50}]
+    print(f"[{args.model_type}] vanilla(zero-shot) {history[0]}", flush=True)
+
+    best_map, best_epoch, bad_epochs = v_map, -1, 0
     for epoch in range(args.num_train_epochs):
         model.train()
         train_losses = []
@@ -313,38 +341,42 @@ def main():
             optimizer.step()
             train_losses.append(float(out.loss.detach()))
 
-        model.eval()
-        eval_losses = []
-        metric = MeanAveragePrecision(box_format="xyxy")
-        with torch.no_grad():
-            for enc, labels in eval_loader:
-                enc, labels = move_to_device(enc, labels, device)
-                out = model(**enc, labels=labels)
-                if out.loss is not None:
-                    eval_losses.append(float(out.loss.detach()))
-                preds = [
-                    {k: v.cpu() for k, v in p.items()}
-                    for p in postprocess_predictions(args.model_type, out, labels, processor, enc, categories)
-                ]
-                tgts = [{k: v.cpu() for k, v in t.items()} for t in targets_for_metric(labels)]
-                metric.update(preds, tgts)
-        m = metric.compute()
+        e_loss, e_map, e_map50 = evaluate(model, eval_loader, processor, args.model_type, categories, device)
         row = {
             "epoch": epoch,
             "train_loss": round(float(np.mean(train_losses)), 4),
-            "eval_loss": round(float(np.mean(eval_losses)), 4) if eval_losses else None,
-            "eval_map": round(float(m["map"]), 4),
-            "eval_map_50": round(float(m["map_50"]), 4),
+            "eval_loss": e_loss,
+            "eval_map": e_map,
+            "eval_map_50": e_map50,
         }
         history.append(row)
         print(f"[{args.model_type}] {row}", flush=True)
+
+        if e_map > best_map:
+            best_map, best_epoch, bad_epochs = e_map, epoch, 0
+        else:
+            bad_epochs += 1
+            if args.early_stopping_patience and bad_epochs >= args.early_stopping_patience:
+                print(
+                    f"[{args.model_type}] early stopping at epoch {epoch} (best mAP {best_map} @ {best_epoch})",
+                    flush=True,
+                )
+                break
 
     for i, (img, bbox, cat) in enumerate(sample):
         render_sample(model, processor, args.model_type, img, bbox, cat, categories, device).save(
             os.path.join(args.output_dir, f"sample_{i}_finetuned.png")
         )
 
-    summary = {"model_type": args.model_type, "model_id": model_id, "dataset": args.dataset_name, "history": history}
+    summary = {
+        "model_type": args.model_type,
+        "model_id": model_id,
+        "dataset": args.dataset_name,
+        "vanilla_map": v_map,
+        "best_map": best_map,
+        "best_epoch": best_epoch,
+        "history": history,
+    }
     with open(os.path.join(args.output_dir, "metrics.json"), "w") as f:
         json.dump(summary, f, indent=2)
     print(f"[{args.model_type}] wrote metrics.json", flush=True)
