@@ -171,9 +171,11 @@ def postprocess_predictions(model_type, outputs, labels, processor, enc, categor
             outputs, text_labels=[categories] * bs, threshold=0.0, nms_threshold=0.5, target_sizes=target_sizes
         )
         return [{"boxes": r["boxes"], "scores": r["scores"], "labels": r["labels"]} for r in results]
-    # grounding_dino: labels come back as text -> map robustly to class ids
+    # grounding_dino: labels come back as text -> map robustly to class ids.
+    # A non-zero text_threshold is required: with 0.0 every box decodes to the whole prompt and all
+    # predictions collapse onto a single class.
     results = processor.post_process_grounded_object_detection(
-        outputs, enc["input_ids"], threshold=0.0, text_threshold=0.0, target_sizes=target_sizes
+        outputs, enc["input_ids"], threshold=0.05, text_threshold=0.25, target_sizes=target_sizes
     )
     cat_clean = [c.lower() for c in categories]
     preds = []
