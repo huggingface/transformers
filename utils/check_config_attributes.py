@@ -25,7 +25,7 @@ CHECKER_CONFIG = {
     "label": "Config attributes",
     # Approximate: iterates CONFIG_MAPPING at runtime and also reads modeling_*.py files
     # in each config's directory via os.listdir(). Deprecated models are skipped.
-    "file_globs": ["src/transformers/models/**/configuration_*.py", "src/transformers/models/**/modeling_*.py"],
+    "cache_globs": ["src/transformers/models/**/configuration_*.py", "src/transformers/models/**/modeling_*.py"],
     "check_args": [],
     "fix_args": None,
 }
@@ -71,6 +71,11 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_loss_coefficient",
         "focal_alpha",
     ],
+    "Gemma4UnifiedAudioConfig": ["audio_embed_dim"],  # Used as meta data for other attributes/properties
+    "Gemma4UnifiedVisionConfig": [
+        "patch_size",
+        "pooling_kernel_size",
+    ],  # Used as meta data for other attributes/properties
     "MiniCPMV4_6Config": ["drop_vision_last_layer"],
     "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
     "HYV3Config": ["output_router_logits"],
@@ -116,6 +121,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "TimeSeriesTransformerConfig": ["num_static_real_features", "num_time_features"],
     "AutoformerConfig": ["num_static_real_features", "num_time_features"],
     "SamVisionConfig": ["mlp_ratio"],
+    "DeepseekOcr2SamVisionConfig": ["mlp_ratio"],
     "Sam3VisionConfig": ["backbone_feature_sizes"],
     "SamHQVisionConfig": ["mlp_ratio"],
     "ClapAudioConfig": ["num_classes"],
@@ -134,8 +140,27 @@ SPECIAL_CASES_TO_ALLOW = {
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],
     "HiggsAudioV2Config": ["audio_bos_token", "audio_stream_bos_id", "audio_stream_eos_id"],
     "HiggsAudioV2TokenizerConfig": ["downsample_factor"],
+    "Cohere2MoeConfig": ["rope_scaling", "sliding_window_pattern"],
     "CsmConfig": ["tie_codebooks_embeddings"],
     "DeepseekV2Config": ["norm_topk_prob"],
+    "DeepseekV4Config": [
+        # All BC / config-compat surface that the modeling code never reads but
+        # checkpoints in the wild expose (so we keep accepting them in `__init__`):
+        # `attention_bias` — V4 has no bias on any linear; kept for parity with V3 configs.
+        # `n_shared_experts` — V4 always builds exactly one shared MLP; the count
+        #   isn't read because there's no loop over shared experts.
+        # `norm_topk_prob` — V3 router knob; V4's `DeepseekV4TopKRouter` always normalises.
+        # `num_key_value_heads` — V4 is shared-KV MQA (always 1); not read at runtime.
+        # `num_nextn_predict_layers` — MTP layer count from upstream checkpoints; the
+        #   MTP head isn't instantiated by transformers' V4 implementation.
+        # `router_jitter_noise` — inherited from Mixtral; V4 routers don't apply jitter.
+        "attention_bias",
+        "n_shared_experts",
+        "norm_topk_prob",
+        "num_key_value_heads",
+        "num_nextn_predict_layers",
+        "router_jitter_noise",
+    ],
     "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
     "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
     "SeamlessM4TConfig": True,
@@ -184,9 +209,32 @@ SPECIAL_CASES_TO_ALLOW = {
     "GptOssConfig": True,
     "LwDetrConfig": True,
     "NemotronHConfig": True,
+    # RfDetr config attributes only used in loss code
+    "RfDetrConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "class_loss_coefficient",
+        "dice_loss_coefficient",
+        "eos_coefficient",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+        "mask_class_loss_coefficient",
+        "mask_dice_loss_coefficient",
+        "mask_loss_coefficient",
+        "mask_point_sample_ratio",
+    ],
     # Internally uses Got Ocr2 so no need to use in the modeling code as we remap in auto instead
     "PPChart2TableConfig": True,
     "PPChart2TableVisionConfig": True,
+    "GlmgaConfig": ["vision_config"],
+    "Sapiens2Config": [
+        "num_first_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
+        "num_key_value_attention_heads",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
+        "num_last_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
+        "flip_pairs",  # used externally for post-processing keypoints, not in forward pass
+    ],
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)

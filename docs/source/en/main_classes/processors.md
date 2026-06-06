@@ -31,6 +31,12 @@ such as tokenizers (for the text modality), image processors (for vision) and fe
 Those processors inherit from the following base class that implements the saving and loading functionality:
 
 [[autodoc]] ProcessorMixin
+    - __call__
+    - prepare_inputs_layout
+    - validate_inputs
+    - get_text_with_replacements
+    - create_mm_token_type_ids
+    - apply_chat_template
 
 ### Processing kwargs
 

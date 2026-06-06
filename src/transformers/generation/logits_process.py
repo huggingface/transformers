@@ -1863,7 +1863,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_token_mask = torch.isin(vocab_tensor, self.begin_suppress_tokens)
+        suppress_token_mask = torch.isin(vocab_tensor, self.begin_suppress_tokens.to(scores.device))
         scores_processed = scores
         if input_ids.shape[-1] == self.begin_index:
             scores_processed = torch.where(suppress_token_mask, -float("inf"), scores)

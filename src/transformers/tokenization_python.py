@@ -687,8 +687,13 @@ class PythonBackend(PreTrainedTokenizerBase):
         raise NotImplementedError
 
     def _convert_token_to_id_with_added_voc(self, token):
-        if token in self.added_tokens_encoder:
-            return self.added_tokens_encoder[token]
+        # Use the cached `_added_tokens_encoder` dict rather than the
+        # `added_tokens_encoder` property, which rebuilds and re-sorts the full
+        # added-token mapping on every access. Going through the property here
+        # made `convert_tokens_to_ids` O(T * N * logN) for a tokenizer with N
+        # added tokens (regression from the v5 tokenizer refactor, #40936).
+        if token in self._added_tokens_encoder:
+            return self._added_tokens_encoder[token]
         return self._convert_token_to_id(token)
 
     def _convert_token_to_id(self, token):
@@ -1070,9 +1075,11 @@ class PythonBackend(PreTrainedTokenizerBase):
             )
 
         tokens = []
+        # self.all_special_ids is an @property which may be slow, so only compute it once before the loop
+        ids_to_skip = set(self.all_special_ids) if skip_special_tokens else set()
         for index in ids:
             index = int(index)
-            if skip_special_tokens and index in self.all_special_ids:
+            if index in ids_to_skip:
                 continue
             tokens.append(
                 self._added_tokens_decoder[index].content

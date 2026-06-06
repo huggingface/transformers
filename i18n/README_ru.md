@@ -303,7 +303,7 @@ conda install conda-forge::transformers
 
 ## Цитирование
 
-Теперь у нас есть [статья](https://www.aclweb.org/anthology/2020.emnlp-demos.6/), которую можно цитировать для библиотеки 🤗 Transformers:
+Теперь у нас есть [статья](https://aclanthology.org/2020.emnlp-demos.6/), которую можно цитировать для библиотеки 🤗 Transformers:
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
@@ -313,7 +313,7 @@ conda install conda-forge::transformers
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://aclanthology.org/2020.emnlp-demos.6/",
     pages = "38--45"
 }
 ```

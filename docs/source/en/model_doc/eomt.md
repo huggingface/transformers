@@ -8,13 +8,10 @@ specific language governing permissions and limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 -->
-*This model was released on 2025-03-24 and added to Hugging Face Transformers on 2025-06-27.*
+*This model was published in HF papers on 2025-03-24 and contributed to Hugging Face Transformers on 2025-06-27.*
 
 # EoMT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 

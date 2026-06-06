@@ -665,12 +665,12 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Llama4CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -1186,12 +1186,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             self.pad_token_id = self.config.text_config.pad_token_id or -1
 
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()

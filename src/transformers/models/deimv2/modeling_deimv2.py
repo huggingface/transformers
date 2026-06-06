@@ -42,7 +42,6 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_deimv2 import Deimv2Config
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the Deimv2Decoder. This class adds two attributes to
@@ -51,6 +50,7 @@ from .configuration_deimv2 import Deimv2Config
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class Deimv2DecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -80,12 +80,12 @@ class Deimv2DecoderOutput(ModelOutput):
     cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RT-DETR encoder-decoder model.
     """
 )
+@dataclass
 class Deimv2ModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -138,13 +138,13 @@ class Deimv2ModelOutput(ModelOutput):
     denoising_meta_values: dict | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type for DEIMv2 encoder modules (HybridEncoder and LiteEncoder).
     Attentions are only available for HybridEncoder variants with AIFI layers.
     """
 )
+@dataclass
 class Deimv2EncoderOutput(ModelOutput):
     r"""
     feature_maps (`list[torch.FloatTensor]`):
@@ -277,7 +277,7 @@ def multi_scale_deformable_attention_v2(
                 .repeat(1, sampling_coord.shape[1])
             )
             sampling_value_l_ = value_l_[sampling_idx, :, sampling_coord[..., 1], sampling_coord[..., 0]]
-            sampling_value_l_ = sampling_value_l_.permute(0, 2, 1).reshape(
+            sampling_value_l_ = sampling_value_l_.transpose(1, 2).reshape(
                 batch_size * num_heads, hidden_dim, num_queries, num_points_list[level_id]
             )
         sampling_value_list.append(sampling_value_l_)
@@ -682,6 +682,54 @@ class Deimv2EncoderLayer(nn.Module):
         return hidden_states
 
 
+def build_2d_sinusoidal_position_embedding(
+    height: int,
+    width: int,
+    embed_dim: int = 256,
+    temperature: float = 10000.0,
+    cls_token: bool = False,
+    device: torch.device | None = None,
+    dtype: torch.dtype = torch.float32,
+) -> torch.Tensor:
+    """2D sinusoidal position embeddings for an image patch grid.
+
+    Each (h, w) position gets an ``embed_dim``-dimensional vector laid out as
+    ``[sin_h | cos_h | sin_w | cos_w]``, with row-major (H-outer) patch ordering.
+
+    Args:
+        height: Grid height in patches.
+        width: Grid width in patches.
+        embed_dim: Total embedding dimension; must be divisible by 4.
+        temperature: Base for the frequency decay.
+        cls_token: If `True`, prepend a zero row for a CLS token.
+        device: Target device; defaults to CPU.
+        dtype: Output dtype; frequency arithmetic uses float64 internally.
+
+    Returns:
+        Tensor of shape ``(height * width [+1], embed_dim)``.
+    """
+    if embed_dim % 4 != 0:
+        raise ValueError(f"`embed_dim` must be divisible by 4, got {embed_dim}")
+
+    pos_dim = embed_dim // 4
+    omega = torch.arange(pos_dim, dtype=torch.float64, device=device) / pos_dim
+    omega = 1.0 / temperature**omega  # (D/4,)
+
+    grid_h = torch.arange(height, dtype=torch.float64, device=device)
+    grid_w = torch.arange(width, dtype=torch.float64, device=device)
+    grid_h, grid_w = torch.meshgrid(grid_h, grid_w, indexing="ij")  # (H, W) each
+
+    emb_h = grid_h.flatten().outer(omega)  # (H*W, D/4)
+    emb_w = grid_w.flatten().outer(omega)  # (H*W, D/4)
+
+    pos_embed = torch.cat([emb_h.sin(), emb_h.cos(), emb_w.sin(), emb_w.cos()], dim=1)
+
+    if cls_token:
+        pos_embed = torch.cat([torch.zeros(1, embed_dim, dtype=torch.float64, device=device), pos_embed], dim=0)
+
+    return pos_embed.to(dtype)
+
+
 class Deimv2SinePositionEmbedding(nn.Module):
     """
     2D sinusoidal position embedding used in RT-DETR hybrid encoder.
@@ -692,7 +740,11 @@ class Deimv2SinePositionEmbedding(nn.Module):
         self.embed_dim = embed_dim
         self.temperature = temperature
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=32)
+    def _cached_build_2d_sinusoidal_position_embedding(*args, **kwargs) -> torch.Tensor:
+        return build_2d_sinusoidal_position_embedding(*args, **kwargs)
+
     def forward(
         self,
         width: int,
@@ -706,19 +758,14 @@ class Deimv2SinePositionEmbedding(nn.Module):
         Returns:
             Position embeddings of shape (1, height*width, embed_dim)
         """
-        grid_w = torch.arange(torch_int(width), device=device).to(dtype)
-        grid_h = torch.arange(torch_int(height), device=device).to(dtype)
-        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="xy")
-        if self.embed_dim % 4 != 0:
-            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
-        pos_dim = self.embed_dim // 4
-        omega = torch.arange(pos_dim, device=device).to(dtype) / pos_dim
-        omega = 1.0 / (self.temperature**omega)
-
-        out_w = grid_w.flatten()[..., None] @ omega[None]
-        out_h = grid_h.flatten()[..., None] @ omega[None]
-
-        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
+        return self._cached_build_2d_sinusoidal_position_embedding(
+            height=torch_int(height),
+            width=torch_int(width),
+            embed_dim=self.embed_dim,
+            temperature=self.temperature,
+            device=device,
+            dtype=dtype,
+        ).unsqueeze(0)
 
 
 class Deimv2AIFILayer(nn.Module):
@@ -751,7 +798,7 @@ class Deimv2AIFILayer(nn.Module):
         batch_size = hidden_states.shape[0]
         height, width = hidden_states.shape[2:]
 
-        hidden_states = hidden_states.flatten(2).permute(0, 2, 1)
+        hidden_states = hidden_states.flatten(2).transpose(1, 2)
 
         if self.training or self.eval_size is None:
             pos_embed = self.position_embedding(
@@ -772,7 +819,7 @@ class Deimv2AIFILayer(nn.Module):
             )
 
         hidden_states = (
-            hidden_states.permute(0, 2, 1).reshape(batch_size, self.encoder_hidden_dim, height, width).contiguous()
+            hidden_states.transpose(1, 2).reshape(batch_size, self.encoder_hidden_dim, height, width).contiguous()
         )
 
         return hidden_states
@@ -795,146 +842,6 @@ class Deimv2SpatialTuningAdapter(nn.Module):
         hidden_states_3 = self.conv3(self.act_fn(hidden_states_2))
         hidden_states_4 = self.conv4(self.act_fn(hidden_states_3))
         return hidden_states_2, hidden_states_3, hidden_states_4
-
-
-class Deimv2FrozenBatchNorm2d(nn.Module):
-    """
-    BatchNorm2d where the batch statistics and the affine parameters are fixed.
-
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
-    torchvision.models.resnet[18,34,50,101] produce nans.
-    """
-
-    def __init__(self, n):
-        super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
-
-    def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-    ):
-        num_batches_tracked_key = prefix + "num_batches_tracked"
-        if num_batches_tracked_key in state_dict:
-            del state_dict[num_batches_tracked_key]
-
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-        )
-
-    def forward(self, x):
-        # move reshapes to the beginning
-        # to make it user-friendly
-        weight = self.weight.reshape(1, -1, 1, 1)
-        bias = self.bias.reshape(1, -1, 1, 1)
-        running_var = self.running_var.reshape(1, -1, 1, 1)
-        running_mean = self.running_mean.reshape(1, -1, 1, 1)
-        epsilon = 1e-5
-        scale = weight * (running_var + epsilon).rsqrt()
-        bias = bias - running_mean * scale
-        return x * scale + bias
-
-
-def replace_batch_norm(model):
-    r"""
-    Recursively replace all `torch.nn.BatchNorm2d` with `Deimv2FrozenBatchNorm2d`.
-
-    Args:
-        model (torch.nn.Module):
-            input model
-    """
-    for name, module in model.named_children():
-        if isinstance(module, nn.BatchNorm2d):
-            new_module = Deimv2FrozenBatchNorm2d(module.num_features)
-
-            if module.weight.device != torch.device("meta"):
-                new_module.weight.copy_(module.weight)
-                new_module.bias.copy_(module.bias)
-                new_module.running_mean.copy_(module.running_mean)
-                new_module.running_var.copy_(module.running_var)
-
-            model._modules[name] = new_module
-
-        if len(list(module.children())) > 0:
-            replace_batch_norm(module)
-
-
-class Deimv2ConvEncoder(nn.Module):
-    """
-    Convolutional backbone using the modeling_deimv2_resnet.py.
-
-    nn.BatchNorm2d layers are replaced by Deimv2FrozenBatchNorm2d as defined above.
-    https://github.com/lyuwenyu/RT-DETR/blob/main/Deimv2_pytorch/src/nn/backbone/presnet.py#L142
-    """
-
-    def __init__(self, config):
-        super().__init__()
-
-        backbone = load_backbone(config)
-
-        if config.freeze_backbone_batch_norms:
-            # replace batch norm by frozen batch norm
-            with torch.no_grad():
-                replace_batch_norm(backbone)
-        self.model = backbone
-        self.intermediate_channel_sizes = self.model.channels
-        self.encoder_input_proj = nn.ModuleList(
-            [
-                Deimv2ConvNormLayer(config, in_channel, config.encoder_hidden_dim, 1, 1)
-                if config.encoder_type != "lite"
-                else nn.Identity()
-                for in_channel in self.intermediate_channel_sizes
-            ]
-        )
-
-    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> list[torch.Tensor]:
-        features = self.model(pixel_values, **kwargs).feature_maps
-        return [proj(feat) for proj, feat in zip(self.encoder_input_proj, features)]
-
-
-class Deimv2DINOv3ConvEncoder(nn.Module):
-    def __init__(self, config: Deimv2Config):
-        super().__init__()
-        self.backbone = load_backbone(config)
-
-        self.spatial_tuning_adapter = Deimv2SpatialTuningAdapter(config)
-
-        embed_dim = config.backbone_config.hidden_size
-        hidden_dim = config.encoder_hidden_dim
-        spatial_tuning_adapter_channels = config.spatial_tuning_adapter_inplanes
-        self.fusion_proj = nn.ModuleList(
-            [
-                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 2, hidden_dim, 1, 1),
-                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 4, hidden_dim, 1, 1),
-                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 4, hidden_dim, 1, 1),
-            ]
-        )
-
-    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> list[torch.Tensor]:
-        backbone_output = self.backbone(pixel_values, **kwargs)
-        feature_maps = backbone_output.feature_maps
-
-        patch_size = self.backbone.config.patch_size
-        height_patches = pixel_values.shape[2] // patch_size
-        width_patches = pixel_values.shape[3] // patch_size
-
-        semantic_features = []
-        num_scales = len(feature_maps)
-        for i, feat in enumerate(feature_maps):
-            resize_height = int(height_patches * 2 ** (num_scales - 2 - i))
-            resize_width = int(width_patches * 2 ** (num_scales - 2 - i))
-            spatial = F.interpolate(feat, size=[resize_height, resize_width], mode="bilinear", align_corners=False)
-            semantic_features.append(spatial)
-
-        detail_features = self.spatial_tuning_adapter(pixel_values)
-
-        outputs = []
-        for i, (semantic_feature, detail_feature) in enumerate(zip(semantic_features, detail_features)):
-            fused = torch.cat([semantic_feature, detail_feature], dim=1)
-            outputs.append(self.fusion_proj[i](fused))
-
-        return outputs
 
 
 class Deimv2Integral(nn.Module):
@@ -1154,6 +1061,144 @@ class Deimv2PreTrainedModel(PreTrainedModel):
             init.constant_(module.up_proj.bias, 0)
             init.xavier_uniform_(module.down_proj.weight)
             init.constant_(module.down_proj.bias, 0)
+
+
+class Deimv2FrozenBatchNorm2d(nn.Module):
+    """
+    BatchNorm2d where the batch statistics and the affine parameters are fixed.
+
+    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    torchvision.models.resnet[18,34,50,101] produce nans.
+    """
+
+    def __init__(self, n):
+        super().__init__()
+        self.register_buffer("weight", torch.ones(n))
+        self.register_buffer("bias", torch.zeros(n))
+        self.register_buffer("running_mean", torch.zeros(n))
+        self.register_buffer("running_var", torch.ones(n))
+
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+    ):
+        num_batches_tracked_key = prefix + "num_batches_tracked"
+        if num_batches_tracked_key in state_dict:
+            del state_dict[num_batches_tracked_key]
+
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
+
+    def forward(self, x):
+        # move reshapes to the beginning
+        # to make it user-friendly
+        weight = self.weight.reshape(1, -1, 1, 1)
+        bias = self.bias.reshape(1, -1, 1, 1)
+        running_var = self.running_var.reshape(1, -1, 1, 1)
+        running_mean = self.running_mean.reshape(1, -1, 1, 1)
+        epsilon = 1e-5
+        scale = weight * (running_var + epsilon).rsqrt()
+        bias = bias - running_mean * scale
+        return x * scale + bias
+
+
+def replace_batch_norm(model):
+    r"""
+    Recursively replace all `torch.nn.BatchNorm2d` with `Deimv2FrozenBatchNorm2d`.
+
+    Args:
+        model (torch.nn.Module):
+            input model
+    """
+    for name, module in model.named_children():
+        if isinstance(module, nn.BatchNorm2d):
+            new_module = Deimv2FrozenBatchNorm2d(module.num_features)
+
+            if module.weight.device != torch.device("meta"):
+                new_module.weight.copy_(module.weight)
+                new_module.bias.copy_(module.bias)
+                new_module.running_mean.copy_(module.running_mean)
+                new_module.running_var.copy_(module.running_var)
+
+            model._modules[name] = new_module
+
+        if len(list(module.children())) > 0:
+            replace_batch_norm(module)
+
+
+# This follows DFineConvEncoder, with optional projections added after the backbone features.
+class Deimv2ConvEncoder(Deimv2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        backbone = load_backbone(config)
+
+        if config.freeze_backbone_batch_norms:
+            # replace batch norm by frozen batch norm
+            with torch.no_grad():
+                replace_batch_norm(backbone)
+        self.model = backbone
+        self.intermediate_channel_sizes = self.model.channels
+        self.encoder_input_proj = nn.ModuleList(
+            [
+                Deimv2ConvNormLayer(config, in_channel, config.encoder_hidden_dim, 1, 1)
+                if config.encoder_type != "lite"
+                else nn.Identity()
+                for in_channel in self.intermediate_channel_sizes
+            ]
+        )
+
+        self.post_init()
+
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> list[torch.Tensor]:
+        features = self.model(pixel_values, **kwargs).feature_maps
+        return [proj(feat) for proj, feat in zip(self.encoder_input_proj, features)]
+
+
+class Deimv2DINOv3ConvEncoder(Deimv2PreTrainedModel):
+    def __init__(self, config: Deimv2Config):
+        super().__init__(config)
+        self.backbone = load_backbone(config)
+
+        self.spatial_tuning_adapter = Deimv2SpatialTuningAdapter(config)
+
+        embed_dim = config.backbone_config.hidden_size
+        hidden_dim = config.encoder_hidden_dim
+        spatial_tuning_adapter_channels = config.spatial_tuning_adapter_inplanes
+        self.fusion_proj = nn.ModuleList(
+            [
+                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 2, hidden_dim, 1, 1),
+                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 4, hidden_dim, 1, 1),
+                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 4, hidden_dim, 1, 1),
+            ]
+        )
+
+        self.post_init()
+
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> list[torch.Tensor]:
+        backbone_output = self.backbone(pixel_values, **kwargs)
+        feature_maps = backbone_output.feature_maps
+
+        patch_size = self.backbone.config.patch_size
+        height_patches = pixel_values.shape[2] // patch_size
+        width_patches = pixel_values.shape[3] // patch_size
+
+        semantic_features = []
+        num_scales = len(feature_maps)
+        for i, feat in enumerate(feature_maps):
+            resize_height = int(height_patches * 2 ** (num_scales - 2 - i))
+            resize_width = int(width_patches * 2 ** (num_scales - 2 - i))
+            spatial = F.interpolate(feat, size=[resize_height, resize_width], mode="bilinear", align_corners=False)
+            semantic_features.append(spatial)
+
+        detail_features = self.spatial_tuning_adapter(pixel_values)
+
+        outputs = []
+        for i, (semantic_feature, detail_feature) in enumerate(zip(semantic_features, detail_features)):
+            fused = torch.cat([semantic_feature.to(detail_feature.device), detail_feature], dim=1)
+            outputs.append(self.fusion_proj[i](fused))
+
+        return outputs
 
 
 class Deimv2LiteEncoder(Deimv2PreTrainedModel):
@@ -1701,13 +1746,14 @@ class Deimv2Model(Deimv2PreTrainedModel):
         for param in self.backbone.parameters():
             param.requires_grad_(True)
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=32)
-    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
-        if spatial_shapes is None:
-            spatial_shapes = [
-                [int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s)]
-                for s in self.config.feat_strides
-            ]
+    def _cached_generate_anchors(
+        spatial_shapes: tuple[tuple[int, int], ...],
+        grid_size: float,
+        device: torch.device | str = "cpu",
+        dtype: torch.dtype = torch.float32,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         anchors = []
         for level, (height, width) in enumerate(spatial_shapes):
             grid_y, grid_x = torch.meshgrid(
@@ -1729,6 +1775,14 @@ class Deimv2Model(Deimv2PreTrainedModel):
         anchors = torch.where(valid_mask, anchors, torch.tensor(torch.finfo(dtype).max, dtype=dtype, device=device))
 
         return anchors, valid_mask
+
+    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
+        if spatial_shapes is None:
+            spatial_shapes = (
+                (int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s))
+                for s in self.config.feat_strides
+            )
+        return self._cached_generate_anchors(spatial_shapes, grid_size, device, dtype)
 
     @auto_docstring
     @can_return_tuple
@@ -1756,10 +1810,12 @@ class Deimv2Model(Deimv2PreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Deimv2Model
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("PekingU/Deimv2_r50vd")
         >>> model = Deimv2Model.from_pretrained("PekingU/Deimv2_r50vd")
@@ -1923,12 +1979,12 @@ class Deimv2Model(Deimv2PreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`Deimv2ForObjectDetection`].
     """
 )
+@dataclass
 class Deimv2ObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -2008,6 +2064,7 @@ class Deimv2ObjectDetectionOutput(ModelOutput):
     """
 )
 class Deimv2ForObjectDetection(Deimv2PreTrainedModel):
+    _no_split_modules = None  # Restrictions are collected from self.model during post_init.
     _tied_weights_keys = {
         r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
         r"class_embed.(?![0])\d+": r"^class_embed.0",
