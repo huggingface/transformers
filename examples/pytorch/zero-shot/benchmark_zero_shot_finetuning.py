@@ -125,24 +125,8 @@ class Collator:
 
         sizes = [img.size for img in images]  # (w, h)
 
-        if self.model_type == "grounding_dino":
-            # let the processor build correct (resize/pad-aware) labels from COCO annotations
-            annotations = []
-            for i, (bbox, cat, (w, h)) in enumerate(zip(bboxes, cats, sizes)):
-                anns = [
-                    {"image_id": i, "category_id": c, "bbox": b, "area": b[2] * b[3], "iscrowd": 0}
-                    for b, c in zip(bbox, cat)
-                ]
-                annotations.append({"image_id": i, "annotations": anns})
-            enc = self.processor(
-                images=images, text=[self.text_prompt] * len(images), annotations=annotations, return_tensors="pt"
-            )
-            labels = enc.pop("labels")
-            for lab, (w, h) in zip(labels, sizes):
-                lab["orig_size"] = torch.tensor([h, w])
-            return enc, labels
-
-        # OWL-ViT / OWLv2 / OmDet-Turbo: manual normalized labels (processors only square-resize)
+        # Manual normalized (cxcywh) labels work for all four: OWL-ViT/OWLv2/OmDet square-resize, and Grounding
+        # DINO uses aspect-preserving resize with no padding at batch size 1, so normalized coords are invariant.
         labels = []
         for bbox, cat, (w, h) in zip(bboxes, cats, sizes):
             labels.append(
@@ -152,7 +136,9 @@ class Collator:
                     "orig_size": torch.tensor([h, w]),
                 }
             )
-        if self.model_type in ("owlvit", "owlv2"):
+        if self.model_type == "grounding_dino":
+            enc = self.processor(images=images, text=[self.text_prompt] * len(images), return_tensors="pt")
+        elif self.model_type in ("owlvit", "owlv2"):
             enc = self.processor(images=images, text=[self.categories] * len(images), return_tensors="pt")
         else:  # omdet_turbo
             task = "Detect {}.".format(", ".join(self.categories))
