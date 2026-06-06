@@ -99,7 +99,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         for i in range(self._utf_vocab_size):
             token = chr(i)
             vocab[token] = i + self._num_special_tokens
-        vocab.update(self.added_tokens_encoder)
+        vocab.update(self._added_tokens_encoder)
         return vocab
 
     @property
@@ -181,7 +181,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         """Converts a sequence of tokens (string) in a single string."""
         bstring = b""
         for token in tokens:
-            if token in self.added_tokens_encoder:
+            if token in self._added_tokens_encoder:
                 tok_string = str(token).encode("utf-8")
             else:
                 tok_string = bytes([ord(token)])

@@ -213,7 +213,7 @@ class MyT5Tokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.byt5.tokenization_byt5.ByT5Tokenizer.get_vocab
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size + self.offset)}
-        vocab.update(self.added_tokens_encoder)
+        vocab.update(self._added_tokens_encoder)
         return vocab
 
     # Copied from transformers.models.byt5.tokenization_byt5.ByT5Tokenizer.get_special_tokens_mask
@@ -348,13 +348,13 @@ class MyT5Tokenizer(PreTrainedTokenizer):
         for token in tokens:
             if token in self.added_tokens_decoder:
                 out_tokens.append(self.added_tokens_decoder[token])
-            elif token in self.added_tokens_encoder:
+            elif token in self._added_tokens_encoder:
                 out_tokens.append(token)
             else:
                 out_tokens.append(token)
 
         out_tokens = self.morphological_decode(out_tokens)
-        _added_tokens = set(self.added_tokens_decoder.values()) | set(self.added_tokens_encoder)
+        _added_tokens = set(self.added_tokens_decoder.values()) | set(self._added_tokens_encoder)
         for token in out_tokens:
             if token in _added_tokens:
                 bstring += bytes(token, "utf-8")

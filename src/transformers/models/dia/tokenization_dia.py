@@ -73,7 +73,7 @@ class DiaTokenizer(PreTrainedTokenizer):
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size + self.offset)}
-        vocab.update(self.added_tokens_encoder)
+        vocab.update(self._added_tokens_encoder)
         return vocab
 
     def _tokenize(self, text: str) -> list[str]:
@@ -103,7 +103,7 @@ class DiaTokenizer(PreTrainedTokenizer):
             if token in self.added_tokens_decoder:
                 added_token_obj = self.added_tokens_decoder[token]
                 tok_string = str(added_token_obj).encode("utf-8")
-            elif token in self.added_tokens_encoder:
+            elif token in self._added_tokens_encoder:
                 tok_string = token.encode("utf-8")
             else:
                 tok_string = token.encode("utf-8")  # Assume general string token

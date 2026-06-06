@@ -102,7 +102,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size + self.offset)}
-        vocab.update(self.added_tokens_encoder)
+        vocab.update(self._added_tokens_encoder)
         return vocab
 
     def get_special_tokens_mask(
@@ -218,7 +218,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         for token in tokens:
             if token in self.added_tokens_decoder:
                 tok_string = self.added_tokens_decoder[token].encode("utf-8")
-            elif token in self.added_tokens_encoder:
+            elif token in self._added_tokens_encoder:
                 tok_string = token.encode("utf-8")
             else:
                 tok_string = bytes([ord(token)])
