@@ -124,7 +124,7 @@ Train: 6669, Validation: 1177
 ## Preprocess the data
 
 [`AutoImageProcessor`] takes care of processing image data to create `pixel_values`, `pixel_mask`, and
-`labels` that the model can train with. The image processor handles resizing, padding, and normalization — no manual augmentation library is needed.
+`labels` that the model can train with. The image processor handles resizing, padding, and normalization. On top of that, you can optionally add random data augmentations (see [below](#data-augmentation)) to improve generalization.
 
 ```py
 >>> import numpy as np
@@ -164,6 +164,48 @@ The `image_processor` expects annotations in the COCO format: `{'image_id': int,
 
 >>> transform_fn = partial(transform_batch, image_processor=image_processor)
 >>> train_ds = train_ds.with_transform(transform_fn)
+>>> val_ds = val_ds.with_transform(transform_fn)
+```
+
+### Data augmentation
+
+The transform above only resizes and normalizes images. Random augmentations applied to the **training** split usually improve generalization, while the validation split should stay augmentation-free so that evaluation stays deterministic. A common choice is [Albumentations](https://albumentations.ai/), which augments the image and its bounding boxes together. Define a pipeline with `bbox_params` so boxes are transformed consistently with the image, then recompute areas from the augmented boxes:
+
+```py
+>>> import albumentations as A
+
+>>> train_augment = A.Compose(
+...     [
+...         A.Perspective(p=0.1),
+...         A.HorizontalFlip(p=0.5),
+...         A.RandomBrightnessContrast(p=0.5),
+...         A.HueSaturationValue(p=0.1),
+...     ],
+...     bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True, min_area=25),
+... )
+
+>>> def augment_and_transform_batch(examples, image_processor, transform):
+...     images = []
+...     annotations = []
+...     for image_id, image, objects in zip(examples["image_id"], examples["image"], examples["objects"]):
+...         image = np.array(image.convert("RGB"))
+...         output = transform(image=image, bboxes=objects["bbox"], category=objects["category"])
+...         images.append(output["image"])
+...         areas = [w * h for (_, _, w, h) in output["bboxes"]]
+...         formatted = format_image_annotations_as_coco(
+...             image_id, output["category"], areas, output["bboxes"]
+...         )
+...         annotations.append(formatted)
+...     result = image_processor(images=images, annotations=annotations, return_tensors="pt")
+...     result.pop("pixel_mask", None)
+...     return result
+```
+
+Apply the augmenting transform to the training split only, and keep the plain `transform_fn` for validation:
+
+```py
+>>> train_augment_fn = partial(augment_and_transform_batch, image_processor=image_processor, transform=train_augment)
+>>> train_ds = train_ds.with_transform(train_augment_fn)
 >>> val_ds = val_ds.with_transform(transform_fn)
 ```
 

@@ -224,29 +224,32 @@ Since each image has a different number of object instances, labels are variable
 ...     return out
 ```
 
-## Define evaluation metric: Mean IoU
+## Define evaluation metric
 
 To track segmentation quality during training, compute a *union-based mean IoU* at each evaluation epoch. For each image:
 
-1. Filter predicted masks by confidence score (> 0.5)
-2. Merge all predicted instance masks into a single binary "buildings" map
-3. Merge all ground-truth instance masks into a single binary map
-4. Compute Intersection-over-Union between the two maps
+1. Merge all predicted instance masks into a single binary "buildings" map (binarize each query's mask logits with `sigmoid > 0.5`)
+2. Merge all ground-truth instance masks into a single binary map
+3. Compute Intersection-over-Union between the two maps
+
+RF-DETR-Seg's query masks are not gated by a class-score threshold, so the metric ignores class scores and unions the per-query mask logits directly. Unmatched queries produce near-empty masks, so they do not pollute the union.
 
 This gives a per-image metric of "how well does the model cover the buildings", which is averaged over the full validation set.
 
-Implement this as a [`Trainer`] subclass that runs an extra inference pass during evaluation to compute the metric:
+> [!TIP]
+> Instance segmentation benchmarks (such as COCO) usually report **mask mean average precision (mAP)**, which scores each predicted instance mask against the ground truth across a range of IoU thresholds and therefore rewards correctly separating individual objects. The union-based mean IoU used here is a simpler, faster proxy: it measures overall pixel coverage rather than per-instance quality, which makes it convenient for tracking progress during training. For a standard, instance-aware evaluation, compute mask mAP instead, for example with `torchmetrics`' [`MeanAveragePrecision(iou_type="segm")`](https://lightning.ai/docs/torchmetrics/stable/detection/mean_average_precision.html).
+
+Pass this to the [`Trainer`] as a `compute_metrics` function instead of subclassing the trainer. With `eval_do_concat_batches=False` (set in the [`TrainingArguments`] below), the predictions and labels produced by the standard evaluation pass are handed to `compute_metrics` as a list of per-batch outputs, so the metric reuses those predictions and no second forward pass over the validation set is needed. In the model output tuple, index `3` holds `pred_masks`:
 
 ```py
 >>> import torch.nn.functional as F
->>> from transformers import Trainer
 
 
 >>> @torch.no_grad()
 ... def compute_mean_iou(pred_masks, gt_masks, target_size):
 ...     """Union-based IoU: merge all instances per image, then compute IoU."""
-...     pred_union = (pred_masks.sigmoid() > 0.5).any(dim=0).float()
-...     pred_union = F.interpolate(pred_union[None, None], size=target_size, mode="bilinear")[0, 0] > 0.5
+...     pred_masks = F.interpolate(pred_masks[None], size=target_size, mode="bilinear", align_corners=False)[0]
+...     pred_union = (pred_masks.sigmoid() > 0.5).any(dim=0)
 ...
 ...     gt_union = gt_masks.any(dim=0).bool()
 ...
@@ -255,63 +258,37 @@ Implement this as a [`Trainer`] subclass that runs an extra inference pass durin
 ...     return (intersection / union.clamp(min=1)).item()
 
 
->>> class SegTrainer(Trainer):
-...     """Trainer that computes mean IoU during evaluation."""
+>>> @torch.no_grad()
+... def compute_metrics(evaluation_results):
+...     predictions, targets = evaluation_results.predictions, evaluation_results.label_ids
+...     ious = []
+...     for pred_batch, target_batch in zip(predictions, targets):
+...         batch_masks = pred_batch[3]
+...         for i, gt_label in enumerate(target_batch):
+...             gt_masks = torch.as_tensor(gt_label["masks"])
+...             if gt_masks.numel() == 0:
+...                 continue
+...             target_size = gt_masks.shape[-2:]
+...             pred_masks = torch.as_tensor(batch_masks[i])
+...             ious.append(compute_mean_iou(pred_masks, gt_masks, target_size))
 ...
-...     def evaluate(self, eval_dataset=None, **kwargs):
-...         metrics = super().evaluate(eval_dataset=eval_dataset, **kwargs)
-...
-...         eval_ds = eval_dataset if eval_dataset is not None else self.eval_dataset
-...         model = self.model
-...         model.eval()
-...         device = next(model.parameters()).device
-...
-...         ious = []
-...         dataloader = self.get_eval_dataloader(eval_ds)
-...         for batch in dataloader:
-...             pixel_values = batch["pixel_values"].to(device)
-...             pixel_mask = batch.get("pixel_mask")
-...             if pixel_mask is not None:
-...                 pixel_mask = pixel_mask.to(device)
-...
-...             outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-...             pred_masks = outputs.pred_masks
-...             logits = outputs.logits
-...
-...             for i, gt_label in enumerate(batch["labels"]):
-...                 gt_m = gt_label["masks"].to(device)
-...                 if gt_m.numel() == 0:
-...                     continue
-...                 target_h, target_w = gt_m.shape[-2:]
-...
-...                 scores = logits[i].sigmoid().max(dim=-1).values
-...                 keep = scores > 0.5
-...                 pm = pred_masks[i][keep]
-...                 if pm.numel() == 0:
-...                     ious.append(0.0)
-...                     continue
-...                 ious.append(compute_mean_iou(pm, gt_m, (target_h, target_w)))
-...
-...         mean_iou = sum(ious) / len(ious) if ious else 0.0
-...         metrics["eval_mean_iou"] = mean_iou
-...         self.log({"eval_mean_iou": mean_iou})
-...         print(f"\n*** Mean IoU: {mean_iou:.4f} ***")
-...         return metrics
+...     mean_iou = sum(ious) / len(ious) if ious else 0.0
+...     return {"mean_iou": mean_iou}
 ```
+
+The [`Trainer`] automatically prefixes the returned keys with `eval_`, so this produces the `eval_mean_iou` metric used below for checkpoint selection.
 
 ## Training
 
-With the data, model, and metrics ready, set up training.. A few important notes on the [`TrainingArguments`]:
+With the data, model, and metrics ready, set up training. A few important notes on the [`TrainingArguments`]:
 
-- **`remove_unused_columns=False`**: Required because the default behavior would drop columns before our transform runs.
-- **`eval_do_concat_batches=False`**: Instance segmentation labels are variable-length dicts — they cannot be concatenated across batches.
-- **`metric_for_best_model="eval_mean_iou"`**: Select the best checkpoint by segmentation quality, not just loss.
-- **`fp16=True`**: Mixed precision training significantly speeds up training on modern GPUs.
-
-With a batch size of 16 on an A100 80GB GPU, training takes about 1 hour for 10 epochs. On a T4 (16GB), reduce batch size to 2-4 and increase gradient accumulation.
+- `remove_unused_columns=False`: Required because the default behavior would drop columns before our transform runs.
+- `eval_do_concat_batches=False`: Instance segmentation labels are variable-length dicts, they cannot be concatenated across batches. This also keeps predictions grouped per batch so `compute_metrics` can match them to their labels.
+- `metric_for_best_model="eval_mean_iou"`: Select the best checkpoint by segmentation quality, not just loss.
+- `fp16=True`: Mixed precision training significantly speeds up training on modern GPUs.
 
 ```py
->>> from transformers import TrainingArguments
+>>> from transformers import Trainer, TrainingArguments
 
 >>> training_args = TrainingArguments(
 ...     output_dir="rf-detr-seg-satellite-buildings",
@@ -335,13 +312,14 @@ With a batch size of 16 on an A100 80GB GPU, training takes about 1 hour for 10 
 ...     push_to_hub=True,
 ... )
 
->>> trainer = SegTrainer(
+>>> trainer = Trainer(
 ...     model=model,
 ...     args=training_args,
 ...     train_dataset=train_ds,
 ...     eval_dataset=valid_ds,
 ...     processing_class=image_processor,
 ...     data_collator=collate_fn,
+...     compute_metrics=compute_metrics,
 ... )
 
 >>> trainer.train()

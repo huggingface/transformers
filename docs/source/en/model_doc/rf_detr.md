@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 # RF-DETR
 
-[RF-DETR](https://huggingface.co/papers/2407.17140) proposes a Receptive Field Detection Transformer (DETR) architecture
+[RF-DETR](https://github.com/roboflow/rf-detr) proposes a Receptive Field Detection Transformer (DETR) architecture
 designed to compete with and surpass the dominant YOLO series for real-time object detection. It achieves a new
 state-of-the-art balance between speed (latency) and accuracy (mAP) by combining recent transformer advances with
 efficient design choices.
@@ -75,11 +75,12 @@ pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
 ```python
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 from PIL import Image
-import requests
+import httpx
+from io import BytesIO
 import torch
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
+image = Image.open(BytesIO(httpx.get(url).content))
 
 image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-medium")
 model = AutoModelForObjectDetection.from_pretrained("Roboflow/rf-detr-medium", device_map="auto")
@@ -113,11 +114,12 @@ You can use the [supervision](https://github.com/roboflow/supervision) library t
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 from PIL import Image
 import supervision as sv
-import requests
+import httpx
+from io import BytesIO
 import torch
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
+image = Image.open(BytesIO(httpx.get(url).content))
 
 image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-medium")
 model = AutoModelForObjectDetection.from_pretrained("Roboflow/rf-detr-medium", device_map="auto")
@@ -152,11 +154,12 @@ sv.plot_image(annotated_image)
 from transformers import AutoImageProcessor, AutoModelForInstanceSegmentation
 from PIL import Image
 import supervision as sv
-import requests
+import httpx
+from io import BytesIO
 import torch
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
+image = Image.open(BytesIO(httpx.get(url).content))
 
 image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-seg-medium")
 model = AutoModelForInstanceSegmentation.from_pretrained("Roboflow/rf-detr-seg-medium", device_map="auto")
