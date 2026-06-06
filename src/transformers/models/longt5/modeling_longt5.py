@@ -1251,7 +1251,7 @@ class LongT5Stack(LongT5PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
+            err_msg_prefix = "decoder's " if self.is_decoder else ""
             raise ValueError(
                 f"You cannot specify both {err_msg_prefix}input_ids and {err_msg_prefix}inputs_embeds at the same time"
             )
@@ -1261,7 +1261,7 @@ class LongT5Stack(LongT5PreTrainedModel):
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
         else:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
+            err_msg_prefix = "decoder's " if self.is_decoder else ""
             raise ValueError(f"You have to specify either {err_msg_prefix}input_ids or {err_msg_prefix}inputs_embeds")
 
         if self.gradient_checkpointing and self.training:
