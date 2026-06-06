@@ -157,17 +157,30 @@ def write_processor(
         # Normally CTC and TDT already have
         tokenizer_converted_fast.add_tokens([AddedToken("<unk>", normalized=False, special=True)])
         print(f"Added <unk> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<unk>')}")
-    if tokenizer_converted_fast.convert_tokens_to_ids("<pad>") is None:
-        # Normally CTC doesn't have while TDT has at token id = 2
-        tokenizer_converted_fast.add_tokens([AddedToken("<pad>", normalized=False, special=True)])
-        print(f"Added <pad> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<pad>')}")
-    if model_type in ("tdt", "rnnt"):
-        # TDT and RNN-T need a separate blank token
+
+    if model_type == "rnnt":
+        # RNN-T (unlike TDT) has no dedicated pad token in its NeMo vocab. NeMo's blank is the final vocab entry,
+        # i.e. `config.blank_token_id == len(labels)`, and the joint head emits exactly `len(labels) + 1` logits.
+        # Add `<blank>` *first* so it lands on that id (no `<pad>` is appended to push it past the model's vocab),
+        # and reuse it as the pad token: decoding already skips the pad id, and padding decoder/label tensors with
+        # the blank id keeps every id within the joint vocab. This aligns the tokenizer's `<blank>` id with the
+        # model's blank logit, so the processor can prepend `<blank>` to build decoder_input_ids unchanged.
         tokenizer_converted_fast.add_tokens([AddedToken("<blank>", normalized=False, special=True)])
         print(f"Added <blank> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<blank>')}")
+        pad_token = AddedToken("<blank>", normalized=False, special=True)
+    else:
+        if tokenizer_converted_fast.convert_tokens_to_ids("<pad>") is None:
+            # Normally CTC doesn't have while TDT has at token id = 2
+            tokenizer_converted_fast.add_tokens([AddedToken("<pad>", normalized=False, special=True)])
+            print(f"Added <pad> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<pad>')}")
+        if model_type == "tdt":
+            # TDT needs a separate blank token (its vocab already carries a distinct <pad>)
+            tokenizer_converted_fast.add_tokens([AddedToken("<blank>", normalized=False, special=True)])
+            print(f"Added <blank> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<blank>')}")
+        pad_token = AddedToken("<pad>", normalized=False, special=True)
     tokenizer_converted_fast.add_special_tokens(
         {
-            "pad_token": AddedToken("<pad>", normalized=False, special=True),
+            "pad_token": pad_token,
             "unk_token": AddedToken("<unk>", normalized=False, special=True),
         }
     )
@@ -204,6 +217,9 @@ def write_processor(
     processor = ParakeetProcessor(
         feature_extractor=feature_extractor,
         tokenizer=tokenizer_converted_fast,
+        # Drives the decoding/timestamp rules (CTC collapses repeats; TDT uses predicted durations + punctuation
+        # attach; RNN-T uses single-frame spans).
+        decoder_type=model_type,
     )
     processor.save_pretrained(output_dir)
 
