@@ -605,21 +605,44 @@ def _fix_remainder_scalar(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool
 # default is buggy or missing. Passed to `torch.onnx.export` as `custom_translation_table`.
 
 
+def _values_broadcast_to_self(values: TReal, self: TReal) -> bool:
+    """Static-shape check: does ``values.shape`` broadcast against ``self.shape``?
+
+    Returns ``True`` only when every dim of ``values`` is statically known and either
+    equals the corresponding (right-aligned) dim of ``self`` or is ``1``. Used to dispatch
+    `_aten_index_put` between the broadcast and flat-gather paths — bailing on dynamic /
+    unknown dims keeps us on the safe flat-gather fallback.
+    """
+    if values.shape is None or self.shape is None or len(values.shape) > len(self.shape):
+        return False
+    offset = len(self.shape) - len(values.shape)
+    for v_dim, s_dim in zip(values.shape, self.shape[offset:]):
+        try:
+            v_dim, s_dim = int(v_dim), int(s_dim)
+        except (TypeError, ValueError):
+            return False
+        if v_dim != 1 and v_dim != s_dim:
+            return False
+    return True
+
+
 def _aten_index_put(
     self: TReal,
     indices: Sequence[INT64 | BOOL | None],
     values: TReal,
     accumulate: bool = False,
 ) -> TReal:
-    """Bool-mask index_put via broadcast-and-Where; delegates other cases to torchlib.
+    """Bool-mask index_put with two paths; delegates non-bool-mask cases to torchlib.
 
-    For `self[bool_mask] = values`, torchlib's default lowering flattens both sides and
-    Gathers `values` by a cumulative-True-count to place each value at its destination
-    — but that assumes `values.numel() == bool_mask.sum()`. The dominant transformers
-    usage is `tensor[~mask] = 0` / `tensor[mask] = embed_vec`, where `values` is a scalar
-    or a vector that broadcasts against `self.shape`. For those, `Expand(values, Shape(self))`
-    + `Where(mask, expanded, self)` is both correct and ORT-friendly (no out-of-bounds
-    Gather when `values.numel() == 1`).
+    For `self[bool_mask] = values`, PyTorch supports two distinct shapes for ``values``:
+    1. Broadcasts against ``self.shape`` (e.g. scalar `tensor[~mask] = 0`) — handled by
+       `Expand(values, Shape(self)) + Where(mask, expanded, self)`.
+    2. Equals ``bool_mask.sum()`` along its first dim, with remaining dims matching
+       ``self`` (e.g. `inputs_embeds[image_mask] = image_features_flat`) — handled by
+       the flat cumulative-count-Gather + Where trick.
+
+    Path 1 is correct only when broadcast-compatibility can be statically verified — for
+    dynamic shapes we fall through to path 2, which is also torchlib's default behaviour.
     """
     bool_mask = indices[0]
     is_bool = (
@@ -630,8 +653,18 @@ def _aten_index_put(
     for _ in range(len(self.shape) - len(bool_mask.shape)):
         bool_mask = op.Unsqueeze(bool_mask, op.Constant(value_ints=[-1]))
     expanded_mask = op.Expand(bool_mask, op.Shape(self))
-    expanded_values = op.Expand(values, op.Shape(self))
-    return op.Where(expanded_mask, expanded_values, self)
+    if _values_broadcast_to_self(values, self):
+        expanded_values = op.Expand(values, op.Shape(self))
+        return op.Where(expanded_mask, expanded_values, self)
+    flat_mask = op.Reshape(expanded_mask, op.Constant(value_ints=[-1]))
+    flat_mask_int = op.Cast(flat_mask, to=7)  # INT64
+    cs = op.CumSum(flat_mask_int, op.Constant(value_ints=[0]))
+    positions = op.Clip(op.Sub(cs, op.Constant(value_ints=[1])), op.Constant(value_ints=[0]))
+    flat_values = op.Reshape(values, op.Constant(value_ints=[-1]))
+    gathered = op.Gather(flat_values, positions)
+    flat_self = op.Reshape(self, op.Constant(value_ints=[-1]))
+    result = op.Where(flat_mask, gathered, flat_self)
+    return op.Reshape(result, op.Shape(self))
 
 
 def _aten_bincount(self: INT64, weights=None, minlength: int = 0) -> INT64:
