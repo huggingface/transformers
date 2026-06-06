@@ -57,6 +57,12 @@ if is_torchcodec_available():
 
 AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]
 
+# Upper bound on the number of elements of a filter bank (mel: `num_frequency_bins * num_mel_filters`; chroma:
+# `num_frequency_bins * num_chroma`). Used to reject config-driven values that would allocate an excessive amount of
+# memory (see `mel_filter_bank` / `chroma_filter_bank`). The largest filter bank produced by any model in this
+# repository is on the order of 10**5 elements, so this leaves a wide margin.
+MAX_FILTER_BANK_SIZE = 2_000_000
+
 
 @retry(exceptions=(httpx.HTTPError,))
 def _fetch_audio_bytes(url: str, timeout: float | None = 10.0) -> bytes:
@@ -429,6 +435,21 @@ def chroma_filter_bank(
     Returns:
         `np.ndarray` of shape `(num_frequency_bins, num_chroma)`
     """
+    if num_frequency_bins < 1 or num_chroma < 1:
+        raise ValueError(
+            f"Require num_frequency_bins >= 1 and num_chroma >= 1, got ({num_frequency_bins}, {num_chroma})"
+        )
+
+    # Like `mel_filter_bank`, this builds a dense matrix whose size (`num_frequency_bins * num_chroma`) is derived from
+    # config fields (e.g. `n_fft` / `num_chroma`); bound it so a malformed config cannot exhaust memory.
+    if num_frequency_bins * num_chroma > MAX_FILTER_BANK_SIZE:
+        raise ValueError(
+            f"Refusing to create a chroma filter bank of shape ({num_frequency_bins}, {num_chroma}): "
+            f"{num_frequency_bins * num_chroma} elements exceeds the maximum of {MAX_FILTER_BANK_SIZE}. "
+            "This is far larger than any real audio configuration and would consume an excessive amount of memory; "
+            "check `num_frequency_bins`/`num_chroma` (e.g. the `n_fft` and `num_chroma` in your config)."
+        )
+
     # Get the FFT bins, not counting the DC component
     frequencies = np.linspace(0, sampling_rate, num_frequency_bins, endpoint=False)[1:]
 
@@ -529,6 +550,21 @@ def mel_filter_bank(
 
     if num_frequency_bins < 2:
         raise ValueError(f"Require num_frequency_bins: {num_frequency_bins} >= 2")
+
+    if num_mel_filters < 1:
+        raise ValueError(f"Require num_mel_filters: {num_mel_filters} >= 1")
+
+    # The filter bank is a dense `(num_frequency_bins, num_mel_filters)` matrix allocated eagerly (often in a feature
+    # extractor's `__init__`). Both dimensions ultimately come from config fields (e.g. `n_fft` / `feature_size`), so
+    # an unvalidated config could request an arbitrarily large matrix and exhaust memory. The largest filter bank used
+    # by any model in this repository is well under 10**5 elements, so this bound leaves a very wide safety margin.
+    if num_frequency_bins * num_mel_filters > MAX_FILTER_BANK_SIZE:
+        raise ValueError(
+            f"Refusing to create a mel filter bank of shape ({num_frequency_bins}, {num_mel_filters}): "
+            f"{num_frequency_bins * num_mel_filters} elements exceeds the maximum of {MAX_FILTER_BANK_SIZE}. "
+            "This is far larger than any real audio configuration and would consume an excessive amount of memory; "
+            "check `num_frequency_bins`/`num_mel_filters` (e.g. the `n_fft` and `feature_size` in your config)."
+        )
 
     if min_frequency > max_frequency:
         raise ValueError(f"Require min_frequency: {min_frequency} <= max_frequency: {max_frequency}")

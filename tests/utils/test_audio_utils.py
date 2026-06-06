@@ -120,6 +120,30 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         )
         self.assertEqual(mel_filters.shape, (513, 13))
 
+    def test_mel_filter_bank_rejects_oversized_allocation(self):
+        # A malformed/malicious config (e.g. a huge `n_fft` or `feature_size`) must not be able to request an
+        # arbitrarily large filter bank and exhaust memory. Both an oversized `num_frequency_bins` and an oversized
+        # `num_mel_filters` (and their product) must be rejected before any allocation happens.
+        common = {"min_frequency": 0.0, "max_frequency": 8000.0, "sampling_rate": 16000}
+        for num_frequency_bins, num_mel_filters in ((10001, 8000), (3_000_000, 2), (2, 3_000_000)):
+            with self.assertRaises(ValueError):
+                mel_filter_bank(num_frequency_bins=num_frequency_bins, num_mel_filters=num_mel_filters, **common)
+
+        # A realistically-sized filter bank (well within the limit) still works.
+        mel_filters = mel_filter_bank(num_frequency_bins=513, num_mel_filters=128, **common)
+        self.assertEqual(mel_filters.shape, (513, 128))
+
+    def test_chroma_filter_bank_rejects_oversized_allocation(self):
+        # Same guard as the mel filter bank: a malicious `n_fft` / `num_chroma` (e.g. via
+        # MusicgenMelodyFeatureExtractor) must not be able to allocate an arbitrarily large matrix.
+        for num_frequency_bins, num_chroma in ((6_000_000, 24), (3_000_000, 1), (0, 12)):
+            with self.assertRaises(ValueError):
+                chroma_filter_bank(num_frequency_bins=num_frequency_bins, num_chroma=num_chroma, sampling_rate=16000)
+
+        # A realistically-sized chroma filter bank still works.
+        chroma_filters = chroma_filter_bank(num_frequency_bins=16384, num_chroma=12, sampling_rate=32000)
+        self.assertEqual(chroma_filters.shape, (12, 1 + 16384 // 2))
+
     def test_mel_filter_bank_htk(self):
         mel_filters = mel_filter_bank(
             num_frequency_bins=16,
