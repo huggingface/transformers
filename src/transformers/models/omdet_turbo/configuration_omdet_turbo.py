@@ -84,6 +84,22 @@ class OmDetTurboConfig(PreTrainedConfig):
         Whether to learn the initial query.
     cache_size (`int`, *optional*, defaults to 100):
         The cache size for the classes and prompts caches.
+    auxiliary_loss (`bool`, *optional*, defaults to `True`):
+        Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
+    class_cost (`float`, *optional*, defaults to 1.0):
+        Relative weight of the classification error in the Hungarian matching cost.
+    bbox_cost (`float`, *optional*, defaults to 5.0):
+        Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
+    giou_cost (`float`, *optional*, defaults to 2.0):
+        Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
+    class_loss_coefficient (`float`, *optional*, defaults to 2.0):
+        Relative weight of the classification loss in the object detection loss.
+    bbox_loss_coefficient (`float`, *optional*, defaults to 5.0):
+        Relative weight of the L1 bounding box loss in the object detection loss.
+    giou_loss_coefficient (`float`, *optional*, defaults to 2.0):
+        Relative weight of the generalized IoU loss in the object detection loss.
+    focal_alpha (`float`, *optional*, defaults to 0.25):
+        Alpha parameter in the focal loss.
 
     Examples:
 
@@ -147,6 +163,15 @@ class OmDetTurboConfig(PreTrainedConfig):
     learn_initial_query: bool = False
     cache_size: int = 100
     is_encoder_decoder: bool = True
+    # Loss hyperparameters, used by `OmDetTurboForObjectDetection` when `labels` are provided.
+    auxiliary_loss: bool = True
+    class_cost: float = 1.0
+    bbox_cost: float = 5.0
+    giou_cost: float = 2.0
+    class_loss_coefficient: float = 2.0
+    bbox_loss_coefficient: float = 5.0
+    giou_loss_coefficient: float = 2.0
+    focal_alpha: float = 0.25
 
     def __post_init__(self, **kwargs):
         # Init timm backbone with hardcoded values for BC

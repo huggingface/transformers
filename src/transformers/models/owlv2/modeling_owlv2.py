@@ -1446,9 +1446,16 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         attention_mask: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
+        labels: list[dict[str, torch.Tensor]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Owlv2ObjectDetectionOutput:
         r"""
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+            following 2 keys: `class_labels` and `boxes` (the class labels and bounding boxes of an image in the batch
+            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+            in the image,)`, indexing into the text queries, and the boxes a `torch.FloatTensor` of shape `(number of
+            bounding boxes in the image, 4)` in normalized `(center_x, center_y, width, height)` format.
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
@@ -1521,7 +1528,13 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         # Predict object boxes
         pred_boxes = self.box_predictor(image_feats, feature_map, interpolate_pos_encoding)
 
+        loss, loss_dict = None, None
+        if labels is not None:
+            loss, loss_dict, _ = self.loss_function(pred_logits, labels, pred_logits.device, pred_boxes, self.config)
+
         return Owlv2ObjectDetectionOutput(
+            loss=loss,
+            loss_dict=loss_dict,
             image_embeds=feature_map,
             text_embeds=query_embeds,
             pred_boxes=pred_boxes,
