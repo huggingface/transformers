@@ -267,88 +267,24 @@ et_program = exporter.export(model, inputs)
 ## Generative models
 
 For autoregressive generation, the model's `forward` has different shapes at the prefill step
-(full prompt, no KV cache) versus the decode step (single token, populated KV cache).
-[`decompose_prefill_decode`] runs `model.generate()` for two tokens and captures both.
+(full prompt, no KV cache) versus the decode step (single token, populated KV cache). Exporters
+expose [`~HfExporter.export_for_generation`] which splits both stages and exports each.
+For multi-modal generative models it additionally splits the prefill into vision/audio encoder,
+projector, language model, and `lm_head`. Encoder and language-model discovery uses the canonical
+[`~PreTrainedModel.get_encoder`] (`modality="image"` / `"audio"`) and
+[`~PreTrainedModel.get_decoder`] accessors, so any new architecture that wires those up
+correctly works out of the box. Projector lookup (`multi_modal_projector`, `connector`,
+`embed_vision`, `embed_audio`) is heuristic — see
+[`~transformers.exporters.utils._MULTIMODAL_PROJECTOR_NAMES`] in
+[exporters/utils.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/utils.py)
+and append a new attribute name there if needed.
 
 <hfoptions id="generate">
 <hfoption id="Dynamo">
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
->>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
->>> from transformers.exporters.utils import decompose_prefill_decode
-
->>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
->>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
->>> inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
-
->>> stages = decompose_prefill_decode(model, inputs)
->>> # stages = {"prefill": (model_copy, prefill_inputs), "decode": (model_copy, decode_inputs)}
-
->>> exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))
->>> for name, (stage_model, stage_inputs) in stages.items():
-...     exported = exporter.export(stage_model, stage_inputs)
-```
-
-</hfoption>
-<hfoption id="ONNX">
-
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
-from transformers.exporters.utils import decompose_prefill_decode
-
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
-
-stages = decompose_prefill_decode(model, inputs)
-# stages = {"prefill": (model_copy, prefill_inputs), "decode": (model_copy, decode_inputs)}
-
-exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
-for name, (stage_model, stage_inputs) in stages.items():
-    onnx_program = exporter.export(stage_model, stage_inputs)
-```
-
-</hfoption>
-<hfoption id="ExecuTorch">
-
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
-from transformers.exporters.utils import decompose_prefill_decode
-
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
-
-stages = decompose_prefill_decode(model, inputs)
-# stages = {"prefill": (model_copy, prefill_inputs), "decode": (model_copy, decode_inputs)}
-
-exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend="xnnpack", dynamic=True))
-for name, (stage_model, stage_inputs) in stages.items():
-    et_program = exporter.export(stage_model, stage_inputs)
-```
-
-</hfoption>
-</hfoptions>
-
-## Multi-modal generative models
-
-Multi-modal models (vision-language, audio-language, etc.) are exported as separate components —
-encoder, projector, language model — each as an independent graph. [`decompose_multimodal`] detects
-multi-modal submodules automatically and captures their inputs via a single forward pass with hooks.
-
-For generative multi-modal models, first decompose into prefill/decode, then decompose the prefill
-stage into its submodules. The decode stage stays as a single graph.
-
-<hfoptions id="multicomponent">
-<hfoption id="Dynamo">
-
-```python
 >>> from transformers import AutoModelForImageTextToText, AutoProcessor
 >>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
->>> from transformers.exporters.utils import decompose_multimodal, decompose_prefill_decode
 
 >>> model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
 >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
@@ -356,17 +292,9 @@ stage into its submodules. The decode stage stays as a single graph.
 >>> text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
 >>> inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
 
->>> # step 1: split into prefill and decode stages
->>> stages = decompose_prefill_decode(model, inputs)
->>> prefill_model, prefill_inputs = stages["prefill"]
-
->>> # step 2: decompose the prefill into vision encoder, projector, language model
->>> components = decompose_multimodal(prefill_model, prefill_inputs)
->>> components["decode"] = stages["decode"]
-
 >>> exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))
->>> for name, (submodel, subinputs) in components.items():
-...     exported = exporter.export(submodel, subinputs)
+>>> components = exporter.export_for_generation(model, inputs)
+>>> # components = {"image_encoder": ExportedProgram, "language_model": ExportedProgram, "lm_head": ExportedProgram, "decode": ExportedProgram}
 ```
 
 </hfoption>
@@ -375,7 +303,6 @@ stage into its submodules. The decode stage stays as a single graph.
 ```python
 from transformers import AutoModelForImageTextToText, AutoProcessor
 from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
-from transformers.exporters.utils import decompose_multimodal, decompose_prefill_decode
 
 model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
@@ -383,17 +310,9 @@ messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggi
 text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
 inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
 
-# step 1: split into prefill and decode stages
-stages = decompose_prefill_decode(model, inputs)
-prefill_model, prefill_inputs = stages["prefill"]
-
-# step 2: decompose the prefill into vision encoder, projector, language model
-components = decompose_multimodal(prefill_model, prefill_inputs)
-components["decode"] = stages["decode"]
-
 exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
-for name, (submodel, subinputs) in components.items():
-    onnx_program = exporter.export(submodel, subinputs)
+components = exporter.export_for_generation(model, inputs)
+# components = {"image_encoder": ONNXProgram, "language_model": ONNXProgram, "lm_head": ONNXProgram, "decode": ONNXProgram}
 ```
 
 </hfoption>
@@ -402,7 +321,6 @@ for name, (submodel, subinputs) in components.items():
 ```python
 from transformers import AutoModelForImageTextToText, AutoProcessor
 from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
-from transformers.exporters.utils import decompose_multimodal, decompose_prefill_decode
 
 model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
@@ -410,29 +328,13 @@ messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggi
 text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
 inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
 
-# step 1: split into prefill and decode stages
-stages = decompose_prefill_decode(model, inputs)
-prefill_model, prefill_inputs = stages["prefill"]
-
-# step 2: decompose the prefill into vision encoder, projector, language model
-components = decompose_multimodal(prefill_model, prefill_inputs)
-components["decode"] = stages["decode"]
-
 exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend="xnnpack", dynamic=True))
-for name, (submodel, subinputs) in components.items():
-    et_program = exporter.export(submodel, subinputs)
+components = exporter.export_for_generation(model, inputs)
+# components = {"image_encoder": ExecutorchProgramManager, "language_model": ..., "lm_head": ..., "decode": ...}
 ```
 
 </hfoption>
 </hfoptions>
-
-Encoder and language-model discovery uses the canonical [`~PreTrainedModel.get_encoder`]
-(`modality="image"` / `"audio"`) and [`~PreTrainedModel.get_decoder`] accessors, so any
-new architecture that wires those up correctly works out of the box. Projector lookup
-(`multi_modal_projector`, `connector`, `embed_vision`, `embed_audio`) is still
-heuristic — see [`~transformers.exporters.utils._MULTIMODAL_PROJECTOR_NAMES`] in
-[exporters/utils.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/utils.py)
-and append a new attribute name there if needed.
 
 <Tip warning={true}>
 
@@ -441,6 +343,32 @@ The caller is responsible for running each encoder, projecting embeddings, and o
 the generation loop. We are actively working to reduce the glue required between components.
 
 </Tip>
+
+<details>
+<summary>What <code>export_for_generation</code> does under the hood</summary>
+
+```python
+from transformers.exporters.utils import decompose_multimodal, decompose_prefill_decode, is_multimodal
+
+# 1. Split into prefill and decode stages (runs model.generate() for 2 tokens, captures kwargs).
+stages = decompose_prefill_decode(model, inputs)
+prefill_model, prefill_inputs = stages["prefill"]
+
+# 2. If the prefill is multi-modal, further split it into one entry per submodule.
+if is_multimodal(prefill_model):
+    components = decompose_multimodal(prefill_model, prefill_inputs)
+else:
+    components = {"prefill": stages["prefill"]}
+components["decode"] = stages["decode"]
+
+# 3. Export each component independently.
+exported = {name: exporter.export(submodel, subinputs) for name, (submodel, subinputs) in components.items()}
+```
+
+Useful if you need to skip a stage, swap one submodule's inputs, or debug a single component
+in isolation.
+
+</details>
 
 ## Export pipeline
 
