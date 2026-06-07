@@ -24,7 +24,7 @@ if is_torch_available():
     import torch
 
     from transformers import ROPE_INIT_FUNCTIONS
-    from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
+    from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding, rotate_half
 
 
 @require_torch
@@ -33,20 +33,23 @@ class RopeTest(unittest.TestCase):
         config = LlamaConfig()
         all_rope_types = ROPE_INIT_FUNCTIONS.keys()
 
+        # rope types that only require rope_type + rope_theta (like default)
+        simple_rope_types = {"default", "proportional", "torchembed"}
+        rope_types_requiring_extra = [t for t in all_rope_types if t not in simple_rope_types]
+
         # The base config is always valid (default RoPE)
         config.validate_rope()
 
-        # If we explicitly set the other (non-default) RoPE types with only rope_theta,
-        # validation should fail because required keys are missing (e.g. factor, short_factor)
-        for rope_type in all_rope_types:
-            if rope_type == "default":
-                continue  # "default" is always valid with just rope_theta
-            # proportional is same as default wrt to expected keys
-            if rope_type == "proportional":
-                continue
+        # All non-simple rope types require extra params beyond rope_type + rope_theta
+        for rope_type in rope_types_requiring_extra:
             config.rope_parameters = {"rope_type": rope_type, "rope_theta": 10000.0}
             with self.assertRaises(KeyError):
                 config.validate_rope()
+
+        # Simple rope types pass validation with just rope_type + rope_theta
+        for rope_type in simple_rope_types:
+            config.rope_parameters = {"rope_type": rope_type, "rope_theta": 10000.0}
+            config.validate_rope()
 
         # Parameters are exclusive to their own RoPE type, and should raise an exception if incorrectly passed
         valid_param_mapping = {
@@ -66,7 +69,7 @@ class RopeTest(unittest.TestCase):
             for param, valid_rope_types in valid_param_mapping.items():
                 # Set `param` with a dummy value -- we want to test the dict key
                 config.rope_parameters = {"rope_type": rope_type, "rope_theta": 10000.0, param: True}
-                if rope_type in valid_rope_types:
+                if rope_type in valid_rope_types or rope_type in simple_rope_types:
                     continue
                 else:
                     with self.assertRaises(KeyError):
@@ -706,3 +709,59 @@ class RopeTest(unittest.TestCase):
         }
         inv_freq, _ = rope_fn(config=config, device=torch_device)
         torch.testing.assert_close(inv_freq, EXPECTED_INV_FREQ)
+
+    def test_torchembed_rope_numerically(self):
+        """torchembed rope init function should match default RoPE frequencies."""
+        config = LlamaConfig()
+        default_inv_freq, _ = LlamaRotaryEmbedding.compute_default_rope_parameters(config, device=torch_device)
+
+        rope_fn = ROPE_INIT_FUNCTIONS["torchembed"]
+        config.rope_parameters = {"rope_type": "torchembed", "rope_theta": 10000.0}
+        inv_freq, attention_scale = rope_fn(config=config, device=torch_device)
+
+        self.assertEqual(attention_scale, 1.0)
+        torch.testing.assert_close(inv_freq, default_inv_freq)
+
+    def test_torchembed_rope_rotates_qk(self):
+        """torchembed.RotaryEmbedding should rotate Q/K the same way as HF's apply_rotary_pos_emb."""
+        try:
+            import torchembed
+        except ImportError:
+            self.skipTest("torchembed is not installed")
+
+        config = LlamaConfig()
+        head_dim = config.hidden_size // config.num_attention_heads
+        base = config.rope_parameters.get("rope_theta", 10000.0)
+
+        # Reference: HF's cos/sin from LlamaRotaryEmbedding + apply_rotary_pos_emb
+        hf_rotary = LlamaRotaryEmbedding(config, device=torch_device)
+        n_seq = 16
+        position_ids = torch.arange(n_seq, device=torch_device).unsqueeze(0)
+        q = torch.randn(1, n_seq, head_dim, device=torch_device)
+        k = torch.randn(1, n_seq, head_dim, device=torch_device)
+
+        cos, sin = hf_rotary(q, position_ids)
+        q_rot_hf = q * cos + rotate_half(q) * sin
+        k_rot_hf = k * cos + rotate_half(k) * sin
+
+        # torchembed's RotaryEmbedding
+        te_rotary = torchembed.RotaryEmbedding(dim=head_dim, max_seq_len=n_seq, base=base, device=torch_device)
+        q_rot_te, k_rot_te = te_rotary(q, k, seq_dim=-2)
+
+        # Both should produce identical rotated Q/K
+        torch.testing.assert_close(q_rot_te, q_rot_hf)
+        torch.testing.assert_close(k_rot_te, k_rot_hf)
+
+    def test_torchembed_rope_config_validation(self):
+        """torchembed rope type should validate with just rope_type + rope_theta."""
+        config = LlamaConfig()
+        config.rope_parameters = {"rope_type": "torchembed", "rope_theta": 10000.0}
+        config.validate_rope()
+
+        # It should also work through LlamaRotaryEmbedding end-to-end
+        rotary = LlamaRotaryEmbedding(config, device=torch_device)
+        head_dim = config.hidden_size // config.num_attention_heads
+        position_ids = torch.arange(10, device=torch_device).unsqueeze(0)
+        cos, sin = rotary(torch.randn(1, 10, head_dim, device=torch_device), position_ids)
+        self.assertEqual(cos.shape, (1, 10, head_dim))
+        self.assertEqual(sin.shape, (1, 10, head_dim))

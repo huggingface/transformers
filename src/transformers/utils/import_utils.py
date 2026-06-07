@@ -757,6 +757,11 @@ def is_torch_optimi_available() -> bool:
 
 
 @lru_cache
+def is_torchembed_available() -> bool:
+    return _is_package_available("torchembed")[0]
+
+
+@lru_cache
 def is_lomo_available() -> bool:
     return _is_package_available("lomo_optim")[0]
 

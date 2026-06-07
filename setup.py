@@ -149,6 +149,7 @@ _deps = [
     "timm>=1.0.23",
     "tokenizers>=0.22.0,<=0.23.0",
     "torch>=2.4",
+    "torchembed",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
@@ -176,6 +177,7 @@ def deps_list(*pkgs):
 extras = {}
 
 extras["torch"] = deps_list("torch", "accelerate")
+extras["torchembed"] = deps_list("torchembed")
 extras["vision"] = deps_list("torchvision", "Pillow")
 extras["audio"] = deps_list("torchaudio", "librosa", "pyctcdecode", "phonemizer")
 if PYTHON_MINOR_VERSION < 13:

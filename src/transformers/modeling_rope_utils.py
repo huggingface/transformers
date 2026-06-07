@@ -18,7 +18,7 @@ from collections.abc import Callable
 from functools import wraps
 from typing import TYPE_CHECKING, Optional, TypedDict
 
-from .utils import is_torch_available, logging
+from .utils import is_torch_available, is_torchembed_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -626,6 +626,35 @@ def _compute_llama3_parameters(
     return inv_freq_llama, attention_factor
 
 
+def _compute_torchembed_rope_parameters(
+    config: "PreTrainedConfig",
+    device: Optional["torch.device"] = None,
+    seq_len: int | None = None,
+    layer_type: str | None = None,
+) -> tuple["torch.Tensor", float]:
+    """
+    Compute RoPE parameters backed by `torchembed.RotaryEmbedding`.
+
+    Requires the `torchembed` package to be installed. When used, inv_freq follows the same
+    computation as the default RoPE, with the understanding that the model forward pass will
+    delegate the actual rotary application to `torchembed.RotaryEmbedding`.
+    """
+    if not is_torchembed_available():
+        raise ImportError(
+            "The 'torchembed' rope type requires the `torchembed` package. "
+            "Install it with: pip install torchembed"
+        )
+
+    # Same frequency computation as default RoPE — torchembed uses the same scheme
+    base = config.rope_parameters["rope_theta"]
+    dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+    attention_factor = 1.0
+    inv_freq = 1.0 / (
+        base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+    )
+    return inv_freq, attention_factor
+
+
 # This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters
 # from the model config. You can append new {'rope_type': callable} pairs to this rope_parameters to enable custom RoPE
 # parameterizations, as long as the callable has the same signature.
@@ -636,6 +665,7 @@ ROPE_INIT_FUNCTIONS: dict[str, Callable[..., tuple["torch.Tensor", float]]] = {
     "longrope": _compute_longrope_parameters,
     "llama3": _compute_llama3_parameters,
     "proportional": _compute_proportional_rope_parameters,
+    "torchembed": _compute_torchembed_rope_parameters,
 }
 
 
@@ -647,7 +677,8 @@ class RopeParameters(TypedDict):
             the model's `default_theta` (typically 10000.0) is used.
         rope_type (`str`, *optional*, defaults to "default"):
             The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-            'llama3'], with 'default' being the original RoPE implementation.
+            'llama3', 'torchembed'], with 'default' being the original RoPE implementation. The 'torchembed'
+            type requires the `torchembed` package to be installed.
         partial_rotary_factor (`float`, *optional*):
             The percentage of the query and key head embedding on which RoPE will be applied.
         factor (`float`, *optional*):
@@ -995,6 +1026,18 @@ class RotaryEmbeddingConfigMixin:
                 "`rope_parameters`'s partial_rotary_factor is None. This will default to 1.0 in the computation, "
                 "making this equivalent to the linear_scaling RoPE type. Provide a value in the range [0.0, 1.0) to "
                 "make use of the proportional RoPE funcitonality."
+            )
+
+    def _validate_torchembed_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
+        required_keys = {"rope_type", "rope_theta"}
+        received_keys = set(rope_parameters.keys())
+        rope_type = rope_parameters["rope_type"]
+        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+
+        if not is_torchembed_available():
+            logger.warning(
+                "The 'torchembed' rope type requires the `torchembed` package to be installed. "
+                "Install it with: pip install torchembed"
             )
 
     @staticmethod
