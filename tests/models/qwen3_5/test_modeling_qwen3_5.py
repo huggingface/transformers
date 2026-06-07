@@ -423,8 +423,7 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
     def test_automodelforcausallm_propagates_dtype(self) -> None:
         config = self.model_tester.get_config()
-        config.dtype = torch.float16  # set on composite config
-        full_model = Qwen3_5ForConditionalGeneration(config)
+        full_model = Qwen3_5ForConditionalGeneration(config).to(torch.float16)
         with tempfile.TemporaryDirectory() as tmp_dir:
             full_model.save_pretrained(tmp_dir)
             model = AutoModelForCausalLM.from_pretrained(tmp_dir)  # no dtype kwarg
