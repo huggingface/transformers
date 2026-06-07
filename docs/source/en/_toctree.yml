@@ -209,6 +209,8 @@
         title: torch.compile
       - local: kernels
         title: Kernels
+      - local: padding_free
+        title: Padding-free training
       title: Speed optimization
     title: Performance
   - isExpanded: false
@@ -1007,6 +1009,8 @@
         title: SAM2
       - local: model_doc/sam3_tracker
         title: Sam3Tracker
+      - local: model_doc/sapiens2
+        title: Sapiens2
       - local: model_doc/segformer
         title: SegFormer
       - local: model_doc/seggpt
@@ -1209,6 +1213,8 @@
         title: ColPali
       - local: model_doc/colqwen2
         title: ColQwen2
+      - local: model_doc/cosmos3_omni
+        title: Cosmos3 Omni
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/deepseek_vl
@@ -1237,12 +1243,16 @@
         title: Florence2
       - local: model_doc/gemma4_assistant
         title: Gemma 4 Assistant
+      - local: model_doc/gemma4_unified_assistant
+        title: Gemma 4 Unified Assistant
       - local: model_doc/gemma3
         title: Gemma3
       - local: model_doc/gemma3n
         title: Gemma3n
       - local: model_doc/gemma4
         title: Gemma4
+      - local: model_doc/gemma4_unified
+        title: Gemma4 Unified
       - local: model_doc/git
         title: GIT
       - local: model_doc/glm46v
