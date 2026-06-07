@@ -80,6 +80,12 @@ ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES = {
     # (length-0 INT64 tensor). Hit by the multi-modal vision decomposition for Gemma4-Unified.
     "Gemma4UnifiedModel",
     "Gemma4UnifiedForConditionalGeneration",
+    # Onnxscript optimizer pass exceeds 1000s on the YOLOS detection graph (many small Concat /
+    # Slice nodes — verified: `optimize=False` exports in 2s, `optimize=True` runs past 6 minutes
+    # before being killed). TODO: revisit when onnxscript's optimizer gets faster on dense
+    # small-node graphs.
+    "YolosModel",
+    "YolosForObjectDetection",
 }
 
 
