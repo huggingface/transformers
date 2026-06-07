@@ -15,6 +15,8 @@
 FastAPI app factory.
 """
 
+from __future__ import annotations
+
 import uuid
 from contextlib import asynccontextmanager
 
@@ -27,11 +29,12 @@ if is_serve_available():
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse, StreamingResponse
 
-from .chat_completion import ChatCompletionHandler
-from .completion import CompletionHandler
+    from .chat_completion import ChatCompletionHandler
+    from .completion import CompletionHandler
+    from .response import ResponseHandler
+    from .transcription import TranscriptionHandler
+
 from .model_manager import ModelManager
-from .response import ResponseHandler
-from .transcription import TranscriptionHandler
 from .utils import X_REQUEST_ID, CBWorkerDeadError, GenerationState
 
 
