@@ -96,7 +96,7 @@ class MMGroundingDinoModelTester:
     def __init__(
         self,
         parent,
-        batch_size=4,
+        batch_size=2,
         is_training=True,
         use_labels=True,
         hidden_size=32,
@@ -108,7 +108,7 @@ class MMGroundingDinoModelTester:
         attention_probs_dropout_prob=0.1,
         num_queries=2,
         num_channels=3,
-        image_size=98,
+        image_size=32,
         n_targets=8,
         num_labels=2,
         num_feature_levels=4,
