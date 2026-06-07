@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 from dataclasses import dataclass
 
 import torch
@@ -120,6 +121,15 @@ class VibeVoiceAsrConfig(PreTrainedConfig):
             self.text_config = CONFIG_MAPPING["qwen2"]()
 
         super().__post_init__(**kwargs)
+
+    @property
+    def audio_config(self):
+        return self
+
+    @property
+    def max_source_positions(self) -> int:
+        hop_length = int(math.prod(self.acoustic_tokenizer_encoder_config.downsampling_ratios))
+        return math.ceil(self.acoustic_tokenizer_chunk_size / hop_length)
 
 
 class VibeVoiceAsrRMSNorm(Qwen2RMSNorm):
