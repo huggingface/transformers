@@ -123,10 +123,6 @@ class VibeVoiceAsrConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
     @property
-    def audio_config(self):
-        return self
-
-    @property
     def max_source_positions(self) -> int:
         hop_length = int(math.prod(self.acoustic_tokenizer_encoder_config.downsampling_ratios))
         return math.ceil(self.acoustic_tokenizer_chunk_size / hop_length)
