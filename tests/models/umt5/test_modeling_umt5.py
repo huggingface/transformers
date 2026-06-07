@@ -295,6 +295,20 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             with torch.no_grad():
                 model(**inputs)[0]
 
+    def test_decoder_input_validation_errors_name_forward_args(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
+        model = UMT5Model(config).to(torch_device)
+        model.eval()
+
+        decoder_input_ids = input_dict["decoder_input_ids"].to(torch_device)
+        inputs_embeds = model.decoder.embed_tokens(decoder_input_ids)
+
+        with self.assertRaisesRegex(ValueError, "both decoder input_ids and decoder inputs_embeds"):
+            model.decoder(input_ids=decoder_input_ids, inputs_embeds=inputs_embeds)
+
+        with self.assertRaisesRegex(ValueError, "either decoder input_ids or decoder inputs_embeds"):
+            model.decoder()
+
     # overwrite because T5 doesn't accept position ids as input and expects `decoder_input_ids`
     def test_custom_4d_attention_mask(self):
         for model_class in self.all_generative_model_classes:

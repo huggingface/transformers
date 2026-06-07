@@ -579,6 +579,20 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
         self.assertTrue(config_and_inputs[0].scale_decoder_outputs)
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_decoder_input_validation_errors_name_forward_args(self):
+        config, _, decoder_input_ids, *_ = self.model_tester.prepare_config_and_inputs()
+        model = T5Model(config).to(torch_device)
+        model.eval()
+
+        decoder_input_ids = decoder_input_ids.to(torch_device)
+        inputs_embeds = model.decoder.embed_tokens(decoder_input_ids)
+
+        with self.assertRaisesRegex(ValueError, "both decoder input_ids and decoder inputs_embeds"):
+            model.decoder(input_ids=decoder_input_ids, inputs_embeds=inputs_embeds)
+
+        with self.assertRaisesRegex(ValueError, "either decoder input_ids or decoder inputs_embeds"):
+            model.decoder()
+
     def test_model_v1_1(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config_v1 = self.model_tester.get_config_v1_1()
