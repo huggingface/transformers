@@ -684,7 +684,7 @@ class BigBirdBlockSparseAttention(nn.Module):
             bsz, n_heads, num_middle, from_block_size, 3, to_block_size
         )
         q_grid = torch.arange(num_middle, device=attention_probs.device)
-        k_diag = (q_grid[:, None] + torch.arange(3, device=attention_probs.device)[None, :])
+        k_diag = q_grid[:, None] + torch.arange(3, device=attention_probs.device)[None, :]
         k_diag = k_diag[None, None, :, None, :, None].expand(
             bsz, n_heads, num_middle, from_block_size, 3, to_block_size
         )
@@ -695,9 +695,11 @@ class BigBirdBlockSparseAttention(nn.Module):
         mid_rand_vals = attn_weights[:, :, :, :, 4 * to_block_size : -to_block_size].view(
             bsz, n_heads, num_middle, from_block_size, n_rand_blocks, to_block_size
         )
-        mid_rand_idx = rand_attn[:, :, 1:-1, :, None, None].expand(
-            bsz, n_heads, num_middle, n_rand_blocks, from_block_size, to_block_size
-        ).transpose(3, 4)
+        mid_rand_idx = (
+            rand_attn[:, :, 1:-1, :, None, None]
+            .expand(bsz, n_heads, num_middle, n_rand_blocks, from_block_size, to_block_size)
+            .transpose(3, 4)
+        )
         view[:, :, 2:-2].scatter_(4, mid_rand_idx, mid_rand_vals)
 
         # q[-2] random keys — same pattern as q[1], using `rand_attn[:, :, -1]`.
@@ -763,9 +765,7 @@ class BigBirdBlockSparseAttention(nn.Module):
         # Flatten the random-block indices to `(batch_size, n_heads * num_windows * num_rand_blocks)` and gather
         # the corresponding rows from `to_blocked_mask` (`(batch_size, num_to_blocks, from_block_size)`) along dim 1.
         flat_indices = rand_attn.reshape(batch_size, -1)
-        rand_mask = torch.gather(
-            to_blocked_mask, 1, flat_indices.unsqueeze(-1).expand(-1, -1, from_block_size)
-        )
+        rand_mask = torch.gather(to_blocked_mask, 1, flat_indices.unsqueeze(-1).expand(-1, -1, from_block_size))
         rand_mask = rand_mask.view(batch_size, num_attention_heads, num_windows, num_rand_blocks * from_block_size)
         rand_mask = torch.einsum("blq,bhlk->bhlqk", from_blocked_mask[:, 1:-1], rand_mask)
         return rand_mask
