@@ -20,6 +20,7 @@ import pytest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, FalconMambaConfig, is_torch_available
 from transformers.testing_utils import (
+    CaptureLogger,
     Expectations,
     cleanup,
     require_bitsandbytes,
@@ -42,6 +43,8 @@ if is_torch_available():
     import torch
 
     from transformers import DynamicCache, FalconMambaForCausalLM, FalconMambaModel
+    from transformers.models.falcon_mamba.modeling_falcon_mamba import FalconMambaMixer
+    from transformers.models.falcon_mamba.modeling_falcon_mamba import logger as falcon_mamba_logger
 
 
 # Copied from transformers.tests.models.mamba.MambaModelTester with Mamba->FalconMamba,mamba->falcon_mamba
@@ -318,6 +321,23 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def test_falcon_mamba_lm_head_forward_and_backwards(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_falcon_mamba_lm_head_forward_and_backwards(*config_and_inputs)
+
+    def test_slow_path_warning_mentions_falcon_mamba_kernels(self):
+        falcon_mamba_logger.warning_once.cache_clear()
+        config = FalconMambaConfig(
+            hidden_size=32,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            use_falcon_mambapy=False,
+        )
+
+        with CaptureLogger(falcon_mamba_logger) as captured:
+            FalconMambaMixer(config, layer_idx=0, initialize_mixer_weights=False)
+
+        self.assertIn("The Falcon-Mamba fast path is not available", captured.out)
+        self.assertIn("falcon_mamba_inner_fn", captured.out)
+        self.assertIn("Install `kernels` to use the Falcon-Mamba hub kernels", captured.out)
+        self.assertIn("do not provide every Falcon-Mamba fast-path kernel", captured.out)
 
     @slow
     # Ignore copy

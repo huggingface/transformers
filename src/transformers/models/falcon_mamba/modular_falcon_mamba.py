@@ -134,9 +134,9 @@ class FalconMambaMixer(MambaMixer):
             if self.use_falcon_mambapy:
                 if is_mambapy_available():
                     logger.warning_once(
-                        "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation for mamba-ssm and"
-                        " https://github.com/Dao-AILab/causal-conv1d or `pip install kernels` for causal-conv1d"
+                        "The Falcon-Mamba fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)`"
+                        " is None. Falling back to the mamba.py backend. Install `kernels` to use the Falcon-Mamba hub kernels;"
+                        " `mamba_ssm` and `causal_conv1d` alone do not provide every Falcon-Mamba fast-path kernel."
                     )
                 else:
                     raise ImportError(
@@ -144,9 +144,9 @@ class FalconMambaMixer(MambaMixer):
                     )
             else:
                 logger.warning_once(
-                    "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation for mamba-ssm and"
-                    " https://github.com/Dao-AILab/causal-conv1d or `pip install kernels` for causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
+                    "The Falcon-Mamba fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)`"
+                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. Install `kernels` to use the Falcon-Mamba hub kernels;"
+                    " `mamba_ssm` and `causal_conv1d` alone do not provide every Falcon-Mamba fast-path kernel. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
                 )
 
     def __init__(self, config: FalconMambaConfig, layer_idx: int, initialize_mixer_weights: bool = True):
