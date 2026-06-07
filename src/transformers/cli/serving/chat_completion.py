@@ -17,10 +17,12 @@ Handler for the /v1/chat/completions endpoint.
 Supports streaming (SSE via DirectStreamer) and non-streaming (JSON) responses.
 """
 
+from __future__ import annotations
+
 import asyncio
 import time
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from ...utils import logging
 from ...utils.import_utils import is_serve_available
@@ -56,6 +58,10 @@ if is_serve_available():
         """OpenAI ``ChoiceDelta`` extended with the ``reasoning_content`` field."""
 
         reasoning_content: str | None = None
+else:
+
+    class CompletionCreateParamsStreaming(TypedDict):
+        pass
 
 
 from .utils import (

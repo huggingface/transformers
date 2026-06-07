@@ -601,6 +601,42 @@ class GenerationMixin(ContinuousMixin):
 
         return model_inputs
 
+    def _call_prepare_inputs_for_generation(
+        self: "GenerativePreTrainedModel", input_ids: torch.LongTensor, **model_kwargs
+    ):
+        """
+        Calls `prepare_inputs_for_generation`, temporarily adding `cache_position` for legacy remote code models.
+
+        This keeps `cache_position` out of the generation state while preserving compatibility with remote models that
+        still override `prepare_inputs_for_generation` and expect this argument to be passed by `generate`.
+        """
+        if (
+            "cache_position" not in model_kwargs
+            and self.is_remote_code()
+            and "cache_position" in set(inspect.signature(self.prepare_inputs_for_generation).parameters)
+        ):
+            logger.warning_once(
+                "The remote code model you are currently using seems to expect `cache_position`. This arg has been "
+                "removed from the Transformers library, and will stop being created in `generate` even for remote code models "
+                "in a future release. Please open a PR on the remote code hub repo to remove any usage of `cache_position`."
+            )
+            inputs_embeds = model_kwargs.get("inputs_embeds")
+            if (
+                not self.config.is_encoder_decoder
+                and inputs_embeds is not None
+                and model_kwargs.get("is_first_iteration")
+                and model_kwargs.get("next_sequence_length") is None
+            ):
+                sequence_length = inputs_embeds.shape[1]
+            else:
+                sequence_length = model_kwargs.get("next_sequence_length") or input_ids.shape[1]
+
+            past_key_values = model_kwargs.get("past_key_values")
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            model_kwargs["cache_position"] = torch.arange(sequence_length, device=input_ids.device) + past_seen_tokens
+
+        return self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
     def _prepare_model_inputs(
         self: "GenerativePreTrainedModel",
         inputs: torch.Tensor | None,
@@ -2789,7 +2825,7 @@ class GenerationMixin(ContinuousMixin):
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             if prefill_consumed:
                 next_sequence_length = 1 if model_kwargs["use_cache"] else None
-                model_inputs = self.prepare_inputs_for_generation(
+                model_inputs = self._call_prepare_inputs_for_generation(
                     input_ids, next_sequence_length=next_sequence_length, **model_kwargs
                 )
                 with self._optimize_model_for_decode():
@@ -3279,7 +3315,7 @@ class GenerationMixin(ContinuousMixin):
                 # a. Forward current tokens, obtain the logits
                 flat_running_sequences = self._flatten_beam_dim(running_sequences[:, :, :cur_len])
                 next_sequence_length = 1 if model_kwargs["use_cache"] else None
-                model_inputs = self.prepare_inputs_for_generation(
+                model_inputs = self._call_prepare_inputs_for_generation(
                     flat_running_sequences, next_sequence_length=next_sequence_length, **model_kwargs
                 )
                 model_outputs = self(**model_inputs, return_dict=True)
@@ -3612,7 +3648,7 @@ class GenerationMixin(ContinuousMixin):
                 candidate_kwargs = _prepare_position_ids(candidate_kwargs, new_length, self.config.is_encoder_decoder)
 
             next_sequence_length = candidate_length + 1 if not is_first_iteration else None
-            model_inputs = self.prepare_inputs_for_generation(
+            model_inputs = self._call_prepare_inputs_for_generation(
                 candidate_input_ids,
                 next_sequence_length=next_sequence_length,
                 is_first_iteration=is_first_iteration,
@@ -3819,7 +3855,7 @@ class GenerationMixin(ContinuousMixin):
 
         # Usual prefill
         if generation_config.prefill_chunk_size is None:
-            model_inputs = self.prepare_inputs_for_generation(
+            model_inputs = self._call_prepare_inputs_for_generation(
                 input_ids,
                 next_sequence_length=next_sequence_length,
                 is_first_iteration=is_first_iteration,
@@ -3854,7 +3890,7 @@ class GenerationMixin(ContinuousMixin):
                     model_kwargs["attention_mask"] = attention_mask[:, :current_length]
                 if position_ids is not None:
                     model_kwargs["position_ids"] = position_ids[:, past_length:current_length]
-                model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
+                model_inputs = self._call_prepare_inputs_for_generation(input_chunk, **model_kwargs)
 
                 outputs = model_forward(**model_inputs, return_dict=True)
 

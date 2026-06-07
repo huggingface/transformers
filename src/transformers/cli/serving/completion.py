@@ -19,10 +19,12 @@ in choices[].text. Supports streaming and non-streaming modes, and suffix for
 fill-in-the-middle text insertion.
 """
 
+from __future__ import annotations
+
 import asyncio
 import time
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from ...utils import logging
 from ...utils.import_utils import is_serve_available
@@ -33,6 +35,10 @@ if is_serve_available():
     from fastapi.responses import JSONResponse, StreamingResponse
     from openai.types import Completion, CompletionChoice, CompletionUsage
     from openai.types.completion_create_params import CompletionCreateParamsBase
+else:
+
+    class CompletionCreateParamsBase(TypedDict):
+        pass
 
 
 from .utils import BaseGenerateManager, BaseHandler, _StreamError

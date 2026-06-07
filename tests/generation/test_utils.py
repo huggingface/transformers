@@ -72,6 +72,7 @@ if is_torch_available():
         BartForConditionalGeneration,
         BartTokenizer,
         DataCollatorWithFlattening,
+        GPT2Config,
         GPT2LMHeadModel,
         GPT2Tokenizer,
         ImageGPTForCausalImageModeling,
@@ -2825,6 +2826,49 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 @pytest.mark.generate
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase):
+    def test_remote_prepare_inputs_gets_legacy_cache_position(self):
+        config = GPT2Config(
+            n_layer=1,
+            n_head=2,
+            n_embd=8,
+            vocab_size=32,
+            bos_token_id=0,
+            eos_token_id=30,
+            pad_token_id=31,
+        )
+        model = GPT2LMHeadModel(config).to(torch_device)
+        input_ids = torch.tensor([[1, 2, 3]], device=torch_device)
+
+        original_prepare_inputs = model.prepare_inputs_for_generation
+        cache_positions = []
+
+        def legacy_prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=None,
+            attention_mask=None,
+            inputs_embeds=None,
+            cache_position=None,
+            **kwargs,
+        ):
+            self.assertIsNotNone(cache_position)
+            cache_positions.append(cache_position)
+            return original_prepare_inputs(
+                input_ids,
+                past_key_values=past_key_values,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                **kwargs,
+            )
+
+        model.is_remote_code = lambda: True
+        model.prepare_inputs_for_generation = legacy_prepare_inputs_for_generation
+
+        model.generate(input_ids, do_sample=False, max_new_tokens=2)
+
+        self.assertGreaterEqual(len(cache_positions), 2)
+        self.assertListEqual(cache_positions[0].tolist(), [0, 1, 2])
+        self.assertListEqual(cache_positions[1].tolist(), [3])
+
     def test_generation_config_defaults(self):
         "Tests that we can set config value to a global default. See https://github.com/huggingface/transformers/issues/42762"
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)

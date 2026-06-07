@@ -17,11 +17,13 @@ Tests for the serving layer.
 """
 
 import asyncio
+import importlib
 import json
 import socket
+import sys
 import time
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import httpx
 
@@ -57,6 +59,39 @@ if is_serve_available():
     from fastapi import HTTPException
     from openai import OpenAI
     from openai.types.responses import Response, ResponseCreatedEvent
+
+
+def test_serving_modules_import_without_optional_deps():
+    modules = [
+        "transformers.cli.serving.chat_completion",
+        "transformers.cli.serving.completion",
+        "transformers.cli.serving.response",
+        "transformers.cli.serving.transcription",
+        "transformers.cli.serving.server",
+    ]
+    previous_modules = {module: sys.modules.pop(module, None) for module in modules}
+    parent_module = sys.modules.get("transformers.cli.serving")
+    previous_attrs = {
+        module.rsplit(".", 1)[1]: getattr(parent_module, module.rsplit(".", 1)[1], None)
+        for module in modules
+        if parent_module is not None
+    }
+
+    try:
+        with patch("transformers.utils.import_utils.is_serve_available", return_value=False):
+            for module in modules:
+                importlib.import_module(module)
+    finally:
+        for module in modules:
+            sys.modules.pop(module, None)
+            if previous_modules[module] is not None:
+                sys.modules[module] = previous_modules[module]
+        if parent_module is not None:
+            for attr, value in previous_attrs.items():
+                if value is not None:
+                    setattr(parent_module, attr, value)
+                elif hasattr(parent_module, attr):
+                    delattr(parent_module, attr)
 
 
 def _find_free_port() -> int:

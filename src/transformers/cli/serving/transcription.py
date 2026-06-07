@@ -15,8 +15,10 @@
 Handler for the /v1/audio/transcriptions endpoint.
 """
 
+from __future__ import annotations
+
 import io
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from ...utils import logging
 from ...utils.import_utils import is_serve_available
@@ -26,6 +28,10 @@ if is_serve_available():
     from fastapi import HTTPException, Request
     from fastapi.responses import JSONResponse, StreamingResponse
     from openai.types.audio.transcription_create_params import TranscriptionCreateParamsBase
+else:
+
+    class TranscriptionCreateParamsBase(TypedDict):
+        pass
 
 from .model_manager import ModelManager
 from .utils import DirectStreamer, GenerateManager, GenerationState, _StreamError
