@@ -71,3 +71,17 @@
     - local: processors
       title: Procesatoare
     title: Preprocesatoare
+  title: Clase de bază
+- isExpanded: true
+  sections:
+  - isExpanded: false
+    sections:
+    - local: pipeline_tutorial
+      title: Pipeline
+    - local: pipeline_gradio
+      title: Aplicații de Machine learning
+    - local: pipeline_webserver
+      title: Inferență pe web server
+    - local: add_new_pipeline
+      title: Adăugarea unui nou pipeline
+    title: API-ul Pipeline
