@@ -105,12 +105,14 @@ try:
             "cuda": LayerRepository(
                 repo_id="kernels-community/deformable-detr",
                 layer_name="MultiScaleDeformableAttention",
+                revision="main",
             )
         },
         "Llama4TextMoe": {
             "cuda": LayerRepository(
                 repo_id="kernels-community/moe",
                 layer_name="Llama4TextMoe",
+                revision="main",
             )
         },
         "RMSNorm": {
@@ -118,6 +120,7 @@ try:
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger_kernels",
                     layer_name="LigerRMSNorm",
+                    revision="main",
                     # revision="pure-layer-test",
                 ),
             },
@@ -125,24 +128,28 @@ try:
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger_kernels",
                     layer_name="LigerRMSNorm",
+                    revision="main",
                 )
             },
             "xpu": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/rmsnorm",
                     layer_name="RMSNorm",
+                    revision="main",
                 )
             },
             "mps": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/mlx_rmsnorm",
                     layer_name="RMSNorm",
+                    revision="main",
                 )
             },
             "npu": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger_kernels",
                     layer_name="LigerRMSNorm",
+                    revision="main",
                 )
             },
         },
@@ -150,6 +157,7 @@ try:
             "cuda": LayerRepository(
                 repo_id="medmekk/triton-llama-mlp",
                 layer_name="TritonLlamaMLP",
+                revision="main",
             )
         },
         "MegaBlocksMoeMLP": {
@@ -157,28 +165,33 @@ try:
                 Mode.TRAINING: LayerRepository(
                     repo_id="kernels-community/megablocks",
                     layer_name="MegaBlocksMoeMLP",
+                    revision="main",
                 ),
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/megablocks",
                     layer_name="MegaBlocksMoeMLP",
+                    revision="main",
                 ),
             },
             "rocm": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="ahadnagy/megablocks",
                     layer_name="MegaBlocksMoeMLP",
+                    revision="main",
                 )
             },
             "xpu": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/megablocks",
                     layer_name="MegaBlocksMoeMLP",
+                    revision="main",
                 )
             },
             "cpu": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/megablocks",
                     layer_name="CPUMegaBlocksMoeMLP",
+                    revision="main",
                 )
             },
         },
@@ -237,15 +250,15 @@ try:
         _KERNEL_MAPPING["rotary_pos_emb"] = {
             "xpu": {
                 Mode.INFERENCE: FuncRepository(
-                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers", revision="main"
                 )
             },
             "cuda": {
                 Mode.TRAINING: FuncRepository(
-                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers", revision="main"
                 ),
                 Mode.INFERENCE: FuncRepository(
-                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers", revision="main"
                 ),
             },
         }
@@ -266,6 +279,7 @@ try:
 except ImportError:
     _kernels_available = False
     _kernels_enabled = False
+    _KERNEL_MAPPING = {}
 
     # Stub to make decorators int transformers work when `kernels`
     # is not installed.
@@ -366,7 +380,7 @@ def load_and_register_attn_kernel(
 
     # Load the kernel from hub
     try:
-        kernel = get_kernel(repo_id, revision=rev, allow_all_kernels=allow_all_kernels)
+        kernel = get_kernel(repo_id, revision=rev or "main", allow_all_kernels=allow_all_kernels)
     except Exception as e:
         raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.")
     # correctly wrap the kernel

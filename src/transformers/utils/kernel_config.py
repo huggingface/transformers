@@ -67,6 +67,7 @@ def add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping):
             mode: LayerRepository(
                 repo_id=repo_id,
                 layer_name=repo_layer_name,
+                revision="main",
             )
         }
     }
@@ -111,7 +112,7 @@ class KernelConfig(PushToHubMixin):
                 mode: LayerRepository(
                     repo_id=repo_id,
                     layer_name=layer_name,
-                    revision=revision,
+                    revision=revision or "main",
                 )
             }
         }
