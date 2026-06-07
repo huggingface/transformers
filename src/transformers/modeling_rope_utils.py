@@ -641,17 +641,14 @@ def _compute_torchembed_rope_parameters(
     """
     if not is_torchembed_available():
         raise ImportError(
-            "The 'torchembed' rope type requires the `torchembed` package. "
-            "Install it with: pip install torchembed"
+            "The 'torchembed' rope type requires the `torchembed` package. Install it with: pip install torchembed"
         )
 
     # Same frequency computation as default RoPE — torchembed uses the same scheme
     base = config.rope_parameters["rope_theta"]
     dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
     attention_factor = 1.0
-    inv_freq = 1.0 / (
-        base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-    )
+    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim))
     return inv_freq, attention_factor
 
 
