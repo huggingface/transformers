@@ -61,15 +61,12 @@ class RopeTest(unittest.TestCase):
             "long_factor": ["longrope"],
         }
         for rope_type in all_rope_types:
-            if rope_type == "default":
-                continue  # "default" only warns about unrecognised keys, never raises KeyError
-            # proportional is same as default wrt to expected keys
-            if rope_type == "proportional":
+            if rope_type in simple_rope_types:
                 continue
             for param, valid_rope_types in valid_param_mapping.items():
                 # Set `param` with a dummy value -- we want to test the dict key
                 config.rope_parameters = {"rope_type": rope_type, "rope_theta": 10000.0, param: True}
-                if rope_type in valid_rope_types or rope_type in simple_rope_types:
+                if rope_type in valid_rope_types:
                     continue
                 else:
                     with self.assertRaises(KeyError):
@@ -174,6 +171,8 @@ class RopeTest(unittest.TestCase):
         all_rope_types = ROPE_INIT_FUNCTIONS.keys()
         config.layer_types = ["full_attention", "sliding_attention"]
 
+        simple_rope_types = {"default", "proportional", "torchembed"}
+
         def nest(full_attention_params):
             return {
                 "full_attention": full_attention_params,
@@ -183,7 +182,7 @@ class RopeTest(unittest.TestCase):
         # Each non-default RoPE type with only `rope_theta` should still raise
         # KeyError (missing required keys) when wrapped in the nested shape.
         for rope_type in all_rope_types:
-            if rope_type in ("default", "proportional"):
+            if rope_type in simple_rope_types:
                 continue
             config.rope_parameters = nest({"rope_type": rope_type, "rope_theta": 10000.0})
             with self.assertRaises(KeyError):
@@ -200,7 +199,7 @@ class RopeTest(unittest.TestCase):
             "long_factor": ["longrope"],
         }
         for rope_type in all_rope_types:
-            if rope_type in ("default", "proportional"):
+            if rope_type in simple_rope_types:
                 continue
             for param, valid_rope_types in valid_param_mapping.items():
                 config.rope_parameters = nest({"rope_type": rope_type, "rope_theta": 10000.0, param: True})
