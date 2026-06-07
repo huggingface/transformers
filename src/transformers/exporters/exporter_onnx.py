@@ -402,6 +402,38 @@ def _patch_masked_scatter(original):
     return patch
 
 
+@register_patch("onnx", "torch.roll")
+def _patch_roll(original):
+    """Replace `torch.roll(input, shifts, dims)` with explicit `narrow + cat` shifts.
+
+    `torch.roll`'s torch.export lowering emits a `Shape(start, end)` op that can resolve to an
+    empty INT64 result; the downstream `Slice` then has mismatched `axes` and `ends` lengths
+    and ORT rejects the graph with `ShapeInferenceError` (seen in Gemma4-Unified Vision2Text,
+    where roll is composed with an in-place scatter `[..., 0] = value`). The explicit form is
+    bit-exact and traces to plain Slice + Concat nodes.
+    """
+
+    def patch(input, shifts, dims=None):
+        if isinstance(shifts, int) and isinstance(dims, int):
+            shifts = (shifts,)
+            dims = (dims,)
+        elif not (isinstance(shifts, (tuple, list)) and isinstance(dims, (tuple, list)) and len(shifts) == len(dims)):
+            return original(input, shifts, dims)
+
+        out = input
+        for shift, dim in zip(shifts, dims):
+            length = out.size(dim)
+            shift = shift % length if length > 0 else 0
+            if shift == 0:
+                continue
+            front = out.narrow(dim, length - shift, shift)
+            back = out.narrow(dim, 0, length - shift)
+            out = torch.cat([front, back], dim=dim)
+        return out
+
+    return patch
+
+
 # ── Stage 2: ONNX patches ──────────────────────────────────────────────────────
 # Reversible swaps of `torch.onnx` internals via `@register_patch("onnx", path)`.
 # Currently a single hook that intercepts the private `_prepare_exported_program_for_export`
