@@ -63,7 +63,7 @@ def _sanitize_module_name(name: str) -> str:
     # separator used in module names, replacing `\W` with `_` would create too many collisions.
     # Once a module is imported, it is cached in `sys.modules` and the second import would return
     # the first module, which might not be the expected behavior if name collisions happen.
-    new_name = name.replace(".", "_dot_").replace("-", "_hyphen_")
+    new_name = name.replace(".", "_dot_").replace("-", "_hyphen_").replace("/", "_slash_").replace("\\", "_backslash_")
     if new_name and new_name[0].isdigit():
         new_name = f"_{new_name}"
     if keyword.iskeyword(new_name):
