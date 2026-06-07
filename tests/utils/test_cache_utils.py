@@ -108,6 +108,15 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
 
+    def test_static_layer_seq_length_type_hint_allows_tensor(self):
+        from typing import get_type_hints
+
+        from transformers.cache_utils import CacheLayerMixin, StaticLayer
+
+        expected_return_type = int | torch.Tensor
+        self.assertEqual(get_type_hints(CacheLayerMixin.get_seq_length)["return"], expected_return_type)
+        self.assertEqual(get_type_hints(StaticLayer.get_seq_length)["return"], expected_return_type)
+
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
     """Function to skip tests on failed cache prerequisites, given a cache implementation"""
