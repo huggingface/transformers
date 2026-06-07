@@ -440,6 +440,7 @@ class PeftAdapterMixin:
         local_files_only: bool = False,
         adapter_kwargs: dict[str, Any] | None = None,
         load_config: Optional["LoadStateDictConfig"] = None,
+        trust_remote_code: bool | None = None,
         **kwargs,
     ) -> "LoadStateDictInfo":
         """
@@ -456,6 +457,9 @@ class PeftAdapterMixin:
                 The adapter name to use. If not set, will use the name "default".
             load_config (`LoadStateDictConfig`, *optional*):
                 A load configuration to reuse when pulling adapter weights, typically from `from_pretrained`.
+            trust_remote_code (`bool`, *optional*):
+                Whether to allow the adapter config to trigger code execution (e.g. importing a custom
+                `megatron_core` module). Defaults to `False`; required to be `True` to load such adapters.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional `LoadStateDictConfig` fields passed as keyword arguments.
             peft_config (`dict[str, Any]`, *optional*):
@@ -578,6 +582,21 @@ class PeftAdapterMixin:
         peft_weight_conversions = build_peft_weight_mapping(weight_conversions, adapter_name, peft_config=peft_config)
 
         patch_moe_parameter_targeting(model=self, peft_config=peft_config)
+
+        # Security: a malicious `adapter_config.json` from an untrusted repository can set
+        # `megatron_config`, which makes PEFT import the module named in `megatron_core` during
+        # `inject_adapter_in_model` (`importlib.import_module(config.megatron_core)` in
+        # `peft.tuners.lora.tp_layer.dispatch_megatron`). Adapters are auto-loaded by
+        # `from_pretrained` with no code-execution opt-in, so restrict this import to the real
+        # Megatron-Core package unless the caller explicitly passes `trust_remote_code=True`.
+        if getattr(peft_config, "megatron_config", None) is not None and not trust_remote_code:
+            megatron_core = getattr(peft_config, "megatron_core", "megatron.core")
+            if megatron_core not in ("megatron.core", "megatron"):
+                raise ValueError(
+                    f"This adapter's config requests importing `{megatron_core}` via `megatron_core`, "
+                    "which would execute code from the adapter repository when the adapter is injected. "
+                    "If you trust this repository, reload it with `trust_remote_code=True`."
+                )
 
         if not hotswap:
             # Create and add fresh new adapters into the model, unless the weights are hotswapped

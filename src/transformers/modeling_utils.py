@@ -4341,6 +4341,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 adapter_name=adapter_name,
                 load_config=load_config,
                 adapter_kwargs=adapter_kwargs,
+                trust_remote_code=trust_remote_code,
             )
 
         if output_loading_info:

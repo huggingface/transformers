@@ -111,6 +111,46 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # dummy generation
                 _ = peft_model.generate(input_ids=torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device))
 
+    def test_peft_adapter_megatron_core_import_requires_trust_remote_code(self):
+        """
+        Security regression: an auto-loaded `adapter_config.json` can set `megatron_config`, which
+        makes PEFT import the module named in `megatron_core` during `inject_adapter_in_model`
+        (`importlib.import_module(config.megatron_core)`). Loading such an adapter must not import an
+        arbitrary module without `trust_remote_code=True`.
+        """
+        from peft import LoraConfig
+
+        model_id = self.transformers_test_model_ids[0]
+        model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
+        model.add_adapter(LoraConfig(init_lora_weights=False))
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+
+            # Tamper the saved adapter config to request importing an arbitrary module.
+            adapter_config_path = os.path.join(tmpdirname, ADAPTER_CONFIG_NAME)
+            with open(adapter_config_path) as f:
+                adapter_config = json.load(f)
+            adapter_config["megatron_config"] = {"hidden_size": 8}
+            adapter_config["megatron_core"] = "os"
+            with open(adapter_config_path, "w") as f:
+                json.dump(adapter_config, f)
+
+            # Without trust_remote_code the loader must refuse instead of importing the module.
+            with self.assertRaises(ValueError) as ctx:
+                AutoModelForCausalLM.from_pretrained(tmpdirname)
+            self.assertIn("trust_remote_code", str(ctx.exception))
+
+            # The legitimate Megatron-Core module name is allowed through the guard (any later error
+            # is only because megatron is not installed in the test environment, never the guard).
+            adapter_config["megatron_core"] = "megatron.core"
+            with open(adapter_config_path, "w") as f:
+                json.dump(adapter_config, f)
+            try:
+                AutoModelForCausalLM.from_pretrained(tmpdirname)
+            except Exception as e:
+                self.assertNotIn("trust_remote_code", str(e))
+
     def test_peft_state_dict(self):
         """
         Simple test that checks if the returned state dict of `get_adapter_state_dict()` method contains
