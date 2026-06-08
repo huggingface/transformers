@@ -58,19 +58,24 @@ if is_torch_available():
         VideoPrismVisionModel,
     )
     from transformers.models.videoprism.modeling_videoprism import VideoPrismLayerNorm
+
+    torch.set_printoptions(precision=10)
 if is_vision_available():
     from transformers import LlavaOnevisionVideoProcessor
 if is_tokenizers_available():
     from transformers import VideoPrismTokenizer
-torch.set_printoptions(precision=10)
 
 TENNIS_VIDEO_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
 INTEGRATION_NUM_FRAMES = 16
 INTEGRATION_FRAME_SIZE = 288
+INTEGRATION_TEXT_MAX_LENGTH = 64
+INTEGRATION_TEXT_QUERIES = "playing drums,sitting,playing flute,playing at playground,concert"
+INTEGRATION_TEXT_PROMPT_TEMPLATE = "a video of {}."
+VIDEO_PRISM_BASE_CHECKPOINT = "MHRDYN7/videoprism-base-f16r288"
 VIDEO_PRISM_LVT_CHECKPOINT = "MHRDYN7/videoprism-lvt-base-f16r288"
 
 
-class VideoPrismFlashAttentionTesterMixin:
+class VideoPrismModelTest(ModelTesterMixin):
     def flash_attn_inference_equivalence(
         self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
     ) -> None:
@@ -199,7 +204,7 @@ class VideoPrismVisionModelTester:
 
 
 @require_vision
-class VideoPrismVisionModelTest(VideoPrismFlashAttentionTesterMixin, ModelTesterMixin, unittest.TestCase):
+class VideoPrismVisionModelTest(VideoPrismModelTest, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as VideoPrismVisionModel does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -346,8 +351,7 @@ class VideoPrismVisionModelTest(VideoPrismFlashAttentionTesterMixin, ModelTester
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "MHRDYN7/videoprism-base-f16r288"
-        model = VideoPrismVisionModel.from_pretrained(model_name)
+        model = VideoPrismVisionModel.from_pretrained(VIDEO_PRISM_BASE_CHECKPOINT)
         self.assertIsNotNone(model)
 
 
@@ -420,7 +424,6 @@ class VideoPrismTextModelTester:
             intermediate_size=self.intermediate_size,
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
-            num_text_layers=self.num_hidden_layers,
             vocab_size=self.vocab_size,
             apply_l2norm=self.apply_l2norm,
             hidden_act=self.hidden_act,
@@ -451,7 +454,7 @@ class VideoPrismTextModelTester:
 
 
 @require_vision
-class VideoPrismTextModelTest(VideoPrismFlashAttentionTesterMixin, ModelTesterMixin, unittest.TestCase):
+class VideoPrismTextModelTest(VideoPrismModelTest, unittest.TestCase):
     all_model_classes = (VideoPrismTextModel,) if is_torch_available() else ()
 
     def setUp(self):
@@ -474,8 +477,7 @@ class VideoPrismTextModelTest(VideoPrismFlashAttentionTesterMixin, ModelTesterMi
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "MHRDYN7/videoprism-lvt-base-f16r288"
-        model = VideoPrismTextModel.from_pretrained(model_name)
+        model = VideoPrismTextModel.from_pretrained(VIDEO_PRISM_LVT_CHECKPOINT)
         self.assertIsNotNone(model)
 
 
@@ -531,7 +533,7 @@ class VideoPrismClipModelTester:
 
 
 @require_vision
-class VideoPrismClipModelTest(VideoPrismFlashAttentionTesterMixin, ModelTesterMixin, unittest.TestCase):
+class VideoPrismClipModelTest(VideoPrismModelTest, unittest.TestCase):
     _is_composite = True
     test_attention_outputs = False
     additional_model_inputs = ["input_ids", "attention_mask"]
@@ -593,8 +595,7 @@ class VideoPrismClipModelTest(VideoPrismFlashAttentionTesterMixin, ModelTesterMi
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "MHRDYN7/videoprism-lvt-base-f16r288"
-        model = VideoPrismClipModel.from_pretrained(model_name)
+        model = VideoPrismClipModel.from_pretrained(VIDEO_PRISM_LVT_CHECKPOINT)
         self.assertIsNotNone(model)
 
     def _test_get_text_features_output(self, return_dict):
@@ -689,7 +690,7 @@ class VideoPrismClipModelTest(VideoPrismFlashAttentionTesterMixin, ModelTesterMi
 
 
 @require_vision
-class VideoPrismForVideoClassificationModelTester(ModelTesterMixin, VideoPrismVisionModelTester):
+class VideoPrismForVideoClassificationModelTester(VideoPrismVisionModelTester):
     def __init__(self, parent, vision_kwargs=None, is_training=True):
         if vision_kwargs is None:
             vision_kwargs = {}
@@ -729,7 +730,7 @@ class VideoPrismForVideoClassificationModelTester(ModelTesterMixin, VideoPrismVi
 
 
 @require_vision
-class VideoPrismForVideoClassificationTest(VideoPrismFlashAttentionTesterMixin, ModelTesterMixin, unittest.TestCase):
+class VideoPrismForVideoClassificationTest(VideoPrismModelTest, unittest.TestCase):
     all_model_classes = (VideoPrismForVideoClassification,) if is_torch_available() else ()
     test_resize_embeddings = False
 
@@ -792,11 +793,8 @@ def prepare_tennis_frames():
 
 
 def prepare_texts():
-    text_query_csv = "playing drums,sitting,playing flute,playing at playground,concert"
-    prompt_template = "a video of {}."
-
-    text_queries = text_query_csv.split(",")
-    text_queries = [prompt_template.format(t) for t in text_queries]
+    text_queries = INTEGRATION_TEXT_QUERIES.split(",")
+    text_queries = [INTEGRATION_TEXT_PROMPT_TEMPLATE.format(t) for t in text_queries]
     tokenizer = VideoPrismTokenizer.from_pretrained(VIDEO_PRISM_LVT_CHECKPOINT)
     return tokenizer, text_queries
 
@@ -813,7 +811,7 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_videoprism_vision_model(self):
-        model = VideoPrismVisionModel.from_pretrained("MHRDYN7/videoprism-base-f16r288").to(torch_device)
+        model = VideoPrismVisionModel.from_pretrained(VIDEO_PRISM_BASE_CHECKPOINT).to(torch_device)
         input_vids = torch.cat([self.tennis_frames, self.tennis_frames], dim=0).to(torch_device)
         model.eval()
         with torch.inference_mode():
@@ -844,11 +842,11 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_videoprism_clip_model(self):
-        model = VideoPrismClipModel.from_pretrained("MHRDYN7/videoprism-lvt-base-f16r288").to(torch_device)
+        model = VideoPrismClipModel.from_pretrained(VIDEO_PRISM_LVT_CHECKPOINT).to(torch_device)
         input_vids = torch.cat([self.tennis_frames, self.tennis_frames], dim=0).to(torch_device)
-        tokens = self.tokenizer(self.text_queries, max_length=64, padding="max_length", return_tensors="pt").to(
-            torch_device
-        )
+        tokens = self.tokenizer(
+            self.text_queries, max_length=INTEGRATION_TEXT_MAX_LENGTH, padding="max_length", return_tensors="pt"
+        ).to(torch_device)
         model.eval()
         with torch.inference_mode():
             outputs = model(input_vids, **tokens)
@@ -917,9 +915,8 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_videoprism_interpolate_pos_encoding(self):
-        model_name = "MHRDYN7/videoprism-base-f16r288"
-        model = VideoPrismVisionModel.from_pretrained(model_name).to(torch_device)
-        processor = LlavaOnevisionVideoProcessor.from_pretrained(model_name)
+        model = VideoPrismVisionModel.from_pretrained(VIDEO_PRISM_BASE_CHECKPOINT).to(torch_device)
+        processor = LlavaOnevisionVideoProcessor.from_pretrained(VIDEO_PRISM_BASE_CHECKPOINT)
         kwargs = {
             "num_frames": 10,
             "size": {"height": 144, "width": 144},

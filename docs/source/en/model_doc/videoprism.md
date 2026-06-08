@@ -38,7 +38,7 @@ Notes:
 - The vision encoder can be used standalone via `VideoPrismVisionModel` for extracting video features. `VideoPrismVisionConfig` must be used with this model.
 - The default input resolution is 288x288 pixels with 16 frames per video clip for the base models and 8 frames for the large models. Set interpolate_pos_encoding=True to use the models with custom resolution and frames per clip.
 
-This model was contributed by [MHRDYN7](https://github.com/MHRDYN7) and reviewed by [qubvel](https://github.com/qubvel) & [zucchini-nlp](https://github.com/zucchini-nlp).
+This model was contributed by [MHRDYN7](https://github.com/MHRDYN7) and reviewed by [vasqu](https://github.com/vasqu) & [zucchini-nlp](https://github.com/zucchini-nlp).
 The original code can be found [here](https://github.com/google-deepmind/videoprism).
 
 <Tip warning={true}>
