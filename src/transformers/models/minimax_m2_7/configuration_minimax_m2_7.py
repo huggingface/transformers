@@ -49,7 +49,7 @@ class MiniMaxM27Config(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "minimax_m2"
+    model_type = "minimax_m2_7"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

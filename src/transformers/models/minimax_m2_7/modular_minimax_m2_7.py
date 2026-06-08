@@ -26,13 +26,11 @@ from ...modeling_layers import (
 )
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import auto_docstring
 from ...utils.output_capturing import OutputRecorder
 from ..minimax_m2.modeling_minimax_m2 import (
     MiniMaxM2Attention,
     MiniMaxM2DecoderLayer,
-    MiniMaxM2Experts,
     MiniMaxM2ForCausalLM,
     MiniMaxM2Model,
     MiniMaxM2PreTrainedModel,
@@ -134,7 +132,7 @@ class MiniMaxM27MLP(nn.Module):
         return current_hidden_states
 
 
-class MiniMaxM27Experts(MiniMaxM2Experts):
+class MiniMaxM27Experts(nn.Module):
     def __init__(self, config: MiniMaxM27Config):
         nn.Module.__init__(self)
         self.top_k = config.num_experts_per_tok
@@ -157,16 +155,12 @@ class MiniMaxM27Experts(MiniMaxM2Experts):
         return final_hidden_states
 
 
-class MiniMaxM27MoEGate(nn.Linear):
-    pass
-
-
 class MiniMaxM27SparseMoeBlock(MiniMaxM2SparseMoeBlock):
     def __init__(self, config):
         nn.Module.__init__(self)
         self.top_k = config.num_experts_per_tok
         self.jitter_noise = config.router_jitter_noise
-        self.gate = MiniMaxM27MoEGate(config.hidden_size, config.num_local_experts, bias=False)
+        self.gate = nn.Linear(config.hidden_size, config.num_local_experts, bias=False)
         self.experts = MiniMaxM27Experts(config)
         self.register_buffer("e_score_correction_bias", torch.zeros(config.num_local_experts))
 
@@ -194,10 +188,6 @@ class MiniMaxM27RMSNorm(MiniMaxM2RMSNorm):
     pass
 
 
-class MiniMaxM27RotaryEmbedding(MiniMaxM2RotaryEmbedding):
-    pass
-
-
 class MiniMaxM27Attention(MiniMaxM2Attention):
     def __init__(self, config: MiniMaxM27Config, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -208,13 +198,17 @@ class MiniMaxM27DecoderLayer(MiniMaxM2DecoderLayer):
     pass
 
 
+class MiniMaxM27RotaryEmbedding(MiniMaxM2RotaryEmbedding):
+    pass
+
+
 @auto_docstring
 class MiniMaxM27PreTrainedModel(MiniMaxM2PreTrainedModel):
     config: MiniMaxM27Config
     _no_split_modules = ["MiniMaxM27DecoderLayer"]
     _can_compile_fullgraph = False
     _can_record_outputs = {
-        "router_logits": OutputRecorder(MiniMaxM27MoEGate, index=0),
+        "router_logits": OutputRecorder(MiniMaxM27SparseMoeBlock, index=1),
         "hidden_states": MiniMaxM27DecoderLayer,
         "attentions": MiniMaxM27Attention,
     }
