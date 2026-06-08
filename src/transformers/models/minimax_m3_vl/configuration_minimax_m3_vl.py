@@ -104,6 +104,14 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
     router_jitter_noise: float = 0.0
     rope_parameters: RopeParameters | dict | None = None
     base_config_key = "text_config"
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.gate_up_proj_scale_inv": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj_scale_inv": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
     dense_intermediate_size: int = 12288
     shared_intermediate_size: int = 3072
     n_shared_experts: int = 1
@@ -199,10 +207,6 @@ class MiniMaxM3VLConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        # The snapshot bundles its sub-configs with their original model_types
-        # (e.g. ``clip_vision_model`` for the ViT, ``minimax_m2`` for the LLM).
-        # We always rebuild them as our own classes so the resulting attributes
-        # carry the fields our model code expects.
         if isinstance(self.vision_config, dict):
             self.vision_config.pop("model_type", None)
             self.vision_config = MiniMaxM3VLVisionConfig(**self.vision_config)

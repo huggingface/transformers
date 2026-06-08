@@ -28,7 +28,7 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, DynamicLayer
+from ...cache_utils import Cache, DynamicCache, DynamicLayer, StaticLayer
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernelized_func
@@ -46,13 +46,9 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
+from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_minimax_m3_vl import MiniMaxM3VLConfig, MiniMaxM3VLTextConfig, MiniMaxM3VLVisionConfig
-
-
-# ---------------------------------------------------------------------------
-# Per-layer cache for sparse-attention layers
-# ---------------------------------------------------------------------------
 
 
 class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
@@ -100,6 +96,68 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
             self.idx_keys = self.idx_keys[..., :max_length, :]
 
 
+class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
+    """Static counterpart of [`MiniMaxM3VLSparseCacheLayer`] for ``torch.compile`` / ``StaticCache``:
+    a standard ``StaticLayer`` for the main GQA attention plus a pre-allocated ``idx_keys`` buffer
+    holding the lightning indexer's keys (one head, ``index_head_dim`` per token), written in place.
+
+    It shares ``layer_type = "minimax_m3_sparse"`` with the dynamic layer but, being a ``StaticLayer``
+    subclass, auto-registers in ``LAYER_TYPE_STATIC_CACHE_MAPPING`` instead, so ``StaticCache`` picks
+    it (and ``DynamicCache`` keeps picking the dynamic one) for the sparse layers.
+
+    The indexer keeps its own ``idx_cumulative_length`` rather than reusing the main attention's
+    ``cumulative_length``: the indexer runs *before* the main attention writes its KV in each forward,
+    so the two counters are bumped at different points and must be tracked independently.
+    """
+
+    layer_type = "minimax_m3_sparse"
+
+    def __init__(self, max_cache_len: int):
+        super().__init__(max_cache_len)
+        self.idx_keys: torch.Tensor | None = None
+        # Tensor (not int) so it can be marked as a static address for cudagraphs, like ``cumulative_length``.
+        self.idx_cumulative_length = torch.tensor([0], dtype=int)
+
+    def update_index(self, idx_k: torch.Tensor) -> torch.Tensor:
+        """Write the new token's ``idx_k`` into the static buffer in place and return the whole buffer.
+
+        The buffer's unfilled tail holds zeros, but those slots sit at key positions ahead of every
+        current query, so the indexer's block- and token-level causal masking discards them — the
+        returned ``[B, 1, max_cache_len, D]`` history is therefore safe to score against directly.
+        """
+        if self.idx_keys is None:
+            self.idx_keys = torch.zeros(
+                (idx_k.shape[0], idx_k.shape[1], self.max_cache_len, idx_k.shape[-1]),
+                dtype=idx_k.dtype,
+                device=idx_k.device,
+            )
+            self.idx_cumulative_length = self.idx_cumulative_length.to(idx_k.device)
+            if not is_torchdynamo_compiling():
+                torch._dynamo.mark_static_address(self.idx_keys)
+                torch._dynamo.mark_static_address(self.idx_cumulative_length)
+
+        kv_len = idx_k.shape[-2]
+        cache_position = torch.arange(kv_len, device=self.idx_keys.device) + self.idx_cumulative_length
+        self.idx_cumulative_length.add_(kv_len)
+        try:
+            self.idx_keys.index_copy_(2, cache_position, idx_k)
+        except NotImplementedError:
+            # Fallback for devices like MPS where index_copy_ might not be supported.
+            self.idx_keys[:, :, cache_position] = idx_k
+        return self.idx_keys
+
+    def reset(self) -> None:
+        super().reset()
+        if self.idx_keys is not None:
+            self.idx_keys.zero_()
+        self.idx_cumulative_length.zero_()
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        if self.idx_keys is not None:
+            self.idx_keys = self.idx_keys.index_select(0, beam_idx.to(self.idx_keys.device))
+
+
 class MiniMaxM3VLRMSNorm(nn.Module):
     """Gemma-style RMSNorm: normalizes in fp32 and scales by ``weight + 1``."""
 
@@ -120,11 +178,6 @@ class MiniMaxM3VLRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
-
-
-# ---------------------------------------------------------------------------
-# Text branch: dense MLP + MoE
-# ---------------------------------------------------------------------------
 
 
 class MiniMaxM3VLDenseMLP(nn.Module):
@@ -149,13 +202,7 @@ class MiniMaxM3VLDenseMLP(nn.Module):
 
 @use_experts_implementation
 class MiniMaxM3VLExperts(nn.Module):
-    """M3 experts: standard packed-expert layout, gated by the SwiGLU-OAI activation.
-
-    Identical to [`PhimoeExperts`] except for the gate: M3 fuses gate and up with
-    the clamped SwiGLU-OAI activation, which needs both halves at once, so we route
-    through the ``_apply_gate`` hook (also honoured by the kernelized FP8 experts)
-    instead of a plain ``act_fn(gate) * up``.
-    """
+    """Collection of expert weights stored as 3D tensors."""
 
     def __init__(self, config: MiniMaxM3VLTextConfig):
         super().__init__()
@@ -164,31 +211,27 @@ class MiniMaxM3VLExperts(nn.Module):
         self.intermediate_dim = config.intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        # No ``act_fn``: M3 gates with SwiGLU-OAI via ``_apply_gate`` (the checkpoint's
-        # ``hidden_act="swigluoai"`` is not an ``ACT2FN`` key by design).
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.limit = config.swiglu_limit
         self.swiglu_alpha = config.swiglu_alpha
         self.swiglu_limit = config.swiglu_limit
 
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
-        # Override [`PhimoeExperts.forward`], which bakes in ``act_fn(gate) * up``: the
-        # gate has to go through ``_apply_gate`` (SwiGLU-OAI) so the eager path matches
-        # the ``grouped_mm`` / ``batched_mm`` backends, which also route through it.
-        final_hidden_states = torch.zeros_like(hidden_states)
+        final = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            expert_mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-
-        for expert_idx in expert_hit:
+            mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in hit:
             expert_idx = expert_idx[0]
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
-            current_state = F.linear(current_state, self.down_proj[expert_idx])
-            current_state = current_state * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_state.to(final_hidden_states.dtype))
-
-        return final_hidden_states
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(mask[expert_idx])
+            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
+            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
+            final.index_add_(0, token_idx, current.to(final.dtype))
+        return final
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
@@ -199,36 +242,33 @@ class MiniMaxM3VLExperts(nn.Module):
 
 
 class MiniMaxM3VLTopKRouter(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: MiniMaxM3VLTextConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.register_buffer("e_score_correction_bias", torch.zeros(config.num_local_experts))
 
-    def forward(self, hidden_states, e_score_correction_bias):
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)  # (seq_len, num_experts)
-        # Main difference to other Moe, using Sigmoid activation instead of Softmax
-        routing_weights = nn.functional.sigmoid(router_logits.float())
-        scores_for_choice = routing_weights + e_score_correction_bias
+        router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)
+        # Sigmoid scoring (not softmax), as in M2.
+        routing_weights = F.sigmoid(router_logits.float())
+        scores_for_choice = routing_weights + self.e_score_correction_bias
         _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
         top_k_weights = routing_weights.gather(1, top_k_index)
         top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-        router_scores = top_k_weights
-        return router_logits, router_scores, top_k_index
+        return router_logits, top_k_weights, top_k_index
 
 
 class MiniMaxM3VLSparseMoeBlock(nn.Module):
-    """M3 MoE block: M2 base + shared expert (``n_shared_experts`` is always >= 1)."""
-
     def __init__(self, config: MiniMaxM3VLTextConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.jitter_noise = config.router_jitter_noise
         self.gate = MiniMaxM3VLTopKRouter(config)
         self.experts = MiniMaxM3VLExperts(config)
-        self.register_buffer("e_score_correction_bias", torch.zeros(config.num_local_experts))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.shared_experts = MiniMaxM3VLDenseMLP(
             config, intermediate_size=config.shared_intermediate_size * config.n_shared_experts
@@ -236,12 +276,17 @@ class MiniMaxM3VLSparseMoeBlock(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states_flat = hidden_states.view(-1, hidden_dim)
-        _, top_k_weights, top_k_index = self.gate(hidden_states_flat, self.e_score_correction_bias)
-        top_k_weights = top_k_weights * self.routed_scaling_factor
-        routed = self.experts(hidden_states_flat, top_k_index, top_k_weights)
-        routed = routed + self.shared_experts(hidden_states_flat)
-        return routed.reshape(batch_size, sequence_length, hidden_dim)
+        hidden_states = hidden_states.view(-1, hidden_dim)
+        shared_output = self.shared_experts(hidden_states)
+
+        _, routing_weights, selected_experts = self.gate(hidden_states)
+        hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
+        # Additional scaling
+        hidden_states = hidden_states * self.routed_scaling_factor
+        hidden_states = hidden_states + shared_output
+
+        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        return hidden_states
 
 
 class MiniMaxM3VLRotaryEmbedding(nn.Module):
@@ -440,18 +485,19 @@ class MiniMaxM3VLAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        # Sparse layers fold the indexer's block selection into the attention mask.
+        # On sparse layers the indexer returns a self-contained additive [B, 1, S_q, S_k] selection bias
+        # (0 where a query may attend, -inf elsewhere, including token-level causality). Fold it straight
+        # into ``attention_mask`` *before* the attention call so every backend sees a single, standard
+        # additive mask — no special per-backend bias plumbing. Dense layers leave the mask untouched.
         if self.indexer is not None:
-            block_bias = self.indexer(
+            sparse_bias = self.indexer(
                 hidden_states,
                 position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 layer_idx=self.layer_idx,
             )
-            if attention_mask is not None:
-                block_bias = block_bias + attention_mask.to(block_bias.dtype)
-            attention_mask = block_bias
+            attention_mask = sparse_bias if attention_mask is None else attention_mask + sparse_bias
 
         query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
@@ -578,12 +624,17 @@ class MiniMaxM3VLIndexer(nn.Module):
         bias = bias.masked_fill(future, float("-inf"))
 
         token_bias = bias.repeat_interleave(block, dim=-1)[..., :k_len]
+
+        # Token-level causality, so the bias is self-contained: the diagonal block is selected as a
+        # whole (block granularity), but the keys *inside* it that sit ahead of the query must still be
+        # masked. eager gets this from the separate causal ``attention_mask``, but sdpa/flash collapse
+        # the mask into ``is_causal`` and pass ``attention_mask=None`` when there is no padding, so the
+        # folded bias has to carry the token-level causal pattern itself.
+        k_positions = torch.arange(k_len, device=idx_q.device)
+        token_future = k_positions.view(1, 1, -1) > q_positions.view(1, -1, 1)
+        token_bias = token_bias.masked_fill(token_future, float("-inf"))
+
         return token_bias.to(idx_q.dtype).unsqueeze(1)
-
-
-# ---------------------------------------------------------------------------
-# Text branch: decoder layer + model
-# ---------------------------------------------------------------------------
 
 
 class MiniMaxM3VLDecoderLayer(GradientCheckpointingLayer):
@@ -592,50 +643,40 @@ class MiniMaxM3VLDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MiniMaxM3VLTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        eps = config.rms_norm_eps
-
-        # Sparse vs. dense attention is decided inside MiniMaxM3VLAttention by
-        # config.layer_types[layer_idx] (sparse layers build a MiniMaxM3VLIndexer).
         self.self_attn = MiniMaxM3VLAttention(config, layer_idx)
-
-        if config.moe_layer_freq[layer_idx]:
-            self.mlp = MiniMaxM3VLSparseMoeBlock(config)
-        else:
-            self.mlp = MiniMaxM3VLDenseMLP(config, intermediate_size=config.dense_intermediate_size)
-
-        self.input_layernorm = MiniMaxM3VLRMSNorm(config.hidden_size, eps=eps)
-        self.post_attention_layernorm = MiniMaxM3VLRMSNorm(config.hidden_size, eps=eps)
+        self.mlp = (
+            MiniMaxM3VLSparseMoeBlock(config)
+            if config.moe_layer_freq[layer_idx]
+            else MiniMaxM3VLDenseMLP(config, intermediate_size=config.dense_intermediate_size)
+        )
+        self.input_layernorm = MiniMaxM3VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MiniMaxM3VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        use_cache: bool | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        # ``position_ids`` is consumed by the sparse-attention indexer (used for
-        # absolute-position causality on the cached idx_k history). The dense
-        # attention path ignores it.
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
+            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            use_cache=use_cache,
-            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = residual + hidden_states
-
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        return residual + hidden_states
+        hidden_states = residual + hidden_states
+        return hidden_states
 
 
 @auto_docstring
@@ -645,12 +686,8 @@ class MiniMaxM3VLPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MiniMaxM3VLDecoderLayer", "MiniMaxM3VLVisionEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    # The text backbone's Compressed Sparse Attention gathers a variable, data-dependent
-    # set of compressed blocks per query (via the non-differentiable Lightning Indexer),
-    # which does not compose with flash/sdpa/flex kernels or a fixed-shape static cache /
-    # fullgraph compile. Custom eager attention only, same as DeepSeek-V4.
     _supports_flash_attn = False
-    _supports_sdpa = False
+    _supports_sdpa = True
     _supports_flex_attn = False
     _can_compile_fullgraph = False
     _supports_attention_backend = True
@@ -672,7 +709,6 @@ class MiniMaxM3VLPreTrainedModel(PreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, MiniMaxM3VLTopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
-        elif isinstance(module, MiniMaxM3VLSparseMoeBlock):
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, MiniMaxM3VLRMSNorm):
             init.zeros_(module.weight)
@@ -725,7 +761,6 @@ class MiniMaxM3VLTextModel(MiniMaxM3VLPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        # No sliding window opposed to mixtral
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
@@ -750,7 +785,7 @@ class MiniMaxM3VLTextModel(MiniMaxM3VLPreTrainedModel):
 
         hidden_states = self.norm(hidden_states)
 
-        return MoeModelOutputWithPast(  # only diff with Mistral is the output type, we need MoE
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -976,7 +1011,30 @@ class MiniMaxM3VLVisionEmbeddings(nn.Module):
 
 
 class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
-    """3D RoPE over (T, H, W); splits ``head_dim`` into three axes."""
+    r"""3D RoPE for the vision tower: rotates each patch by its (T, H, W) grid position.
+
+    ``head_dim`` is split into three contiguous axis bands. Each spatial/temporal
+    coordinate rotates only its own band, so a patch's embedding carries separate
+    temporal, row and column phase information::
+
+        head_dim
+        |<--------------------------------------------------->|
+        +----------------+----------------+-------------------+
+        |   T  (frames)  |   H  (rows)    |   W  (cols)       |
+        |   d_per_axis   |   d_per_axis   |  head_dim-2*d     |
+        +----------------+----------------+-------------------+
+
+    where ``d_per_axis = (head_dim // 3)`` rounded down to an even number. Within
+    each band, every frequency is duplicated side by side (``repeat_interleave(2)``)
+    to give the *interleaved* ``[f0, f0, f1, f1, ...]`` layout that pairs with the
+    interleaved ``rotate_half`` (``rotate_half_llm``)::
+
+        cos band = [cos(c*w0), cos(c*w0), cos(c*w1), cos(c*w1), ...]
+
+    ``c`` is the patch's coordinate on that axis. ``forward`` returns ``(cos, sin)``
+    of shape ``[num_patches, head_dim]`` already cast to ``dtype`` (frequencies are
+    accumulated in float32 for precision, then cast once at the end).
+    """
 
     def __init__(self, head_dim: int, theta: float = 10000.0):
         super().__init__()
@@ -985,19 +1043,19 @@ class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
         self.dims = (d_per_axis, d_per_axis, head_dim - 2 * d_per_axis)
         self.theta = theta
 
-    def _axis_inv_freq(self, dim: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+    def _axis_inv_freq(self, dim: int, device: torch.device) -> torch.Tensor:
         if dim == 0:
-            return torch.empty(0, device=device, dtype=dtype)
-        return 1.0 / (self.theta ** (torch.arange(0, dim, 2, device=device, dtype=dtype) / dim))
+            return torch.empty(0, device=device, dtype=torch.float32)
+        return 1.0 / (self.theta ** (torch.arange(0, dim, 2, device=device, dtype=torch.float32) / dim))
 
     def forward(
         self, grid_thw: torch.Tensor, device: torch.device, dtype: torch.dtype
     ) -> tuple[torch.Tensor, torch.Tensor]:
         coords_list = []
         for t, h, w in grid_thw.tolist():
-            ti = torch.arange(t, device=device, dtype=dtype).repeat_interleave(h * w)
-            hi = torch.arange(h, device=device, dtype=dtype).repeat_interleave(w).repeat(t)
-            wi = torch.arange(w, device=device, dtype=dtype).repeat(t * h)
+            ti = torch.arange(t, device=device, dtype=torch.float32).repeat_interleave(h * w)
+            hi = torch.arange(h, device=device, dtype=torch.float32).repeat_interleave(w).repeat(t)
+            wi = torch.arange(w, device=device, dtype=torch.float32).repeat(t * h)
             coords_list.append(torch.stack([ti, hi, wi], dim=-1))
         coords = torch.cat(coords_list, dim=0)
 
@@ -1006,24 +1064,20 @@ class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
         for axis, dim in enumerate(self.dims):
             if dim == 0:
                 continue
-            inv = self._axis_inv_freq(dim, device, dtype)
+            inv = self._axis_inv_freq(dim, device)
             freqs = coords[:, axis : axis + 1] * inv[None, :]
             parts_cos.append(freqs.cos().repeat_interleave(2, dim=-1))
             parts_sin.append(freqs.sin().repeat_interleave(2, dim=-1))
-        return torch.cat(parts_cos, dim=-1), torch.cat(parts_sin, dim=-1)
+        cos = torch.cat(parts_cos, dim=-1).to(dtype)
+        sin = torch.cat(parts_sin, dim=-1).to(dtype)
+        return cos, sin
 
 
-def _rotate_half(x: torch.Tensor) -> torch.Tensor:
-    x1, x2 = x[..., ::2], x[..., 1::2]
-    return torch.stack([-x2, x1], dim=-1).flatten(-2)
-
-
-def _apply_vision_rope(q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor):
-    cos = cos[None, :, None, :]
-    sin = sin[None, :, None, :]
-    q = q * cos + _rotate_half(q) * sin
-    k = k * cos + _rotate_half(k) * sin
-    return q, k
+def rotate_half_llm(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., 0::2]
+    x2 = x[..., 1::2]
+    return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
 class MiniMaxM3VLVisionAttention(nn.Module):
@@ -1062,7 +1116,10 @@ class MiniMaxM3VLVisionAttention(nn.Module):
         queries = self.q_proj(hidden_states).view(hidden_shape)
         keys = self.k_proj(hidden_states).view(hidden_shape)
         values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        queries, keys = _apply_vision_rope(queries, keys, *position_embeddings)
+        cos, sin = position_embeddings
+        cos, sin = cos[None, :, None, :], sin[None, :, None, :]
+        queries = queries * cos + rotate_half_llm(queries) * sin
+        keys = keys * cos + rotate_half_llm(keys) * sin
         queries, keys = queries.transpose(1, 2), keys.transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -1183,9 +1240,8 @@ class MiniMaxM3VLVisionTransformer(nn.Module):
         self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithPooling:
         embeds = self.embeddings(pixel_values)
-        cos, sin = self.rotary_emb(image_grid_thw, device=embeds.device, dtype=torch.float32)
+        cos, sin = self.rotary_emb(image_grid_thw, device=embeds.device, dtype=embeds.dtype)
         hidden_states = self.pre_layrnorm(embeds).unsqueeze(0)
-        cos, sin = cos.to(hidden_states.dtype), sin.to(hidden_states.dtype)
         encoder_outputs = self.encoder(inputs_embeds=hidden_states, position_embeddings=(cos, sin), **kwargs)
         last_hidden_state = encoder_outputs.last_hidden_state
         return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state, pooler_output=last_hidden_state[:, 0])
@@ -1218,11 +1274,6 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
             The temporal, height and width of feature shape of each image.
         """
         return self.vision_model(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
-
-
-# ---------------------------------------------------------------------------
-# Multimodal: patch merger + projector + composite model
-# ---------------------------------------------------------------------------
 
 
 class MiniMaxM3VLPatchMerger(nn.Module):
@@ -1609,6 +1660,37 @@ class MiniMaxM3VLForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Generation
             and to merge patch features.
         """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+
+    @staticmethod
+    def create_masks_for_generate(
+        config: PreTrainedConfig,
+        inputs_embeds: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None,
+        position_ids: torch.Tensor | None = None,
+        or_mask_function: Callable | None = None,
+        and_mask_function: Callable | None = None,
+        block_sequence_ids: torch.Tensor | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor | None]:
+        # ``generate`` calls this to pre-build the per-layer-type mask dict when running under a
+        # compilable (static) cache. M3's "minimax_m3_sparse" layer type is model-specific, so it is
+        # absent from the global ``LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING``; rather than mutate that
+        # global from here (a module-level write the modular converter would prune), we override the
+        # hook locally. All M3 layers share a plain causal base mask (the block-sparse selection is
+        # the indexer's separate additive bias), so every layer type maps to the same causal mask.
+        text_config = config.get_text_config()
+        causal_mask = create_causal_mask(
+            config=text_config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+            or_mask_function=or_mask_function,
+            and_mask_function=and_mask_function,
+            block_sequence_ids=block_sequence_ids,
+        )
+        return dict.fromkeys(set(text_config.layer_types), causal_mask)
 
 
 __all__ = [
