@@ -994,8 +994,6 @@ MODEL_FOR_RETRIEVAL_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
     [
-        # NOTE: DO NOT ADD new models here, this class will be deprecated
-        # in the future. Add in `MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES` instead
         ("aria", "AriaForConditionalGeneration"),
         ("aya_vision", "AyaVisionForConditionalGeneration"),
         ("blip", "BlipForConditionalGeneration"),
