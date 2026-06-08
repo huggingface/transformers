@@ -25,6 +25,7 @@ from lighteval.tasks.requests import Doc
 from tabulate import tabulate
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, ContinuousBatchingConfig, GenerationConfig
+from transformers.utils.logging import disable_progress_bar
 
 
 # Defaults
@@ -176,6 +177,7 @@ class BenchmarkResults:
         self.local_rank = int(os.environ.get("LOCAL_RANK", 0))
         # Pin this worker to its own GPU and open a process group to gather results later
         if self.dp_size > 1:
+            disable_progress_bar()
             torch.cuda.set_device(self.local_rank)
             if not torch.distributed.is_initialized():  # type: ignore
                 torch.distributed.init_process_group(backend="gloo")  # type: ignore
@@ -229,8 +231,9 @@ class BenchmarkResults:
             return None
 
         # Tag lines with the rank and disable the per-token bar so DP stdout stays readable.
-        tag = f"[rank {self.global_rank}] " if self.dp_size > 1 else ""
-        print(f"\n{tag}[{entry.label}] samples={entry.num_samples} avg_in={avg_input:.1f} max_new={max_new_tokens}")
+        tag = f"[rank {self.global_rank}]" if self.dp_size > 1 else ""
+        details = f"samples={entry.num_samples} avg_in={avg_input:.1f} max_new={max_new_tokens}"
+        print(f"\n{tag} [{entry.label}] Starting with {details}")
 
         model = self._get_model()
         self.cleanup()
@@ -249,18 +252,17 @@ class BenchmarkResults:
 
             entry.time_seconds = gen_time
             entry.num_tokens = num_tokens
-            entry.throughput_tok_per_sec = num_tokens / gen_time if gen_time > 0 else 0.0
+            tps = num_tokens / gen_time if gen_time > 0 else 0.0
+            entry.throughput_tok_per_sec = tps
             entry.peak_memory_gb = torch.cuda.max_memory_allocated() / (1024**3)
             if score_fn is not None:
                 entry.accuracy = score_fn(outputs)
-            print(
-                f"   {gen_time:.2f}s, {num_tokens} tokens, "
-                f"{entry.throughput_tok_per_sec:.2f} tok/s, peak {entry.peak_memory_gb:.2f} GB"
-                + (f", acc {entry.accuracy:.3f}" if entry.accuracy is not None else "")
-            )
+            details = f"time={gen_time:.2f}s tokens={num_tokens} tok/s={tps:.2f} GB={entry.peak_memory_gb:.2f}"
+            details += f", acc={entry.accuracy:.3f}" if entry.accuracy is not None else ""
+            print(f"\n{tag} [{entry.label}] Finished with {details}")
         except Exception as e:
             entry.error = str(e)
-            print(f"   ERROR: {e}")
+            print(f"{tag} [{entry.label}] ERROR: {e}")
 
         self.entries.append(entry)
         model = None
