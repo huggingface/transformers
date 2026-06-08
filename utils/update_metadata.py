@@ -235,7 +235,7 @@ def update_pipeline_and_auto_class_table(table: dict[str, tuple[str, str]]) -> d
 
             for name in names:
                 # For multimodal LLMs, keep the fine-grained pipeline tag but use a generic `AutoClass`
-                if name in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES:
+                if name in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values():
                     cls = "AutoModelForMultimodalLM"
 
                 # Add pipeline tag and auto model class for those models
