@@ -13,7 +13,6 @@ specific language governing permissions and limitations under the License.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
     </div>
 </div>
@@ -55,11 +54,11 @@ The snippet below shows how to load the VideoPrismVisionModel for feature extrac
 import torch
 from transformers import AutoModel, AutoVideoProcessor
 
-processor = AutoVideoProcessor.from_pretrained("MHRDYN7/videoprism-base-f16r288")
+processor = AutoVideoProcessor.from_pretrained("google/videoprism-base-f16r288")
 model = AutoModel.from_pretrained(
-    "MHRDYN7/videoprism-base-f16r288",
+    "google/videoprism-base-f16r288",
     device_map="auto",
-    attn_implementation="sdpa" # use "eager" to replicate the exact behavior as the original model
+    attn_implementation="eager" # use "flash_attention_2" for faster inference on supprted hardware
 )
 
 video_url = "https://huggingface.co/datasets/nateraw/kinetics-mini/resolve/main/val/archery/-Qz25rXdMjE_000014_000024.mp4"

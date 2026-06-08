@@ -266,7 +266,7 @@ class VideoPrismTubeletEmbeddings(VivitTubeletEmbeddings):
     VideoPrism Tubelet Embeddings.
 
     The authors of Videoprism use the Factorized Encoder architecture, i.e. "Model 2", introduced in the VIVIT paper (https://huggingface.co/papers/2103.15691).
-    This differs from Vivit by using a convolution of `tubelet_size=(1, 18, 18)`, which is essntially a 2d convolution in the spatial dimension.
+    This differs from Vivit by using a convolution of `tubelet_size=(1, 18, 18)`, which is essentially a 2d convolution in the spatial dimension.
     The temporal dimension is also merged with the `batch_size` in order to make sure the image embeddings have no temporal component, unlike Vivit.
     """
 
@@ -816,8 +816,8 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, VideoPrismClipModel
 
-        >>> model = VideoPrismClipModel.from_pretrained("MHRDYN7/videoprism-lvt-base-f16r288")
-        >>> tokenizer = AutoTokenizer.from_pretrained("MHRDYN7/videoprism-lvt-base-f16r288")
+        >>> model = VideoPrismClipModel.from_pretrained("google/videoprism-lvt-base-f16r288")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/videoprism-lvt-base-f16r288")
 
         >>> inputs = tokenizer(["a video of a cat.", "a video of a dog."], padding="max_length", return_tensors="pt")
         >>> with torch.no_grad():
@@ -839,8 +839,8 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         ```python
         >>> from transformers import VideoPrismProcessor, VideoPrismClipModel
 
-        >>> model = VideoPrismClipModel.from_pretrained("MHRDYN7/videoprism-lvt-base-f16r288")
-        >>> processor = VideoPrismProcessor.from_pretrained("MHRDYN7/videoprism-lvt-base-f16r288")
+        >>> model = VideoPrismClipModel.from_pretrained("google/videoprism-lvt-base-f16r288")
+        >>> processor = VideoPrismProcessor.from_pretrained("google/videoprism-lvt-base-f16r288")
 
         >>> inputs = processor(videos="path/to/video.mp4", return_tensors="pt")
         >>> with torch.no_grad():
@@ -878,8 +878,8 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
 
         video_embeddings = video_model_outputs.pooler_output
         text_embeddings = text_model_outputs.pooler_output
-        video_emb_dim = video_embeddings[0].shape[-1]
-        text_emb_dim = text_embeddings[0].shape[-1]
+        video_emb_dim = video_embeddings.shape[-1]
+        text_emb_dim = text_embeddings.shape[-1]
 
         video_embeds = video_embeddings.reshape(-1, video_emb_dim)
         text_embeds = text_embeddings.reshape(-1, text_emb_dim)
@@ -929,8 +929,6 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
         super().__init__(config)
         self.vision_model = VideoPrismVisionModel._from_config(config)
         self.head = VideoPrismMultiheadAttentionPoolingHead(config)
-        if hasattr(config, "head_dim"):
-            del config.head_dim
         self.head_layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         self.post_init()
