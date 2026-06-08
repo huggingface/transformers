@@ -24,7 +24,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicLayer, StaticLayer
 from ...configuration_utils import PreTrainedConfig
-from ...masking_utils import create_causal_mask
+from ...masking_utils import LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING, create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -59,6 +59,9 @@ from ..minimax_m2.modeling_minimax_m2 import (
 from ..mixtral.modeling_mixtral import MixtralDecoderLayer
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionPatchEmbed
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwargs
+
+
+LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING["minimax_m3_sparse"] = create_causal_mask
 
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
@@ -1172,37 +1175,6 @@ class MiniMaxM3VLForConditionalGeneration(LlavaForConditionalGeneration):
             model_inputs["pixel_values_videos"] = pixel_values_videos
 
         return model_inputs
-
-    @staticmethod
-    def create_masks_for_generate(
-        config: PreTrainedConfig,
-        inputs_embeds: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None,
-        position_ids: torch.Tensor | None = None,
-        or_mask_function: Callable | None = None,
-        and_mask_function: Callable | None = None,
-        block_sequence_ids: torch.Tensor | None = None,
-        **kwargs,
-    ) -> dict[str, torch.Tensor | None]:
-        # ``generate`` calls this to pre-build the per-layer-type mask dict when running under a
-        # compilable (static) cache. M3's "minimax_m3_sparse" layer type is model-specific, so it is
-        # absent from the global `LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING`; rather than mutate that
-        # global from here (a module-level write the modular converter would prune), we override the
-        # hook locally. All M3 layers share a plain causal base mask (the block-sparse selection is
-        # the indexer's separate additive bias), so every layer type maps to the same causal mask.
-        text_config = config.get_text_config()
-        causal_mask = create_causal_mask(
-            config=text_config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-            or_mask_function=or_mask_function,
-            and_mask_function=and_mask_function,
-            block_sequence_ids=block_sequence_ids,
-        )
-        return dict.fromkeys(set(text_config.layer_types), causal_mask)
 
 
 class MiniMaxM3VLProcessorKwargs(Qwen2VLProcessorKwargs):

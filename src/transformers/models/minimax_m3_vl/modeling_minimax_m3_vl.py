@@ -569,17 +569,11 @@ class MiniMaxM3VLIndexer(nn.Module):
             idx_k = past_key_values.layers[self.layer_idx].update_index(idx_k)
 
         k_len = idx_k.shape[2]
-        # Blocks group consecutive *slots* of the key axis, so causality here is slot-based -- exactly the
-        # frame ``create_causal_mask`` uses (query slots = the trailing ``q_len`` of the key axis, i.e.
-        # ``cache_position``). Batch-independent: per-row left/right padding is folded in via ``attention_mask``.
         q_positions = torch.arange(k_len - q_len, k_len, device=idx_q.device)
         num_key_blocks = -(-k_len // self.block_size)  # ceil-div
         pad = num_key_blocks * self.block_size - k_len
 
-        # Score every key per (head, query), then max-pool over the keys inside
-        # each block and over the index heads to get a single score per *key
-        # block*. Pad keys with ``-inf`` so the trailing partial block never wins
-        # a top-k slot on padding.
+        # we compute a single score per block of keys
         scores = torch.matmul(idx_q.float(), idx_k.expand(-1, self.num_heads, -1, -1).float().transpose(-1, -2))
         if pad:
             scores = F.pad(scores, (0, pad), value=float("-inf"))
@@ -591,9 +585,6 @@ class MiniMaxM3VLIndexer(nn.Module):
         future = torch.arange(num_key_blocks, device=idx_q.device).view(1, 1, -1) > q_block.view(1, -1, 1)
         block_scores = block_scores.masked_fill(future, float("-inf"))
 
-        # Same scatter-into-``-inf``-bias idea as deepseek_v4: start all-masked,
-        # punch ``0`` at the selected key blocks (top-k, then the always-on local
-        # window), then re-mask the future so a short history can't leak.
         bias = block_scores.new_full((batch, q_len, num_key_blocks), float("-inf"))
         bias.scatter_(-1, block_scores.topk(min(self.topk_blocks, num_key_blocks), dim=-1).indices, 0.0)
         if self.local_blocks > 0:
@@ -605,16 +596,12 @@ class MiniMaxM3VLIndexer(nn.Module):
         # Broadcast the per-block keep/drop verdict back onto every key (block granularity), add head axis.
         block_keep = (bias == 0.0).repeat_interleave(self.block_size, dim=-1)[..., :k_len].unsqueeze(1)
 
-        # This is the *final* attention mask for the layer, so it must carry token-level causality and any
-        # padding. `create_causal_mask` already folded both into ``attention_mask`` for eager (and for
-        # every backend whenever there is padding), so there we just drop the non-selected key blocks on
-        # top of it -- masking with ``finfo.min`` (never ``-inf``, which makes a fully-masked row NaN under
-        # sdpa while eager stays finite). Only when the mask was collapsed to ``is_causal`` with
-        # ``attention_mask=None`` (sdpa/flash, no padding) do we build causality here: a block is selected
-        # whole, but keys inside the diagonal block that sit ahead of the query must still be masked.
+        # even if a block is selected, we need to make sure that inside the mask is causal.
         min_dtype = torch.finfo(idx_q.dtype).min
         if attention_mask is not None:
             return attention_mask.masked_fill(~block_keep, min_dtype)
+
+        # if no attention mask is provided we build it
         k_positions = torch.arange(k_len, device=idx_q.device)
         token_future = k_positions.view(1, 1, 1, -1) > q_positions.view(1, 1, -1, 1)
         keep = block_keep & ~token_future
@@ -1167,12 +1154,6 @@ class MiniMaxM3VLVisionEncoderLayer(GradientCheckpointingLayer):
 
 
 class MiniMaxM3VLVisionTransformer(nn.Module):
-    """CLIP-style vision transformer with a Conv3d patch embed and 3D RoPE.
-
-    No post-encoder norm: the last encoder layer feeds the projector directly.
-    ``pre_layrnorm`` keeps the upstream CLIP spelling.
-    """
-
     def __init__(self, config: MiniMaxM3VLVisionConfig):
         super().__init__()
         self.embeddings = MiniMaxM3VLVisionEmbeddings(config)
@@ -1605,37 +1586,6 @@ class MiniMaxM3VLForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Generation
             and to merge patch features.
         """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @staticmethod
-    def create_masks_for_generate(
-        config: PreTrainedConfig,
-        inputs_embeds: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None,
-        position_ids: torch.Tensor | None = None,
-        or_mask_function: Callable | None = None,
-        and_mask_function: Callable | None = None,
-        block_sequence_ids: torch.Tensor | None = None,
-        **kwargs,
-    ) -> dict[str, torch.Tensor | None]:
-        # ``generate`` calls this to pre-build the per-layer-type mask dict when running under a
-        # compilable (static) cache. M3's "minimax_m3_sparse" layer type is model-specific, so it is
-        # absent from the global ``LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING``; rather than mutate that
-        # global from here (a module-level write the modular converter would prune), we override the
-        # hook locally. All M3 layers share a plain causal base mask (the block-sparse selection is
-        # the indexer's separate additive bias), so every layer type maps to the same causal mask.
-        text_config = config.get_text_config()
-        causal_mask = create_causal_mask(
-            config=text_config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-            or_mask_function=or_mask_function,
-            and_mask_function=and_mask_function,
-            block_sequence_ids=block_sequence_ids,
-        )
-        return dict.fromkeys(set(text_config.layer_types), causal_mask)
 
 
 __all__ = [
