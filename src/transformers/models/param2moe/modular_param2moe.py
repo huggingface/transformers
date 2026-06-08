@@ -270,9 +270,7 @@ class Param2MoERouter(nn.Module):
             group_mask = torch.zeros_like(group_scores)
             group_mask.scatter_(1, group_idx, 1)
             score_mask = (
-                group_mask.unsqueeze(-1)
-                .expand(num_tokens, self.n_group, experts_per_group)
-                .reshape(num_tokens, -1)
+                group_mask.unsqueeze(-1).expand(num_tokens, self.n_group, experts_per_group).reshape(num_tokens, -1)
             )
             scores_for_routing = scores_for_routing.masked_fill(~score_mask.bool(), 0.0)
 
@@ -312,9 +310,7 @@ class Param2MoESparseMoeBlock(nn.Module):
         self.gate = Param2MoERouter(config)
         # Shared expert uses moe_shared_expert_intermediate_size (4096),
         # not the routed expert size (moe_intermediate_size = 2048).
-        self.shared_experts = Param2MoEMLP(
-            config, intermediate_size=config.moe_shared_expert_intermediate_size
-        )
+        self.shared_experts = Param2MoEMLP(config, intermediate_size=config.moe_shared_expert_intermediate_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # Keep a reference for the shared expert residual addition
@@ -361,7 +357,9 @@ class Param2MoEDecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
 
         self.self_attn = Param2MoEAttention(config=config, layer_idx=layer_idx)
-        self.mlp = Param2MoESparseMoeBlock(config) if layer_idx >= config.first_k_dense_replace else Param2MoEMLP(config)
+        self.mlp = (
+            Param2MoESparseMoeBlock(config) if layer_idx >= config.first_k_dense_replace else Param2MoEMLP(config)
+        )
 
         self.input_layernorm = Param2MoERMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Param2MoERMSNorm(config.hidden_size, eps=config.rms_norm_eps)
