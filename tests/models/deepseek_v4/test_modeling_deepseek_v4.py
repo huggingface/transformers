@@ -11,12 +11,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import subprocess
+import tempfile
 import unittest
 
 from parameterized import parameterized
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import (
+    backend_device_count,
+    require_cuda_capability_at_least,
+    require_torch,
+    require_torch_accelerator,
+    require_torch_gpu,
+    require_torch_large_accelerator,
+    require_torch_n_accelerators,
+    slow,
+    torch_device,
+)
 
 
 if is_torch_available():
@@ -31,6 +43,14 @@ if is_torch_available():
     )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+
+
+def _v4_chat(prompt: str) -> str:
+    """V4-Flash chat-mode template (canonical form in ``encoding/encoding_dsv4.py``
+    on the model repo). ``</think>`` after ``<｜Assistant｜>`` skips the reasoning
+    block and goes straight to the answer. Pair with ``add_special_tokens=False``
+    when tokenizing — the literal BOS is already in the template."""
+    return f"<｜begin▁of▁sentence｜><｜User｜>{prompt}<｜Assistant｜></think>"
 
 
 class DeepseekV4ModelTester(CausalLMModelTester):
@@ -249,10 +269,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
     model_id = "deepseek-ai/DeepSeek-V4-Flash"
     prompt = "Pipeline parallelism in ai is "
 
-    def test_v4_flash_fp8_generation(self):
-        # ``dequantize=True`` so we can run on bf16-only kernels (needed for the
-        # ``grouped_mm`` path the routed experts hit). Eager attention so we
-        # exercise the same forward we tune the rest of the V4 modeling around.
+    def test_v4_flash_dequantized_generation(self):
         quantization_config = FineGrainedFP8Config(dequantize=True)
         config = AutoConfig.from_pretrained(self.model_id)
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
@@ -282,7 +299,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
         decoded = tokenizer.decode(output_ids[0], skip_special_tokens=False)
         self.assertEqual(decoded, expected)
 
-    def test_v4_flash_fp8_chat_seven_prompts(self):
+    def test_v4_flash_dequantized_chat_seven_prompts(self):
         """Chat-templated greedy generation across 7 prompts of varying length.
 
         Covers: short factual recall (1, 2), translation (3), code generation (4),
@@ -295,12 +312,6 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
         ``block_bias`` causal mask, the Hyper-Connection Sinkhorn projection or
         the residual mixing direction, or the fp32 promotion in the MoE path.
         """
-
-        def _chat(prompt: str) -> str:
-            # V4-Flash chat-mode template (canonical form in ``encoding/encoding_dsv4.py``
-            # on the model repo). ``</think>`` after ``<｜Assistant｜>`` skips the
-            # reasoning block and goes straight to the answer.
-            return f"<｜begin▁of▁sentence｜><｜User｜>{prompt}<｜Assistant｜></think>"
 
         long_prompt = (
             "Please read the following extended passage carefully and then provide a concise "
@@ -384,7 +395,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
 
         for i, (prompt, expected) in enumerate(cases, start=1):
             with self.subTest(prompt_index=i):
-                inputs = tokenizer(_chat(prompt), return_tensors="pt", add_special_tokens=False).to(model.device)
+                inputs = tokenizer(_v4_chat(prompt), return_tensors="pt", add_special_tokens=False).to(model.device)
                 with torch.no_grad():
                     output_ids = model.generate(
                         **inputs,
@@ -395,3 +406,223 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
                 new_tokens = output_ids[0, inputs.input_ids.size(1) :]
                 completion = tokenizer.decode(new_tokens, skip_special_tokens=True)
                 self.assertEqual(completion, expected)
+
+
+# `{loadtime_dispatch}` is forwarded to `from_pretrained(experts_implementation=…)`
+# (set once at load time). `{runtime_dispatches}` is the tuple of impls the worker
+# exercises sequentially via `set_experts_implementation` on that load. The remaining
+# placeholders (`model_id`, `prompt`, `expected`, `add_special_tokens`) let the same
+# worker drive multiple FP8 V4 variants — the expected string is asserted as a
+# substring of the decoded output so it works for both base-completion and instruct
+# models. Instruct prompts include the literal ``<｜begin▁of▁sentence｜>`` and pair with
+# ``add_special_tokens=False``; base-completion prompts skip it and pair with True.
+_DISTRIBUTED_WORKER_SCRIPT_TEMPLATE = """\
+import os
+import sys
+
+import torch
+import torch.distributed as dist
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.distributed import DistributedConfig
+from transformers.utils.quantization_config import FineGrainedFP8Config
+
+
+LOADTIME_DISPATCH = {loadtime_dispatch!r}
+RUNTIME_DISPATCHES = {runtime_dispatches!r}
+MODEL_ID = {model_id!r}
+PROMPT = {prompt!r}
+EXPECTED = {expected!r}
+ADD_SPECIAL_TOKENS = {add_special_tokens!r}
+
+
+def main() -> int:
+    # `from_pretrained(distributed_config=…)` auto-sets `tp_plan="auto"`, which calls
+    # `initialize_tensor_parallelism`, which calls `torch.cuda.set_device(local_rank)`
+    # and `init_process_group` from the RANK/LOCAL_RANK/WORLD_SIZE env vars torchrun sets.
+    rank = int(os.environ["RANK"])
+    model = AutoModelForCausalLM.from_pretrained(
+        MODEL_ID,
+        dtype="auto",
+        attn_implementation="eager",
+        experts_implementation=LOADTIME_DISPATCH,
+        distributed_config=DistributedConfig(enable_expert_parallel=True),
+        quantization_config=FineGrainedFP8Config(dequantize=False),
+    )
+    model.eval()
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+    inputs = tokenizer(PROMPT, return_tensors="pt", add_special_tokens=ADD_SPECIAL_TOKENS).to(model.device)
+
+    failed = []
+    for dispatch in RUNTIME_DISPATCHES:
+        model.set_experts_implementation(dispatch)
+        dist.barrier()
+        with torch.no_grad():
+            out = model.generate(
+                **inputs, max_new_tokens=64, do_sample=False, pad_token_id=tokenizer.eos_token_id
+            )
+        dist.barrier()
+        if rank == 0:
+            decoded = tokenizer.decode(out[0], skip_special_tokens=True)
+            print(f"[{{dispatch}}] decoded: {{decoded!r}}", flush=True)
+            # Normalize internal whitespace so trivial extra spaces (e.g. from kernels
+            # emitting an odd tokenization for a comma-separated list) don't fail an
+            # otherwise-correct generation.
+            if " ".join(EXPECTED.split()) not in " ".join(decoded.split()):
+                failed.append(f"[{{dispatch}}] {{decoded!r}} does not contain {{EXPECTED!r}}")
+
+    dist.barrier()
+    dist.destroy_process_group()
+    if rank == 0 and failed:
+        print("FAILED:\\n" + "\\n".join(failed), flush=True)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+"""
+
+
+def _run_distributed_worker(
+    loadtime_dispatch,
+    runtime_dispatches,
+    model_id: str,
+    prompt: str,
+    expected: str,
+    add_special_tokens: bool,
+) -> int:
+    script = _DISTRIBUTED_WORKER_SCRIPT_TEMPLATE.format(
+        loadtime_dispatch=loadtime_dispatch,
+        runtime_dispatches=tuple(runtime_dispatches),
+        model_id=model_id,
+        prompt=prompt,
+        expected=expected,
+        add_special_tokens=add_special_tokens,
+    )
+    # Reuse the test-suite-selected accelerator backend.
+    num_gpus = backend_device_count(torch_device)
+    if num_gpus < 1:
+        raise RuntimeError(f"No visible devices for torch_device={torch_device!r}")
+    # Redirect only stdout (`:1`) for ranks 1..N-1 to suppress duplicated generation chatter.
+    # Stderr is left attached so worker tracebacks (OOM, NCCL, kernel crash) surface in the
+    # subprocess stderr and the test failure message — `:3` would file-log both and turn any
+    # rank>0 crash into a bare non-zero return code with no diagnostic.
+    redirects = ",".join(f"{r}:1" for r in range(1, num_gpus))
+    with tempfile.NamedTemporaryFile("w", suffix="_distributed_worker.py") as f:
+        f.write(script)
+        f.flush()
+        result = subprocess.run(
+            ["torchrun", f"--nproc_per_node={num_gpus}", f"--redirects={redirects}", f.name],
+            check=False,
+        )
+    return result.returncode
+
+
+@require_torch
+@require_torch_gpu
+@require_torch_n_accelerators(n=8)
+@require_torch_large_accelerator(memory=64)
+@require_cuda_capability_at_least(10, 0)
+@slow
+class DeepseekV4FlashIntegrationTest(unittest.TestCase):
+    """Multi-device native FP4 generation on DSv4-Flash, via `torchrun` + EP=8.
+
+    - `test_v4_flash_fp4_generation`: one model load, loops eager → deepgemm.
+    - `test_v4_flash_fp4_generation_megamoe`: separate load with
+      `experts_implementation="deepgemm_megamoe"` (TP plan + weight layout are
+      committed at load and can't be switched at runtime).
+
+    No ``device_map="auto"`` test — FP4 weights require DeepGEMM (Triton has no FP4
+    path), and DeepGEMM doesn't tolerate single-process multi-GPU, so the only
+    working configuration for Flash is the distributed EP=8 setup above.
+    """
+
+    model_id = "deepseek-ai/DeepSeek-V4-Flash"
+    prompt = _v4_chat("List the first ten prime numbers:")
+    expected_primes = "2, 3, 5, 7, 11, 13, 17, 19, 23, 29"
+
+    def test_v4_flash_fp4_generation(self):
+        rc = _run_distributed_worker(
+            loadtime_dispatch=None,
+            runtime_dispatches=("eager", "deepgemm"),
+            model_id=self.model_id,
+            prompt=self.prompt,
+            expected=self.expected_primes,
+            add_special_tokens=False,
+        )
+        self.assertEqual(rc, 0, "torchrun worker failed; see stdout above")
+
+    def test_v4_flash_fp4_generation_megamoe(self):
+        rc = _run_distributed_worker(
+            loadtime_dispatch="deepgemm_megamoe",
+            runtime_dispatches=("deepgemm_megamoe",),
+            model_id=self.model_id,
+            prompt=self.prompt,
+            expected=self.expected_primes,
+            add_special_tokens=False,
+        )
+        self.assertEqual(rc, 0, "torchrun worker failed; see stdout above")
+
+
+@require_torch
+@require_torch_accelerator
+@require_torch_n_accelerators(n=8)
+@require_torch_large_accelerator(memory=60)
+@require_cuda_capability_at_least(9, 0)
+@slow
+class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
+    """Multi-device native FP8 generation on DSv4-Flash-Base.
+
+    Mirrors :class:`DeepseekV4FlashIntegrationTest` (FP4 mixed) but for the base
+    completion variant.
+
+      - `test_v4_flash_base_fp8_generation`: EP=8 via `torchrun`, exercises all
+        three experts impls (``eager``, ``grouped_mm``, ``deepgemm``) — distributed
+        gives every impl a working configuration since each rank drives one device.
+      - `test_v4_flash_base_fp8_generation_device_map_auto`: single-process multi-GPU via
+        ``device_map="auto"``. The ``deepgemm`` experts impl is excluded because
+        DeepGEMM kernels race in this regime (see :func:`_assert_single_device`).
+    """
+
+    model_id = "deepseek-ai/DeepSeek-V4-Flash-Base"
+    prompt = "Here is the list of the first ten prime numbers, separated by commas:"
+    expected_primes = "2, 3, 5, 7, 11, 13, 17, 19, 23, 29"
+
+    def test_v4_flash_base_fp8_generation(self):
+        runtime_dispatches = (
+            ("eager", "grouped_mm", "deepgemm") if torch.cuda.is_available() else ("eager", "grouped_mm")
+        )
+        rc = _run_distributed_worker(
+            loadtime_dispatch=None,
+            runtime_dispatches=runtime_dispatches,
+            model_id=self.model_id,
+            prompt=self.prompt,
+            expected=self.expected_primes,
+            add_special_tokens=True,
+        )
+        self.assertEqual(rc, 0, "torchrun worker failed; see stdout above")
+
+    def test_v4_flash_base_fp8_generation_device_map_auto(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id,
+            dtype="auto",
+            device_map="auto",
+            attn_implementation="eager",
+            quantization_config=FineGrainedFP8Config(dequantize=False),
+        )
+        inputs = tokenizer(self.prompt, return_tensors="pt").to(model.device)
+        prompt_len = inputs.input_ids.size(1)
+        # `deepgemm` experts impl is excluded — DeepGEMM kernels race in single-process
+        # multi-GPU runs (which `device_map="auto"` always is for a model this size).
+        for impl in ("eager", "grouped_mm"):
+            model.set_experts_implementation(impl)
+            with torch.no_grad():
+                out = model.generate(**inputs, max_new_tokens=64, do_sample=False, pad_token_id=tokenizer.eos_token_id)
+            completion = tokenizer.decode(out[0, prompt_len:], skip_special_tokens=True)
+            self.assertIn(
+                " ".join(self.expected_primes.split()),
+                " ".join(completion.split()),
+                f"[{impl}] {completion!r}",
+            )

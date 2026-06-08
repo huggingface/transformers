@@ -103,6 +103,13 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
             config.mlp_layer_types, ["dense", "dense", "dense", "sparse", "sparse", "sparse", "sparse", "sparse"]
         )
 
+    def test_indexer_types_respect_skip_topk_offset(self):
+        config = GlmMoeDsaConfig(num_hidden_layers=8, index_topk_freq=4, index_skip_topk_offset=3)
+        self.assertEqual(
+            config.indexer_types,
+            ["full", "full", "full", "shared", "shared", "shared", "full", "shared"],
+        )
+
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("Won't fix: Blip2 + T5 backbone needs custom input preparation for this test")
     def test_eager_matches_sdpa_inference(self, *args):
@@ -154,6 +161,15 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip("DSA indexer mask shape mismatch with static cache")
     def test_generate_with_static_cache(self):
+        pass
+
+    @unittest.skip("GLM-MoE-DSA uses qk_rope_head_dim; generic rope scaling tests assume config.head_dim")
+    def test_model_rope_scaling_frequencies(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("GLM-MoE-DSA uses qk_rope_head_dim; generic rope scaling tests assume config.head_dim")
+    def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
 
