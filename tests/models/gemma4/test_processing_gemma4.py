@@ -202,6 +202,31 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
         self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
 
+    def test_get_num_audio_tokens(self):
+        """Tests the audio path of the helper used internally in vLLM."""
+
+        processor = self.get_processor()
+        if not hasattr(processor, "_compute_audio_num_tokens") or processor.audio_token is None:
+            self.skipTest("Processor doesn't support audio token counting")
+
+        # The golden counts below assume the default 16 kHz feature extractor.
+        self.assertEqual(processor.feature_extractor.sampling_rate, 16000)
+
+        # {num_samples (at 16 kHz): expected_audio_tokens}. Some samples diverge from the naive
+        # ceil(duration_ms / 40ms) shortcut for each length -- it disagrees with the real
+        # arithmetic for most entries except for the 3s/40s ones.
+        expected_num_tokens = {
+            38560: 60,  # 2.41s
+            48000: 75,  # 3.00s
+            48800: 76,  # 3.05s
+            99360: 155,  # 6.21s
+            640000: 750,  # 40s
+        }
+
+        audio_lengths = list(expected_num_tokens)
+        num_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)["num_audio_tokens"]
+        self.assertListEqual(num_from_helper, list(expected_num_tokens.values()))
+
     @unittest.skip("This test seems to be loading a different video, check for all models and fix")
     def test_apply_chat_template_video_frame_sampling(self):
         pass
