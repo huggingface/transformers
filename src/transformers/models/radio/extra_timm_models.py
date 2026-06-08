@@ -25,8 +25,23 @@ from timm.models.vision_transformer import (
 from torch import nn
 from torch.nn import functional as F
 
-# Import these to also register them
-from . import dinov2_arch
+
+class LayerScale(nn.Module):
+    """LayerScale whose weight is named `grandma` (not the usual `gamma`) so the HF Hub
+    serialization does not special-case the parameter."""
+
+    def __init__(
+        self,
+        dim: int,
+        init_values: float | torch.Tensor = 1e-5,
+        inplace: bool = False,
+    ) -> None:
+        super().__init__()
+        self.inplace = inplace
+        self.grandma = nn.Parameter(init_values * torch.ones(dim))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x.mul_(self.grandma) if self.inplace else x * self.grandma
 
 
 @register_model
@@ -184,7 +199,7 @@ def _create_vision_transformer(*args, **kwargs):
 
 def _patch_layer_scale(model: VisionTransformer):
     def replace_ls(old_ls: TIMMLayerScale):
-        new_ls = dinov2_arch.LayerScale(old_ls.gamma.shape[0], inplace=old_ls.inplace)
+        new_ls = LayerScale(old_ls.gamma.shape[0], inplace=old_ls.inplace)
         new_ls.load_state_dict(old_ls.state_dict())
         return new_ls
 

@@ -11,10 +11,8 @@ try:
     from timm.models import register_model
 except ImportError:
     from timm.models.registry import register_model
-from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 from .forward_intermediates import forward_intermediates
-from .input_conditioner import InputConditioner
 
 
 _has_torch_sdpa = hasattr(F, "scaled_dot_product_attention")
@@ -189,32 +187,3 @@ class DinoWrapper(nn.Module):
             x=x,
             **kwargs,
         )
-
-
-def _dino_student(arch: str, **kwargs):
-    from . import dinov2_arch
-
-    factory = getattr(dinov2_arch, arch)
-    model = factory()
-
-    model = DinoWrapper(model)
-
-    conditioner = InputConditioner(
-        input_scale=1.0,
-        norm_mean=IMAGENET_DEFAULT_MEAN,
-        norm_std=IMAGENET_DEFAULT_STD,
-    )
-
-    model.input_conditioner = conditioner
-
-    return model
-
-
-@register_model
-def dino_v2_l_student(**kwargs):
-    return _dino_student("dinov2_vitl14_reg", **kwargs)
-
-
-@register_model
-def dino_v2_g_student(**kwargs):
-    return _dino_student("dinov2_vitg14_reg", **kwargs)

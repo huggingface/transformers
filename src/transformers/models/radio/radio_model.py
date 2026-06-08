@@ -12,7 +12,6 @@ import torch
 from timm.models import VisionTransformer, create_model
 from torch import nn
 
-from . import eradio_model
 from .adaptor_base import AdaptorBase, AdaptorInput, RadioOutput
 from .enable_cpe_support import enable_cpe
 from .feature_normalizer import FeatureNormalizer, IntermediateFeatureNormalizer
@@ -205,11 +204,6 @@ class RADIOModel(nn.Module):
                 all_summary = y[:, 0]
                 bb_summary = all_summary
                 all_feat = y[:, 1:]
-        elif isinstance(self.model, eradio_model.ERADIO):
-            _, f = y
-            all_feat = f.flatten(2).transpose(1, 2)
-            all_summary = all_feat.mean(dim=1)
-            bb_summary = all_summary
         elif isinstance(y, (list, tuple)):
             all_summary, all_feat = y
             bb_summary = all_summary

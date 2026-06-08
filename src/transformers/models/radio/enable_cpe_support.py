@@ -14,7 +14,6 @@ import torch
 from timm.models import VisionTransformer, checkpoint_seq
 from torch import nn
 
-from .dual_hybrid_vit import HybridModel
 from .extra_models import DinoWrapper
 from .forward_intermediates import forward_intermediates
 from .vit_patch_generator import ViTPatchGenerator
@@ -179,8 +178,6 @@ def enable_cpe(
         _enable_cpe_for_timm_vit(model, *args, **kwargs)
     elif isinstance(model, DinoWrapper):
         _enable_cpe_for_dv2_reg_vit(model, *args, **kwargs)
-    elif isinstance(model, HybridModel):
-        _enable_cpe_for_timm_vit(model.vit, *args, **kwargs)
     else:
         raise ValueError(f"CPE not supported for this model type: {type(model)}")
 
