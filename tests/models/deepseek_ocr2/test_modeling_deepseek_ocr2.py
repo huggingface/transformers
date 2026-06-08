@@ -177,6 +177,7 @@ class DeepseekOcr2IntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 ("cuda", None): "R&D QUALITY IMPROVEMENT SUGGESTION/SOLUTION FORM\n\nName/",
+                ("xpu", 5): "R&D QUALITY IMPROVEMENT SUGGESTION/SOLUTION FORM\n\nName/",
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
@@ -201,6 +202,7 @@ class DeepseekOcr2IntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 ("cuda", None): "<|ref|>title<|/ref|><|det|>[[330, 198, 559, 230]]<|/det|>\n# R",
+                ("xpu", 5): "<|ref|>title<|/ref|><|det|>[[330, 198, 558, 230]]<|/det|>\n# R",
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
@@ -233,6 +235,10 @@ class DeepseekOcr2IntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 ("cuda", None): [
+                    "R&D QUALITY IMPROVEMENT SUGGESTION/SOLUTION FORM\n\nName/",
+                    "# Reducing the number of images\n\nIt is also believed that the performance of a website is a critical",
+                ],
+                ("xpu", 5): [
                     "R&D QUALITY IMPROVEMENT SUGGESTION/SOLUTION FORM\n\nName/",
                     "# Reducing the number of images\n\nIt is also believed that the performance of a website is a critical",
                 ],
