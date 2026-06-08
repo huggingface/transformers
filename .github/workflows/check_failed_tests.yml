@@ -170,7 +170,7 @@ jobs:
       - name: Extract the base commit on `main` (of the merge commit created by Github) if it is a PR
         id: pr_info
         if: ${{ inputs.pr_number != '' }}
-        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           PR_NUMBER: ${{ inputs.pr_number }}
           COMMIT_SHA: ${{ inputs.commit_sha }}
@@ -253,7 +253,7 @@ jobs:
           cat "new_failures_with_bad_commit_${job}_${run_idx}.json"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}
           path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
@@ -367,7 +367,7 @@ jobs:
           cat new_failures_with_bad_commit.json
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: new_failures_with_bad_commit_${{ inputs.job }}
           path: |
@@ -385,7 +385,7 @@ jobs:
 
       - name: Send processed report
         if: ${{ !endsWith(env.REPORT_TEXT, '{}') }}
-        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
+        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c
         with:
           # Slack channel id, channel name, or user id to post message.
           # See also: https://api.slack.com/methods/chat.postMessage#channels
