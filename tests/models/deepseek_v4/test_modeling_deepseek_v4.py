@@ -118,6 +118,12 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_tp_generation_quantized(self):
         pass
 
+    @unittest.skip(
+        "V4's compressor stores rolling-window state on custom cache layers, which is not compatible with QuantizedCache."
+    )
+    def test_generate_with_quant_cache(self):
+        pass
+
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
