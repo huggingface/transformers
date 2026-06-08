@@ -514,6 +514,8 @@ def get_gguf_hf_weights_map(
         model_type = "qwen3moe"
     elif model_type == "gemma3_text":
         model_type = "gemma3"
+    elif model_type == "gemma4_text":
+        model_type = "gemma4"
     elif model_type == "umt5":
         model_type = "t5"
     elif model_type == "minimax_m2":
@@ -694,6 +696,14 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # Gemma3 GGUF checkpoint only contains weights of text backbone
     if parsed_parameters["config"]["model_type"] == "gemma3":
         parsed_parameters["config"]["model_type"] = "gemma3_text"
+
+    # Gemma4 GGUF checkpoint only contains weights of text backbone
+    if parsed_parameters["config"]["model_type"] == "gemma4":
+        parsed_parameters["config"]["model_type"] = "gemma4_text"
+        # GGUF stores a single eos_token_id but Gemma4 needs all three
+        # EOG tokens to match generation_config.json: <eos>(1),
+        # <|tool_response>(50), <turn|>(106).
+        parsed_parameters["config"]["eos_token_id"] = [1, 106, 50]
 
     # MiniMax-M2: convert expert_gating_func integer to scoring_func string
     if parsed_parameters["config"].get("model_type") == "minimax_m2":
