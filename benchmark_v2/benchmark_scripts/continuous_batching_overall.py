@@ -171,12 +171,14 @@ class BenchmarkResults:
         # For now, TP and DP are mutually exclusive
         if self.tp_size > 1 and self.dp_size > 1:
             raise ValueError("TP and DP cannot be used together")
-        # torchrun sets these per worker; the work is independent so no process group is needed.
+        # torchrun sets these per worker
         self.global_rank = int(os.environ.get("RANK", 0))
         self.local_rank = int(os.environ.get("LOCAL_RANK", 0))
-        # Pin this worker to its own GPU so all torch.cuda calls (memory stats, cleanup) target it.
+        # Pin this worker to its own GPU and open a process group to gather results later
         if self.dp_size > 1:
             torch.cuda.set_device(self.local_rank)
+            if not torch.distributed.is_initialized():  # type: ignore
+                torch.distributed.init_process_group(backend="gloo")  # type: ignore
         # Entries accumulator
         self.entries: list[BenchmarkEntry] = []
 
@@ -262,6 +264,12 @@ class BenchmarkResults:
         self.entries.append(entry)
         self.cleanup()
 
+    def gather_entries(self) -> None:
+        """In DP, merge each rank's owned entries onto all ranks (entry i is owned by rank i % dp_size)."""
+        gathered: list[Any] = [None] * self.dp_size
+        torch.distributed.all_gather_object(gathered, self.entries)  # type: ignore
+        self.entries = [gathered[i % self.dp_size][i] for i in range(len(self.entries))]
+
     # Persistence
     def save(self, name: str) -> Path:
         """Save all entries to a timestamped JSON file keyed by name."""
@@ -294,8 +302,6 @@ class BenchmarkResults:
 
     # Display
     def print_summary(self) -> None:
-        if self.dp_size > 1:
-            print("-" * 80, f"RANK {self.global_rank}", "-" * 80, sep="\n")
         rows = [
             {
                 "label": e.label,
@@ -458,12 +464,17 @@ if __name__ == "__main__":
             label=f"rollouts_{length}",
         )
 
-    # Post processing and display. Only on rank 0 in TP runs to avoid duplicate output / file writes.
-    is_rank_zero = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
-    if is_rank_zero:
+    # In DP, gather every rank's entries
+    if args.dp_size > 1:
+        results.gather_entries()
+
+    # Post processing and display, only for rank 0
+    write_results = results.global_rank == 0 if (args.dp_size > 1 or args.tp_size > 1) else True
+
+    if write_results:
         results.print_summary()
-        if cli_args.compare_to:
-            baseline = BenchmarkResults.load_most_recent(cli_args.compare_to)
+        if args.compare_to:
+            baseline = BenchmarkResults.load_most_recent(args.compare_to)
             results.compare_to(baseline=baseline)
-        if cli_args.name:
-            results.save(cli_args.name)
+        if args.name:
+            results.save(args.name)
