@@ -129,6 +129,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("deepseek_ocr2_vision", "DeepseekOcr2VisionConfig"),
         ("deepseek_v2", "DeepseekV2Config"),
         ("deepseek_v3", "DeepseekV3Config"),
+        ("deepseek_v32", "DeepseekV32Config"),
         ("deepseek_v4", "DeepseekV4Config"),
         ("deepseek_vl", "DeepseekVLConfig"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridConfig"),

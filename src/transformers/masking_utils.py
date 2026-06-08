@@ -1446,6 +1446,9 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "chunked_attention": create_chunked_causal_mask,
     "compressed_sparse_attention": create_sliding_window_causal_mask,
     "heavily_compressed_attention": create_sliding_window_causal_mask,
+    # DSA (DeepSeek Sparse Attention) layers are causal at the mask level; the top-k token
+    # sparsification is applied separately inside the indexer, not via the layer mask.
+    "dynamic_sparse_attention": create_causal_mask,
 }
 
 
