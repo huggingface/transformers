@@ -33,7 +33,12 @@ from dataclasses import dataclass
 import torch
 
 from ..utils import logging
-from ..utils.import_utils import get_cuda_runtime_version, is_kernels_available, resolve_internal_import
+from ..utils.import_utils import (
+    get_cuda_runtime_version,
+    is_kernels_available,
+    is_torchdynamo_compiling,
+    resolve_internal_import,
+)
 from .hub_kernels import lazy_load_kernel
 from .tensor_parallel import to_local
 
@@ -72,12 +77,11 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
     `requires_sm100` raises a Blackwell-specific error for callers (FP4 / Mega MoE)
     that won't work on Hopper, instead of the generic SM90+ message.
     """
-    # Env-/arch-/version validation skipped during dynamo tracing — `is_kernels_available()`
-    # calls `find_spec`, `get_cuda_runtime_version()` calls `ctypes.CDLL`, both untraceable.
-    # The friendly errors fire the first time the kernel loads eagerly; the function is
-    # `@functools.cache`d so subsequent calls (incl. trace-time re-runs by dynamo) skip
-    # straight to the kernel-handle materialization below.
-    if not torch.compiler.is_compiling():
+    # Skip env/arch/version checks under dynamo — `is_kernels_available()` calls
+    # `importlib.find_spec` and `get_cuda_runtime_version()` calls `ctypes.CDLL`, both
+    # non-traceable. Eager invocations still get the friendly errors; the function is
+    # `@functools.cache`d so trace-time re-runs skip straight to the kernel handle.
+    if not is_torchdynamo_compiling():
         if not is_kernels_available():
             raise ImportError(
                 "DeepGEMM kernel requires the `kernels` package. Install it with `pip install -U kernels`."
@@ -173,7 +177,7 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
     # happens under dynamo we fall back to 128. `@functools.cache` on this loader
     # means the eager-resolved value is reused on later traced calls.
     m_alignment = 128
-    if not torch.compiler.is_compiling():
+    if not is_torchdynamo_compiling():
         m_alignment = get_mk_alignment()
 
     return DeepGEMM(
@@ -189,6 +193,18 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
         fp8_fp4_mega_moe=fp8_fp4_mega_moe,
         m_alignment=m_alignment,
     )
+
+
+@torch._dynamo.allow_in_graph
+def _populate_deepgemm_kernel(requires_sm100: bool = False) -> None:
+    _ = _load_deepgemm_kernel(requires_sm100=requires_sm100)
+    return None
+
+
+def load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
+    if is_torchdynamo_compiling():
+        _populate_deepgemm_kernel(requires_sm100=requires_sm100)
+    return _load_deepgemm_kernel(requires_sm100=requires_sm100)
 
 
 # ── Scale-factor helpers ───────────────────────────────────────────────────────
@@ -477,7 +493,7 @@ def deepgemm_fp8_fp4_linear(
     if input.dtype not in (torch.bfloat16, torch.float16):
         raise ValueError(f"DeepGEMM linear requires FP16 or BF16 activations, got {input.dtype}")
 
-    deepgemm = _load_deepgemm_kernel(requires_sm100=weight.dtype == torch.int8)
+    deepgemm = load_deepgemm_kernel(requires_sm100=weight.dtype == torch.int8)
     cast_kwargs = _select_fp8_cast_kwargs(weight, weight_scale_inv, block_size, _is_sm100(input.device))
 
     input_2d = input.view(-1, input.shape[-1])
@@ -508,7 +524,7 @@ def deepgemm_bf16_experts_forward(
     if hidden_states.dtype != torch.bfloat16:
         raise ValueError(f"DeepGEMM experts path requires bfloat16 hidden states, got {hidden_states.dtype}")
 
-    deepgemm = _load_deepgemm_kernel()
+    deepgemm = load_deepgemm_kernel()
     # Non-transposed weights (E, N, K) → NT kernel; transposed (E, K, N) → NN kernel.
     grouped_bf16_matmul = deepgemm.grouped_bf16_matmul_nn if self.is_transposed else deepgemm.grouped_bf16_matmul_nt
 
@@ -577,7 +593,7 @@ def deepgemm_fp8_fp4_experts_forward(
     if hidden_states.dtype != torch.bfloat16:
         raise ValueError(f"DeepGEMM experts path requires bfloat16 hidden states, got {hidden_states.dtype}")
 
-    deepgemm = _load_deepgemm_kernel(requires_sm100=self.down_proj.dtype == torch.int8)
+    deepgemm = load_deepgemm_kernel(requires_sm100=self.down_proj.dtype == torch.int8)
     grouped_fp8_fp4_matmul = (
         deepgemm.grouped_fp8_fp4_matmul_nn if self.is_transposed else deepgemm.grouped_fp8_fp4_matmul_nt
     )
@@ -664,7 +680,7 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     Unwraps any ``DTensor`` wrappers FSDP2/EP may have placed around the loader-
     side Parameters — the kernel takes raw pointers.
     """
-    deepgemm = _load_deepgemm_kernel(requires_sm100=True)
+    deepgemm = load_deepgemm_kernel(requires_sm100=True)
     gate_up_sf_raw = to_local(module.gate_up_proj_scale_inv.data)
     down_sf_raw = to_local(module.down_proj_scale_inv.data)
     # Force int8 view: the kernel's interleave reshape/empty_like/copy_ is bit-level.
@@ -742,7 +758,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
             "(MoeTensorParalellMegaMoeExperts) supplies it automatically; pass it explicitly otherwise."
         )
 
-    deepgemm = _load_deepgemm_kernel(requires_sm100=True)
+    deepgemm = load_deepgemm_kernel(requires_sm100=True)
 
     # First-forward one-shot: pack UE8M0 SFs and interleave the L1/L2 weights for UTCCP.
     # Kept lazy here (instead of in a quantizer load-time hook) so the megamoe-specific
