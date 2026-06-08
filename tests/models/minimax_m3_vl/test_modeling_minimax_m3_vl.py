@@ -211,16 +211,6 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     @unittest.skip(
         reason=(
-            "Composite model whose text backbone is eager-only (Compressed Sparse Attention does "
-            "not compose with sdpa/flash/flex). The common test tries to switch the whole model to "
-            "sdpa, which the text backbone correctly rejects."
-        )
-    )
-    def test_can_set_attention_dynamically_composite_model(self):
-        pass
-
-    @unittest.skip(
-        reason=(
             "The expert-packing converters fuse separate ``w1``/``w3`` checkpoints into a single "
             "``gate_up_proj`` (MergeModulelist + Concatenate); there is no information-preserving "
             "single source pattern for the base reverse test to check against. The real round-trip "

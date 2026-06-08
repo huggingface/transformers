@@ -221,6 +221,27 @@ class SqrtSoftplusActivation(nn.Module):
         return nn.functional.softplus(input).sqrt()
 
 
+class SwiGLUOAIActivation(nn.Module):
+    """Clamped SwiGLU-OAI gate (OpenAI GPT-OSS / MiniMax M3 style).
+
+    Operates on a fused ``gate_up`` tensor: the gate half is sigmoid-gated with a
+    learnable-style ``alpha`` gain and both halves are clamped to ``limit`` before
+    the ``(up + 1) * glu`` combination.
+    """
+
+    def __init__(self, alpha: float = 1.702, limit: float = 7.0):
+        super().__init__()
+        self.alpha = alpha
+        self.limit = limit
+
+    def forward(self, gate_up: Tensor) -> Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        gate = gate.clamp(max=self.limit)
+        up = up.clamp(min=-self.limit, max=self.limit)
+        glu = gate * torch.sigmoid(gate * self.alpha)
+        return (up + 1.0) * glu
+
+
 class ClassInstantier(OrderedDict):
     def __getitem__(self, key):
         content = super().__getitem__(key)
@@ -342,6 +363,8 @@ ACT2CLS = {
     "sigmoid": nn.Sigmoid,
     "silu": SiLUActivation,
     "sqrtsoftplus": SqrtSoftplusActivation,
+    "swiglu_oai": SwiGLUOAIActivation,
+    "swigluoai": SwiGLUOAIActivation,
     "swish": nn.SiLU,
     "tanh": nn.Tanh,
     "prelu": nn.PReLU,

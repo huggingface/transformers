@@ -453,7 +453,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
-            WeightRenaming(source_patterns=r"^patch_merge_mlp\.", target_patterns="model.patch_merge."),
+            WeightRenaming(source_patterns=r"^patch_merge_mlp", target_patterns="model.patch_merge"),
             # The vision patch embed is the inherited ``Qwen2_5_VisionPatchEmbed``, whose conv
             # is named ``proj``; the upstream checkpoint stores it as ``patch_embedding``.
             WeightRenaming(
@@ -464,6 +464,13 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 source_patterns=r"\.block_sparse_moe\.",
                 target_patterns=".mlp.",
+            ),
+            # The router's correction bias lives on the gate (``MiniMaxM3VLTopKRouter``),
+            # not on the MoE block; the checkpoint stores it at the block level, so move
+            # it onto the gate after the ``block_sparse_moe`` → ``mlp`` rename above.
+            WeightRenaming(
+                source_patterns=r"\.mlp\.e_score_correction_bias",
+                target_patterns=".mlp.gate.e_score_correction_bias",
             ),
             WeightRenaming(
                 source_patterns=r"\.self_attn\.index_q_proj\.",
