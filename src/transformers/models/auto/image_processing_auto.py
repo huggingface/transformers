@@ -74,6 +74,7 @@ else:
             ("colpali", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
             ("colqwen2", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("convnextv2", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
+            ("cosmos3_omni", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("cvt", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("data2vec-vision", {"torchvision": "BeitImageProcessor", "pil": "BeitImageProcessorPil"}),
             ("deimv2", {"torchvision": "RTDetrImageProcessor", "pil": "RTDetrImageProcessorPil"}),
