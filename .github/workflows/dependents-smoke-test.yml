@@ -1,0 +1,57 @@
+name: Dependents Smoke Test
+
+on:
+  schedule:
+    # Run every night at 3 AM UTC
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+env:
+  UV_SYSTEM_PYTHON: "1"
+  VLLM_USE_PRECOMPILED: "1"
+  VLLM_PRECOMPILED_WHEEL_VARIANT: cpu
+  VLLM_TARGET_DEVICE: cpu
+
+permissions:
+  contents: read
+
+jobs:
+  vllm:
+    name: Test vLLM integration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Transformers
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: huggingface/transformers
+          persist-credentials: false
+          path: transformers
+
+      - name: Checkout vLLM
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: vllm-project/vllm
+          persist-credentials: false
+          path: vllm
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+      - name: Install dependencies
+        run: uv pip install -e vllm -e transformers
+
+      - name: Run tests
+        run: |
+          pytest -v -s vllm/tests/models/test_initialization.py
+          pytest -v -s vllm/tests/models/test_transformers.py
+          pytest -v -s vllm/tests/models/multimodal/processing/
+          pytest -v -s vllm/tests/models/multimodal/test_mapping.py
+          python3 vllm/examples/basic/offline_inference/chat.py
+          python3 vllm/examples/generate/multimodal/vision_language_offline.py --model-type qwen2_5_vl
+          # Whisper needs spawn method to avoid deadlock
+          VLLM_WORKER_MULTIPROC_METHOD=spawn python3 vllm/examples/generate/multimodal/audio_language_offline.py --model-type whisper
