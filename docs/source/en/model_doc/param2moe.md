@@ -111,3 +111,4 @@ print("\n========== FINAL ANSWER ==========\n", parsed["final_answer"])
 ## Param2MoEForCausalLM
 
 [[autodoc]] Param2MoEForCausalLM
+    - forward
