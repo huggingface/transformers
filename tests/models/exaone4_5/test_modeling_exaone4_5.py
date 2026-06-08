@@ -145,9 +145,9 @@ class Exaone4_5_ModelTest(VLMModelTest, unittest.TestCase):
     def test_model_parallelism(self):
         pass
 
-    @unittest.skip("Beam search with model parallel auto device_map is not stable for EXAONE 4.5 VLM yet.")
-    def test_model_parallel_beam_search(self):
-        pass
+    # @unittest.skip("Beam search with model parallel auto device_map is not stable for EXAONE 4.5 VLM yet.")
+    # def test_model_parallel_beam_search(self):
+    #     pass
 
 
 @require_torch
