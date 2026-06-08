@@ -30,6 +30,7 @@ from .image_transforms import (
     get_size_with_aspect_ratio,
     group_images_by_shape,
     reorder_images,
+    validate_image_output_size,
 )
 from .image_transforms import (
     normalize as np_normalize,
@@ -263,6 +264,7 @@ class TorchvisionBackend(BaseImageProcessor):
                 f" {size}."
             )
 
+        validate_image_output_size(*new_size)
         # Workaround for torch.compile issue with uint8 on AMD GPUs
         if is_torchdynamo_compiling() and is_rocm_platform():
             return self._compile_friendly_resize(image, new_size, interpolation, antialias)

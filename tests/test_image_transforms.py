@@ -310,6 +310,20 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertEqual(normalized_image.dtype, np.float32)
         self.assertTrue(np.allclose(normalized_image, expected_image, atol=1e-6))
 
+    def test_resize_and_crop_reject_oversized_allocation(self):
+        # Regression: resize/center_crop must reject an oversized target (an untrusted config can set
+        # `size`/`crop_size` arbitrarily) instead of allocating it and OOM-ing at preprocess time.
+        from transformers.image_transforms import MAX_IMAGE_OUTPUT_PIXELS
+
+        big = int(MAX_IMAGE_OUTPUT_PIXELS**0.5) + 1  # big * big > MAX_IMAGE_OUTPUT_PIXELS
+        image = np.random.randint(0, 256, (3, 32, 32))
+        with self.assertRaises(ValueError):
+            resize(image, (big, big))
+        with self.assertRaises(ValueError):
+            center_crop(image, (big, big))
+        # a reasonable size still works
+        self.assertEqual(resize(image, (64, 64)).shape, (3, 64, 64))
+
     def test_center_crop(self):
         image = np.random.randint(0, 256, (3, 224, 224))
 

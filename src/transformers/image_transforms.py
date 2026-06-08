@@ -310,6 +310,21 @@ def get_resize_output_image_size(
     return (new_long, new_short) if width <= height else (new_short, new_long)
 
 
+# A resized or center-cropped image larger than this many pixels almost certainly indicates a
+# malformed or malicious `size`/`crop_size` in the image-processor config rather than a real target,
+# and materializing it would exhaust memory. Refuse it instead of allocating (DoS guard).
+MAX_IMAGE_OUTPUT_PIXELS = 1 << 27
+
+
+def validate_image_output_size(height: int, width: int) -> None:
+    if height * width > MAX_IMAGE_OUTPUT_PIXELS:
+        raise ValueError(
+            f"Refusing to allocate an image of {height}x{width} ({height * width} pixels), which exceeds "
+            f"the maximum of {MAX_IMAGE_OUTPUT_PIXELS}; this likely indicates an invalid `size`/`crop_size` "
+            f"in the image processor config."
+        )
+
+
 def resize(
     image: np.ndarray,
     size: tuple[int, int],
@@ -363,6 +378,7 @@ def resize(
         do_rescale = _rescale_for_pil_conversion(image)
         image = to_pil_image(image, do_rescale=do_rescale, input_data_format=input_data_format)
     height, width = size
+    validate_image_output_size(height, width)
     # PIL images are in the format (width, height)
     resized_image = image.resize((width, height), resample=resample, reducing_gap=reducing_gap)
 
@@ -488,6 +504,7 @@ def center_crop(
     orig_height, orig_width = get_image_size(image, ChannelDimension.FIRST)
     crop_height, crop_width = size
     crop_height, crop_width = int(crop_height), int(crop_width)
+    validate_image_output_size(crop_height, crop_width)
 
     # In case size is odd, (image_shape[0] + size[0]) // 2 won't give the proper result.
     top = (orig_height - crop_height) // 2
