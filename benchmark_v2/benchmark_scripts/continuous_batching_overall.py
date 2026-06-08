@@ -222,14 +222,15 @@ class BenchmarkResults:
             cb_config=_config_summary(cb_config),
             gen_config=_config_summary(gen_config),
         )
-        print(f"\n[{entry.label}] samples={entry.num_samples} avg_in={avg_input:.1f} max_new={max_new_tokens}")
-
         # In DP, entries are sharded round-robin across ranks: entry i runs on rank i % dp_size.
         if self.dp_size > 1 and len(self.entries) % self.dp_size != self.global_rank:
             entry.error = f"Rank {self.global_rank} is not in charge of this entry"
-            print(f"SKIPPED: {entry.error}")
             self.entries.append(entry)
             return None
+
+        # Tag lines with the rank and disable the per-token bar so DP stdout stays readable.
+        tag = f"[rank {self.global_rank}] " if self.dp_size > 1 else ""
+        print(f"\n{tag}[{entry.label}] samples={entry.num_samples} avg_in={avg_input:.1f} max_new={max_new_tokens}")
 
         model = self._get_model()
         self.cleanup()
@@ -239,7 +240,7 @@ class BenchmarkResults:
                 inputs=data,
                 generation_config=gen_config,
                 continuous_batching_config=cb_config,
-                progress_bar=True,
+                progress_bar=self.dp_size == 1,
             )
             gen_start = min(out.created_time for out in outputs.values())
             gen_end = max(out.lifespan[1] for out in outputs.values())
@@ -262,6 +263,7 @@ class BenchmarkResults:
             print(f"   ERROR: {e}")
 
         self.entries.append(entry)
+        model = None
         self.cleanup()
 
     def gather_entries(self) -> None:
