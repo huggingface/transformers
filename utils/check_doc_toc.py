@@ -92,7 +92,7 @@ def ensure_all_models_in_toctree(model_doc: list[dict]):
     the case."""
     all_documented_models = {model_doc_file.removesuffix(".md") for model_doc_file in os.listdir(DOC_PATH)} - {"auto"}
     all_models_in_toctree = {
-        model_entry["local"].removeprefix("model_doc/") for section in model_doc for model_entry in section["sections"]
+        model_entry["local"].removeprefix("model_doc/") for section in model_doc if "sections" in section for model_entry in section["sections"]
     }
 
     # everything alright

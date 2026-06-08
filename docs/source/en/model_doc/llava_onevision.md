@@ -234,7 +234,7 @@ conversation = [
 
 inputs = processor.apply_chat_template(
     conversation,
-    num_frames=8
+    num_frames=8,
     add_generation_prompt=True,
     tokenize=True,
     return_dict=True,

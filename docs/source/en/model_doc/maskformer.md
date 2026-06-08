@@ -21,7 +21,7 @@ rendered properly in your Markdown viewer.
 <Tip>
 
 This is a recently introduced model so the API hasn't been tested extensively. There may be some bugs or slight
-breaking changes to fix it in the future. If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title).
+breaking changes to fix it in the future. If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.yml&title).
 
 </Tip>
 
