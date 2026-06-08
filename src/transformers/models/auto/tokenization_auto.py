@@ -13,6 +13,7 @@
 # limitations under the License.
 """Auto Tokenizer class."""
 
+import fnmatch
 import importlib
 import json
 import os
@@ -410,6 +411,7 @@ CONFIG_TO_TYPE = {v: k for k, v in CONFIG_MAPPING_NAMES.items()}
 
 MODEL_IDS_TO_TOKENIZERS_BACKEND = [
     "deepseek-ai/deepseek-r1-distill-llama-8b",
+    "deepseek-ai/deepseek-coder-*",
     "allenai/dolma2-tokenizer",
     "google/umt5-small",
 ]
@@ -758,7 +760,7 @@ class AutoTokenizer:
         if (
             tokenizer_auto_map is None
             and TokenizersBackend is not None
-            and _config_name_or_path in MODEL_IDS_TO_TOKENIZERS_BACKEND
+            and any(fnmatch.fnmatch(_config_name_or_path, p) for p in MODEL_IDS_TO_TOKENIZERS_BACKEND)
         ):
             return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
