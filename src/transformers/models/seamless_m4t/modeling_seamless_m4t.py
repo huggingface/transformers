@@ -29,7 +29,6 @@ from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -475,6 +474,45 @@ class SeamlessM4TConformerConvolutionModule(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer._apply_conformer_relative_position_encoding with Wav2Vec2->SeamlessM4T
+def _apply_conformer_relative_position_encoding(module, query, key, attention_mask, relative_position_embeddings):
+    if relative_position_embeddings is None:
+        raise ValueError(
+            "`relative_position_embeddings` has to be defined when `self.position_embeddings_type == 'relative'`"
+        )
+
+    # 1. project positional embeddings
+    proj_relative_position_embeddings = module.linear_pos(relative_position_embeddings)
+    proj_relative_position_embeddings = proj_relative_position_embeddings.view(
+        relative_position_embeddings.size(0), -1, module.num_heads, module.head_size
+    )
+    proj_relative_position_embeddings = proj_relative_position_embeddings.permute(0, 2, 3, 1)
+
+    # 2. compute matrix b and matrix d
+    q_with_bias_v = query + module.pos_bias_v[None, :, None, :]
+    relative_attention_scores = torch.matmul(q_with_bias_v, proj_relative_position_embeddings)
+
+    # 3. shift (skew) to get proper relative position indexing
+    relative_attention_scores_shape = relative_attention_scores.shape
+    relative_attention_scores = nn.functional.pad(relative_attention_scores, (1, 0)).view(
+        *relative_attention_scores_shape[:2],
+        relative_attention_scores_shape[3] + 1,
+        relative_attention_scores_shape[2],
+    )
+    relative_attention_scores = relative_attention_scores[..., 1:, :].view(relative_attention_scores_shape)
+    relative_attention_scores = relative_attention_scores[..., : key.size(2)]
+
+    # 4. scale and combine with attention mask
+    relative_attention_scores = relative_attention_scores * module.scale
+    if attention_mask is not None:
+        relative_attention_scores = relative_attention_scores + attention_mask
+
+    # 5. add pos_bias_u to query for the content-based attention (matrix a+c)
+    query = query + module.pos_bias_u[None, :, None, :]
+
+    return query, relative_attention_scores
+
+
 class SeamlessM4TConformerSelfAttention(nn.Module):
     """Construct a SeamlessM4TConformerSelfAttention object.
     Can be enhanced with rotary or relative position embeddings.
@@ -511,10 +549,11 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         relative_position_embeddings: torch.Tensor | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         # self-attention mechanism
-        batch_size, sequence_length, hidden_size = hidden_states.size()
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_size)
 
         # make sure query/key states can be != value states
         query_key_states = hidden_states
@@ -527,19 +566,13 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
                 )
             query_key_states = self._apply_rotary_embedding(query_key_states, relative_position_embeddings)
 
-        # project query_key_states and value_states
-        query = self.linear_q(query_key_states).view(batch_size, -1, self.num_heads, self.head_size)
-        key = self.linear_k(query_key_states).view(batch_size, -1, self.num_heads, self.head_size)
-        value = self.linear_v(value_states).view(batch_size, -1, self.num_heads, self.head_size)
+        query_states = self.linear_q(query_key_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.linear_k(query_key_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.linear_v(value_states).view(hidden_shape).transpose(1, 2)
 
-        # => (batch, head, time1, d_k)
-        query = query.transpose(1, 2)
-        key = key.transpose(1, 2)
-        value = value.transpose(1, 2)
-
-        query, attention_mask = self._apply_relative_position_encoding(
-            query=query,
-            key=key,
+        query_states, attention_mask = self._apply_relative_position_encoding(
+            query=query_states,
+            key=key_states,
             attention_mask=attention_mask,
             relative_position_embeddings=relative_position_embeddings,
         )
@@ -548,21 +581,21 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        hidden_states, attn_weights = attention_interface(
+        attn_output, attn_weights = attention_interface(
             self,
-            query,
-            key,
-            value,
+            query_states,
+            key_states,
+            value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
             scaling=self.scale,
             **kwargs,
         )
 
-        hidden_states = hidden_states.reshape(batch_size, sequence_length, -1)
-        hidden_states = self.linear_out(hidden_states)
+        attn_output = attn_output.reshape(*input_shape, -1)
+        attn_output = self.linear_out(attn_output)
 
-        return hidden_states, attn_weights
+        return attn_output, attn_weights
 
     # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerSelfAttention._apply_rotary_embedding
     def _apply_rotary_embedding(self, hidden_states, relative_position_embeddings):
@@ -593,43 +626,9 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
         if self.position_embeddings_type != "relative":
             return query, attention_mask
 
-        if relative_position_embeddings is None:
-            raise ValueError(
-                "`relative_position_embeddings` has to be defined when `self.position_embeddings_type == 'relative'`"
-            )
-
-        # 1. project positional embeddings
-        proj_relative_position_embeddings = self.linear_pos(relative_position_embeddings)
-        proj_relative_position_embeddings = proj_relative_position_embeddings.view(
-            relative_position_embeddings.size(0), -1, self.num_heads, self.head_size
+        return _apply_conformer_relative_position_encoding(
+            self, query, key, attention_mask, relative_position_embeddings
         )
-        proj_relative_position_embeddings = proj_relative_position_embeddings.transpose(1, 2)
-        proj_relative_position_embeddings = proj_relative_position_embeddings.transpose(2, 3)
-
-        # 2. compute matrix b and matrix d
-        query_for_bias = query.transpose(1, 2)
-        q_with_bias_v = (query_for_bias + self.pos_bias_v).transpose(1, 2)
-        relative_attention_scores = torch.matmul(q_with_bias_v, proj_relative_position_embeddings)
-
-        # 3. shift (skew) to get proper relative position indexing
-        relative_attention_scores_shape = relative_attention_scores.shape
-        relative_attention_scores = nn.functional.pad(relative_attention_scores, (1, 0)).view(
-            *relative_attention_scores_shape[:2],
-            relative_attention_scores_shape[3] + 1,
-            relative_attention_scores_shape[2],
-        )
-        relative_attention_scores = relative_attention_scores[:, :, 1:].view(relative_attention_scores_shape)
-        relative_attention_scores = relative_attention_scores[:, :, :, : key.size(2)]
-
-        # 4. scale and combine with attention mask
-        relative_attention_scores = relative_attention_scores / math.sqrt(self.head_size)
-        if attention_mask is not None:
-            relative_attention_scores = relative_attention_scores + attention_mask
-
-        # 5. add pos_bias_u to query for the content-based attention (matrix a+c)
-        query = query + self.pos_bias_u[None, :, None, :]
-
-        return query, relative_attention_scores
 
 
 class SeamlessM4TConformerEncoderLayer(GradientCheckpointingLayer):
@@ -664,7 +663,7 @@ class SeamlessM4TConformerEncoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         relative_position_embeddings: torch.Tensor | None = None,
         conv_attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ):
         # 1. Feed-Forward 1 layer
         residual = hidden_states
@@ -1049,7 +1048,7 @@ class SeamlessM4TAttention(nn.Module):
         encoder_hidden_states: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
@@ -1165,7 +1164,7 @@ class SeamlessM4TEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
         Args:
@@ -1243,7 +1242,7 @@ class SeamlessM4TDecoderLayer(GradientCheckpointingLayer):
         encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = True,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
         Args:
