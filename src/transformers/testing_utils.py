@@ -256,7 +256,7 @@ _TEXT_MODEL_TESTER_DEFAULTS = {
     "shared_expert_gate": True,
     "moe_num_shared_experts": 2,
     "num_experts_per_tok": 2,
-    "num_experts": 8,
+    "num_experts": 4,
 }
 
 
