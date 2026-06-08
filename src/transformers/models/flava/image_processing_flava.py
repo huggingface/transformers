@@ -78,10 +78,9 @@ class FlavaImageProcessorKwargs(ImagesKwargs, total=False):
     codebook_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
         Resize the input for codebook to the given size. Can be overridden by the `codebook_size` parameter in
         `preprocess`.
-    codebook_resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS` for PIL backend,
-        `PILImageResampling.BICUBIC` for torchvision backend):
-        Resampling filter to use if resizing the codebook image. LANCZOS is not supported for torch Tensors;
-        BICUBIC is used as the closest alternative for the torchvision backend. Can be overridden by the
+    codebook_resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
+        Resampling filter to use if resizing the codebook image. With torchvision < 0.27, LANCZOS is not
+        supported for torch Tensors and BICUBIC is used as the closest alternative. Can be overridden by the
         `codebook_resample` parameter in `preprocess`.
     codebook_do_center_crop (`bool`, *optional*, defaults to `True`):
         Whether to crop the input for codebook at the center. If the input size is smaller than
@@ -235,9 +234,10 @@ class FlavaImageProcessor(TorchvisionBackend):
     return_codebook_pixels = False
     codebook_do_resize = True
     codebook_size = {"height": 112, "width": 112}
-    # LANCZOS resampling is not supported for torch Tensors; BICUBIC is the closest alternative.
-    # Note: the PIL backend defaults to LANCZOS for this parameter.
-    codebook_resample = PILImageResampling.BICUBIC
+    # LANCZOS resampling is not supported for torch Tensors with torchvision < 0.27; BICUBIC is the closest
+    # alternative. With torchvision >= 0.27, LANCZOS is natively supported.
+    # Note: the PIL backend always defaults to LANCZOS for this parameter.
+    codebook_resample = PILImageResampling.LANCZOS
     codebook_do_center_crop = True
     codebook_crop_size = {"height": 112, "width": 112}
     codebook_do_rescale = True

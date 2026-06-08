@@ -302,15 +302,20 @@ class AutoImageProcessorTest(unittest.TestCase):
 
     @require_torchvision
     def test_default_to_pil_backend_for_lanczos_processors(self):
-        # Even when torchvision is available, processors that rely on Lanczos interpolation
-        # (listed in DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS) must default to the PIL backend
-        # when backend='auto'.
+        # Processors that rely on Lanczos interpolation (listed in _LANCZOS_IMAGE_PROCESSORS)
+        # must default to the PIL backend when torchvision < 0.27, but can use the torchvision
+        # backend directly when torchvision >= 0.27 (which natively supports Lanczos).
+        from transformers.utils.import_utils import is_torchvision_greater_or_equal
+
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
             json.dump({"image_processor_type": "FlavaImageProcessor"}, open(processor_tmpfile, "w"))
 
             image_processor = AutoImageProcessor.from_pretrained(tmpdirname)
-            self.assertEqual(type(image_processor).__name__, "FlavaImageProcessorPil")
+            if is_torchvision_greater_or_equal("0.27"):
+                self.assertEqual(type(image_processor).__name__, "FlavaImageProcessor")
+            else:
+                self.assertEqual(type(image_processor).__name__, "FlavaImageProcessorPil")
 
     @require_torchvision
     def test_explicit_backend_overrides_lanczos_default(self):
