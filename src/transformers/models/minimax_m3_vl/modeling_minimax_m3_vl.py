@@ -472,7 +472,7 @@ class MiniMaxM3VLAttention(nn.Module):
             attention_mask = self.indexer(
                 hidden_states,
                 position_embeddings,
-                position_ids=position_ids,
+                attention_mask=attention_mask,
                 past_key_values=past_key_values,
             )
 
@@ -506,18 +506,16 @@ class MiniMaxM3VLAttention(nn.Module):
 class MiniMaxM3VLIndexer(nn.Module):
     r"""Lightning Indexer for MiniMax M3 sparse attention.
 
-    Scores each query against every key with a small ``index_n_heads``-head
+    Scores each query against every key with a small `index_n_heads`-head
     dot-product branch, then max-pools those per-key scores into *blocks* of
-    ``index_block_size`` keys and keeps, per query, the top-``index_topk_blocks``
-    key blocks plus the ``index_local_blocks`` blocks immediately preceding the
+    `index_block_size` keys and keeps, per query, the top-`index_topk_blocks`
+    key blocks plus the `index_local_blocks` blocks immediately preceding the
     query (always visible). Selection therefore happens at the granularity of a
     *block of keys* rather than individual keys: the expensive main attention
     only has to attend the handful of selected key blocks, which is what makes
     it block-sparse (and cheaper) on long sequences. It returns a
-    ``[B, 1, S_q, S_k]`` additive bias that is ``0`` at every allowed
-    (query, key) pair and ``-inf`` elsewhere, to be summed onto the main
-    attention mask — the same scatter-into-``-inf``-bias trick as
-    [`DeepseekV4Indexer`].
+    `[B, 1, S_q, S_k]` attention mask that is `0` at every allowed
+    (query, key) pair and `-inf` elsewhere.
 
     Like DeepSeek-V4's indexer this is purely a *selection* branch: it has no
     value projection and produces no residual output of its own (the upstream
@@ -528,6 +526,11 @@ class MiniMaxM3VLIndexer(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
+        self.head_dim = config.index_head_dim
+        self.num_heads = config.index_n_heads
+        self.block_size = config.index_block_size
+        self.topk_blocks = config.index_topk_blocks
+        self.local_blocks = config.index_local_blocks
         self.q_proj = nn.Linear(config.hidden_size, config.index_n_heads * config.index_head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.index_head_dim, bias=False)
         self.q_norm = MiniMaxM3VLRMSNorm(config.index_head_dim, eps=config.rms_norm_eps)
@@ -537,46 +540,40 @@ class MiniMaxM3VLIndexer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        position_ids: torch.Tensor | None,
+        attention_mask: torch.Tensor | None,
         past_key_values: Cache | None,
     ) -> torch.Tensor:
-        config = self.config
-        head_dim = config.index_head_dim
-        num_heads = config.index_n_heads
-        block_size = config.index_block_size
-        topk_blocks = config.index_topk_blocks
-        local_blocks = config.index_local_blocks
-
         batch, q_len, _ = hidden_states.shape
-        idx_q = self.q_proj(hidden_states).view(batch, q_len, num_heads, head_dim)
-        idx_k = self.k_proj(hidden_states).view(batch, q_len, 1, head_dim)
+        idx_q = self.q_proj(hidden_states).view(batch, q_len, self.num_heads, self.head_dim)
+        idx_k = self.k_proj(hidden_states).view(batch, q_len, 1, self.head_dim)
         idx_q = self.q_norm(idx_q).transpose(1, 2)  # [B, H_idx, Sq, D]
         idx_k = self.k_norm(idx_k).transpose(1, 2)  # [B, 1, Sq, D]
         cos, sin = position_embeddings
-        idx_q, idx_k = apply_rotary_pos_emb(idx_q, idx_k, cos[..., :head_dim], sin[..., :head_dim])
+        idx_q, idx_k = apply_rotary_pos_emb(idx_q, idx_k, cos[..., : self.head_dim], sin[..., : self.head_dim])
 
-        cache_layer: MiniMaxM3VLSparseCacheLayer | None = (
-            past_key_values.layers[self.layer_idx] if past_key_values is not None else None
-        )
-        idx_k = cache_layer.update_index(idx_k) if cache_layer is not None else idx_k
-        q_positions = torch.arange(q_len, device=idx_q.device) if position_ids is None else position_ids[0]
+        if past_key_values is not None:
+            idx_k = past_key_values.layers[self.layer_idx].update_index(idx_k)
 
         k_len = idx_k.shape[2]
-        num_key_blocks = -(-k_len // block_size)  # ceil-div
-        pad = num_key_blocks * block_size - k_len
+        # Blocks group consecutive *slots* of the key axis, so causality here is slot-based -- exactly the
+        # frame ``create_causal_mask`` uses (query slots = the trailing ``q_len`` of the key axis, i.e.
+        # ``cache_position``). Batch-independent: per-row left/right padding is folded in via ``attention_mask``.
+        q_positions = torch.arange(k_len - q_len, k_len, device=idx_q.device)
+        num_key_blocks = -(-k_len // self.block_size)  # ceil-div
+        pad = num_key_blocks * self.block_size - k_len
 
         # Score every key per (head, query), then max-pool over the keys inside
         # each block and over the index heads to get a single score per *key
         # block*. Pad keys with ``-inf`` so the trailing partial block never wins
         # a top-k slot on padding.
-        scores = torch.matmul(idx_q.float(), idx_k.expand(-1, num_heads, -1, -1).float().transpose(-1, -2))
+        scores = torch.matmul(idx_q.float(), idx_k.expand(-1, self.num_heads, -1, -1).float().transpose(-1, -2))
         if pad:
             scores = F.pad(scores, (0, pad), value=float("-inf"))
-        scores = scores.view(batch, num_heads, q_len, num_key_blocks, block_size)
+        scores = scores.view(batch, self.num_heads, q_len, num_key_blocks, self.block_size)
         block_scores = scores.amax(dim=-1).amax(dim=1)  # -> [B, S_q, num_key_blocks]
 
-        # Block-level causality on absolute positions.
-        q_block = q_positions // block_size  # [S_q]
+        # Block-level causality on slot indices (so top-k never spends a slot on a future block).
+        q_block = q_positions // self.block_size  # [S_q]
         future = torch.arange(num_key_blocks, device=idx_q.device).view(1, 1, -1) > q_block.view(1, -1, 1)
         block_scores = block_scores.masked_fill(future, float("-inf"))
 
@@ -584,26 +581,30 @@ class MiniMaxM3VLIndexer(nn.Module):
         # punch ``0`` at the selected key blocks (top-k, then the always-on local
         # window), then re-mask the future so a short history can't leak.
         bias = block_scores.new_full((batch, q_len, num_key_blocks), float("-inf"))
-        bias.scatter_(-1, block_scores.topk(min(topk_blocks, num_key_blocks), dim=-1).indices, 0.0)
-        if local_blocks > 0:
-            local = torch.arange(local_blocks, device=idx_q.device)
+        bias.scatter_(-1, block_scores.topk(min(self.topk_blocks, num_key_blocks), dim=-1).indices, 0.0)
+        if self.local_blocks > 0:
+            local = torch.arange(self.local_blocks, device=idx_q.device)
             local = (q_block.view(-1, 1) - local.view(1, -1)).clamp(min=0)  # [S_q, local]
             bias.scatter_(-1, local.unsqueeze(0).expand(batch, -1, -1), 0.0)
         bias = bias.masked_fill(future, float("-inf"))
 
-        # Broadcast the per-block verdict back onto each key, then drop padding.
-        token_bias = bias.repeat_interleave(block_size, dim=-1)[..., :k_len]
+        # Broadcast the per-block keep/drop verdict back onto every key (block granularity), add head axis.
+        block_keep = (bias == 0.0).repeat_interleave(self.block_size, dim=-1)[..., :k_len].unsqueeze(1)
 
-        # Token-level causality, so the bias is self-contained: the diagonal block is selected as a
-        # whole (block granularity), but the keys *inside* it that sit ahead of the query must still be
-        # masked. eager gets this from the separate causal ``attention_mask``, but sdpa/flash collapse
-        # the mask into ``is_causal`` and pass ``attention_mask=None`` when there is no padding, so the
-        # folded bias has to carry the token-level causal pattern itself.
+        # This is the *final* attention mask for the layer, so it must carry token-level causality and any
+        # padding. ``create_causal_mask`` already folded both into ``attention_mask`` for eager (and for
+        # every backend whenever there is padding), so there we just drop the non-selected key blocks on
+        # top of it -- masking with ``finfo.min`` (never ``-inf``, which makes a fully-masked row NaN under
+        # sdpa while eager stays finite). Only when the mask was collapsed to ``is_causal`` with
+        # ``attention_mask=None`` (sdpa/flash, no padding) do we build causality here: a block is selected
+        # whole, but keys inside the diagonal block that sit ahead of the query must still be masked.
+        min_dtype = torch.finfo(idx_q.dtype).min
+        if attention_mask is not None:
+            return attention_mask.masked_fill(~block_keep, min_dtype)
         k_positions = torch.arange(k_len, device=idx_q.device)
-        token_future = k_positions.view(1, 1, -1) > q_positions.view(1, -1, 1)
-        token_bias = token_bias.masked_fill(token_future, float("-inf"))
-
-        return token_bias.to(idx_q.dtype).unsqueeze(1)
+        token_future = k_positions.view(1, 1, 1, -1) > q_positions.view(1, 1, -1, 1)
+        keep = block_keep & ~token_future
+        return keep.new_zeros(keep.shape, dtype=idx_q.dtype).masked_fill(~keep, min_dtype)
 
 
 class MiniMaxM3VLDecoderLayer(GradientCheckpointingLayer):
