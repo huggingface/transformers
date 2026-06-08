@@ -595,6 +595,15 @@ class Kosmos2TextSinusoidalPositionalEmbedding(nn.Module):
         This matches the implementation in tensor2tensor, but differs slightly from the description in Section 3.5 of
         "Attention Is All You Need".
         """
+        # Guard against unbounded memory allocation: this table has
+        # `num_embeddings * embedding_dim` elements and is built eagerly from
+        # `config.max_position_embeddings`, so reject pathologically large sizes
+        # (2**30 elements is far above any real model and would already be ~4GB).
+        if num_embeddings * embedding_dim > 2**30:
+            raise ValueError(
+                f"Cannot create a sinusoidal positional embedding table of {num_embeddings} x "
+                f"{embedding_dim} elements; check the model config (e.g. `max_position_embeddings`)."
+            )
         half_dim = embedding_dim // 2
         emb = math.log(10000) / (half_dim - 1)
         emb = torch.exp(torch.arange(half_dim, dtype=torch.int64).float() * -emb)

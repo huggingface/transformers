@@ -243,6 +243,18 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_sinusoidal_embedding_rejects_oversized_allocation(self):
+        # Regression: the sinusoidal table is (num_positions x embedding_dim) and is built eagerly
+        # from config.max_position_embeddings, so an oversized value must be rejected instead of
+        # OOM-ing the process at model construction.
+        from transformers.models.m2m_100.modeling_m2m_100 import M2M100SinusoidalPositionalEmbedding
+
+        # a reasonable table still builds
+        M2M100SinusoidalPositionalEmbedding(num_positions=2048, embedding_dim=16, padding_idx=1)
+        # a pathologically large one is refused, not allocated
+        with self.assertRaises(ValueError):
+            M2M100SinusoidalPositionalEmbedding(num_positions=10**9, embedding_dim=1024, padding_idx=1)
+
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
