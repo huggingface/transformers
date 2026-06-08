@@ -23,7 +23,6 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cached_property
-from types import GeneratorType
 
 import torch
 from torch import nn
@@ -31,7 +30,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...generation import GenerationMixin, GenerationMode
+from ...generation import GenerationMode
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -1192,180 +1191,6 @@ class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin)
             attentions=encoder_outputs.attentions,
             decoder_cache=decoder_cache,
         )
-
-    def _get_encoder_cache(self, cache_implementation: str, batch_size: int, max_cache_len: int) -> Cache:
-        """Build the streaming encoder K/V cache, mirroring [`VoxtralRealtimeForConditionalGeneration._get_encoder_cache`].
-
-        Unlike voxtral, NemotronAsr's relative-position attention needs an **order-preserving** sliding
-        window: a `StaticCache` ring-buffer (`StaticSlidingWindowLayer`) scrambles the relative positions
-        and drops the earliest context, so here we use a `DynamicCache` whose `DynamicSlidingWindowLayer`s
-        keep insertion order. The window size is read from `encoder_config.sliding_window` (so `max_cache_len`
-        is informational here). A fresh cache is built per stream — `DynamicCache` allocation is cheap, and
-        reusing a reset sliding cache would re-inject stale (zeroed) frames into the next stream.
-        """
-        offload_cache = "offloaded" in cache_implementation
-        self._encoder_cache = DynamicCache(config=self.config.encoder_config, offloading=offload_cache)
-        return self._encoder_cache
-
-    def _prepare_model_inputs(
-        self,
-        inputs: torch.Tensor | None = None,
-        bos_token_id: torch.Tensor | None = None,
-        model_kwargs: dict[str, torch.Tensor] | None = None,
-    ) -> tuple[torch.Tensor, str | None, dict[str, torch.Tensor]]:
-        inputs, input_name, model_kwargs = super()._prepare_model_inputs(inputs, bos_token_id, model_kwargs)
-
-        input_features = model_kwargs.get("input_features")
-        if input_features is not None and not isinstance(input_features, GeneratorType):
-            model_kwargs["encoder_inputs_embeds"] = self.model.audio_tower.embedder(model_kwargs.pop("input_features"))
-
-        elif isinstance(input_features, GeneratorType):
-            input_features_generator = model_kwargs.pop("input_features")
-            model_kwargs["input_features_generator"] = input_features_generator
-            try:
-                model_kwargs["input_features"] = next(input_features_generator)
-            except StopIteration:
-                self._stream_exhausted = True
-
-        return inputs, input_name, model_kwargs
-
-    def _prepare_model_inputs(self, inputs=None, bos_token_id=None, model_kwargs=None):
-        input_features = inputs if inputs is not None else (model_kwargs or {}).get("input_features")
-        if not isinstance(input_features, GeneratorType):
-            return super()._prepare_model_inputs(inputs, bos_token_id, model_kwargs)
-
-        model_kwargs = model_kwargs or {}
-        generator = input_features
-        try:
-            first_chunk = next(generator)
-        except StopIteration as e:
-            raise ValueError("The `input_features` generator did not yield any chunk.") from e
-        first_chunk = first_chunk.to(device=self.device, dtype=self.dtype)
-        batch_size = first_chunk.shape[0]
-
-        # Stash the first chunk: the streaming caches (encoder K/V + conv padding) are built in
-        # `_prepare_cache_for_generation` (voxtral's hook), which then encodes this chunk to seed the
-        # transducer frame buffer — it must run *after* the caches exist, hence not encoded here.
-        self._streaming_first_chunk = first_chunk
-        model_kwargs.pop("input_features", None)
-        model_kwargs["input_features_generator"] = generator
-        model_kwargs["padding_cache"] = NemotronAsrEncoderCausalConvPaddingCache()
-        model_kwargs["encoder_frame_idxs"] = torch.zeros(batch_size, dtype=torch.long, device=self.device)
-        return first_chunk, "input_features", model_kwargs
-
-    def _prepare_cache_for_generation(
-        self, generation_config, model_kwargs, generation_mode, batch_size, max_cache_length, *args, **kwargs
-    ):
-        # Decoder LSTM cache, handled by `NemotronAsrGenerationMixin` / the Parakeet transducer mixin.
-        super()._prepare_cache_for_generation(
-            generation_config, model_kwargs, generation_mode, batch_size, max_cache_length, *args, **kwargs
-        )
-        if not getattr(self, "_streaming", False):
-            return
-
-        # Encoder K/V cache, à la [`VoxtralRealtimeForConditionalGeneration._prepare_cache_for_generation`].
-        model_kwargs["encoder_past_key_values"] = self._get_encoder_cache(
-            cache_implementation=generation_config.cache_implementation or "static",
-            batch_size=batch_size,
-            max_cache_len=self.config.encoder_config.sliding_window,
-        )
-        # Seed the transducer frame buffer with the first chunk (encoded cache-aware via the standard
-        # `get_audio_features` entry point); the buffer must exist before the first decode step.
-        encoder_outputs = self.get_audio_features(
-            input_features=self._streaming_first_chunk,
-            past_key_values=model_kwargs["encoder_past_key_values"],
-            padding_cache=model_kwargs["padding_cache"],
-            att_context_size=self._streaming_att_context,
-            use_cache=True,
-            output_attention_mask=False,
-        )
-        model_kwargs["encoder_outputs"] = NemotronAsrEncoderModelOutput(pooler_output=encoder_outputs.pooler_output)
-        model_kwargs["encoder_valid_lengths"] = torch.full(
-            (batch_size,), encoder_outputs.pooler_output.shape[1], dtype=torch.long, device=self.device
-        )
-
-    def _update_model_kwargs_for_generation(self, outputs, model_kwargs, *args, **kwargs):
-        model_kwargs = super()._update_model_kwargs_for_generation(outputs, model_kwargs, *args, **kwargs)
-        if not getattr(self, "_streaming", False):
-            return model_kwargs
-
-        generator = model_kwargs.get("input_features_generator")
-        # Pull and encode further chunks whenever the frame pointer has caught up with the buffer.
-        while not self._stream_exhausted and bool(
-            (model_kwargs["encoder_frame_idxs"] >= model_kwargs["encoder_valid_lengths"]).all()
-        ):
-            try:
-                chunk = next(generator)
-            except StopIteration:
-                self._stream_exhausted = True
-                break
-            chunk = chunk.to(device=self.device, dtype=self.dtype)
-            chunk_outputs = self.get_audio_features(
-                input_features=chunk,
-                past_key_values=model_kwargs["encoder_past_key_values"],
-                padding_cache=model_kwargs["padding_cache"],
-                att_context_size=self._streaming_att_context,
-                use_cache=True,
-                output_attention_mask=False,
-            )
-            pooler = chunk_outputs.pooler_output
-            if pooler.shape[1] == 0:
-                continue
-            encoder_outputs = model_kwargs["encoder_outputs"]
-            encoder_outputs.pooler_output = torch.cat([encoder_outputs.pooler_output, pooler], dim=1)
-            model_kwargs["encoder_valid_lengths"] = model_kwargs["encoder_valid_lengths"] + pooler.shape[1]
-
-        # Recompute exhaustion now that the buffer may have grown (drives `EncoderExhaustedCriteria`).
-        self._encoder_finished = model_kwargs["encoder_frame_idxs"] >= model_kwargs["encoder_valid_lengths"]
-        return model_kwargs
-
-    def _prepare_generated_length(
-        self,
-        generation_config,
-        has_default_max_length,
-        has_default_min_length,
-        model_input_name,
-        input_ids_length,
-        inputs_tensor,
-    ):
-        if getattr(self, "_streaming", False):
-            # In streaming the length is bounded by stream exhaustion (via `EncoderExhaustedCriteria`),
-            # not by the (unknown) total audio length: size the output buffer generously.
-            if has_default_max_length and generation_config.max_new_tokens is None:
-                generation_config.max_length = int(1e9)
-                has_default_max_length = False
-            return GenerationMixin._prepare_generated_length(
-                self,
-                generation_config,
-                has_default_max_length,
-                has_default_min_length,
-                model_input_name,
-                input_ids_length,
-                inputs_tensor,
-            )
-        prepared = super()._prepare_generated_length(
-            generation_config,
-            has_default_max_length,
-            has_default_min_length,
-            model_input_name,
-            input_ids_length,
-            inputs_tensor,
-        )
-        return prepared
-
-    def generate(self, inputs=None, generation_config=None, **kwargs):
-        input_features = kwargs.get("input_features", inputs)
-        self._streaming = isinstance(input_features, GeneratorType)
-        if self._streaming:
-            self._stream_exhausted = False
-            att_context_size = kwargs.pop("att_context_size", None)
-            self._streaming_att_context = att_context_size or self.encoder._resolve_att_context_size()
-        try:
-            return super().generate(inputs=inputs, generation_config=generation_config, **kwargs)
-        finally:
-            for attr in ("_streaming", "_stream_exhausted", "_streaming_att_context", "_streaming_first_chunk"):
-                if hasattr(self, attr):
-                    delattr(self, attr)
 
 
 __all__ = [

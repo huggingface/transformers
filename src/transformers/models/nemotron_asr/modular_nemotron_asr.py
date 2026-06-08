@@ -18,7 +18,6 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cached_property
-from types import GeneratorType
 
 import numpy as np
 import torch
@@ -27,7 +26,8 @@ from torch import nn
 
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...generation import GenerationMixin
+from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationMode
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -44,7 +44,7 @@ from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import eager_attention_forward
-from ..parakeet.configuration_parakeet import ParakeetEncoderConfig, ParakeetTDTConfig
+from ..parakeet.configuration_parakeet import ParakeetEncoderConfig, ParakeetRNNTConfig
 from ..parakeet.feature_extraction_parakeet import ParakeetFeatureExtractor
 from ..parakeet.modeling_parakeet import (
     ParakeetEncoder,
@@ -56,10 +56,10 @@ from ..parakeet.modeling_parakeet import (
     ParakeetForRNNT,
     ParakeetPreTrainedModel,
     ParakeetRNNTDecoder,
+    ParakeetRNNTJointNetwork,
     ParakeetRNNTOutput,
-    ParakeetTDTJointNetwork,
 )
-from .generation_nemotron_asr import NemotronAsrGenerationMixin, NemotronAsrTDTDecoderCache
+from .generation_nemotron_asr import NemotronAsrGenerationMixin, NemotronAsrRNNTDecoderCache
 
 
 LOG_ZERO_GUARD_VALUE = 2**-24
@@ -150,9 +150,54 @@ class NemotronAsrEncoderConfig(ParakeetEncoderConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
+class NemotronAsrRNNTConfig(ParakeetRNNTConfig):
+    r"""
+    This is the base NemotronAsr transducer configuration. A conventional RNN-T (RNN Transducer) joint network
+    emits token logits only (so the joint head outputs just `vocab_size` logits), and during greedy decoding
+    the encoder frame pointer advances by exactly one frame on each blank emission. The duration-aware
+    [`NemotronAsrTDTConfig`] extends this configuration with a `durations` field.
+
+    decoder_hidden_size (`int`, *optional*, defaults to 640):
+        Hidden size of the LSTM prediction network and joint network.
+    num_decoder_layers (`int`, *optional*, defaults to 2):
+        Number of LSTM layers in the prediction network.
+    max_symbols_per_step (`int`, *optional*, defaults to 10):
+        Maximum number of symbols to emit per encoder time step during greedy decoding.
+    encoder_config (`Union[dict, NemotronAsrEncoderConfig]`, *optional*):
+        The config object or dictionary of the encoder.
+    blank_token_id (`int`, *optional*, defaults to 8192):
+        Blank token id. Different from `pad_token_id` for RNN-T.
+
+    Example:
+    ```python
+    >>> from transformers import NemotronAsrForRNNT, NemotronAsrRNNTConfig
+
+    >>> # Initializing a NemotronAsr RNN-T configuration
+    >>> configuration = NemotronAsrRNNTConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = NemotronAsrForRNNT(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
+
+    model_type = "nemotron_asr_rnnt"
+    sub_configs = {"encoder_config": NemotronAsrEncoderConfig}
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.encoder_config, dict):
+            self.encoder_config = NemotronAsrEncoderConfig(**self.encoder_config)
+        elif self.encoder_config is None:
+            self.encoder_config = NemotronAsrEncoderConfig()
+        self.initializer_range = self.encoder_config.initializer_range
+        super().__post_init__(**kwargs)
+
+
 @auto_docstring(checkpoint="nvidia/nemotron-speech-streaming-en-0.6b")
 @strict
-class NemotronAsrConfig(ParakeetTDTConfig):
+class NemotronAsrConfig(NemotronAsrRNNTConfig):
     r"""
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network (NeMo's `pred_hidden`).
@@ -387,59 +432,6 @@ class NemotronAsrFeatureExtractor(ParakeetFeatureExtractor):
         )
 
 
-class NemotronAsrEncoderCache:
-    """
-    Order-preserving sliding-window K/V cache for the cache-aware streaming encoder.
-
-    Unlike a standard rolling `StaticCache`, the cached keys/values are kept in **temporal order**
-    (concatenate the new keys, then keep the last `max_cache_len` frames). The encoder uses
-    Transformer-XL-style relative-position attention, which requires ordered keys, so a wrapping
-    buffer cannot be used here. Created and reused through [`NemotronAsrForRNNT._get_encoder_cache`],
-    mirroring how [`VoxtralRealtimeForConditionalGeneration`] threads an `encoder_past_key_values`.
-    """
-
-    def __init__(self, num_hidden_layers: int, max_cache_len: int):
-        self.max_cache_len = max_cache_len
-        self.key_cache: list[torch.Tensor | None] = [None] * num_hidden_layers
-        self.value_cache: list[torch.Tensor | None] = [None] * num_hidden_layers
-
-    def get_seq_length(self, layer_idx: int = 0) -> int:
-        key = self.key_cache[layer_idx]
-        return 0 if key is None else key.shape[2]
-
-    def get_mask_sizes(self, query_length: int, layer_idx: int = 0) -> tuple[int, int]:
-        """`(kv_length, kv_offset)` for mask creation. Keys are `[cached | current]`, starting at offset 0.
-
-        Because the cache length is always a multiple of the attention chunk size (each streaming chunk is
-        one chunk), using the cache-relative offset in `create_bidirectional_mask` yields the same
-        `chunked_limited` mask as absolute frame positions would (it only depends on the chunk *difference*).
-        """
-        return self.get_seq_length(layer_idx) + query_length, 0
-
-    def update(
-        self,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        layer_idx: int,
-        cache_kwargs: dict | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        prev_key = self.key_cache[layer_idx]
-        if prev_key is None:
-            full_key, full_value = key_states, value_states
-        else:
-            full_key = torch.cat([prev_key, key_states], dim=2)
-            full_value = torch.cat([self.value_cache[layer_idx], value_states], dim=2)
-        # Keep the last `max_cache_len` frames (in order) for the next chunk.
-        self.key_cache[layer_idx] = full_key[:, :, -self.max_cache_len :].detach()
-        self.value_cache[layer_idx] = full_value[:, :, -self.max_cache_len :].detach()
-        return full_key, full_value
-
-    def reset(self):
-        for layer_idx in range(len(self.key_cache)):
-            self.key_cache[layer_idx] = None
-            self.value_cache[layer_idx] = None
-
-
 @auto_docstring(
     custom_intro="""
     Extends [`ParakeetEncoderModelOutput`] with optional streaming caches. Caches are only populated for
@@ -447,7 +439,8 @@ class NemotronAsrEncoderCache:
     """
 )
 @dataclass
-class NemotronAsrEncoderModelOutput(ParakeetEncoderModelOutput):
+@dataclass
+class NemotronAsrEncoderModelOutput(BaseModelOutputWithPooling):
     r"""
     attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
         Mask to avoid performing attention on padding token indices after sequence compression. Returned because the
@@ -455,13 +448,14 @@ class NemotronAsrEncoderModelOutput(ParakeetEncoderModelOutput):
 
         - 1 for tokens that are **not masked**,
         - 0 for tokens that are **masked**.
-    past_key_values (`NemotronAsrEncoderCache`, *optional*):
+    past_key_values (`Cache`, *optional*):
         Updated attention K/V sliding-window cache from the encoder. Pass to the next chunk call.
     """
 
     attention_mask: torch.Tensor | None = None
 
-    past_key_values: NemotronAsrEncoderCache | None = None
+    past_key_values: Cache | None = None
+
 
 
 class NemotronAsrEncoderRelPositionalEncoding(ParakeetEncoderRelPositionalEncoding):
@@ -623,7 +617,7 @@ class NemotronAsrEncoderAttention(ParakeetEncoderAttention):
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: "NemotronAsrEncoderCache | None" = None,
+        past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -966,7 +960,7 @@ class NemotronAsrEncoderBlock(ParakeetEncoderBlock):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: torch.Tensor | None = None,
-        past_key_values: "NemotronAsrEncoderCache | None" = None,
+        past_key_values: Cache | None = None,
         padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -1063,7 +1057,7 @@ class NemotronAsrEncoder(ParakeetEncoder):
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: "NemotronAsrEncoderCache | None" = None,
+        past_key_values: Cache | None = None,
         output_attention_mask: bool = True,
         use_cache: bool | None = None,
         padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None,
@@ -1073,8 +1067,9 @@ class NemotronAsrEncoder(ParakeetEncoder):
         r"""
         output_attention_mask (`bool`, *optional*, defaults to `True`):
             Whether to return the output attention mask. Only effective when `attention_mask` is provided.
-        past_key_values (`NemotronAsrEncoderCache`, *optional*):
-            Order-preserving sliding-window K/V cache for cache-aware streaming attention.
+        past_key_values (`Cache`, *optional*):
+            Sliding-window K/V cache (`DynamicCache` built from `config.sliding_window`) for cache-aware
+            streaming attention.
         padding_cache (`NemotronAsrEncoderCausalConvPaddingCache`, *optional*):
             Unified streaming cache backing the subsampling Conv2d layers and the conformer depthwise Conv1d.
         att_context_size (`list[int]`, *optional*):
@@ -1099,7 +1094,11 @@ class NemotronAsrEncoder(ParakeetEncoder):
         >>> print(encoder_outputs.last_hidden_state.shape)
         ```
         """
-        # Lazily allocate the conv padding cache when streaming is requested without one.
+        # Lazily allocate the streaming caches when requested without one. The K/V cache is a standard
+        # `DynamicCache` built from the config: `config.sliding_window` makes it a sliding-window cache of
+        # order-preserving `DynamicSlidingWindowLayer`s (exactly what the relative-position attention needs).
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
         if use_cache and padding_cache is None:
             padding_cache = NemotronAsrEncoderCausalConvPaddingCache()
 
@@ -1107,9 +1106,14 @@ class NemotronAsrEncoder(ParakeetEncoder):
         inputs_embeds *= self.input_scale
 
         seq_length = inputs_embeds.shape[1]
-        # In streaming, attention also attends to the cached frames on the left (sliding window).
-        cache_len = past_key_values.get_seq_length() if past_key_values is not None else 0
-        position_embeddings = self.encode_positions(inputs_embeds, context_length=cache_len + seq_length)
+        # In streaming, attention also attends to the cached frames on the left (sliding window). The
+        # rel-pos encoding spans the full key length = cached frames (capped at the window) + current chunk.
+        if past_key_values is not None:
+            kv_length, _ = past_key_values.get_mask_sizes(seq_length, 0)
+            past_seen = past_key_values.get_seq_length()
+        else:
+            kv_length, past_seen = seq_length, 0
+        position_embeddings = self.encode_positions(inputs_embeds, context_length=kv_length)
 
         inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.dropout, training=self.training)
         position_embeddings = nn.functional.dropout(
@@ -1117,17 +1121,16 @@ class NemotronAsrEncoder(ParakeetEncoder):
         )
 
         if position_ids is None:
-            position_ids = torch.arange(seq_length, device=inputs_embeds.device) + cache_len
-            position_ids = position_ids.unsqueeze(0)
+            position_ids = (torch.arange(seq_length, device=inputs_embeds.device) + past_seen).unsqueeze(0)
 
         output_mask = None
         if attention_mask is not None:
             output_mask = self._get_output_attention_mask(attention_mask, target_length=seq_length)
 
-        # The standard masking machinery handles the cache offset (`q_offset = past_key_values.get_seq_length()`,
-        # keys = [cache | current]); the `chunked_limited` overlay only depends on the chunk difference, so the
-        # cache-relative offset gives the same mask as absolute positions. `past_key_values=None` (offline) is
-        # the full-sequence case.
+        # The standard masking machinery handles the cache offset: `create_bidirectional_mask` reads
+        # `q_offset = past_key_values.get_seq_length()` and `kv_length, kv_offset = get_mask_sizes(...)` from
+        # the sliding-window cache and offsets the `chunked_limited` overlay with the absolute frame positions
+        # accordingly. `past_key_values=None` (offline) is the full-sequence case.
         left_ctx, right_ctx = self._resolve_att_context_size(att_context_size)
         attention_mask_4d = create_bidirectional_mask(
             config=self.config,
@@ -1188,22 +1191,18 @@ class NemotronAsrEncoder(ParakeetEncoder):
         return configured
 
 
-class NemotronAsrTDTDecoder(ParakeetRNNTDecoder):
-    """LSTM-based prediction network for RNN-T."""
-
-    def __init__(self, config: NemotronAsrConfig):
+class NemotronAsrRNNTDecoder(ParakeetRNNTDecoder):
+    def __init__(self, config: NemotronAsrRNNTConfig):
         super().__init__(config)
 
 
-class NemotronAsrTDTJointNetwork(ParakeetTDTJointNetwork):
-    """Joint network that combines encoder and decoder outputs to predict tokens (no duration head)."""
-
-    def __init__(self, config: NemotronAsrConfig):
+class NemotronAsrRNNTJointNetwork(ParakeetRNNTJointNetwork):
+    def __init__(self, config: NemotronAsrRNNTConfig):
         super().__init__(config)
 
 
 @dataclass
-class NemotronAsrTDTOutput(ParakeetRNNTOutput):
+class NemotronAsrRNNTOutput(ParakeetRNNTOutput):
     pass
 
 
@@ -1213,15 +1212,15 @@ class NemotronAsrTDTOutput(ParakeetRNNTOutput):
     """
 )
 class NemotronAsrForRNNT(ParakeetForRNNT, NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin):
-    config: NemotronAsrConfig
+    config: NemotronAsrRNNTConfig
 
-    def __init__(self, config: NemotronAsrConfig):
+    def __init__(self, config: NemotronAsrRNNTConfig):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
-        self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.joint_hidden_size)
-        self.decoder = NemotronAsrTDTDecoder(config)
-        self.joint = NemotronAsrTDTJointNetwork(config)
-        self.max_symbols_per_step = config.max_symbols_per_step
+        self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.decoder_hidden_size)
+        self.decoder = NemotronAsrRNNTDecoder(config)
+        self.joint = NemotronAsrRNNTJointNetwork(config)
+        self.max_symbols_per_step = config.max_symbols_per_step  # used in generation
 
         self.post_init()
 
@@ -1232,12 +1231,12 @@ class NemotronAsrForRNNT(ParakeetForRNNT, NemotronAsrPreTrainedModel, NemotronAs
         input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
-        decoder_cache: NemotronAsrTDTDecoderCache | None = None,
+        decoder_cache: NemotronAsrRNNTDecoderCache | None = None,
         use_decoder_cache: bool | None = None,
         encoder_outputs: NemotronAsrEncoderModelOutput | tuple[torch.FloatTensor] | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> NemotronAsrTDTOutput:
+    ) -> NemotronAsrRNNTOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
             Decoder input token ids for single-step inference.
@@ -1281,7 +1280,7 @@ class NemotronAsrForRNNT(ParakeetForRNNT, NemotronAsrPreTrainedModel, NemotronAs
             )
 
         if use_decoder_cache and decoder_cache is None:
-            decoder_cache = NemotronAsrTDTDecoderCache()
+            decoder_cache = NemotronAsrRNNTDecoderCache()
 
         decoder_hidden_states = self.decoder(decoder_input_ids, cache=decoder_cache)
         logits = self.joint(
@@ -1294,7 +1293,7 @@ class NemotronAsrForRNNT(ParakeetForRNNT, NemotronAsrPreTrainedModel, NemotronAs
                 "RNN-T training loss is not yet implemented for NemotronAsrForRNNT. Inference (greedy decoding) works."
             )
 
-        return NemotronAsrTDTOutput(
+        return NemotronAsrRNNTOutput(
             loss=None,
             logits=logits,
             last_hidden_state=encoder_outputs.last_hidden_state,
@@ -1304,170 +1303,13 @@ class NemotronAsrForRNNT(ParakeetForRNNT, NemotronAsrPreTrainedModel, NemotronAs
             decoder_cache=decoder_cache,
         )
 
-    # ----------------------------------------------------------------------------------------------
-    # Cache-aware streaming generation.
-    #
-    # `generate(input_features=<generator of mel chunks>, ...)` drives RNN-T greedy decoding over a
-    # stream: each chunk is encoded cache-aware (threading the attention `encoder_past_key_values` and
-    # the unified `NemotronAsrEncoderCausalConvPaddingCache`), its encoder frames are appended to a
-    # growing buffer, and the transducer walks that buffer frame by frame. Mirrors the generator +
-    # `encoder_past_key_values` handling of [`VoxtralRealtimeForConditionalGeneration`], adapted to the
-    # transducer frame-walking loop.
-    # ----------------------------------------------------------------------------------------------
-
-    def _get_encoder_cache(self, batch_size: int, max_cache_len: int) -> "NemotronAsrEncoderCache":
-        """Return a reusable [`NemotronAsrEncoderCache`] for cache-aware streaming (mirrors VoxtralRealtime)."""
-        need_new_cache = (
-            not hasattr(self, "_encoder_cache")
-            or self._encoder_cache.max_cache_len != max_cache_len
-            or len(self._encoder_cache.key_cache) != self.config.encoder_config.num_hidden_layers
-        )
-        if need_new_cache:
-            self._encoder_cache = NemotronAsrEncoderCache(
-                num_hidden_layers=self.config.encoder_config.num_hidden_layers, max_cache_len=max_cache_len
-            )
-        else:
-            self._encoder_cache.reset()
-        return self._encoder_cache
-
-    def _encode_streaming_chunk(
-        self,
-        chunk: torch.Tensor,
-        encoder_past_key_values: "NemotronAsrEncoderCache",
-        padding_cache: NemotronAsrEncoderCausalConvPaddingCache,
-        att_context_size: list,
-    ) -> torch.Tensor:
-        """Encode one mel chunk cache-aware and return its projected (joint-space) encoder frames."""
-        encoder_outputs = self.encoder(
-            input_features=chunk,
-            past_key_values=encoder_past_key_values,
-            padding_cache=padding_cache,
-            att_context_size=att_context_size,
-            use_cache=True,
-            output_attention_mask=False,
-        )
-        # `encoder_past_key_values` and `padding_cache` are mutated in place.
-        return self.encoder_projector(encoder_outputs.last_hidden_state)
-
-    def _prepare_model_inputs(self, inputs=None, bos_token_id=None, model_kwargs=None):
-        input_features = inputs if inputs is not None else (model_kwargs or {}).get("input_features")
-        if not isinstance(input_features, GeneratorType):
-            return super()._prepare_model_inputs(inputs, bos_token_id, model_kwargs)
-
-        model_kwargs = model_kwargs or {}
-        generator = input_features
-        try:
-            first_chunk = next(generator)
-        except StopIteration as e:
-            raise ValueError("The `input_features` generator did not yield any chunk.") from e
-        first_chunk = first_chunk.to(device=self.device, dtype=self.dtype)
-        batch_size = first_chunk.shape[0]
-
-        encoder_past_key_values = self._get_encoder_cache(batch_size, max_cache_len=self._streaming_att_context[0])
-        padding_cache = NemotronAsrEncoderCausalConvPaddingCache()
-        pooler = self._encode_streaming_chunk(
-            first_chunk, encoder_past_key_values, padding_cache, self._streaming_att_context
-        )
-
-        model_kwargs.pop("input_features", None)
-        model_kwargs["input_features_generator"] = generator
-        model_kwargs["encoder_past_key_values"] = encoder_past_key_values
-        model_kwargs["padding_cache"] = padding_cache
-        model_kwargs["encoder_outputs"] = NemotronAsrEncoderModelOutput(pooler_output=pooler)
-        model_kwargs["encoder_valid_lengths"] = torch.full(
-            (batch_size,), pooler.shape[1], dtype=torch.long, device=self.device
-        )
-        model_kwargs["encoder_frame_idxs"] = torch.zeros(batch_size, dtype=torch.long, device=self.device)
-        return first_chunk, "input_features", model_kwargs
-
-    def _update_model_kwargs_for_generation(self, outputs, model_kwargs, *args, **kwargs):
-        model_kwargs = super()._update_model_kwargs_for_generation(outputs, model_kwargs, *args, **kwargs)
-        if not getattr(self, "_streaming", False):
-            return model_kwargs
-
-        generator = model_kwargs.get("input_features_generator")
-        # Pull and encode further chunks whenever the frame pointer has caught up with the buffer.
-        while not self._stream_exhausted and bool(
-            (model_kwargs["encoder_frame_idxs"] >= model_kwargs["encoder_valid_lengths"]).all()
-        ):
-            try:
-                chunk = next(generator)
-            except StopIteration:
-                self._stream_exhausted = True
-                break
-            chunk = chunk.to(device=self.device, dtype=self.dtype)
-            pooler = self._encode_streaming_chunk(
-                chunk,
-                model_kwargs["encoder_past_key_values"],
-                model_kwargs["padding_cache"],
-                self._streaming_att_context,
-            )
-            if pooler.shape[1] == 0:
-                continue
-            encoder_outputs = model_kwargs["encoder_outputs"]
-            encoder_outputs.pooler_output = torch.cat([encoder_outputs.pooler_output, pooler], dim=1)
-            model_kwargs["encoder_valid_lengths"] = model_kwargs["encoder_valid_lengths"] + pooler.shape[1]
-
-        # Recompute exhaustion now that the buffer may have grown (drives `EncoderExhaustedCriteria`).
-        self._encoder_finished = model_kwargs["encoder_frame_idxs"] >= model_kwargs["encoder_valid_lengths"]
-        return model_kwargs
-
-    def _prepare_generated_length(
-        self,
-        generation_config,
-        has_default_max_length,
-        has_default_min_length,
-        model_input_name,
-        input_ids_length,
-        inputs_tensor,
-    ):
-        if getattr(self, "_streaming", False):
-            # In streaming the length is bounded by stream exhaustion (via `EncoderExhaustedCriteria`),
-            # not by the (unknown) total audio length: size the output buffer generously.
-            if has_default_max_length and generation_config.max_new_tokens is None:
-                generation_config.max_length = int(1e9)
-                has_default_max_length = False
-            return GenerationMixin._prepare_generated_length(
-                self,
-                generation_config,
-                has_default_max_length,
-                has_default_min_length,
-                model_input_name,
-                input_ids_length,
-                inputs_tensor,
-            )
-        prepared = super()._prepare_generated_length(
-            generation_config,
-            has_default_max_length,
-            has_default_min_length,
-            model_input_name,
-            input_ids_length,
-            inputs_tensor,
-        )
-        return prepared
-
-    def generate(self, inputs=None, generation_config=None, **kwargs):
-        input_features = kwargs.get("input_features", inputs)
-        self._streaming = isinstance(input_features, GeneratorType)
-        if self._streaming:
-            self._stream_exhausted = False
-            att_context_size = kwargs.pop("att_context_size", None)
-            self._streaming_att_context = att_context_size or self.encoder._resolve_att_context_size()
-        try:
-            return super().generate(inputs=inputs, generation_config=generation_config, **kwargs)
-        finally:
-            # `_encoder_cache` is intentionally kept for reuse across calls (mirrors VoxtralRealtime).
-            for attr in ("_streaming", "_stream_exhausted", "_streaming_att_context"):
-                if hasattr(self, attr):
-                    delattr(self, attr)
-
 
 __all__ = [
     "NemotronAsrConfig",
     "NemotronAsrEncoderConfig",
     "NemotronAsrFeatureExtractor",
     "NemotronAsrEncoderModelOutput",
-    "NemotronAsrTDTOutput",
+    "NemotronAsrRNNTOutput",
     "NemotronAsrForRNNT",
     "NemotronAsrEncoder",
     "NemotronAsrPreTrainedModel",
