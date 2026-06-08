@@ -17,22 +17,24 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
+    LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
 )
 from ..mixtral.modeling_mixtral import (
     MixtralForCausalLM,
     MixtralModel,
-    MixtralPreTrainedModel,
     load_balancing_loss_func,
 )
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
@@ -365,7 +367,18 @@ class Param2MoEDecoderLayer(LlamaDecoderLayer):
         self.post_attention_layernorm = Param2MoERMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
-class Param2MoEPreTrainedModel(MixtralPreTrainedModel):
+class Param2MoEPreTrainedModel(LlamaPreTrainedModel):
+    config: Param2MoEConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Param2MoEDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(Param2MoERouter, index=0),
         "hidden_states": Param2MoEDecoderLayer,
@@ -374,7 +387,7 @@ class Param2MoEPreTrainedModel(MixtralPreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
         if isinstance(module, Param2MoEExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
