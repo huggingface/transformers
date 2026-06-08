@@ -92,7 +92,7 @@ class PPOCRV6SmallRecImageProcessor(TorchvisionBackend):
             if do_resize:
                 # [Key Change] Use antialias=False to align with cv2.resize
                 stacked_images = self.resize(
-                    image=stacked_images.float(), size=target_size, resample=resample, antialias=False
+                    image=stacked_images, size=target_size, resample=resample, antialias=False
                 )
             # [Key Change] RGB to BGR conversion
             stacked_images = stacked_images[:, [2, 1, 0], :, :]
