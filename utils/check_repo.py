@@ -1217,6 +1217,8 @@ UNDOCUMENTED_OBJECTS = [
     "Ernie4_5_VL_MoeVariableResolutionResamplerModel",  # BC Alias
     "Ernie4_5_VL_MoeVisionConfig",  # BC Alias
     "Ernie4_5_VL_MoeVisionTransformerPretrainedModel",  # BC Alias
+    # FIXME(SunMarc)
+    "GemmaQuantizationConfig",  # No docs, going for release
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
