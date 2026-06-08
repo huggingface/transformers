@@ -203,8 +203,8 @@ inputs = processor.apply_chat_template(
 
 # Generate
 generate_ids = model.generate(**inputs, max_new_tokens=30)
-processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-['user\n\nWhat is shown in this image?\nassistant\nThere is a red stop sign in the image.\nuser\n\nWhat about this image? How many cats do you see?\nassistant\ntwo', 'user\n\nWhat is shown in this image?\nassistant\nThe image shows a whimsical scene of a snowman sitting by a campfire. The snowman is anthropomorphized, wearing a hat and']
+print(processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+# ['user\n\nWhat is shown in this image?\nassistant\nThere is a red stop sign in the image.\nuser\n\nWhat about this image? How many cats do you see?\nassistant\ntwo', 'user\n\nWhat is shown in this image?\nassistant\nThe image shows a whimsical scene of a snowman sitting by a campfire. The snowman is anthropomorphized, wearing a hat and']
 ```
 
 ### Video inference

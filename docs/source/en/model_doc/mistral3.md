@@ -41,14 +41,17 @@ from transformers import pipeline
 
 
 messages = [
-    {"role": "user",
-        "content":[
-            {"type": "image",
-            "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg",},
-            {"type": "text", "text": "Describe this image."}
-        ,]
-    ,}
-,]
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg",
+            },
+            {"type": "text", "text": "Describe this image."},
+        ],
+    },
+]
 
 pipeline = pipeline(
     task="image-text-to-text",
@@ -57,8 +60,8 @@ pipeline = pipeline(
 )
 outputs = pipeline(text=messages, max_new_tokens=50, return_full_text=False)
 
-outputs[0]["generated_text"]
-'The image depicts a vibrant and lush garden scene featuring a variety of wildflowers and plants. The central focus is on a large, pinkish-purple flower, likely a Greater Celandine (Chelidonium majus), with a'
+print(outputs[0]["generated_text"])
+# 'The image depicts a vibrant and lush garden scene featuring a variety of wildflowers and plants. The central focus is on a large, pinkish-purple flower, likely a Greater Celandine (Chelidonium majus), with a'
 ```
 
 </hfoption>

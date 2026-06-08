@@ -77,7 +77,7 @@ torchrun  --nproc_per_node=8 --nnodes=2 --node_rank=0 | 1  --rdzv-id <an_id> --r
 
 And you'll get a nice generation:
 
-```json
+```text
 [Round 0] USER:Hello! What is the capital of France? What can you tell me about it? ASSISTANT:Hello! 😊 The capital of France is Paris, one of the most famous and beloved cities in the world. Here’s a quick overview of what makes Paris special:
 1. Iconic Landmarks
 

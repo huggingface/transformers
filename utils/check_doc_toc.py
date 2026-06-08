@@ -91,9 +91,14 @@ def ensure_all_models_in_toctree(model_doc: list[dict]):
     """Make sure that all models in `model_doc` folder are also part of the `_toctree.yml`. Raise if it's not
     the case."""
     all_documented_models = {model_doc_file.removesuffix(".md") for model_doc_file in os.listdir(DOC_PATH)} - {"auto"}
-    all_models_in_toctree = {
-        model_entry["local"].removeprefix("model_doc/") for section in model_doc if "sections" in section for model_entry in section["sections"]
-    }
+
+    all_models_in_toctree = set()
+    for section in model_doc:
+        if "sections" in section:
+            for model_entry in section["sections"]:
+                all_models_in_toctree.add(model_entry["local"].removeprefix("model_doc/"))
+        elif "local" in section:
+            all_models_in_toctree.add(section["local"].removeprefix("model_doc/"))
 
     # everything alright
     if all_documented_models == all_models_in_toctree:
