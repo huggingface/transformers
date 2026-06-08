@@ -352,12 +352,15 @@ class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, Dinov2WithRegistersEmbeddings):
-            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+            if module.position_embeddings is not None:
+                init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
-            init.zeros_(module.mask_token)
-            init.zeros_(module.register_tokens)
-        elif isinstance(module, Dinov2WithRegistersLayerScale):  # noqa: F821
+            if module.mask_token is not None:
+                init.zeros_(module.mask_token)
+        if isinstance(module, Dinov2WithRegistersLayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
+        if isinstance(module, Dinov2WithRegistersEmbeddings):
+            init.zeros_(module.register_tokens)
 
 
 class Dinov2WithRegistersEncoder(Dinov2WithRegistersPreTrainedModel):

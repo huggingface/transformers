@@ -23,7 +23,6 @@ from ...backbone_utils import BackboneConfigMixin, filter_output_hidden_states
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
-from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
@@ -191,14 +190,9 @@ class Dinov2WithRegistersPreTrainedModel(Dinov2PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module) -> None:
-        PreTrainedModel._init_weights(self, module)
+        super()._init_weights(module)
         if isinstance(module, Dinov2WithRegistersEmbeddings):
-            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
-            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
-            init.zeros_(module.mask_token)
             init.zeros_(module.register_tokens)
-        elif isinstance(module, Dinov2WithRegistersLayerScale):  # noqa: F821
-            init.constant_(module.lambda1, self.config.layerscale_value)
 
 
 class Dinov2WithRegistersEncoder(Dinov2Encoder):
