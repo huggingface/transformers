@@ -54,7 +54,7 @@ class PPOCRV5MobileRecAttention(nn.Module):
             )
         self.scale = self.head_dim**-0.5
         self.is_causal = False
-        self.attention_dropout = config.attention_dropout
+        self.dropout = config.attention_dropout
 
         # small tweak here compared to CLIP, no bias here
         self.qkv = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=False)
@@ -102,7 +102,7 @@ class PPOCRV5MobileRecAttention(nn.Module):
             key_states,
             value_states,
             attention_mask=None,
-            dropout=0.0 if not self.training else self.attention_dropout,
+            dropout=0.0 if not self.training else self.dropout,
             scaling=self.scale,
             **kwargs,
         )
