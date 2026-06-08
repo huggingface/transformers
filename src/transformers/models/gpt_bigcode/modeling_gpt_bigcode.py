@@ -380,6 +380,13 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         max_positions = config.max_position_embeddings
+        # Guard against unbounded memory allocation: this causal mask is O(max_positions**2)
+        # and is built eagerly from the model config, so reject pathologically large values.
+        if max_positions * max_positions > 2**30:
+            raise ValueError(
+                f"Refusing to build a {max_positions}x{max_positions} causal mask; check "
+                f"`max_position_embeddings` in the model config."
+            )
         self.register_buffer(
             "bias", torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)), persistent=False
         )

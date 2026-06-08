@@ -94,6 +94,10 @@ class BarkSelfAttention(nn.Module):
         self.layer_idx = layer_idx
         if is_causal:
             block_size = config.block_size
+            # Guard against unbounded memory allocation: this causal mask is O(block_size**2)
+            # and is built eagerly from the model config, so reject pathologically large values.
+            if block_size * block_size > 2**30:
+                raise ValueError(f"Refusing to build a {block_size}x{block_size} causal mask; check `block_size`.")
             bias = torch.tril(torch.ones((block_size, block_size), dtype=bool)).view(1, 1, block_size, block_size)
             self.register_buffer("bias", bias)
 

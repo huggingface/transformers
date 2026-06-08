@@ -388,6 +388,17 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_causal_mask_rejects_oversized_allocation(self):
+        # Regression: the causal-mask buffer is (max_position_embeddings x max_position_embeddings)
+        # and is built eagerly at construction, so an oversized value must be rejected instead of
+        # OOM-ing the process.
+        from transformers.models.gpt_neo.modeling_gpt_neo import GPTNeoSelfAttention
+
+        config = self.model_tester.get_config()
+        config.max_position_embeddings = 100000  # 100k x 100k bool mask = 10 GB
+        with self.assertRaises(ValueError):
+            GPTNeoSelfAttention(config, attention_type="global", layer_id=0)
+
     def test_gpt_neo_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt_neo_model(*config_and_inputs)

@@ -50,6 +50,10 @@ class Attention(nn.Module):
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         if n_state % config.n_head != 0:
             raise ValueError(f"Attention n_state shape: {n_state} must be divisible by config.n_head {config.n_head}")
+        # Guard against unbounded memory allocation: this causal mask is O(n_positions**2)
+        # and is built eagerly from the model config, so reject pathologically large values.
+        if n_positions * n_positions > 2**30:
+            raise ValueError(f"Refusing to build a {n_positions}x{n_positions} causal mask; check `n_positions`.")
         self.register_buffer(
             "bias",
             torch.tril(torch.ones(n_positions, n_positions)).view(1, 1, n_positions, n_positions),

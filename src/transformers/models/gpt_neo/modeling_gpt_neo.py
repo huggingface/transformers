@@ -54,6 +54,13 @@ class GPTNeoSelfAttention(nn.Module):
         self.config = config
 
         max_positions = config.max_position_embeddings
+        # Guard against unbounded memory allocation: this causal mask is O(max_positions**2)
+        # and is built eagerly from the model config, so reject pathologically large values.
+        if max_positions * max_positions > 2**30:
+            raise ValueError(
+                f"Refusing to build a {max_positions}x{max_positions} causal mask; check "
+                f"`max_position_embeddings` in the model config."
+            )
         bias = torch.tril(torch.ones((max_positions, max_positions), dtype=bool)).view(
             1, 1, max_positions, max_positions
         )
