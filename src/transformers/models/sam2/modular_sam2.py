@@ -596,9 +596,8 @@ class Sam2MultiScaleBlock(GradientCheckpointingLayer):
             # Shapes have changed due to Q pooling
             window_size = self.window_size // self.query_stride[0]
             H, W = residual.shape[1:3]
-
-            pad_h = (window_size - H % window_size) % window_size
-            pad_w = (window_size - W % window_size) % window_size
+            pad_h = (-H) % window_size
+            pad_w = (-W) % window_size
             pad_hw = (H + pad_h, W + pad_w)
 
         # Reverse window partition
