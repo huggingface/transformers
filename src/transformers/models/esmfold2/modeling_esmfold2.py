@@ -123,9 +123,9 @@ class ConfidenceHead(nn.Module):
         relative_position_encoding: Tensor | None = None,
         token_bonds_encoding: Tensor | None = None,
     ) -> dict[str, Tensor]:
-        s_inputs_normed = self.s_inputs_norm(s_inputs)
+        s_inputs_normed = self.s_inputs_norm(s_inputs.float()).to(s_inputs.dtype)
 
-        z_base = self.z_norm(z)
+        z_base = self.z_norm(z.float()).to(z.dtype)
         if relative_position_encoding is not None:
             z_base = z_base + relative_position_encoding
         if token_bonds_encoding is not None:
@@ -162,7 +162,7 @@ class ConfidenceHead(nn.Module):
 
         atom_mask_f = atom_mask_m.float()
         s_at_atoms = gather_token_to_atom(single, atom_to_token_m)
-        s_at_atoms_ln = self.plddt_ln(s_at_atoms)
+        s_at_atoms_ln = self.plddt_ln(s_at_atoms.float()).to(s_at_atoms.dtype)
 
         intra_idx = _compute_intra_token_idx(atom_to_token_m)
         intra_idx = intra_idx.clamp(max=self.plddt_weight.shape[0] - 1)
@@ -198,15 +198,15 @@ class ConfidenceHead(nn.Module):
         plddt_ca = plddt_per_atom.gather(1, rep_idx_m)
 
         # PAE
-        pae_logits = self.pae_head(self.pae_ln(pair))
+        pae_logits = self.pae_head(self.pae_ln(pair.float()).to(pair.dtype))
         pae = _categorical_mean(pae_logits, start=0.0, end=32.0).detach()
 
         # PDE
-        pde_logits = self.pde_head(self.pde_ln(pair))
+        pde_logits = self.pde_head(self.pde_ln(pair.float()).to(pair.dtype))
         pde = _categorical_mean(pde_logits, start=0.0, end=32.0).detach()
 
         # Resolved (per-atom binary).
-        s_at_atoms_res = self.resolved_ln(s_at_atoms)
+        s_at_atoms_res = self.resolved_ln(s_at_atoms.float()).to(s_at_atoms.dtype)
         w_res = self.resolved_weight[intra_idx]
         resolved_logits = torch.einsum("...c,...cb->...b", s_at_atoms_res, w_res)
 
@@ -289,6 +289,9 @@ class ESMFold2Model(PreTrainedModel):
 
     config_class = ESMFold2Config
     _keys_to_ignore_on_load_unexpected = [r"\._extra_state$"]
+    # The Fourier noise-embedding frequencies/phases are random Gaussian features whose
+    # precision drives the diffusion conditioning; keep them fp32 even under dtype=bf16.
+    _keep_in_fp32_modules_strict = ["fourier"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
@@ -510,7 +513,7 @@ class ESMFold2Model(PreTrainedModel):
             if refined_lm_z is not None:
                 z_inject_pair = z_inject_pair + refined_lm_z.to(z_inject_pair.dtype)
 
-            injected_pair = self.parcae_input_norm(z_inject_pair)
+            injected_pair = self.parcae_input_norm(z_inject_pair.float()).to(z_inject_pair.dtype)
             z = a * z + F.linear(injected_pair.to(z.dtype), b_mat)
             z = self.folding_trunk(z, pair_attention_mask=pair_mask)
 

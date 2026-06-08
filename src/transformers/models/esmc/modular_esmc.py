@@ -37,8 +37,8 @@ from ...utils import (  # type: ignore[import]
     logging,
 )
 from ..esm.modeling_esm import (
-    apply_rotary_pos_emb,
     eager_attention_forward,
+    rotate_half,
 )
 from .configuration_esmc import ESMCConfig
 
@@ -189,6 +189,26 @@ class ESMCRotaryEmbedding(nn.Module):
             cos = emb.cos()
             sin = emb.sin()
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Apply Rotary Position Embedding to ``q`` and ``k`` in the activation dtype.
+
+    This deliberately differs from the otherwise-identical
+    :func:`~transformers.models.esm.modeling_esm.apply_rotary_pos_emb` (whose
+    ``rotate_half`` it reuses): that helper upcasts ``q``/``k`` to fp32 for the
+    rotation, but the reference ESMC implementation applies RoPE in the
+    activation dtype. Upcasting here would make bf16 inference diverge from the
+    published ESMC numerics — at bf16 it is the single source of fork-vs-port
+    drift, accumulating over the residual stream (~0.3 over 80 layers on
+    ESMC-6B). The rotation is a no-op-difference in fp32 (``q`` is already fp32),
+    so fp32 stays bit-exact. See ``modeling_esm`` for the argument semantics.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
 
 
 # ---------------------------------------------------------------------------

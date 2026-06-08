@@ -186,10 +186,10 @@ class TransitionLayer(nn.Module):
         self.out_proj = nn.Linear(hidden, d_model, bias=False)
 
     def forward(self, x: Tensor) -> Tensor:
-        x = self.norm(x)
+        x = self.norm(x.float()).to(x.dtype)
         a = self.a_proj(x)
         b = self.b_proj(x)
-        return self.out_proj(F.silu(a) * b)
+        return self.out_proj((F.silu(a.float()) * b.float()).to(a.dtype))
 
 
 # ===========================================================================
@@ -210,9 +210,12 @@ class AdaptiveLayerNorm(nn.Module):
         self.s_shift = nn.Linear(d_cond, d_model, bias=False)
 
     def forward(self, a: Tensor, s: Tensor) -> Tensor:
-        a_norm = F.layer_norm(a.float(), (self.d_model,), None, None, self.eps).to(a.dtype)
+        a_norm = F.layer_norm(a.float(), (self.d_model,), None, None, self.eps)
         s_norm = F.layer_norm(s.float(), (self.d_cond,), self.s_scale.float(), None, self.eps).to(s.dtype)
-        return torch.sigmoid(self.s_gate(s_norm)) * a_norm + self.s_shift(s_norm)
+        # gate/shift come from bf16 linears; do the gating + affine in fp32, downcast at the end.
+        gate = torch.sigmoid(self.s_gate(s_norm).float())
+        shift = self.s_shift(s_norm).float()
+        return (gate * a_norm + shift).to(a.dtype)
 
 
 # ===========================================================================
@@ -233,6 +236,8 @@ class FourierEmbedding(nn.Module):
         self.register_buffer("b", torch.randn(c))
 
     def forward(self, t_hat: Tensor) -> Tensor:
+        # w/b are kept fp32 (ESMFold2Model._keep_in_fp32_modules_strict), so the random
+        # frequencies/phases — and the cos embedding — are computed at full precision.
         t = torch.as_tensor(t_hat, device=self.w.device, dtype=self.w.dtype).reshape(-1)
         return torch.cos(2.0 * torch.pi * (t[:, None] * self.w[None, :] + self.b[None, :]))
 
@@ -261,7 +266,7 @@ class SwiGLU(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         x12 = self.w12(x)
         x1, x2 = x12.split(self.hidden_features, dim=-1)
-        hidden = F.silu(x1) * x2
+        hidden = (F.silu(x1.float()) * x2.float()).to(x1.dtype)
         return self.w3(hidden)
 
 
@@ -347,7 +352,7 @@ def build_3d_rope(
 
 
 def qk_norm(x: Tensor) -> Tensor:
-    return F.rms_norm(x, (x.size(-1),)).to(x.dtype)
+    return F.rms_norm(x.float(), (x.size(-1),)).to(x.dtype)
 
 
 # ===========================================================================
@@ -367,7 +372,7 @@ class SwiGLUFFN(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         x = x.to(self.w_up.weight.dtype)
         x1, x2 = self.w_up(x).chunk(2, dim=-1)
-        return self.w_down(F.silu(x1) * x2)
+        return self.w_down((F.silu(x1.float()) * x2.float()).to(x1.dtype))
 
 
 # ===========================================================================
@@ -523,7 +528,7 @@ class SWA3DRoPEAttention(nn.Module):
             out = out * valid.unsqueeze(-1).unsqueeze(-1)
 
         out = out.to(input_dtype).reshape(B, N, -1)
-        out = out * torch.sigmoid(self.gate_proj(x_input))
+        out = (out.float() * torch.sigmoid(self.gate_proj(x_input).float())).to(input_dtype)
         return self.out_proj(out)
 
 
@@ -533,11 +538,11 @@ class SWA3DRoPEAttention(nn.Module):
 
 
 def _rms_adaln(x: Tensor, scale: Tensor, shift: Tensor) -> Tensor:
-    return F.rms_norm(x, (x.shape[-1],)) * (1 + scale) + shift
+    return (F.rms_norm(x.float(), (x.shape[-1],)) * (1 + scale.float()) + shift.float()).to(x.dtype)
 
 
 def _gated_residual(x: Tensor, gate: Tensor, y: Tensor) -> Tensor:
-    return x + gate * y
+    return (x.float() + gate.float() * y.float()).to(x.dtype)
 
 
 class SWAAtomBlock(nn.Module):
@@ -735,7 +740,9 @@ class ESMFold2AtomEncoder(nn.Module):
                 ],
                 dim=-1,
             )
-            c_base = self.atom_norm(self.atom_linear(atom_feats.to(self.atom_linear.weight.dtype)))
+            c_base = self.atom_norm(self.atom_linear(atom_feats.to(self.atom_linear.weight.dtype)).float()).to(
+                self.atom_linear.weight.dtype
+            )
             cos, sin = self.atom_transformer._build_3d_rope(ref_pos, ref_space_uid)
             cos = cos.repeat_interleave(num_diffusion_samples, 0)
             sin = sin.repeat_interleave(num_diffusion_samples, 0)
@@ -862,7 +869,7 @@ class ESMFold2AtomDecoder(nn.Module):
             q_l = result
             intermediates = []
 
-        r_l = self.output_linear(self.norm(q_l))
+        r_l = self.output_linear(self.norm(q_l.float()).to(q_l.dtype))
         return r_l, intermediates
 
 
@@ -920,7 +927,7 @@ class AttentionPairBias(nn.Module):
         if s is not None:
             x = self.adaln(a, s)
         else:
-            x = self.pre_norm(a)
+            x = self.pre_norm(a.float()).to(a.dtype)
 
         n_keys = x.shape[1]
         q = self.q_proj(x).view(bsz, n_queries, self.num_heads, self.head_dim)
@@ -936,12 +943,12 @@ class AttentionPairBias(nn.Module):
             attention_mask = attention_mask.repeat_interleave(num_diffusion_samples, dim=0)
 
         # Standard attention with pair bias
-        g = torch.sigmoid(self.g_proj(x)).view(bsz, n_queries, self.num_heads, self.head_dim)
+        g = torch.sigmoid(self.g_proj(x).float()).view(bsz, n_queries, self.num_heads, self.head_dim)
 
         logits = torch.einsum("... i h d, ... j h d -> ... i j h", q, k) * self.scale
 
         if z.dim() == 4:
-            pair_bias = self.pair_bias_proj(self.pair_norm(z))
+            pair_bias = self.pair_bias_proj(self.pair_norm(z.float()).to(z.dtype))
         else:
             pair_bias = z.unsqueeze(-1)
         logits = logits + pair_bias.to(dtype=logits.dtype)
@@ -953,11 +960,11 @@ class AttentionPairBias(nn.Module):
 
         attn = torch.softmax(logits, dim=-2, dtype=torch.float32).to(dtype=v.dtype)
         ctx = torch.einsum("... i j h, ... j h d -> ... i h d", attn, v)
-        ctx = g * ctx
-        out = self.out_proj(ctx.reshape(bsz, n_queries, d_model))
+        ctx = g * ctx.float()
+        out = self.out_proj(ctx.reshape(bsz, n_queries, d_model).to(v.dtype))
 
         if s is not None:
-            out = torch.sigmoid(self.out_gate(s)) * out
+            out = (torch.sigmoid(self.out_gate(s).float()) * out.float()).to(out.dtype)
         return out
 
 
@@ -995,14 +1002,14 @@ class ConditionedTransitionBlock(nn.Module):
         if s is not None:
             x = self.adaln(a, s)
         else:
-            x = self.pre_norm(a)
+            x = self.pre_norm(a.float()).to(a.dtype)
 
         swish_a, swish_b = self.lin_swish(x).chunk(2, dim=-1)
-        b = F.silu(swish_a) * swish_b
+        b = (F.silu(swish_a.float()) * swish_b.float()).to(swish_a.dtype)
         out = self.lin_out(b)
 
         if s is not None:
-            out = torch.sigmoid(self.output_gate(s)) * out
+            out = (torch.sigmoid(self.output_gate(s).float()) * out.float()).to(out.dtype)
         return out
 
 
@@ -1158,7 +1165,7 @@ class DiffusionConditioning(nn.Module):
             t = t.repeat_interleave(num_diffusion_samples, 0)
         t_noise = 0.25 * torch.log((t / sigma).clamp(min=1e-20))
         n = self.fourier(t_noise)
-        n = self.noise_proj(self.noise_norm(n))
+        n = self.noise_proj(self.noise_norm(n.float()).to(self.noise_proj.weight.dtype))
         s = s + n.unsqueeze(1)
 
         for block in self.s_transitions:
@@ -1314,7 +1321,7 @@ class DiffusionModule(nn.Module):
         )
 
         # Step 4: add conditioned s
-        a = a + self.s_to_token(self.s_step_norm(s))
+        a = a + self.s_to_token(self.s_step_norm(s.float()).to(s.dtype))
 
         # Step 5: token transformer
         a, _ = self.token_transformer(
@@ -1326,7 +1333,7 @@ class DiffusionModule(nn.Module):
         )
 
         # Step 6: token norm
-        a = self.token_norm(a)
+        a = self.token_norm(a.float()).to(a.dtype)
 
         # Step 7: atom decoder
         r_update, dec_intermediates = self.atom_decoder(
@@ -1866,10 +1873,14 @@ class LanguageModelShim(nn.Module):
         # The ESMC backbone may be loaded at a different precision than the trunk
         # (e.g. bf16 backbone with an fp32 trunk); align to the projection dtype.
         hidden_states = hidden_states.to(self.base_z_linear[1].weight.dtype)
-        lm_z = self.base_z_linear(hidden_states)  # [B, L, 81, d_z]
+        # base_z_linear[0] is an fp32-pinned LayerNorm; upcast in, downcast out.
+        normed = self.base_z_linear[0](hidden_states.float()).to(hidden_states.dtype)
+        lm_z = self.base_z_linear[1](normed)  # [B, L, 81, d_z]
         weights = self.base_z_combine.softmax(0)  # [81]
         lm_z = (weights @ lm_z).squeeze(-2)  # [B, L, d_z]
-        lm_z = self.base_z_mlp(lm_z)  # [B, L, L, d_z]
+        # base_z_mlp[1] is an fp32-pinned LayerNorm; upcast in, downcast out.
+        pair = self.base_z_mlp[0](lm_z)
+        lm_z = self.base_z_mlp[1](pair.float()).to(pair.dtype)  # [B, L, L, d_z]
         return lm_z
 
 
@@ -2049,10 +2060,10 @@ class TriangleMultiplicativeBlock(nn.Module):
         if visibility is None:
             visibility = pair_grid.new_ones(pair_grid.shape[:-1])
 
-        normalized_grid = self.norm_start(pair_grid)
+        normalized_grid = self.norm_start(pair_grid.float()).to(pair_grid.dtype)
         bundled = self.proj_bundle(normalized_grid)
         signal, gate_logits = bundled.split(2 * self.latent_channels, dim=-1)
-        routed = signal * torch.sigmoid(gate_logits)
+        routed = signal.float() * torch.sigmoid(gate_logits.float())
         routed = routed * visibility.unsqueeze(-1)
 
         left_stream, right_stream = routed.float().chunk(2, dim=-1)
@@ -2061,8 +2072,8 @@ class TriangleMultiplicativeBlock(nn.Module):
         else:
             contracted = self._triangular_contract(left_stream, right_stream)
         mixed = self.proj_emit(self.norm_mix(contracted).to(self.proj_emit.weight.dtype))
-        output_gate = torch.sigmoid(self.proj_gate(normalized_grid))
-        return mixed * output_gate
+        output_gate = torch.sigmoid(self.proj_gate(normalized_grid).float())
+        return (mixed.float() * output_gate).to(mixed.dtype)
 
 
 class TriangleMultiplicativeUpdate(nn.Module):
@@ -2100,12 +2111,12 @@ class Transition(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         if self._chunk_size is None or x.shape[1] <= self._chunk_size:
-            return x + self.ffn(self.norm(x))
+            return x + self.ffn(self.norm(x.float()).to(x.dtype))
         out_list: list[Tensor] = []
         for s in range(0, x.shape[1], self._chunk_size):
             e = min(s + self._chunk_size, x.shape[1])
             sl = x[:, s:e]
-            out_list.append(sl + self.ffn(self.norm(sl)))
+            out_list.append(sl + self.ffn(self.norm(sl.float()).to(sl.dtype)))
         return torch.cat(out_list, dim=1)
 
 
@@ -2192,7 +2203,7 @@ class OuterProductMean(nn.Module):
         self._chunk_size = chunk_size
 
     def forward(self, m: Tensor, msa_attention_mask: Tensor) -> Tensor:
-        m_norm = self.norm(m)
+        m_norm = self.norm(m.float()).to(m.dtype)
         x = self.W(m_norm) * msa_attention_mask.unsqueeze(-1).to(m_norm.dtype)
         a, b = x.chunk(2, dim=-1)
         mask_f = msa_attention_mask.to(a.dtype)
@@ -2243,13 +2254,13 @@ class MSAPairWeightedAveraging(nn.Module):
         B, L, M, _ = msa_repr.shape
         h, dh = self.n_heads, self.head_width
 
-        msa_normed = self.norm_single(msa_repr)
-        bias = self.compute_bias(pair_repr)  # [B, L, L, n_heads]
+        msa_normed = self.norm_single(msa_repr.float()).to(msa_repr.dtype)
+        bias = self.compute_bias[1](self.compute_bias[0](pair_repr.float()).to(pair_repr.dtype))  # [B, L, L, n_heads]
         bias.masked_fill_(~pair_attention_mask.unsqueeze(-1).bool(), -1e5)
         attn = torch.softmax(bias, dim=-2, dtype=torch.float32).to(bias.dtype)  # softmax over j
 
         v = self.Wv(msa_normed).reshape(B, L, M, h, dh)
-        gate = torch.sigmoid(self.Wgate(msa_normed)).reshape(B, L, M, h, dh)
+        gate = torch.sigmoid(self.Wgate(msa_normed).float()).to(msa_normed.dtype).reshape(B, L, M, h, dh)
 
         output = torch.einsum("bijh,bjmhd,bimhd->bimhd", attn, v, gate)
         return self.Wout(output.reshape(B, L, M, h * dh))
