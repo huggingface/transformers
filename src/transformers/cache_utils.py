@@ -33,6 +33,12 @@ logger = logging.get_logger(__name__)
 # ``PreTrainedConfig`` (the decoder text config) as the only positional argument.
 LAYER_TYPE_CACHE_MAPPING: dict[str, type] = {}
 
+# Parallel registry for the *static* implementation of a custom layer type, consulted by
+# ``StaticCache``. A ``StaticLayer`` subclass with a ``layer_type`` registers here instead of in
+# ``LAYER_TYPE_CACHE_MAPPING`` (constructed with ``max_cache_len=...``), so a single ``layer_type``
+# can have both a dynamic and a static cache layer (e.g. M3's sparse-attention indexer cache).
+LAYER_TYPE_STATIC_CACHE_MAPPING: dict[str, type] = {}
+
 
 class CacheLayerMixin(ABC):
     """Base, abstract class for a single layer's cache."""
@@ -47,7 +53,13 @@ class CacheLayerMixin(ABC):
         super().__init_subclass__(**kwargs)
         layer_type = cls.__dict__.get("layer_type", None)
         if layer_type is not None:
-            LAYER_TYPE_CACHE_MAPPING[layer_type] = cls
+            # Static layers go to the parallel static registry so a layer_type can carry both a
+            # dynamic and a static implementation (``StaticLayer`` is always defined by the time a
+            # subclass of it is, so the ``issubclass`` reference is safe here).
+            if issubclass(cls, StaticLayer):
+                LAYER_TYPE_STATIC_CACHE_MAPPING[layer_type] = cls
+            else:
+                LAYER_TYPE_CACHE_MAPPING[layer_type] = cls
 
     def __init__(self):
         self.keys: torch.Tensor | None = None
@@ -1414,6 +1426,9 @@ class StaticCache(Cache):
             # LinearAttention layers are static by essence - using `"moe"` as well is a trick, see the comment about it on DynamicCache
             elif layer_type in ("mamba", "conv", "linear_attention", "moe"):
                 layer = LinearAttentionLayer()
+            # Custom layer types (e.g. M3's sparse-attention indexer cache) that registered a static variant.
+            elif layer_type in LAYER_TYPE_STATIC_CACHE_MAPPING:
+                layer = LAYER_TYPE_STATIC_CACHE_MAPPING[layer_type](max_cache_len=max_cache_len)
             else:
                 layer = StaticLayer(max_cache_len=max_cache_len)
             layers.append(layer)

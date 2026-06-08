@@ -94,6 +94,34 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             return 1
         return super().param_element_size(model, param_name, param)
 
+    def _normalize_modules_to_not_convert(self, model: "PreTrainedModel"):
+        """Rewrite the skip-list to the model's own module tree.
+
+        ``modules_to_not_convert`` (and its ``ignored_layers`` alias) ships inside the checkpoint's
+        ``quantization_config`` using the *checkpoint's* key layout. Composite / renamed models expose a
+        different module tree (e.g. a VL model nests its decoder under ``model.language_model`` and renames
+        ``block_sparse_moe`` to ``mlp``), so a raw checkpoint name like
+        ``language_model.model.layers.0.block_sparse_moe.gate`` matches nothing and the module is quantized
+        anyway. Re-use the model's own checkpoint->module ``WeightRenaming`` rules — the same source of truth
+        the weight loader uses — to rewrite each skip name, keeping a rewrite only when it turns a name that
+        does not resolve to any real module into one that does (so models that already ship model-tree names
+        are left untouched).
+        """
+        skip = self.quantization_config.modules_to_not_convert
+        if not skip:
+            return
+
+        from ..conversion_mapping import get_model_conversion_mapping
+
+        renamings = get_model_conversion_mapping(model)
+        remapped = []
+        for name in skip:
+            renamed = name
+            for rename in renamings:
+                renamed, _ = rename.rename_source_key(renamed)
+            remapped.append(renamed)
+        self.quantization_config.modules_to_not_convert = remapped
+
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
@@ -101,6 +129,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     ):
         from ..integrations.finegrained_fp8 import replace_with_fp8_linear
 
+        self._normalize_modules_to_not_convert(model)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
@@ -167,6 +196,41 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             ]
         return []
 
+    def _is_mxfp8(self) -> bool:
+        """MXFP8 checkpoints ship E8M0 (uint8) per-block scales; plain FP8 ships float32."""
+        quant_method = getattr(self.quantization_config, "quant_method", None)
+        return quant_method == "mxfp8"
+
+    def _update_weight_conversions_mxfp8(self, weight_conversions):
+        """Native MXFP8 path: prepend an :class:`Fp8DecodeScale` op so the uint8 E8M0
+        scales are decoded to float32 ``2 ** (byte - 127)`` *before* any merge/concat op
+        collapses the per-expert structure, and add a generic fallback converter that
+        decodes the scales of plain ``FP8Linear`` weights (attention / dense projections)
+        which have no model-specific converter.
+        """
+        from ..core_model_loading import WeightConverter
+        from ..integrations.finegrained_fp8 import Fp8DecodeScale
+
+        updated: list = []
+        for conv in weight_conversions:
+            if isinstance(conv, WeightConverter) and any(p.endswith(".weight") for p in conv.source_patterns):
+                conv = WeightConverter(
+                    source_patterns=conv.source_patterns,
+                    target_patterns=conv._original_target_patterns,
+                    operations=[Fp8DecodeScale(self)] + list(conv.operations),
+                )
+            updated.append(conv)
+        # Generic fallback for plain ``nn.Linear`` scales with no model-specific converter.
+        # Listed last so the model converters above win the first-match for expert/dense scales.
+        updated.append(
+            WeightConverter(
+                source_patterns=["weight_scale_inv"],
+                target_patterns="weight_scale_inv",
+                operations=[Fp8DecodeScale(self)],
+            )
+        )
+        return updated
+
     def update_weight_conversions(self, weight_conversions):
         """When loading with ``dequantize=True``, attach an :class:`Fp8Dequantize` op to
         every existing :class:`WeightConverter` so that per-block scales are folded into
@@ -189,8 +253,12 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         # Native (``dequantize=False``) path: the weights stay in ``float8_e4m3fn`` and
         # the model's own converters route the sibling ``*.weight_scale_inv`` keys through
         # the same substring match + suffix-preserving rename as ``*.weight`` (see
-        # huggingface/transformers#45634), so there is nothing extra to wire up here.
+        # huggingface/transformers#45634). MXFP8 checkpoints ship those per-block scales as
+        # ``uint8`` E8M0 exponents (real scale = ``2 ** (byte - 127)``), but the FP8 compute
+        # path expects float32 multiplicative scales — so decode them at conversion time.
         if not (self.pre_quantized and self.quantization_config.dequantize):
+            if self.pre_quantized and self._is_mxfp8():
+                return self._update_weight_conversions_mxfp8(weight_conversions)
             return weight_conversions + self.get_weight_conversions()
 
         from ..core_model_loading import WeightConverter, WeightRenaming
