@@ -919,9 +919,9 @@ class AriaModel(AriaPreTrainedModel):
             image_attn_mask = torch.logical_not(flattened_mask)
 
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-        image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
+        pooler_output = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
 
-        return image_outputs
+        return BaseModelOutputWithPooling(pooler_output=pooler_output, **image_outputs)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor

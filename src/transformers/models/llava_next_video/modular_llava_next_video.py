@@ -470,7 +470,6 @@ class LlavaNextVideoModel(LlavaNextModel):
 class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
     @merge_with_config_defaults
     @can_return_tuple
-    @filter_output_hidden_states
     @auto_docstring
     def get_video_features(
         self,
