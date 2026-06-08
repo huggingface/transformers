@@ -88,7 +88,6 @@ class VibeVoiceAsrConfig(PreTrainedConfig):
     audio_bos_token_id: int = 151646
     audio_eos_token_id: int = 151647
     acoustic_tokenizer_chunk_size: int = 1440000
-    tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
         if isinstance(self.acoustic_tokenizer_encoder_config, dict):
@@ -361,8 +360,6 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
     """
 )
 class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-
     def __init__(self, config: VibeVoiceAsrConfig):
         super().__init__(config)
         self.model = VibeVoiceAsrModel(config)
