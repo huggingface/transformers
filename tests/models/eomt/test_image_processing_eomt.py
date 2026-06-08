@@ -152,7 +152,7 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 18})
+            self.assertEqual(image_processor.size, self.image_processor_tester.size)
 
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
             self.assertEqual(image_processor.size, {"shortest_edge": 42})
@@ -168,12 +168,17 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = (1, 3, 18, 18)
+            expected_output_image_shape = (1, 3, self.image_processor_tester.height, self.image_processor_tester.width)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = (2, 3, 18, 18)
+            expected_output_image_shape = (
+                self.image_processor_tester.batch_size,
+                3,
+                self.image_processor_tester.height,
+                self.image_processor_tester.width,
+            )
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     @unittest.skip(reason="Not supported")
@@ -189,12 +194,17 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             # Test Non batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = (1, 3, 18, 18)
+            expected_output_image_shape = (1, 3, self.image_processor_tester.height, self.image_processor_tester.width)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = (2, 3, 18, 18)
+            expected_output_image_shape = (
+                self.image_processor_tester.batch_size,
+                3,
+                self.image_processor_tester.height,
+                self.image_processor_tester.width,
+            )
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_pytorch(self):
@@ -206,11 +216,16 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertIsInstance(image, torch.Tensor)
 
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = (1, 3, 18, 18)
+            expected_output_image_shape = (1, 3, self.image_processor_tester.height, self.image_processor_tester.width)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = (2, 3, 18, 18)
+            expected_output_image_shape = (
+                self.image_processor_tester.batch_size,
+                3,
+                self.image_processor_tester.height,
+                self.image_processor_tester.width,
+            )
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_backends_equivalence(self):
@@ -284,7 +299,7 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         for image_processing_class in self.image_processing_classes.values():
             processor = image_processing_class(**self.image_processor_dict)
             # Set longest_edge to None to test for semantic segmentatiom.
-            processor.size = {"shortest_edge": 18, "longest_edge": None}
+            processor.size = {"shortest_edge": self.image_processor_tester.height, "longest_edge": None}
             image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
 
             inputs = processor(images=image, do_split_image=True, return_tensors="pt")
