@@ -62,13 +62,11 @@ class EomtImageProcessingTester:
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
-        # for the post_process_functions
-        self.batch_size = 2
+        self.num_labels = num_labels
+        # for the post_process methods
         self.num_queries = 3
-        self.num_classes = 2
         self.height = 18
         self.width = 18
-        self.num_labels = num_labels
 
     def prepare_image_processor_dict(self):
         return {
@@ -84,7 +82,7 @@ class EomtImageProcessingTester:
     def prepare_fake_eomt_outputs(self, batch_size, patch_offsets=None):
         return EomtForUniversalSegmentationOutput(
             masks_queries_logits=torch.randn((batch_size, self.num_queries, self.height, self.width)),
-            class_queries_logits=torch.randn((batch_size, self.num_queries, self.num_classes + 1)),
+            class_queries_logits=torch.randn((batch_size, self.num_queries, self.num_labels + 1)),
             patch_offsets=patch_offsets,
         )
 
@@ -98,6 +96,22 @@ class EomtImageProcessingTester:
             numpify=numpify,
             torchify=torchify,
         )
+
+    def prepare_post_process_semantic_segmentation_inputs(self):
+        inputs = {
+            "outputs": EomtForUniversalSegmentationOutput(
+                masks_queries_logits=torch.randn(self.batch_size, self.num_queries, self.height, self.width),
+                class_queries_logits=torch.randn(self.batch_size, self.num_queries, self.num_labels + 1),
+            ),
+            # target_sizes are required for Eomt
+            "target_sizes": [(self.height, self.width)] * self.batch_size,
+        }
+        expected_shape = {
+            "num_labels": self.num_labels,
+            "height": self.height,
+            "width": self.width,
+        }
+        return inputs, expected_shape
 
 
 def prepare_semantic_single_inputs():

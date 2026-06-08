@@ -271,6 +271,10 @@ class SegGptImageProcessorPil(PilBackend):
             `(height, width)` corresponds to the target size (if `target_sizes` is specified).
         """
         masks = outputs.pred_masks
+
+        if target_sizes is not None and len(masks) != len(target_sizes):
+            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+
         masks = masks[:, :, masks.shape[2] // 2 :, :]
 
         std = torch.tensor(self.image_std).to(masks.device)

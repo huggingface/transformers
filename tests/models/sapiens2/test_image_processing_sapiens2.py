@@ -47,6 +47,7 @@ class Sapiens2ImageProcessingTester:
         image_mean=[0.485, 0.456, 0.406],
         image_std=[0.229, 0.224, 0.225],
         do_reduce_labels=False,
+        num_labels=5,
     ):
         super().__init__()
         size = size if size is not None else {"height": 20, "width": 18}
@@ -62,6 +63,7 @@ class Sapiens2ImageProcessingTester:
         self.image_mean = image_mean
         self.image_std = image_std
         self.do_reduce_labels = do_reduce_labels
+        self.num_labels = num_labels
 
     def prepare_image_processor_dict(self):
         return {
@@ -86,6 +88,19 @@ class Sapiens2ImageProcessingTester:
             numpify=numpify,
             torchify=torchify,
         )
+
+    def prepare_post_process_semantic_segmentation_inputs(self):
+        inputs = {
+            "outputs": SemanticSegmenterOutput(
+                logits=torch.randn(self.batch_size, self.num_labels, self.size["height"], self.size["width"])
+            )
+        }
+        expected_shape = {
+            "num_labels": self.num_labels,
+            "height": self.size["height"],
+            "width": self.size["width"],
+        }
+        return inputs, expected_shape
 
 
 @require_torch
@@ -168,29 +183,6 @@ class Sapiens2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(encoding["labels"].dtype, torch.long)
             self.assertTrue(encoding["labels"].min().item() >= 0)
             self.assertTrue(encoding["labels"].max().item() <= 255)
-
-    def test_post_process_semantic_segmentation(self):
-        image_processor = Sapiens2ImageProcessor()
-
-        batch_size = 2
-        num_labels = 3
-        height = width = 16
-        outputs = SemanticSegmenterOutput(logits=torch.randn(batch_size, num_labels, height, width))
-
-        # without target_sizes: spatial dims match logits
-        segmentation = image_processor.post_process_semantic_segmentation(outputs)
-        self.assertEqual(len(segmentation), batch_size)
-        self.assertEqual(segmentation[0].shape, torch.Size([height, width]))
-
-        # with target_sizes: output is resized to requested size
-        target_sizes = [(height * 2, width * 2)] * batch_size
-        segmentation = image_processor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
-        self.assertEqual(len(segmentation), batch_size)
-        self.assertEqual(segmentation[0].shape, torch.Size([height * 2, width * 2]))
-
-        # mismatched batch size raises ValueError
-        with self.assertRaises(ValueError):
-            image_processor.post_process_semantic_segmentation(outputs, target_sizes=[(100, 100)])
 
     def test_post_process_normal_estimation(self):
         image_processor = Sapiens2ImageProcessor()

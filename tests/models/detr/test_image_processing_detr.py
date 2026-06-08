@@ -54,6 +54,7 @@ class DetrImageProcessingTester:
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
         do_pad=True,
+        num_labels=5,
     ):
         # by setting size["longest_edge"] > max_resolution we're effectively not testing this :p
         size = size if size is not None else {"shortest_edge": 18, "longest_edge": 1333}
@@ -70,6 +71,11 @@ class DetrImageProcessingTester:
         self.image_mean = image_mean
         self.image_std = image_std
         self.do_pad = do_pad
+        self.num_labels = 5
+        # for the post_process methods
+        self.num_queries = 3
+        self.height = 3
+        self.width = 4
 
     def prepare_image_processor_dict(self):
         return {
@@ -130,6 +136,22 @@ class DetrImageProcessingTester:
             numpify=numpify,
             torchify=torchify,
         )
+
+    def prepare_post_process_semantic_segmentation_inputs(self):
+        from transformers.models.detr.modeling_detr import DetrSegmentationOutput
+
+        inputs = {
+            "outputs": DetrSegmentationOutput(
+                logits=torch.randn(self.batch_size, self.num_queries, self.num_labels + 1),
+                pred_masks=torch.randn(self.batch_size, self.num_queries, self.height, self.width),
+            )
+        }
+        expected_shape = {
+            "num_labels": self.num_labels,
+            "height": self.height,
+            "width": self.width,
+        }
+        return inputs, expected_shape
 
 
 @require_torch

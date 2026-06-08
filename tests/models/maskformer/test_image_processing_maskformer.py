@@ -142,6 +142,15 @@ class MaskFormerImageProcessingTester:
             torchify=torchify,
         )
 
+    def prepare_post_process_semantic_segmentation_inputs(self):
+        inputs = {"outputs": self.get_fake_maskformer_outputs()}
+        expected_shape = {
+            "num_labels": self.num_classes,
+            "height": self.height,
+            "width": self.width,
+        }
+        return inputs, expected_shape
+
 
 # Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_single_inputs
 def prepare_semantic_single_inputs():
@@ -422,55 +431,6 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         self.assertEqual(len(rle), 4)
         self.assertEqual(rle[0], 21)
         self.assertEqual(rle[1], 45)
-
-    def test_post_process_semantic_segmentation(self):
-        for image_processing_class in self.image_processing_classes.values():
-            feature_extractor = image_processing_class(num_labels=self.image_processor_tester.num_classes)
-            outputs = self.image_processor_tester.get_fake_maskformer_outputs()
-
-            segmentation = feature_extractor.post_process_semantic_segmentation(outputs)
-
-            self.assertEqual(len(segmentation), self.image_processor_tester.batch_size)
-            self.assertEqual(
-                segmentation[0].shape,
-                (
-                    self.image_processor_tester.height,
-                    self.image_processor_tester.width,
-                ),
-            )
-
-            target_sizes = [(1, 4) for i in range(self.image_processor_tester.batch_size)]
-            segmentation = feature_extractor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
-
-            self.assertEqual(segmentation[0].shape, target_sizes[0])
-
-            # return_segmentation_scores=True: returns list of SemanticSegmentationPostProcessorOutput
-            segmentation = feature_extractor.post_process_semantic_segmentation(
-                outputs, return_segmentation_scores=True
-            )
-            self.assertEqual(len(segmentation), self.image_processor_tester.batch_size)
-            self.assertEqual(
-                segmentation[0].segmentation.shape,
-                (self.image_processor_tester.height, self.image_processor_tester.width),
-            )
-            self.assertEqual(
-                segmentation[0].segmentation_scores.shape,
-                (
-                    self.image_processor_tester.num_classes,
-                    self.image_processor_tester.height,
-                    self.image_processor_tester.width,
-                ),
-            )
-
-            # return_segmentation_scores=True with target_sizes
-            segmentation = feature_extractor.post_process_semantic_segmentation(
-                outputs, target_sizes=target_sizes, return_segmentation_scores=True
-            )
-            self.assertEqual(segmentation[0].segmentation.shape, target_sizes[0])
-            self.assertEqual(
-                segmentation[0].segmentation_scores.shape,
-                (self.image_processor_tester.num_classes,) + target_sizes[0],
-            )
 
     def test_post_process_instance_segmentation(self):
         for image_processing_class in self.image_processing_classes.values():

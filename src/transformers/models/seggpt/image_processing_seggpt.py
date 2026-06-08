@@ -292,6 +292,9 @@ class SegGptImageProcessor(TorchvisionBackend):
         # batch_size x num_channels x 2*height x width
         masks = outputs.pred_masks
 
+        if target_sizes is not None and len(masks) != len(target_sizes):
+            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+
         # Predicted mask and prompt are concatenated in the height dimension
         # batch_size x num_channels x height x width
         masks = masks[:, :, masks.shape[2] // 2 :, :]

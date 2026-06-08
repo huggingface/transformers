@@ -25,6 +25,8 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 if is_torch_available():
     import torch
 
+    from transformers.models.sam3.modeling_sam3 import Sam3ImageSegmentationOutput
+
 if is_vision_available():
     pass
 
@@ -81,6 +83,19 @@ class Sam3ImageProcessingTester:
             numpify=numpify,
             torchify=torchify,
         )
+
+    def prepare_post_process_semantic_segmentation_inputs(self):
+        inputs = {
+            "outputs": Sam3ImageSegmentationOutput(
+                semantic_seg=torch.randn(self.batch_size, 1, self.mask_size["height"], self.mask_size["width"])
+            )
+        }
+        expected_shape = {
+            "num_labels": 1,
+            "height": self.mask_size["height"],
+            "width": self.mask_size["width"],
+        }
+        return inputs, expected_shape
 
 
 def prepare_semantic_single_inputs():
