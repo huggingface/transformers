@@ -16,6 +16,22 @@ jobs:
       - uses: actions/github-script@v7
         with:
           script: |
+            const wr = context.payload.workflow_run;
+            console.log('=== Triggering PR CI workflow_run info ===');
+            console.log(`  Run ID:           ${wr.id}`);
+            console.log(`  Run number:       ${wr.run_number}`);
+            console.log(`  Run URL:          ${wr.html_url}`);
+            console.log(`  Triggering event: ${wr.event}`);
+            console.log(`  Conclusion:       ${wr.conclusion}`);
+            console.log(`  Head branch:      ${wr.head_branch}`);
+            console.log(`  Head SHA:         ${wr.head_sha}`);
+            console.log(`  Actor:            ${wr.actor?.login}`);
+            console.log(`  Triggering actor: ${wr.triggering_actor?.login}`);
+            console.log(`  Created at:       ${wr.created_at}`);
+            console.log(`  Run started at:   ${wr.run_started_at}`);
+            console.log(`  Updated at:       ${wr.updated_at}`);
+            console.log('==========================================');
+
             const headSha = context.payload.workflow_run.head_sha;
             const runId = context.payload.workflow_run.id;
 
@@ -30,6 +46,7 @@ jobs:
               console.log(`No open PR found for SHA ${headSha}, skipping`);
               return;
             }
+            console.log(`Matched PR #${pr.number}: ${pr.html_url}`);
 
             // Check if the code quality job failed (causes all test jobs to be skipped)
             const { data: jobsData } = await github.rest.actions.listJobsForWorkflowRun({
