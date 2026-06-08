@@ -571,8 +571,9 @@ class ImageProcessingTestMixin:
 
         image_processor = torch.compile(image_processor, mode="reduce-overhead")
         output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
+        # torch.compile can introduce 1-level rounding differences in uint8 resize; after normalization this can reach 2 / 255.
         self._assert_tensors_equivalence(
-            output_eager.pixel_values, output_compiled.pixel_values, atol=1e-4, rtol=1e-4, mean_atol=1e-5
+            output_eager.pixel_values, output_compiled.pixel_values, atol=1e-2, rtol=1e-4, mean_atol=1e-5
         )
 
     def test_new_models_require_torchvision_backend(self):
