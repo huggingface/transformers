@@ -452,7 +452,9 @@ class MiniMaxM3VLAttention(nn.Module):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.q_norm = MiniMaxM3VLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = MiniMaxM3VLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.indexer = MiniMaxM3VLIndexer(config) if config.layer_types[layer_idx] == "minimax_m3_sparse" else None
+        self.indexer = (
+            MiniMaxM3VLIndexer(config, layer_idx) if config.layer_types[layer_idx] == "minimax_m3_sparse" else None
+        )
 
     def forward(
         self,
@@ -467,14 +469,12 @@ class MiniMaxM3VLAttention(nn.Module):
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         if self.indexer is not None:
-            sparse_bias = self.indexer(
+            attention_mask = self.indexer(
                 hidden_states,
                 position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                layer_idx=self.layer_idx,
             )
-            attention_mask = sparse_bias if attention_mask is None else attention_mask + sparse_bias
 
         query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
@@ -506,12 +506,15 @@ class MiniMaxM3VLAttention(nn.Module):
 class MiniMaxM3VLIndexer(nn.Module):
     r"""Lightning Indexer for MiniMax M3 sparse attention.
 
-    Scores key *blocks* of size ``index_block_size`` against each query with a
-    small ``index_n_heads``-head dot-product branch, then keeps, per
-    query, the top-``index_topk_blocks`` blocks plus the first
-    ``index_init_blocks`` blocks and the ``index_local_blocks`` blocks
-    immediately preceding the query (always visible). It returns a
-    ``[B, 1, S_q, S_k]`` additive ``block_bias`` that is ``0`` at every allowed
+    Scores each query against every key with a small ``index_n_heads``-head
+    dot-product branch, then max-pools those per-key scores into *blocks* of
+    ``index_block_size`` keys and keeps, per query, the top-``index_topk_blocks``
+    key blocks plus the ``index_local_blocks`` blocks immediately preceding the
+    query (always visible). Selection therefore happens at the granularity of a
+    *block of keys* rather than individual keys: the expensive main attention
+    only has to attend the handful of selected key blocks, which is what makes
+    it block-sparse (and cheaper) on long sequences. It returns a
+    ``[B, 1, S_q, S_k]`` additive bias that is ``0`` at every allowed
     (query, key) pair and ``-inf`` elsewhere, to be summed onto the main
     attention mask — the same scatter-into-``-inf``-bias trick as
     [`DeepseekV4Indexer`].
@@ -521,9 +524,10 @@ class MiniMaxM3VLIndexer(nn.Module):
     checkpoint disables the index-value path on every sparse layer).
     """
 
-    def __init__(self, config: MiniMaxM3VLTextConfig):
+    def __init__(self, config: MiniMaxM3VLTextConfig, layer_idx: int):
         super().__init__()
         self.config = config
+        self.layer_idx = layer_idx
         self.q_proj = nn.Linear(config.hidden_size, config.index_n_heads * config.index_head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.index_head_dim, bias=False)
         self.q_norm = MiniMaxM3VLRMSNorm(config.index_head_dim, eps=config.rms_norm_eps)
@@ -535,72 +539,60 @@ class MiniMaxM3VLIndexer(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         position_ids: torch.Tensor | None,
         past_key_values: Cache | None,
-        layer_idx: int,
     ) -> torch.Tensor:
         config = self.config
         head_dim = config.index_head_dim
         num_heads = config.index_n_heads
-        block = config.index_block_size
+        block_size = config.index_block_size
         topk_blocks = config.index_topk_blocks
-        init_blocks = config.index_init_blocks
         local_blocks = config.index_local_blocks
 
-        bsz, slen, _ = hidden_states.shape
-        idx_q = self.q_proj(hidden_states).view(bsz, slen, num_heads, head_dim)
-        idx_k = self.k_proj(hidden_states).view(bsz, slen, 1, head_dim)
+        batch, q_len, _ = hidden_states.shape
+        idx_q = self.q_proj(hidden_states).view(batch, q_len, num_heads, head_dim)
+        idx_k = self.k_proj(hidden_states).view(batch, q_len, 1, head_dim)
         idx_q = self.q_norm(idx_q).transpose(1, 2)  # [B, H_idx, Sq, D]
         idx_k = self.k_norm(idx_k).transpose(1, 2)  # [B, 1, Sq, D]
         cos, sin = position_embeddings
         idx_q, idx_k = apply_rotary_pos_emb(idx_q, idx_k, cos[..., :head_dim], sin[..., :head_dim])
 
-        # Cache the indexer keys (one head, ``index_head_dim`` per token) so a
-        # decode-step query scores against the full history.
         cache_layer: MiniMaxM3VLSparseCacheLayer | None = (
-            past_key_values.layers[layer_idx] if past_key_values is not None else None
+            past_key_values.layers[self.layer_idx] if past_key_values is not None else None
         )
         idx_k = cache_layer.update_index(idx_k) if cache_layer is not None else idx_k
-        q_positions = torch.arange(slen, device=idx_q.device) if position_ids is None else position_ids[0]
+        q_positions = torch.arange(q_len, device=idx_q.device) if position_ids is None else position_ids[0]
 
-        # Build the ``[B, 1, S_q, S_k]`` top-k + init + local additive mask: ``0`` at every
-        # allowed (query, key) pair, ``-inf`` elsewhere. ``idx_q`` is ``[B, H_idx, S_q, D]``
-        # (only the new queries); ``idx_k`` is ``[B, 1, S_k, D]`` (the full cached history);
-        # ``q_positions`` are the absolute query positions so the causal block threshold
-        # lines up with the cache during decode.
-        batch, heads, q_len, _ = idx_q.shape
         k_len = idx_k.shape[2]
-        n_blocks = -(-k_len // block)  # ceil-div
-        pad = n_blocks * block - k_len
+        num_key_blocks = -(-k_len // block_size)  # ceil-div
+        pad = num_key_blocks * block_size - k_len
 
-        # Per-(head, query) block score = pool over the block's key tokens, then
-        # reduce over index heads. Pad keys with ``-inf`` so the trailing partial
-        # block never wins a top-k slot on padding.
-        scores = torch.matmul(idx_q.float(), idx_k.expand(-1, heads, -1, -1).float().transpose(-1, -2))
+        # Score every key per (head, query), then max-pool over the keys inside
+        # each block and over the index heads to get a single score per *key
+        # block*. Pad keys with ``-inf`` so the trailing partial block never wins
+        # a top-k slot on padding.
+        scores = torch.matmul(idx_q.float(), idx_k.expand(-1, num_heads, -1, -1).float().transpose(-1, -2))
         if pad:
             scores = F.pad(scores, (0, pad), value=float("-inf"))
-        scores = scores.view(batch, heads, q_len, n_blocks, block)
-        block_scores = scores.amax(dim=-1).amax(
-            dim=1
-        )  # max-pool over block tokens, then over heads -> [B, S_q, n_blocks]
+        scores = scores.view(batch, num_heads, q_len, num_key_blocks, block_size)
+        block_scores = scores.amax(dim=-1).amax(dim=1)  # -> [B, S_q, num_key_blocks]
 
         # Block-level causality on absolute positions.
-        q_block = q_positions // block  # [S_q]
-        future = torch.arange(n_blocks, device=idx_q.device).view(1, 1, -1) > q_block.view(1, -1, 1)
+        q_block = q_positions // block_size  # [S_q]
+        future = torch.arange(num_key_blocks, device=idx_q.device).view(1, 1, -1) > q_block.view(1, -1, 1)
         block_scores = block_scores.masked_fill(future, float("-inf"))
 
         # Same scatter-into-``-inf``-bias idea as deepseek_v4: start all-masked,
-        # punch ``0`` at the selected blocks (top-k, then the always-on init and
-        # local windows), then re-mask the future so a short history can't leak.
-        bias = block_scores.new_full((batch, q_len, n_blocks), float("-inf"))
-        bias.scatter_(-1, block_scores.topk(min(topk_blocks, n_blocks), dim=-1).indices, 0.0)
-        if init_blocks > 0:
-            bias[..., :init_blocks] = 0.0
+        # punch ``0`` at the selected key blocks (top-k, then the always-on local
+        # window), then re-mask the future so a short history can't leak.
+        bias = block_scores.new_full((batch, q_len, num_key_blocks), float("-inf"))
+        bias.scatter_(-1, block_scores.topk(min(topk_blocks, num_key_blocks), dim=-1).indices, 0.0)
         if local_blocks > 0:
             local = torch.arange(local_blocks, device=idx_q.device)
             local = (q_block.view(-1, 1) - local.view(1, -1)).clamp(min=0)  # [S_q, local]
             bias.scatter_(-1, local.unsqueeze(0).expand(batch, -1, -1), 0.0)
         bias = bias.masked_fill(future, float("-inf"))
 
-        token_bias = bias.repeat_interleave(block, dim=-1)[..., :k_len]
+        # Broadcast the per-block verdict back onto each key, then drop padding.
+        token_bias = bias.repeat_interleave(block_size, dim=-1)[..., :k_len]
 
         # Token-level causality, so the bias is self-contained: the diagonal block is selected as a
         # whole (block granularity), but the keys *inside* it that sit ahead of the query must still be
@@ -1013,11 +1005,8 @@ class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
     def __init__(self, head_dim: int, theta: float = 10000.0):
         super().__init__()
         band = (head_dim // 3) // 2 * 2
-        dims = (band, band, head_dim - 2 * band)
-        inv_freq = torch.cat([1.0 / (theta ** (torch.arange(0, d, 2, dtype=torch.float32) / d)) for d in dims])
-        axis_of_freq = torch.cat([torch.full((d // 2,), axis) for axis, d in enumerate(dims)])
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("axis_of_freq", axis_of_freq, persistent=False)
+        self.dims = (band, band, head_dim - 2 * band)
+        self.theta = theta
 
     def forward(
         self, grid_thw: torch.Tensor, device: torch.device, dtype: torch.dtype
@@ -1030,7 +1019,13 @@ class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
             coords.append(torch.stack([ti, hi, wi], dim=-1))
         coords = torch.cat(coords).to(device=device, dtype=torch.float32)
 
-        freqs = coords[:, self.axis_of_freq] * self.inv_freq
+        # Per-axis inverse frequencies laid out as T|H|W, then broadcast each patch's
+        # T/H/W coordinate across its own band so every frequency rotates by its axis.
+        inv_freq = torch.cat(
+            [1.0 / (self.theta ** (torch.arange(0, d, 2, device=device, dtype=torch.float32) / d)) for d in self.dims]
+        )
+        band_freqs = torch.tensor([d // 2 for d in self.dims], device=device)
+        freqs = coords.repeat_interleave(band_freqs, dim=1) * inv_freq
         emb = freqs.repeat_interleave(2, dim=-1)
         return emb.cos().to(dtype), emb.sin().to(dtype)
 

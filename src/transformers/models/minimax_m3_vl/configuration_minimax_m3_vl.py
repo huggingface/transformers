@@ -51,8 +51,6 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
         Number of key tokens pooled into a single scored block.
     index_topk_blocks (`int`, *optional*, defaults to 16):
         Number of top-scoring key blocks each query may attend to.
-    index_init_blocks (`int`, *optional*, defaults to 0):
-        Number of leading key blocks always kept visible.
     index_local_blocks (`int`, *optional*, defaults to 1):
         Number of key blocks immediately preceding the query always kept visible.
     num_mtp_modules (`int`, *optional*, defaults to 0):
@@ -125,7 +123,6 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
     index_head_dim: int = 128
     index_block_size: int = 128
     index_topk_blocks: int = 16
-    index_init_blocks: int = 0
     index_local_blocks: int = 1
     layer_types: list[str] | None = None
     num_mtp_modules: int = 0
@@ -143,7 +140,6 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
             "index_head_dim": "sparse_index_dim",
             "index_block_size": "sparse_block_size",
             "index_topk_blocks": "sparse_topk_blocks",
-            "index_init_blocks": "sparse_init_block",
             "index_local_blocks": "sparse_local_block",
         }.items():
             if legacy in sparse_cfg:
