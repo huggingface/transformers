@@ -520,6 +520,20 @@ class MiniMaxM3VLIndexer(nn.Module):
     Like DeepSeek-V4's indexer this is purely a *selection* branch: it has no
     value projection and produces no residual output of its own (the upstream
     checkpoint disables the index-value path on every sparse layer).
+
+    TODO: blocks are anchored to absolute key *slots* (the contiguous reshape in
+    `forward` and `q_block = slot // block_size`), so left-padding shifts the block
+    boundaries and the selection diverges from an unpadded run -- only right-padding
+    is equivalent (same limitation as DeepSeek-V4; see `test_right_padding_does_not_leak`
+    / the skipped `test_left_padding_compatibility`). For *true* left-padding equivalence
+    we'd make blocking content-relative instead of slot-relative:
+      1. derive block ids from `position_ids` (content positions, 0 at each row's first
+         real token) rather than from absolute slots, and
+      2. replace the contiguous `view(..., num_key_blocks, block_size).amax(-1)` key pool
+         with a per-row position-binned pool (e.g. `scatter_reduce` over `key_position //
+         block_size`), so pad never shifts the boundaries, and
+      3. mask padded keys' scores to `-inf` before the pool so a pad key can't win a block
+         a top-k slot.
     """
 
     def __init__(self, config: MiniMaxM3VLTextConfig, layer_idx: int):
@@ -592,7 +606,7 @@ class MiniMaxM3VLIndexer(nn.Module):
         block_keep = (bias == 0.0).repeat_interleave(self.block_size, dim=-1)[..., :k_len].unsqueeze(1)
 
         # This is the *final* attention mask for the layer, so it must carry token-level causality and any
-        # padding. ``create_causal_mask`` already folded both into ``attention_mask`` for eager (and for
+        # padding. `create_causal_mask` already folded both into ``attention_mask`` for eager (and for
         # every backend whenever there is padding), so there we just drop the non-selected key blocks on
         # top of it -- masking with ``finfo.min`` (never ``-inf``, which makes a fully-masked row NaN under
         # sdpa while eager stays finite). Only when the mask was collapsed to ``is_causal`` with

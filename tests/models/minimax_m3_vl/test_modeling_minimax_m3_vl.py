@@ -93,7 +93,6 @@ class MiniMaxM3VLVisionText2TextModelTester:
             "index_head_dim": 16,
             "index_block_size": 8,
             "index_topk_blocks": 4,
-            "index_init_blocks": 0,
             "index_local_blocks": 1,
         },
         vision_config={
@@ -222,14 +221,58 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     @unittest.skip(
         reason=(
-            "The text backbone's indexer compresses windows of consecutive tokens *before* the "
-            "attention mask is applied — left-padding shifts the window boundaries so pad tokens "
-            "get folded into the pooled KV entries, and the resulting logits diverge from the "
-            "unpadded run by design (same limitation as DeepSeek-V4)."
+            "The lightning indexer tiles the key axis into blocks of `index_block_size` *slots* and "
+            "selects whole blocks, so its block boundaries are anchored to absolute sequence slots. "
+            "Left-padding shifts every real token by the (per-row, generally non-block-aligned) pad "
+            "width, which regroups real keys into different blocks than the unpadded run and changes "
+            "which blocks win top-k — so left-padded logits diverge by design. This is the same "
+            "block-sparse limitation as DeepSeek-V4; see `test_right_padding_does_not_leak` for the "
+            "padding direction that *is* equivalent."
         )
     )
     def test_left_padding_compatibility(self):
         pass
+
+    def test_right_padding_does_not_leak(self):
+        """Right-padding must not change a sequence's real-token logits.
+
+        Pad keys land on slots *after* every real token, so block-level causality drops them before
+        top-k selection and the indexer's folded mask zeroes the pad columns. The real tokens therefore
+        occupy the same slots and see the same key blocks as in an unpadded run -- unlike left-padding,
+        which shifts the slot-anchored block boundaries (see `test_left_padding_compatibility`).
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.text_config._attn_implementation = "eager"
+        vocab = config.text_config.vocab_size
+        pad_id = config.text_config.pad_token_id
+        # Text-only inputs: keep ids clear of the image/video placeholder ids so no vision tower runs.
+        low = max(self.model_tester.image_token_index, self.model_tester.video_token_index) + 1
+        torch.manual_seed(0)
+        lengths = [self.model_tester.seq_length + 6, self.model_tester.seq_length + 1]
+        seqs = [torch.randint(low, vocab - 2, (n,), device=torch_device) for n in lengths]
+        max_len = max(lengths)
+
+        model = MiniMaxM3VLForConditionalGeneration(config).to(torch_device).eval()
+
+        per_seq_logits = []
+        for seq in seqs:
+            with torch.no_grad():
+                out = model(
+                    input_ids=seq[None],
+                    attention_mask=torch.ones(1, len(seq), dtype=torch.long, device=torch_device),
+                )
+            per_seq_logits.append(out.logits[0, : len(seq)])
+
+        input_ids = torch.full((len(seqs), max_len), pad_id, device=torch_device)
+        attention_mask = torch.zeros(len(seqs), max_len, dtype=torch.long, device=torch_device)
+        for i, seq in enumerate(seqs):
+            input_ids[i, : len(seq)] = seq
+            attention_mask[i, : len(seq)] = 1
+        with torch.no_grad():
+            batched_logits = model(input_ids=input_ids, attention_mask=attention_mask).logits
+
+        for i, seq in enumerate(seqs):
+            torch.testing.assert_close(batched_logits[i, : len(seq)], per_seq_logits[i], rtol=1e-4, atol=1e-4)
 
     def test_mismatching_num_image_tokens(self):
         """
@@ -352,7 +395,7 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 @slow
 @require_torch
 class MiniMaxM3VLIntegrationTest(unittest.TestCase):
-    model_id = "MiniMaxAI/MiniMax-M3-preview"
+    model_id = "MiniMaxAI/Minimax-M3-preview"
 
     def _load_model(self):
         from transformers import AutoConfig, AutoModelForImageTextToText, FineGrainedFP8Config
