@@ -28,7 +28,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
 from ... import initialization as init
-from ...integrations import use_kernel_func_from_hub
 from ...masking_utils import create_bidirectional_mask  # type: ignore[import]
 from ...modeling_outputs import (  # type: ignore[import]
     MaskedLMOutput,
@@ -248,33 +247,6 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    original_dtype = q.dtype
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q.float() * cos) + (rotate_half(q.float()) * sin)
-    k_embed = (k.float() * cos) + (rotate_half(k.float()) * sin)
-    return q_embed.to(original_dtype), k_embed.to(original_dtype)
-
-
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -301,6 +273,26 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Apply Rotary Position Embedding to ``q`` and ``k`` in the activation dtype.
+
+    This deliberately differs from the otherwise-identical
+    :func:`~transformers.models.esm.modeling_esm.apply_rotary_pos_emb` (whose
+    ``rotate_half`` it reuses): that helper upcasts ``q``/``k`` to fp32 for the
+    rotation, but the reference ESMC implementation applies RoPE in the
+    activation dtype. Upcasting here would make bf16 inference diverge from the
+    published ESMC numerics — at bf16 it is the single source of fork-vs-port
+    drift, accumulating over the residual stream (~0.3 over 80 layers on
+    ESMC-6B). The rotation is a no-op-difference in fp32 (``q`` is already fp32),
+    so fp32 stays bit-exact. See ``modeling_esm`` for the argument semantics.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
 
 
 def _make_attn_layernorm_qkv(d_model: int, bias: bool) -> nn.Module:
