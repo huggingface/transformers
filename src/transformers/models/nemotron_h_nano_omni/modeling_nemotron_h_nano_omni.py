@@ -24,48 +24,166 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-import transformers
-
+from ...activations import ACT2FN
 from ...generation import GenerationConfig
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from ..nemotron_h import NemotronHForCausalLM
 from ..radio import RADIOModel
-from .audio_model import SoundEncoder, SoundProjection
 from .configuration_nemotron_h_nano_omni import NemotronH_Nano_Omni_Reasoning_V3_Config
-from .evs import EfficientVideoSampling
 
 
 logger = logging.get_logger(__name__)
 
 
-class SquaredReLU(nn.Module):
-    def forward(self, x):
-        return torch.pow(torch.nn.functional.relu(x), 2)
-
-
-class RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-5):
+@use_kernel_forward_from_hub("RMSNorm")
+class NemotronH_Nano_Omni_RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        NemotronHNanoOmniRMSNorm is equivalent to T5LayerNorm
+        """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.eps = eps
+        self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.eps)
-        return (self.weight.to(torch.float32) * hidden_states).to(input_dtype)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-def version_cmp(v1, v2, op="eq"):
-    import operator
+class EfficientVideoSampling:
+    @staticmethod
+    def compute_retention_mask(
+        *,
+        video_embeds: torch.FloatTensor,
+        thw: torch.LongTensor,
+        spatial_merge_size: int,
+        q: float,
+    ):
+        """
+        Computes the retention mask for video embeddings based on the grid dimensions.
 
-    from packaging import version
+        Args:
+            video_embeds (`torch.FloatTensor` of shape `(T * H * W, hidden_size)`):
+                The video embeddings to compute the retention mask for.
+            thw (`torch.LongTensor` of shape `(3)`):
+                The temporal, height and width of feature shape of each video in LLM.
+            spatial_merge_size (`int`): The spatial merge size of the video embeddings.
+                If embeddings will be downsampled *later*, this should be the downsampling factor.
+            q: (`float`): Pruning rate factor, indicating number of tokens to prune (remove)
 
-    op_func = getattr(operator, op)
-    return op_func(version.parse(v1), version.parse(v2))
+        Returns:
+            `torch.Tensor`: The retention mask for the video embeddings (T * H * W).
+                1 for tokens to keep, 0 for tokens to prune.
+        """
+        T, H, W = thw
+
+        # Use reshape instead of einops to avoid graph breaks
+        video_embeds = video_embeds.reshape(T, H // spatial_merge_size, W // spatial_merge_size, video_embeds.size(-1))
+
+        # Core EVS
+        similarity = torch.nn.functional.cosine_similarity(video_embeds[1:, ...], video_embeds[:-1, ...], dim=-1)
+        dissimilarity = 1 - similarity
+
+        # Always ensure we include all tokens from the first frame
+        dissimilarity = torch.cat([255 * torch.ones_like(video_embeds[:1, :, :, 0]), dissimilarity], dim=0)
+        dissimilarity_flat = dissimilarity.view(-1)
+
+        min_num_tokens = (H // spatial_merge_size) * (W // spatial_merge_size)  # a single frame
+        evs_num_tokens = int(T * min_num_tokens * (1 - q))
+        num_tokens_to_keep = max(min_num_tokens, evs_num_tokens)
+
+        order = torch.argsort(dissimilarity_flat, dim=-1, descending=True, stable=True)
+        topk_indices = order[:num_tokens_to_keep]
+
+        retention_mask = torch.zeros_like(dissimilarity_flat, dtype=torch.bool)
+        retention_mask[topk_indices] = True
+        retention_mask = retention_mask.reshape(dissimilarity.size())
+
+        mask = retention_mask.view(-1)  # "T H W -> (T H W)"
+        return mask
+
+
+class SoundProjection(nn.Module):
+    """MLP projection from sound encoder hidden size to LLM hidden size.
+
+    Architecture: RMSNorm -> linear1 -> ReLU² -> linear2, matching the Megatron
+    checkpoint structure (`sound_projection.{norm,linear1,linear2}.weight`).
+    """
+
+    def __init__(
+        self,
+        sound_hidden_size: int,
+        projection_hidden_size: int,
+        llm_hidden_size: int,
+        bias: bool = True,
+        eps: float = 1e-5,
+    ):
+        super().__init__()
+        self.norm = NemotronH_Nano_Omni_RMSNorm(sound_hidden_size, eps=eps)
+        self.linear1 = nn.Linear(sound_hidden_size, projection_hidden_size, bias=bias)
+        self.activation = ACT2FN["relu2"]
+        self.linear2 = nn.Linear(projection_hidden_size, llm_hidden_size, bias=bias)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.norm(hidden_states)
+        hidden_states = self.linear1(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.linear2(hidden_states)
+        return hidden_states
+
+
+class SoundEncoder(nn.Module):
+    """Wrapper around the Parakeet encoder; we use only the encoder to extract audio embeddings."""
+
+    def __init__(self, config=None):
+        super().__init__()
+        from ..parakeet import ParakeetEncoder, ParakeetEncoderConfig
+
+        if config is None:
+            raise ValueError("config must be provided, and ParakeetEncoder must be available in transformers.")
+
+        if hasattr(config, "__dict__"):
+            config_dict = {
+                "attention_bias": getattr(config, "attention_bias", False),
+                "hidden_size": getattr(config, "hidden_size", 1024),
+                "num_attention_heads": getattr(config, "num_attention_heads", 8),
+                "num_hidden_layers": getattr(config, "num_hidden_layers", 24),
+                "intermediate_size": getattr(config, "intermediate_size", 4096),
+                "conv_kernel_size": getattr(config, "conv_kernel_size", 31),
+                "convolution_bias": getattr(config, "convolution_bias", False),
+                "feat_in": getattr(config, "feat_in", 80),
+                "subsampling_factor": getattr(config, "subsampling_factor", 8),
+                "subsampling_conv_channels": getattr(config, "subsampling_conv_channels", 256),
+                "subsampling_conv_kernel_size": getattr(config, "subsampling_conv_kernel_size", 3),
+                "subsampling_conv_stride": getattr(config, "subsampling_conv_stride", 2),
+                "num_mel_bins": getattr(config, "num_mel_bins", 128),
+                "scale_input": getattr(config, "scale_input", False),
+            }
+        elif isinstance(config, dict):
+            config_dict = config
+        else:
+            config_dict = {}
+
+        parakeet_config = ParakeetEncoderConfig(**config_dict)
+        self.config = parakeet_config
+        self.encoder = ParakeetEncoder(parakeet_config)
+
+    def forward(self, input_features: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
+        outputs = self.encoder(input_features=input_features, attention_mask=attention_mask)
+        return outputs.last_hidden_state
+
+    @property
+    def hidden_size(self) -> int:
+        return self.config.hidden_size
 
 
 class NemotronH_Nano_Omni_Reasoning_V3(PreTrainedModel):
@@ -78,7 +196,6 @@ class NemotronH_Nano_Omni_Reasoning_V3(PreTrainedModel):
     def __init__(self, config: NemotronH_Nano_Omni_Reasoning_V3_Config):
         super().__init__(config)
 
-        assert version_cmp(transformers.__version__, "4.36.2", "ge")
         image_size = config.force_image_size
         patch_size = config.patch_size
         self.patch_size = patch_size
@@ -95,19 +212,16 @@ class NemotronH_Nano_Omni_Reasoning_V3(PreTrainedModel):
 
         self.language_model = NemotronHForCausalLM(config.llm_config)
         self.vision_model = RADIOModel(config.vision_config)
-        # WAR for transformers issue 38358 — RADIO's `_init_weights` shadows the base
-        # `_initialize_weights` lookup; alias them so the meta-init path resolves.
-        self.vision_model.model._initialize_weights = self.vision_model.model._init_weights
-        self.vision_model.radio_model.make_preprocessor_external()
+        self.vision_model.make_preprocessor_external()
 
-        # 3D video patch projection. The RADIO ViT only ships a 2D `embedder`
-        # `[embed_dim, C·P²]`; this checkpoint also carries a `video_embedder`
-        # `[embed_dim, T·C·P²]` for temporally-packed video patches.
+        # 3D video patch projection. The native RADIO patch embedder is a 2D
+        # `patch_projection` `[embed_dim, C·P²]`; this checkpoint also carries a
+        # `video_patch_projection` `[embed_dim, T·C·P²]` for temporally-packed video patches.
         self.video_temporal_patch_dim = config.video_temporal_patch_size
-        pg = self.vision_model.radio_model.model.patch_generator
-        pg.video_embedder = nn.Linear(
-            in_features=self.video_temporal_patch_dim * 3 * pg.patch_size * pg.patch_size,
-            out_features=pg.embed_dim,
+        embeddings = self.vision_model.embeddings
+        embeddings.video_patch_projection = nn.Linear(
+            in_features=self.video_temporal_patch_dim * 3 * embeddings.patch_size * embeddings.patch_size,
+            out_features=embeddings.embed_dim,
             bias=False,
         )
 
@@ -122,13 +236,13 @@ class NemotronH_Nano_Omni_Reasoning_V3(PreTrainedModel):
         self.video_pruning_rate = config.video_pruning_rate
 
         self.mlp1 = nn.Sequential(
-            RMSNorm(vit_hidden_size * int(1 / self.downsample_ratio) ** 2, eps=1e-5),
+            NemotronH_Nano_Omni_RMSNorm(vit_hidden_size * int(1 / self.downsample_ratio) ** 2, eps=1e-5),
             nn.Linear(
                 vit_hidden_size * int(1 / self.downsample_ratio) ** 2,
                 vision_projection_hidden_size,
                 bias=False,
             ),
-            SquaredReLU(),
+            ACT2FN["relu2"],
             nn.Linear(vision_projection_hidden_size, llm_hidden_size, bias=False),
         )
         self.mlp1 = self.mlp1.to(self.language_model.config.torch_dtype)
@@ -274,7 +388,7 @@ class NemotronH_Nano_Omni_Reasoning_V3(PreTrainedModel):
         pixel_values = pixel_values.to(dtype=self.vision_model.config.torch_dtype)
         vit_embeds = self.vision_model(pixel_values).features
         vit_embeds = vit_embeds.to(dtype=torch.bfloat16)
-        patch_size = self.vision_model.radio_model.model.patch_generator.patch_size
+        patch_size = self.vision_model.patch_size
         B, _, H, W = pixel_values.shape
         h = H // patch_size
         w = W // patch_size
@@ -285,7 +399,7 @@ class NemotronH_Nano_Omni_Reasoning_V3(PreTrainedModel):
         return vit_embeds
 
     def extract_video_feature(self, pixel_values_videos):
-        pg = self.vision_model.radio_model.model.patch_generator
+        embeddings = self.vision_model.embeddings
         T = self.video_temporal_patch_dim
         N, C, H, W = pixel_values_videos.shape
 
@@ -297,15 +411,16 @@ class NemotronH_Nano_Omni_Reasoning_V3(PreTrainedModel):
 
         x = pixel_values_videos.reshape(num_groups, T * C, H, W)
 
-        orig_embedder = pg.embedder
-        pg.embedder = pg.video_embedder
+        # Temporally-packed video patches use the dedicated `video_patch_projection`.
+        orig_projection = embeddings.patch_projection
+        embeddings.patch_projection = embeddings.video_patch_projection
         try:
             vit_embeds = self.vision_model(x).features
         finally:
-            pg.embedder = orig_embedder
+            embeddings.patch_projection = orig_projection
 
         vit_embeds = vit_embeds.to(dtype=torch.bfloat16)
-        patch_size = pg.patch_size
+        patch_size = embeddings.patch_size
         h = H // patch_size
         w = W // patch_size
         vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], h, w, -1)
