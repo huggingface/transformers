@@ -1705,7 +1705,11 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
         # define the valid range for anchor coordinates
         eps = 1e-2
         anchors = torch.concat(anchors, 1)
-        valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)
+        tol = 1e-4
+        valid_mask = (
+            (anchors > (eps - tol)) &
+            (anchors < (1 - eps + tol))
+        ).all(-1, keepdim=True)
         anchors = torch.log(anchors / (1 - anchors))
         anchors = torch.where(valid_mask, anchors, torch.tensor(torch.finfo(dtype).max, dtype=dtype, device=device))
 
