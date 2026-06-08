@@ -114,8 +114,8 @@ jobs:
         working-directory: /transformers
         run: |
           python3 -m pip uninstall -y torch torchvision torchaudio torchcodec
-          python3 -m pip install --no-cache-dir "torchcodec==0.15.0.dev20260607" --index-url https://download.pytorch.org/whl/nightly/cpu
-          python3 -m pip install --no-cache-dir "torch==2.13.0.dev20260607" "torchvision==0.28.0.dev20260607" "torchaudio==2.11.0.dev20260607" --index-url https://download.pytorch.org/whl/nightly/cu126
+          python3 -m pip install --no-cache-dir "torchcodec==0.15.0.dev20260606" --index-url https://download.pytorch.org/whl/nightly/cpu
+          python3 -m pip install --no-cache-dir "torch==2.13.0.dev20260606" "torchvision==0.28.0.dev20260606" "torchaudio==2.12.0.dev20260606" --index-url https://download.pytorch.org/whl/nightly/cu126
 
       - name: NVIDIA-SMI
         run: |
