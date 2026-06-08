@@ -889,7 +889,9 @@ class NemotronAsrEncoderSubsamplingConv2D(nn.Module):
             # activation
             self.layers.append(nn.ReLU())
 
-        total_pad = self.kernel_size + self.stride - 2
+        # Compute output freq length by simulating the conv chain with the actual padding applied.
+        out_length = config.num_mel_bins
+        total_pad = self._pad_left + self._pad_right
         for _ in range(self.num_layers):
             out_length = (out_length + total_pad - self.kernel_size) // self.stride + 1
         self.linear = nn.Linear(config.subsampling_conv_channels * out_length, config.hidden_size, bias=True)
