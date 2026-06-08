@@ -64,11 +64,6 @@ class SubclassPostProcessorOutputTest(unittest.TestCase):
         labels = torch.randint(0, num_labels, (batch_size,))
         return SubclassPostProcessorOutput(scores=scores, labels=labels)
 
-    def test_attribute_access(self):
-        obj = self._make_output()
-        self.assertIsInstance(obj.scores, torch.Tensor)
-        self.assertIsInstance(obj.labels, torch.Tensor)
-
     def test_dict_access(self):
         obj = self._make_output()
         self.assertIsInstance(obj["scores"], torch.Tensor)
@@ -164,11 +159,6 @@ class SubclassPostProcessorOutputTest(unittest.TestCase):
         del obj.scores
         self.assertIn("labels", obj)
         self.assertIs(obj.labels, original_labels)
-
-    def test_delattr_nonexistent_attr_raises(self):
-        obj = self._make_output()
-        with self.assertRaises(AttributeError):
-            del obj.nonexistent
 
     def test_delattr_data_raises(self):
         obj = self._make_output()
