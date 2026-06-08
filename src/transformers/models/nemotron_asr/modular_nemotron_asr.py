@@ -155,7 +155,7 @@ class NemotronAsrRNNTConfig(ParakeetRNNTConfig):
     This is the base NemotronAsr transducer configuration. A conventional RNN-T (RNN Transducer) joint network
     emits token logits only (so the joint head outputs just `vocab_size` logits), and during greedy decoding
     the encoder frame pointer advances by exactly one frame on each blank emission. The duration-aware
-    [`NemotronAsrTDTConfig`] extends this configuration with a `durations` field.
+    [`NemotronAsrRNNTConfig`] extends this configuration with a `durations` field.
 
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network and joint network.
@@ -1240,7 +1240,7 @@ class NemotronAsrForRNNT(ParakeetForRNNT, NemotronAsrPreTrainedModel, NemotronAs
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
             Decoder input token ids for single-step inference.
-        decoder_cache (`NemotronAsrTDTDecoderCache`, *optional*):
+        decoder_cache (`NemotronAsrRNNTDecoderCache`, *optional*):
             Decoder LSTM cache. Reused on blank predictions to skip the LSTM step.
         use_decoder_cache (`bool`, *optional*):
             Whether to allocate and use a decoder cache when none is provided.

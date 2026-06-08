@@ -55,6 +55,7 @@ logger = logging.get_logger(__name__)
     """
 )
 @dataclass
+@dataclass
 class NemotronAsrEncoderModelOutput(BaseModelOutputWithPooling):
     r"""
     attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -165,22 +166,24 @@ class NemotronAsrEncoderConvolutionModule(nn.Module):
         self.pointwise_conv1 = nn.Conv1d(
             channels, 2 * channels, kernel_size=1, stride=1, padding=0, bias=config.convolution_bias
         )
-
-        self.depthwise_conv = NemotronAsrEncoderCausalConv1d(
+        self.depthwise_conv = nn.Conv1d(
             channels,
             channels,
             kernel_size,
-            cache_key=f"conv.{layer_idx}",
             stride=1,
+            padding=self.padding,
             groups=channels,
             bias=config.convolution_bias,
         )
-
-        self.norm = nn.LayerNorm(channels)
+        self.norm = nn.BatchNorm1d(channels)
         self.pointwise_conv2 = nn.Conv1d(
             channels, channels, kernel_size=1, stride=1, padding=0, bias=config.convolution_bias
         )
         kernel_size = config.conv_kernel_size
+
+        # Replace BatchNorm with LayerNorm for cache-aware checkpoints.
+        if config.conv_norm_type == "layer_norm":
+            self.norm = nn.LayerNorm(channels)
 
         # Resolve depthwise conv left/right padding.
         ctx = config.conv_context_size
@@ -192,6 +195,32 @@ class NemotronAsrEncoderConvolutionModule(nn.Module):
             self._conv_right = 0
         else:  # explicit [left, right]
             self._conv_left, self._conv_right = ctx
+
+        # A purely causal depthwise conv (left = kernel - 1, right = 0) supports streaming through the
+        # unified `NemotronAsrEncoderCausalConvPaddingCache`. Other (symmetric / asymmetric-with-right)
+        # configs keep a plain `Conv1d` with manual padding and are not streaming-capable.
+        sym = (kernel_size - 1) // 2
+        self._is_causal_streaming = self._conv_left == kernel_size - 1 and self._conv_right == 0
+        if self._is_causal_streaming:
+            self.depthwise_conv = NemotronAsrEncoderCausalConv1d(
+                channels,
+                channels,
+                kernel_size,
+                cache_key=f"conv.{layer_idx}",
+                stride=1,
+                groups=channels,
+                bias=config.convolution_bias,
+            )
+        elif self._conv_left != sym or self._conv_right != sym:
+            self.depthwise_conv = nn.Conv1d(
+                channels,
+                channels,
+                kernel_size,
+                stride=1,
+                padding=0,
+                groups=channels,
+                bias=config.convolution_bias,
+            )
 
     def forward(
         self,
@@ -211,11 +240,17 @@ class NemotronAsrEncoderConvolutionModule(nn.Module):
             `torch.Tensor`: Output tensor of shape `(batch, time, channels)`.
 
         """
-        hidden_states = hidden_states.transpose(1, 2)
+        # Override the parent forward to support asymmetric (causal/custom) conv padding
+        # and LayerNorm (channel-last layout), plus an optional streaming padding cache.
+        # exchange the temporal dimension and the feature dimension
+        hidden_states = hidden_states.transpose(1, 2)  # (B, C, T)
 
+        # GLU mechanism
         hidden_states = self.pointwise_conv1(hidden_states)
         hidden_states = nn.functional.glu(hidden_states, dim=1)
 
+        # Apply padding mask before convolution. The mask may be 3D (B, T_q, T_k) for offline or
+        # streaming use; reduce over the key dim to get a per-query padding indicator.
         if attention_mask is not None:
             if attention_mask.dtype == torch.bool:
                 all_masked_rows = torch.all(~attention_mask, dim=-1)
@@ -223,15 +258,28 @@ class NemotronAsrEncoderConvolutionModule(nn.Module):
                 all_masked_rows = torch.all(attention_mask == 0.0, dim=-1)
             hidden_states = hidden_states.masked_fill(all_masked_rows, 0.0)
 
-        hidden_states = self.depthwise_conv(hidden_states, padding_cache=padding_cache)
+        if self._is_causal_streaming:
+            # Causal depthwise conv: left context from `padding_cache` when streaming, else left-padded.
+            hidden_states = self.depthwise_conv(hidden_states, padding_cache=padding_cache)
+        else:
+            sym = (self.depthwise_conv.kernel_size[0] - 1) // 2
+            if self._conv_left != sym or self._conv_right != sym:
+                padded = nn.functional.pad(hidden_states, (self._conv_left, self._conv_right))
+                hidden_states = self.depthwise_conv(padded)
+            else:
+                hidden_states = self.depthwise_conv(hidden_states)
 
-        hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = self.norm(hidden_states)
-        hidden_states = hidden_states.transpose(1, 2)
+        # Norm: BatchNorm1d expects (B,C,T); LayerNorm expects (B,T,C).
+        if isinstance(self.norm, nn.LayerNorm):
+            hidden_states = hidden_states.transpose(1, 2)
+            hidden_states = self.norm(hidden_states)
+            hidden_states = hidden_states.transpose(1, 2)
+        else:
+            hidden_states = self.norm(hidden_states)
 
         hidden_states = self.activation(hidden_states)
         hidden_states = self.pointwise_conv2(hidden_states)
-        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = hidden_states.transpose(1, 2)  # (B, T, C)
 
         return hidden_states
 
@@ -624,10 +672,7 @@ class NemotronAsrEncoderSubsamplingConv2D(nn.Module):
             # activation
             self.layers.append(nn.ReLU())
 
-        out_length = config.num_mel_bins
-        self._pad_left = self.kernel_size - 1
-        self._pad_right = self.stride - 1
-        total_pad = self._pad_left + self._pad_right
+        total_pad = self.kernel_size + self.stride - 2
         for _ in range(self.num_layers):
             out_length = (out_length + total_pad - self.kernel_size) // self.stride + 1
         self.linear = nn.Linear(config.subsampling_conv_channels * out_length, config.hidden_size, bias=True)
@@ -992,26 +1037,6 @@ class NemotronAsrEncoder(NemotronAsrPreTrainedModel):
         return configured
 
 
-@dataclass
-class NemotronAsrRNNTOutput(BaseModelOutputWithPooling):
-    """
-    Output of the NemotronAsr RNN-T forward pass.
-
-    Args:
-        loss (`torch.FloatTensor`, *optional*):
-            RNN-T loss, returned when `labels` are provided.
-        logits (`torch.FloatTensor`):
-            Joint token logits. Shape is `(batch, T, U+1, vocab)` for training
-            or `(batch, 1, 1, vocab)` for single-step inference.
-        decoder_cache (`NemotronAsrRNNTDecoderCache`, *optional*):
-            Decoder LSTM cache containing hidden state, cell state, and last output.
-    """
-
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    decoder_cache: NemotronAsrRNNTDecoderCache | None = None
-
-
 class NemotronAsrRNNTDecoder(nn.Module):
     """LSTM-based prediction network For RNN-T"""
 
@@ -1078,6 +1103,26 @@ class NemotronAsrRNNTJointNetwork(nn.Module):
         return self.head(joint_output)
 
 
+@dataclass
+class NemotronAsrRNNTOutput(BaseModelOutputWithPooling):
+    """
+    Output of the NemotronAsr RNN-T forward pass.
+
+    Args:
+        loss (`torch.FloatTensor`, *optional*):
+            RNN-T loss, returned when `labels` are provided.
+        logits (`torch.FloatTensor`):
+            Joint token logits. Shape is `(batch, T, U+1, vocab)` for training
+            or `(batch, 1, 1, vocab)` for single-step inference.
+        decoder_cache (`NemotronAsrRNNTDecoderCache`, *optional*):
+            Decoder LSTM cache containing hidden state, cell state, and last output.
+    """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    decoder_cache: NemotronAsrRNNTDecoderCache | None = None
+
+
 @auto_docstring(
     custom_intro="""
     NemotronAsr Encoder with an RNN-T (Recurrent Neural Network Transducer) head.
@@ -1129,7 +1174,7 @@ class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin)
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
             Decoder input token ids for single-step inference.
-        decoder_cache (`NemotronAsrTDTDecoderCache`, *optional*):
+        decoder_cache (`NemotronAsrRNNTDecoderCache`, *optional*):
             Decoder LSTM cache. Reused on blank predictions to skip the LSTM step.
         use_decoder_cache (`bool`, *optional*):
             Whether to allocate and use a decoder cache when none is provided.
@@ -1191,6 +1236,9 @@ class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin)
             attentions=encoder_outputs.attentions,
             decoder_cache=decoder_cache,
         )
+
+    def loss_function(self, logits, labels, encoder_outputs, **kwargs):
+        raise NotImplementedError("RNN-T loss function is not implemented yet")
 
 
 __all__ = [

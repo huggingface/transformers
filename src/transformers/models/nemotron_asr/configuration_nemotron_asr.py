@@ -136,7 +136,7 @@ class NemotronAsrRNNTConfig(PreTrainedConfig):
     This is the base NemotronAsr transducer configuration. A conventional RNN-T (RNN Transducer) joint network
     emits token logits only (so the joint head outputs just `vocab_size` logits), and during greedy decoding
     the encoder frame pointer advances by exactly one frame on each blank emission. The duration-aware
-    [`NemotronAsrTDTConfig`] extends this configuration with a `durations` field.
+    [`NemotronAsrRNNTConfig`] extends this configuration with a `durations` field.
 
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network and joint network.
@@ -178,6 +178,11 @@ class NemotronAsrRNNTConfig(PreTrainedConfig):
     is_encoder_decoder: bool = True
 
     def __post_init__(self, **kwargs):
+        if isinstance(self.encoder_config, dict):
+            self.encoder_config = NemotronAsrEncoderConfig(**self.encoder_config)
+        elif self.encoder_config is None:
+            self.encoder_config = NemotronAsrEncoderConfig()
+        self.initializer_range = self.encoder_config.initializer_range
         if isinstance(self.encoder_config, dict):
             self.encoder_config = NemotronAsrEncoderConfig(**self.encoder_config)
         elif self.encoder_config is None:
@@ -225,11 +230,11 @@ class NemotronAsrConfig(NemotronAsrRNNTConfig):
     """
 
     model_type = "nemotron_asr"
-    durations: list[int] | tuple[int, ...] = ()
     sub_configs = {"encoder_config": NemotronAsrEncoderConfig}
 
     vocab_size: int = 1025
     joint_hidden_size: int = 640
+    durations: list[int] | tuple[int, ...] = ()
     pad_token_id: int = 0
     blank_token_id: int = 1024
 

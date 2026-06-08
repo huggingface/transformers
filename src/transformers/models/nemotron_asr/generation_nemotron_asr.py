@@ -86,11 +86,6 @@ class NemotronAsrRNNTDecoderCache:
             self.cell_state = torch.where(mask_h, cell_state, self.cell_state)
 
 
-# Backwards-compatible alias: the decoder/joint/output classes are named with the historical "TDT"
-# prefix in this model, while the RNN-T decoder cache is referenced under both names in the modeling file.
-NemotronAsrTDTDecoderCache = NemotronAsrRNNTDecoderCache
-
-
 class NemotronAsrEncoderExhaustedCriteria(StoppingCriteria):
     """Stops generation when all batch elements have walked past their encoder output length."""
 
@@ -293,7 +288,7 @@ class NemotronAsrGenerationMixin(GenerationMixin):
         return inputs, input_name, model_kwargs
 
     def _prepare_cache_for_generation(self, generation_config, model_kwargs, *args, **kwargs):
-        model_kwargs["decoder_cache"] = NemotronAsrTDTDecoderCache(self.config)
+        model_kwargs["decoder_cache"] = NemotronAsrRNNTDecoderCache(self.config)
 
     def prepare_inputs_for_generation(self, input_ids, *args, **kwargs):
         from .modeling_nemotron_asr import NemotronAsrEncoderModelOutput
