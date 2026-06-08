@@ -28,11 +28,14 @@ from transformers import (
     InstructBlipVideoProcessor,
     InstructBlipVideoQFormerConfig,
     InstructBlipVideoVisionConfig,
+    PreTrainedModel,
 )
 from transformers.testing_utils import (
     require_accelerate,
     require_bitsandbytes,
+    require_flash_attn,
     require_torch,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -533,15 +536,138 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     def test_model_base_model_prefix(self):
         pass
 
+    @unittest.skip(
+        reason="QFormer is forced to fp32 via _keep_in_fp32_modules, incompatible with SDPA flash-only kernel"
+    )
     def test_sdpa_can_dispatch_on_flash(self):
-        self.skipTest(
-            reason="QFormer is forced to fp32 via _keep_in_fp32_modules, incompatible with SDPA flash-only kernel"
-        )
+        pass
 
+    @unittest.skip(
+        reason="QFormer's _keep_in_fp32_modules causes mixed precision incompatible with torch.compile dynamic shapes"
+    )
     def test_sdpa_can_compile_dynamic(self):
-        self.skipTest(
-            reason="QFormer's _keep_in_fp32_modules causes mixed precision incompatible with torch.compile dynamic shapes"
-        )
+        pass
+
+    @require_flash_attn
+    @require_torch_accelerator
+    @require_bitsandbytes
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_fp32_ln(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+            if not all(
+                submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+            ):
+                self.skipTest(reason="At least some parts of this model do not support flash attention")
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                pixel_values = inputs_dict[model.main_input_name]
+                input_ids = inputs_dict["input_ids"]
+                qformer_input_ids = inputs_dict["qformer_input_ids"]
+                qformer_attention_mask = inputs_dict.get("qformer_attention_mask")
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(input_ids))
+                batch_size = dummy_attention_mask.shape[0]
+
+                is_padding_right = dummy_attention_mask[:, -1].sum().item() != batch_size
+                if is_padding_right:
+                    dummy_attention_mask = torch.ones_like(input_ids)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    dtype=torch.float16,
+                    attn_implementation="flash_attention_2",
+                    quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+                )
+
+                for _, param in model.named_parameters():
+                    if (param.dtype == torch.float16) or (param.dtype == torch.bfloat16):
+                        param.data = param.data.to(torch.float32)
+
+                _ = model(
+                    pixel_values,
+                    input_ids=input_ids,
+                    qformer_input_ids=qformer_input_ids,
+                    qformer_attention_mask=qformer_attention_mask,
+                )
+                _ = model(
+                    pixel_values,
+                    input_ids=input_ids,
+                    attention_mask=dummy_attention_mask,
+                    qformer_input_ids=qformer_input_ids,
+                    qformer_attention_mask=qformer_attention_mask,
+                )
+
+    @require_flash_attn
+    @require_torch_accelerator
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_from_config(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn:
+                self.skipTest(f"{model_class.__name__} does not support flash_attention_2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+            if not all(
+                submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+            ):
+                self.skipTest(reason="At least some parts of this model do not support flash_attention_2")
+
+            fa_model = model_class._from_config(
+                config, attn_implementation="flash_attention_2", dtype=torch.bfloat16
+            ).to(torch_device)
+            fa_model = fa_model.train()
+
+            pixel_values = inputs_dict[fa_model.main_input_name]
+            if pixel_values.dtype in [torch.float32, torch.float16]:
+                pixel_values = pixel_values.to(torch.bfloat16)
+
+            input_ids = inputs_dict["input_ids"]
+            qformer_input_ids = inputs_dict["qformer_input_ids"]
+            qformer_attention_mask = inputs_dict.get("qformer_attention_mask")
+            dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(input_ids))
+
+            _ = fa_model(
+                pixel_values,
+                input_ids=input_ids,
+                attention_mask=dummy_attention_mask,
+                qformer_input_ids=qformer_input_ids,
+                qformer_attention_mask=qformer_attention_mask,
+            )
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                fa_model.save_pretrained(tmpdirname)
+                model_from_pretrained = model_class.from_pretrained(tmpdirname)
+                self.assertTrue(model_from_pretrained.config._attn_implementation != "flash_attention_2")
+
+    @unittest.skip(reason="_prepare_config_headdim breaks the qformer/vision cross-attention hidden-size invariant")
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip(reason="_prepare_config_headdim breaks the qformer/vision cross-attention hidden-size invariant")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip(reason="_prepare_config_headdim breaks the qformer/vision cross-attention hidden-size invariant")
+    def test_flash_attn_kernels_inference_equivalence(self):
+        pass
+
+    @unittest.skip(reason="_prepare_config_headdim breaks the qformer/vision cross-attention hidden-size invariant")
+    def test_flex_attention_with_grads(self):
+        pass
 
     def test_forward_signature(self):
         for model_class in self.all_model_classes:

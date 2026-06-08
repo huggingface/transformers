@@ -213,7 +213,7 @@ class InstructBlipAttention(nn.Module):
             )
         self.scale = self.head_dim**-0.5
         self.is_causal = False
-        self.attention_dropout = config.attention_dropout
+        self.dropout = config.attention_dropout
 
         # small tweak here compared to CLIP, no bias here
         self.qkv = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=False)
@@ -260,7 +260,7 @@ class InstructBlipAttention(nn.Module):
             key_states,
             value_states,
             attention_mask=None,
-            dropout=0.0 if not self.training else self.attention_dropout,
+            dropout=0.0 if not self.training else self.dropout,
             scaling=self.scale,
             **kwargs,
         )
@@ -458,7 +458,7 @@ class InstructBlipQFormerMultiHeadAttention(nn.Module):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.scaling = self.attention_head_size**-0.5
         self.is_causal = False
-        self.attention_dropout = config.attention_probs_dropout_prob
+        self.dropout = config.attention_probs_dropout_prob
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
         if is_cross_attention:
@@ -505,7 +505,7 @@ class InstructBlipQFormerMultiHeadAttention(nn.Module):
             key_layer,
             value_layer,
             attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
+            dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
             **kwargs,
         )
@@ -766,8 +766,8 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
 
     _supports_attention_backend = True
     _supports_sdpa = True
-    _supports_flash_attn = False
-    _supports_flex_attn = False
+    _supports_flash_attn = True
+    _supports_flex_attn = True
 
     _can_record_outputs = {
         "hidden_states": InstructBlipQFormerLayer,
