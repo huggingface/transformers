@@ -62,6 +62,7 @@ from .generic import (
     is_torch_device,
     is_torch_dtype,
     is_torch_tensor,
+    no_inherit_decorator,
     reshape,
     safe_load_json_file,
     squeeze,
