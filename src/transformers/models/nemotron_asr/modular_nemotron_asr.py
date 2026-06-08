@@ -453,7 +453,6 @@ class NemotronAsrEncoderModelOutput(BaseModelOutputWithPooling):
     """
 
     attention_mask: torch.Tensor | None = None
-
     past_key_values: Cache | None = None
 
 
@@ -628,7 +627,6 @@ class NemotronAsrEncoderAttention(ParakeetEncoderAttention):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        # Streaming: prepend cached K/V from previous chunks and update the order-preserving sliding window.
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
@@ -945,19 +943,8 @@ class NemotronAsrEncoderSubsamplingConv2D(nn.Module):
 
 class NemotronAsrEncoderBlock(ParakeetEncoderBlock):
     def __init__(self, config: NemotronAsrEncoderConfig, layer_idx: int | None = None):
-        super().__init__()
-        self.gradient_checkpointing = False
-
-        self.feed_forward1 = NemotronAsrEncoderFeedForward(config)
-        self.self_attn = NemotronAsrEncoderAttention(config, layer_idx)
+        super().__init__(config, layer_idx)
         self.conv = NemotronAsrEncoderConvolutionModule(config, layer_idx=layer_idx)
-        self.feed_forward2 = NemotronAsrEncoderFeedForward(config)
-
-        self.norm_feed_forward1 = nn.LayerNorm(config.hidden_size)
-        self.norm_self_att = nn.LayerNorm(config.hidden_size)
-        self.norm_conv = nn.LayerNorm(config.hidden_size)
-        self.norm_feed_forward2 = nn.LayerNorm(config.hidden_size)
-        self.norm_out = nn.LayerNorm(config.hidden_size)
 
     def forward(
         self,
@@ -1195,16 +1182,6 @@ class NemotronAsrEncoder(ParakeetEncoder):
         return configured
 
 
-class NemotronAsrRNNTDecoder(ParakeetRNNTDecoder):
-    def __init__(self, config: NemotronAsrRNNTConfig):
-        super().__init__(config)
-
-
-class NemotronAsrRNNTJointNetwork(ParakeetRNNTJointNetwork):
-    def __init__(self, config: NemotronAsrRNNTConfig):
-        super().__init__(config)
-
-
 @dataclass
 class NemotronAsrRNNTOutput(ParakeetRNNTOutput):
     pass
@@ -1215,19 +1192,7 @@ class NemotronAsrRNNTOutput(ParakeetRNNTOutput):
     NemotronAsr Encoder with an RNN-T (Recurrent Neural Network Transducer) head.
     """
 )
-class NemotronAsrForRNNT(ParakeetForRNNT, NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin):
-    config: NemotronAsrRNNTConfig
-
-    def __init__(self, config: NemotronAsrRNNTConfig):
-        super().__init__(config)
-        self.encoder = AutoModel.from_config(config.encoder_config)
-        self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.decoder_hidden_size)
-        self.decoder = NemotronAsrRNNTDecoder(config)
-        self.joint = NemotronAsrRNNTJointNetwork(config)
-        self.max_symbols_per_step = config.max_symbols_per_step  # used in generation
-
-        self.post_init()
-
+class NemotronAsrForRNNT(ParakeetForRNNT, NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin): 
     @auto_docstring
     @can_return_tuple
     def forward(

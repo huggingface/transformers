@@ -69,7 +69,6 @@ class NemotronAsrEncoderModelOutput(BaseModelOutputWithPooling):
     """
 
     attention_mask: torch.Tensor | None = None
-
     past_key_values: Cache | None = None
 
 
@@ -403,7 +402,6 @@ class NemotronAsrEncoderAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        # Streaming: prepend cached K/V from previous chunks and update the order-preserving sliding window.
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
@@ -1041,6 +1039,26 @@ class NemotronAsrEncoder(NemotronAsrPreTrainedModel):
         return configured
 
 
+@dataclass
+class NemotronAsrRNNTOutput(BaseModelOutputWithPooling):
+    """
+    Output of the NemotronAsr RNN-T forward pass.
+
+    Args:
+        loss (`torch.FloatTensor`, *optional*):
+            RNN-T loss, returned when `labels` are provided.
+        logits (`torch.FloatTensor`):
+            Joint token logits. Shape is `(batch, T, U+1, vocab)` for training
+            or `(batch, 1, 1, vocab)` for single-step inference.
+        decoder_cache (`NemotronAsrRNNTDecoderCache`, *optional*):
+            Decoder LSTM cache containing hidden state, cell state, and last output.
+    """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    decoder_cache: NemotronAsrRNNTDecoderCache | None = None
+
+
 class NemotronAsrRNNTDecoder(nn.Module):
     """LSTM-based prediction network For RNN-T"""
 
@@ -1105,26 +1123,6 @@ class NemotronAsrRNNTJointNetwork(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         joint_output = self.activation(encoder_hidden_states + decoder_hidden_states)
         return self.head(joint_output)
-
-
-@dataclass
-class NemotronAsrRNNTOutput(BaseModelOutputWithPooling):
-    """
-    Output of the NemotronAsr RNN-T forward pass.
-
-    Args:
-        loss (`torch.FloatTensor`, *optional*):
-            RNN-T loss, returned when `labels` are provided.
-        logits (`torch.FloatTensor`):
-            Joint token logits. Shape is `(batch, T, U+1, vocab)` for training
-            or `(batch, 1, 1, vocab)` for single-step inference.
-        decoder_cache (`NemotronAsrRNNTDecoderCache`, *optional*):
-            Decoder LSTM cache containing hidden state, cell state, and last output.
-    """
-
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    decoder_cache: NemotronAsrRNNTDecoderCache | None = None
 
 
 @auto_docstring(
