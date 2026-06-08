@@ -372,6 +372,18 @@ class Param2MoEPreTrainedModel(MixtralPreTrainedModel):
         "attentions": Param2MoEAttention,
     }
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, Param2MoEExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, Param2MoERouter):
+            init.normal_(module.weight, mean=0.0, std=std)
+            if module.expert_bias is not None:
+                init.zeros_(module.expert_bias)
+
 
 class Param2MoEModel(MixtralModel):
     pass
