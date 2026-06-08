@@ -207,8 +207,7 @@ _BACKEND_PREPARE = {
 # `@register_patch("executorch", "dotted.path")` and installed through `apply_patches`.
 
 
-@register_patch("executorch", "torch.split")
-@register_patch("executorch", "torch.Tensor.split")
+@register_patch("executorch", "torch.split", "torch.Tensor.split")
 def _patch_split(original):
     """Narrow-based split (split_copy not supported by CUDA backend)."""
 
@@ -234,8 +233,7 @@ def _patch_split(original):
     return patch
 
 
-@register_patch("executorch", "torch.chunk")
-@register_patch("executorch", "torch.Tensor.chunk")
+@register_patch("executorch", "torch.chunk", "torch.Tensor.chunk")
 def _patch_chunk(original):
     """Narrow-based chunk (delegates to split patch)."""
 
@@ -248,8 +246,7 @@ def _patch_chunk(original):
     return patch
 
 
-@register_patch("executorch", "torch.topk")
-@register_patch("executorch", "torch.Tensor.topk")
+@register_patch("executorch", "torch.topk", "torch.Tensor.topk")
 def _patch_topk(original):
     """Argsort-based topk fallback."""
 
@@ -264,8 +261,7 @@ def _patch_topk(original):
     return patch
 
 
-@register_patch("executorch", "torch.detach")
-@register_patch("executorch", "torch.Tensor.detach")
+@register_patch("executorch", "torch.detach", "torch.Tensor.detach")
 def _patch_detach(_original):
     """No-op detach."""
 
@@ -362,8 +358,7 @@ def _patch_dropout(_original):
     return patch
 
 
-@register_patch("executorch", "torch.bernoulli")
-@register_patch("executorch", "torch.Tensor.bernoulli")
+@register_patch("executorch", "torch.bernoulli", "torch.Tensor.bernoulli")
 def _patch_bernoulli(_original):
     """Sample Bernoulli via ``rand_like`` + comparison.
 
@@ -411,8 +406,11 @@ def _patch_expand(original):
 # and installed by the single `apply_patches("executorch")` wrapping the export.
 
 
-@register_patch("executorch", "executorch.exir.sym_util.eval_upper_bound")
-@register_patch("executorch", "executorch.exir.passes.sym_shape_eval_pass.eval_upper_bound")
+@register_patch(
+    "executorch",
+    "executorch.exir.sym_util.eval_upper_bound",
+    "executorch.exir.passes.sym_shape_eval_pass.eval_upper_bound",
+)
 def _patch_eval_upper_bound(original):
     """Constraint-based bound, then trace hint, then ``_MAX_DIM_FLOOR``.
 
@@ -529,10 +527,13 @@ def _patch_check_tensor_args_dtype(original):
     return patch
 
 
-@register_patch("executorch", "executorch.exir.tensor.dim_order_from_stride")
-@register_patch("executorch", "executorch.exir.tensor_layout.dim_order_from_stride")
-@register_patch("executorch", "executorch.exir.emit._emitter.dim_order_from_stride")
-@register_patch("executorch", "executorch.exir.passes.replace_view_copy_with_view_pass.dim_order_from_stride")
+@register_patch(
+    "executorch",
+    "executorch.exir.tensor.dim_order_from_stride",
+    "executorch.exir.tensor_layout.dim_order_from_stride",
+    "executorch.exir.emit._emitter.dim_order_from_stride",
+    "executorch.exir.passes.replace_view_copy_with_view_pass.dim_order_from_stride",
+)
 def _patch_dim_order_from_stride(_original):
     """Replacement for ``executorch.exir.tensor.dim_order_from_stride``.
 
@@ -601,8 +602,11 @@ def _patch_update_placeholder_tensor_specs(_original):
     return patch
 
 
-@register_patch("executorch", "executorch.exir.passes.executorch_prim_ops_registry._EXECUTORCH_SYM_OPS")
-@register_patch("executorch", "executorch.exir.verification.verifier._EXECUTORCH_SYM_OPS")
+@register_patch(
+    "executorch",
+    "executorch.exir.passes.executorch_prim_ops_registry._EXECUTORCH_SYM_OPS",
+    "executorch.exir.verification.verifier._EXECUTORCH_SYM_OPS",
+)
 def _extend_sym_ops_allowlist(original):
     """Return the edge-dialect sym-op allowlist extended with sym ops that have no `executorch_prim.*`
     equivalent (`sym_ite`, `sym_not`, `sym_int`, `sym_sum`, `sym_float`).

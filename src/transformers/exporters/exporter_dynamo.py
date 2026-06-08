@@ -18,14 +18,18 @@
 Wraps `torch.export.export(strict=False)` with helpers that make Transformers
 models exportable. The export pipeline uses five sections, in execution order:
 
-1. **Model patches** (`patch_untraceable_patterns`): reversible patches applied
-   during tracing to replace non-exportable model patterns (data-dependent loops,
-   in-place ops, mask checks) with export-safe equivalents. Modeling codes themselves are not updated because these are too specifc. In general we do try to have compliant code tho.
-2. **Pytree registration** (`register_cache_pytrees_for_model`): flatten/unflatten
+1. **Model signature patch** (`patch_forward_signature`): replaces `model.forward`
+   with a flat explicit signature derived from `sample_inputs` so `torch.export` does
+   not expand `**kwargs` into a `combined_args` bundle that mismatches `dynamic_shapes`.
+   This is the entry contract `torch.export` reads before tracing.
+2. **Model patches** (`_PATCHES["dynamo"]` via `apply_patches("dynamo")`): reversible
+   class-attribute swaps applied during tracing to replace non-exportable model patterns
+   (data-dependent loops, in-place ops, mask checks) with export-safe equivalents.
+   Modeling code itself is not updated because these patches are too model-specific. We
+   do strive to keep modeling code compliant where reasonable.
+3. **Pytree registration** (`register_cache_pytrees_for_model`): flatten/unflatten
    hooks (via `torch.utils._pytree.register_pytree_node`) for Cache subclasses and
    custom containers so `torch.export` can trace through them.
-3. **Model signature patch** (`patch_forward_signature`): replaces `model.forward`
-   with a flat explicit signature so `torch.export` does not choke on `**kwargs`.
 4. **Dynamic shapes** (`get_auto_dynamic_shapes`): automatic `Dim.AUTO` inference
    for all tensor and cache inputs when `DynamoConfig.dynamic=True`.
 5. **State cleanup** (`cleanup_state`): resets non-Cache stateful module attributes
@@ -36,7 +40,6 @@ models exportable. The export pipeline uses five sections, in execution order:
 from __future__ import annotations
 
 import copy
-import functools
 import importlib
 import inspect
 import sys
@@ -47,7 +50,7 @@ from ..utils import logging
 from ..utils.export_config import DynamoConfig
 from ..utils.import_utils import is_detectron2_available, is_torch_available, torch_compilable_check
 from .base import HfExporter
-from .utils import prepare_for_export
+from .utils import apply_patches, prepare_for_export, register_patch
 
 
 if is_torch_available():
@@ -90,7 +93,7 @@ class DynamoExporter(HfExporter):
             dynamic_shapes = get_auto_dynamic_shapes(sample_inputs)
 
         register_cache_pytrees_for_model(model)
-        with patch_untraceable_patterns(model), patch_forward_signature(model, sample_inputs):
+        with apply_patches("dynamo"), patch_forward_signature(model, sample_inputs):
             exported_program: ExportedProgram = torch.export.export(
                 model,
                 args=(),
@@ -104,20 +107,53 @@ class DynamoExporter(HfExporter):
         return exported_program
 
 
-# ── Stage 1: Model patches ────────────────────────────────────────────────────
-# Reversible patches applied by `patch_untraceable_patterns` during
-# `torch.export` tracing. Each replaces a non-exportable model pattern
+# ── Stage 1: Model signature patch ──────────────────────────────────────────
+# Replaces `model.forward` with a flat explicit signature derived from the
+# inputs dict so `torch.export` does not expand `**kwargs` into a large bundle.
+
+
+@contextmanager
+def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
+    """Temporarily replace `model.forward` with a flat explicit signature derived from `inputs`.
+
+    `torch.export` infers the exported function signature from `model.forward.__signature__`.
+    Most transformers models use `**kwargs: Unpack[TransformersKwargs]`, which causes
+    `torch.export` to expand the signature into a large `combined_args` bundle that
+    mismatches the `dynamic_shapes` dict. This patch replaces the forward with a
+    minimal signature containing only the keys present in `inputs`.
+    """
+    original_forward = model.forward
+
+    def _flat_forward(**kwargs):
+        return original_forward(**kwargs)
+
+    _flat_forward.__signature__ = inspect.Signature(
+        [inspect.Parameter(k, inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None) for k in inputs]
+    )
+
+    try:
+        model.forward = _flat_forward
+        yield
+    finally:
+        model.forward = original_forward
+
+
+# ── Stage 2: Model patches ────────────────────────────────────────────────────
+# Reversible class-attribute swaps applied during `torch.export` tracing via
+# `apply_patches("dynamo")`. Each replaces a non-exportable model pattern
 # (data-dependent control flow, in-place ops on views, etc.) with an
-# export-safe equivalent.
+# export-safe equivalent on the owning class — every live instance sees the
+# replacement until the context exits. Modeling code itself is not updated
+# because these patches are too model-specific; we do strive to keep modeling
+# code compliant where reasonable.
 #
-# Each patcher takes a module and returns `(attr, replacement)` if the
-# module matches, or `None` otherwise. Originals are saved by the context
-# manager and restored when tracing completes.
-#
-# To add a new patch: define a `_patch_*` function and append to _MODEL_PATCHERS.
+# Each `@register_patch("dynamo", *dotted_paths)` decorator targets one or
+# more `Class.method` paths and wraps a `factory(original) -> replacement`.
+# Multiple paths share the same factory when the same method shape needs to be
+# swapped on several classes (e.g. `_update_mamba_mask` on Jamba/Bamba/…).
 
 
-def _exportable_update_mask(attention_mask, past_key_values_or_cache_position=None, *args, **kwargs):
+def _exportable_update_mask(self, attention_mask, past_key_values_or_cache_position=None, *args, **kwargs):
     """Export-safe mamba/linear-attn mask: keeps only `has_previous_state` (a Python bool)."""
     has_previous_state = getattr(past_key_values_or_cache_position, "has_previous_state", False)
     if callable(has_previous_state):
@@ -127,35 +163,54 @@ def _exportable_update_mask(attention_mask, past_key_values_or_cache_position=No
     return attention_mask
 
 
-def _patch_mamba_mask(module):
+@register_patch(
+    "dynamo",
+    "transformers.models.jamba.modeling_jamba.JambaModel._update_mamba_mask",
+    "transformers.models.bamba.modeling_bamba.BambaModel._update_mamba_mask",
+    "transformers.models.falcon_h1.modeling_falcon_h1.FalconH1Model._update_mamba_mask",
+    "transformers.models.granitemoehybrid.modeling_granitemoehybrid.GraniteMoeHybridModel._update_mamba_mask",
+    "transformers.models.nemotron_h.modeling_nemotron_h.NemotronHModel._update_mamba_mask",
+)
+def _patch_mamba_mask(_original):
     """Replace data-dependent `torch.all(mask == 1)` in mamba mask update."""
-    if hasattr(module, "_update_mamba_mask"):
-        return ("_update_mamba_mask", _exportable_update_mask)
+    return _exportable_update_mask
 
 
-def _patch_linear_attn_mask(module):
-    """Replace data-dependent mask check in linear attention (falcon_h1)."""
-    if hasattr(module, "_update_linear_attn_mask"):
-        return ("_update_linear_attn_mask", _exportable_update_mask)
+@register_patch(
+    "dynamo",
+    "transformers.models.qwen3_5.modeling_qwen3_5.Qwen3_5TextModel._update_linear_attn_mask",
+    "transformers.models.qwen3_5_moe.modeling_qwen3_5_moe.Qwen3_5MoeTextModel._update_linear_attn_mask",
+    "transformers.models.qwen3_next.modeling_qwen3_next.Qwen3NextModel._update_linear_attn_mask",
+    "transformers.models.olmo_hybrid.modeling_olmo_hybrid.OlmoHybridModel._update_linear_attn_mask",
+)
+def _patch_linear_attn_mask(_original):
+    """Replace data-dependent mask check in linear attention (qwen3_next, olmo_hybrid, …)."""
+    return _exportable_update_mask
 
 
-def _patch_classifier_cast(module):
+@register_patch("dynamo", "transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeTop2Router._cast_classifier")
+def _patch_classifier_cast(_original):
     """Disable classifier dtype cast in nllb-moe (not traceable)."""
-    if hasattr(module, "_cast_classifier"):
-        return ("_cast_classifier", lambda *args, **kwargs: None)
+    return lambda self, *args, **kwargs: None
 
 
-def _patch_chunked_vision_attention(module):
-    """Replace split → loop → cat with reshaped batch SDPA for vision attention."""
-    has_attention = (
-        hasattr(module, "qkv")
-        or (hasattr(module, "q") and hasattr(module, "k") and hasattr(module, "v"))
-        or (hasattr(module, "q_proj") and hasattr(module, "k_proj") and hasattr(module, "v_proj"))
-    )
-    src = inspect.getsource(module.forward) if has_attention else ""
-    if has_attention and "zip(*splits)" in src:
-        returns_tuple = "return attn_output, attn_weight" in src or "return attn_output, None" in src
-        return ("forward", functools.partial(_reshaped_vision_attention_forward, module, returns_tuple=returns_tuple))
+# --- Chunked vision/audio attention ─────────────────────────────────────────
+# Sub-encoders that pack multiple variable-length sequences into one flat tensor
+# with `cu_seqlens` markers fall back to `split → per-segment SDPA → cat` in the
+# unpatched forward, which is a Python loop that `torch.export` can't trace.
+# `_reshaped_vision_attention_forward` replaces that loop with a reshape into a
+# per-segment batch followed by a single SDPA call. It handles the layout
+# differences across encoders (combined `qkv` vs separate `q/k/v` vs separate
+# `q_proj/k_proj/v_proj`, asymmetric `q_dim/kv_dim` split, `(cos, sin)` vs single
+# rotary tensor vs none, `.proj` vs `.out_proj`, NaViT `(1, T, D)` packing,
+# tuple vs single return). The `returns_tuple` flag is bound once per class at
+# install time by inspecting the original `forward`'s source.
+#
+# NOTE: this whole stack of patches becomes unnecessary once transformers adopts a
+# proper varlen-attention op (e.g. PyTorch's `torch._nested.scaled_dot_product_attention`
+# or a Flex-Attention varlen kernel) — the modeling forwards can then express the
+# segmented attention directly with `cu_seqlens` and trace through `torch.export`
+# without this reshape-into-batch workaround. Drop this section when that lands.
 
 
 def _reshaped_vision_attention_forward(
@@ -167,7 +222,8 @@ def _reshaped_vision_attention_forward(
     returns_tuple: bool = False,
     **kwargs,
 ):
-    """Export-safe vision attention: reshape segments into batch dim, single SDPA call."""
+    """Export-safe chunked vision/audio attention: reshape segments into a batch dim,
+    apply rotary if provided, run one SDPA call, project, and re-emit in the original layout."""
 
     # Normalise NaViT-style `(1, T, D)` packing (minicpmv4_6) to the flat `(T, D)` layout
     # the rest of this wrapper assumes. The leading dim is always 1 — multi-image batches
@@ -208,15 +264,13 @@ def _reshaped_vision_attention_forward(
         value_states = v_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
 
     if position_embeddings is not None:
-        model_module = sys.modules[type(self).__module__]
-        apply_rotary_pos_emb_vision = getattr(model_module, "apply_rotary_pos_emb_vision")
+        apply_rotary_pos_emb_vision = sys.modules[type(self).__module__].apply_rotary_pos_emb_vision
         if isinstance(position_embeddings, (tuple, list)):
-            # (cos, sin) tuple convention — e.g. MLCD, Qwen2VL after rotary expansion.
+            # (cos, sin) tuple convention — most VL encoders.
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
         else:
-            # Single `rotary_pos_emb` tensor convention — Qwen2.5/3 Omni vision, where
-            # `apply_rotary_pos_emb_vision(states, rotary_pos_emb)` is per-states.
+            # Single `rotary_pos_emb` tensor convention — Qwen2.5/3 Omni vision applies rotary per-states.
             query_states = apply_rotary_pos_emb_vision(query_states.unsqueeze(0), position_embeddings).squeeze(0)
             key_states = apply_rotary_pos_emb_vision(key_states.unsqueeze(0), position_embeddings).squeeze(0)
 
@@ -253,37 +307,47 @@ def _reshaped_vision_attention_forward(
     return (attn_output, None) if returns_tuple else attn_output
 
 
-_MODEL_PATCHERS = [
-    _patch_mamba_mask,
-    _patch_classifier_cast,
-    _patch_linear_attn_mask,
-    _patch_chunked_vision_attention,
-]
+@register_patch(
+    "dynamo",
+    # Combined `qkv` + `(cos, sin)` rotary + `.proj`
+    "transformers.models.qwen2_vl.modeling_qwen2_vl.VisionAttention.forward",
+    "transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLVisionAttention.forward",
+    "transformers.models.qwen3_vl.modeling_qwen3_vl.Qwen3VLVisionAttention.forward",
+    "transformers.models.qwen3_vl_moe.modeling_qwen3_vl_moe.Qwen3VLMoeVisionAttention.forward",
+    "transformers.models.qwen3_5.modeling_qwen3_5.Qwen3_5VisionAttention.forward",
+    "transformers.models.qwen3_5_moe.modeling_qwen3_5_moe.Qwen3_5MoeVisionAttention.forward",
+    "transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe.Qwen3OmniMoeVisionAttention.forward",
+    "transformers.models.glm4v.modeling_glm4v.Glm4vVisionAttention.forward",
+    "transformers.models.glm4v_moe.modeling_glm4v_moe.Glm4vMoeVisionAttention.forward",
+    "transformers.models.glm_ocr.modeling_glm_ocr.GlmOcrVisionAttention.forward",
+    "transformers.models.ernie4_5_vl_moe.modeling_ernie4_5_vl_moe.Ernie4_5_VLMoeVisionAttention.forward",
+    # Asymmetric `qkv` split + `(cos, sin)` rotary + `.proj`
+    "transformers.models.exaone4_5.modeling_exaone4_5.Exaone4_5_VisionAttention.forward",
+    # Combined `qkv` + no in-attention rotary + `.proj`
+    "transformers.models.glm_image.modeling_glm_image.GlmImageVisionAttention.forward",
+    # Separate `.q` / `.k` / `.v` + single rotary tensor + `.proj`
+    "transformers.models.qwen2_5_omni.modeling_qwen2_5_omni.Qwen2_5OmniVisionAttention.forward",
+    # Separate `_proj` + `(cos, sin)` rotary + `.out_proj` (tuple return)
+    "transformers.models.video_llama_3.modeling_video_llama_3.VideoLlama3VisionAttention.forward",
+    "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",
+    # NaViT (1, T, D) + separate `_proj` + `.out_proj` (tuple return)
+    "transformers.models.minicpmv4_6.modeling_minicpmv4_6.MiniCPMV4_6VisionAttention.forward",
+    # Audio attention: separate `_proj` + `.out_proj`, no rotary
+    "transformers.models.qwen2_5_omni.modeling_qwen2_5_omni.Qwen2_5OmniAudioAttention.forward",
+    "transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe.Qwen3OmniMoeAudioAttention.forward",
+)
+def _patch_chunked_vision_attention(original):
+    """Bind `returns_tuple` once per class by inspecting the original forward's source."""
+    src = inspect.getsource(original)
+    returns_tuple = "return attn_output, attn_weight" in src or "return attn_output, None" in src
+
+    def forward(self, *args, **kwargs):
+        return _reshaped_vision_attention_forward(self, *args, returns_tuple=returns_tuple, **kwargs)
+
+    return forward
 
 
-@contextmanager
-def patch_untraceable_patterns(model: PreTrainedModel):
-    """Temporarily replace untraceable model patterns with export-safe equivalents.
-
-    Iterates every module, applies matching patchers from `_MODEL_PATCHERS`,
-    and reverts all changes when the context exits.
-    """
-    saved = []
-    for module in model.modules():
-        for patcher in _MODEL_PATCHERS:
-            result = patcher(module)
-            if result is not None:
-                attr, replacement = result
-                saved.append((module, attr, getattr(module, attr)))
-                setattr(module, attr, replacement)
-    try:
-        yield
-    finally:
-        for module, attr, original in reversed(saved):
-            setattr(module, attr, original)
-
-
-# ── Stage 2: Pytree registration ─────────────────────────────────────────────
+# ── Stage 3: Pytree registration ─────────────────────────────────────────────
 # torch.export needs pytree flatten/unflatten for Cache objects and other
 # custom types. The generic flattener serialises any object to a JSON-native
 # context (bools, ints, strings, dicts, lists) while collecting tensors into
@@ -467,37 +531,6 @@ def register_cache_pytrees_for_model(model: PreTrainedModel):
         from detectron2.structures.image_list import ImageList
 
         _register_pytree_node(ImageList)
-
-
-# ── Stage 3: Model signature patch ──────────────────────────────────────────
-# Replaces `model.forward` with a flat explicit signature derived from the
-# inputs dict so `torch.export` does not expand `**kwargs` into a large bundle.
-
-
-@contextmanager
-def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
-    """Temporarily replace `model.forward` with a flat explicit signature derived from `inputs`.
-
-    `torch.export` infers the exported function signature from `model.forward.__signature__`.
-    Most transformers models use `**kwargs: Unpack[TransformersKwargs]`, which causes
-    `torch.export` to expand the signature into a large `combined_args` bundle that
-    mismatches the `dynamic_shapes` dict. This patch replaces the forward with a
-    minimal signature containing only the keys present in `inputs`.
-    """
-    original_forward = model.forward
-
-    def _flat_forward(**kwargs):
-        return original_forward(**kwargs)
-
-    _flat_forward.__signature__ = inspect.Signature(
-        [inspect.Parameter(k, inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None) for k in inputs]
-    )
-
-    try:
-        model.forward = _flat_forward
-        yield
-    finally:
-        model.forward = original_forward
 
 
 # ── Stage 4: Dynamic shapes ─────────────────────────────────────────────────

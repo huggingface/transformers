@@ -190,8 +190,7 @@ def _patch_where(original):
     return patch
 
 
-@register_patch("onnx", "torch.unsqueeze")
-@register_patch("onnx", "torch.Tensor.unsqueeze")
+@register_patch("onnx", "torch.unsqueeze", "torch.Tensor.unsqueeze")
 def _patch_unsqueeze(original):
     """Support complex tensors in torch.unsqueeze."""
 
@@ -291,14 +290,12 @@ def _patch_cummax_or_cummin(original, *, mode: str):
     return patch
 
 
-@register_patch("onnx", "torch.cummax")
-@register_patch("onnx", "torch.Tensor.cummax")
+@register_patch("onnx", "torch.cummax", "torch.Tensor.cummax")
 def _patch_cummax(original):
     return _patch_cummax_or_cummin(original, mode="max")
 
 
-@register_patch("onnx", "torch.cummin")
-@register_patch("onnx", "torch.Tensor.cummin")
+@register_patch("onnx", "torch.cummin", "torch.Tensor.cummin")
 def _patch_cummin(original):
     return _patch_cummax_or_cummin(original, mode="min")
 

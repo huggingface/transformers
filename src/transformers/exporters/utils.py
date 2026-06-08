@@ -18,9 +18,9 @@
 Organised into five sections (search for the `# ── Name ──` banners):
 
 - **Patch and fix registries** — backend-keyed `_PATCHES` / `_FX_NODE_FIXES` /
-  `_FX_PROGRAM_FIXES` populated via `@register_patch` / `@register_fx_node_fix` /
-  `@register_fx_program_fix`, applied via `apply_patches` / `apply_fx_node_fixes` /
-  `apply_fx_program_fixes`.
+  `_FX_PROGRAM_FIXES` populated via `@register_patch(backend, *paths)` /
+  `@register_fx_node_fix` / `@register_fx_program_fix`, applied via
+  `apply_patches` / `apply_fx_node_fixes` / `apply_fx_program_fixes`.
 - **Recursive structure traversal** — internal helpers (`_map_leaf_tensors`,
   `_iter_leaf_tensors`) that drive every other tensor utility.
 - **Public tensor utilities** — `get_leaf_tensors`, `duplicate_leaf_tensors`,
@@ -137,23 +137,28 @@ def apply_fx_program_fixes(backend: str, exported_program) -> None:
         fix(exported_program)
 
 
-def register_patch(backend: str, path: str):
-    """Append the decorated `factory(original)` to `_PATCHES[backend]`.
+def register_patch(backend: str, *paths: str):
+    """Append the decorated `factory(original)` to `_PATCHES[backend]`, once per `path`.
 
-    `path` is a dotted Python path like `"torch.where"` or `"torch.Tensor.unsqueeze"`. The
-    rightmost segment is the attribute to swap; the rest is the object that owns it. The
-    path is resolved at decoration time — submodules are imported lazily, falling back to
-    `getattr` for class attributes. If the chain can't be resolved (e.g. the backend isn't
-    installed), registration is silently skipped so the module still imports.
+    Each `path` is a dotted Python path like `"torch.where"`, `"torch.Tensor.unsqueeze"`,
+    or `"transformers.models.jamba.modeling_jamba.JambaModel._update_mamba_mask"`. The
+    rightmost segment is the attribute to swap; the rest is the object that owns it.
+    Paths are resolved at decoration time — submodules are imported as needed, falling
+    back to `getattr` for class attributes. A path that fails to resolve (e.g. the backend
+    isn't installed) is silently skipped so the module still imports.
+
+    Passing multiple paths registers the SAME factory against each — useful for swapping
+    the same method on several classes (e.g. `_update_mamba_mask` on Jamba/Bamba/…).
     """
 
     def decorator(fn):
-        obj_path, _, attr = path.rpartition(".")
-        try:
-            obj = _resolve_dotted_path(obj_path)
-        except (ImportError, AttributeError):
-            return fn
-        _PATCHES.setdefault(backend, []).append((obj, attr, fn))
+        for path in paths:
+            obj_path, _, attr = path.rpartition(".")
+            try:
+                obj = _resolve_dotted_path(obj_path)
+            except (ImportError, AttributeError):
+                continue
+            _PATCHES.setdefault(backend, []).append((obj, attr, fn))
         return fn
 
     return decorator
