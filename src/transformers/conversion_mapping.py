@@ -460,6 +460,12 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"\.embeddings\.patch_embedding\.",
                 target_patterns=".embeddings.proj.",
             ),
+            # The vision transformer holds its blocks directly (no ``CLIPEncoder`` wrapper),
+            # so flatten the checkpoint's ``vision_model.encoder.layers`` onto ``vision_model.layers``.
+            WeightRenaming(
+                source_patterns=r"\.vision_model\.encoder\.layers\.",
+                target_patterns=".vision_model.layers.",
+            ),
             # ---- text decoder: MoE block path + lightning index branch ----
             WeightRenaming(
                 source_patterns=r"\.block_sparse_moe\.",

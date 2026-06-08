@@ -35,7 +35,6 @@ from ...integrations import use_experts_implementation, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
-    BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     MoeCausalLMOutputWithPast,
@@ -761,6 +760,7 @@ class MiniMaxM3VLTextModel(MiniMaxM3VLPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
+        # No sliding window opposed to mixtral
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
@@ -785,7 +785,7 @@ class MiniMaxM3VLTextModel(MiniMaxM3VLPreTrainedModel):
 
         hidden_states = self.norm(hidden_states)
 
-        return MoeModelOutputWithPast(
+        return MoeModelOutputWithPast(  # only diff with Mistral is the output type, we need MoE
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -1074,10 +1074,19 @@ class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
 
 
 def rotate_half_llm(x):
-    """Rotates half the hidden dims of the input."""
+    """Rotates half the hidden dims of the input (interleaved layout)."""
     x1 = x[..., 0::2]
     x2 = x[..., 1::2]
     return torch.stack((-x2, x1), dim=-1).flatten(-2)
+
+
+def apply_rotary_pos_emb_vision(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    cos, sin = cos[None, :, None, :], sin[None, :, None, :]
+    q_embed = q * cos + rotate_half_llm(q) * sin
+    k_embed = k * cos + rotate_half_llm(k) * sin
+    return q_embed, k_embed
 
 
 class MiniMaxM3VLVisionAttention(nn.Module):
@@ -1117,9 +1126,7 @@ class MiniMaxM3VLVisionAttention(nn.Module):
         keys = self.k_proj(hidden_states).view(hidden_shape)
         values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         cos, sin = position_embeddings
-        cos, sin = cos[None, :, None, :], sin[None, :, None, :]
-        queries = queries * cos + rotate_half_llm(queries) * sin
-        keys = keys * cos + rotate_half_llm(keys) * sin
+        queries, keys = apply_rotary_pos_emb_vision(queries, keys, cos, sin)
         queries, keys = queries.transpose(1, 2), keys.transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -1187,40 +1194,6 @@ class MiniMaxM3VLVisionEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class MiniMaxM3VLVisionEncoder(nn.Module):
-    """
-    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`MiniMaxM3VLVisionEncoderLayer`].
-
-    Args:
-        config: MiniMaxM3VLVisionConfig
-    """
-
-    def __init__(self, config: MiniMaxM3VLVisionConfig):
-        super().__init__()
-        self.config = config
-        self.layers = nn.ModuleList([MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        inputs_embeds,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
-        hidden_states = inputs_embeds
-        for encoder_layer in self.layers:
-            hidden_states = encoder_layer(
-                hidden_states,
-                attention_mask,
-                **kwargs,
-            )
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-        )
-
-
 class MiniMaxM3VLVisionTransformer(nn.Module):
     """CLIP-style vision transformer with a Conv3d patch embed and 3D RoPE.
 
@@ -1232,7 +1205,7 @@ class MiniMaxM3VLVisionTransformer(nn.Module):
         super().__init__()
         self.embeddings = MiniMaxM3VLVisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.encoder = MiniMaxM3VLVisionEncoder(config)
+        self.layers = nn.ModuleList([MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         head_dim = config.hidden_size // config.num_attention_heads
         self.rotary_emb = MiniMaxM3VL3DRotaryEmbedding(head_dim, theta=config.rope_theta)
 
@@ -1242,9 +1215,9 @@ class MiniMaxM3VLVisionTransformer(nn.Module):
         embeds = self.embeddings(pixel_values)
         cos, sin = self.rotary_emb(image_grid_thw, device=embeds.device, dtype=embeds.dtype)
         hidden_states = self.pre_layrnorm(embeds).unsqueeze(0)
-        encoder_outputs = self.encoder(inputs_embeds=hidden_states, position_embeddings=(cos, sin), **kwargs)
-        last_hidden_state = encoder_outputs.last_hidden_state
-        return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state, pooler_output=last_hidden_state[:, 0])
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, attention_mask=None, position_embeddings=(cos, sin), **kwargs)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states[:, 0])
 
 
 @auto_docstring

@@ -22,10 +22,10 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, DynamicLayer, StaticLayer
+from ...cache_utils import Cache, DynamicLayer, StaticLayer
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
-from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -34,10 +34,9 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
-from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoder, CLIPEncoderLayer
+from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoderLayer
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
 from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
-from ..glm4v.modeling_glm4v import rotate_half_llm
 from ..laguna.modeling_laguna import LagunaSparseMoeBlock
 from ..llama.modeling_llama import eager_attention_forward
 from ..llava.modeling_llava import (
@@ -766,6 +765,22 @@ class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
         return cos, sin
 
 
+def rotate_half_llm(x):
+    """Rotates half the hidden dims of the input (interleaved layout)."""
+    x1 = x[..., 0::2]
+    x2 = x[..., 1::2]
+    return torch.stack((-x2, x1), dim=-1).flatten(-2)
+
+
+def apply_rotary_pos_emb_vision(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    cos, sin = cos[None, :, None, :], sin[None, :, None, :]
+    q_embed = q * cos + rotate_half_llm(q) * sin
+    k_embed = k * cos + rotate_half_llm(k) * sin
+    return q_embed, k_embed
+
+
 class MiniMaxM3VLVisionAttention(CLIPAttention):
     """CLIP-style vision attention; the only difference from [`CLIPAttention`] is
     that queries and keys are rotated by the tower's 3D RoPE before the
@@ -790,9 +805,7 @@ class MiniMaxM3VLVisionAttention(CLIPAttention):
         keys = self.k_proj(hidden_states).view(hidden_shape)
         values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         cos, sin = position_embeddings
-        cos, sin = cos[None, :, None, :], sin[None, :, None, :]
-        queries = queries * cos + rotate_half_llm(queries) * sin
-        keys = keys * cos + rotate_half_llm(keys) * sin
+        queries, keys = apply_rotary_pos_emb_vision(queries, keys, cos, sin)
         queries, keys = queries.transpose(1, 2), keys.transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -826,12 +839,6 @@ class MiniMaxM3VLVisionEncoderLayer(CLIPEncoderLayer):
         self.mlp = MiniMaxM3VLVisionMLP(config)
 
 
-class MiniMaxM3VLVisionEncoder(CLIPEncoder):
-    def __init__(self, config: MiniMaxM3VLVisionConfig):
-        super().__init__(config)
-        self.layers = nn.ModuleList([MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-
-
 class MiniMaxM3VLVisionTransformer(nn.Module):
     """CLIP-style vision transformer with a Conv3d patch embed and 3D RoPE.
 
@@ -843,7 +850,7 @@ class MiniMaxM3VLVisionTransformer(nn.Module):
         super().__init__()
         self.embeddings = MiniMaxM3VLVisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.encoder = MiniMaxM3VLVisionEncoder(config)
+        self.layers = nn.ModuleList([MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         head_dim = config.hidden_size // config.num_attention_heads
         self.rotary_emb = MiniMaxM3VL3DRotaryEmbedding(head_dim, theta=config.rope_theta)
 
@@ -853,9 +860,9 @@ class MiniMaxM3VLVisionTransformer(nn.Module):
         embeds = self.embeddings(pixel_values)
         cos, sin = self.rotary_emb(image_grid_thw, device=embeds.device, dtype=embeds.dtype)
         hidden_states = self.pre_layrnorm(embeds).unsqueeze(0)
-        encoder_outputs = self.encoder(inputs_embeds=hidden_states, position_embeddings=(cos, sin), **kwargs)
-        last_hidden_state = encoder_outputs.last_hidden_state
-        return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state, pooler_output=last_hidden_state[:, 0])
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, attention_mask=None, position_embeddings=(cos, sin), **kwargs)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states[:, 0])
 
 
 @auto_docstring
