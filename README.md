@@ -335,3 +335,6 @@ We now have a [paper](https://aclanthology.org/2020.emnlp-demos.6/) you can cite
     pages = "38--45"
 }
 ```
+## Contributing
+
+We welcome contributions! Please check the existing issues and open a pull request. See the [contribution guide](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md) for details.
