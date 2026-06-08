@@ -1,4 +1,4 @@
-# Copyright (c) 2023-2024, NVIDIA CORPORATION.  All rights reserved.
+# Copyright (c) 2026, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,43 +14,86 @@
 """RADIO vision encoder configuration."""
 
 from ...configuration_utils import PretrainedConfig
-from .common import DEFAULT_VERSION, RESOURCE_MAP, Resolution
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 
 __all__ = ["RADIOConfig"]
 
 
 class RADIOConfig(PretrainedConfig):
-    """Configuration for RADIO vision encoder models."""
+    """Configuration for the RADIO vision encoder (native transformers port).
+
+    The defaults correspond to ``nvidia/C-RADIOv4-H`` (a ViT-H/16 backbone with a
+    Cropped Position Embedding (CPE) patch generator).
+    """
 
     model_type = "radio"
 
     def __init__(
         self,
-        args: dict | None = None,
-        version: str | None = DEFAULT_VERSION,
-        patch_size: int | None = None,
-        max_resolution: int | None = None,
-        preferred_resolution: Resolution | None = None,
-        adaptor_names: str | list[str] = None,
-        adaptor_configs: dict[str, dict[str, int]] = None,
-        vitdet_window_size: int | None = None,
-        feature_normalizer_config: dict | None = None,
-        inter_feature_normalizer_config: dict | None = None,
+        hidden_size: int = 1280,
+        num_hidden_layers: int = 32,
+        num_attention_heads: int = 16,
+        mlp_ratio: float = 4.0,
+        hidden_act: str = "gelu",
+        layer_norm_eps: float = 1e-6,
+        attention_probs_dropout_prob: float = 0.0,
+        hidden_dropout_prob: float = 0.0,
+        drop_path_rate: float = 0.0,
+        use_swiglu_ffn: bool = False,
+        qkv_bias: bool = True,
+        # C-RADIO has no layerscale; 1.0 makes the (inherited) layerscale an identity op.
+        layerscale_value: float = 1.0,
+        # patch / image
+        num_channels: int = 3,
+        patch_size: int = 16,
+        image_size: int = 224,
+        # CPE patch generator
+        max_img_size: int = 2048,
+        num_cls_tokens: int = 3,
+        num_registers: int = 7,
+        summary_idxs: list[int] | None = None,
+        # input conditioner
+        norm_mean: tuple[float, float, float] = OPENAI_CLIP_MEAN,
+        norm_std: tuple[float, float, float] = OPENAI_CLIP_STD,
+        # resolution metadata (inference convenience)
+        max_resolution: int = 2048,
+        preferred_resolution: tuple[int, int] = (512, 512),
+        initializer_range: float = 0.02,
         **kwargs,
     ):
-        self.args = args
-        for field in ["dtype", "amp_dtype"]:
-            if self.args is not None and field in self.args:
-                self.args[field] = str(args[field]).split(".")[-1]
-        self.version = version
-        resource = RESOURCE_MAP[version]
-        self.patch_size = patch_size or resource.patch_size
-        self.max_resolution = max_resolution or resource.max_resolution
-        self.preferred_resolution = preferred_resolution or resource.preferred_resolution
-        self.adaptor_names = adaptor_names
-        self.adaptor_configs = adaptor_configs
-        self.vitdet_window_size = vitdet_window_size
-        self.feature_normalizer_config = feature_normalizer_config
-        self.inter_feature_normalizer_config = inter_feature_normalizer_config
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.mlp_ratio = mlp_ratio
+        self.hidden_act = hidden_act
+        self.layer_norm_eps = layer_norm_eps
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.drop_path_rate = drop_path_rate
+        self.use_swiglu_ffn = use_swiglu_ffn
+        self.qkv_bias = qkv_bias
+        self.layerscale_value = layerscale_value
+
+        self.num_channels = num_channels
+        self.patch_size = patch_size
+        self.image_size = image_size
+
+        self.max_img_size = max_img_size
+        self.num_cls_tokens = num_cls_tokens
+        self.num_registers = num_registers
+        self.summary_idxs = summary_idxs if summary_idxs is not None else [0, 1]
+
+        self.norm_mean = list(norm_mean)
+        self.norm_std = list(norm_std)
+
+        self.max_resolution = max_resolution
+        self.preferred_resolution = preferred_resolution
+        self.initializer_range = initializer_range
+
         super().__init__(**kwargs)
+
+    @property
+    def num_summary_tokens(self) -> int:
+        """Number of skipped prefix tokens (cls + registers) before spatial features."""
+        return self.num_cls_tokens + self.num_registers
