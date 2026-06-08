@@ -1426,8 +1426,9 @@ class StaticCache(Cache):
             else:
                 layer_types = ["full_attention" for _ in range(config.num_hidden_layers)]
         # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
-        if hasattr(config, "num_kv_shared_layers"):
-            layer_types = layer_types[: -config.num_kv_shared_layers]
+        num_kv_shared_layers = getattr(config, "num_kv_shared_layers", 0)
+        if num_kv_shared_layers > 0:
+            layer_types = layer_types[:-num_kv_shared_layers]
 
         sliding_layer_types = {
             name

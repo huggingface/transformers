@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-04-05 and added to Hugging Face Transformers on 2026-05-07.*
+*This model was published in HF papers on 2024-07-24 and contributed to Hugging Face Transformers on 2026-05-07.*
 
 <div style="float: right;">
  <div class="flex flex-wrap space-x-1">
@@ -39,7 +39,7 @@ It enhances the DETR architecture for efficiency and speed using the following c
 4. **Faster Decoder**: Employs a shallow 3-layer DETR decoder with deformable cross-attention for lower latency.
 5. **Optimized Queries**: Uses a mixed-query scheme combining learnable content queries and generated spatial queries.
 
-You can find all the available RF-DETR checkpoints under the [stevenbucaille](https://huggingface.co/stevenbucaille)
+You can find all the available RF-DETR checkpoints under the [Roboflow](https://huggingface.co/Roboflow)
 organization.
 The original code can be found [here](https://github.com/roboflow/rf-detr).
 
@@ -64,7 +64,7 @@ The example below demonstrates how to perform object detection with the [`Pipeli
 from transformers import pipeline
 import torch
 
-pipeline = pipeline("object-detection", model="stevenbucaille/rf-detr-base", device_map="auto")
+pipeline = pipeline("object-detection", model="Roboflow/rf-detr-medium", device_map="auto")
 
 pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
 ```
@@ -81,8 +81,8 @@ import torch
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/rf-detr-base")
-model = AutoModelForObjectDetection.from_pretrained("stevenbucaille/rf-detr-base", device_map="auto")
+image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-medium")
+model = AutoModelForObjectDetection.from_pretrained("Roboflow/rf-detr-medium", device_map="auto")
 
 # prepare image for the model
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
@@ -97,6 +97,91 @@ for result in results:
         score, label = score.item(), label_id.item()
         box = [round(i, 2) for i in box.tolist()]
         print(f"{model.config.id2label[label]}: {score:.2f} {box}")
+```
+
+</hfoption>
+</hfoptions>
+
+### Visualizing results with supervision
+
+You can use the [supervision](https://github.com/roboflow/supervision) library to visualize detection and segmentation results. Install it with `pip install supervision`.
+
+<hfoptions id="supervision">
+<hfoption id="Object Detection">
+
+```python
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
+from PIL import Image
+import supervision as sv
+import requests
+import torch
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-medium")
+model = AutoModelForObjectDetection.from_pretrained("Roboflow/rf-detr-medium", device_map="auto")
+
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+    outputs = model(**inputs)
+
+results = image_processor.post_process_object_detection(
+    outputs, target_sizes=torch.tensor([image.size[::-1]]), threshold=0.3
+)[0]
+
+detections = sv.Detections.from_transformers(
+    transformers_results=results, id2label=model.config.id2label
+)
+
+box_annotator = sv.BoxAnnotator()
+label_annotator = sv.LabelAnnotator()
+
+annotated_image = image.copy()
+annotated_image = box_annotator.annotate(annotated_image, detections)
+annotated_image = label_annotator.annotate(annotated_image, detections)
+
+sv.plot_image(annotated_image)
+```
+
+</hfoption>
+<hfoption id="Instance Segmentation">
+
+```python
+from transformers import AutoImageProcessor, AutoModelForInstanceSegmentation
+from PIL import Image
+import supervision as sv
+import requests
+import torch
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-seg-medium")
+model = AutoModelForInstanceSegmentation.from_pretrained("Roboflow/rf-detr-seg-medium", device_map="auto")
+
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+    outputs = model(**inputs)
+
+results = image_processor.post_process_instance_segmentation(
+    outputs, target_sizes=[image.size[::-1]], threshold=0.3
+)[0]
+
+detections = sv.Detections.from_transformers(
+    transformers_results=results, id2label=model.config.id2label
+)
+
+mask_annotator = sv.MaskAnnotator()
+label_annotator = sv.LabelAnnotator()
+
+annotated_image = image.copy()
+annotated_image = mask_annotator.annotate(annotated_image, detections)
+annotated_image = label_annotator.annotate(annotated_image, detections)
+
+sv.plot_image(annotated_image)
 ```
 
 </hfoption>
@@ -117,6 +202,13 @@ for result in results:
 ## RfDetrDinov2Config
 
 [[autodoc]] RfDetrDinov2Config
+
+## RfDetrImageProcessor
+
+[[autodoc]] RfDetrImageProcessor
+    - preprocess
+    - post_process_object_detection
+    - post_process_instance_segmentation
 
 ## RfDetrModel
 
