@@ -103,6 +103,13 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
             config.mlp_layer_types, ["dense", "dense", "dense", "sparse", "sparse", "sparse", "sparse", "sparse"]
         )
 
+    def test_indexer_types_respect_skip_topk_offset(self):
+        config = GlmMoeDsaConfig(num_hidden_layers=8, index_topk_freq=4, index_skip_topk_offset=3)
+        self.assertEqual(
+            config.indexer_types,
+            ["full", "full", "full", "shared", "shared", "shared", "full", "shared"],
+        )
+
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("Won't fix: Blip2 + T5 backbone needs custom input preparation for this test")
     def test_eager_matches_sdpa_inference(self, *args):
