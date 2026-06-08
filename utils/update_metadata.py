@@ -38,6 +38,7 @@ import pandas as pd
 from datasets import Dataset
 from huggingface_hub import hf_hub_download, upload_folder
 
+from transformers.models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
 from transformers.utils import direct_transformers_import
 
 
@@ -77,6 +78,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("automatic-speech-recognition", "MODEL_FOR_CTC_MAPPING_NAMES", "AutoModelForCTC"),
     ("image-classification", "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES", "AutoModelForImageClassification"),
     ("image-segmentation", "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES", "AutoModelForImageSegmentation"),
+    ("any-to-any", "MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES", "AutoModelForMultimodalLM"),
     ("image-text-to-text", "MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES", "AutoModelForImageTextToText"),
     ("fill-mask", "MODEL_FOR_MASKED_LM_MAPPING_NAMES", "AutoModelForMaskedLM"),
     ("object-detection", "MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES", "AutoModelForObjectDetection"),
@@ -128,11 +130,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("text-to-audio", "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING_NAMES", "AutoModelForTextToSpectrogram"),
     ("text-to-audio", "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES", "AutoModelForTextToWaveform"),
     ("keypoint-matching", "MODEL_FOR_KEYPOINT_MATCHING_MAPPING_NAMES", "AutoModelForKeypointMatching"),
-    ("any-to-any", "MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES", "AutoModelForMultimodalLM"),
 ]
-
-# Pipeline tags that do not necessarily have to be in the above list
-PIPELINES_TO_IGNORE = ["image-text-to-text"]
 
 
 def camel_case_split(identifier: str) -> list[str]:
@@ -229,16 +227,19 @@ def update_pipeline_and_auto_class_table(table: dict[str, tuple[str, str]]) -> d
     for pipeline_tag, model_mapping, cls in PIPELINE_TAGS_AND_AUTO_MODELS:
         if not hasattr(module, model_mapping):
             continue
-        # First extract all model_names
-        model_names = []
-        for name in getattr(module, model_mapping).values():
-            if isinstance(name, str):
-                model_names.append(name)
-            else:
-                model_names.extend(list(name))
 
-        # Add pipeline tag and auto model class for those models
-        table.update(dict.fromkeys(model_names, (pipeline_tag, cls)))
+        # Iterate over all model_names for given mapping
+        for names in getattr(module, model_mapping).values():
+            if isinstance(names, str):
+                names = [names]
+
+            for name in names:
+                # For multimodal LLMs, keep the fine-grained pipeline tag but use a generic `AutoClass`
+                if name in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES:
+                    cls = "AutoModelForMultimodalLM"
+
+                # Add pipeline tag and auto model class for those models
+                table[name] = (pipeline_tag, cls)
 
     return table
 
@@ -334,7 +335,7 @@ def check_pipeline_tags():
     pipeline_tasks = transformers_module.pipelines.SUPPORTED_TASKS
     missing = []
     for key in pipeline_tasks:
-        if key not in in_table and key not in PIPELINES_TO_IGNORE:
+        if key not in in_table:
             model = pipeline_tasks[key]["pt"]
             if isinstance(model, (list, tuple)):
                 model = model[0]
