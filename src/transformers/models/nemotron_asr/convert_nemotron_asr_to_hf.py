@@ -38,7 +38,7 @@ from transformers import (
     NemotronAsrEncoderConfig,
     NemotronAsrFeatureExtractor,
     NemotronAsrForRNNT,
-    ParakeetProcessor,
+    NemotronAsrProcessor,
     ParakeetTokenizer,
 )
 from transformers.convert_slow_tokenizer import ParakeetConverter
@@ -211,7 +211,7 @@ def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=
             raise ValueError(f"Key {key} not found in feature_extractor_config_keys_mapping")
 
     feature_extractor = NemotronAsrFeatureExtractor(**converted_feature_extractor_config)
-    processor = ParakeetProcessor(
+    processor = NemotronAsrProcessor(
         feature_extractor=feature_extractor,
         tokenizer=tokenizer_converted_fast,
     )

@@ -131,7 +131,7 @@ else:
             ("moonshine", "Wav2Vec2Processor"),
             ("moonshine_streaming", "MoonshineStreamingProcessor"),
             ("musicflamingo", "MusicFlamingoProcessor"),
-            ("nemotron_asr", "ParakeetProcessor"),
+            ("nemotron_asr", "NemotronAsrProcessor"),
             ("omdet-turbo", "OmDetTurboProcessor"),
             ("oneformer", "OneFormerProcessor"),
             ("ovis2", "Ovis2Processor"),

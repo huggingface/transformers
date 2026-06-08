@@ -59,6 +59,7 @@ from ..parakeet.modeling_parakeet import (
     ParakeetRNNTJointNetwork,
     ParakeetRNNTOutput,
 )
+from ..parakeet.processing_parakeet import ParakeetProcessor
 from .generation_nemotron_asr import NemotronAsrGenerationMixin, NemotronAsrRNNTDecoderCache
 
 
@@ -258,6 +259,9 @@ class NemotronAsrConfig(NemotronAsrRNNTConfig):
             self.encoder_config = NemotronAsrEncoderConfig()
         self.initializer_range = self.encoder_config.initializer_range
         PreTrainedConfig.__post_init__(self, **kwargs)
+
+
+class NemotronAsrProcessor(ParakeetProcessor): ...
 
 
 class NemotronAsrFeatureExtractor(ParakeetFeatureExtractor):
@@ -1277,6 +1281,7 @@ __all__ = [
     "NemotronAsrConfig",
     "NemotronAsrEncoderConfig",
     "NemotronAsrFeatureExtractor",
+    "NemotronAsrProcessor",
     "NemotronAsrEncoderModelOutput",
     "NemotronAsrRNNTOutput",
     "NemotronAsrForRNNT",
