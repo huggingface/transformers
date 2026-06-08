@@ -8,6 +8,7 @@ data) and can compare throughput against a previously-saved run.
 import argparse
 import gc
 import json
+import os
 import time
 import types
 from collections.abc import Callable
@@ -30,11 +31,19 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, ContinuousBatching
 RESULTS_DIR = Path(__file__).parent.parent / "benchmark_results/cb_overall/"
 
 
+# Auxiliary functions
 def _fmt(val: Any, spec: str = "", missing: str = "X") -> str:
     """Format `val` per `spec`, or return `missing` if val is None."""
     return format(val, spec) if val is not None else missing
 
 
+def _config_summary(cfg: Any) -> dict[str, Any]:
+    """Extract a JSON-friendly summary of a dataclass/config object."""
+    raw = cfg.to_dict() if hasattr(cfg, "to_dict") else cfg.__dict__
+    return {k: v for k, v in raw.items() if isinstance(v, (int, float, str, bool, type(None)))}
+
+
+# Data-related functions
 def _build_gsm8k_platinum_module() -> types.ModuleType:
     """Define the gsm8k_platinum custom task inline so lighteval's Registry can pick it up via `custom_tasks=`."""
 
@@ -49,7 +58,7 @@ def _build_gsm8k_platinum_module() -> types.ModuleType:
     metrics = list(Registry().load_all_task_configs()["gsm8k"].metrics)
 
     mod = types.ModuleType("_gsm8k_platinum_inline")
-    mod.TASKS_TABLE = [
+    mod.TASKS_TABLE = [  # type: ignore
         LightevalTaskConfig(
             name="gsm8k_platinum",
             prompt_function=gsm8k_platinum_prompt,
@@ -90,7 +99,7 @@ def _build_lighteval_inputs_scorer(
     def score(outputs) -> float:
         scores = []
         for doc, (_, out) in zip(docs, outputs.items()):
-            text = tokenizer.decode(out.generated_tokens, skip_special_tokens=True)
+            text = tokenizer.decode(out.generated_tokens, skip_special_tokens=True)  # type: ignore
             for s in stop_sequences:
                 text = text.split(s, 1)[0]
             value = metric.sample_level_fn.compute(doc, ModelResponse(text=[text]))
@@ -101,7 +110,6 @@ def _build_lighteval_inputs_scorer(
     return inputs, score
 
 
-# Data helpers
 def get_tokenized_gsm8k(
     tokenizer: AutoTokenizer, n_fewshot: int = 8
 ) -> tuple[list[list[int]], Callable[[Any], float]]:
@@ -152,19 +160,24 @@ class BenchmarkEntry:
     error: str | None = None
 
 
-def _config_summary(cfg: Any) -> dict[str, Any]:
-    """Extract a JSON-friendly summary of a dataclass/config object."""
-    raw = cfg.to_dict() if hasattr(cfg, "to_dict") else cfg.__dict__
-    return {k: v for k, v in raw.items() if isinstance(v, (int, float, str, bool, type(None)))}
-
-
 class BenchmarkResults:
     """Holds all CB benchmark runs and the shared model they execute against."""
 
-    def __init__(self, model_id: str, attn_impl: str, tp_size: int = 1):
+    def __init__(self, model_id: str, attn_impl: str, tp_size: int = 1, dp_size: int = 1):
         self.model_id = model_id
         self.attn_impl = attn_impl
         self.tp_size = tp_size
+        self.dp_size = dp_size
+        # For now, TP and DP are mutually exclusive
+        if self.tp_size > 1 and self.dp_size > 1:
+            raise ValueError("TP and DP cannot be used together")
+        # torchrun sets these per worker; the work is independent so no process group is needed.
+        self.global_rank = int(os.environ.get("RANK", 0))
+        self.local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        # Pin this worker to its own GPU so all torch.cuda calls (memory stats, cleanup) target it.
+        if self.dp_size > 1:
+            torch.cuda.set_device(self.local_rank)
+        # Entries accumulator
         self.entries: list[BenchmarkEntry] = []
 
     def cleanup(self) -> None:
@@ -175,7 +188,12 @@ class BenchmarkResults:
     def _get_model(self) -> Any:
         self.cleanup()
         # tp_plan and device_map are mutually exclusive — TP uses its own placement.
-        placement = {"tp_plan": "auto"} if self.tp_size > 1 else {"device_map": 0}
+        if self.tp_size > 1:
+            placement = {"tp_plan": "auto"}
+        elif self.dp_size > 1:
+            placement = {"device_map": self.local_rank}
+        else:
+            placement = {"device_map": 0}
         model = AutoModelForCausalLM.from_pretrained(self.model_id, attn_implementation=self.attn_impl, **placement)
         return model.eval()
 
@@ -187,13 +205,11 @@ class BenchmarkResults:
         gen_config: GenerationConfig | None = None,
         label: str | None = None,
         score_fn: Callable[[Any], float] | None = None,
-    ) -> BenchmarkEntry:
+    ) -> None:
         """Run one CB benchmark and record time, tokens, and peak memory."""
 
         gen_config = GenerationConfig() if gen_config is None else gen_config
         gen_config.max_new_tokens = max_new_tokens
-
-        model = self._get_model()
 
         avg_input = sum(len(x) for x in data) / max(len(data), 1)
         entry = BenchmarkEntry(
@@ -204,9 +220,16 @@ class BenchmarkResults:
             cb_config=_config_summary(cb_config),
             gen_config=_config_summary(gen_config),
         )
-
         print(f"\n[{entry.label}] samples={entry.num_samples} avg_in={avg_input:.1f} max_new={max_new_tokens}")
 
+        # In DP, entries are sharded round-robin across ranks: entry i runs on rank i % dp_size.
+        if self.dp_size > 1 and len(self.entries) % self.dp_size != self.global_rank:
+            entry.error = f"Rank {self.global_rank} is not in charge of this entry"
+            print(f"SKIPPED: {entry.error}")
+            self.entries.append(entry)
+            return None
+
+        model = self._get_model()
         self.cleanup()
 
         try:
@@ -238,7 +261,6 @@ class BenchmarkResults:
 
         self.entries.append(entry)
         self.cleanup()
-        return entry
 
     # Persistence
     def save(self, name: str) -> Path:
@@ -250,7 +272,8 @@ class BenchmarkResults:
             "attn_impl": self.attn_impl,
             "entries": [asdict(e) for e in self.entries],
         }
-        filename.write_text(json.dumps(payload, indent=2))
+        with open(filename, "a") as f:
+            json.dump(payload, f, indent=2)
         print(f"\nResults saved to {filename}")
         return filename
 
@@ -271,6 +294,8 @@ class BenchmarkResults:
 
     # Display
     def print_summary(self) -> None:
+        if self.dp_size > 1:
+            print("-" * 80, f"RANK {self.global_rank}", "-" * 80, sep="\n")
         rows = [
             {
                 "label": e.label,
@@ -317,6 +342,7 @@ if __name__ == "__main__":
     parser.add_argument("--model-id", type=str, default="meta-llama/Llama-3.1-8B-Instruct")
     parser.add_argument("--attn", type=str, default="kernels-community/flash-attn3")
     parser.add_argument("--tp-size", type=int, default=1, help="Tensor parallel size (1 = no TP).")
+    parser.add_argument("--dp-size", type=int, default=1, help="Data parallel size (1 = no DP).")
     parser.add_argument(
         "--rollouts-lengths",
         "-rl",
@@ -324,14 +350,14 @@ if __name__ == "__main__":
         nargs="+",
         help="If this is specified, only the rollouts benchmarks run, with the given sizes (in tokens).",
     )
-    cli_args = parser.parse_args()
+    args = parser.parse_args()
 
-    results = BenchmarkResults(model_id=cli_args.model_id, attn_impl=cli_args.attn, tp_size=cli_args.tp_size)
-    tokenizer = AutoTokenizer.from_pretrained(cli_args.model_id, padding_side="left")
+    results = BenchmarkResults(model_id=args.model_id, attn_impl=args.attn, tp_size=args.tp_size, dp_size=args.dp_size)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_id, padding_side="left")
 
-    if cli_args.rollouts_lengths is not None:
+    if args.rollouts_lengths is not None:
         rollouts_only = True
-        rollout_sizes = cli_args.rollouts_lengths
+        rollout_sizes = args.rollouts_lengths
     else:
         rollouts_only = False
         rollout_sizes = [1024, 2048, 4096, 8192, 16384]
