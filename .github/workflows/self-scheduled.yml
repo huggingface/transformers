@@ -71,7 +71,7 @@ jobs:
     if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu", "run_quantization_torch_gpu"]'), inputs.job)
     strategy:
       matrix:
-        machine_type: [aws-g5-4xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -140,7 +140,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g5-4xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
     with:
@@ -161,7 +161,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g5-4xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
         slice_id: [0, 1, 2]
     uses: ./.github/workflows/model_jobs.yml
     with:
@@ -181,7 +181,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g5-4xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -326,7 +326,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g5-4xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -431,7 +431,7 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.quantization_matrix) }}
-        machine_type: [aws-g5-4xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
