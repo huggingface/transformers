@@ -80,10 +80,10 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
     Raises `ImportError` if the `kernels` package is missing, or the kernel or required
     symbols cannot be found.
     """
-    if not is_kernels_available():
-        raise ImportError(
-            "finegrained-fp8 kernel requires the `kernels` package. Install it with `pip install -U kernels`."
-        )
+    #if not is_kernels_available():
+    #    raise ImportError(
+    #        "finegrained-fp8 kernel requires the `kernels` package. Install it with `pip install -U kernels`."
+    #    )
 
     kernel = lazy_load_kernel("finegrained-fp8")
     if kernel is None:
