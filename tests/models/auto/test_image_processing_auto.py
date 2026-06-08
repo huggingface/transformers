@@ -305,16 +305,25 @@ class AutoImageProcessorTest(unittest.TestCase):
         # Processors that rely on Lanczos interpolation (listed in _LANCZOS_IMAGE_PROCESSORS)
         # must default to the PIL backend when torchvision < 0.27, but can use the torchvision
         # backend directly when torchvision >= 0.27 (which natively supports Lanczos).
-        from transformers.utils.import_utils import is_torchvision_greater_or_equal
+        from unittest.mock import patch
+
+        from transformers.models.auto.image_processing_auto import _LANCZOS_IMAGE_PROCESSORS
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
             json.dump({"image_processor_type": "FlavaImageProcessor"}, open(processor_tmpfile, "w"))
 
-            image_processor = AutoImageProcessor.from_pretrained(tmpdirname)
-            if is_torchvision_greater_or_equal("0.27"):
+            # Simulate torchvision >= 0.27: list is empty, so torchvision backend is used
+            with patch("transformers.models.auto.image_processing_auto.DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS", []):
+                image_processor = AutoImageProcessor.from_pretrained(tmpdirname)
                 self.assertEqual(type(image_processor).__name__, "FlavaImageProcessor")
-            else:
+
+            # Simulate torchvision < 0.27: list is populated, so PIL backend is forced
+            with patch(
+                "transformers.models.auto.image_processing_auto.DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS",
+                _LANCZOS_IMAGE_PROCESSORS,
+            ):
+                image_processor = AutoImageProcessor.from_pretrained(tmpdirname)
                 self.assertEqual(type(image_processor).__name__, "FlavaImageProcessorPil")
 
     @require_torchvision

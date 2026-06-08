@@ -234,9 +234,6 @@ class FlavaImageProcessor(TorchvisionBackend):
     return_codebook_pixels = False
     codebook_do_resize = True
     codebook_size = {"height": 112, "width": 112}
-    # LANCZOS resampling is not supported for torch Tensors with torchvision < 0.27; BICUBIC is the closest
-    # alternative. With torchvision >= 0.27, LANCZOS is natively supported.
-    # Note: the PIL backend always defaults to LANCZOS for this parameter.
     codebook_resample = PILImageResampling.LANCZOS
     codebook_do_center_crop = True
     codebook_crop_size = {"height": 112, "width": 112}
