@@ -158,7 +158,7 @@ class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
 
 
 class MiniMaxM3VLRMSNorm(nn.Module):
-    """Gemma-style RMSNorm: normalizes in fp32 and scales by ``weight + 1``."""
+    """Gemma-style RMSNorm: normalizes in fp32 and scales by `weight + 1`."""
 
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
@@ -180,8 +180,6 @@ class MiniMaxM3VLRMSNorm(nn.Module):
 
 
 class MiniMaxM3VLDenseMLP(nn.Module):
-    """Dense feed-forward used for layers where ``moe_layer_freq[i] == 0``."""
-
     def __init__(self, config: MiniMaxM3VLTextConfig, intermediate_size: int | None = None):
         super().__init__()
         inter = intermediate_size if intermediate_size is not None else config.dense_intermediate_size
@@ -264,8 +262,6 @@ class MiniMaxM3VLTopKRouter(nn.Module):
 class MiniMaxM3VLSparseMoeBlock(nn.Module):
     def __init__(self, config: MiniMaxM3VLTextConfig):
         super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.jitter_noise = config.router_jitter_noise
         self.gate = MiniMaxM3VLTopKRouter(config)
         self.experts = MiniMaxM3VLExperts(config)
         self.routed_scaling_factor = config.routed_scaling_factor
@@ -437,21 +433,8 @@ def rotate_half(x):
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class MiniMaxM3VLAttention(nn.Module):
-    """M3 attention: per-head Gemma QK-norm + partial RoPE, optionally sparse.
-
-    Overrides the inherited FlexOlmo-style forward because per-head QK norm
-    requires reshaping to ``[..., num_heads, head_dim]`` before the norm
-    (FlexOlmo applies a flat per-layer norm). The partial RoPE needs no special
-    handling: the rotary embedding already emits ``rotary_dim``-wide ``cos``/``sin``
-    (via ``partial_rotary_factor``), so the inherited ``apply_rotary_pos_emb`` —
-    which derives ``rotary_dim`` from ``cos.shape[-1]`` and passes the remaining
-    channels through unchanged — rotates exactly the first ``rotary_dim`` channels.
-
-    On ``"minimax_m3_sparse"`` layers a [`MiniMaxM3VLIndexer`] selects, per query, a
-    small set of key blocks; its ``[B, 1, S, S]`` additive ``block_bias`` (``0`` where
-    a query may attend, ``-inf`` elsewhere) is summed onto the causal mask so the
-    attention kernel already excludes every key outside the top-k blocks — the same
-    optional-branch design as [`DeepseekV4Attention`]'s compressor.
+    """
+    M3 attention: per-head Gemma QK-norm + partial RoPE, optionally sparse indexer selection which require position IDs.
     """
 
     def __init__(self, config: MiniMaxM3VLTextConfig, layer_idx: int):
@@ -467,7 +450,6 @@ class MiniMaxM3VLAttention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-        # Replace the inherited (per-layer) q_norm/k_norm with per-head Gemma norms.
         self.q_norm = MiniMaxM3VLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = MiniMaxM3VLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.indexer = MiniMaxM3VLIndexer(config) if config.layer_types[layer_idx] == "minimax_m3_sparse" else None
@@ -484,10 +466,6 @@ class MiniMaxM3VLAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        # On sparse layers the indexer returns a self-contained additive [B, 1, S_q, S_k] selection bias
-        # (0 where a query may attend, -inf elsewhere, including token-level causality). Fold it straight
-        # into ``attention_mask`` *before* the attention call so every backend sees a single, standard
-        # additive mask — no special per-backend bias plumbing. Dense layers leave the mask untouched.
         if self.indexer is not None:
             sparse_bias = self.indexer(
                 hidden_states,
@@ -1011,66 +989,50 @@ class MiniMaxM3VLVisionEmbeddings(nn.Module):
 
 
 class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
-    r"""3D RoPE for the vision tower: rotates each patch by its (T, H, W) grid position.
+    r"""3D RoPE for the vision tower: each patch is rotated by its ``(T, H, W)`` grid position.
 
-    ``head_dim`` is split into three contiguous axis bands. Each spatial/temporal
-    coordinate rotates only its own band, so a patch's embedding carries separate
-    temporal, row and column phase information::
+    ``head_dim`` is split into three contiguous bands, one per axis. A band only sees
+    its own coordinate, so the patch embedding carries independent temporal, row and
+    column phases::
 
-        head_dim
-        |<--------------------------------------------------->|
-        +----------------+----------------+-------------------+
-        |   T  (frames)  |   H  (rows)    |   W  (cols)       |
-        |   d_per_axis   |   d_per_axis   |  head_dim-2*d     |
-        +----------------+----------------+-------------------+
+        |<------------------------- head_dim ------------------------>|
+        +--------------------+--------------------+--------------------+
+        |     T  (frames)    |      H  (rows)     |      W  (cols)     |
+        |        band        |        band        |  head_dim - 2*band |
+        +--------------------+--------------------+--------------------+
 
-    where ``d_per_axis = (head_dim // 3)`` rounded down to an even number. Within
-    each band, every frequency is duplicated side by side (``repeat_interleave(2)``)
-    to give the *interleaved* ``[f0, f0, f1, f1, ...]`` layout that pairs with the
-    interleaved ``rotate_half`` (``rotate_half_llm``)::
-
-        cos band = [cos(c*w0), cos(c*w0), cos(c*w1), cos(c*w1), ...]
-
-    ``c`` is the patch's coordinate on that axis. ``forward`` returns ``(cos, sin)``
-    of shape ``[num_patches, head_dim]`` already cast to ``dtype`` (frequencies are
-    accumulated in float32 for precision, then cast once at the end).
+    ``band = head_dim // 3`` rounded down to an even number, so each band holds
+    ``band // 2`` frequencies. ``inv_freq`` lays those frequencies out as ``T|H|W``;
+    ``axis_of_freq`` tags each one with the grid axis (``0=T, 1=H, 2=W``) whose
+    coordinate rotates it. ``forward`` scales every frequency by its axis' coordinate,
+    then ``repeat_interleave(2)`` duplicates each side by side into the interleaved
+    ``[f0, f0, f1, f1, ...]`` layout that pairs with ``rotate_half_llm``, returning
+    ``(cos, sin)`` of shape ``[num_patches, head_dim]``.
     """
 
     def __init__(self, head_dim: int, theta: float = 10000.0):
         super().__init__()
-        self.head_dim = head_dim
-        d_per_axis = (head_dim // 3) // 2 * 2
-        self.dims = (d_per_axis, d_per_axis, head_dim - 2 * d_per_axis)
-        self.theta = theta
-
-    def _axis_inv_freq(self, dim: int, device: torch.device) -> torch.Tensor:
-        if dim == 0:
-            return torch.empty(0, device=device, dtype=torch.float32)
-        return 1.0 / (self.theta ** (torch.arange(0, dim, 2, device=device, dtype=torch.float32) / dim))
+        band = (head_dim // 3) // 2 * 2
+        dims = (band, band, head_dim - 2 * band)
+        inv_freq = torch.cat([1.0 / (theta ** (torch.arange(0, d, 2, dtype=torch.float32) / d)) for d in dims])
+        axis_of_freq = torch.cat([torch.full((d // 2,), axis) for axis, d in enumerate(dims)])
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("axis_of_freq", axis_of_freq, persistent=False)
 
     def forward(
         self, grid_thw: torch.Tensor, device: torch.device, dtype: torch.dtype
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        coords_list = []
+        coords = []
         for t, h, w in grid_thw.tolist():
-            ti = torch.arange(t, device=device, dtype=torch.float32).repeat_interleave(h * w)
-            hi = torch.arange(h, device=device, dtype=torch.float32).repeat_interleave(w).repeat(t)
-            wi = torch.arange(w, device=device, dtype=torch.float32).repeat(t * h)
-            coords_list.append(torch.stack([ti, hi, wi], dim=-1))
-        coords = torch.cat(coords_list, dim=0)
+            ti = torch.arange(t).repeat_interleave(h * w)
+            hi = torch.arange(h).repeat_interleave(w).repeat(t)
+            wi = torch.arange(w).repeat(t * h)
+            coords.append(torch.stack([ti, hi, wi], dim=-1))
+        coords = torch.cat(coords).to(device=device, dtype=torch.float32)
 
-        parts_cos: list[torch.Tensor] = []
-        parts_sin: list[torch.Tensor] = []
-        for axis, dim in enumerate(self.dims):
-            if dim == 0:
-                continue
-            inv = self._axis_inv_freq(dim, device)
-            freqs = coords[:, axis : axis + 1] * inv[None, :]
-            parts_cos.append(freqs.cos().repeat_interleave(2, dim=-1))
-            parts_sin.append(freqs.sin().repeat_interleave(2, dim=-1))
-        cos = torch.cat(parts_cos, dim=-1).to(dtype)
-        sin = torch.cat(parts_sin, dim=-1).to(dtype)
-        return cos, sin
+        freqs = coords[:, self.axis_of_freq] * self.inv_freq
+        emb = freqs.repeat_interleave(2, dim=-1)
+        return emb.cos().to(dtype), emb.sin().to(dtype)
 
 
 def rotate_half_llm(x):
