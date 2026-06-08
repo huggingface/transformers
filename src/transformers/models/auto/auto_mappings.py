@@ -1071,6 +1071,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("smolvlm", "SmolVLMProcessor"),
         ("speech_to_text", "Speech2TextProcessor"),
         ("speecht5", "SpeechT5Processor"),
+        ("tipsv2", "Tipsv2Processor"),
         ("trocr", "TrOCRProcessor"),
         ("tvp", "TvpProcessor"),
         ("udop", "UdopProcessor"),

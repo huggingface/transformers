@@ -33,7 +33,6 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import (
-    CLIPMLP,
     CLIPAttention,
     CLIPEncoder,
     CLIPEncoderLayer,
@@ -498,70 +497,16 @@ class Tipsv2TextAttention(CLIPAttention):
         return attn_output, attn_weights
 
 
-class Tipsv2TextMLP(CLIPMLP):
-    def forward(self, hidden_states: torch.Tensor, valid_mask: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = hidden_states * valid_mask[..., None]
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = hidden_states * valid_mask[..., None]
-        return hidden_states
-
-
 class Tipsv2TextEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: Tipsv2TextConfig):
         super().__init__(config)
         self.self_attn = Tipsv2TextAttention(config)
-        self.mlp = Tipsv2TextMLP(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        valid_mask: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states, valid_mask)
-        hidden_states = residual + hidden_states
-        return hidden_states
 
 
 class Tipsv2TextEncoder(CLIPEncoder):
     def __init__(self, config: Tipsv2TextConfig):
         super().__init__(config)
         self.layers = nn.ModuleList([Tipsv2TextEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-
-    def forward(
-        self,
-        inputs_embeds: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        valid_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
-        hidden_states = inputs_embeds
-        if valid_mask is None:
-            valid_mask = hidden_states.new_ones(hidden_states.shape[:-1])
-
-        for encoder_layer in self.layers:
-            hidden_states = encoder_layer(
-                hidden_states,
-                attention_mask=attention_mask,
-                valid_mask=valid_mask,
-                **kwargs,
-            )
-
-        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -633,45 +578,16 @@ class Tipsv2TextModel(Tipsv2TextPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        padding_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
-        r"""
-        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Official TIPSv2-style padding mask where `1` marks padding tokens and `0` marks valid tokens. Mutually
-            exclusive with the Hugging Face-style `attention_mask`, where `1` marks valid tokens.
-        """
-        if input_ids is None and inputs_embeds is None:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds")
-        if attention_mask is not None and padding_mask is not None:
-            raise ValueError("You cannot specify both attention_mask and padding_mask")
-
-        if input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        else:
-            input_shape = inputs_embeds.size()[:-1]
-            inputs_embeds = inputs_embeds.view(-1, input_shape[-1], inputs_embeds.shape[-1])
-
-        if attention_mask is not None:
-            attention_mask = attention_mask.view(-1, input_shape[-1])
-        elif padding_mask is not None:
-            attention_mask = padding_mask.view(-1, input_shape[-1]) == 0
-        elif input_ids is not None and self.config.pad_token_id is not None:
-            attention_mask = input_ids != self.config.pad_token_id
-        else:
-            attention_mask = torch.ones(input_shape, dtype=torch.bool, device=self.device).view(-1, input_shape[-1])
-
-        if attention_mask.dim() != 2:
-            raise ValueError("`attention_mask` must be a 2D mask with 1 for valid tokens and 0 for padding tokens.")
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids, inputs_embeds=inputs_embeds)
-        valid_mask = attention_mask.to(device=hidden_states.device, dtype=hidden_states.dtype)
-        attention_mask = attention_mask.to(device=hidden_states.device, dtype=torch.bool)
+
+        pooling_mask = attention_mask
         attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=hidden_states,
@@ -681,18 +597,18 @@ class Tipsv2TextModel(Tipsv2TextPreTrainedModel):
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            valid_mask=valid_mask,
             **kwargs,
         )
 
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.final_layer_norm(last_hidden_state)
-        masked_hidden_state = torch.where(
-            valid_mask[..., None] > 0, last_hidden_state, torch.zeros_like(last_hidden_state)
-        )
-        pooled_output = masked_hidden_state.sum(dim=1) / (
-            valid_mask.sum(dim=1, keepdim=True) + self.config.pooling_epsilon
-        )
+        if pooling_mask is not None:
+            masked_hidden_state = last_hidden_state * pooling_mask[..., None]
+            pooled_output = masked_hidden_state.sum(dim=1) / (
+                pooling_mask.sum(dim=1, keepdim=True) + self.config.pooling_epsilon
+            )
+        else:
+            pooled_output = last_hidden_state.mean(dim=1)
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -744,20 +660,13 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        padding_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Official TIPSv2-style padding mask where `1` marks padding tokens and `0` marks valid tokens. Mutually
-            exclusive with the Hugging Face-style `attention_mask`, where `1` marks valid tokens.
-        """
         text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            padding_mask=padding_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             return_dict=True,
@@ -793,7 +702,6 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        padding_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         bool_masked_pos: torch.Tensor | None = None,
@@ -801,9 +709,6 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Tipsv2Output:
         r"""
-        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Official TIPSv2-style padding mask where `1` marks padding tokens and `0` marks valid tokens. Mutually
-            exclusive with the Hugging Face-style `attention_mask`, where `1` marks valid tokens.
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
             pre-training.
@@ -831,7 +736,6 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
             text_outputs = self.text_model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                padding_mask=padding_mask,
                 position_ids=position_ids,
                 inputs_embeds=inputs_embeds,
                 return_dict=True,

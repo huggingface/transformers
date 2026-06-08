@@ -332,28 +332,6 @@ class Tipsv2TextModelTest(Tipsv2ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
-    def test_text_attention_mask_and_padding_mask_are_equivalent(self):
-        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
-        model = Tipsv2TextModel(config).to(torch_device)
-        model.eval()
-
-        padding_mask = 1 - attention_mask
-
-        with torch.no_grad():
-            hf_outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-            official_outputs = model(input_ids=input_ids, padding_mask=padding_mask)
-
-        torch.testing.assert_close(hf_outputs.last_hidden_state, official_outputs.last_hidden_state)
-        torch.testing.assert_close(hf_outputs.pooler_output, official_outputs.pooler_output)
-
-    def test_text_model_rejects_both_mask_conventions(self):
-        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
-        model = Tipsv2TextModel(config)
-        padding_mask = 1 - attention_mask
-
-        with self.assertRaisesRegex(ValueError, "attention_mask and padding_mask"):
-            model(input_ids=input_ids, attention_mask=attention_mask, padding_mask=padding_mask)
-
 
 class Tipsv2ModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
@@ -625,6 +603,7 @@ class Tipsv2ModelIntegrationTest(unittest.TestCase):
             outputs.text_model_output.pooler_output[0, :5], expected_text_pooler_output, rtol=1e-4, atol=1e-4
         )
 
+    # TODO: Remove before merge
     @slow
     def test_models_from_pretrained(self):
         model_ids = [
