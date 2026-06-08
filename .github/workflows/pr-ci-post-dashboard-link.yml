@@ -13,7 +13,7 @@ jobs:
     if: github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v9.0.0
         with:
           script: |
             const wr = context.payload.workflow_run;
