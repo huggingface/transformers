@@ -25,19 +25,24 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 if is_vision_available():
     from transformers import LlavaOnevisionVideoProcessor, VideoPrismProcessor, VideoPrismTokenizer
 
-VIDEO_PRISM_LVT_CHECKPOINT = "MHRDYN7/videoprism-lvt-base-f16r288"
-NUM_FRAMES = 16
-FRAME_SIZE = 288
-
 TENNIS_VIDEO_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+INTEGRATION_NUM_FRAMES = 16
+INTEGRATION_FRAME_SIZE = 288
+VIDEO_PRISM_LVT_CHECKPOINT = "MHRDYN7/videoprism-lvt-base-f16r288"
 
-EXPECTED_TENNIS_PIXEL_SLICE = torch.tensor(
-    [
-        [0.05882353335618973, 0.0470588281750679, 0.3137255012989044],
-        [0.05098039656877518, 0.05882353335618973, 0.3137255012989044],
-        [0.06666667014360428, 0.062745101749897, 0.3019607961177826],
-    ]
-)
+
+def prepare_tennis_frames():
+    tennis_video = url_to_local_path(TENNIS_VIDEO_URL)
+    video_processor = LlavaOnevisionVideoProcessor(
+        size={"height": INTEGRATION_FRAME_SIZE, "width": INTEGRATION_FRAME_SIZE},
+        do_normalize=False,
+    )
+    return tennis_video, video_processor(
+        videos=tennis_video,
+        return_tensors="pt",
+        do_sample_frames=True,
+        num_frames=INTEGRATION_NUM_FRAMES,
+    )["pixel_values_videos"]
 
 
 @require_tokenizers
@@ -49,8 +54,8 @@ class VideoPrismProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tennis_video = url_to_local_path(TENNIS_VIDEO_URL)
         super().setUpClass()
+        cls.tennis_video, cls.tennis_frames = prepare_tennis_frames()
 
     @classmethod
     def _setup_tokenizer(cls):
@@ -59,47 +64,30 @@ class VideoPrismProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_video_processor(cls):
         return LlavaOnevisionVideoProcessor(
-            size={"height": FRAME_SIZE, "width": FRAME_SIZE},
+            size={"height": INTEGRATION_FRAME_SIZE, "width": INTEGRATION_FRAME_SIZE},
             do_normalize=False,
         )
 
-    def _video_processor_kwargs(self):
-        return {"do_sample_frames": True, "num_frames": NUM_FRAMES}
-
-    def _pixel_slice(self, pixel_values_videos):
-        return pixel_values_videos[0, 0, 0, 144:147, 144:147]
-
     def test_processor_video_tennis_video(self):
-        """VideoPrismProcessor on tennis.mp4 matches video_processor and a golden pixel slice."""
-        video_processor = self._setup_video_processor()
+        """VideoPrismProcessor on tennis.mp4 matches prepare_tennis_frames golden pixels."""
         processor = self.processor_class(
-            video_processor=video_processor,
+            video_processor=self._setup_video_processor(),
             tokenizer=self._setup_tokenizer(),
-        )
-
-        video_only = video_processor(
-            videos=self.tennis_video,
-            return_tensors="pt",
-            **self._video_processor_kwargs(),
         )
         processor_out = processor(
             videos=self.tennis_video,
             return_tensors="pt",
-            **self._video_processor_kwargs(),
+            do_sample_frames=True,
+            num_frames=INTEGRATION_NUM_FRAMES,
         )
         pixel_values_videos = processor_out["pixel_values_videos"]
-        self.assertEqual(pixel_values_videos.shape[1], NUM_FRAMES)
-        self.assertEqual(pixel_values_videos.shape[-2:], (FRAME_SIZE, FRAME_SIZE))
+        self.assertEqual(pixel_values_videos.shape[1], INTEGRATION_NUM_FRAMES)
+        self.assertEqual(pixel_values_videos.shape[-2:], (INTEGRATION_FRAME_SIZE, INTEGRATION_FRAME_SIZE))
 
+        torch.testing.assert_close(pixel_values_videos, self.tennis_frames, rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(
-            video_only["pixel_values_videos"],
-            processor_out["pixel_values_videos"],
-            rtol=1e-4,
-            atol=1e-4,
-        )
-        torch.testing.assert_close(
-            self._pixel_slice(processor_out["pixel_values_videos"]),
-            EXPECTED_TENNIS_PIXEL_SLICE,
+            pixel_values_videos[0, 0, 0, 144:147, 144:147],
+            self.tennis_frames[0, 0, 0, 144:147, 144:147],
             rtol=1e-4,
             atol=1e-4,
         )

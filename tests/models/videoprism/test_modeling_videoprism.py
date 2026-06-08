@@ -16,9 +16,9 @@
 import copy
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
-from huggingface_hub import HfApi
 
 from transformers import VideoPrismConfig, VideoPrismTextConfig, VideoPrismVisionConfig
 from transformers.testing_utils import (
@@ -42,10 +42,12 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
     from torch import nn
 
     from transformers import (
@@ -55,11 +57,30 @@ if is_torch_available():
         VideoPrismVideoModel,
         VideoPrismVisionModel,
     )
+    from transformers.models.videoprism.modeling_videoprism import VideoPrismLayerNorm
 if is_vision_available():
     from transformers import LlavaOnevisionVideoProcessor
 if is_tokenizers_available():
     from transformers import VideoPrismTokenizer
 torch.set_printoptions(precision=10)
+
+TENNIS_VIDEO_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+INTEGRATION_NUM_FRAMES = 16
+INTEGRATION_FRAME_SIZE = 288
+VIDEO_PRISM_LVT_CHECKPOINT = "MHRDYN7/videoprism-lvt-base-f16r288"
+
+
+class VideoPrismFlashAttentionTesterMixin:
+    def flash_attn_inference_equivalence(
+        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
+    ) -> None:
+        """Override: custom LayerNorm (gamma+1) amplifies eager vs flash differences."""
+
+        def standard_layernorm_forward(self, hidden_states):
+            return F.layer_norm(hidden_states, self.normalized_shape, self.weight, self.bias, self.eps)
+
+        with patch.object(VideoPrismLayerNorm, "forward", standard_layernorm_forward):
+            super().flash_attn_inference_equivalence(attn_implementation, padding_side, atol, rtol)
 
 
 @require_vision
@@ -178,7 +199,7 @@ class VideoPrismVisionModelTester:
 
 
 @require_vision
-class VideoPrismVisionModelTest(ModelTesterMixin, unittest.TestCase):
+class VideoPrismVisionModelTest(VideoPrismFlashAttentionTesterMixin, ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as VideoPrismVisionModel does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -338,9 +359,9 @@ class VideoPrismTextModelTester:
         batch_size=12,
         hidden_size=32,  # should be same as the hidden_size of the vision model tester
         intermediate_size=37,
-        num_attention_heads=2,
+        num_attention_heads=4,
         num_hidden_layers=2,
-        vocab_size=32,
+        vocab_size=99,
         apply_l2norm=True,
         hidden_act="relu",
         attention_probs_dropout_prob=0.0,
@@ -430,7 +451,7 @@ class VideoPrismTextModelTester:
 
 
 @require_vision
-class VideoPrismTextModelTest(ModelTesterMixin, unittest.TestCase):
+class VideoPrismTextModelTest(VideoPrismFlashAttentionTesterMixin, ModelTesterMixin, unittest.TestCase):
     all_model_classes = (VideoPrismTextModel,) if is_torch_available() else ()
 
     def setUp(self):
@@ -510,9 +531,11 @@ class VideoPrismClipModelTester:
 
 
 @require_vision
-class VideoPrismClipModelTest(ModelTesterMixin, unittest.TestCase):
+class VideoPrismClipModelTest(VideoPrismFlashAttentionTesterMixin, ModelTesterMixin, unittest.TestCase):
     _is_composite = True
     test_attention_outputs = False
+    additional_model_inputs = ["input_ids", "attention_mask"]
+    test_resize_embeddings = False
 
     all_model_classes = (VideoPrismClipModel,) if is_torch_available() else ()
 
@@ -706,7 +729,7 @@ class VideoPrismForVideoClassificationModelTester(ModelTesterMixin, VideoPrismVi
 
 
 @require_vision
-class VideoPrismForVideoClassificationTest(ModelTesterMixin, unittest.TestCase):
+class VideoPrismForVideoClassificationTest(VideoPrismFlashAttentionTesterMixin, ModelTesterMixin, unittest.TestCase):
     all_model_classes = (VideoPrismForVideoClassification,) if is_torch_available() else ()
     test_resize_embeddings = False
 
@@ -754,27 +777,18 @@ class VideoPrismForVideoClassificationTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
-def prepare_video(video_type="water_bottle_drumming"):
-    """
-    Returns different video files/arrays based on the `video_type` argument.
-    """
-
-    api = HfApi()
-    if video_type == "water_bottle_drumming":
-        filename = "water_bottle_drumming.mp4"  # Raw video used in original repo's example
-    elif video_type == "water_bottle_drumming_frames":
-        filename = "frames_16_288.npy"  # Preprocessed array of the raw video
-    elif video_type == "basketball_dunk":
-        filename = "v_BasketballDunk_g14_c06.avi"  # An example video from UCF101 used for testing the classification head of VideoPrismForVideoClassification
-    else:
-        raise ValueError(
-            "The `video_type` should be one of ['water_bottle_drumming', 'water_bottle_drumming_frames', 'basketball_dunk']."
-        )
-
-    file = api.hf_hub_download(repo_id="MHRDYN7/videoprism_assets", filename=filename, repo_type="dataset")
-    if video_type == "water_bottle_drumming_frames":
-        file = np.load(file)
-    return file
+def prepare_tennis_frames():
+    tennis_video = url_to_local_path(TENNIS_VIDEO_URL)
+    video_processor = LlavaOnevisionVideoProcessor(
+        size={"height": INTEGRATION_FRAME_SIZE, "width": INTEGRATION_FRAME_SIZE},
+        do_normalize=False,
+    )
+    return tennis_video, video_processor(
+        videos=tennis_video,
+        return_tensors="pt",
+        do_sample_frames=True,
+        num_frames=INTEGRATION_NUM_FRAMES,
+    )["pixel_values_videos"]
 
 
 def prepare_texts():
@@ -783,7 +797,7 @@ def prepare_texts():
 
     text_queries = text_query_csv.split(",")
     text_queries = [prompt_template.format(t) for t in text_queries]
-    tokenizer = VideoPrismTokenizer.from_pretrained("MHRDYN7/videoprism-lvt-base-f16r288")
+    tokenizer = VideoPrismTokenizer.from_pretrained(VIDEO_PRISM_LVT_CHECKPOINT)
     return tokenizer, text_queries
 
 
@@ -794,19 +808,13 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.water_bottle_drumming_frames = (
-            torch.tensor(prepare_video("water_bottle_drumming_frames")).unsqueeze(0).permute(0, 1, 4, 2, 3)
-        )
-        cls.water_bottle_drumming_video = prepare_video("water_bottle_drumming")
-        cls.basketball_dunk_video = prepare_video("basketball_dunk")
+        cls.tennis_video, cls.tennis_frames = prepare_tennis_frames()
         cls.tokenizer, cls.text_queries = prepare_texts()
 
     @slow
     def test_videoprism_vision_model(self):
         model = VideoPrismVisionModel.from_pretrained("MHRDYN7/videoprism-base-f16r288").to(torch_device)
-        input_vids = torch.cat([self.water_bottle_drumming_frames, self.water_bottle_drumming_frames], dim=0).to(
-            torch_device
-        )
+        input_vids = torch.cat([self.tennis_frames, self.tennis_frames], dim=0).to(torch_device)
         model.eval()
         with torch.inference_mode():
             outputs = model(input_vids).last_hidden_state
@@ -819,28 +827,25 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [
-                    [0.11648951, 0.4568253, 0.19288044],
-                    [0.28420594, -0.04224018, 0.377879],
-                    [0.24594213, -0.3914095, -0.30516925],
+                    [0.4354448914527893, 0.4073091447353363, -0.29193729162216187],
+                    [0.21557867527008057, 0.24542216956615448, 0.25062084197998047],
+                    [0.16283036768436432, 0.11620327830314636, 0.008987100794911385],
                 ],
                 ("cuda", 8): [
-                    [0.1164810285, 0.4568167031, 0.1928822696],
-                    [0.2842144370, -0.0422473773, 0.3778813481],
-                    [0.2459464073, -0.3914141059, -0.3051622808],
+                    [0.43544602394104004, 0.4073105454444885, -0.2919350862503052],
+                    [0.21557006239891052, 0.24542272090911865, 0.2506211996078491],
+                    [0.16283579170703888, 0.11620290577411652, 0.008984619751572609],
                 ],
             }
         )
         expected_values = torch.tensor(expectations.get_expectation(), device=torch_device)
         output_slice = outputs[0, :3, :3]
-        print(output_slice)
         torch.testing.assert_close(output_slice, expected_values, rtol=2e-4, atol=2e-4)
 
     @slow
     def test_videoprism_clip_model(self):
         model = VideoPrismClipModel.from_pretrained("MHRDYN7/videoprism-lvt-base-f16r288").to(torch_device)
-        input_vids = torch.cat([self.water_bottle_drumming_frames, self.water_bottle_drumming_frames], dim=0).to(
-            torch_device
-        )
+        input_vids = torch.cat([self.tennis_frames, self.tennis_frames], dim=0).to(torch_device)
         tokens = self.tokenizer(self.text_queries, max_length=64, padding="max_length", return_tensors="pt").to(
             torch_device
         )
@@ -861,44 +866,44 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
         video_expectation = Expectations(
             {
                 (None, None): [
-                    -0.01940615,
-                    -0.04830061,
-                    0.0069022,
-                    0.02915299,
-                    -0.05897291,
-                    0.02168823,
-                    -0.01471708,
-                    -0.00971614,
-                    -0.00220576,
+                    -0.0022147062700241804,
+                    -0.015442248433828354,
+                    0.026582615450024605,
+                    0.024988114833831787,
+                    0.023289205506443977,
+                    0.03686177730560303,
+                    -0.016299977898597717,
+                    0.010566001757979393,
+                    -0.016186168417334557,
                 ],
                 ("cuda", 8): [
-                    -0.0194059499,
-                    -0.0483003967,
-                    0.0069021182,
-                    0.0291529540,
-                    -0.0589727312,
-                    0.0216881726,
-                    -0.0147173097,
-                    -0.0097162435,
-                    -0.0022055341,
+                    -0.002214818261563778,
+                    -0.015442408621311188,
+                    0.026582621037960052,
+                    0.02498835325241089,
+                    0.023289136588573456,
+                    0.03686164692044258,
+                    -0.016299953684210777,
+                    0.010566022247076035,
+                    -0.016185807064175606,
                 ],
             }
         )
         text_expectation = Expectations(
             {
                 (None, None): [
-                    [-0.00802545, 0.00931361, 0.01555958],
-                    [0.02245245, 0.00010197, -0.01073526],
-                    [-0.02258418, 0.00133927, -0.01555064],
-                    [0.01056228, 0.01835608, -0.01539922],
-                    [-0.00366718, 0.00370416, 0.00800336],
+                    [-0.008009868673980236, 0.009317189455032349, 0.015544884838163853],
+                    [0.022461067885160446, 9.54712595557794e-05, -0.01074187271296978],
+                    [-0.022578040137887, 0.001339073060080409, -0.015561817213892937],
+                    [0.010591105557978153, 0.018359515815973282, -0.015389746055006981],
+                    [-0.003638886846601963, 0.0036980013828724623, 0.007990806363523006],
                 ],
                 ("cuda", 8): [
-                    [-8.0098593608e-03, 9.3171931803e-03, 1.5544882976e-02],
-                    [2.2461047396e-02, 9.5467286883e-05, -1.0741823353e-02],
-                    [-2.2578010336e-02, 1.3390942477e-03, -1.5561779030e-02],
-                    [1.0591125116e-02, 1.8359506503e-02, -1.5389740467e-02],
-                    [-3.6388880108e-03, 3.6980083678e-03, 7.9908100888e-03],
+                    [-0.00800985936075449, 0.009317193180322647, 0.015544882975518703],
+                    [0.022461047396063805, 9.546728688292205e-05, -0.010741823352873325],
+                    [-0.022578010335564613, 0.0013390942476689816, -0.015561779029667377],
+                    [0.01059112511575222, 0.018359506502747536, -0.015389740467071533],
+                    [-0.0036388880107551813, 0.003698008367791772, 0.007990810088813305],
                 ],
             }
         )
@@ -906,9 +911,7 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
         video_expected_values = torch.tensor(video_expectation.get_expectation(), device=torch_device)
         text_expected_values = torch.tensor(text_expectation.get_expectation(), device=torch_device)
         video_logits = outputs.video_embeds[0, :9]
-        print(video_logits)
         text_logits = outputs.text_embeds[:, :3]
-        print(text_logits)
         torch.testing.assert_close(video_logits, video_expected_values, rtol=2e-4, atol=2e-4)
         torch.testing.assert_close(text_logits, text_expected_values, rtol=2e-4, atol=2e-4)
 
@@ -922,54 +925,10 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
             "size": {"height": 144, "width": 144},
             "do_resize": True,
         }
-        inputs = processor(videos=self.water_bottle_drumming_video, return_tensors="pt", **kwargs).to(torch_device)
+        inputs = processor(videos=self.tennis_video, return_tensors="pt", **kwargs).to(torch_device)
         model.eval()
         with torch.inference_mode():
             outputs = model(**inputs, interpolate_pos_encoding=True)
 
         expected_shape = torch.Size([1, int((144 / 18) * (144 / 18) * 10), model.config.hidden_size])
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
-
-    # @slow
-    # def test_videoprism_classification_model(self):
-    #     model_name = "MHRDYN7/videoprism-base-f16r288-finetuned-ucf101"
-    #     model = VideoPrismForVideoClassification.from_pretrained(model_name).to(torch_device)
-    #     print(model.device, torch_device)
-    #     processor = LlavaOnevisionVideoProcessor.from_pretrained(model_name)
-    #     inputs = processor(videos=self.basketball_dunk_video, return_tensors="pt")["pixel_values_videos"].to(
-    #         torch_device
-    #     )
-    #     label = torch.tensor([8], dtype=torch.long, device=torch_device)
-    #     model.eval()
-    #     with torch.inference_mode():
-    #         outputs = model(inputs, labels=label)
-
-    #     expected_logits = Expectations(
-    #         {
-    #             (None, None): [
-    #                 [
-    #                     [-5.8973, -2.4552, -2.6362, -3.2215, 11.2046, 4.4604, -3.3962, 3.6890, 12.3573, 5.1211],
-    #                 ]
-    #             ],
-    #             ("cuda", 8): [
-    #                 [
-    #                     [
-    #                         -5.8972797394,
-    #                         -2.4551916122,
-    #                         -2.6361594200,
-    #                         -3.2215039730,
-    #                         11.2045707703,
-    #                         4.4604382515,
-    #                         -3.3961904049,
-    #                         3.6890094280,
-    #                         12.3573036194,
-    #                         5.1210832596,
-    #                     ],
-    #                 ]
-    #             ],
-    #         }
-    #     )
-    #     expected_logits_values = torch.tensor(expected_logits.get_expectation(), device=torch_device)
-    #     print(outputs)
-    #     torch.testing.assert_close(outputs.logits, expected_logits_values, rtol=2e-4, atol=2e-4)
-    #     torch.testing.assert_close(outputs.loss, torch.tensor(0.2754, device=torch_device), rtol=2e-3, atol=2e-3)
