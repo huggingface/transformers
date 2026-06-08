@@ -171,7 +171,11 @@ def filter_output_hidden_states(forward_function):
         kwargs["output_hidden_states"] = True
         output = forward_function(self, *args, **kwargs)
         if not output_hidden_states:
+            # carry over non-field attributes (e.g. `pooler_output` set via setattr) the rebuild below would drop
+            extra_attributes = {k: v for k, v in vars(output).items() if k not in output and not k.startswith("_")}
             output = type(output)(**{k: v for k, v in output.items() if k != "hidden_states"})
+            for key, value in extra_attributes.items():
+                setattr(output, key, value)
         return output
 
     return wrapper
