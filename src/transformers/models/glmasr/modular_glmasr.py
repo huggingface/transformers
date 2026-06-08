@@ -379,6 +379,8 @@ class GlmAsrModel(AudioFlamingo3Model):
     """
 )
 class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+
     def __init__(self, config):
         super().__init__(config)
         self.model = GlmAsrModel(config)
