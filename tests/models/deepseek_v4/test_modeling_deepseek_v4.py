@@ -463,9 +463,9 @@ def main() -> int:
     for dispatch in RUNTIME_DISPATCHES:
         model.set_experts_implementation(dispatch)
         if is_fp8 and dispatch in ("batched_mm", "grouped_mm"):
-            os.environ["TRANSFORMERS_DISABLE_DEEPGEMM"] = "1"
+            os.environ["TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR"] = "1"
         else:
-            os.environ.pop("TRANSFORMERS_DISABLE_DEEPGEMM", None)
+            os.environ.pop("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", None)
         dist.barrier()
         with torch.no_grad():
             out = model.generate(
@@ -492,6 +492,113 @@ def main() -> int:
 if __name__ == "__main__":
     sys.exit(main())
 """
+
+
+# Forward-only sibling of ``_DISTRIBUTED_WORKER_SCRIPT_TEMPLATE``. Per dispatch:
+# reset the compiler cache, ``torch.compile(model, fullgraph=True)``, do one forward,
+# check logits shape. No ``generate()``, no expected-string assertion — this catches
+# graph breaks / unsupported ops, not numerical correctness (that's the generation tests).
+_DISTRIBUTED_COMPILE_WORKER_SCRIPT_TEMPLATE = """\
+import os
+import sys
+
+import torch
+import torch.distributed as dist
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.distributed import DistributedConfig
+
+
+LOADTIME_DISPATCH = {loadtime_dispatch!r}
+RUNTIME_DISPATCHES = {runtime_dispatches!r}
+MODEL_ID = {model_id!r}
+PROMPT = {prompt!r}
+ADD_SPECIAL_TOKENS = {add_special_tokens!r}
+
+
+def main() -> int:
+    rank = int(os.environ["RANK"])
+    model = AutoModelForCausalLM.from_pretrained(
+        MODEL_ID,
+        dtype="auto",
+        attn_implementation="eager",
+        experts_implementation=LOADTIME_DISPATCH,
+        distributed_config=DistributedConfig(enable_expert_parallel=True),
+    )
+    model.eval()
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+    inputs = tokenizer(PROMPT, return_tensors="pt", add_special_tokens=ADD_SPECIAL_TOKENS).to(model.device)
+    expected_logits_shape = inputs.input_ids.shape
+
+    is_fp8 = getattr(model.config, "expert_dtype", "fp8") != "fp4"
+
+    failed = []
+    for dispatch in RUNTIME_DISPATCHES:
+        # Megamoe is locked at load; switching to/from it errors out, so only call
+        # set_experts_implementation when the requested impl is reachable.
+        if dispatch != LOADTIME_DISPATCH:
+            model.set_experts_implementation(dispatch)
+        if is_fp8 and dispatch in ("batched_mm", "grouped_mm"):
+            os.environ["TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR"] = "1"
+        else:
+            os.environ.pop("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", None)
+        torch.compiler.reset()
+        compiled = torch.compile(model, fullgraph=True)
+        dist.barrier()
+        ok = True
+        try:
+            with torch.no_grad():
+                outputs = compiled(**inputs)
+            shape = tuple(outputs.logits.shape[:2])
+            if shape != tuple(expected_logits_shape):
+                failed.append(f"[{{dispatch}}] logits.shape[:2]={{shape}} != {{tuple(expected_logits_shape)}}")
+                ok = False
+        except Exception as e:
+            failed.append(f"[{{dispatch}}] {{type(e).__name__}}: {{e}}")
+            ok = False
+        dist.barrier()
+        if rank == 0:
+            print(f"[{{dispatch}}] {{'OK' if ok else 'FAIL'}}", flush=True)
+
+    dist.barrier()
+    dist.destroy_process_group()
+    if rank == 0 and failed:
+        print("FAILED:\\n" + "\\n".join(failed), flush=True)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+"""
+
+
+def _run_distributed_compile_worker(
+    loadtime_dispatch,
+    runtime_dispatches,
+    model_id: str,
+    prompt: str,
+    add_special_tokens: bool,
+) -> int:
+    script = _DISTRIBUTED_COMPILE_WORKER_SCRIPT_TEMPLATE.format(
+        loadtime_dispatch=loadtime_dispatch,
+        runtime_dispatches=tuple(runtime_dispatches),
+        model_id=model_id,
+        prompt=prompt,
+        add_special_tokens=add_special_tokens,
+    )
+    num_gpus = backend_device_count(torch_device)
+    if num_gpus < 1:
+        raise RuntimeError(f"No visible devices for torch_device={torch_device!r}")
+    redirects = ",".join(f"{r}:1" for r in range(1, num_gpus))
+    with tempfile.NamedTemporaryFile("w", suffix="_distributed_compile_worker.py") as f:
+        f.write(script)
+        f.flush()
+        result = subprocess.run(
+            ["torchrun", f"--nproc_per_node={num_gpus}", f"--redirects={redirects}", f.name],
+            check=False,
+        )
+    return result.returncode
 
 
 def _run_distributed_worker(
@@ -597,6 +704,29 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
             completion = tokenizer.decode(out[0, prompt_len:], skip_special_tokens=True)
             self.assertIn(self.expected_primes, completion, f"[{impl}] {completion!r}")
 
+    def test_v4_flash_fp4_forward_compile_fullgraph_distributed(self):
+        """EP=8 via ``torchrun``: one forward per impl through ``torch.compile(fullgraph=True)``.
+        Each rank drives one device so ``deepgemm`` and ``deepgemm_megamoe`` are available;
+        megamoe is load-locked so it has its own sibling test."""
+        rc = _run_distributed_compile_worker(
+            loadtime_dispatch=None,
+            runtime_dispatches=("batched_mm", "grouped_mm", "deepgemm"),
+            model_id=self.model_id,
+            prompt=self.prompt,
+            add_special_tokens=False,
+        )
+        self.assertEqual(rc, 0, "torchrun forward-compile worker failed; see stdout above")
+
+    def test_v4_flash_fp4_forward_compile_fullgraph_megamoe_distributed(self):
+        rc = _run_distributed_compile_worker(
+            loadtime_dispatch="deepgemm_megamoe",
+            runtime_dispatches=("deepgemm_megamoe",),
+            model_id=self.model_id,
+            prompt=self.prompt,
+            add_special_tokens=False,
+        )
+        self.assertEqual(rc, 0, "torchrun forward-compile worker failed; see stdout above")
+
 
 @require_torch
 @require_torch_accelerator
@@ -659,3 +789,15 @@ class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
                 out = model.generate(**inputs, max_new_tokens=64, do_sample=False, pad_token_id=tokenizer.eos_token_id)
             completion = tokenizer.decode(out[0, prompt_len:], skip_special_tokens=True)
             self.assertIn(self.expected_primes, completion, f"[{impl}] {completion!r}")
+
+    def test_v4_flash_base_fp8_forward_compile_fullgraph_distributed(self):
+        """EP=8 via ``torchrun``: one forward per impl through ``torch.compile(fullgraph=True)``.
+        Each rank drives one device so ``deepgemm`` is in the sweep; megamoe is FP4-only."""
+        rc = _run_distributed_compile_worker(
+            loadtime_dispatch=None,
+            runtime_dispatches=("batched_mm", "grouped_mm", "deepgemm"),
+            model_id=self.model_id,
+            prompt=self.prompt,
+            add_special_tokens=True,
+        )
+        self.assertEqual(rc, 0, "torchrun forward-compile worker failed; see stdout above")

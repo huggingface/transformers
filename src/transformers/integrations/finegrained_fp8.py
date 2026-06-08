@@ -119,6 +119,18 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
     )
 
 
+@torch._dynamo.allow_in_graph
+def _populate_finegrained_fp8_kernel() -> None:
+    _ = _load_finegrained_fp8_kernel()
+    return None
+
+
+def load_finegrained_fp8_kernel() -> FineGrainedFP8:
+    if is_torchdynamo_compiling():
+        _populate_finegrained_fp8_kernel()
+    return _load_finegrained_fp8_kernel()
+
+
 def _cdiv(a: int, b: int) -> int:
     """Ceiling division."""
     return (a + b - 1) // b
@@ -167,7 +179,7 @@ def finegrained_fp8_linear(
     static per-tensor quant. ``weight_scale_inv`` accepts fp32 or UE8M0; the
     dispatcher routes FP4 (``int8``-packed) weights automatically.
     """
-    finegrained_fp8 = _load_finegrained_fp8_kernel()
+    finegrained_fp8 = load_finegrained_fp8_kernel()
     output = finegrained_fp8.matmul(
         input,
         weight,
@@ -212,16 +224,23 @@ def fp8_linear(
         output_dtype: desired output dtype.
     """
     # DeepGEMM is CUDA-only, dynamic-only, SM90+ only, FP4/FP8-block-128-only.
-    # ``TRANSFORMERS_DISABLE_DEEPGEMM=1`` forces the Triton fallback — used by the FP8 MoE
-    # batched_mm / grouped_mm paths to avoid a still-unexplained DeepGEMM-vs-Triton
-    # interaction that degrades end-to-end generation on B200 (per-row kernel outputs
-    # still measure bit-perfect, but final tokens drift; not reproducible with DeepGEMM off).
+    # ``TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1`` forces the Triton fallback for this single
+    # dispatcher (the experts ``"deepgemm"`` impl is unaffected — use ``set_experts_implementation``
+    # for that). Used by the FP8 MoE batched_mm / grouped_mm paths to avoid a still-unexplained
+    # DeepGEMM-vs-Triton interaction that degrades end-to-end generation on B200 (per-row kernel
+    # outputs still measure bit-perfect, but final tokens drift; not reproducible with the
+    # DeepGEMM linear off). Also temporarily skipped under ``torch.compile`` — DeepGEMM's
+    # per-token cast calls ``pack_ue8m0_to_int`` which has data-dependent bit-twiddling that
+    # dynamo can't guard. TODO: remove the ``is_torchdynamo_compiling`` gate once the upstream
+    # ``pack_ue8m0_to_int`` is rewritten to be FakeTensor-friendly; the Triton fallback is
+    # dynamo-friendly today via its ``@triton_op`` registration.
     deepgemm_preferred = (
         activation_scale is None
         and weight.device.type == "cuda"
         and torch.cuda.get_device_properties().major >= 9
         and (weight.dtype == torch.int8 or (block_size is not None and block_size[0] == block_size[1] == 128))
-        and os.environ.get("TRANSFORMERS_DISABLE_DEEPGEMM", "0") != "1"
+        and os.environ.get("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", "0") != "1"
+        and not is_torchdynamo_compiling()
     )
 
     if deepgemm_preferred:
@@ -353,7 +372,7 @@ class FP8GroupedLinear(FP8Linear):
         tokens_per_expert = torch.full((self.n_groups,), tokens_per_group, device=x.device, dtype=torch.int32)
         offsets = torch.arange(1, self.n_groups + 1, device=x.device, dtype=torch.int32) * tokens_per_group
 
-        finegrained_fp8 = _load_finegrained_fp8_kernel()
+        finegrained_fp8 = load_finegrained_fp8_kernel()
         y = finegrained_fp8.grouped_matmul(
             x,
             w,
@@ -380,7 +399,7 @@ def fp8_batched_mm_experts_forward(
             "Use the default eager dispatch or switch to activation_scheme='dynamic'."
         )
 
-    finegrained_fp8 = _load_finegrained_fp8_kernel()
+    finegrained_fp8 = load_finegrained_fp8_kernel()
 
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
@@ -454,7 +473,7 @@ def fp8_grouped_mm_experts_forward(
             "Use the default eager dispatch or switch to activation_scheme='dynamic'."
         )
 
-    finegrained_fp8 = _load_finegrained_fp8_kernel()
+    finegrained_fp8 = load_finegrained_fp8_kernel()
 
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
