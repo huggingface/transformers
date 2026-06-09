@@ -17,14 +17,17 @@ Processor class for Donut.
 
 import re
 
-from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
 
 
 class DonutProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    _defaults = {
+        "text_kwargs": {
+            "return_mm_token_type_ids": False,
+            "return_text_replacement_offsets": False,
+        },
+    }
 
 
 logger = logging.get_logger(__name__)
@@ -32,46 +35,22 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class DonutProcessor(ProcessorMixin):
+    valid_processor_kwargs = DonutProcessorKwargs
+
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 
-    @auto_docstring
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: str | list[str] | TextInput | PreTokenizedInput | None = None,
-        **kwargs: Unpack[DonutProcessorKwargs],
-    ):
-        if images is None and text is None:
-            raise ValueError("You need to specify either an `images` or `text` input to process.")
-
-        output_kwargs = self._merge_kwargs(
-            DonutProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        if images is not None:
-            inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-        if text is not None:
-            if images is not None:
-                output_kwargs["text_kwargs"].setdefault("add_special_tokens", False)
-            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
-        if text is None:
-            return inputs
-        elif images is None:
-            return encodings
-        else:
-            inputs["labels"] = encodings["input_ids"]  # for BC
-            inputs["input_ids"] = encodings["input_ids"]
-            return inputs
+    def __call__(self, images=None, text=None, **kwargs):
+        if images is not None and text is not None:
+            kwargs.setdefault("add_special_tokens", False)
+        return_data = super().__call__(images=images, text=text, **kwargs)
+        if text is not None and images is not None:
+            return_data["labels"] = return_data["input_ids"]
+        return return_data
 
     @property
     def model_input_names(self):
-        image_processor_input_names = self.image_processor.model_input_names
-
-        return list(image_processor_input_names + ["input_ids", "labels"])
+        return super().model_input_names + ["labels"]
 
     def token2json(self, tokens, is_inner_value=False, added_vocab=None):
         """

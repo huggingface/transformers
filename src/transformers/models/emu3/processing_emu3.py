@@ -14,9 +14,8 @@
 # limitations under the License.
 
 
-from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_vision_available
 from ...utils.import_utils import requires
@@ -46,16 +45,14 @@ class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
             "return_for_image_generation": False,
             "return_mm_token_type_ids": False,
         },
-        "images_kwargs": {
-            "ratio": "1:1",
-            "image_area": 518400,
-        },
     }
 
 
 @auto_docstring
 @requires(backends=("vision",))
 class Emu3Processor(ProcessorMixin):
+    valid_processor_kwargs = Emu3ProcessorKwargs
+
     def __init__(
         self,
         image_processor,
@@ -73,85 +70,51 @@ class Emu3Processor(ProcessorMixin):
         self.downsample_ratio = 8
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-    @auto_docstring
+    def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
+        images, text, videos, audio = super().prepare_inputs_layout(
+            images=images, text=text, videos=videos, audio=audio, **kwargs
+        )
+        if images is not None and text is not None:
+            # Add BOS once per sample; GPT tokenizer doesn't add it automatically
+            text = [f"{self.bos_token}{sample}" for sample in text]
+        return images, text, videos, audio
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        height, width = image_inputs["image_sizes"][image_idx]
+        height = height // self.downsample_ratio
+        width = width // self.downsample_ratio
+        image_seq_length = height * (width + 1)  # +1 for extra row when converting to BPE in modeling code
+        return (
+            f"{self.image_start_token}{height}*{width}"
+            f"{self.fake_token_around_image}"
+            f"{self.image_token * image_seq_length}"
+            f"{self.eof_token}{self.image_end_token}"
+        )
+
     def __call__(
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[Emu3ProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+        **kwargs,
+    ):
+        return_for_image_generation = kwargs.pop("return_for_image_generation", False)
+        # pop here so they don't reach the image processor via _merge_kwargs
+        ratio = kwargs.pop("ratio", "1:1")
+        image_area = kwargs.pop("image_area", 518400)
 
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-        """
-        # check if images and text inputs are reversed for BC
-
-        if isinstance(text, str):
-            text = [text]
-        elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
-
-        output_kwargs = self._merge_kwargs(
-            Emu3ProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-        return_for_image_generation = output_kwargs["text_kwargs"].pop("return_for_image_generation", False)
-        ratio = output_kwargs["images_kwargs"].pop("ratio", None)
-        image_area = output_kwargs["images_kwargs"].pop("image_area", None)
-
-        if return_for_image_generation and images is not None:
-            raise ValueError("You should not provide `images` when `return_for_image_generation=True`")
-
-        if not return_for_image_generation and text is None and images is None:
-            raise ValueError("You must provide either text or images when `return_for_image_generation=False`")
-
-        image_features = {}
-        image_start_tokens = f"{self.image_start_token}"
-        image_end_tokens = f"{self.eof_token}{self.image_end_token}"
-
-        # generate text from image + text input, so we add placeholders for image tokens
-        if not return_for_image_generation and images is not None:
-            image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
-            image_sizes = iter(image_features.image_sizes)
-
-            prompt_strings = []
-            for sample in text:
-                while self.image_token in sample:
-                    image_size = next(image_sizes)
-                    height, width = image_size
-                    height = height // self.downsample_ratio
-                    width = width // self.downsample_ratio
-                    image_seq_length = height * (width + 1)  # +1 for extra row when converting to BPE in modeling code
-
-                    image_placeholder = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}{'<placeholder>' * image_seq_length}{image_end_tokens}"
-                    sample = sample.replace(self.image_token, image_placeholder, 1)
-                    sample = f"{self.bos_token}{sample}"  # add BOS because GPT tokenizer doesn't add it
-                prompt_strings.append(sample)
-            text = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
-
-        # generate image from text input, so we add begin-of-image tokens from where image generation starts
-        elif return_for_image_generation:
+        if return_for_image_generation:
+            if images is not None:
+                raise ValueError("You should not provide `images` when `return_for_image_generation=True`")
             height, width = self.calculate_generate_size(ratio, image_area, self.downsample_ratio)
-            image_prompt = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}"
+            image_prompt = f"{self.image_start_token}{height}*{width}{self.fake_token_around_image}"
+            if isinstance(text, str):
+                text = [text]
             text = [f"{self.bos_token}{sample}{image_prompt}" for sample in text]
-            image_features["image_sizes"] = [[height, width]] * len(text)
+            return_data = super().__call__(text=text, **kwargs)
+            return_data["image_sizes"] = [[height, width]] * len(text)
+            return return_data
 
-        # else just generate from text-only input, and we do no special treatment for text
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
-
-        if return_mm_token_type_ids:
-            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-        return BatchFeature(data={**text_inputs, **image_features}, tensor_type=return_tensors)
+        return super().__call__(images=images, text=text, **kwargs)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """

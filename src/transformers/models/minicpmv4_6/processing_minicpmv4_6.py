@@ -75,6 +75,8 @@ class MiniCPMV4_6Processor(ProcessorMixin):
     def _process_images(self, images, **kwargs):
         use_image_id = kwargs.pop("use_image_id", None)
         use_image_id = use_image_id if use_image_id is not None else self.default_use_image_id
+        # Store for get_text_with_replacements to apply local (per-sample) indexing
+        self._images_use_image_id = use_image_id
 
         img_downsample = kwargs.get("downsample_mode", self.image_processor.downsample_mode)
         image_token_divisor = 4 if img_downsample == "4x" else 16
@@ -93,13 +95,10 @@ class MiniCPMV4_6Processor(ProcessorMixin):
             num_tokens_per_patch = img_target_sizes.prod(-1) // image_token_divisor
             num_rows, num_cols = image_grids[image_idx]
 
+            # Build replacement WITHOUT image_id prefix; local ID added in get_text_with_replacements
             image_placeholder = (
                 self.image_start_token + self.image_token * int(num_tokens_per_patch[0]) + self.image_end_token
             )
-            if use_image_id:
-                image_placeholder = (
-                    f"{self.image_id_start_token}{image_idx}{self.image_id_end_token}" + image_placeholder
-                )
 
             if self.slice_mode and num_rows > 0 and num_cols > 0:
                 per_slice_tokens = int(num_tokens_per_patch[1]) if len(num_tokens_per_patch) > 1 else 0
@@ -115,6 +114,8 @@ class MiniCPMV4_6Processor(ProcessorMixin):
     def _process_videos(self, videos, **kwargs):
         use_image_id = kwargs.pop("use_image_id", None)
         use_image_id = use_image_id if use_image_id is not None else self.default_use_image_id
+        # Store for get_text_with_replacements to apply local (per-sample) indexing
+        self._videos_use_image_id = use_image_id
 
         vid_downsample = kwargs.get("downsample_mode", self.video_processor.downsample_mode)
         video_token_divisor = 4 if vid_downsample == "4x" else 16
@@ -158,15 +159,45 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                 flat_index += n_patches
 
             frame_offset += num_frames
-
-            if use_image_id:
-                video_placeholder = (
-                    f"{self.image_id_start_token}{video_idx}{self.image_id_end_token}" + video_placeholder
-                )
-
+            # NOTE: video_id prefix added in get_text_with_replacements with local indexing
             video_replacements.append(video_placeholder)
 
         return processed_videos, video_replacements
+
+    def get_text_with_replacements(
+        self,
+        text,
+        images_replacements=None,
+        videos_replacements=None,
+        audio_replacements=None,
+    ):
+        use_image_id_imgs = getattr(self, "_images_use_image_id", False)
+        use_image_id_vids = getattr(self, "_videos_use_image_id", False)
+
+        if images_replacements and use_image_id_imgs:
+            images_replacements = self._prepend_local_ids(text, images_replacements, self.image_token)
+
+        if videos_replacements and use_image_id_vids:
+            videos_replacements = self._prepend_local_ids(text, videos_replacements, self.video_token)
+
+        return super().get_text_with_replacements(
+            text,
+            images_replacements=images_replacements or [],
+            videos_replacements=videos_replacements or [],
+            audio_replacements=audio_replacements or [],
+        )
+
+    def _prepend_local_ids(self, text, replacements, token):
+        """Prepend local (per-sample) image/video ID tokens to each replacement string."""
+        new_replacements = []
+        global_idx = 0
+        for sample in text:
+            n_tokens = sample.count(token)
+            for local_idx in range(n_tokens):
+                prefix = f"{self.image_id_start_token}{local_idx}{self.image_id_end_token}"
+                new_replacements.append(prefix + replacements[global_idx])
+                global_idx += 1
+        return new_replacements
 
     def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
         texts = self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
