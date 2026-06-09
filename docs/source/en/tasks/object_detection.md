@@ -81,7 +81,7 @@ Start by loading the dataset, extracting category labels, and creating a train/v
 Categories (4): ['group', 'image', 'rectangle', 'text']
 ```
 
-The dataset uses string category names and bounding boxes in COCO format `(x, y, w, h)`. We need to convert
+The dataset uses string category names and bounding boxes in COCO format `(x, y, w, h)`. Convert the
 categories to integer ids, compute areas, and filter out degenerate bounding boxes before training:
 
 ```py
