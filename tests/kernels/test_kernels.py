@@ -19,15 +19,36 @@ import copy
 import os
 import tempfile
 import types
+import unittest
 from unittest.mock import MagicMock, patch
 
+import torch
+import torch.nn as nn
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
+from transformers.conversion_mapping import get_checkpoint_conversion_mapping
+from transformers.core_model_loading import (
+    Chunk,
+    Concatenate,
+    MergeModulelist,
+    WeightConverter,
+    WeightRenaming,
+    rename_source_key,
+)
 from transformers.integrations.hub_kernels import (
     _HUB_KERNEL_MAPPING,
     _KERNEL_MODULE_MAPPING,
+    _apply_converter_to_module,
+    _apply_weight_conversions,
+    _make_converted_child_class,
+    _strip_converter_prefix,
+    infer_kernel_fusion_transforms,
     is_kernel,
     lazy_load_kernel,
     load_and_register_attn_kernel,
+    make_fused_module_class,
+    make_fused_parent_class,
+    register_kernel_fusions,
 )
 from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -207,6 +228,54 @@ class TestHubKernels(TestCasePlus):
 
         del model
 
+    def _kernel_fusion_tuple_matches_baseline(self, with_transformations: bool):
+        model_id = "michaelbenayoun/qwen3-tiny-4kv-heads-4layers-random"
+
+        if with_transformations:
+            kernel_config = KernelConfig(
+                {
+                    (
+                        ("RMSNorm", "model.layers.*.post_attention_layernorm"),
+                        ("MLP", "model.layers.*.mlp"),
+                    ): "michaelbenayoun/dummy-rmsnorm-mlp-with-transformations:RMSNormMLP",
+                }
+            )
+        else:
+            kernel_config = KernelConfig(
+                {
+                    (
+                        ("RMSNorm", "model.layers.*.post_attention_layernorm"),
+                        ("MLP", "model.layers.*.mlp"),
+                    ): "michaelbenayoun/dummy-rmsnorm-mlp:RMSNormMLP",
+                }
+            )
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer("Hello, how are you?", return_tensors="pt")
+
+        baseline = AutoModelForCausalLM.from_pretrained(model_id, device_map=torch_device)
+        baseline.eval()
+        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
+        with torch.no_grad():
+            baseline_out = baseline(**inputs).logits
+        del baseline
+
+        fused = AutoModelForCausalLM.from_pretrained(
+            model_id, use_kernels=True, kernel_config=kernel_config, device_map=torch_device
+        )
+        fused.eval()
+        with torch.no_grad():
+            fused_out = fused(**inputs).logits
+        del fused
+
+        torch.testing.assert_close(baseline_out, fused_out, atol=1e-4, rtol=1e-4)
+
+    def test_kernel_fusion_tuple_matches_baseline_without_transformations(self):
+        self._kernel_fusion_tuple_matches_baseline(with_transformations=False)
+
+    def test_kernel_fusion_tuple_matches_baseline_with_transformations(self):
+        self._kernel_fusion_tuple_matches_baseline(with_transformations=True)
+
     def test_faulty_kernel_mapping_layer_name(self):
         kernel_config = KernelConfig(kernel_mapping={"RMSNorm1": "kernels-community/layer_norm:LlamaRMSNorm"})
         with self.assertRaises(ValueError):
@@ -225,24 +294,24 @@ class TestHubKernels(TestCasePlus):
 @require_kernels
 class TestKernelsEnv(TestCasePlus):
     def test_disable_hub_kernels(self):
+        import importlib
+
+        from transformers.integrations import hub_kernels
+
         with patch.dict(os.environ, {"USE_HUB_KERNELS": "OFF"}):
-            import importlib
-
-            from transformers.integrations import hub_kernels
-
             importlib.reload(hub_kernels)
-
             self.assertFalse(hub_kernels._kernels_enabled)
+        importlib.reload(hub_kernels)
 
     def test_enable_hub_kernels(self):
+        import importlib
+
+        from transformers.integrations import hub_kernels
+
         with patch.dict(os.environ, {"USE_HUB_KERNELS": "ON"}):
-            import importlib
-
-            from transformers.integrations import hub_kernels
-
             importlib.reload(hub_kernels)
-
             self.assertTrue(hub_kernels._kernels_enabled)
+        importlib.reload(hub_kernels)
 
 
 @require_kernels
@@ -536,3 +605,391 @@ class TestKernelMappingDeviceFiltering(TestCasePlus):
 
         result_mapping = kernel_config.kernel_mapping
         self.assertIn("RMSNorm", result_mapping, "RMSNorm should be in mapping")
+
+
+@require_kernels
+class TestKernelFusions(TestCasePlus):
+    _MODEL_TYPE = "kernel_fusion_test_model"
+
+    # Define dummy model structure to test the kernel fusion utilities.
+    class Norm(nn.Module):
+        kernel_layer_name = "RMSNorm"
+
+        def __init__(self):
+            super().__init__()
+            self.weight = nn.Parameter(torch.ones(4))
+
+    class MLP(nn.Module):
+        kernel_layer_name = "MLP"
+
+        def __init__(self):
+            super().__init__()
+            self.gate_proj = nn.Linear(4, 8, bias=False)
+            self.up_proj = nn.Linear(4, 8, bias=False)
+            self.down_proj = nn.Linear(8, 4, bias=False)
+
+    class Layer(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.post_attention_layernorm = TestKernelFusions.Norm()
+            self.mlp = TestKernelFusions.MLP()
+
+    class Model(nn.Module):
+        class config_class:
+            model_type = "kernel_fusion_test_model"
+
+        def __init__(self, config=None):
+            super().__init__()
+            self.layers = nn.ModuleList([TestKernelFusions.Layer(), TestKernelFusions.Layer()])
+
+    def tearDown(self):
+        import transformers.conversion_mapping as _cm
+
+        if _cm._checkpoint_conversion_mapping_cache is not None:
+            _cm._checkpoint_conversion_mapping_cache.pop(self._MODEL_TYPE, None)
+        make_fused_module_class.cache_clear()
+
+    def test_infer_kernel_fusion_transforms(self):
+        transforms = infer_kernel_fusion_transforms(
+            [
+                ("RMSNorm", "model.layers.*.post_attention_layernorm"),
+                ("MLP", "model.layers.*.mlp"),
+            ]
+        )
+
+        first_key = "model.layers.0.post_attention_layernorm.weight"
+        self.assertEqual(
+            rename_source_key(first_key, transforms, [])[0],
+            "model.layers.0.post_attention_layernorm.RMSNorm.weight",
+        )
+
+        second_key = "model.layers.2.mlp.gate_proj.weight"
+        self.assertEqual(
+            rename_source_key(second_key, transforms, [])[0],
+            "model.layers.2.post_attention_layernorm.MLP.gate_proj.weight",
+        )
+
+    def test_make_fused_parent_class(self):
+        FusedLayer = make_fused_parent_class(
+            TestKernelFusions.Layer,
+            child_names=["post_attention_layernorm", "mlp"],
+            source_names=["RMSNorm", "MLP"],
+            kernel_layer_name="RMSNormMLP",
+        )
+        layer = FusedLayer()
+
+        self.assertIsInstance(layer.post_attention_layernorm, hub_kernels_pkg.FusedModuleBase)
+        self.assertIsInstance(layer.mlp, nn.Identity)
+        self.assertIn("RMSNorm", layer.post_attention_layernorm._modules)
+        self.assertIn("MLP", layer.post_attention_layernorm._modules)
+
+    def test_register_kernel_fusions_replaces_tuple_key(self):
+        kernel_config = KernelConfig(
+            {
+                (
+                    ("RMSNorm", "layers.*.post_attention_layernorm"),
+                    ("MLP", "layers.*.mlp"),
+                ): "dummy/fake-kernel:RMSNormMLP"
+            }
+        )
+
+        with (
+            patch("transformers.integrations.hub_kernels._try_load_kernel_class", return_value=None),
+            patch("transformers.integrations.hub_kernels.register_patch_mapping"),
+        ):
+            register_kernel_fusions(TestKernelFusions.Model, None, kernel_config)
+
+        self.assertIn("RMSNormMLP", kernel_config.kernel_mapping)
+        self.assertFalse(any(isinstance(k, tuple) for k in kernel_config.kernel_mapping))
+
+    def test_register_kernel_fusions_merges_kernel_conversion_mapping(self):
+        """WeightRenaming from structure + WeightConverter from kernel.conversion_mapping are both registered."""
+
+        class FakeKernel:
+            conversion_mapping = [
+                WeightConverter(["MLP.gate_proj", "MLP.up_proj"], "MLP.gate_up_proj", [Concatenate(dim=0)])
+            ]
+
+        kernel_config = KernelConfig(
+            {
+                (
+                    ("RMSNorm", "layers.*.post_attention_layernorm"),
+                    ("MLP", "layers.*.mlp"),
+                ): "dummy/fake-kernel:RMSNormMLP"
+            }
+        )
+
+        with (
+            patch("transformers.integrations.hub_kernels._try_load_kernel_class", return_value=FakeKernel),
+            patch("transformers.integrations.hub_kernels.register_patch_mapping"),
+        ):
+            register_kernel_fusions(TestKernelFusions.Model, None, kernel_config)
+
+        mapping = get_checkpoint_conversion_mapping(self._MODEL_TYPE)
+        self.assertIsNotNone(mapping)
+        self.assertTrue(any(isinstance(t, WeightRenaming) for t in mapping))
+        self.assertTrue(any(isinstance(t, WeightConverter) for t in mapping))
+
+
+class TestFusedModuleWeightConversions(unittest.TestCase):
+    def test_weight_converter_concatenates_projections(self):
+        class SeparateAttn(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.q_proj = nn.Linear(2, 2, bias=False)
+                self.k_proj = nn.Linear(2, 2, bias=False)
+                self.v_proj = nn.Linear(2, 2, bias=False)
+
+        attn = SeparateAttn()
+        q_weight = attn.q_proj.weight.data.clone()
+        k_weight = attn.k_proj.weight.data.clone()
+        v_weight = attn.v_proj.weight.data.clone()
+
+        _apply_weight_conversions(
+            attn,
+            [
+                WeightConverter(
+                    ["q_proj.weight", "k_proj.weight", "v_proj.weight"],
+                    "qkv_proj.weight",
+                    operations=[Concatenate(dim=0)],
+                )
+            ],
+        )
+
+        state_dict = attn.state_dict()
+        self.assertIn("qkv_proj.weight", state_dict)
+        self.assertNotIn("q_proj.weight", state_dict)
+        self.assertNotIn("k_proj.weight", state_dict)
+        self.assertNotIn("v_proj.weight", state_dict)
+        self.assertIn("qkv_proj", attn._modules)
+        self.assertNotIn("q_proj", attn._modules)
+        self.assertNotIn("k_proj", attn._modules)
+        self.assertNotIn("v_proj", attn._modules)
+        torch.testing.assert_close(state_dict["qkv_proj.weight"], torch.cat([q_weight, k_weight, v_weight], dim=0))
+
+    def test_weight_converter_splits_fused_projection(self):
+        class QKVAttn(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.qkv_proj = nn.Linear(2, 6, bias=False)
+
+        attn = QKVAttn()
+        qkv_weight = attn.qkv_proj.weight.data.clone()
+
+        _apply_weight_conversions(
+            attn,
+            [
+                WeightConverter(
+                    "qkv_proj.weight", ["q_proj.weight", "k_proj.weight", "v_proj.weight"], operations=[Chunk(dim=0)]
+                )
+            ],
+        )
+
+        state_dict = attn.state_dict()
+        self.assertIn("q_proj.weight", state_dict)
+        self.assertIn("k_proj.weight", state_dict)
+        self.assertIn("v_proj.weight", state_dict)
+        self.assertNotIn("qkv_proj.weight", state_dict)
+        self.assertNotIn("qkv_proj", attn._modules)
+        self.assertIn("q_proj", attn._modules)
+        self.assertIn("k_proj", attn._modules)
+        self.assertIn("v_proj", attn._modules)
+        expected_q, expected_k, expected_v = torch.chunk(qkv_weight, 3, dim=0)
+        torch.testing.assert_close(state_dict["q_proj.weight"], expected_q)
+        torch.testing.assert_close(state_dict["k_proj.weight"], expected_k)
+        torch.testing.assert_close(state_dict["v_proj.weight"], expected_v)
+
+    def test_weight_converter_split_is_idempotent(self):
+        class QKVAttn(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.qkv_proj = nn.Linear(2, 6, bias=False)
+
+        def make_mapping():
+            return [
+                WeightConverter(
+                    "qkv_proj.weight", ["q_proj.weight", "k_proj.weight", "v_proj.weight"], operations=[Chunk(dim=0)]
+                )
+            ]
+
+        attn = QKVAttn()
+        _apply_weight_conversions(attn, make_mapping())
+        keys_after_first = set(attn.state_dict().keys())
+        _apply_weight_conversions(attn, make_mapping())
+        self.assertEqual(keys_after_first, set(attn.state_dict().keys()))
+
+    def test_weight_converter_glob_merges_modulelist(self):
+        class ExpertModule(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.experts = nn.ModuleList([nn.Linear(2, 4, bias=False), nn.Linear(2, 4, bias=False)])
+                self.merged = nn.Module()
+
+        mod = ExpertModule()
+        weight_0 = mod.experts[0].weight.data.clone()
+        weight_1 = mod.experts[1].weight.data.clone()
+
+        _apply_weight_conversions(
+            mod, [WeightConverter("experts.*.weight", "merged.weight", operations=[MergeModulelist(dim=0)])]
+        )
+
+        state_dict = mod.state_dict()
+        self.assertIn("merged.weight", state_dict)
+        self.assertNotIn("experts.0.weight", state_dict)
+        self.assertNotIn("experts.1.weight", state_dict)
+        torch.testing.assert_close(state_dict["merged.weight"], torch.stack([weight_0, weight_1], dim=0))
+
+    def test_multiple_independent_converters(self):
+        class QKVAttn(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.qkv_proj = nn.Linear(2, 6, bias=False)
+
+        class MLP(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.gate_proj = nn.Linear(2, 4, bias=False)
+                self.up_proj = nn.Linear(2, 4, bias=False)
+
+        attn = QKVAttn()
+        mlp = MLP()
+        qkv_weight = attn.qkv_proj.weight.data.clone()
+        gate_weight = mlp.gate_proj.weight.data.clone()
+        up_weight = mlp.up_proj.weight.data.clone()
+
+        _apply_weight_conversions(
+            attn,
+            [
+                WeightConverter(
+                    "qkv_proj.weight", ["q_proj.weight", "k_proj.weight", "v_proj.weight"], operations=[Chunk(dim=0)]
+                )
+            ],
+        )
+        _apply_weight_conversions(
+            mlp,
+            [
+                WeightConverter(
+                    ["gate_proj.weight", "up_proj.weight"], "gate_up_proj.weight", operations=[Concatenate(dim=0)]
+                )
+            ],
+        )
+
+        attn_sd = attn.state_dict()
+        self.assertNotIn("qkv_proj.weight", attn_sd)
+        self.assertIn("q_proj.weight", attn_sd)
+        self.assertIn("k_proj.weight", attn_sd)
+        self.assertIn("v_proj.weight", attn_sd)
+        expected_q, expected_k, expected_v = torch.chunk(qkv_weight, 3, dim=0)
+        torch.testing.assert_close(attn_sd["q_proj.weight"], expected_q)
+
+        mlp_sd = mlp.state_dict()
+        self.assertNotIn("gate_proj.weight", mlp_sd)
+        self.assertNotIn("up_proj.weight", mlp_sd)
+        self.assertIn("gate_up_proj.weight", mlp_sd)
+        torch.testing.assert_close(mlp_sd["gate_up_proj.weight"], torch.cat([gate_weight, up_weight], dim=0))
+
+    def test_no_match_is_noop(self):
+        class SimpleModule(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(4, 4, bias=False)
+
+        mod = SimpleModule()
+        original_keys = set(mod.state_dict().keys())
+        _apply_weight_conversions(
+            mod, [WeightConverter("non_existent.weight", "something.weight", operations=[Concatenate(dim=0)])]
+        )
+        self.assertEqual(original_keys, set(mod.state_dict().keys()))
+
+
+class TestConvertedChildClass(unittest.TestCase):
+    def test_strip_converter_prefix_removes_prefix(self):
+        converter = WeightConverter(
+            ["MLP.gate_proj.weight", "MLP.up_proj.weight"],
+            "MLP.gate_up_proj.weight",
+            operations=[Concatenate(dim=0)],
+        )
+        stripped = _strip_converter_prefix(converter, "MLP")
+        self.assertEqual(stripped._original_source_patterns, ["gate_proj.weight", "up_proj.weight"])
+        self.assertEqual(stripped._original_target_patterns, ["gate_up_proj.weight"])
+
+    def test_strip_converter_prefix_leaves_non_matching_unchanged(self):
+        converter = WeightConverter(
+            ["gate_proj.weight", "up_proj.weight"],
+            "gate_up_proj.weight",
+            operations=[Concatenate(dim=0)],
+        )
+        stripped = _strip_converter_prefix(converter, "MLP")
+        self.assertEqual(stripped._original_source_patterns, ["gate_proj.weight", "up_proj.weight"])
+        self.assertEqual(stripped._original_target_patterns, ["gate_up_proj.weight"])
+
+    def test_apply_converter_to_module_creates_linear(self):
+        class MLP(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.gate_proj = nn.Linear(4, 8, bias=False)
+                self.up_proj = nn.Linear(4, 8, bias=False)
+
+        mlp = MLP()
+        converter = WeightConverter(
+            ["gate_proj.weight", "up_proj.weight"],
+            "gate_up_proj.weight",
+            operations=[Concatenate(dim=0)],
+        )
+        _apply_converter_to_module(mlp, converter)
+        state_dict = mlp.state_dict()
+        self.assertIn("gate_up_proj.weight", state_dict)
+        self.assertNotIn("gate_proj.weight", state_dict)
+        self.assertNotIn("up_proj.weight", state_dict)
+        self.assertEqual(state_dict["gate_up_proj.weight"].shape, (16, 4))
+        self.assertIsInstance(mlp.gate_up_proj, nn.Linear)
+        self.assertFalse(hasattr(mlp, "gate_proj"))
+        self.assertFalse(hasattr(mlp, "up_proj"))
+
+    def test_apply_converter_to_module_preserves_bias(self):
+        class MLP(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.gate_proj = nn.Linear(4, 8, bias=True)
+                self.up_proj = nn.Linear(4, 8, bias=True)
+
+        mlp = MLP()
+        converter = WeightConverter(
+            ["gate_proj.weight", "up_proj.weight"],
+            "gate_up_proj.weight",
+            operations=[Concatenate(dim=0)],
+        )
+        _apply_converter_to_module(mlp, converter)
+        self.assertIsInstance(mlp.gate_up_proj, nn.Linear)
+        self.assertIsNotNone(mlp.gate_up_proj.bias)
+
+    def test_make_converted_child_class_applies_conversion(self):
+        class MLP(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.gate_proj = nn.Linear(4, 8, bias=False)
+                self.up_proj = nn.Linear(4, 8, bias=False)
+
+        converter = WeightConverter(
+            ["gate_proj.weight", "up_proj.weight"],
+            "gate_up_proj.weight",
+            operations=[Concatenate(dim=0)],
+        )
+        ConvertedMLP = _make_converted_child_class(MLP, [converter])
+        mlp = ConvertedMLP()
+        state_dict = mlp.state_dict()
+        self.assertIn("gate_up_proj.weight", state_dict)
+        self.assertNotIn("gate_proj.weight", state_dict)
+        self.assertNotIn("up_proj.weight", state_dict)
+        self.assertEqual(state_dict["gate_up_proj.weight"].shape, (16, 4))
+        self.assertIsInstance(mlp.gate_up_proj, nn.Linear)
+
+    def test_make_converted_child_class_is_subclass(self):
+        class Base(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(2, 2, bias=False)
+
+        Converted = _make_converted_child_class(Base, [])
+        self.assertTrue(issubclass(Converted, Base))
+        self.assertEqual(Converted.__name__, "ConvertedBase")

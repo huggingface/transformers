@@ -11,18 +11,34 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import functools
 import importlib.metadata
 import os
 import re
 from collections.abc import Callable
 from contextlib import contextmanager
+from copy import deepcopy
 from types import ModuleType
+from typing import TYPE_CHECKING
 
 from packaging import version as pkg_version
 
+from ..conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
+from ..core_model_loading import WeightRenaming
+from ..monkey_patching import register_patch_mapping
 from ..utils import ENV_VARS_TRUE_VALUES, logging
-from ..utils.import_utils import is_kernels_available
+from ..utils.import_utils import is_kernels_available, is_torch_available
 from .flash_attention import flash_attention_forward
+
+
+if TYPE_CHECKING:
+    from ..configuration_utils import PretrainedConfig
+    from ..modeling_utils import PreTrainedModel
+    from ..utils.kernel_config import KernelConfig
+
+if is_torch_available():
+    import torch
+    import torch.nn as nn
 
 
 logger = logging.get_logger(__name__)
@@ -31,6 +47,7 @@ try:
     from kernels import (
         Device,
         LayerRepository,
+        LocalLayerRepository,
         Mode,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
@@ -269,6 +286,10 @@ except ImportError:
         def __init__(self, *args, **kwargs):
             raise RuntimeError("LayerRepository requires `kernels` to be installed. Run `pip install kernels`.")
 
+    class LocalLayerRepository:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("LocalLayerRepository requires `kernels` to be installed. Run `pip install kernels`.")
+
     def replace_kernel_forward_from_hub(*args, **kwargs):
         raise RuntimeError(
             "replace_kernel_forward_from_hub requires `kernels` to be installed. Run `pip install kernels`."
@@ -501,14 +522,557 @@ def allow_all_hub_kernels():
         ALLOW_ALL_KERNELS = False
 
 
+class FusedModuleBase(nn.Module):
+    def __init__(
+        self,
+        modules_to_fuse: list["nn.Module"],
+        fused_module_names: list[str] | None = None,
+    ):
+        """
+        Args:
+            modules_to_fuse: The source modules to fuse together.
+            fused_module_names: The names under which each source module is registered as a
+                child of this container (i.e. `self.<name>`). When `None`, the
+                `kernel_layer_name` attribute of each source module is used. Pass this
+                explicitly when the source modules do not carry `@use_kernel_forward_from_hub`.
+        """
+        super().__init__()
+        if len(modules_to_fuse) == 0:
+            raise ValueError("At least one module must be provided for fusion.")
+
+        if fused_module_names is not None:
+            if len(fused_module_names) != len(modules_to_fuse):
+                raise ValueError("Length of fused_module_names and modules_to_fuse must match.")
+            for module, name in zip(modules_to_fuse, fused_module_names):
+                self.add_module(name, module)
+            self._fused_module_names = list(fused_module_names)
+        else:
+            for module in modules_to_fuse:
+                attr_name = getattr(module, "kernel_layer_name", None)
+                if attr_name is None:
+                    raise ValueError(
+                        f"Module {module} does not have a 'kernel_layer_name' attribute. "
+                        f"Either decorate it with @use_kernel_forward_from_hub or provide "
+                        f"explicit names via the inline pattern format: "
+                        f'(("<name>", "<glob_path>"), ...).'
+                    )
+                self.add_module(attr_name, module)
+            self._fused_module_names = [m.kernel_layer_name for m in modules_to_fuse]
+
+        # `kernelize` validates the kernel's forward signature against the class being replaced.
+        # Since the fused container sits at the position of the first module in the chain, the
+        # kernel's forward must match that module's signature. We patch the class-level forward
+        # here (via `functools.wraps`) so the signature is correct when `kernelize` inspects it.
+        # The body raises because this forward is always replaced by the kernel before any call.
+        @functools.wraps(type(modules_to_fuse[0]).forward)
+        def forward(self, *args, **kwargs):
+            raise NotImplementedError("FusedModule is a placeholder and should not be called directly.")
+
+        self.__class__.forward = forward
+
+    def __repr__(self):
+        names = ", ".join(self._fused_module_names)
+        return f"{self.__class__.__name__}(fused=({names}))"
+
+
+@functools.cache
+def make_fused_module_class(source_layer_names: tuple[str, ...], kernel_layer_name: str) -> type:
+    """
+    Dynamically create and cache a `FusedModuleBase` subclass for a given fusion combination.
+
+    Args:
+        source_layer_names (`tuple[str, ...]`):
+            Ordered tuple of `kernel_layer_name` values of the modules being fused
+            (e.g. `("RMSNorm", "MLP")`). Used as the cache key — the same combination
+            always returns the same class object.
+        kernel_layer_name (`str`):
+            The name assigned to the fused class, used by `kernelize` to look up the
+            kernel in the mapping (e.g. `"RMSNormMLP"`).
+
+    Returns:
+        A subclass of `FusedModuleBase` with `kernel_layer_name` set as a class attribute.
+    """
+    return type(
+        f"Fused_{'_'.join(source_layer_names)}",
+        (FusedModuleBase,),
+        {"kernel_layer_name": kernel_layer_name},
+    )
+
+
+def _get_or_create_submodule(
+    root: "nn.Module",
+    mod_path: str,
+    original_module: "nn.Module | None",
+    future_weight: "torch.Tensor",
+) -> "nn.Module":
+    if not mod_path:
+        return root
+    parent, _, mod_name = mod_path.rpartition(".")
+    parent_mod = root.get_submodule(parent) if parent else root
+    if mod_name not in parent_mod._modules:
+        parent_mod.add_module(mod_name, _create_typed_module(original_module, future_weight))
+    return parent_mod._modules[mod_name]
+
+
+def _apply_weight_conversions(module: "nn.Module", conversion_mapping: list) -> None:
+    """Apply WeightConverter transforms to a module via state-dict walk. Handles glob patterns."""
+    from ..core_model_loading import dot_natural_key, rename_source_key
+
+    state_dict = module.state_dict()
+    pattern_to_converter = {k: c for c in conversion_mapping for k in c.source_patterns}
+    param_name_to_transform: dict = {}
+
+    for param_name in sorted(state_dict, key=dot_natural_key):
+        renamed_key, source_pattern = rename_source_key(param_name, [], conversion_mapping)
+        if source_pattern is None:
+            continue
+        transform = param_name_to_transform.setdefault(renamed_key, deepcopy(pattern_to_converter[source_pattern]))
+        transform.add_tensor(renamed_key, param_name, source_pattern, state_dict[param_name])
+
+    for layer_name, transform in param_name_to_transform.items():
+        source_names = list(transform.layer_targets.get(layer_name, []))
+        if not source_names:
+            continue
+
+        original_mod = None
+        for sname in source_names:
+            smod_path = sname.rpartition(".")[0]
+            try:
+                original_mod = module.get_submodule(smod_path) if smod_path else module
+                break
+            except AttributeError:
+                pass
+
+        result = transform.convert(layer_name)
+
+        for sname in source_names:
+            mod_path, _, attr = sname.rpartition(".")
+            try:
+                source_mod = module.get_submodule(mod_path) if mod_path else module
+            except AttributeError:
+                continue
+            source_mod._parameters.pop(attr, None)
+            source_mod._buffers.pop(attr, None)
+
+        for target_key, meta_val in result.items():
+            meta_tensor = meta_val[0] if isinstance(meta_val, list) else meta_val
+            t_mod_path, _, t_attr = target_key.rpartition(".")
+            target_mod = _get_or_create_submodule(module, t_mod_path, original_mod, meta_tensor)
+            if not isinstance(meta_tensor, nn.Parameter):
+                meta_tensor = nn.Parameter(meta_tensor, requires_grad=meta_tensor.is_floating_point())
+            target_mod.register_parameter(t_attr, meta_tensor)
+
+        for source_name in source_names:
+            mod_path = source_name.rpartition(".")[0]
+            if not mod_path:
+                continue
+            try:
+                source_mod = module.get_submodule(mod_path)
+            except AttributeError:
+                continue
+            if (
+                all(p is None for p in source_mod._parameters.values())
+                and all(b is None for b in source_mod._buffers.values())
+                and not source_mod._modules
+            ):
+                parent_path, _, mod_name = mod_path.rpartition(".")
+                parent_mod = module.get_submodule(parent_path) if parent_path else module
+                parent_mod._modules.pop(mod_name, None)
+
+
+def _strip_converter_prefix(converter, prefix: str):
+    """Return a new WeightConverter with `prefix.` stripped from all source and target patterns."""
+    from ..core_model_loading import WeightConverter
+
+    prefix_dot = prefix + "."
+    new_src = [p.removeprefix(prefix_dot) for p in converter._original_source_patterns]
+    new_tgt = [p.removeprefix(prefix_dot) for p in converter._original_target_patterns]
+    return WeightConverter(new_src, new_tgt, operations=converter.operations)
+
+
+def _apply_converter_to_module(module: "nn.Module", converter) -> None:
+    """
+    Apply a single WeightConverter to any nn.Module.
+
+    For literal (non-glob) patterns: locates source submodules directly by path, runs the
+    converter operations to infer the output shape, then creates the target submodule with
+    the proper typed class (nn.Linear, nn.Embedding, …) and prunes empty source submodules.
+    For glob patterns (containing *): falls back to _apply_weight_conversions which does a
+    full state-dict walk and registers the result parameter explicitly.
+    """
+    src_patterns = converter._original_source_patterns
+
+    # Glob patterns require a state-dict walk to expand wildcards.
+    if any("*" in p for p in src_patterns):
+        _apply_weight_conversions(module, [converter])
+        return
+
+    from copy import deepcopy
+
+    from ..core_model_loading import dot_natural_key, rename_source_key
+
+    # Collect source tensors directly from the module — bail if any are missing.
+    src_tensors: dict[str, torch.Tensor] = {}
+    for pattern in src_patterns:
+        mod_path, _, attr = pattern.rpartition(".")
+        try:
+            src_mod = module.get_submodule(mod_path) if mod_path else module
+        except AttributeError:
+            return
+        t = src_mod._parameters.get(attr)
+        if t is None:
+            t = src_mod._buffers.get(attr)
+        if t is None:
+            return
+        src_tensors[pattern] = t
+
+    # Feed the source tensors into a converter copy and run the operation to get the
+    # result meta tensor (shape inference is free on meta device).
+    conv = deepcopy(converter)
+    for param_name in sorted(src_tensors, key=dot_natural_key):
+        renamed_key, source_pattern = rename_source_key(param_name, [], [conv])
+        if source_pattern is not None:
+            conv.add_tensor(renamed_key, param_name, source_pattern, src_tensors[param_name])
+
+    target_keys = list(conv.layer_targets)
+    if not target_keys:
+        return
+
+    # Collect results from all target keys; a converter may produce more than one output tensor.
+    result: dict = {}
+    for target_key in target_keys:
+        result.update(conv.convert(target_key))
+
+    # Infer the typed module class from the first source submodule.
+    first_src_path = src_patterns[0].rpartition(".")[0]
+    try:
+        first_src_mod = module.get_submodule(first_src_path) if first_src_path else module
+    except AttributeError:
+        first_src_mod = None
+
+    # Remove source parameters before creating the target so shape queries stay clean.
+    for pattern in src_patterns:
+        mod_path, _, attr = pattern.rpartition(".")
+        try:
+            src_mod = module.get_submodule(mod_path) if mod_path else module
+        except AttributeError:
+            continue
+        src_mod._parameters.pop(attr, None)
+        src_mod._buffers.pop(attr, None)
+
+    # Create the target submodule with the correct shape inferred from the result.
+    # The module is initialised with the right in/out dimensions — no parameter replacement needed.
+    for result_key, meta_val in result.items():
+        meta_tensor = meta_val[0] if isinstance(meta_val, list) else meta_val
+        t_mod_path, _, _ = result_key.rpartition(".")
+
+        if t_mod_path:
+            parent_path, _, mod_name = t_mod_path.rpartition(".")
+            parent_mod = module.get_submodule(parent_path) if parent_path else module
+            if mod_name not in parent_mod._modules:
+                parent_mod.add_module(mod_name, _create_typed_module(first_src_mod, meta_tensor))
+
+    # Prune source submodules that are now completely empty.
+    for pattern in src_patterns:
+        mod_path = pattern.rpartition(".")[0]
+        if not mod_path:
+            continue
+        try:
+            src_mod = module.get_submodule(mod_path)
+        except AttributeError:
+            continue
+        # _parameters and _buffers may hold None-valued entries (e.g. bias=False in nn.Linear
+        # registers _parameters['bias'] = None), so check all-None rather than emptiness.
+        # _modules entries are always non-None module objects, so use emptiness there.
+        if (
+            all(p is None for p in src_mod._parameters.values())
+            and all(b is None for b in src_mod._buffers.values())
+            and not src_mod._modules
+        ):
+            parent_path, _, mod_name = mod_path.rpartition(".")
+            parent_mod = module.get_submodule(parent_path) if parent_path else module
+            parent_mod._modules.pop(mod_name, None)
+
+
+def _create_typed_module(source_mod: "nn.Module | None", weight: "torch.Tensor") -> "nn.Module":
+    """Instantiate a properly-typed nn.Module whose shape matches weight, inferred from source_mod."""
+    cls_ = type(source_mod) if source_mod is not None else nn.Module
+    if issubclass(cls_, nn.Linear):
+        out_features, in_features = weight.shape
+        return cls_(in_features=in_features, out_features=out_features, bias=source_mod.bias is not None)
+    if issubclass(cls_, nn.Embedding):
+        num_embeddings, embedding_dim = weight.shape
+        return cls_(
+            num_embeddings=num_embeddings,
+            embedding_dim=embedding_dim,
+            padding_idx=source_mod.padding_idx,
+            max_norm=source_mod.max_norm,
+            norm_type=source_mod.norm_type,
+            scale_grad_by_freq=source_mod.scale_grad_by_freq,
+            sparse=source_mod.sparse,
+        )
+    raise ValueError(f"Cannot create target module: unsupported source class {cls_.__name__!r}")
+
+
+def _make_converted_child_class(child_cls: type, stripped_converters: list) -> type:
+    """Return a subclass of child_cls whose __init__ applies weight conversions after construction."""
+    original_init = child_cls.__init__
+    _converters = list(stripped_converters)
+
+    def converted_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        for converter in _converters:
+            _apply_converter_to_module(self, converter)
+
+    converted_cls = type(f"Converted{child_cls.__name__}", (child_cls,), {"__init__": converted_init})
+    converted_cls.__qualname__ = f"Converted{child_cls.__qualname__}"
+    return converted_cls
+
+
+def make_fused_parent_class(
+    parent_cls: type,
+    child_names: list[str],
+    source_names: list[str],
+    kernel_layer_name: str,
+) -> type:
+    original_init = parent_cls.__init__
+    _child_names = list(child_names)
+    _source_names = list(source_names)
+
+    fused_module_cls = make_fused_module_class(tuple(_source_names), kernel_layer_name)
+
+    def fused_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        modules_to_fuse = [getattr(self, name) for name in _child_names]
+        fused = fused_module_cls(
+            modules_to_fuse,
+            fused_module_names=list(_source_names),
+        )
+        setattr(self, _child_names[0], fused)
+        for name in _child_names[1:]:
+            setattr(self, name, nn.Identity())
+
+    fused_cls = type(f"Fused{parent_cls.__name__}", (parent_cls,), {"__init__": fused_init})
+    fused_cls.__qualname__ = f"Fused{parent_cls.__qualname__}"
+    return fused_cls
+
+
+def infer_kernel_fusion_transforms(
+    patterns_with_names: list[tuple[str, str]],
+) -> list[WeightRenaming]:
+    """
+    Auto-infer WeightRenaming transforms for the path changes caused by FusedModuleBase wrapping.
+
+    For each fusion (source_name, glob_path) pair:
+        - The first module's weights get source_name inserted between the module path and the weight suffix.
+        - Each subsequent module's weights are relocated from their original path to under the first module.
+
+    For example, given
+        [
+            ("RMSNorm", "model.layers.*.post_attention_layernorm"),
+            ("MLP", "model.layers.*.mlp")
+        ]
+    the inferred transforms would be:
+        - model.layers.0.post_attention_layernorm.weight -> model.layers.0.post_attention_layernorm.RMSNorm.weight
+        - model.layers.0.mlp.gate_proj.weight -> model.layers.0.post_attention_layernorm.MLP.gate_proj.weight
+    """
+
+    def segment_to_regex(seg: str) -> str:
+        """
+        Convert a glob segment to a regex segment.
+        The wildcard "*" matches any non-empty sequence of characters that does not include a dot.
+        Otherwise, the segment is escaped.
+        """
+        return r"[^.]+" if seg == "*" else re.escape(seg)
+
+    _, first_glob = patterns_with_names[0]
+    parent_path, first_child = first_glob.rsplit(".", 1)
+
+    # Convert parent_path to a regex pattern, capturing it as a group for reuse in the target pattern.
+    parent_regex = r"\.".join(segment_to_regex(s) for s in parent_path.split("."))
+
+    transforms: list[WeightRenaming] = []
+
+    # We must not match the moved child modules under the first child, so we add a negative lookahead.
+    child_regexes = "|".join(rf"{name}\." for name, _ in patterns_with_names)
+    moved_child_lookahead = f"(?!{child_regexes})"
+
+    for i, (source_name, glob) in enumerate(patterns_with_names):
+        child = glob.rsplit(".", 1)[1]
+        child_re = segment_to_regex(child)
+        guard = moved_child_lookahead if i == 0 else ""
+        transforms.append(
+            WeightRenaming(
+                source_patterns=rf"({parent_regex}\.){child_re}\.{guard}",
+                # \1 refers to the captured parent path
+                target_patterns=rf"\1{first_child}.{source_name}\.",
+            )
+        )
+
+    return transforms
+
+
+def _first_str_leaf(obj) -> str | None:
+    """Recursively extract the first string leaf from a potentially nested dict (device → mode → str)."""
+    if isinstance(obj, str):
+        return obj
+    if isinstance(obj, dict):
+        for v in obj.values():
+            result = _first_str_leaf(v)
+            if result is not None:
+                return result
+    return None
+
+
+def _try_load_kernel_class(repo_str: str, use_local: bool = False) -> type | None:
+    if ":" not in repo_str:
+        return None
+    repo_id, _, layer_name = repo_str.rpartition(":")
+    if not repo_id or not layer_name:
+        return None
+    try:
+        if use_local:
+            from pathlib import Path
+
+            package_name = repo_id.rstrip("/").split("/")[-1]
+            repo = LocalLayerRepository(
+                repo_path=Path(repo_id),
+                package_name=package_name,
+                layer_name=layer_name,
+            )
+        else:
+            repo = LayerRepository(repo_id=repo_id, layer_name=layer_name)
+        return repo.load()
+    except Exception:
+        return None
+
+
+def register_kernel_fusions(
+    cls: "type[PreTrainedModel]",
+    config: "PretrainedConfig",
+    kernel_config: "KernelConfig",
+) -> None:
+    """
+    Pre-register hub kernel n-to-1 fusions (tuple keys in KernelConfig) before model instantiation.
+
+    For each inline tuple key `(("Name", "glob.path"), ...)` in `kernel_config.kernel_mapping`:
+
+        1. Meta-instantiate the model to discover parent classes containing all target children.
+
+        2. Register a monkey patch mapping each parent class to a fused subclass whose `__init__`
+           wraps the target children in a `FusedModuleBase` with the resolved `kernel_layer_name`.
+
+        3. Load or infer conversion mapping to handle the weight transformations caused by the kernel fusion.
+
+        4. Replace the tuple key with the scalar kernel_layer_name in kernel_config so the
+           downstream pipeline (sanitize, create_compatible_mapping, kernelize) is unchanged.
+    """
+
+    if not hasattr(cls, "config_class") or not hasattr(cls.config_class, "model_type"):
+        raise ValueError(f"Model {cls.__name__} has no config_class or model_type.")
+    model_type = cls.config_class.model_type
+
+    new_mapping: dict = {}
+    for layer_name, hub_repo in kernel_config.kernel_mapping.items():
+        if not isinstance(layer_name, tuple) or not all(
+            isinstance(item, tuple) and len(item) == 2 for item in layer_name
+        ):
+            new_mapping[layer_name] = hub_repo
+            continue
+
+        source_names = [item[0] for item in layer_name]
+        glob_patterns = [item[1] for item in layer_name]
+        child_names = [p.rsplit(".", 1)[1] for p in glob_patterns]
+
+        # Resolve kernel_layer_name from "org/repo:ClassName" or a device/mode-nested dict.
+        # All leaf strings in the nested dict point to the same kernel class, so any will do.
+        repo_str = _first_str_leaf(hub_repo)
+        if repo_str is None:
+            raise ValueError(f"Cannot resolve a repo string from hub_repo={hub_repo!r}")
+        kernel_layer_name = repo_str.split(":")[1] if ":" in repo_str else repo_str.split("/")[-1]
+
+        # 1. Load the kernel class to get any conversion_mapping it declares.
+        kernel_cls = _try_load_kernel_class(repo_str, use_local=kernel_config.use_local_kernel)
+        kernel_conversion_mapping = (
+            list(kernel_cls.conversion_mapping)
+            if kernel_cls is not None and hasattr(kernel_cls, "conversion_mapping")
+            else []
+        )
+
+        # 2. Meta-device scan — find parent classes that contain all target children.
+        with torch.device("meta"):
+            meta_model = cls(config)
+
+        seen: set[type] = set()
+        seen_children: set[type] = set()
+        patch_mapping: dict[str, type] = {}
+        for module in meta_model.modules():
+            module_cls = type(module)
+            if module_cls in seen:
+                continue
+            if not all(hasattr(module, name) for name in child_names):
+                continue
+            seen.add(module_cls)
+
+            if kernel_conversion_mapping:
+                for source_name, child_name in zip(source_names, child_names):
+                    child_cls = type(getattr(module, child_name))
+                    if child_cls in seen_children:
+                        continue
+                    seen_children.add(child_cls)
+                    prefix_dot = source_name + "."
+                    relevant = [
+                        c
+                        for c in kernel_conversion_mapping
+                        if any(p.startswith(prefix_dot) for p in c._original_source_patterns)
+                    ]
+                    if relevant:
+                        stripped = [_strip_converter_prefix(c, source_name) for c in relevant]
+                        patch_mapping[child_cls.__name__] = _make_converted_child_class(child_cls, stripped)
+
+            fused_parent_cls = make_fused_parent_class(module_cls, child_names, source_names, kernel_layer_name)
+            patch_mapping[module_cls.__name__] = fused_parent_cls
+
+        if not patch_mapping:
+            logger.warning(
+                f"No parent modules found containing children {child_names} for kernel fusion "
+                f"'{kernel_layer_name}'. Skipping tuple key."
+            )
+            new_mapping[layer_name] = hub_repo
+            continue
+
+        # 3. Register class-level monkey patches.
+        register_patch_mapping(patch_mapping, overwrite=True)
+
+        # 4. Infer weight renaming mapping for the loader.
+        transforms = infer_kernel_fusion_transforms(list(zip(source_names, glob_patterns)))
+        if kernel_conversion_mapping:
+            transforms = transforms + kernel_conversion_mapping
+
+        # 5. Load existing conversion mapping for this model type.
+        existing = get_checkpoint_conversion_mapping(model_type)
+        if existing is not None:
+            transforms = existing + transforms
+
+        # 6. Register the combined mappings.
+        register_checkpoint_conversion_mapping(model_type, transforms, overwrite=True)
+
+        new_mapping[kernel_layer_name] = hub_repo
+
+    kernel_config.kernel_mapping = new_mapping
+
+
 __all__ = [
+    "FusedModuleBase",
     "LayerRepository",
-    "use_kernel_forward_from_hub",
-    "use_kernel_func_from_hub",
+    "get_kernel",
+    "make_fused_module_class",
+    "register_kernel_fusions",
+    "lazy_load_kernel",
     "register_kernel_mapping",
     "register_kernel_mapping_transformers",
     "replace_kernel_forward_from_hub",
-    "lazy_load_kernel",
-    "get_kernel",
+    "use_kernel_forward_from_hub",
+    "use_kernel_func_from_hub",
     "use_kernelized_func",
 ]  # type: ignore
