@@ -295,7 +295,7 @@ class Blip2Attention(nn.Module):
             )
         self.scale = self.head_dim**-0.5
         self.is_causal = False
-        self.dropout = config.attention_dropout
+        self.attention_dropout = config.attention_dropout
 
         # small tweak here compared to CLIP, no bias here
         self.qkv = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=False)
@@ -342,7 +342,7 @@ class Blip2Attention(nn.Module):
             key_states,
             value_states,
             attention_mask=None,
-            dropout=0.0 if not self.training else self.dropout,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scale,
             **kwargs,
         )
@@ -550,7 +550,7 @@ class Blip2QFormerMultiHeadAttention(nn.Module):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.scaling = self.attention_head_size**-0.5
         self.is_causal = False
-        self.dropout = config.attention_probs_dropout_prob
+        self.attention_dropout = config.attention_probs_dropout_prob
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
         if is_cross_attention:
@@ -597,7 +597,7 @@ class Blip2QFormerMultiHeadAttention(nn.Module):
             key_layer,
             value_layer,
             attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
         )
