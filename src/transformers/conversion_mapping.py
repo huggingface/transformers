@@ -40,6 +40,8 @@ _MODEL_TO_CONVERSION_PATTERN = {
     # Mixtral-style MoE
     "minimax": "mixtral",
     "minimax_m2": "mixtral",
+    "granitemoeshared": "granitemoe",
+    "granitemoehybrid": "granitemoe",
     # Qwen2-style MoE
     "afmoe": "qwen2_moe",
     "deepseek_v2": "qwen2_moe",
@@ -668,6 +670,20 @@ def _build_checkpoint_conversion_mapping():
         "olmo_hybrid": [
             WeightRenaming("attention_layer_norm", "input_layernorm"),
             WeightRenaming("feedforward_layer_norm", "post_attention_layernorm"),
+        ],
+        "granitemoe": [
+            WeightRenaming(
+                source_patterns=".block_sparse_moe.input_linear.weight",
+                target_patterns=".block_sparse_moe.experts.gate_up_proj",
+            ),
+            WeightRenaming(
+                source_patterns=".block_sparse_moe.router.layer.weight",
+                target_patterns=".block_sparse_moe.router.weight",
+            ),
+            WeightRenaming(
+                source_patterns=".block_sparse_moe.output_linear.weight",
+                target_patterns=".block_sparse_moe.experts.down_proj",
+            ),
         ],
         "qwen3_5_text": [PrefixChange(prefix_to_remove="language_model", model_prefix="model")],
         "sam3_tracker": [

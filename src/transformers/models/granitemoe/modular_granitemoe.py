@@ -17,7 +17,6 @@ import torch
 from torch import nn
 
 from ... import initialization as init
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -25,11 +24,17 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..granite.modeling_granite import GraniteRMSNorm, GraniteRotaryEmbedding
-from ..jetmoe.modeling_jetmoe import JetMoeParallelExperts, JetMoeTopKGating
 from ..llama.modeling_llama import LlamaAttention, LlamaPreTrainedModel
-from ..mixtral.modeling_mixtral import MixtralDecoderLayer, MixtralForCausalLM, MixtralModel, load_balancing_loss_func
+from ..mixtral.modeling_mixtral import (
+    MixtralDecoderLayer,
+    MixtralExperts,
+    MixtralForCausalLM,
+    MixtralModel,
+    MixtralTopKRouter,
+    load_balancing_loss_func,
+)
 from .configuration_granitemoe import GraniteMoeConfig
 
 
@@ -41,12 +46,17 @@ class GraniteMoeRotaryEmbedding(GraniteRotaryEmbedding):
     pass
 
 
-class GraniteMoeParallelExperts(JetMoeParallelExperts):
+class GraniteMoeExperts(MixtralExperts):
     pass
 
 
-class GraniteMoeTopKGating(JetMoeTopKGating):
-    pass
+class GraniteMoeTopKRouter(MixtralTopKRouter):
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+        router_logits = nn.functional.linear(hidden_states, self.weight).float()
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
+        router_scores = torch.softmax(router_top_value, dim=-1).type_as(hidden_states)
+        return router_logits, router_scores, router_indices
 
 
 class GraniteMoeMoE(nn.Module):
@@ -63,31 +73,14 @@ class GraniteMoeMoE(nn.Module):
 
         self.input_size = config.hidden_size
         self.hidden_size = config.intermediate_size
-        self.activation = ACT2FN[config.hidden_act]
-        self.input_linear = GraniteMoeParallelExperts(config.num_local_experts, self.input_size, self.hidden_size * 2)
-        self.output_linear = GraniteMoeParallelExperts(config.num_local_experts, self.hidden_size, self.input_size)
-
-        self.router = GraniteMoeTopKGating(
-            input_size=self.input_size,
-            num_experts=config.num_local_experts,
-            top_k=config.num_experts_per_tok,
-        )
+        self.experts = GraniteMoeExperts(config)
+        self.router = GraniteMoeTopKRouter(config)
 
     def forward(self, layer_input):
         bsz, length, emb_size = layer_input.size()
         layer_input = layer_input.reshape(-1, emb_size)
-        _, batch_index, batch_gates, expert_size, _ = self.router(layer_input)
-
-        expert_inputs = layer_input[batch_index]
-        hidden_states = self.input_linear(expert_inputs, expert_size)
-        chunked_hidden_states = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
-        expert_outputs = self.output_linear(hidden_states, expert_size)
-
-        expert_outputs = expert_outputs * batch_gates[:, None]
-
-        zeros = torch.zeros((bsz * length, self.input_size), dtype=expert_outputs.dtype, device=expert_outputs.device)
-        layer_output = zeros.index_add(0, batch_index, expert_outputs)
+        _, routing_weights, selected_experts = self.router(layer_input)
+        layer_output = self.experts(layer_input, selected_experts, routing_weights)
         layer_output = layer_output.view(bsz, length, self.input_size)
         return layer_output
 
@@ -143,12 +136,20 @@ class GraniteMoePreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _can_compile_fullgraph = False  # TopK gating fails fullgraph compilation at "expert_size = expert_size.tolist()"
+    _can_compile_fullgraph = True
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(GraniteMoeTopKRouter, index=0),
+        "hidden_states": GraniteMoeDecoderLayer,
+        "attentions": GraniteMoeAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, GraniteMoeParallelExperts):
+        if isinstance(module, GraniteMoeExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, GraniteMoeTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
@@ -273,6 +274,7 @@ class GraniteMoeForCausalLM(MixtralForCausalLM):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 

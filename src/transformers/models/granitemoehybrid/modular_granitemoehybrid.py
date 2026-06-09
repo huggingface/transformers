@@ -184,6 +184,7 @@ class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     config: GraniteMoeHybridConfig
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]
     _is_stateful = True
+    _can_compile_fullgraph = False
 
     @torch.no_grad()
     def _init_weights(self, module):
