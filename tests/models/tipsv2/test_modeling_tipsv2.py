@@ -561,7 +561,7 @@ class Tipsv2ModelIntegrationTest(unittest.TestCase):
         _, _, height, width = inputs["pixel_values"].shape
         num_patches = (height // vision_cfg.patch_size) * (width // vision_cfg.patch_size)
         num_register_tokens = vision_cfg.num_register_tokens
-        patch_tokens = outputs.last_hidden_state[:, 1 + num_register_tokens :]
+        patch_tokens = outputs.vision_model_output.last_hidden_state[:, 1 + num_register_tokens :]
         self.assertEqual(outputs.image_embeds.shape, torch.Size([1, vision_cfg.hidden_size]))
         self.assertEqual(patch_tokens.shape, torch.Size([1, num_patches, vision_cfg.hidden_size]))
         self.assertEqual(outputs.text_embeds.shape, torch.Size([4, model.config.text_config.hidden_size]))
