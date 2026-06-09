@@ -29,9 +29,10 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_int
@@ -533,6 +534,81 @@ class Tipsv2VisionModel(Tipsv2VisionPreTrainedModel):
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
+    Tipsv2Vision backbone, to be used with frameworks like DETR and MaskFormer.
+    """
+)
+class Tipsv2VisionBackbone(BackboneMixin, Tipsv2VisionPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
+        self.embeddings = Tipsv2VisionEmbeddings(config)
+        self.encoder = Tipsv2VisionEncoder(config)
+
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        self.num_register_tokens = config.num_register_tokens
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> Tipsv2VisionPatchEmbeddings:
+        return self.embeddings.patch_embeddings
+
+    @can_return_tuple
+    @filter_output_hidden_states
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BackboneOutput:
+        r"""
+        Examples:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoBackbone, Tipsv2VisionConfig
+
+        >>> config = Tipsv2VisionConfig(out_features=["stage3", "stage6", "stage9", "stage12"])
+        >>> model = AutoBackbone.from_config(config)
+
+        >>> pixel_values = torch.randn(1, 3, 448, 448)
+
+        >>> outputs = model(pixel_values)
+        >>> feature_maps = outputs.feature_maps
+        >>> list(feature_maps[-1].shape)
+        [1, 768, 32, 32]
+        ```"""
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
+
+        embedding_output = self.embeddings(pixel_values)
+        output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
+        hidden_states = output.hidden_states
+
+        feature_maps = []
+        for stage, hidden_state in zip(self.stage_names, hidden_states):
+            if stage in self.out_features:
+                if self.config.apply_layernorm:
+                    hidden_state = self.layernorm(hidden_state)
+                if self.config.reshape_hidden_states:
+                    hidden_state = hidden_state[:, 1 + self.num_register_tokens :]
+                    # this was actually a bug in the original implementation that we copied here,
+                    # cause normally the order is height, width
+                    batch_size, _, height, width = pixel_values.shape
+                    patch_size = self.config.patch_size
+                    hidden_state = hidden_state.reshape(batch_size, height // patch_size, width // patch_size, -1)
+                    hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
+                feature_maps.append(hidden_state)
+
+        return BackboneOutput(
+            feature_maps=tuple(feature_maps),
+            hidden_states=hidden_states,
+            attentions=output.attentions,
         )
 
 
@@ -1040,6 +1116,7 @@ __all__ = [
     "Tipsv2PreTrainedModel",
     "Tipsv2TextModel",
     "Tipsv2TextPreTrainedModel",
+    "Tipsv2VisionBackbone",
     "Tipsv2VisionModel",
     "Tipsv2VisionPreTrainedModel",
 ]

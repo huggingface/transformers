@@ -146,3 +146,8 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
 
 [[autodoc]] Tipsv2VisionModel
     - forward
+
+## Tipsv2VisionBackbone
+
+[[autodoc]] Tipsv2VisionBackbone
+    - forward

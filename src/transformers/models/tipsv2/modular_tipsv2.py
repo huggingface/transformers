@@ -20,11 +20,12 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
+from ...backbone_utils import filter_output_hidden_states
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_sentencepiece import SentencePieceBackend
@@ -43,6 +44,7 @@ from ..clip.modeling_clip import (
 )
 from ..dinov2_with_registers.configuration_dinov2_with_registers import Dinov2WithRegistersConfig
 from ..dinov2_with_registers.modeling_dinov2_with_registers import (
+    Dinov2WithRegistersBackbone,
     Dinov2WithRegistersEmbeddings,
     Dinov2WithRegistersEncoder,
     Dinov2WithRegistersModel,
@@ -166,6 +168,7 @@ class Tipsv2VisionConfig(Dinov2WithRegistersConfig):
     model_type = "tipsv2_vision_model"
     base_config_key = "vision_config"
 
+    patch_size: int | list[int] | tuple[int, int] = 14
     image_size: int | list[int] | tuple[int, int] = 448
     mlp_ratio: int | float = 4  # float required for so400m14 checkpoint
     num_register_tokens: int = 1
@@ -402,6 +405,35 @@ class Tipsv2VisionEncoder(Dinov2WithRegistersEncoder):
 
 class Tipsv2VisionModel(Dinov2WithRegistersModel):
     pass
+
+
+class Tipsv2VisionBackbone(Dinov2WithRegistersBackbone):
+    @can_return_tuple
+    @filter_output_hidden_states
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BackboneOutput:
+        r"""
+        Examples:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoBackbone, Tipsv2VisionConfig
+
+        >>> config = Tipsv2VisionConfig(out_features=["stage3", "stage6", "stage9", "stage12"])
+        >>> model = AutoBackbone.from_config(config)
+
+        >>> pixel_values = torch.randn(1, 3, 448, 448)
+
+        >>> outputs = model(pixel_values)
+        >>> feature_maps = outputs.feature_maps
+        >>> list(feature_maps[-1].shape)
+        [1, 768, 32, 32]
+        ```"""
+        return super().forward(pixel_values, **kwargs)
 
 
 class Tipsv2SinusoidalPositionalEmbedding(Speech2TextSinusoidalPositionalEmbedding):
@@ -771,6 +803,7 @@ __all__ = [
     "Tipsv2TextConfig",
     "Tipsv2TextModel",
     "Tipsv2TextPreTrainedModel",
+    "Tipsv2VisionBackbone",
     "Tipsv2VisionConfig",
     "Tipsv2VisionModel",
     "Tipsv2VisionPreTrainedModel",

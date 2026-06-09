@@ -32,6 +32,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
@@ -57,6 +58,7 @@ if is_torch_available():
         Tipsv2Processor,
         Tipsv2TextModel,
         Tipsv2Tokenizer,
+        Tipsv2VisionBackbone,
         Tipsv2VisionModel,
     )
     from transformers.image_utils import load_image_as_tensor
@@ -223,6 +225,17 @@ class Tipsv2VisionModelTest(Tipsv2ModelTesterMixin, PipelineTesterMixin, unittes
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, *args):
         return getattr(ModelTesterMixin, self._testMethodName)(self)
+
+
+@require_torch
+class Tipsv2VisionBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (Tipsv2VisionBackbone,) if is_torch_available() else ()
+    config_class = Tipsv2VisionConfig
+
+    has_attentions = False
+
+    def setUp(self):
+        self.model_tester = Tipsv2VisionModelTester(self)
 
 
 class Tipsv2TextModelTester:
