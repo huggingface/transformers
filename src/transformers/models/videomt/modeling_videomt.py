@@ -967,7 +967,7 @@ class VideomtPreTrainedModel(PreTrainedModel):
         elif isinstance(module, VideomtForUniversalSegmentation):
             init.ones_(module.attn_mask_probs)
         if isinstance(module, VideomtEmbeddings):
-            nn.init.zeros_(module.mask_token)
+            init.zeros_(module.mask_token)
 
 
 class VideomtLayerNorm2d(nn.LayerNorm):

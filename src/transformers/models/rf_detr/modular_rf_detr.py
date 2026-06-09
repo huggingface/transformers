@@ -21,6 +21,7 @@ from huggingface_hub.dataclasses import strict
 from torch import Tensor, nn
 from torchvision.transforms.v2 import functional as tvF
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import (
     BackboneConfigMixin,
@@ -757,7 +758,6 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
-    @can_return_tuple
     @filter_output_hidden_states
     @auto_docstring
     def forward(
@@ -889,7 +889,7 @@ class RfDetrPreTrainedModel(LwDetrPreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if hasattr(module, "segmentation_bias") and isinstance(module.segmentation_bias, nn.Parameter):
-            nn.init.constant_(module.segmentation_bias, 0.0)
+            init.constant_(module.segmentation_bias, 0.0)
 
 
 @auto_docstring(
