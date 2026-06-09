@@ -209,6 +209,8 @@
         title: torch.compile
       - local: kernels
         title: Kernels
+      - local: padding_free
+        title: Padding-free training
       title: Speed optimization
     title: Performance
   - isExpanded: false
@@ -384,6 +386,8 @@
         title: Video classification
       - local: tasks/object_detection
         title: Object detection
+      - local: tasks/instance_segmentation
+        title: Instance segmentation
       - local: tasks/zero_shot_object_detection
         title: Zero-shot object detection
       - local: tasks/zero_shot_image_classification
@@ -1211,6 +1215,8 @@
         title: ColPali
       - local: model_doc/colqwen2
         title: ColQwen2
+      - local: model_doc/cosmos3_omni
+        title: Cosmos3 Omni
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/deepseek_vl
