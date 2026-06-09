@@ -256,8 +256,10 @@ class VisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
-        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+    def forward(self, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        freqs = (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        return emb.cos(), emb.sin()
 
 
 class PatchEmbed(nn.Module):
@@ -721,9 +723,7 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_embeddings = self.rotary_pos_emb(position_ids)
 
         for blk in self.blocks:
             hidden_states = blk(
