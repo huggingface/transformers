@@ -2597,7 +2597,7 @@ def main(*args):
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained(
-            _TOKENIZER_PATH.value, **chat_template_kwargs, **response_schema_kwargs
+            _TOKENIZER_PATH.value, **chat_template_kwargs, **response_template_kwargs
         )
 
     # Update config multimodal token IDs from the tokenizer.
