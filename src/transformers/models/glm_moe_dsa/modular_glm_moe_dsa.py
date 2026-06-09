@@ -147,12 +147,12 @@ class GlmMoeDsaIndexer(DeepseekV32Indexer):
 
 class GlmMoeDsaAttention(DeepseekV3Attention):
     """
-    DeepSeek-V3 MLA + a DSA indexer, extended with **cross-layer index-mask sharing**.
+    DeepSeek-V3 MLA + a DSA indexer, extended with **cross-layer top-k sharing**.
 
     `config.indexer_types[layer_idx]` decides whether this layer runs its own indexer (`"full"`) or
-    reuses the previous full layer's index mask (`"shared"`). Shared layers have no indexer of their
-    own (`self.indexer is None`); `next_skip_topk` signals that the *next* layer will reuse this
-    layer's mask, so it is propagated upward via `prev_index_mask`.
+    reuses the previous full layer's top-k selection (`"shared"`). Shared layers have no indexer of
+    their own (`self.indexer is None`); `next_skip_topk` signals that the *next* layer will reuse this
+    layer's top-k, so it is propagated upward via `prev_topk_indices`.
     """
 
     def __init__(self, config: GlmMoeDsaConfig, layer_idx: int):
@@ -162,7 +162,7 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
         self.next_skip_topk = (
             config.indexer_types[layer_idx + 1] == "shared" if layer_idx < len(config.indexer_types) - 1 else False
         )
-        # `"full"` layers run their own indexer; `"shared"` layers carry none and reuse the previous mask.
+        # `"full"` layers run their own indexer; `"shared"` layers carry none and reuse the previous top-k.
         self.indexer = None if self.skip_topk else GlmMoeDsaIndexer(config, layer_idx)
 
     def forward(
@@ -171,7 +171,7 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        prev_index_mask: torch.Tensor | None = None,
+        prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
@@ -198,18 +198,31 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        # DSA: compute this layer's additive sparse mask, or reuse the previous full layer's on `"shared"`
-        # layers, then fold it into the attention mask.
-        if not self.skip_topk or prev_index_mask is None:
+        # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
+        if not self.skip_topk or prev_topk_indices is None:
             if self.indexer is None:
-                raise ValueError("Shared DSA layers require an index mask from a previous full indexer layer.")
+                raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
             indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
-            index_mask = self.indexer(
+            topk_indices = self.indexer(
                 hidden_states, q_resid, position_embeddings, indexer_mask, past_key_values=past_key_values
-            ).unsqueeze(1)  # [B, 1, S, T]
+            )  # [B, S, topk]
         else:
-            index_mask = prev_index_mask
-        attention_mask = attention_mask + index_mask if attention_mask is not None else index_mask
+            topk_indices = prev_topk_indices
+
+        # Dense eager / SDPA paths materialize the additive `-inf` mask (visualizable); `flash-mla` gathers
+        # the top-k tokens itself.
+        sparse_indices = None
+        if self.config._attn_implementation in ("eager", "sdpa"):
+            index_mask = torch.full(
+                (batch_size, seq_length, key_states.shape[2]),
+                float("-inf"),
+                device=hidden_states.device,
+                dtype=hidden_states.dtype,
+            )
+            index_mask = index_mask.scatter(-1, topk_indices.long(), 0.0).unsqueeze(1)  # [B, 1, S, T]
+            attention_mask = attention_mask + index_mask if attention_mask is not None else index_mask
+        else:
+            sparse_indices = topk_indices
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -222,12 +235,13 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            indices=sparse_indices,  # consumed by flash_mla_with_kvcache; ignored by eager / SDPA
             **kwargs,
         )
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights, index_mask if self.next_skip_topk else None
+        return attn_output, attn_weights, topk_indices if self.next_skip_topk else None
 
 
 class GlmMoeDsaDecoderLayer(DeepseekV32DecoderLayer):
@@ -239,20 +253,20 @@ class GlmMoeDsaDecoderLayer(DeepseekV32DecoderLayer):
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        prev_index_mask: torch.Tensor | None = None,
+        prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
-        hidden_states, _, index_mask = self.self_attn(
+        hidden_states, _, topk_indices = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
-            prev_index_mask=prev_index_mask,
+            prev_topk_indices=prev_topk_indices,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -262,7 +276,7 @@ class GlmMoeDsaDecoderLayer(DeepseekV32DecoderLayer):
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-        return hidden_states, index_mask
+        return hidden_states, topk_indices
 
 
 class GlmMoeDsaPreTrainedModel(DeepseekV32PreTrainedModel):
@@ -305,17 +319,17 @@ class GlmMoeDsaModel(DeepseekV32Model):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        # Thread the previous full layer's index mask through `"shared"` layers.
-        index_mask = None
+        # Thread the previous full layer's top-k selection through `"shared"` layers.
+        topk_indices = None
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            hidden_states, index_mask = decoder_layer(
+            hidden_states, topk_indices = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                prev_index_mask=index_mask,
+                prev_topk_indices=topk_indices,
                 **kwargs,
             )
 

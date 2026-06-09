@@ -227,7 +227,7 @@ class DeepseekV32Indexer(nn.Module):
         past_key_values: Cache | None = None,
     ) -> torch.Tensor:
         """
-        Computes the additive top-k sparse-attention mask (DSA).
+        Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
 
         This is the bf16 equivalent of the reference Indexer which uses `rotate_activation` (Hadamard transform)
         and `fp8_index` (FP8 quantized scoring kernel). Since the Hadamard transform is orthogonal (dot products
@@ -245,8 +245,8 @@ class DeepseekV32Indexer(nn.Module):
             past_key_values: Cache object containing the indexer key cache for this layer.
 
         Returns:
-            `torch.Tensor`: Additive sparse mask of shape `[B, S, T]` (`0` at the selected top-k tokens,
-                `-inf` elsewhere).
+            `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
+                turn these into an additive sparse mask; the `flash-mla` kernel consumes them directly.
         """
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
@@ -281,19 +281,9 @@ class DeepseekV32Indexer(nn.Module):
         if attention_mask is not None:
             index_scores = index_scores + attention_mask
 
-        total_len = index_scores.shape[-1]
-        topk = min(self.index_topk, total_len)
+        topk = min(self.index_topk, index_scores.shape[-1])
         # diff with classic attention, sample don't project :wink:
-        topk_indices = index_scores.topk(topk, dim=-1).indices  # [B, S, topk]
-        # Return the additive sparse mask directly (0 at the selected tokens, -inf elsewhere).
-        index_mask = torch.full(
-            (batch_size, seq_len, total_len),
-            float("-inf"),
-            device=hidden_states.device,
-            dtype=hidden_states.dtype,
-        )
-        index_mask.scatter_(-1, topk_indices, 0.0)  # [B, S, T]
-        return index_mask
+        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
 
 
 class DeepseekV32Attention(DeepseekV3Attention):
@@ -336,13 +326,27 @@ class DeepseekV32Attention(DeepseekV3Attention):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        # ===== DSA: fold the indexer's additive top-k mask into the attention mask =====
-        # The indexer works with a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
+        # ===== DSA: select the top-k tokens per query =====
+        # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
         indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
-        index_mask = self.indexer(
+        topk_indices = self.indexer(
             hidden_states, q_resid, position_embeddings, indexer_mask, past_key_values=past_key_values
-        ).unsqueeze(1)  # [B, 1, S, T]
-        attention_mask = attention_mask + index_mask if attention_mask is not None else index_mask
+        )  # [B, S, topk]
+
+        # The dense eager / SDPA paths apply sparsity as an additive `-inf` mask (materialized here, so it
+        # shows up in output recorders); the `flash-mla` kernel instead gathers the top-k tokens itself.
+        sparse_indices = None
+        if self.config._attn_implementation in ("eager", "sdpa"):
+            index_mask = torch.full(
+                (batch_size, seq_length, key_states.shape[2]),
+                float("-inf"),
+                device=hidden_states.device,
+                dtype=hidden_states.dtype,
+            )
+            index_mask = index_mask.scatter(-1, topk_indices.long(), 0.0).unsqueeze(1)  # [B, 1, S, T]
+            attention_mask = attention_mask + index_mask if attention_mask is not None else index_mask
+        else:
+            sparse_indices = topk_indices
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -355,6 +359,7 @@ class DeepseekV32Attention(DeepseekV3Attention):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            indices=sparse_indices,  # consumed by flash_mla_with_kvcache; ignored by eager / SDPA
             **kwargs,
         )
 
