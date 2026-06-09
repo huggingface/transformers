@@ -25,7 +25,7 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..dinov2.modeling_dinov2 import (
     Dinov2Backbone,
@@ -248,7 +248,6 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
-    @can_return_tuple
     @filter_output_hidden_states
     @auto_docstring
     def forward(
