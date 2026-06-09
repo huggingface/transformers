@@ -209,8 +209,12 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if not hasattr(processor, "_compute_audio_num_tokens") or processor.audio_token is None:
             self.skipTest("Processor doesn't support audio token counting")
 
-        # The golden counts below assume the default 16 kHz feature extractor.
-        self.assertEqual(processor.feature_extractor.sampling_rate, 16000)
+        # The golden counts are keyed on raw sample counts and assume 16 kHz framing
+        # (frame_length=320, hop_length=160 = round(16000 * {20, 10} ms)). Those framing
+        # params are derived from the feature extractor's sampling_rate and, because of
+        # integer rounding, are not rate-invariant -- so pin a 16 kHz feature extractor
+        # here instead of depending on (and asserting) the class default.
+        processor.feature_extractor = type(processor.feature_extractor)(sampling_rate=16000)
 
         # {num_samples (at 16 kHz): expected_audio_tokens}. Some samples diverge from the naive
         # ceil(duration_ms / 40ms) shortcut for each length -- it disagrees with the real
