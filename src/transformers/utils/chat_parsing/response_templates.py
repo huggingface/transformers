@@ -129,11 +129,11 @@ def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
         return spec
     if not isinstance(spec, dict):
         raise ValueError(f"response_template must be a dict, got {type(spec).__name__}")
-    if unknown_template_keys := set(spec) - {"version", "defaults", "fields", "start_anchor", "start_anchor_pattern"}:
-        raise ValueError(f"Unknown keys in response_template: {sorted(unknown_template_keys)}")
     version = spec.get("version", 1)
     if version != 1:
         raise ValueError(f"Unsupported response_template version: {version}")
+    if unknown_template_keys := set(spec) - {"version", "defaults", "fields", "start_anchor", "start_anchor_pattern"}:
+        raise ValueError(f"Unknown keys in response_template: {sorted(unknown_template_keys)}")
     defaults = spec.get("defaults", {})
     if not isinstance(defaults, dict):
         raise ValueError("response_template.defaults must be a dict")
