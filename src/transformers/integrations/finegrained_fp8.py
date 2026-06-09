@@ -80,9 +80,6 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
     Raises `ImportError` if the `kernels` package is missing, or the kernel or required
     symbols cannot be found.
     """
-    # Skip the env check under dynamo — `is_kernels_available()` calls
-    # `importlib.find_spec`, non-traceable. Eager invocations still get the friendly
-    # error (mirrors the same guard in `_load_deepgemm_kernel`).
     if not is_torchdynamo_compiling():
         if not is_kernels_available():
             raise ImportError(

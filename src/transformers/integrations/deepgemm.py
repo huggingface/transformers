@@ -67,7 +67,7 @@ class DeepGEMM:
     # it: 128 was empirically the best across MoE workloads (bench showed the
     # kernel-recommended 240 is slower and 256 doesn't compile). Same stance as
     # vLLM, which caches and never sets it.
-    m_alignment: int
+    m_alignment: int = 128
 
 
 @functools.cache
@@ -77,10 +77,6 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
     `requires_sm100` raises a Blackwell-specific error for callers (FP4 / Mega MoE)
     that won't work on Hopper, instead of the generic SM90+ message.
     """
-    # Skip env/arch/version checks under dynamo — `is_kernels_available()` calls
-    # `importlib.find_spec` and `get_cuda_runtime_version()` calls `ctypes.CDLL`, both
-    # non-traceable. Eager invocations still get the friendly errors; the function is
-    # `@functools.cache`d so trace-time re-runs skip straight to the kernel handle.
     if not is_torchdynamo_compiling():
         if not is_kernels_available():
             raise ImportError(
@@ -121,7 +117,6 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
     transform_sf_into_required_layout = getattr(kernel, "transform_sf_into_required_layout", None)
     transform_weights_for_mega_moe = getattr(kernel, "transform_weights_for_mega_moe", None)
     get_symm_buffer_for_mega_moe = getattr(kernel, "get_symm_buffer_for_mega_moe", None)
-    get_mk_alignment = getattr(kernel, "get_mk_alignment_for_contiguous_layout", None)
     fp8_fp4_mega_moe = getattr(kernel, "fp8_fp4_mega_moe", None)
 
     missing = [
@@ -136,7 +131,6 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
             ("transform_sf_into_required_layout", transform_sf_into_required_layout),
             ("transform_weights_for_mega_moe", transform_weights_for_mega_moe),
             ("get_symm_buffer_for_mega_moe", get_symm_buffer_for_mega_moe),
-            ("get_mk_alignment_for_contiguous_layout", get_mk_alignment),
             ("fp8_fp4_mega_moe", fp8_fp4_mega_moe),
         ]
         if attr is None
@@ -172,14 +166,6 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
 
         math_mod.pack_ue8m0_to_int = _pack_ue8m0_to_int_no_sync
 
-    # Resolve eagerly when possible. `get_mk_alignment()` is a torch op returning a
-    # Python int — `fullgraph=True` rejects non-Tensor returns — so if first load
-    # happens under dynamo we fall back to 128. `@functools.cache` on this loader
-    # means the eager-resolved value is reused on later traced calls.
-    m_alignment = 128
-    if not is_torchdynamo_compiling():
-        m_alignment = get_mk_alignment()
-
     return DeepGEMM(
         fp8_fp4_matmul=fp8_fp4_matmul,
         grouped_fp8_fp4_matmul_nt=grouped_fp8_fp4_matmul_nt,
@@ -191,7 +177,6 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
         transform_weights_for_mega_moe=transform_weights_for_mega_moe,
         get_symm_buffer_for_mega_moe=get_symm_buffer_for_mega_moe,
         fp8_fp4_mega_moe=fp8_fp4_mega_moe,
-        m_alignment=m_alignment,
     )
 
 
