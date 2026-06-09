@@ -821,6 +821,7 @@ class Tipsv2TextModel(Tipsv2TextPreTrainedModel):
         self.embeddings = Tipsv2TextEmbeddings(config)
         self.encoder = Tipsv2TextEncoder(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pooler = None
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
@@ -878,7 +879,7 @@ class Tipsv2TextModel(Tipsv2TextPreTrainedModel):
 class Tipsv2PreTrainedModel(PreTrainedModel):
     config: Tipsv2Config
     base_model_prefix = "model"
-    input_modalities = ("image", "text")
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "Tipsv2TextEmbeddings",
@@ -890,10 +891,6 @@ class Tipsv2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        pass
 
 
 # contrastive loss function, adapted from
