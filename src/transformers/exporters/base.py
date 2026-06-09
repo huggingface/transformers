@@ -21,11 +21,16 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from ..utils.export_config import ExportConfigMixin
+from ..utils.import_utils import is_torch_available
 from .utils import decompose_for_generation
 
 
 if TYPE_CHECKING:
-    from ..modeling_utils import PreTrainedModel
+    if is_torch_available():
+        import torch
+
+        from ..cache_utils import Cache
+        from ..modeling_utils import PreTrainedModel
 
 
 class HfExporter(ABC):
@@ -33,17 +38,12 @@ class HfExporter(ABC):
     Abstract base class for all Transformers exporters.
 
     Subclass and implement [`~HfExporter.export`] to add a new export backend.
-
-    Args:
-        export_config ([`~transformers.utils.export_config.ExportConfigMixin`]):
-            Backend-specific configuration. The concrete subclass declares the
-            expected type via a class-level annotation.
     """
 
     required_packages: list[str] | None = None
 
-    def __init__(self, export_config: ExportConfigMixin):
-        self.export_config = export_config
+    def __init__(self):
+        self.validate_environment()
 
     def validate_environment(self, *args, **kwargs):
         """
@@ -63,26 +63,43 @@ class HfExporter(ABC):
                 )
 
     @abstractmethod
-    def export(self, model: PreTrainedModel, sample_inputs: dict):
+    def export(
+        self,
+        model: PreTrainedModel,
+        sample_inputs: dict[str, torch.Tensor | Cache],
+        config: ExportConfigMixin,
+    ):
         """
         Export the model and return the backend-specific program object.
 
         Args:
             model ([`PreTrainedModel`]):
                 The model to export.
-            sample_inputs (`dict[str, Any]`):
+            sample_inputs (`dict[str, torch.Tensor | Cache]`):
                 **Forward** kwargs — what you'd pass to `model(**sample_inputs)`. These are used
                 directly as the example inputs during tracing. For an autoregressive decode-step
                 export, this means you need to include `past_key_values`, `cache_position`, etc.
                 If you only have generation-style inputs, use [`~HfExporter.export_for_generation`]
                 instead — it runs `model.generate` for you and exports each stage.
+            config ([`~transformers.utils.export_config.ExportConfigMixin`]):
+                Backend-specific configuration.
 
         Returns:
             Backend-specific export artifact.
         """
-        pass
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement `export`. Pick a concrete exporter "
+            "(`DynamoExporter`, `OnnxExporter`, `ExecutorchExporter`), or override `export` "
+            "in your subclass with a backend-specific tracing pipeline that consumes `config` "
+            "and returns the runtime artifact."
+        )
 
-    def export_for_generation(self, model: PreTrainedModel, sample_inputs: dict) -> dict[str, object]:
+    def export_for_generation(
+        self,
+        model: PreTrainedModel,
+        sample_inputs: dict[str, torch.Tensor | Cache],
+        config: ExportConfigMixin | dict[str, ExportConfigMixin],
+    ) -> dict[str, object]:
         """
         Decompose a generative model and export each component independently.
 
@@ -94,11 +111,16 @@ class HfExporter(ABC):
         Args:
             model ([`PreTrainedModel`]):
                 The generative model to export. Must support `model.generate(**sample_inputs)`.
-            sample_inputs (`dict[str, Any]`):
+            sample_inputs (`dict[str, torch.Tensor | Cache]`):
                 **Generate** kwargs — what you'd pass to `model.generate(**sample_inputs)`
                 (typically `input_ids` + `attention_mask`, plus any modality inputs like
                 `pixel_values` / `input_features` for multi-modal models). Per-stage forward
                 kwargs are captured internally.
+            config ([`~transformers.utils.export_config.ExportConfigMixin`] or `dict[str, ExportConfigMixin]`):
+                Backend-specific configuration. Pass a single config to apply to every
+                component, or a `dict` keyed by component name (e.g. `"image_encoder"`,
+                `"language_model"`, `"lm_head"`, `"decode"`) to override per-component —
+                all component names must be present in the dict.
 
         Returns:
             `dict[str, Any]`: `{component_name: backend_specific_artifact}` — same keys as
@@ -107,10 +129,20 @@ class HfExporter(ABC):
             `ONNXProgram`, `ExecutorchProgramManager`).
         """
         components = decompose_for_generation(model, sample_inputs)
+        if isinstance(config, dict):
+            missing = set(components) - set(config)
+            if missing:
+                raise ValueError(
+                    f"Per-component `config` dict is missing entries for: {sorted(missing)}. "
+                    f"Expected one entry per component: {sorted(components)}."
+                )
+            configs = config
+        else:
+            configs = dict.fromkeys(components, config)
         exported: dict[str, object] = {}
         for name, (submodel, subinputs) in components.items():
             try:
-                exported[name] = self.export(submodel, subinputs)
+                exported[name] = self.export(submodel, subinputs, config=configs[name])
             except Exception as e:
                 raise RuntimeError(
                     f"{type(self).__name__}.export failed on component '{name}' "

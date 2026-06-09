@@ -72,24 +72,24 @@ class DynamoExporter(HfExporter):
     ```python
     >>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
 
-    >>> exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))
-    >>> exported = exporter.export(model, inputs)
+    >>> exporter = DynamoExporter()
+    >>> exported = exporter.export(model, inputs, config=DynamoConfig(dynamic=True))
     >>> outputs = exported.module()(**inputs)
     ```
     """
 
-    export_config: DynamoConfig
-
     required_packages = ["torch"]
 
-    def validate_environment(self, *args, **kwargs):
-        super().validate_environment(*args, **kwargs)
-
-    def export(self, model: PreTrainedModel, sample_inputs: dict[str, Any]) -> ExportedProgram:
+    def export(
+        self,
+        model: PreTrainedModel,
+        sample_inputs: dict[str, Any],
+        config: DynamoConfig,
+    ) -> ExportedProgram:
         model, sample_inputs = prepare_for_export(model, sample_inputs)
 
-        dynamic_shapes = self.export_config.dynamic_shapes
-        if self.export_config.dynamic and dynamic_shapes is None:
+        dynamic_shapes = config.dynamic_shapes
+        if config.dynamic and dynamic_shapes is None:
             dynamic_shapes = get_auto_dynamic_shapes(sample_inputs)
 
         register_cache_pytrees_for_model(model)
@@ -98,9 +98,9 @@ class DynamoExporter(HfExporter):
                 model,
                 args=(),
                 dynamic_shapes=dynamic_shapes,
-                strict=self.export_config.strict,
+                strict=config.strict,
                 kwargs=copy.deepcopy(sample_inputs),
-                prefer_deferred_runtime_asserts_over_guards=self.export_config.prefer_deferred_runtime_asserts_over_guards,
+                prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
             )
 
         cleanup_state(model)

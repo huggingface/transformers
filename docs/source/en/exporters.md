@@ -20,8 +20,9 @@ Export any [`PreTrainedModel`] to ONNX, ExecuTorch, or a standalone PyTorch prog
 same two lines of code, any runtime.
 
 ```python
-exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))  # or OnnxExporter, ExecutorchExporter
-exported = exporter.export(model, inputs)
+exporter = DynamoExporter()
+config = DynamoConfig(dynamic=True)  # or OnnxExporter, ExecutorchExporter
+exported = exporter.export(model, inputs, config=config)
 ```
 
 Because the exporters live inside Transformers, they evolve with the models. Every architecture
@@ -76,8 +77,9 @@ Switch between runtimes by swapping the exporter class — nothing else changes.
 >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 >>> inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
 
->>> exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))
->>> exported = exporter.export(model, inputs)
+>>> exporter = DynamoExporter()
+>>> config = DynamoConfig(dynamic=True)
+>>> exported = exporter.export(model, inputs, config=config)
 
 >>> # run the exported graph directly
 >>> outputs = exported.module()(**inputs)
@@ -94,8 +96,9 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
 
-exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
-onnx_program = exporter.export(model, inputs)
+exporter = OnnxExporter()
+config = OnnxConfig(dynamic=True)
+onnx_program = exporter.export(model, inputs, config=config)
 
 # save and load with ONNX Runtime
 onnx_program.save("model.onnx")
@@ -118,8 +121,9 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
 
-exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend="xnnpack", dynamic=True))
-et_program = exporter.export(model, inputs)
+exporter = ExecutorchExporter()
+config = ExecutorchConfig(backend="xnnpack", dynamic=True)
+et_program = exporter.export(model, inputs, config=config)
 
 # save for on-device deployment
 et_program.save("model.pte")
@@ -145,8 +149,9 @@ runtime without retracing.
 >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 >>> inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt"))
 
->>> exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))
->>> exported = exporter.export(model, inputs)
+>>> exporter = DynamoExporter()
+>>> config = DynamoConfig(dynamic=True)
+>>> exported = exporter.export(model, inputs, config=config)
 
 >>> # works with any batch size or sequence length
 >>> outputs = exported.module()(**dict(tokenizer("A single input", return_tensors="pt")))
@@ -164,8 +169,9 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt"))
 
-exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
-onnx_program = exporter.export(model, inputs)
+exporter = OnnxExporter()
+config = OnnxConfig(dynamic=True)
+onnx_program = exporter.export(model, inputs, config=config)
 
 # works with any batch size or sequence length
 onnx_program(**dict(tokenizer("A single input", return_tensors="pt")))
@@ -183,8 +189,9 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt"))
 
-exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend="xnnpack", dynamic=True))
-et_program = exporter.export(model, inputs)
+exporter = ExecutorchExporter()
+config = ExecutorchConfig(backend="xnnpack", dynamic=True)
+et_program = exporter.export(model, inputs, config=config)
 ```
 
 </hfoption>
@@ -209,11 +216,12 @@ This is passed directly to `torch.export.export` — see the
 >>> batch = torch.export.Dim("batch", min=1, max=32)
 >>> seq = torch.export.Dim("seq", min=1, max=2048)
 
->>> exporter = DynamoExporter(export_config=DynamoConfig(
+>>> exporter = DynamoExporter()
+>>> config = DynamoConfig(
 ...     dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
 ...     prefer_deferred_runtime_asserts_over_guards=True,
-... ))
->>> exported = exporter.export(model, inputs)
+... )
+>>> exported = exporter.export(model, inputs, config=config)
 ```
 
 </hfoption>
@@ -231,11 +239,12 @@ inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="p
 batch = torch.export.Dim("batch", min=1, max=32)
 seq = torch.export.Dim("seq", min=1, max=2048)
 
-exporter = OnnxExporter(export_config=OnnxConfig(
+exporter = OnnxExporter()
+config = OnnxConfig(
     dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
     prefer_deferred_runtime_asserts_over_guards=True,
-))
-onnx_program = exporter.export(model, inputs)
+)
+onnx_program = exporter.export(model, inputs, config=config)
 ```
 
 </hfoption>
@@ -253,12 +262,13 @@ inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="p
 batch = torch.export.Dim("batch", min=1, max=32)
 seq = torch.export.Dim("seq", min=1, max=2048)
 
-exporter = ExecutorchExporter(export_config=ExecutorchConfig(
+exporter = ExecutorchExporter()
+config = ExecutorchConfig(
     backend="xnnpack",
     dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
     prefer_deferred_runtime_asserts_over_guards=True,
-))
-et_program = exporter.export(model, inputs)
+)
+et_program = exporter.export(model, inputs, config=config)
 ```
 
 </hfoption>
@@ -292,8 +302,9 @@ and append a new attribute name there if needed.
 >>> text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
 >>> inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
 
->>> exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))
->>> components = exporter.export_for_generation(model, inputs)
+>>> exporter = DynamoExporter()
+>>> config = DynamoConfig(dynamic=True)
+>>> components = exporter.export_for_generation(model, inputs, config=config)
 >>> # components = {"image_encoder": ExportedProgram, "language_model": ExportedProgram, "lm_head": ExportedProgram, "decode": ExportedProgram}
 ```
 
@@ -310,8 +321,9 @@ messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggi
 text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
 inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
 
-exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
-components = exporter.export_for_generation(model, inputs)
+exporter = OnnxExporter()
+config = OnnxConfig(dynamic=True)
+components = exporter.export_for_generation(model, inputs, config=config)
 # components = {"image_encoder": ONNXProgram, "language_model": ONNXProgram, "lm_head": ONNXProgram, "decode": ONNXProgram}
 ```
 
@@ -328,8 +340,9 @@ messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggi
 text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
 inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
 
-exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend="xnnpack", dynamic=True))
-components = exporter.export_for_generation(model, inputs)
+exporter = ExecutorchExporter()
+config = ExecutorchConfig(backend="xnnpack", dynamic=True)
+components = exporter.export_for_generation(model, inputs, config=config)
 # components = {"image_encoder": ExecutorchProgramManager, "language_model": ..., "lm_head": ..., "decode": ...}
 ```
 
@@ -365,7 +378,7 @@ components = decompose_for_generation(model, inputs)
 exported = {}
 for name, (submodel, subinputs) in components.items():
     eager_outputs = submodel(**subinputs)
-    exported[name] = exporter.export(submodel, subinputs)
+    exported[name] = exporter.export(submodel,subinputs, config=config)
 ```
 
 </details>

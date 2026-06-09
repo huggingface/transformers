@@ -86,26 +86,29 @@ class ExecutorchExporter(DynamoExporter):
     ```python
     >>> from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
 
-    >>> exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend="xnnpack"))
-    >>> et_program = exporter.export(model, inputs)
+    >>> exporter = ExecutorchExporter()
+    >>> et_program = exporter.export(model, inputs, config=ExecutorchConfig(backend="xnnpack"))
     >>> et_program.write_to_file("model.pte")
     ```
     """
 
-    export_config: ExecutorchConfig
-
     required_packages = ["torch", "executorch"]
 
-    def export(self, model: PreTrainedModel, sample_inputs: dict[str, Any]) -> ExecutorchProgramManager:
+    def export(
+        self,
+        model: PreTrainedModel,
+        sample_inputs: dict[str, Any],
+        config: ExecutorchConfig,
+    ) -> ExecutorchProgramManager:
         """Export a model to ExecuTorch, applying backend preparation and torch op patches."""
-        prepare_for_backend = _BACKEND_PREPARE.get(self.export_config.backend)
+        prepare_for_backend = _BACKEND_PREPARE.get(config.backend)
         if prepare_for_backend is None:
-            raise ValueError(f"Unsupported backend {self.export_config.backend} for ExecuTorch export")
+            raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
 
         model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
 
         with apply_patches("executorch"):
-            exported_program: ExportedProgram = super().export(model, sample_inputs)
+            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
             edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(

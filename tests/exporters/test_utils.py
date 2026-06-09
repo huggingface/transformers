@@ -250,7 +250,8 @@ class ExportTesterMixin:
         """Export each model class with ``torch.export`` and verify outputs match eager within tolerance."""
         self._skip_if_not_exportable()
 
-        exporter = DynamoExporter(export_config=DynamoConfig(dynamic=dynamic))
+        exporter = DynamoExporter()
+        config = DynamoConfig(dynamic=dynamic)
 
         for model_class in self.all_model_classes:
             if self._should_skip(model_class):
@@ -261,7 +262,7 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exported_program = exporter.export(model, inputs)
+                    exported_program = exporter.export(model, inputs, config=config)
 
                     with torch.no_grad():
                         set_seed(1234)
@@ -287,14 +288,15 @@ class ExportTesterMixin:
                 continue
 
             optimize = model_class.__name__ not in ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES
-            exporter = OnnxExporter(export_config=OnnxConfig(dynamic=dynamic, optimize=optimize))
+            exporter = OnnxExporter()
+            config = OnnxConfig(dynamic=dynamic, optimize=optimize)
 
             components = self._prepare_export_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    onnx_program = exporter.export(model, inputs)
+                    onnx_program = exporter.export(model, inputs, config=config)
                     set_seed(1234)
                     onnx_outputs = _run_onnx_program(onnx_program, inputs)
                     self.assertTrue(onnx_outputs, f"ONNX outputs are empty for {name}.")
@@ -312,7 +314,8 @@ class ExportTesterMixin:
 
         self._skip_if_not_exportable()
         backend = "cuda" if torch_device == "cuda" else "xnnpack"
-        exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend=backend, dynamic=dynamic))
+        exporter = ExecutorchExporter()
+        config = ExecutorchConfig(backend=backend, dynamic=dynamic)
 
         for model_class in self.all_model_classes:
             if self._should_skip(model_class):
@@ -322,7 +325,7 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exporter.export(model, inputs)
+                    exporter.export(model, inputs, config=config)
 
 
 class ExportGenerateTesterMixin:
@@ -368,7 +371,8 @@ class ExportGenerateTesterMixin:
         """Export prefill and decode stages with ``torch.export`` and verify outputs match eager."""
         self._skip_if_not_exportable()
 
-        exporter = DynamoExporter(export_config=DynamoConfig(dynamic=dynamic))
+        exporter = DynamoExporter()
+        config = DynamoConfig(dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
             if self._should_skip(model_class, generate=True):
@@ -379,7 +383,7 @@ class ExportGenerateTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exported_program = exporter.export(model, inputs)
+                    exported_program = exporter.export(model, inputs, config=config)
 
                     with torch.no_grad():
                         set_seed(1234)
@@ -405,14 +409,15 @@ class ExportGenerateTesterMixin:
                 continue
 
             optimize = model_class.__name__ not in ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES
-            exporter = OnnxExporter(export_config=OnnxConfig(dynamic=dynamic, optimize=optimize))
+            exporter = OnnxExporter()
+            config = OnnxConfig(dynamic=dynamic, optimize=optimize)
 
             components = self._prepare_export_generate_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    onnx_program = exporter.export(model, inputs)
+                    onnx_program = exporter.export(model, inputs, config=config)
                     set_seed(1234)
                     onnx_outputs = _run_onnx_program(onnx_program, inputs)
                     self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
@@ -430,7 +435,8 @@ class ExportGenerateTesterMixin:
 
         self._skip_if_not_exportable()
         backend = "cuda" if torch_device == "cuda" else "xnnpack"
-        exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend=backend, dynamic=dynamic))
+        exporter = ExecutorchExporter()
+        config = ExecutorchConfig(backend=backend, dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
             if self._should_skip(model_class, generate=True):
@@ -440,4 +446,4 @@ class ExportGenerateTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exporter.export(model, inputs)
+                    exporter.export(model, inputs, config=config)

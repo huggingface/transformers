@@ -90,34 +90,37 @@ class OnnxExporter(DynamoExporter):
     ```python
     >>> from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
 
-    >>> exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
-    >>> onnx_program = exporter.export(model, inputs)
+    >>> exporter = OnnxExporter()
+    >>> onnx_program = exporter.export(model, inputs, config=OnnxConfig(dynamic=True))
     >>> outputs = onnx_program(**inputs)  # run in-memory
-    >>> OnnxExporter(export_config=OnnxConfig(f="model.onnx")).export(model, inputs)  # save to disk
+    >>> exporter.export(model, inputs, config=OnnxConfig(f="model.onnx"))  # save to disk
     ```
     """
 
-    export_config: OnnxConfig
-
     required_packages = ["torch", "onnx", "onnxscript"]
 
-    def export(self, model: PreTrainedModel, sample_inputs: dict[str, Any]) -> ONNXProgram:
+    def export(
+        self,
+        model: PreTrainedModel,
+        sample_inputs: dict[str, Any],
+        config: OnnxConfig,
+    ) -> ONNXProgram:
         with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("onnx"):
-            exported_program: ExportedProgram = super().export(model, sample_inputs)
+            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
             apply_fx_node_fixes("onnx", exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
                 exported_program,
                 args=(),
-                f=self.export_config.f,
+                f=config.f,
                 input_names=inputs_names,
                 output_names=outputs_names,
                 kwargs=copy.deepcopy(sample_inputs),
                 custom_translation_table=_ONNX_TRANSLATION_TABLE,
-                opset_version=self.export_config.opset_version,
-                external_data=self.export_config.external_data,
-                export_params=self.export_config.export_params,
-                optimize=self.export_config.optimize,
+                opset_version=config.opset_version,
+                external_data=config.external_data,
+                export_params=config.export_params,
+                optimize=config.optimize,
             )
 
         apply_onnx_ir_fixes(onnx_program)
