@@ -46,6 +46,9 @@ env:
   CUDA_VISIBLE_DEVICES: 0,1
 
 
+permissions:
+  contents: read
+
 jobs:
   setup_check_new_failures:
     name: "Setup matrix for finding commits"
@@ -55,7 +58,7 @@ jobs:
       n_runners: ${{ steps.set-matrix.outputs.n_runners }}
       process: ${{ steps.set-matrix.outputs.process }}
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         continue-on-error: true
         with:
           name: ci_results_${{ inputs.job }}
@@ -127,12 +130,12 @@ jobs:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ci_results_${{ inputs.job }}
           path: /transformers/ci_results_${{ inputs.job }}
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         env:
           ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
         with:
@@ -167,19 +170,25 @@ jobs:
       - name: Extract the base commit on `main` (of the merge commit created by Github) if it is a PR
         id: pr_info
         if: ${{ inputs.pr_number != '' }}
-        uses: actions/github-script@v6
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
+          COMMIT_SHA: ${{ inputs.commit_sha }}
         with:
-          script: |            
+          script: |
+            const pull_number = parseInt(process.env.PR_NUMBER, 10);
+            const commit_sha = process.env.COMMIT_SHA;
+
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: ${{ inputs.pr_number }}
+              pull_number,
             });
 
-            const { data: merge_commit }  = await github.rest.repos.getCommit({
+            const { data: merge_commit } = await github.rest.repos.getCommit({
               owner: pr.base.repo.owner.login,
               repo: pr.base.repo.name,
-              ref: '${{ inputs.commit_sha }}',
+              ref: commit_sha,
             });
 
             core.setOutput('merge_commit_base_sha', merge_commit.parents[0].sha);
@@ -231,6 +240,7 @@ jobs:
           n_runners: ${{ needs.setup_check_new_failures.outputs.n_runners }}
           run_idx: ${{ matrix.run_idx }}
           pr_number: ${{ inputs.pr_number }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 utils/check_bad_commit.py --start_commit "$START_SHA" --end_commit "$END_SHA" --file "ci_results_${job}/new_failures.json" --output_file "new_failures_with_bad_commit_${job}_${run_idx}.json"
 
       - name: Show results
@@ -243,7 +253,7 @@ jobs:
           cat "new_failures_with_bad_commit_${job}_${run_idx}.json"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}
           path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
@@ -258,12 +268,12 @@ jobs:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ci_results_${{ inputs.job }}
           path: /transformers/ci_results_${{ inputs.job }}
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         env:
           ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
         with:
@@ -357,7 +367,7 @@ jobs:
           cat new_failures_with_bad_commit.json
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: new_failures_with_bad_commit_${{ inputs.job }}
           path: |
@@ -375,7 +385,7 @@ jobs:
 
       - name: Send processed report
         if: ${{ !endsWith(env.REPORT_TEXT, '{}') }}
-        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
+        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c
         with:
           # Slack channel id, channel name, or user id to post message.
           # See also: https://api.slack.com/methods/chat.postMessage#channels

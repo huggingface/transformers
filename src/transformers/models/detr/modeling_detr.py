@@ -318,7 +318,37 @@ class DetrSinePositionEmbedding(nn.Module):
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=1)
+    def build_sine_position_embedding(
+        shape: torch.Size,
+        device: torch.device | str,
+        dtype: torch.dtype,
+        num_position_features: int,
+        normalize: bool = False,
+        scale: float | None = None,
+        temperature: int = 10000,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if mask is None:
+            mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+        y_embed = mask.cumsum(1, dtype=dtype)
+        x_embed = mask.cumsum(2, dtype=dtype)
+        if normalize:
+            eps = 1e-6
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
+
+        dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
+
+        pos_x = x_embed[:, :, :, None] / dim_t
+        pos_y = y_embed[:, :, :, None] / dim_t
+        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
+        return pos
+
     def forward(
         self,
         shape: torch.Size,
@@ -326,27 +356,9 @@ class DetrSinePositionEmbedding(nn.Module):
         dtype: torch.dtype,
         mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        y_embed = mask.cumsum(1, dtype=dtype)
-        x_embed = mask.cumsum(2, dtype=dtype)
-        if self.normalize:
-            eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
-
-        dim_t = torch.arange(self.num_position_features, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_position_features)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
-        # expected by the encoder
-        pos = pos.flatten(2).permute(0, 2, 1)
-        return pos
+        return self.build_sine_position_embedding(
+            shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
+        )
 
 
 class DetrLearnedPositionEmbedding(nn.Module):
@@ -376,9 +388,6 @@ class DetrLearnedPositionEmbedding(nn.Module):
         pos = pos.permute(2, 0, 1)
         pos = pos.unsqueeze(0)
         pos = pos.repeat(shape[0], 1, 1, 1)
-        # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
-        # expected by the encoder
-        pos = pos.flatten(2).permute(0, 2, 1)
         return pos
 
 
@@ -1202,11 +1211,12 @@ class DetrModel(DetrPreTrainedModel):
             feature_map, mask = vision_features[-1]
 
             # Apply 1x1 conv to map (batch_size, C, H, W) -> (batch_size, hidden_size, H, W), then flatten to (batch_size, HW, hidden_size)
-            # Position embeddings are already flattened to (batch_size, sequence_length, hidden_size) format
             projected_feature_map = self.input_projection(feature_map)
-            flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
-            spatial_position_embeddings = self.position_embedding(
-                shape=feature_map.shape, device=device, dtype=pixel_values.dtype, mask=mask
+            flattened_features = projected_feature_map.flatten(2).transpose(1, 2)
+            spatial_position_embeddings = (
+                self.position_embedding(shape=feature_map.shape, device=device, dtype=pixel_values.dtype, mask=mask)
+                .flatten(2)
+                .transpose(1, 2)
             )
             flattened_mask = mask.flatten(1)
         else:
@@ -1218,10 +1228,14 @@ class DetrModel(DetrPreTrainedModel):
             seq_len = inputs_embeds.shape[1]
             feat_dim = int(seq_len**0.5)
             # Create position embeddings for the inferred spatial size
-            spatial_position_embeddings = self.position_embedding(
-                shape=torch.Size([batch_size, self.config.d_model, feat_dim, feat_dim]),
-                device=device,
-                dtype=inputs_embeds.dtype,
+            spatial_position_embeddings = (
+                self.position_embedding(
+                    shape=torch.Size([batch_size, self.config.d_model, feat_dim, feat_dim]),
+                    device=device,
+                    dtype=inputs_embeds.dtype,
+                )
+                .flatten(2)
+                .transpose(1, 2)
             )
             # If a pixel_mask is provided with inputs_embeds, interpolate it to feat_dim, then flatten.
             if pixel_mask is not None:
@@ -1540,9 +1554,13 @@ class DetrForSegmentation(DetrPreTrainedModel):
 
         # Apply 1x1 conv to map (batch_size, C, H, W) -> (batch_size, hidden_size, H, W), then flatten to (batch_size, HW, hidden_size)
         projected_feature_map = self.detr.model.input_projection(feature_map)
-        flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
-        spatial_position_embeddings = self.detr.model.position_embedding(
-            shape=feature_map.shape, device=device, dtype=pixel_values.dtype, mask=mask
+        flattened_features = projected_feature_map.flatten(2).transpose(1, 2)
+        spatial_position_embeddings = (
+            self.detr.model.position_embedding(
+                shape=feature_map.shape, device=device, dtype=pixel_values.dtype, mask=mask
+            )
+            .flatten(2)
+            .transpose(1, 2)
         )
         flattened_mask = mask.flatten(1)
 
@@ -1580,9 +1598,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
         pred_boxes = self.detr.bbox_predictor(sequence_output).sigmoid()
 
         height, width = feature_map.shape[-2:]
-        memory = encoder_outputs.last_hidden_state.permute(0, 2, 1).view(
-            batch_size, self.config.d_model, height, width
-        )
+        memory = encoder_outputs.last_hidden_state.transpose(1, 2).view(batch_size, self.config.d_model, height, width)
         attention_mask = flattened_mask.view(batch_size, height, width)
 
         if attention_mask is not None:

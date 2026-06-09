@@ -19,7 +19,6 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -78,10 +77,12 @@ def apply_rotary_pos_emb(
     unsqueeze_dim: int = 1,
 ) -> torch.Tensor:
     """
-    Applies Rotary Position Embedding to a single tensor.
+    Applies Rotary Position Embedding to a single tensor (query, key, or the indexer's q/k stream).
 
-    This is the transformers equivalent of DeepSeek V3.2's `apply_rotary_emb(x, freqs_cis, interleaved)`.
-    Instead of using complex-number `freqs_cis`, we use pre-split `(cos, sin)` tensors from RotaryEmbedding.
+    This is the transformers equivalent of DeepSeek V3.2's `apply_rotary_emb(x, freqs_cis, interleaved=True)`.
+    Instead of complex-number `freqs_cis`, we use pre-split `(cos, sin)` tensors from RotaryEmbedding.
+    Rotary pairs are always interpreted as adjacent elements (GPT-J style), so we first de-interleave `x` into
+    halves before applying the standard `rotate_half`.
 
     Args:
         x (`torch.Tensor`): Input tensor of shape `[..., head_dim]`.
@@ -95,11 +96,9 @@ def apply_rotary_pos_emb(
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
-
-    # Split-half (NeoX/Llama style): (x[:d/2], x[d/2:])
-    # This matches llama's apply_rotary_pos_emb logic.
-    x_rotated = (x * cos) + (rotate_half(x) * sin)
-    return x_rotated
+    *leading_dims, head_dim = x.shape
+    x = x.view(*leading_dims, head_dim // 2, 2).transpose(-1, -2).reshape(*leading_dims, head_dim)
+    return (x * cos) + (rotate_half(x) * sin)
 
 
 class GlmMoeDsaIndexer(nn.Module):
@@ -107,8 +106,8 @@ class GlmMoeDsaIndexer(nn.Module):
     DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
 
     The Indexer has its own lightweight projections (wq_b, wk) separate from the
-    main MLA attention. It uses non-interleaved (NeoX/Llama) RoPE, unlike the main attention
-    which uses interleaved RoPE.
+    main MLA attention. RoPE uses the same interleaved pair layout as main MLA
+    attention.
 
     **Cache strategy**: The Indexer manages its own key cache (`_cached_keys`) separately
     from the DynamicCache used by MLA attention, since DynamicCache is sized for exactly
@@ -282,6 +281,9 @@ class GlmMoeDsaAttention(nn.Module):
     and SDPA backends. The reference's compressed-cache decode path (which avoids the kv_b_proj
     expansion at decode time) is a future optimization that would require a dedicated MLA cache class.
 
+    **DSA layer sharing**: full layers run the indexer; shared layers reuse the previous full
+    layer's top-k indices (`skip_topk` / `next_skip_topk`, derived from `config.indexer_types`).
+
     **FP8 compatibility**: all weight accesses use standard nn.Linear forward calls (never
     raw `.weight` access), so FP8-quantized checkpoints work transparently.
     """
@@ -333,15 +335,15 @@ class GlmMoeDsaAttention(nn.Module):
 
         self.scaling = self.qk_head_dim ** (-0.5)
 
-        self.indexer = GlmMoeDsaIndexer(config, layer_idx)
-
         # Refer: https://arxiv.org/abs/2603.12201 for more details.
-        # skip_topk: when True, this layer will skip computation and reuse previous layer's topk indices.
-        # next_skip_topk: when True, the next layer will skip computation and reuse this layer's topk indices.
+        # skip_topk: when True, this layer reuses the previous full indexer layer's top-k indices.
+        # next_skip_topk: when True, the next layer reuses this layer's top-k indices.
+        # Shared layers have no indexer of their own.
         self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.next_skip_topk = (
             config.indexer_types[layer_idx + 1] == "shared" if layer_idx < len(config.indexer_types) - 1 else False
         )
+        self.indexer = None if self.skip_topk else GlmMoeDsaIndexer(config, layer_idx)
 
     def forward(
         self,
@@ -365,7 +367,6 @@ class GlmMoeDsaAttention(nn.Module):
         query_states = query_states.view(batch_size, seq_length, -1, self.qk_head_dim).transpose(1, 2)
         # Split nope/rope, apply RoPE, recombine — layout: [B, H, S, D]
         q_nope, q_pe = torch.split(query_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
-        q_pe = apply_rotary_pos_emb(q_pe, cos, sin, unsqueeze_dim=1)  # BHSD format
 
         # ===== KV path =====
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)  # [B, S, kv_rank + rope_D]
@@ -379,9 +380,10 @@ class GlmMoeDsaAttention(nn.Module):
         k_nope = k_nope.transpose(1, 2)  # [B, H, S, nope_D]
         value_states = value_states.transpose(1, 2)  # [B, H, S, v_D]
 
-        # RoPE on k_pe (single-head rope stream)
+        # RoPE on q_pe / k_pe (single-head rope stream for k), using interleaved pair layout.
         k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)  # [B, 1, S, rope_D]
-        k_pe = apply_rotary_pos_emb(k_pe, cos, sin, unsqueeze_dim=1)  # BHSD format
+        q_pe = apply_rotary_pos_emb(q_pe, cos, sin, unsqueeze_dim=1)
+        k_pe = apply_rotary_pos_emb(k_pe, cos, sin, unsqueeze_dim=1)
         k_pe = k_pe.expand(-1, k_nope.shape[1], -1, -1)  # [B, H, S, rope_D]
 
         # Assemble full Q and K
@@ -395,6 +397,8 @@ class GlmMoeDsaAttention(nn.Module):
         # ===== Indexer (DSA sparse mask) =====
         # attention_mask is [B, 1, S, T] (4D) for eager and (2D) otherwise but indexer works with [B, S, T] (3D)
         if not self.skip_topk or prev_topk_indices is None:
+            if self.indexer is None:
+                raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
             indexer_mask = (
                 attention_mask[:, 0, :, :]
                 if attention_mask is not None and attention_mask.dim() == 4
@@ -697,7 +701,7 @@ class GlmMoeDsaRotaryEmbedding(nn.Module):
     @staticmethod
     def compute_default_rope_parameters(
         config: GlmMoeDsaConfig | None = None,
-        device: Optional["torch.device"] = None,
+        device=None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
         """
@@ -714,15 +718,14 @@ class GlmMoeDsaRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        dim = int(head_dim * partial_rotary_factor)
+        head_dim = config.qk_rope_head_dim
+        attention_factor = 1.0
 
-        attention_factor = 1.0  # Unused in this type of RoPE
+        if head_dim == 0:
+            return torch.empty(0, device=device), attention_factor
 
-        # Compute the inverse frequencies
         inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+            base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / head_dim)
         )
         return inv_freq, attention_factor
 

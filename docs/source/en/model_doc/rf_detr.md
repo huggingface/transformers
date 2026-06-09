@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-04-05 and added to Hugging Face Transformers on 2026-05-07.*
+*This model was published in HF papers on 2024-07-24 and contributed to Hugging Face Transformers on 2026-05-07.*
 
 <div style="float: right;">
  <div class="flex flex-wrap space-x-1">
@@ -108,12 +108,13 @@ for result in results:
 You can use the [supervision](https://github.com/roboflow/supervision) library to visualize detection and segmentation results. Install it with `pip install supervision`.
 
 <hfoptions id="supervision">
-<hfoption id="Object detection">
+<hfoption id="Object Detection">
 
 ```python
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 from PIL import Image
 import supervision as sv
+
 import httpx
 from io import BytesIO
 import torch
@@ -205,6 +206,13 @@ sv.plot_image(annotated_image)
 ## RfDetrDinov2Config
 
 [[autodoc]] RfDetrDinov2Config
+
+## RfDetrImageProcessor
+
+[[autodoc]] RfDetrImageProcessor
+    - preprocess
+    - post_process_object_detection
+    - post_process_instance_segmentation
 
 ## RfDetrModel
 

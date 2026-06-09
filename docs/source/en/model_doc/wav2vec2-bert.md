@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-11-30 and added to Hugging Face Transformers on 2024-01-18.*
+*This model was published in HF papers on 2023-12-08 and contributed to Hugging Face Transformers on 2024-01-18.*
 
 # Wav2Vec2-BERT
 
