@@ -19,7 +19,7 @@
 # limitations under the License.
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Optional
 
@@ -406,8 +406,13 @@ class EomtDinov3RotaryEmbedding(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = pixel_values.shape
-        num_patches_h = height // self.config.patch_size
-        num_patches_w = width // self.config.patch_size
+        patch_height, patch_width = (
+            self.config.patch_size
+            if isinstance(self.config.patch_size, Iterable)
+            else (self.config.patch_size, self.config.patch_size)
+        )
+        num_patches_h = height // patch_height
+        num_patches_w = width // patch_width
 
         device = pixel_values.device
         device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"

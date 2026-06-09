@@ -278,21 +278,27 @@ class Sapiens2RopePositionEmbedding(nn.Module):
         self.config = config
         self.base = config.rope_theta
         self.head_dim = config.hidden_size // config.num_attention_heads
+        image_height, image_width = (
+            config.image_size if isinstance(config.image_size, Iterable) else (config.image_size, config.image_size)
+        )
+        patch_height, patch_width = (
+            config.patch_size if isinstance(config.patch_size, Iterable) else (config.patch_size, config.patch_size)
+        )
+        self.num_patches_h = image_height // patch_height
+        self.num_patches_w = image_width // patch_width
 
         inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        image_size = config.image_size
-        image_h, image_w = image_size if isinstance(image_size, Iterable) else (image_size, image_size)
-        patch_size = config.patch_size
-        patch_size_h = patch_size if isinstance(patch_size, int) else patch_size[0]
-        patch_size_w = patch_size if isinstance(patch_size, int) else patch_size[1]
-        self.num_patches_h = image_h // patch_size_h
-        self.num_patches_w = image_w // patch_size_w
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = pixel_values.shape
-        num_patches_h = height // self.config.patch_size
-        num_patches_w = width // self.config.patch_size
+        patch_height, patch_width = (
+            self.config.patch_size
+            if isinstance(self.config.patch_size, Iterable)
+            else (self.config.patch_size, self.config.patch_size)
+        )
+        num_patches_h = height // patch_height
+        num_patches_w = width // patch_width
 
         device = pixel_values.device
         device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
@@ -850,15 +856,11 @@ class Sapiens2Encoder(Sapiens2PreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        output_hidden_states: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        all_hidden_states = (hidden_states,) if output_hidden_states else None
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states, position_embeddings=position_embeddings, **kwargs)
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -967,8 +969,10 @@ class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_state = self.embeddings(pixel_values)
         position_embeddings = self.rope_embeddings(pixel_values)
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
-        stage_hidden_states = self.model(hidden_state, position_embeddings, **kwargs).hidden_states
+        stage_hidden_states = (hidden_state,)
+        for layer in self.model.layer:
+            hidden_state = layer(hidden_state, position_embeddings=position_embeddings, **kwargs)
+            stage_hidden_states = stage_hidden_states + (hidden_state,)
 
         batch_size, _, image_height, image_width = pixel_values.shape
         patch_size = self.config.patch_size

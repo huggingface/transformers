@@ -789,13 +789,10 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        embedding_output = self.embeddings(pixel_values)
-        # Iterate the layer ModuleList directly to collect per-stage hidden_states inline
-        # for window-aware feature_maps. @capture_outputs handles injection into the
-        # returned BackboneOutput.
+        embedding_output = self.rf_detr_dinov2.embeddings(pixel_values)
         hidden_state = embedding_output
         hidden_states = (hidden_state,)
-        for layer in self.encoder.layer:
+        for layer in self.rf_detr_dinov2.encoder.layer:
             hidden_state = layer(hidden_state, **kwargs)
             hidden_states = hidden_states + (hidden_state,)
 
@@ -803,7 +800,7 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
                 if self.config.apply_layernorm:
-                    hidden_state = self.layernorm(hidden_state)
+                    hidden_state = self.rf_detr_dinov2.layernorm(hidden_state)
                 if self.config.reshape_hidden_states:
                     hidden_state = hidden_state[:, 1:]
                     # this was actually a bug in the original implementation that we copied here,

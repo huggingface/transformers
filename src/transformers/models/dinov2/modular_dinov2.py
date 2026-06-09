@@ -56,9 +56,19 @@ class Dinov2Embeddings(nn.Module):
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing and interpolation at torch.float32 precision.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+
         num_patches = embeddings.shape[1] - 1
         num_positions = self.position_embeddings.shape[1] - 1
 
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
             return self.position_embeddings
 
@@ -212,15 +222,11 @@ class Dinov2Encoder(Dinov2PreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        output_hidden_states: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        all_hidden_states = (hidden_states,) if output_hidden_states else None
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states, attention_mask, **kwargs)
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -324,22 +330,18 @@ class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
-        self.embeddings = Dinov2Embeddings(config)
-        self.encoder = Dinov2Encoder(config)
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dinov2 = Dinov2Model(config)
         self.post_init()
 
     def get_input_embeddings(self) -> Dinov2PatchEmbeddings:
-        return self.embeddings.patch_embeddings
+        return self.dinov2.embeddings.patch_embeddings
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
         r"""
@@ -368,21 +370,14 @@ class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        embedding_output = self.embeddings(pixel_values)
-        attention_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=embedding_output,
-            attention_mask=attention_mask,
-        )
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
-        outputs: BaseModelOutput = self.encoder(embedding_output, attention_mask=attention_mask, **kwargs)
-        hidden_states = outputs.hidden_states
+        kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
+        outputs: BaseModelOutputWithPooling = self.dinov2(pixel_values, **kwargs)
 
-        feature_maps = []
-        for stage, hidden_state in zip(self.stage_names, hidden_states):
+        feature_maps = ()
+        for stage, hidden_state in zip(self.stage_names, outputs.hidden_states):
             if stage in self.out_features:
                 if self.config.apply_layernorm:
-                    hidden_state = self.layernorm(hidden_state)
+                    hidden_state = self.dinov2.layernorm(hidden_state)
                 if self.config.reshape_hidden_states:
                     hidden_state = hidden_state[:, 1:]
                     # this was actually a bug in the original implementation that we copied here,
@@ -391,9 +386,13 @@ class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
                     patch_size = self.config.patch_size
                     hidden_state = hidden_state.reshape(batch_size, height // patch_size, width // patch_size, -1)
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
-                feature_maps.append(hidden_state)
+                feature_maps += (hidden_state,)
 
-        return BackboneOutput(feature_maps=tuple(feature_maps))
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 __all__ = ["Dinov2ForImageClassification", "Dinov2Model", "Dinov2PreTrainedModel", "Dinov2Backbone"]
