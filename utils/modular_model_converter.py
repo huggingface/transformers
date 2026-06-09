@@ -686,11 +686,15 @@ class ModuleMapper(CSTVisitor, ABC):
         # now sort the class dependency_mapping based on the position of the nodes
         self.start_lines = {node_name: self._node_order[node_name] for node_name in self.global_nodes}
 
-    def _restrict_dependencies_to_known_entities(self):
+    def _restrict_dependencies_to_known_entities(self, extra_known_objects: set[str] | None = None):
         """Since we added every Name as part of `self.object_dependency_mapping`, we need to remove those that
         are not part of the recorded objects in `self.global_nodes` (i.e. built-in variables, imports, etc).
-        This should be called only after all merging operations have been finalized!!"""
+        `extra_known_objects` lets callers keep edges towards names that are not yet in `self.global_nodes` but
+        will be merged in later (e.g. functions imported from a sibling modeling file). This should be called
+        only after all merging operations have been finalized!!"""
         global_objects = set(self.global_nodes.keys())
+        if extra_known_objects is not None:
+            global_objects |= extra_known_objects
         for object_name, dependencies in self.object_dependency_mapping.items():
             self.object_dependency_mapping[object_name] = {dep for dep in dependencies if dep in global_objects}
 
@@ -872,7 +876,9 @@ class ModelFileMapper(ModuleMapper):
             }
         )
 
-    def merge_modular_dependencies(self, classes, functions, assignments, object_mapping, start_lines):
+    def merge_modular_dependencies(
+        self, classes, functions, assignments, object_mapping, start_lines, model_specific_objects=None
+    ):
         """Merge classes, functions and assignments from the modular definitions into the current module file,
         then record the relative order of all nodes.
         Note: This function takes care of updating `global_nodes` and `object_recursive_dependency_mapping` as well after the
@@ -883,19 +889,24 @@ class ModelFileMapper(ModuleMapper):
         self._merge_classes(classes)
         self.modular_file_start_lines = start_lines
 
-        # Restrict the dependency mappings to the known entities to avoid Python's built-ins and imports
-        self._restrict_dependencies_to_known_entities()
+        # Restrict the dependency mappings to the known entities to avoid Python's built-ins and imports. We keep
+        # edges towards model-specific imported objects (e.g. a helper imported from a sibling modeling file): they
+        # are not in `global_nodes` yet, but will be merged in by `merge_model_specific_imports`, and a modular
+        # function may depend on them transitively.
+        self._restrict_dependencies_to_known_entities(model_specific_objects)
         # Create the global mapping of recursive dependencies for functions and assignments
         self.object_recursive_dependency_mapping = self._compute_recursive_object_dependencies()
 
     @classmethod
     def visit_and_merge_dependencies(
-        cls, module: cst.Module, classes, functions, assignments, object_mapping, start_lines
+        cls, module: cst.Module, classes, functions, assignments, object_mapping, start_lines, model_specific_objects=None
     ) -> "ModelFileMapper":
         mapper = cls(module)
         module.visit(mapper)
         # Merge dependencies
-        mapper.merge_modular_dependencies(classes, functions, assignments, object_mapping, start_lines)
+        mapper.merge_modular_dependencies(
+            classes, functions, assignments, object_mapping, start_lines, model_specific_objects
+        )
         # Create the class dependencies graph
         mapper.compute_class_dependencies()
         return mapper
@@ -1538,6 +1549,7 @@ class ModularFileMapper(ModuleMapper):
                 self.assignments,
                 self.object_dependency_mapping,
                 self.start_lines,
+                set(self.model_specific_imported_objects.keys()),
             )
             # We record it so that we can rename classes later the exact same way
             self.renamers[file] = renamer
