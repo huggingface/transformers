@@ -21,6 +21,8 @@ import tempfile
 import types
 from unittest.mock import MagicMock, patch
 
+import torch
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
 from transformers.integrations.hub_kernels import (
     _HUB_KERNEL_MAPPING,
@@ -31,6 +33,7 @@ from transformers.integrations.hub_kernels import (
 )
 from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+from transformers.monkey_patching import clear_patch_mapping, get_patch_mapping, register_patch_mapping
 from transformers.testing_utils import (
     TestCasePlus,
     cleanup,
@@ -87,7 +90,14 @@ class TestHubKernels(TestCasePlus):
         except Exception as e:
             print(f"Could not clear kernel module cache: {e}")
 
+    def setUp(self):
+        self._pre_test_patch_mapping = get_patch_mapping()
+
     def tearDown(self):
+        # Restore monkey patch state to avoid leaking kernel patches across tests.
+        clear_patch_mapping()
+        if self._pre_test_patch_mapping:
+            register_patch_mapping(self._pre_test_patch_mapping)
         # Free accelerator memory/cache and trigger GC
         cleanup(torch_device, gc_collect=True)
 
@@ -207,6 +217,107 @@ class TestHubKernels(TestCasePlus):
 
         del model
 
+    @require_torch_accelerator
+    def test_kernel_fusion(self):
+        model_id = "michaelbenayoun/qwen3-tiny-4kv-heads-4layers-random"
+        kernel_config = KernelConfig(
+            {
+                (
+                    ("RMSNorm", "model.layers.*.post_attention_layernorm"),
+                    ("MLP", "model.layers.*.mlp"),
+                ): "michaelbenayoun/dummy-rmsnorm-mlp-with-transformations-and-init:RMSNormMLP",
+            }
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer("Hello, how are you?", return_tensors="pt")
+
+        baseline = AutoModelForCausalLM.from_pretrained(model_id, use_kernels=True, device_map=torch_device)
+        baseline.eval()
+        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
+        with torch.no_grad():
+            baseline_out = baseline(**inputs).logits
+        del baseline
+
+        fused = AutoModelForCausalLM.from_pretrained(
+            model_id, use_kernels=True, kernel_config=kernel_config, device_map=torch_device
+        )
+        fused.eval()
+        with torch.no_grad():
+            fused_out = fused(**inputs).logits
+
+        torch.testing.assert_close(baseline_out, fused_out, atol=1e-4, rtol=1e-4)
+
+        decoder_layers = [
+            (name, m)
+            for name, m in fused.named_modules()
+            if hasattr(m, "post_attention_layernorm") and hasattr(m, "mlp")
+        ]
+        self.assertTrue(len(decoder_layers) > 0, "No decoder layers found")
+        for name, layer in decoder_layers:
+            self.assertIsInstance(
+                layer.mlp,
+                torch.nn.Identity,
+                f"{name}.mlp should be nn.Identity after fusion",
+            )
+            self.assertTrue(
+                hasattr(layer.post_attention_layernorm, "kernel_layer_name")
+                or hasattr(type(layer.post_attention_layernorm), "kernel_layer_name"),
+                f"{name}.post_attention_layernorm should carry kernel_layer_name after fusion",
+            )
+
+        del fused
+
+    @require_torch_accelerator
+    def test_kernel_replacement_with_layout(self):
+        model_id = "michaelbenayoun/qwen3-tiny-4kv-heads-4layers-random"
+        kernel_config = KernelConfig({"RMSNorm": "michaelbenayoun/dummy-rmsnorm-kernel-with-init:CustomRMSNorm"})
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer("Hello, how are you?", return_tensors="pt")
+
+        baseline = AutoModelForCausalLM.from_pretrained(model_id, use_kernels=True, device_map=torch_device)
+        baseline.eval()
+        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
+        original_rmsnorm_cls = type(next(m for m in baseline.modules() if "RMSNorm" in type(m).__name__))
+        with torch.no_grad():
+            baseline_out = baseline(**inputs).logits
+        del baseline
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, use_kernels=True, kernel_config=kernel_config, device_map=torch_device
+        )
+        model.eval()
+        with torch.no_grad():
+            model_out = model(**inputs).logits
+
+        torch.testing.assert_close(baseline_out, model_out, atol=1e-4, rtol=1e-4)
+
+        replaced = [m for m in model.modules() if hasattr(type(m), "kernel_layer_name")]
+        self.assertTrue(len(replaced) > 0, "No replaced kernel layout modules found")
+        for m in replaced:
+            self.assertNotIsInstance(m, original_rmsnorm_cls)
+
+        del model
+
+    def test_faulty_fusion_incomplete_pattern(self):
+        model_id = "michaelbenayoun/qwen3-tiny-4kv-heads-4layers-random"
+        # "layers.*.post_attention_layernorm" is missing the leading "model." segment.
+        # re.fullmatch("layers.\w+", "model.layers.0") returns None, so no module
+        # is ever matched and the function raises ValueError.
+        kernel_config = KernelConfig(
+            {
+                (
+                    ("RMSNorm", "layers.*.post_attention_layernorm"),
+                    ("MLP", "layers.*.mlp"),
+                ): "michaelbenayoun/dummy-rmsnorm-mlp-with-transformations-and-init:RMSNormMLP",
+            }
+        )
+        with self.assertRaises(ValueError):
+            _ = AutoModelForCausalLM.from_pretrained(
+                model_id, use_kernels=True, kernel_config=kernel_config, device_map=torch_device
+            )
+
     def test_faulty_kernel_mapping_layer_name(self):
         kernel_config = KernelConfig(kernel_mapping={"RMSNorm1": "kernels-community/layer_norm:LlamaRMSNorm"})
         with self.assertRaises(ValueError):
@@ -225,24 +336,24 @@ class TestHubKernels(TestCasePlus):
 @require_kernels
 class TestKernelsEnv(TestCasePlus):
     def test_disable_hub_kernels(self):
+        import importlib
+
+        from transformers.integrations import hub_kernels
+
         with patch.dict(os.environ, {"USE_HUB_KERNELS": "OFF"}):
-            import importlib
-
-            from transformers.integrations import hub_kernels
-
             importlib.reload(hub_kernels)
-
             self.assertFalse(hub_kernels._kernels_enabled)
+        importlib.reload(hub_kernels)
 
     def test_enable_hub_kernels(self):
+        import importlib
+
+        from transformers.integrations import hub_kernels
+
         with patch.dict(os.environ, {"USE_HUB_KERNELS": "ON"}):
-            import importlib
-
-            from transformers.integrations import hub_kernels
-
             importlib.reload(hub_kernels)
-
             self.assertTrue(hub_kernels._kernels_enabled)
+        importlib.reload(hub_kernels)
 
 
 @require_kernels
