@@ -189,7 +189,7 @@ class TransitionLayer(nn.Module):
         x = self.norm(x.float()).to(x.dtype)
         a = self.a_proj(x)
         b = self.b_proj(x)
-        return self.out_proj((F.silu(a.float()) * b.float()).to(a.dtype))
+        return self.out_proj(F.silu(a) * b)
 
 
 # ===========================================================================
@@ -212,9 +212,10 @@ class AdaptiveLayerNorm(nn.Module):
     def forward(self, a: Tensor, s: Tensor) -> Tensor:
         a_norm = F.layer_norm(a.float(), (self.d_model,), None, None, self.eps)
         s_norm = F.layer_norm(s.float(), (self.d_cond,), self.s_scale.float(), None, self.eps).to(s.dtype)
-        # gate/shift come from bf16 linears; do the gating + affine in fp32, downcast at the end.
-        gate = torch.sigmoid(self.s_gate(s_norm).float())
-        shift = self.s_shift(s_norm).float()
+        # gate/shift in bf16 (matches the reference's autocast); a_norm is fp32 so the
+        # affine promotes to fp32, then downcast for the next op.
+        gate = torch.sigmoid(self.s_gate(s_norm))
+        shift = self.s_shift(s_norm)
         return (gate * a_norm + shift).to(a.dtype)
 
 
@@ -266,7 +267,7 @@ class SwiGLU(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         x12 = self.w12(x)
         x1, x2 = x12.split(self.hidden_features, dim=-1)
-        hidden = (F.silu(x1.float()) * x2.float()).to(x1.dtype)
+        hidden = F.silu(x1) * x2
         return self.w3(hidden)
 
 
@@ -352,7 +353,7 @@ def build_3d_rope(
 
 
 def qk_norm(x: Tensor) -> Tensor:
-    return F.rms_norm(x.float(), (x.size(-1),)).to(x.dtype)
+    return F.rms_norm(x, (x.size(-1),))
 
 
 # ===========================================================================
@@ -372,7 +373,7 @@ class SwiGLUFFN(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         x = x.to(self.w_up.weight.dtype)
         x1, x2 = self.w_up(x).chunk(2, dim=-1)
-        return self.w_down((F.silu(x1.float()) * x2.float()).to(x1.dtype))
+        return self.w_down(F.silu(x1) * x2)
 
 
 # ===========================================================================
@@ -528,7 +529,7 @@ class SWA3DRoPEAttention(nn.Module):
             out = out * valid.unsqueeze(-1).unsqueeze(-1)
 
         out = out.to(input_dtype).reshape(B, N, -1)
-        out = (out.float() * torch.sigmoid(self.gate_proj(x_input).float())).to(input_dtype)
+        out = out * torch.sigmoid(self.gate_proj(x_input))
         return self.out_proj(out)
 
 
@@ -538,11 +539,11 @@ class SWA3DRoPEAttention(nn.Module):
 
 
 def _rms_adaln(x: Tensor, scale: Tensor, shift: Tensor) -> Tensor:
-    return (F.rms_norm(x.float(), (x.shape[-1],)) * (1 + scale.float()) + shift.float()).to(x.dtype)
+    return F.rms_norm(x, (x.shape[-1],)) * (1 + scale) + shift
 
 
 def _gated_residual(x: Tensor, gate: Tensor, y: Tensor) -> Tensor:
-    return (x.float() + gate.float() * y.float()).to(x.dtype)
+    return x + gate * y
 
 
 class SWAAtomBlock(nn.Module):
@@ -943,7 +944,7 @@ class AttentionPairBias(nn.Module):
             attention_mask = attention_mask.repeat_interleave(num_diffusion_samples, dim=0)
 
         # Standard attention with pair bias
-        g = torch.sigmoid(self.g_proj(x).float()).view(bsz, n_queries, self.num_heads, self.head_dim)
+        g = torch.sigmoid(self.g_proj(x)).view(bsz, n_queries, self.num_heads, self.head_dim)
 
         logits = torch.einsum("... i h d, ... j h d -> ... i j h", q, k) * self.scale
 
@@ -960,11 +961,11 @@ class AttentionPairBias(nn.Module):
 
         attn = torch.softmax(logits, dim=-2, dtype=torch.float32).to(dtype=v.dtype)
         ctx = torch.einsum("... i j h, ... j h d -> ... i h d", attn, v)
-        ctx = g * ctx.float()
+        ctx = g * ctx
         out = self.out_proj(ctx.reshape(bsz, n_queries, d_model).to(v.dtype))
 
         if s is not None:
-            out = (torch.sigmoid(self.out_gate(s).float()) * out.float()).to(out.dtype)
+            out = torch.sigmoid(self.out_gate(s)) * out
         return out
 
 
@@ -1005,11 +1006,11 @@ class ConditionedTransitionBlock(nn.Module):
             x = self.pre_norm(a.float()).to(a.dtype)
 
         swish_a, swish_b = self.lin_swish(x).chunk(2, dim=-1)
-        b = (F.silu(swish_a.float()) * swish_b.float()).to(swish_a.dtype)
+        b = F.silu(swish_a) * swish_b
         out = self.lin_out(b)
 
         if s is not None:
-            out = (torch.sigmoid(self.output_gate(s).float()) * out.float()).to(out.dtype)
+            out = torch.sigmoid(self.output_gate(s)) * out
         return out
 
 
@@ -2266,7 +2267,7 @@ class MSAPairWeightedAveraging(nn.Module):
         attn = torch.softmax(bias, dim=-2, dtype=torch.float32).to(bias.dtype)  # softmax over j
 
         v = self.Wv(msa_normed).reshape(B, L, M, h, dh)
-        gate = torch.sigmoid(self.Wgate(msa_normed).float()).to(msa_normed.dtype).reshape(B, L, M, h, dh)
+        gate = torch.sigmoid(self.Wgate(msa_normed)).reshape(B, L, M, h, dh)
 
         output = torch.einsum("bijh,bjmhd,bimhd->bimhd", attn, v, gate)
         return self.Wout(output.reshape(B, L, M, h * dh))
