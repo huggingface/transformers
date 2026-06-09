@@ -232,30 +232,15 @@ def _swiglu_hidden_dim(expansion_ratio: float, d_model: int) -> int:
     return int(((expansion_ratio * d_model) + 255) // 256 * 256)
 
 
-class _Fp32LayerNorm(nn.LayerNorm):
-    """LayerNorm whose normalisation is always computed in fp32, then cast back
-    to the input dtype.
-
-    This matches the reference ESMC numerics: the original model runs its
-    LayerNorms in fp32 (under a bf16 autocast), never in bf16. We reproduce that
-    explicitly so the result is independent of any surrounding autocast and is a
-    no-op in fp32 (every cast below is identity when ``x`` is already fp32). The
-    norm *weights* are kept fp32 on a bf16 standalone load via
-    ``_keep_in_fp32_modules_strict``; inside ESMFold2 they are bf16-rounded to
-    match the trained checkpoint and upcast here for the fp32 maths.
-    """
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        weight = self.weight.float() if self.weight is not None else None
-        bias = self.bias.float() if self.bias is not None else None
-        return F.layer_norm(x.float(), self.normalized_shape, weight, bias, self.eps).to(x.dtype)
-
-
 class _PyTorchLayerNormLinear(nn.Module):
-    """LayerNorm (computed in fp32) followed by a Linear projection.
+    """LayerNorm followed by a Linear projection.
 
     Parameters are named ``layer_norm_weight``, ``layer_norm_bias`` and
-    ``weight`` to match the published ESMC checkpoint layout.
+    ``weight`` to match the published ESMC checkpoint layout. The LayerNorm runs
+    in the activation dtype (plain ``F.layer_norm``) exactly like the reference:
+    standalone bf16 → bf16 norm; inside ESMFold2 the backbone is wrapped in a
+    bf16 autocast (matching the fork's ``_lm_precision_context``), so the norm
+    then computes in fp32. A no-op in fp32.
     """
 
     def __init__(self, d_in: int, d_out: int, eps: float = 1e-5) -> None:
@@ -268,10 +253,7 @@ class _PyTorchLayerNormLinear(nn.Module):
         nn.init.normal_(self.weight, std=0.02)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Norm in fp32 (matches the reference), then the projection in x's dtype.
-        x = F.layer_norm(
-            x.float(), (self.d_in,), self.layer_norm_weight.float(), self.layer_norm_bias.float(), self.eps
-        ).to(x.dtype)
+        x = F.layer_norm(x, (self.d_in,), self.layer_norm_weight, self.layer_norm_bias, self.eps)
         return F.linear(x, self.weight)
 
 
@@ -296,14 +278,13 @@ class _PyTorchLayerNormMLP(nn.Module):
         nn.init.normal_(self.fc2_weight, std=0.02)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Norm in fp32 (matches the reference), then the MLP in x's dtype.
         x = F.layer_norm(
-            x.float(),
+            x,
             (self.hidden_size,),
-            self.layer_norm_weight.float(),
-            self.layer_norm_bias.float(),
+            self.layer_norm_weight,
+            self.layer_norm_bias,
             self.eps,
-        ).to(x.dtype)
+        )
         x = F.linear(x, self.fc1_weight)
         x1, x2 = x.chunk(2, dim=-1)
         x = F.silu(x1) * x2
@@ -379,8 +360,8 @@ class MultiHeadAttention(nn.Module):
         self.out_proj = _make_attn_out_proj(d_model, bias)
 
         if qk_layernorm:
-            self.q_ln = _Fp32LayerNorm(d_model, bias=bias)
-            self.k_ln = _Fp32LayerNorm(d_model, bias=bias)
+            self.q_ln = nn.LayerNorm(d_model, bias=bias)
+            self.k_ln = nn.LayerNorm(d_model, bias=bias)
         else:
             self.q_ln = nn.Identity()
             self.k_ln = nn.Identity()
@@ -560,7 +541,7 @@ class TransformerStack(nn.Module):
                 for _ in range(n_layers)
             ]
         )
-        self.norm = _Fp32LayerNorm(d_model, bias=False)
+        self.norm = nn.LayerNorm(d_model, bias=False)
 
     def forward(
         self,
@@ -640,15 +621,6 @@ class ESMCPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _no_split_modules = ["UnifiedTransformerBlock"]
     _keys_to_ignore_on_load_unexpected = [r"\._extra_state$"]
-    # ESMC computes its LayerNorms in fp32 (see ``_Fp32LayerNorm``). When the
-    # model is loaded in bf16 standalone we also keep the norm *weights* in fp32
-    # (the standard Transformers idiom). These patterns match only the norm
-    # parameters — the fused ``layer_norm_weight``/``layer_norm_bias`` plus the
-    # ``q_ln``/``k_ln`` and final ``transformer.norm`` — never the projection
-    # weights in the same fused modules. (Inside ESMFold2 the backbone is loaded
-    # bf16 and the norms bf16-rounded to match the trained checkpoint; see
-    # ``ESMFold2Model.load_esmc``.)
-    _keep_in_fp32_modules_strict = ["layer_norm_weight", "layer_norm_bias", "q_ln", "k_ln", "transformer.norm"]
 
     def _init_weights(self, module: nn.Module):
         std = self.config.initializer_range
