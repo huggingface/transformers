@@ -175,7 +175,7 @@ class AfmoeIntegrationTest(unittest.TestCase):
         if tokenizer.pad_token_id is None:
             tokenizer.pad_token = tokenizer.eos_token
 
-        model = AfmoeForCausalLM.from_pretrained(checkpoint, device_map=torch_device, dtype=torch.float16)
+        model = AfmoeForCausalLM.from_pretrained(checkpoint, device_map=torch_device, dtype=torch.float32)
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         logger.warning("[DEBUG test_compile_static_cache] prompts=%s", prompts)
