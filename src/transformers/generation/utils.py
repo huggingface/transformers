@@ -1771,6 +1771,23 @@ class GenerationMixin(ContinuousMixin):
 
         return generation_config, model_kwargs
 
+    def _get_static_cache_init_shape(self: "GenerativePreTrainedModel") -> tuple[int, int] | None:
+        """
+        Returns the per-rank `(num_heads, head_dim)` to eagerly initialize a `StaticCache`, with the head count sharded
+        for tensor parallelism. Returns `None` when the cache cannot be initialized on a single device -- the model is
+        device-mapped across devices, or the head count does not shard evenly across TP ranks -- in which case it
+        should be lazily initialized instead.
+        """
+        if hasattr(self, "hf_device_map") and len(set(self.hf_device_map.values())) > 1:
+            return None
+        text_config = self.config.get_text_config(decoder=True)
+        tp_size = getattr(self, "_tp_size", None) or 1
+        num_key_value_heads = getattr(text_config, "num_key_value_heads", None) or text_config.num_attention_heads
+        if num_key_value_heads % tp_size != 0:
+            return None
+        head_dim = getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
+        return num_key_value_heads // tp_size, head_dim
+
     def _prepare_static_cache(
         self: "GenerativePreTrainedModel",
         cache_implementation: str,
@@ -1825,21 +1842,13 @@ class GenerationMixin(ContinuousMixin):
                 self._cache = EncoderDecoderCache(self._cache, StaticCache(**cross_attention_cache_kwargs))
             elif prefill_chunk_size is not None:
                 # Chunked prefill compiles the prefill, so eagerly init the fresh cache to avoid a recompile next call
-                # (#46421) -- only when single-device and the heads shard evenly across TP ranks (else lazy init).
-                text_config = self.config.get_text_config(decoder=True)
-                tp_size = getattr(self, "_tp_size", None) or 1
-                num_key_value_heads = (
-                    getattr(text_config, "num_key_value_heads", None) or text_config.num_attention_heads
-                )
-                device_mapped = hasattr(self, "hf_device_map") and len(set(self.hf_device_map.values())) > 1
-                if not device_mapped and num_key_value_heads % tp_size == 0:
-                    head_dim = (
-                        getattr(text_config, "head_dim", None)
-                        or text_config.hidden_size // text_config.num_attention_heads
-                    )
+                # (#46421). Skipped (-> lazy init) when it can't be initialized on a single device.
+                init_shape = self._get_static_cache_init_shape()
+                if init_shape is not None:
+                    num_heads, head_dim = init_shape
                     self._cache.early_initialization(
                         batch_size=batch_size,
-                        num_heads=num_key_value_heads // tp_size,
+                        num_heads=num_heads,
                         head_dim=head_dim,
                         dtype=self.dtype,
                         device=self.device,
