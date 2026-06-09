@@ -65,7 +65,7 @@ Define global constants, namely the model name and image size. This tutorial use
 The [mobile-ui-design dataset](https://huggingface.co/datasets/merve/mobile-ui-design) contains mobile app screenshots with
 annotations for detecting UI elements such as text, images, rectangles, and groups.
 
-Start by loading the dataset, extracting category labels, and creating a train/validation split:
+Start by loading the dataset and extracting category labels. The dataset is already has splits.
 
 ```py
 >>> from datasets import load_dataset
@@ -90,7 +90,7 @@ categories to integer ids, compute areas, and filter out degenerate bounding box
 ...     bboxes = objects["bbox"]
 ...     categories = objects["category"]
 ...     img_w, img_h = example["width"], example["height"]
-...     good_bboxes, good_cats, good_areas, good_ids = [], [], [], []
+...     bboxes, cats, areas, ids = [], [], [], []
 ...     for i, (bbox, cat) in enumerate(zip(bboxes, categories)):
 ...         x, y, w, h = bbox
 ...         if w <= 0 or h <= 0:
@@ -101,14 +101,14 @@ categories to integer ids, compute areas, and filter out degenerate bounding box
 ...         h = min(h, img_h - y)
 ...         if w <= 0 or h <= 0:
 ...             continue
-...         good_bboxes.append([x, y, w, h])
-...         good_cats.append(label2id[cat])
-...         good_areas.append(w * h)
-...         good_ids.append(i)
+...         bboxes.append([x, y, w, h])
+...         cats.append(label2id[cat])
+...         areas.append(w * h)
+...         ids.append(i)
 ...     return {
 ...         "image_id": idx, "image": example["image"],
 ...         "width": example["width"], "height": example["height"],
-...         "objects": {"id": good_ids, "bbox": good_bboxes, "category": good_cats, "area": good_areas},
+...         "objects": {"id": ids, "bbox": bboxes, "category": cats, "area": areas},
 ...     }
 
 >>> ds_prepared = ds["train"].map(prepare_example, with_indices=True, remove_columns=ds["train"].column_names)
