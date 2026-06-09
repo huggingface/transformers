@@ -316,6 +316,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/edgetam_video/test_modeling_edgetam_video.py",
     "models/gemma4_assistant/test_modeling_gemma4_assistant.py",
     "models/gemma4_unified_assistant/test_modeling_gemma4_unified_assistant.py",
+    "models/hunyuan_vl/test_modeling_hunyuan_vl.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
@@ -515,6 +516,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeTalkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen3OmniMoeTalkerModel",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
+    "HunYuanVLTextModel",  # Building part of bigger (tested) model.
     "Ernie4_5_VLMoeTextModel",  # Building part of a bigger model
     "PeAudioFrameLevelModel",
     "Ernie4_5_VL_MoeForConditionalGeneration",  # BC Alias

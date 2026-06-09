@@ -9,6 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was contributed to Hugging Face Transformers on 2026-06-09.*
 
 # HunYuanVL
 
@@ -106,12 +107,17 @@ print(output)
 
 [[autodoc]] HunYuanVLImageProcessor
 
-## HunYuanVLImageProcessorFast
+## HunYuanVLImageProcessorPil
 
-[[autodoc]] HunYuanVLImageProcessorFast
+[[autodoc]] HunYuanVLImageProcessorPil
 
 `HunYuanVLForConditionalGeneration` is the main public entrypoint for image-text generation. `HunYuanVLForCausalLM`
-exposes the text backbone directly and is mainly useful for lower-level text-only workflows.
+and `HunYuanVLTextModel` expose the text backbone and are mainly useful for lower-level text-only workflows.
+
+## HunYuanVLTextModel
+
+[[autodoc]] HunYuanVLTextModel
+    - forward
 
 ## HunYuanVLForCausalLM
 

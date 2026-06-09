@@ -191,7 +191,7 @@ class HunYuanVLImageProcessor(BaseImageProcessor):
                 if not is_torchvision_available():
                     raise ImportError(
                         "HunYuanVLImageProcessor requires torchvision when do_normalize=True. "
-                        "Install torchvision or use HunYuanVLImageProcessorFast instead."
+                        "Install torchvision or use HunYuanVLImageProcessorPil instead."
                     )
                 import torchvision.transforms as transforms
 

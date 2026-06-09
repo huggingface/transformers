@@ -12,17 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib.util
 import unittest
 
 from PIL import Image
 
 from transformers.models.hunyuan_vl.image_processing_hunyuan_vl import HunYuanVLImageProcessor
-from transformers.testing_utils import require_torch, require_torchvision
+from transformers.models.hunyuan_vl.image_processing_pil_hunyuan_vl import HunYuanVLImageProcessorPil
+from transformers.testing_utils import require_torchvision
 
 
+@require_torchvision
 class HunYuanVLImageProcessorTest(unittest.TestCase):
-    def test_slow_image_processor_outputs_image_only_inputs(self):
+    def test_torchvision_image_processor_outputs_image_only_inputs(self):
         processor = HunYuanVLImageProcessor(
             min_pixels=32 * 32,
             max_pixels=32 * 32,
@@ -38,20 +39,15 @@ class HunYuanVLImageProcessorTest(unittest.TestCase):
         self.assertEqual(inputs["image_grid_thw"].shape, (1, 3))
         self.assertGreater(inputs["pixel_values"].shape[0], 0)
 
-    def test_patch_count_contract_matches_fast_processor(self):
-        if importlib.util.find_spec("torchvision") is None:
-            self.skipTest("torchvision is required for fast image processor parity checks")
-
-        from transformers.models.hunyuan_vl.image_processing_hunyuan_vl_fast import HunYuanVLImageProcessorFast
-
-        slow_processor = HunYuanVLImageProcessor(
+    def test_patch_count_contract_matches_pil_processor(self):
+        torchvision_processor = HunYuanVLImageProcessor(
             min_pixels=32 * 32,
             max_pixels=64 * 64,
             patch_size=16,
             temporal_patch_size=1,
             merge_size=1,
         )
-        fast_processor = HunYuanVLImageProcessorFast(
+        pil_processor = HunYuanVLImageProcessorPil(
             min_pixels=32 * 32,
             max_pixels=64 * 64,
             patch_size=16,
@@ -61,18 +57,14 @@ class HunYuanVLImageProcessorTest(unittest.TestCase):
 
         image_kwargs = {"min_pixels": 32 * 32, "max_pixels": 64 * 64, "patch_size": 16, "merge_size": 1}
         self.assertEqual(
-            slow_processor.get_number_of_image_patches(32, 64, image_kwargs),
-            fast_processor.get_number_of_image_patches(32, 64, image_kwargs),
+            torchvision_processor.get_number_of_image_patches(32, 64, image_kwargs),
+            pil_processor.get_number_of_image_patches(32, 64, image_kwargs),
         )
 
 
-@require_torch
-@require_torchvision
-class HunYuanVLImageProcessorFastTest(unittest.TestCase):
-    def test_fast_image_processor_outputs_image_only_inputs(self):
-        from transformers.models.hunyuan_vl.image_processing_hunyuan_vl_fast import HunYuanVLImageProcessorFast
-
-        processor = HunYuanVLImageProcessorFast(
+class HunYuanVLImageProcessorPilTest(unittest.TestCase):
+    def test_pil_image_processor_outputs_image_only_inputs(self):
+        processor = HunYuanVLImageProcessorPil(
             min_pixels=32 * 32,
             max_pixels=32 * 32,
             patch_size=16,
@@ -81,8 +73,8 @@ class HunYuanVLImageProcessorFastTest(unittest.TestCase):
         )
         image = Image.new("RGB", (32, 32), color="white")
 
-        inputs = processor(images=[image], return_tensors="pt")
+        inputs = processor(images=[image], return_tensors="np")
 
         self.assertSetEqual(set(inputs.keys()), {"pixel_values", "image_grid_thw"})
-        self.assertEqual(tuple(inputs["image_grid_thw"].shape), (1, 3))
+        self.assertEqual(inputs["image_grid_thw"].shape, (1, 3))
         self.assertGreater(inputs["pixel_values"].shape[0], 0)

@@ -31,7 +31,7 @@ class HunYuanVLIntegrationTest(unittest.TestCase):
         from tokenizers.models import WordLevel
         from tokenizers.pre_tokenizers import Whitespace
 
-        from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
+        from transformers.tokenization_utils_tokenizers import PreTrainedTokenizerFast
 
         vocab = {
             "<unk>": 0,

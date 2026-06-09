@@ -152,6 +152,8 @@ class HunYuanVLTextConfig(HunYuanDenseV1Config):
         Legacy alias for `head_dim`. When `head_dim` is not provided, this value is used as the per-head hidden size.
     org_vocab_size (`int`, *optional*):
         Original vocabulary size recorded in exported checkpoints for compatibility with Tencent tooling.
+    tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+        Whether to tie the input and output word embeddings.
     use_qk_norm (`bool`, *optional*, defaults to `False`):
         Legacy flag preserved for checkpoint compatibility. Has no runtime effect in the open-source variant.
     use_cla (`bool`, *optional*, defaults to `False`):
@@ -173,6 +175,7 @@ class HunYuanVLTextConfig(HunYuanDenseV1Config):
     }
 
     sep_token_id: int | None = 4
+    tie_word_embeddings: bool = True
     rope_scaling: dict | None = None
     rope_theta: float = 10000.0
     pad_id: int | None = None
@@ -263,6 +266,8 @@ class HunYuanVLConfig(PreTrainedConfig):
         Token id marking the end of an image span in multimodal prompts.
     im_newline_id (`int`, *optional*, defaults to 120121):
         Token id used for newline-style separators inserted inside serialized image regions.
+    tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+        Whether to tie the input and output word embeddings.
 
     Example:
 
@@ -284,6 +289,7 @@ class HunYuanVLConfig(PreTrainedConfig):
     im_start_id: int = 120118
     im_end_id: int = 120119
     im_newline_id: int = 120121
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         # When loading legacy "flat" Tencent checkpoints (where text fields live at the top level instead of inside a

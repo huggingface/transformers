@@ -7,7 +7,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_hunyuan_vl import *
     from .image_processing_hunyuan_vl import *
-    from .image_processing_hunyuan_vl_fast import *
+    from .image_processing_pil_hunyuan_vl import *
     from .modeling_hunyuan_vl import *
     from .processing_hunyuan_vl import *
 else:
