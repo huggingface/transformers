@@ -1091,3 +1091,29 @@ class Fp8Dequantize(ConversionOps):
         # checkpoint preserves the FP8 format (weight + per-block ``weight_scale_inv``)
         # whether the in-memory state stayed quantized or was dequantized for compute.
         return Fp8Quantize(self.hf_quantizer)
+
+
+class Fp8DecodeScale(ConversionOps):
+    """Decode MXFP8 ``ue8m0`` per-block scales (stored as ``uint8`` exponents) into the
+    float32 multiplicative scales the FP8 compute path expects.
+
+    Native MXFP8 loading (``dequantize=False``) keeps weights in ``float8_e4m3fn`` and only
+    needs the sibling ``*.weight_scale_inv`` tensors turned from raw E8M0 bytes into real
+    scales (``2 ** (byte - 127)``). Prepended to each weight converter, this op runs before
+    any merge/concat collapses the per-expert structure: it rewrites only the ``uint8`` scale
+    entries and passes weights (and already-float scales) through untouched.
+    """
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    @staticmethod
+    def _decode(tensor: torch.Tensor) -> torch.Tensor:
+        # E8M0 stores one exponent byte per block; the real scale is ``2 ** (byte - 127)``.
+        return (tensor.to(torch.float32) - 127.0).exp2() if tensor.dtype == torch.uint8 else tensor
+
+    def convert(self, input_dict: dict[str, list[torch.Tensor] | torch.Tensor], **kwargs):
+        return {
+            key: [self._decode(t) for t in value] if isinstance(value, list) else self._decode(value)
+            for key, value in input_dict.items()
+        }
