@@ -123,16 +123,12 @@ class Chunk(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        targets = self.get_target_patterns(input_dict, target_patterns)
+        targets = target_patterns
         sizes = len(targets)
         chunks = torch.chunk(tensor, sizes, dim=self.dim)
+        if len(input_dict) > 1 or len(target_patterns) == 1 or len(chunks) != len(target_patterns):
+            raise ValueError(f"Failed to convert {kwargs.get('full_layer_name')}")
         return dict(zip(targets, chunks))
-
-    def get_target_patterns(self, input_dict: dict, target_patterns: list[str]) -> list[str]:
-        # Here we always return the target patterns
-        if len(input_dict) > 1 or len(target_patterns) == 1:
-            raise ValueError("Undefined Operation encountered!")
-        return target_patterns
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -1435,7 +1431,8 @@ def convert_and_load_state_dict_in_model(
                         )
                     shard_index = (
                         len(mapping.collected_tensors.get(source_pattern, []))
-                        if isinstance(mapping, WeightConverter) and isinstance(mapping.operations[0], MergeModulelist)
+                        if isinstance(mapping, WeightConverter)
+                        and any(isinstance(op, MergeModulelist) for op in mapping.operations)
                         else None
                     )
                     future_or_tensor = spawn_tp_materialize(

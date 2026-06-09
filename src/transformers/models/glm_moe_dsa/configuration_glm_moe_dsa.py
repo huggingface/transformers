@@ -32,7 +32,7 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
     mlp_layer_types (`list`, *optional*):
-        MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to 3 dense + rest sparse.
+        MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to `3` dense layers and then every `moe_layer_freq`-th layer sparse.
     index_topk (`int`, *optional*, defaults to 2048):
         Number of top tokens selected by the indexer for sparse attention.
     index_head_dim (`int`, *optional*, defaults to 128):
@@ -40,7 +40,7 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     index_n_heads (`int | None`, *optional*, defaults to 32):
         Number of heads for the indexer projections (DSA).
     indexer_types (`list[str]`, *optional*):
-        Indexer mode for each layer (`"full"` or `"shared"`). Defaults to first layer full, then every `index_topk_freq`-th layer full, rest shared.
+        Indexer mode for each layer (`"full"` or `"shared"`). Defaults to the pattern derived from `index_topk_freq` and `index_skip_topk_offset`.
 
     ```python
     >>> from transformers import GlmMoeDsaConfig, GlmMoeDsaModel
@@ -78,9 +78,9 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+
     attribute_map = {
         "num_local_experts": "n_routed_experts",
-        "head_dim": "qk_rope_head_dim",
     }
 
     vocab_size: int = 154880
@@ -123,25 +123,23 @@ class GlmMoeDsaConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
-
-        # MLP layer types: first 3 dense, rest sparse
         if self.mlp_layer_types is None:
-            self.mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (
-                self.num_hidden_layers - 3
-            )
+            moe_layer_freq = kwargs.get("moe_layer_freq", 1)
+            self.mlp_layer_types = [
+                "sparse" if i >= 3 and i % moe_layer_freq == 0 else "dense" for i in range(self.num_hidden_layers)
+            ]
 
-        # Indexer layer types
         if self.indexer_types is None:
-            pattern = kwargs.pop("index_topk_pattern", None)
-            freq = kwargs.pop("index_topk_freq", 1)
+            pattern = kwargs.get("index_topk_pattern")
             if pattern is not None:
                 self.indexer_types = (
                     [{"F": "full", "S": "shared"}[c] for c in pattern] if isinstance(pattern, str) else list(pattern)
                 )
             else:
-                # First layer full, then every freq-th layer full, rest shared
+                freq = max(kwargs.get("index_topk_freq", 1), 1)
+                offset = kwargs.get("index_skip_topk_offset", 2)
                 self.indexer_types = [
-                    "full" if (max(i - 1, 0) % freq) == 0 else "shared" for i in range(self.num_hidden_layers)
+                    "full" if (max(i - offset + 1, 0) % freq) == 0 else "shared" for i in range(self.num_hidden_layers)
                 ]
         super().__post_init__(**kwargs)
 

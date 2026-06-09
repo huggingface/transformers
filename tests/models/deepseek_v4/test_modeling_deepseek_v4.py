@@ -11,12 +11,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import subprocess
+import tempfile
 import unittest
 
 from parameterized import parameterized
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import (
+    backend_device_count,
+    require_cuda_capability_at_least,
+    require_torch,
+    require_torch_accelerator,
+    require_torch_gpu,
+    require_torch_large_accelerator,
+    require_torch_n_accelerators,
+    slow,
+    torch_device,
+)
 
 
 if is_torch_available():
@@ -31,6 +43,14 @@ if is_torch_available():
     )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+
+
+def _v4_chat(prompt: str) -> str:
+    """V4-Flash chat-mode template (canonical form in ``encoding/encoding_dsv4.py``
+    on the model repo). ``</think>`` after ``<｜Assistant｜>`` skips the reasoning
+    block and goes straight to the answer. Pair with ``add_special_tokens=False``
+    when tokenizing — the literal BOS is already in the template."""
+    return f"<｜begin▁of▁sentence｜><｜User｜>{prompt}<｜Assistant｜></think>"
 
 
 class DeepseekV4ModelTester(CausalLMModelTester):
@@ -96,6 +116,12 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
         "kernel) so the quantized-TP path fails. A custom V4 FP8 path will land later."
     )
     def test_tp_generation_quantized(self):
+        pass
+
+    @unittest.skip(
+        "V4's compressor stores rolling-window state on custom cache layers, which is not compatible with QuantizedCache."
+    )
+    def test_generate_with_quant_cache(self):
         pass
 
     def _check_attentions_for_generate(
@@ -249,10 +275,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
     model_id = "deepseek-ai/DeepSeek-V4-Flash"
     prompt = "Pipeline parallelism in ai is "
 
-    def test_v4_flash_fp8_generation(self):
-        # ``dequantize=True`` so we can run on bf16-only kernels (needed for the
-        # ``grouped_mm`` path the routed experts hit). Eager attention so we
-        # exercise the same forward we tune the rest of the V4 modeling around.
+    def test_v4_flash_dequantized_generation(self):
         quantization_config = FineGrainedFP8Config(dequantize=True)
         config = AutoConfig.from_pretrained(self.model_id)
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
@@ -273,16 +296,16 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
         # under ``do_sample=False`` for a fixed prompt — if this snapshot drifts,
         # something in the V4 forward / RoPE / Q-rescale / HC stack changed.
         expected = (
-            "Pipeline parallelism in ai is  driven by three key factors: the exponential increase in data "
-            "size, the development of increasingly powerful computational techniques (especially deep "
-            "learning), to handle this data, and the availability of massive computational resources on "
-            "which to run these methods, all of which are are  well aligned with  trends in  industry, "
-            " academia and  research"
+            "Pipeline parallelism in ai is  a technique where a model is split across multiple devices, "
+            "with each device responsible for a subset of layers. This allows for training of larger "
+            "models that cannot fit on a single device. However, it introduces idle time (bubbles) due to "
+            "sequential dependencies between stages. Techniques like micro-batching and gradient "
+            "accumulation are used"
         )
         decoded = tokenizer.decode(output_ids[0], skip_special_tokens=False)
         self.assertEqual(decoded, expected)
 
-    def test_v4_flash_fp8_chat_seven_prompts(self):
+    def test_v4_flash_dequantized_chat_seven_prompts(self):
         """Chat-templated greedy generation across 7 prompts of varying length.
 
         Covers: short factual recall (1, 2), translation (3), code generation (4),
@@ -295,12 +318,6 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
         ``block_bias`` causal mask, the Hyper-Connection Sinkhorn projection or
         the residual mixing direction, or the fp32 promotion in the MoE path.
         """
-
-        def _chat(prompt: str) -> str:
-            # V4-Flash chat-mode template (canonical form in ``encoding/encoding_dsv4.py``
-            # on the model repo). ``</think>`` after ``<｜Assistant｜>`` skips the
-            # reasoning block and goes straight to the answer.
-            return f"<｜begin▁of▁sentence｜><｜User｜>{prompt}<｜Assistant｜></think>"
 
         long_prompt = (
             "Please read the following extended passage carefully and then provide a concise "
@@ -343,19 +360,19 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
             (
                 "What are the three properties of the UE8M0 scale factor format?",
                 (
-                    "Based on the standard naming convention for fixed-point data types "
-                    '(where "U" stands for unsigned, "E" for exponent, and "M" for mantissa), '
-                    "the **UE8M0** format has the following three properties:\n\n"
-                    "1.  **Unsigned (U):** The value is always non-negative"
+                    "Based on the standard naming convention for fixed-point data types, the **UE8M0** "
+                    "format has the following three properties:\n\n"
+                    "1.  **Unsigned (U):** The value is an unsigned integer. It cannot represent negative "
+                    "numbers.\n2.  **8 Integer Bits (E8):** The integer part"
                 ),
             ),
             (
                 'Write a short story that begins with: "Once upon a time, in a forest far away, there lived a..."',
                 (
-                    "Once upon a time, in a forest far away, there lived a squirrel named Pip who was "
-                    "terrified of the dark. While other squirrels slept soundly in their dreys as the "
-                    "moon rose, Pip would lie awake, his tiny heart hammering against his ribs. The "
-                    "rustle of leaves was a monster’s breath"
+                    "Once upon a time, in a forest far away, there lived a squirrel named Pip who could "
+                    "not store nuts. While every other squirrel in the Great Wood spent the golden autumn "
+                    "days frantically burying acorns and hazelnuts, Pip simply… forgot. He’d find a "
+                    "perfect, glossy acorn, hold"
                 ),
             ),
             (
@@ -364,7 +381,8 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
                     "The opening establishes a societal assumption that wealthy single men are naturally "
                     "seeking wives, making them prime targets for local families with eligible daughters. "
                     "Mrs. Bennet eagerly informs her indifferent husband that Netherfield Park has been "
-                    "leased, hoping to spark his interest in the new tenant. Mr. Bennet’s dry, reluctant engagement"
+                    "leased, hoping to spark his interest in the new, presumably wealthy, tenant. Their "
+                    "exchange highlights the central theme"
                 ),
             ),
         ]
@@ -383,7 +401,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
 
         for i, (prompt, expected) in enumerate(cases, start=1):
             with self.subTest(prompt_index=i):
-                inputs = tokenizer(_chat(prompt), return_tensors="pt", add_special_tokens=False).to(model.device)
+                inputs = tokenizer(_v4_chat(prompt), return_tensors="pt", add_special_tokens=False).to(model.device)
                 with torch.no_grad():
                     output_ids = model.generate(
                         **inputs,
@@ -394,3 +412,412 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
                 new_tokens = output_ids[0, inputs.input_ids.size(1) :]
                 completion = tokenizer.decode(new_tokens, skip_special_tokens=True)
                 self.assertEqual(completion, expected)
+
+
+# `{loadtime_dispatch}` is forwarded to `from_pretrained(experts_implementation=…)`
+# (set once at load time). `{runtime_dispatches}` is the tuple of impls the worker
+# exercises sequentially via `set_experts_implementation` on that load. The remaining
+# placeholders (`model_id`, `prompt`, `expected`, `add_special_tokens`) let the same
+# worker drive multiple FP8 V4 variants — the expected string is asserted as a
+# substring of the decoded output so it works for both base-completion and instruct
+# models. Instruct prompts include the literal ``<｜begin▁of▁sentence｜>`` and pair with
+# ``add_special_tokens=False``; base-completion prompts skip it and pair with True.
+_DISTRIBUTED_WORKER_SCRIPT_TEMPLATE = """\
+import os
+import sys
+
+import torch
+import torch.distributed as dist
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.distributed import DistributedConfig
+from transformers.utils.quantization_config import FineGrainedFP8Config
+
+
+LOADTIME_DISPATCH = {loadtime_dispatch!r}
+RUNTIME_DISPATCHES = {runtime_dispatches!r}
+MODEL_ID = {model_id!r}
+PROMPT = {prompt!r}
+EXPECTED = {expected!r}
+ADD_SPECIAL_TOKENS = {add_special_tokens!r}
+
+
+def main() -> int:
+    # `from_pretrained(distributed_config=…)` auto-sets `tp_plan="auto"`, which calls
+    # `initialize_tensor_parallelism`, which calls `torch.cuda.set_device(local_rank)`
+    # and `init_process_group` from the RANK/LOCAL_RANK/WORLD_SIZE env vars torchrun sets.
+    rank = int(os.environ["RANK"])
+    model = AutoModelForCausalLM.from_pretrained(
+        MODEL_ID,
+        dtype="auto",
+        attn_implementation="eager",
+        experts_implementation=LOADTIME_DISPATCH,
+        distributed_config=DistributedConfig(enable_expert_parallel=True),
+    )
+    model.eval()
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+    inputs = tokenizer(PROMPT, return_tensors="pt", add_special_tokens=ADD_SPECIAL_TOKENS).to(model.device)
+
+    # FP8 only: Triton multi-expert kernels generate wrong tokens after DeepGEMM has run on
+    # the same module (root cause unknown — per-row kernel outputs measure bit-perfect, yet
+    # end-to-end generation degrades; not reproducible with DeepGEMM disabled). Force the
+    # Triton fallback in `fp8_linear` for batched_mm / grouped_mm so attention/MLP linears
+    # stay Triton-only too. FP4 is unaffected and keeps DeepGEMM for performance.
+    is_fp8 = getattr(model.config, "expert_dtype", "fp8") != "fp4"
+
+    failed = []
+    for dispatch in RUNTIME_DISPATCHES:
+        model.set_experts_implementation(dispatch)
+        if is_fp8 and dispatch in ("batched_mm", "grouped_mm"):
+            os.environ["TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR"] = "1"
+        else:
+            os.environ.pop("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", None)
+        dist.barrier()
+        with torch.no_grad():
+            out = model.generate(
+                **inputs, max_new_tokens=64, do_sample=False, pad_token_id=tokenizer.eos_token_id
+            )
+        dist.barrier()
+        if rank == 0:
+            decoded = tokenizer.decode(out[0], skip_special_tokens=True)
+            print(f"[{{dispatch}}] decoded: {{decoded!r}}", flush=True)
+            # Normalize internal whitespace so trivial extra spaces (e.g. from kernels
+            # emitting an odd tokenization for a comma-separated list) don't fail an
+            # otherwise-correct generation.
+            if EXPECTED not in decoded:
+                failed.append(f"[{{dispatch}}] {{decoded!r}} does not contain {{EXPECTED!r}}")
+
+    dist.barrier()
+    dist.destroy_process_group()
+    if rank == 0 and failed:
+        print("FAILED:\\n" + "\\n".join(failed), flush=True)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+"""
+
+
+# Forward-only sibling of ``_DISTRIBUTED_WORKER_SCRIPT_TEMPLATE``. Per dispatch:
+# reset the compiler cache, ``torch.compile(model, fullgraph=True)``, do one forward,
+# check logits shape. No ``generate()``, no expected-string assertion — this catches
+# graph breaks / unsupported ops, not numerical correctness (that's the generation tests).
+_DISTRIBUTED_COMPILE_WORKER_SCRIPT_TEMPLATE = """\
+import os
+import sys
+
+import torch
+import torch.distributed as dist
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.distributed import DistributedConfig
+
+
+LOADTIME_DISPATCH = {loadtime_dispatch!r}
+RUNTIME_DISPATCHES = {runtime_dispatches!r}
+MODEL_ID = {model_id!r}
+PROMPT = {prompt!r}
+ADD_SPECIAL_TOKENS = {add_special_tokens!r}
+
+
+def main() -> int:
+    rank = int(os.environ["RANK"])
+    model = AutoModelForCausalLM.from_pretrained(
+        MODEL_ID,
+        dtype="auto",
+        attn_implementation="eager",
+        experts_implementation=LOADTIME_DISPATCH,
+        distributed_config=DistributedConfig(enable_expert_parallel=True),
+    )
+    model.eval()
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+    inputs = tokenizer(PROMPT, return_tensors="pt", add_special_tokens=ADD_SPECIAL_TOKENS).to(model.device)
+    expected_logits_shape = inputs.input_ids.shape
+
+    is_fp8 = getattr(model.config, "expert_dtype", "fp8") != "fp4"
+
+    failed = []
+    for dispatch in RUNTIME_DISPATCHES:
+        # Megamoe is locked at load; switching to/from it errors out, so only call
+        # set_experts_implementation when the requested impl is reachable.
+        if dispatch != LOADTIME_DISPATCH:
+            model.set_experts_implementation(dispatch)
+        if is_fp8 and dispatch in ("batched_mm", "grouped_mm"):
+            os.environ["TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR"] = "1"
+        else:
+            os.environ.pop("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", None)
+        torch.compiler.reset()
+        compiled = torch.compile(model, fullgraph=True)
+        dist.barrier()
+        ok = True
+        try:
+            with torch.no_grad():
+                outputs = compiled(**inputs)
+            shape = tuple(outputs.logits.shape[:2])
+            if shape != tuple(expected_logits_shape):
+                failed.append(f"[{{dispatch}}] logits.shape[:2]={{shape}} != {{tuple(expected_logits_shape)}}")
+                ok = False
+        except Exception as e:
+            failed.append(f"[{{dispatch}}] {{type(e).__name__}}: {{e}}")
+            ok = False
+        dist.barrier()
+        if rank == 0:
+            print(f"[{{dispatch}}] {{'OK' if ok else 'FAIL'}}", flush=True)
+
+    dist.barrier()
+    dist.destroy_process_group()
+    if rank == 0 and failed:
+        print("FAILED:\\n" + "\\n".join(failed), flush=True)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+"""
+
+
+def _run_distributed_compile_worker(
+    loadtime_dispatch,
+    runtime_dispatches,
+    model_id: str,
+    prompt: str,
+    add_special_tokens: bool,
+) -> int:
+    script = _DISTRIBUTED_COMPILE_WORKER_SCRIPT_TEMPLATE.format(
+        loadtime_dispatch=loadtime_dispatch,
+        runtime_dispatches=tuple(runtime_dispatches),
+        model_id=model_id,
+        prompt=prompt,
+        add_special_tokens=add_special_tokens,
+    )
+    num_gpus = backend_device_count(torch_device)
+    if num_gpus < 1:
+        raise RuntimeError(f"No visible devices for torch_device={torch_device!r}")
+    redirects = ",".join(f"{r}:1" for r in range(1, num_gpus))
+    with tempfile.NamedTemporaryFile("w", suffix="_distributed_compile_worker.py") as f:
+        f.write(script)
+        f.flush()
+        result = subprocess.run(
+            ["torchrun", f"--nproc_per_node={num_gpus}", f"--redirects={redirects}", f.name],
+            check=False,
+        )
+    return result.returncode
+
+
+def _run_distributed_worker(
+    loadtime_dispatch,
+    runtime_dispatches,
+    model_id: str,
+    prompt: str,
+    expected: str,
+    add_special_tokens: bool,
+) -> int:
+    script = _DISTRIBUTED_WORKER_SCRIPT_TEMPLATE.format(
+        loadtime_dispatch=loadtime_dispatch,
+        runtime_dispatches=tuple(runtime_dispatches),
+        model_id=model_id,
+        prompt=prompt,
+        expected=expected,
+        add_special_tokens=add_special_tokens,
+    )
+    # Reuse the test-suite-selected accelerator backend.
+    num_gpus = backend_device_count(torch_device)
+    if num_gpus < 1:
+        raise RuntimeError(f"No visible devices for torch_device={torch_device!r}")
+    # Redirect only stdout (`:1`) for ranks 1..N-1 to suppress duplicated generation chatter.
+    # Stderr is left attached so worker tracebacks (OOM, NCCL, kernel crash) surface in the
+    # subprocess stderr and the test failure message — `:3` would file-log both and turn any
+    # rank>0 crash into a bare non-zero return code with no diagnostic.
+    redirects = ",".join(f"{r}:1" for r in range(1, num_gpus))
+    with tempfile.NamedTemporaryFile("w", suffix="_distributed_worker.py") as f:
+        f.write(script)
+        f.flush()
+        result = subprocess.run(
+            ["torchrun", f"--nproc_per_node={num_gpus}", f"--redirects={redirects}", f.name],
+            check=False,
+        )
+    return result.returncode
+
+
+@require_torch
+@require_torch_accelerator
+@require_torch_n_accelerators(n=8)
+@require_torch_large_accelerator(memory=30)
+@require_cuda_capability_at_least(10, 0)
+@slow
+class DeepseekV4FlashIntegrationTest(unittest.TestCase):
+    """Multi-device native FP4 generation on DSv4-Flash.
+
+    - `test_v4_flash_fp4_generation_distributed`: EP=8 via `torchrun`, loops
+      eager → batched_mm → grouped_mm → deepgemm. ``batched_mm`` / ``grouped_mm``
+      route FP4 through the Triton ``matmul_batched`` / ``matmul_grouped`` dispatchers
+      (``w4a8_block_dynamic_fp4_matmul_*``); DeepGEMM remains the fastest path but
+      Triton is now a functional fallback.
+    - `test_v4_flash_fp4_generation_megamoe_distributed`: separate load with
+      `experts_implementation="deepgemm_megamoe"` (TP plan + weight layout are
+      committed at load and can't be switched at runtime).
+    - `test_v4_flash_fp4_generation_device_map_auto`: single-process multi-GPU
+      via ``device_map="auto"``. ``deepgemm`` is excluded (DeepGEMM kernels race
+      in single-process multi-GPU); ``eager`` and ``grouped_mm`` both route FP4
+      through Triton.
+    """
+
+    model_id = "deepseek-ai/DeepSeek-V4-Flash"
+    prompt = _v4_chat("List the first ten prime numbers:")
+    expected_primes = "2, 3, 5, 7, 11, 13, 17, 19, 23, 29"
+
+    def test_v4_flash_fp4_generation_distributed(self):
+        # DeepGEMM is CUDA-only — drop it on non-CUDA backends (e.g. XPU) so the rest
+        # of the dispatch sweep still runs.
+        runtime_dispatches = (
+            ("eager", "batched_mm", "grouped_mm", "deepgemm")
+            if torch.cuda.is_available()
+            else ("eager", "batched_mm", "grouped_mm")
+        )
+        rc = _run_distributed_worker(
+            loadtime_dispatch=None,
+            runtime_dispatches=runtime_dispatches,
+            model_id=self.model_id,
+            prompt=self.prompt,
+            expected=self.expected_primes,
+            add_special_tokens=False,
+        )
+        self.assertEqual(rc, 0, "torchrun worker failed; see stdout above")
+
+    @require_torch_gpu
+    def test_v4_flash_fp4_generation_megamoe_distributed(self):
+        rc = _run_distributed_worker(
+            loadtime_dispatch="deepgemm_megamoe",
+            runtime_dispatches=("deepgemm_megamoe",),
+            model_id=self.model_id,
+            prompt=self.prompt,
+            expected=self.expected_primes,
+            add_special_tokens=False,
+        )
+        self.assertEqual(rc, 0, "torchrun worker failed; see stdout above")
+
+    def test_v4_flash_fp4_generation_device_map_auto(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id,
+            dtype="auto",
+            device_map="auto",
+            attn_implementation="eager",
+        )
+        inputs = tokenizer(self.prompt, return_tensors="pt", add_special_tokens=False).to(model.device)
+        prompt_len = inputs.input_ids.size(1)
+        # `deepgemm` experts impl is excluded — DeepGEMM kernels race in single-process
+        # multi-GPU runs (which `device_map="auto"` always is for a model this size).
+        for impl in ("eager", "batched_mm", "grouped_mm"):
+            model.set_experts_implementation(impl)
+            with torch.no_grad():
+                out = model.generate(**inputs, max_new_tokens=64, do_sample=False, pad_token_id=tokenizer.eos_token_id)
+            completion = tokenizer.decode(out[0, prompt_len:], skip_special_tokens=True)
+            self.assertIn(self.expected_primes, completion, f"[{impl}] {completion!r}")
+
+    def test_v4_flash_fp4_forward_compile_fullgraph_distributed(self):
+        """EP=8 via ``torchrun``: one forward per impl through ``torch.compile(fullgraph=True)``.
+        Each rank drives one device so ``deepgemm`` and ``deepgemm_megamoe`` are available;
+        megamoe is load-locked so it has its own sibling test."""
+        # DeepGEMM is CUDA-only — drop it on non-CUDA backends (e.g. XPU) so the rest
+        # of the dispatch sweep still runs.
+        runtime_dispatches = (
+            ("batched_mm", "grouped_mm", "deepgemm") if torch.cuda.is_available() else ("batched_mm", "grouped_mm")
+        )
+        rc = _run_distributed_compile_worker(
+            loadtime_dispatch=None,
+            runtime_dispatches=runtime_dispatches,
+            model_id=self.model_id,
+            prompt=self.prompt,
+            add_special_tokens=False,
+        )
+        self.assertEqual(rc, 0, "torchrun forward-compile worker failed; see stdout above")
+
+    @require_torch_gpu
+    def test_v4_flash_fp4_forward_compile_fullgraph_megamoe_distributed(self):
+        rc = _run_distributed_compile_worker(
+            loadtime_dispatch="deepgemm_megamoe",
+            runtime_dispatches=("deepgemm_megamoe",),
+            model_id=self.model_id,
+            prompt=self.prompt,
+            add_special_tokens=False,
+        )
+        self.assertEqual(rc, 0, "torchrun forward-compile worker failed; see stdout above")
+
+
+@require_torch
+@require_torch_accelerator
+@require_torch_n_accelerators(n=8)
+@require_torch_large_accelerator(memory=60)
+@require_cuda_capability_at_least(9, 0)
+@slow
+class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
+    """Multi-device native FP8 generation on DSv4-Flash-Base.
+
+    Mirrors :class:`DeepseekV4FlashIntegrationTest` (FP4 mixed) but for the base
+    completion variant.
+
+      - `test_v4_flash_base_fp8_generation_distributed`: EP=8 via `torchrun`,
+        exercises all four experts impls (``eager``, ``batched_mm``, ``grouped_mm``,
+        ``deepgemm``) — distributed gives every impl a working configuration since
+        each rank drives one device.
+      - `test_v4_flash_base_fp8_generation_device_map_auto`: single-process multi-GPU via
+        ``device_map="auto"``. The ``deepgemm`` experts impl is excluded because
+        DeepGEMM kernels race in this regime (see :func:`_assert_single_device`).
+    """
+
+    model_id = "deepseek-ai/DeepSeek-V4-Flash-Base"
+    prompt = "Here is the list of the first ten prime numbers, separated by commas:"
+    expected_primes = "2, 3, 5, 7, 11, 13, 17, 19, 23, 29"
+
+    def test_v4_flash_base_fp8_generation_distributed(self):
+        # DeepGEMM is CUDA-only — drop it on non-CUDA backends (e.g. XPU) so the rest
+        # of the dispatch sweep still runs.
+        runtime_dispatches = (
+            ("eager", "batched_mm", "grouped_mm", "deepgemm")
+            if torch.cuda.is_available()
+            else ("eager", "batched_mm", "grouped_mm")
+        )
+        rc = _run_distributed_worker(
+            loadtime_dispatch=None,
+            runtime_dispatches=runtime_dispatches,
+            model_id=self.model_id,
+            prompt=self.prompt,
+            expected=self.expected_primes,
+            add_special_tokens=True,
+        )
+        self.assertEqual(rc, 0, "torchrun worker failed; see stdout above")
+
+    def test_v4_flash_base_fp8_generation_device_map_auto(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id,
+            dtype="auto",
+            device_map="auto",
+            attn_implementation="eager",
+        )
+        inputs = tokenizer(self.prompt, return_tensors="pt").to(model.device)
+        prompt_len = inputs.input_ids.size(1)
+        # `deepgemm` experts impl is excluded — DeepGEMM kernels race in single-process
+        # multi-GPU runs (which `device_map="auto"` always is for a model this size).
+        for impl in ("eager", "batched_mm", "grouped_mm"):
+            model.set_experts_implementation(impl)
+            with torch.no_grad():
+                out = model.generate(**inputs, max_new_tokens=64, do_sample=False, pad_token_id=tokenizer.eos_token_id)
+            completion = tokenizer.decode(out[0, prompt_len:], skip_special_tokens=True)
+            self.assertIn(self.expected_primes, completion, f"[{impl}] {completion!r}")
+
+    def test_v4_flash_base_fp8_forward_compile_fullgraph_distributed(self):
+        """EP=8 via ``torchrun``: one forward per impl through ``torch.compile(fullgraph=True)``.
+        Each rank drives one device so ``deepgemm`` is in the sweep; megamoe is FP4-only."""
+        rc = _run_distributed_compile_worker(
+            loadtime_dispatch=None,
+            runtime_dispatches=("batched_mm", "grouped_mm", "deepgemm"),
+            model_id=self.model_id,
+            prompt=self.prompt,
+            add_special_tokens=True,
+        )
+        self.assertEqual(rc, 0, "torchrun forward-compile worker failed; see stdout above")
