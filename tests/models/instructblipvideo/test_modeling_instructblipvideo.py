@@ -64,7 +64,7 @@ if is_torch_available():
     )
 
 
-def _prepare_instructblipvideo_config_headdim(config, requested_dim):
+def _prepare_qformer_config_headdim(config, requested_dim):
     config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
     config.qformer_config.encoder_hidden_size = config.vision_config.hidden_size
     return config
@@ -509,7 +509,7 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
 
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):
-        return _prepare_instructblipvideo_config_headdim(config, requested_dim)
+        return _prepare_qformer_config_headdim(config, requested_dim)
 
     def test_for_conditional_generation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

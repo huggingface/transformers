@@ -66,7 +66,7 @@ if is_vision_available():
     from PIL import Image
 
 
-def _prepare_instructblip_config_headdim(config, requested_dim):
+def _prepare_qformer_config_headdim(config, requested_dim):
     config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
     config.qformer_config.encoder_hidden_size = config.vision_config.hidden_size
     return config
@@ -498,7 +498,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
 
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):
-        return _prepare_instructblip_config_headdim(config, requested_dim)
+        return _prepare_qformer_config_headdim(config, requested_dim)
 
     def test_config(self):
         self.config_tester.run_common_tests()
