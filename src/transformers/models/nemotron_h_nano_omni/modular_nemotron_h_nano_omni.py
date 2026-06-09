@@ -24,8 +24,7 @@ from ...generation import GenerationConfig
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ..llama.modeling_llama import LlamaRMSNorm
-from ..nemotron_h import NemotronHForCausalLM
+from ..nemotron_h import NemotronHForCausalLM, NemotronHRMSNorm
 from ..radio import RADIOModel
 from .configuration_nemotron_h_nano_omni import NemotronH_Nano_Omni_Reasoning_V3_Config
 
@@ -36,7 +35,7 @@ logger = logging.get_logger(__name__)
 __all__ = ["NemotronH_Nano_Omni_Reasoning_V3"]
 
 
-class NemotronH_Nano_Omni_RMSNorm(LlamaRMSNorm):
+class NemotronH_Nano_Omni_RMSNorm(NemotronHRMSNorm):
     pass
 
 
