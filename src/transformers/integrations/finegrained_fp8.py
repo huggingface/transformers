@@ -804,18 +804,9 @@ class FP8ExpertsInterface(ExpertsInterface):
 ALL_FP8_EXPERTS_FUNCTIONS = FP8ExpertsInterface()
 
 
-def _inherit_custom_gate(new_module: nn.Module, source_module: nn.Module) -> None:
-    """Carry a model-specific gating function from ``source_module`` onto its FP8 replacement.
-
-    The FP8 experts forward calls ``self._apply_gate(gate_up)`` for gated experts. A model
-    that overrides ``_apply_gate`` (e.g. the SwiGLU-OAI gate) would otherwise lose it when the
-    module is swapped for the generic [`FP8Experts`], which defaults to ``act_fn(gate) * up``.
-    We rebind the source class' ``_apply_gate`` to the new module and copy the scalar attributes
-    it references (e.g. ``swiglu_alpha`` / ``swiglu_limit``).
-    """
-    source_gate = getattr(type(source_module), "_apply_gate", None)
-    if source_gate is None or source_gate in (_default_apply_gate, FP8Experts._apply_gate):
-        return
+def _move_attributes(new_module: nn.Module, source_module: nn.Module) -> None:
+    # some of the attributes like swiglu limits etc are needed for the gating
+    # here we commpy the attrs over.
     for name, value in vars(source_module).items():
         if isinstance(value, (int, float, bool)) and not hasattr(new_module, name):
             setattr(new_module, name, value)
@@ -869,7 +860,7 @@ def replace_with_fp8_linear(
                     has_gate=has_gate,
                     **module_kwargs,
                 )
-                _inherit_custom_gate(new_module, module)
+                _move_attributes(new_module, module)
             elif isinstance(module, nn.Linear):
                 new_module = FP8Linear(
                     in_features=module.in_features,

@@ -24,7 +24,13 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicLayer, StaticLayer
 from ...configuration_utils import PreTrainedConfig
-from ...masking_utils import LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING, create_causal_mask
+from ...masking_utils import (
+    LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING,
+    create_causal_mask,
+)
+from ...masking_utils import (
+    create_masks_for_generate as create_masks_for_generate_default,
+)
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -37,6 +43,7 @@ from ..auto import AutoConfig
 from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoderLayer
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
 from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
+from ..glm4v.modeling_glm4v import rotate_half_llm
 from ..laguna.modeling_laguna import LagunaSparseMoeBlock
 from ..llama.modeling_llama import eager_attention_forward
 from ..llava.modeling_llava import (
@@ -59,9 +66,6 @@ from ..minimax_m2.modeling_minimax_m2 import (
 from ..mixtral.modeling_mixtral import MixtralDecoderLayer
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionPatchEmbed
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwargs
-
-
-LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING["minimax_m3_sparse"] = create_causal_mask
 
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
@@ -428,7 +432,6 @@ class MiniMaxM3VLAttention(MiniMaxM2Attention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -525,8 +528,8 @@ class MiniMaxM3VLIndexer(nn.Module):
     ) -> torch.Tensor:
         batch, q_len, _ = hidden_states.shape
         idx_q = self.q_proj(hidden_states).view(batch, q_len, self.num_heads, self.head_dim)
-        idx_k = self.k_proj(hidden_states).view(batch, q_len, 1, self.head_dim)
         idx_q = self.q_norm(idx_q).transpose(1, 2)  # [B, H_idx, Sq, D]
+        idx_k = self.k_proj(hidden_states).view(batch, q_len, 1, self.head_dim)
         idx_k = self.k_norm(idx_k).transpose(1, 2)  # [B, 1, Sq, D]
         cos, sin = position_embeddings
         idx_q, idx_k = apply_rotary_pos_emb(idx_q, idx_k, cos[..., : self.head_dim], sin[..., : self.head_dim])
@@ -634,8 +637,6 @@ class MiniMaxM3VLForCausalLM(MiniMaxM2ForCausalLM):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: MiniMaxM3VLTextConfig):
-        # The M2 parent's substitution table would point ``self.model`` at the
-        # composite VL model; force the text backbone here.
         super().__init__(config)
         self.model = MiniMaxM3VLTextModel(config)
         self.post_init()
@@ -711,13 +712,6 @@ class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
         freqs = coords.repeat_interleave(band_freqs, dim=1) * inv_freq
         emb = freqs.repeat_interleave(2, dim=-1)
         return emb.cos().to(dtype), emb.sin().to(dtype)
-
-
-def rotate_half_llm(x):
-    """Rotates half the hidden dims of the input (interleaved layout)."""
-    x1 = x[..., 0::2]
-    x2 = x[..., 1::2]
-    return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
 def apply_rotary_pos_emb_vision(
@@ -1175,6 +1169,14 @@ class MiniMaxM3VLForConditionalGeneration(LlavaForConditionalGeneration):
             model_inputs["pixel_values_videos"] = pixel_values_videos
 
         return model_inputs
+
+    @staticmethod
+    def create_masks_for_generate(config: PreTrainedConfig, **kwargs) -> dict[str, torch.Tensor | None]:
+        # M3's "minimax_m3_sparse" layer type shares a plain causal base mask with dense layers (the
+        # block-sparse selection is the indexer's separate additive bias). Register it in the global
+        # mapping so `generate`'s static-cache mask pre-build resolves it, then delegate to the default.
+        LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING.setdefault("minimax_m3_sparse", create_causal_mask)
+        return create_masks_for_generate_default(config=config, **kwargs)
 
 
 class MiniMaxM3VLProcessorKwargs(Qwen2VLProcessorKwargs):

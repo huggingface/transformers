@@ -32,7 +32,8 @@ from ...cache_utils import Cache, DynamicCache, DynamicLayer, StaticLayer
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernelized_func
-from ...masking_utils import create_causal_mask
+from ...masking_utils import LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING, create_causal_mask
+from ...masking_utils import create_masks_for_generate as create_masks_for_generate_default
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -462,7 +463,6 @@ class MiniMaxM3VLAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -559,8 +559,8 @@ class MiniMaxM3VLIndexer(nn.Module):
     ) -> torch.Tensor:
         batch, q_len, _ = hidden_states.shape
         idx_q = self.q_proj(hidden_states).view(batch, q_len, self.num_heads, self.head_dim)
-        idx_k = self.k_proj(hidden_states).view(batch, q_len, 1, self.head_dim)
         idx_q = self.q_norm(idx_q).transpose(1, 2)  # [B, H_idx, Sq, D]
+        idx_k = self.k_proj(hidden_states).view(batch, q_len, 1, self.head_dim)
         idx_k = self.k_norm(idx_k).transpose(1, 2)  # [B, 1, Sq, D]
         cos, sin = position_embeddings
         idx_q, idx_k = apply_rotary_pos_emb(idx_q, idx_k, cos[..., : self.head_dim], sin[..., : self.head_dim])
@@ -628,7 +628,6 @@ class MiniMaxM3VLDecoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -638,7 +637,6 @@ class MiniMaxM3VLDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
-            position_ids=position_ids,
             past_key_values=past_key_values,
             **kwargs,
         )
@@ -748,7 +746,6 @@ class MiniMaxM3VLTextModel(MiniMaxM3VLPreTrainedModel):
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
-                position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
@@ -1030,13 +1027,6 @@ class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
         freqs = coords.repeat_interleave(band_freqs, dim=1) * inv_freq
         emb = freqs.repeat_interleave(2, dim=-1)
         return emb.cos().to(dtype), emb.sin().to(dtype)
-
-
-def rotate_half_llm(x):
-    """Rotates half the hidden dims of the input (interleaved layout)."""
-    x1 = x[..., 0::2]
-    x2 = x[..., 1::2]
-    return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
 def apply_rotary_pos_emb_vision(
@@ -1586,6 +1576,14 @@ class MiniMaxM3VLForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Generation
             and to merge patch features.
         """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+
+    @staticmethod
+    def create_masks_for_generate(config: PreTrainedConfig, **kwargs) -> dict[str, torch.Tensor | None]:
+        # M3's "minimax_m3_sparse" layer type shares a plain causal base mask with dense layers (the
+        # block-sparse selection is the indexer's separate additive bias). Register it in the global
+        # mapping so `generate`'s static-cache mask pre-build resolves it, then delegate to the default.
+        LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING.setdefault("minimax_m3_sparse", create_causal_mask)
+        return create_masks_for_generate_default(config=config, **kwargs)
 
 
 __all__ = [
