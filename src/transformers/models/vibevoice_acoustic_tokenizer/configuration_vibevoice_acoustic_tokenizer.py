@@ -107,10 +107,14 @@ class VibeVoiceAcousticTokenizerEncoderConfig(VibeVoiceAcousticTokenizerConfig):
         Expansion factor for feed-forward networks.
     vae_std (`float`, *optional*, defaults to 0.625):
         Standard deviation used for VAE sampling after encoder.
+    max_position_embeddings (`int`, *optional*, defaults to 450):
+        Maximum number of acoustic tokens emitted per audio chunk by the encoder.
     """
 
     model_type = "vibevoice_acoustic_tokenizer_encoder"
     base_config_key = "encoder_config"
+
+    max_position_embeddings: int = 450
 
     @property
     def encoder_config(self):
