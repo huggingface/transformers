@@ -45,7 +45,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import maybe_autocast, merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto.modeling_auto import AutoModel
 from ..gemma3.modeling_gemma3 import (
@@ -319,7 +319,7 @@ class Gemma4AudioAttention(nn.Module):
         attn_output = attn_weights @ value_states.permute(0, 3, 1, 2, 4)
         attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(batch_size, num_blocks * self.chunk_size, -1)
         attn_output = attn_output[:, :seq_length].contiguous()
-        attn_output = self.post(attn_output.to(dtype=self.post.linear.weight.dtype))
+        attn_output = self.post(attn_output.to(hidden_states.dtype))
 
         return attn_output, attn_weights
 
@@ -399,7 +399,7 @@ class Gemma4AudioFeedForward(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # This is needed to avoid any underflow/overflow issues when clipping
-        gradient_clipping = min(self.gradient_clipping, torch.finfo(self.ffw_layer_1.linear.weight.dtype).max)
+        gradient_clipping = min(self.gradient_clipping, torch.finfo(hidden_states.dtype).max)
 
         residual = hidden_states
         hidden_states = torch.clamp(hidden_states, -gradient_clipping, gradient_clipping)
@@ -482,7 +482,7 @@ class Gemma4AudioLightConv1d(nn.Module):
         hidden_states = self.depthwise_conv1d(hidden_states.transpose(1, 2)).transpose(1, 2)
 
         # This is needed to avoid any underflow/overflow issues when clipping
-        gradient_clipping = min(self.gradient_clipping, torch.finfo(self.linear_start.linear.weight.dtype).max)
+        gradient_clipping = min(self.gradient_clipping, torch.finfo(hidden_states.dtype).max)
         hidden_states = torch.clamp(hidden_states, -gradient_clipping, gradient_clipping)
         hidden_states = self.conv_norm(hidden_states)
 
@@ -781,6 +781,7 @@ class Gemma4VisionRotaryEmbedding(LlamaRotaryEmbedding):
         return cos, sin
 
 
+@no_inherit_decorator
 class Gemma4VisionAttention(Gemma3Attention):
     def __init__(self, config: Gemma4VisionConfig, layer_idx: int):
         super().__init__(self, config, layer_idx)
@@ -1423,11 +1424,11 @@ class Gemma4TextModel(Gemma3TextModel):
     ) -> Gemma4TextModelOutputWithPast:
         r"""
         per_layer_inputs (`torch.Tensor`, *optional*):
-            Pre-computed per-layer input text embeddings of shape of shape `(batch_size, sequence_length, num_hidden_layers,
+            Pre-computed per-layer input text embeddings of shape `(batch_size, sequence_length, num_hidden_layers,
             hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
             via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
             you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
-            to reverse the main embedding, which is expensibe.
+            to reverse the main embedding, which is expensive.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1523,11 +1524,11 @@ class Gemma4ForCausalLM(Gemma3ForCausalLM):
     ) -> Gemma4CausalLMOutputWithPast:
         r"""
         per_layer_inputs (`torch.Tensor`, *optional*):
-            Pre-computed per-layer input text embeddings of shape of shape `(batch_size, sequence_length, num_hidden_layers,
+            Pre-computed per-layer input text embeddings of shape `(batch_size, sequence_length, num_hidden_layers,
             hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
             via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
             you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
-            to reverse the main embedding, which is expensibe.
+            to reverse the main embedding, which is expensive.
 
         Example:
 
@@ -1961,11 +1962,11 @@ class Gemma4Model(Gemma3nModel):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
         per_layer_inputs (`torch.Tensor`, *optional*):
-            Pre-computed per-layer input text embeddings of shape of shape `(batch_size, sequence_length, num_hidden_layers,
+            Pre-computed per-layer input text embeddings of shape `(batch_size, sequence_length, num_hidden_layers,
             hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
             via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
             you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
-            to reverse the main embedding, which is expensibe.
+            to reverse the main embedding, which is expensive.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -2170,11 +2171,11 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
         per_layer_inputs (`torch.Tensor`, *optional*):
-            Pre-computed per-layer input text embeddings of shape of shape `(batch_size, sequence_length, num_hidden_layers,
+            Pre-computed per-layer input text embeddings of shape `(batch_size, sequence_length, num_hidden_layers,
             hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
             via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
             you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
-            to reverse the main embedding, which is expensibe.
+            to reverse the main embedding, which is expensive.
         """
         outputs = self.model(
             input_ids=input_ids,
