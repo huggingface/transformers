@@ -63,6 +63,7 @@ class QuantizationMethod(str, Enum):
     METAL = "metal"
     FOUR_OVER_SIX = "fouroversix"
     SINQ = "sinq"
+    GEMMA = "gemma"
 
 
 class AwqFormat(str, Enum):
@@ -1968,3 +1969,38 @@ class SinqConfig(QuantizationConfigMixin):
             logger.warning(
                 f"SINQ: group_size={self.group_size} is not a multiple of 8; this may be rejected by the backend."
             )
+
+
+@dataclass
+class GemmaQuantizationConfig(QuantizationConfigMixin):
+    """Quantization config for pre-quantized Gemma checkpoints.
+
+    Args:
+        num_bits (`int`, *optional*, defaults to 4):
+            Bit width applied to modules that don't match any pattern in
+            `module_quant_configs`, and to matched entries that omit `num_bits`.
+        quantize_embeddings (`bool`, *optional*, defaults to `False`):
+            If True, `nn.Embedding` modules are also replaced with quantized
+            counterparts. Off by default since most checkpoints leave them as
+            regular fp embeddings.
+        module_quant_configs (`dict[str, dict]`, *optional*):
+            Ordered mapping from module-name regex (matched with `re.search`) to
+            per-module quantization options. The only key understood today is
+            `"num_bits"` (2, 4, or 8).
+        modules_to_not_convert (`list[str]`, *optional*):
+            Module names to skip during quantized-layer replacement.
+    """
+
+    def __init__(
+        self,
+        num_bits: int = 4,
+        quantize_embeddings: bool = False,
+        module_quant_configs: dict[str, dict] | None = None,
+        modules_to_not_convert: list[str] | None = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.GEMMA
+        self.num_bits = num_bits
+        self.quantize_embeddings = quantize_embeddings
+        self.module_quant_configs = module_quant_configs
+        self.modules_to_not_convert = modules_to_not_convert
