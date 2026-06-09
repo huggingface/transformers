@@ -49,9 +49,6 @@ The indexer keeps its own small per-token key cache (single-head, `index_head_di
 
 In DeepSeek-V3.2 **every layer runs its own indexer** — there is no cross-layer top-k sharing.
 
-> [!TIP]
-> DeepSeek-V3.2 is the base DSA implementation in transformers. [`GlmMoeDsa`](./glm_moe_dsa) inherits from it and adds its own innovation on top: a per-layer `indexer_types` schedule (`"full"` vs `"shared"`) where `"shared"` layers skip running their own indexer and reuse the previous full layer's top-k selection, saving the per-layer indexer compute on long-context decoding (see [IndexCache](https://huggingface.co/papers/2603.12201)). That sharing does not exist in DeepSeek-V3.2.
-
 ## Usage examples
 
 DeepSeek-V3.2-Exp is distributed as an FP8 checkpoint. The indexer projections are kept out of FP8 quantization, since the checkpoint stores them in bf16/fp32:
@@ -78,7 +75,6 @@ outputs = model.generate(**inputs, max_new_tokens=20)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
-This model was contributed by [Arthur](https://huggingface.co/ArthurZ).
 The original code can be found [here](https://github.com/deepseek-ai/DeepSeek-V3.2-Exp).
 
 ## DeepseekV32Config
