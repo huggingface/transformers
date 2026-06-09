@@ -31,8 +31,14 @@ from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...integrations import use_kernel_forward_from_hub
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithCrossAttentions
+from ...modeling_outputs import (
+    BackboneOutput,
+    BaseModelOutput,
+    BaseModelOutputWithCrossAttentions,
+    BaseModelOutputWithPooling,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, torch_compilable_check, torch_int
@@ -457,15 +463,52 @@ class RfDetrDinov2Encoder(RfDetrDinov2PreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        output_hidden_states: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        all_hidden_states = (hidden_states,) if output_hidden_states else None
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states, attention_mask, **kwargs)
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
+@auto_docstring
+class RfDetrDinov2Model(RfDetrDinov2PreTrainedModel):
+    def __init__(self, config: RfDetrDinov2Config):
+        super().__init__(config)
+        self.config = config
+        self.embeddings = RfDetrDinov2Embeddings(config)
+        self.encoder = RfDetrDinov2Encoder(config)
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pooler = None
+        self.post_init()
+
+    def get_input_embeddings(self) -> RfDetrDinov2PatchEmbeddings:
+        return self.embeddings.patch_embeddings
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.Tensor | None = None,
+        bool_masked_pos: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
+            pre-training.
+        """
+        embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
+        encoder_outputs: BaseModelOutput = self.encoder(embedding_output, attention_mask=attention_mask, **kwargs)
+        sequence_output = self.layernorm(encoder_outputs.last_hidden_state)
+        pooled_output = sequence_output[:, 0, :]
+        return BaseModelOutputWithPooling(last_hidden_state=sequence_output, pooler_output=pooled_output)
 
 
 @auto_docstring(
@@ -477,13 +520,11 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
-        self.embeddings = RfDetrDinov2Embeddings(config)
-        self.encoder = RfDetrDinov2Encoder(config)
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.rf_detr_dinov2 = RfDetrDinov2Model(config)
         self.post_init()
 
     def get_input_embeddings(self) -> RfDetrDinov2PatchEmbeddings:
-        return self.embeddings.patch_embeddings
+        return self.rf_detr_dinov2.embeddings.patch_embeddings
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
@@ -518,13 +559,10 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        embedding_output = self.embeddings(pixel_values)
-        # Iterate the layer ModuleList directly to collect per-stage hidden_states inline
-        # for window-aware feature_maps. @capture_outputs handles injection into the
-        # returned BackboneOutput.
+        embedding_output = self.rf_detr_dinov2.embeddings(pixel_values)
         hidden_state = embedding_output
         hidden_states = (hidden_state,)
-        for layer in self.encoder.layer:
+        for layer in self.rf_detr_dinov2.encoder.layer:
             hidden_state = layer(hidden_state, **kwargs)
             hidden_states = hidden_states + (hidden_state,)
 
@@ -532,7 +570,7 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
                 if self.config.apply_layernorm:
-                    hidden_state = self.layernorm(hidden_state)
+                    hidden_state = self.rf_detr_dinov2.layernorm(hidden_state)
                 if self.config.reshape_hidden_states:
                     hidden_state = hidden_state[:, 1:]
                     # this was actually a bug in the original implementation that we copied here,
