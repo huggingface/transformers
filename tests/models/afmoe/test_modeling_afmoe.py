@@ -175,7 +175,7 @@ class AfmoeIntegrationTest(unittest.TestCase):
         if tokenizer.pad_token_id is None:
             tokenizer.pad_token = tokenizer.eos_token
 
-        model = AfmoeForCausalLM.from_pretrained(checkpoint, device_map=torch_device, dtype=torch.bfloat16)
+        model = AfmoeForCausalLM.from_pretrained(checkpoint, device_map=torch_device, dtype=torch.float16)
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         logger.warning("[DEBUG test_compile_static_cache] prompts=%s", prompts)
@@ -201,8 +201,8 @@ class AfmoeIntegrationTest(unittest.TestCase):
         self.assertEqual(dynamic_text, static_text)
 
         model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        # Warm-up run: let torch.compile capture the CUDA graph; output during capture is non-deterministic
-        model.generate(**inputs, max_new_tokens=num_tokens_to_generate, do_sample=False, cache_implementation="static")
+        # # Warm-up run: let torch.compile capture the CUDA graph; output during capture is non-deterministic
+        # model.generate(**inputs, max_new_tokens=num_tokens_to_generate, do_sample=False, cache_implementation="static")
         # Comparison run: CUDA graph is now captured and replays deterministically
         generated_ids = model.generate(
             **inputs,
