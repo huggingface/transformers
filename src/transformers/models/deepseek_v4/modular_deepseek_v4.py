@@ -922,12 +922,6 @@ class DeepseekV4Attention(nn.Module):
             COMPRESSOR_CLASSES[self.layer_type](config) if self.layer_type != "sliding_attention" else None
         )
 
-    # NOTE: cannot mark this as ``@torch.compiler.nested_compile_region`` — the
-    # KV-cache in-place writes inside ``past_key_values.update(...)`` trip
-    # inductor's ``decompose_auto_functionalized`` pass when nested in an
-    # ``invoke_subgraph`` HOP (vllm#42417, pytorch#180949). Region marking is
-    # safe on the MoE block (no cache mutation); attention has to stay in the
-    # outer compiled graph until the upstream fix lands.
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1199,13 +1193,6 @@ class DeepseekV4SparseMoeBlock(nn.Module):
         self.experts = DeepseekV4Experts(config)
         self.shared_experts = DeepseekV4MLP(config)
 
-    # Marked as a nested compile region so all 43 layer-MoE bodies share one
-    # compiled artifact under ``torch.compile`` (no-op outside compile). Region
-    # sits at the MoE level — not the whole decoder layer — to keep the KV-cache
-    # in-place writes (inside attention) outside the ``invoke_subgraph`` HOP;
-    # inductor's ``decompose_auto_functionalized`` pass doesn't unwrap mutation
-    # HOPs nested in ``invoke_subgraph`` today (vllm#42417, pytorch#180949).
-    @torch.compiler.nested_compile_region
     def forward(self, hidden_states: torch.Tensor, input_ids: torch.Tensor | None = None) -> torch.Tensor:
         batch, seq_len, hidden_dim = hidden_states.shape
         residual = hidden_states

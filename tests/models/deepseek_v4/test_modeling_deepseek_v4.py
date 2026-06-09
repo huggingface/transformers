@@ -958,9 +958,7 @@ class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
         compiled FP8 decode path (graph breaks, static-cache drift) that the forward-only
         compile test can't surface."""
         runtime_dispatches = (
-            ("batched_mm", "grouped_mm", "deepgemm")
-            if torch.cuda.is_available()
-            else ("batched_mm", "grouped_mm")
+            ("batched_mm", "grouped_mm", "deepgemm") if torch.cuda.is_available() else ("batched_mm", "grouped_mm")
         )
         rc = _run_distributed_generate_compile_worker(
             loadtime_dispatch=None,
