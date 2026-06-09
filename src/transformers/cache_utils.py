@@ -1466,28 +1466,21 @@ class DynamicCache(Cache):
         # In this case, use the passed data to already fill in the Cache
         if ddp_cache_data is not None:
             # Init all the layers with the data
-            for layer_idx, data in enumerate(ddp_cache_data):
+            for layer_idx, kv_and_optional_sliding in enumerate(ddp_cache_data):
                 # If the config was not passed above, initialize a new cache layer for each entry of the ddp_data
                 if config is None:
-                    # data contains at least two elements: the key and value states. It can also contain:
-                    # - a 3rd element: optional sliding window tensor
-                    # - a 4th element: optional indexer keys tensor
-                    sliding_window_tensor = data[2] if len(data) > 2 else None
-                    indexer_keys_tensor = data[3] if len(data) > 3 else None
-                    if indexer_keys_tensor is not None:
-                        layers.append(DynamicIndexedLayer())
-                    elif sliding_window_tensor is not None:
+                    # kv_and_optional_sliding contains at least two elements: the key and value states. It can also
+                    # contain a third element, which is an optional sliding window tensor.
+                    sliding_window_tensor = kv_and_optional_sliding[2] if len(kv_and_optional_sliding) == 3 else None
+                    # If there is a sliding window tensor, use it to initialize the layer
+                    if sliding_window_tensor is not None:
                         # Since the same layer is dispatched across replicas, sliding_window is the same for all
                         sliding_window = sliding_window_tensor[0].item()
                         layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window))
                     else:
                         layers.append(DynamicLayer())
                 # Update the layer with the data
-                _, _ = layers[layer_idx].update(data[0], data[1])
-                # Restore indexer keys if present
-                indexer_keys_tensor = data[3] if len(data) > 3 else None
-                if indexer_keys_tensor is not None and isinstance(layers[layer_idx], DynamicIndexedLayer):
-                    layers[layer_idx].update_indexer(indexer_keys_tensor)
+                _, _ = layers[layer_idx].update(kv_and_optional_sliding[0], kv_and_optional_sliding[1])
 
         # If neither of config nor ddp_data was passed, then simply lazy init a full cache of DynamicLayer
         if len(layers) == 0:
@@ -1501,12 +1494,7 @@ class DynamicCache(Cache):
 
     def __iter__(self):
         for layer in self.layers:
-            yield (
-                layer.keys,
-                layer.values,
-                getattr(layer, "_sliding_window_tensor", None),
-                getattr(layer, "indexer_keys", None),
-            )
+            yield layer.keys, layer.values, getattr(layer, "_sliding_window_tensor", None)
 
 
 class StaticCache(Cache):
