@@ -70,7 +70,7 @@ from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel
+from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
@@ -4638,7 +4638,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             raise ValueError(
                 "Kernels are not available. To use kernels, please install kernels using `pip install -U kernels`"
             )
-        from kernels import Device, Mode, kernelize
+        from kernels import Mode
 
         def attach_hidden_kernels(module):
             for name, fn in getattr(module, "_hidden_kernels", {}).items():
@@ -4662,14 +4662,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self.apply(attach_hidden_kernels)
 
             mode = Mode.INFERENCE if not self.training else Mode.TRAINING if mode is None else mode
-            if self.kernel_config is not None:
-                from kernels import use_kernel_mapping
-
-                inherit_mapping = not self.kernel_config.use_local_kernel
-                with use_kernel_mapping(self.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
-                    kernelize(self, device=Device(type=self.device.type), mode=mode)
-            else:
-                kernelize(self, device=Device(type=self.device.type), mode=mode)
+            kernelize(self, mode=mode)
             self._use_kernels = True
 
         finally:

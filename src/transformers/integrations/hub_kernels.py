@@ -50,9 +50,13 @@ try:
         Mode,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
+        use_kernel_mapping,
     )
     from kernels import (
         get_kernel as get_kernel_hub,
+    )
+    from kernels import (
+        kernelize as _kernels_kernelize,
     )
     from kernels import (
         use_kernel_forward_from_hub as _kernels_use_kernel_forward_from_hub,
@@ -432,6 +436,15 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
+def kernelize(model: "PreTrainedModel", mode: "Mode"):
+    if model.kernel_config is not None:
+        inherit_mapping = not model.kernel_config.use_local_kernel
+        with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
+            _kernels_kernelize(model, device=Device(type=model.device.type), mode=mode)
+    else:
+        _kernels_kernelize(model, device=Device(type=model.device.type), mode=mode)
+
+
 def get_kernel(
     kernel_name: str,
     revision: str | None = None,
@@ -674,6 +687,7 @@ def register_kernel_replacements_and_fusions(
 __all__ = [
     "LayerRepository",
     "get_kernel",
+    "kernelize",
     "lazy_load_kernel",
     "register_kernel_mapping",
     "register_kernel_mapping_transformers",
