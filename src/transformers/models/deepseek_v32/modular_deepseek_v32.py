@@ -230,9 +230,9 @@ class DeepseekV32Indexer(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-    ) -> torch.LongTensor:
+    ) -> torch.Tensor:
         """
-        Computes top-k token indices for sparse attention (DSA).
+        Computes the additive top-k sparse-attention mask (DSA).
 
         This is the bf16 equivalent of the reference Indexer which uses `rotate_activation` (Hadamard transform)
         and `fp8_index` (FP8 quantized scoring kernel). Since the Hadamard transform is orthogonal (dot products
@@ -250,7 +250,8 @@ class DeepseekV32Indexer(nn.Module):
             past_key_values: Cache object containing the indexer key cache for this layer.
 
         Returns:
-            `torch.LongTensor`: Top-k token indices of shape `[B, S, topk]`.
+            `torch.Tensor`: Additive sparse mask of shape `[B, S, T]` (`0` at the selected top-k tokens,
+                `-inf` elsewhere).
         """
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
@@ -292,7 +293,16 @@ class DeepseekV32Indexer(nn.Module):
         topk = min(self.index_topk, total_len)
         # diff with classic attention, sample don't project :wink:
         topk_indices = index_scores.topk(topk, dim=-1).indices  # [B, S, topk]
-        return topk_indices
+        # Return the additive sparse mask directly (0 at the selected tokens, -inf elsewhere): the raw
+        # top-k indices are not needed downstream, they would only ever be scattered into this mask.
+        index_mask = torch.full(
+            (batch_size, seq_len, total_len),
+            float("-inf"),
+            device=hidden_states.device,
+            dtype=hidden_states.dtype,
+        )
+        index_mask.scatter_(-1, topk_indices, 0.0)  # [B, S, T]
+        return index_mask
 
 
 class DeepseekV32Attention(nn.Module):
@@ -414,21 +424,12 @@ class DeepseekV32Attention(nn.Module):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # ===== Indexer (DSA sparse mask) =====
-        # attention_mask is [B, 1, S, T] (4D) for eager and (2D) otherwise but indexer works with [B, S, T] (3D)
-        topk_indices = self.compute_topk_indices(
-            hidden_states, q_resid, position_embeddings, attention_mask, past_key_values=past_key_values
-        )
-
-        # Build combined DSA + causal mask: -inf everywhere except selected top-k positions
+        # The indexer returns the additive sparse mask directly ([B, S, T]: 0 at the selected top-k tokens,
+        # -inf elsewhere), so there are no raw top-k indices to scatter here.
         total_len = key_states.shape[2]
-        index_mask = torch.full(
-            (batch_size, seq_length, total_len),
-            float("-inf"),
-            device=hidden_states.device,
-            dtype=query_states.dtype,
-        )
-        index_mask.scatter_(-1, topk_indices, 0.0)  # [B, S, T]
-        index_mask = index_mask.unsqueeze(1)  # [B, 1, S, T]
+        index_mask = self.compute_index_mask(
+            hidden_states, q_resid, position_embeddings, attention_mask, past_key_values=past_key_values
+        ).unsqueeze(1)  # [B, 1, S, T]
         if attention_mask is not None and attention_mask.dim() == 4:
             causal_mask = attention_mask[..., :total_len]
             combined_mask = index_mask + causal_mask
@@ -455,7 +456,6 @@ class DeepseekV32Attention(nn.Module):
             combined_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            indices=topk_indices,  # flash_mla_with_kvcache
             **kwargs,
         )
 
@@ -466,7 +466,7 @@ class DeepseekV32Attention(nn.Module):
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
-    def compute_topk_indices(
+    def compute_index_mask(
         self,
         hidden_states: torch.Tensor,
         q_resid: torch.Tensor | None,
@@ -474,7 +474,8 @@ class DeepseekV32Attention(nn.Module):
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
     ) -> torch.Tensor:
-        """Run this layer's indexer to select the top-k tokens for the sparse attention mask."""
+        """Run this layer's indexer to build the additive top-k sparse mask `[B, S, T]`."""
+        # attention_mask is [B, 1, S, T] (4D) for eager and (2D) otherwise but the indexer works with [B, S, T] (3D)
         indexer_mask = (
             attention_mask[:, 0, :, :]
             if attention_mask is not None and attention_mask.dim() == 4

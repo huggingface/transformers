@@ -47,8 +47,10 @@ DSA reduces the quadratic cost of attention over long sequences by attending onl
 
 The indexer keeps its own small per-token key cache (single-head, `index_head_dim`) alongside the main K/V cache. In transformers this lives on a dedicated cache layer — [`DynamicIndexedLayer`] for growing caches and [`StaticIndexedLayer`] for static / `torch.compile` caches — and is updated through `past_key_values.update_indexer()`.
 
+In DeepSeek-V3.2 **every layer runs its own indexer** — there is no cross-layer top-k sharing.
+
 > [!TIP]
-> The same architecture backs `GlmMoeDsa`. A per-layer `indexer_types` schedule (`"full"` vs `"shared"`) lets later layers reuse a previous full layer's top-k selection instead of recomputing it (see [IndexCache](https://huggingface.co/papers/2603.12201)). DeepSeek-V3.2 runs the indexer on every layer by default (`index_topk_freq=1`, i.e. all `"full"`); the sharing schedule is opt-in.
+> DeepSeek-V3.2 is the base DSA implementation in transformers. [`GlmMoeDsa`](./glm_moe_dsa) inherits from it and adds its own innovation on top: a per-layer `indexer_types` schedule (`"full"` vs `"shared"`) where `"shared"` layers skip running their own indexer and reuse the previous full layer's top-k selection, saving the per-layer indexer compute on long-context decoding (see [IndexCache](https://huggingface.co/papers/2603.12201)). That sharing does not exist in DeepSeek-V3.2.
 
 ## Usage examples
 
