@@ -379,22 +379,11 @@ class ESMFold2Model(PreTrainedModel):
         dtype = dtype_map[precision]
 
         # Load directly in the target dtype so the ~25GB fp32 6B backbone is never
-        # materialised (it would not fit alongside the trunk on a 24GB GPU).
-        esmc = AutoModel.from_pretrained(esmc_model_path, dtype=dtype).to(device=self.device, dtype=dtype)
-        if dtype == torch.bfloat16:
-            # The ESMFold2 checkpoint was trained against a bf16-cast backbone, so
-            # reproduce that exactly. ESMC keeps its norm weights in fp32 on a bf16
-            # load (``_keep_in_fp32_modules_strict``); the ``.to(bf16)`` above forced
-            # those down to bf16, matching the trained rounding. Now upcast just the
-            # norm weights back to fp32 so the LayerNorms still run in fp32 (the
-            # reference ran them under autocast). Values stay bf16-rounded — only the
-            # storage/maths are fp32. Net: bit-identical to "load fp32 -> .to(bf16) ->
-            # autocast" without ever holding the fp32 backbone.
-            norm_markers = getattr(esmc, "_keep_in_fp32_modules_strict", None) or ()
-            for name, param in esmc.named_parameters():
-                if any(marker in name for marker in norm_markers):
-                    param.data = param.data.float()
-        esmc = esmc.eval()
+        # materialised (it would not fit alongside the trunk on a 24GB GPU). The
+        # backbone is run exactly as the reference does — plain bf16 weights under a
+        # bf16 autocast (see ``_compute_lm_hidden_states``) — so no per-parameter
+        # dtype fix-up is needed here.
+        esmc = AutoModel.from_pretrained(esmc_model_path, dtype=dtype).to(device=self.device, dtype=dtype).eval()
         for p in esmc.parameters():
             p.requires_grad_(False)
 
@@ -462,15 +451,23 @@ class ESMFold2Model(PreTrainedModel):
         tok_mask: Tensor,
     ) -> Tensor:
         assert self._esmc is not None
-        return compute_lm_hidden_states(
-            self._esmc,
-            input_ids,
-            asym_id,
-            residue_index,
-            mol_type,
-            tok_mask,
-            pad_to_multiple=None,
-        )
+        # Run the frozen ESMC backbone exactly as the reference does: plain weights
+        # under a bf16 autocast (the fork's ``_lm_precision_context``). For a bf16
+        # backbone this puts norms/softmax in fp32 and matmuls/rotary in bf16,
+        # reproducing the checkpoint's training regime bit-for-bit; disabled (a
+        # no-op) for an fp32 backbone. This autocast is scoped to the backbone only
+        # — the trunk stays dtype-honest.
+        use_amp = next(self._esmc.parameters()).dtype == torch.bfloat16
+        with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=use_amp):
+            return compute_lm_hidden_states(
+                self._esmc,
+                input_ids,
+                asym_id,
+                residue_index,
+                mol_type,
+                tok_mask,
+                pad_to_multiple=None,
+            )
 
     def _discretized_dynamics(self) -> tuple[Tensor, Tensor]:
         delta = F.softplus(self.parcae_log_delta)
