@@ -159,7 +159,8 @@ class ModelRunner:
         # Run model forward pass
         logits = model(**batch_data).logits  # shape [1, seq_len, vocab_size]
 
-        # Extract prediction + some padding (reduces the size from max_batch_tokens to max_requests_per_batch)
+        # Extract prediction + some padding: this reduces the size of the logits from the nb of query tokens (capped at
+        # max_batch_tokens) to the nb of requests in the batch (capped at max_requests_per_batch <= max_batch_tokens)
         logits_indices = batch_data["logits_indices"]  # shape [num_logits]
         logits = logits[:, logits_indices, :]  # shape [1, num_logits, vocab_size]
         # Convert to fp32 to match generate
