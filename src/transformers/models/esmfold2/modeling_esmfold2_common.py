@@ -2063,17 +2063,23 @@ class TriangleMultiplicativeBlock(nn.Module):
         normalized_grid = self.norm_start(pair_grid.float()).to(pair_grid.dtype)
         bundled = self.proj_bundle(normalized_grid)
         signal, gate_logits = bundled.split(2 * self.latent_channels, dim=-1)
-        routed = signal.float() * torch.sigmoid(gate_logits.float())
+        # Gates and the O(N^3) contraction run in the activation dtype (bf16). This
+        # matches the reference: under its autocast the einsum is downcast to bf16,
+        # and the fused Triton kernel likewise contracts in bf16 — the dtype the
+        # checkpoint was trained with. Keeping these in fp32 was a (marginal)
+        # precision *up* that diverges from training and is slower on the trunk's
+        # dominant op. ``norm_start``/``norm_mix`` stay fp32. A no-op in fp32.
+        routed = signal * torch.sigmoid(gate_logits)
         routed = routed * visibility.unsqueeze(-1)
 
-        left_stream, right_stream = routed.float().chunk(2, dim=-1)
+        left_stream, right_stream = routed.chunk(2, dim=-1)
         if self._chunk_size is not None:
             contracted = self._triangular_contract_chunked(left_stream, right_stream, self._chunk_size)
         else:
             contracted = self._triangular_contract(left_stream, right_stream)
-        mixed = self.proj_emit(self.norm_mix(contracted).to(self.proj_emit.weight.dtype))
-        output_gate = torch.sigmoid(self.proj_gate(normalized_grid).float())
-        return (mixed.float() * output_gate).to(mixed.dtype)
+        mixed = self.proj_emit(self.norm_mix(contracted.float()).to(self.proj_emit.weight.dtype))
+        output_gate = torch.sigmoid(self.proj_gate(normalized_grid))
+        return mixed * output_gate
 
 
 class TriangleMultiplicativeUpdate(nn.Module):
