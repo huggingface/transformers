@@ -57,6 +57,13 @@ def get_keys_to_not_convert(model) -> list:
     }
     modules_to_not_convert = tied_keys | last_module_key | output_emb_keys
 
+    # Audio modules in multimodal models are typically small and not worth quantizing.
+    # Skipping them also prevents uint8 dtype crashes during inference.
+    # Use named_modules() to find audio modules regardless of nesting depth.
+    for name, _ in model.named_modules():
+        if name.endswith(("audio_tower", "embed_audio")):
+            modules_to_not_convert.add(name)
+
     modules_to_not_convert = list({k.removesuffix(".weight") for k in modules_to_not_convert})
 
     return list(modules_to_not_convert)
