@@ -46,13 +46,43 @@ class NemotronAsrProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+# Default supported right attention contexts (lookaheads, in subsampled encoder frames) of the NeMo
+# cache-aware streaming FastConformer checkpoint. The first entry is the default.
+DEFAULT_NUM_LOOKAHEAD_TOKENS = [13, 6, 1, 0]
+
+
 @auto_docstring
 class NemotronAsrProcessor(ProcessorMixin):
-    def __init__(self, feature_extractor, tokenizer, blank_token="<blank>"):
+    def __init__(
+        self,
+        feature_extractor,
+        tokenizer,
+        blank_token="<blank>",
+        supported_num_lookahead_tokens=None,
+        default_num_lookahead_tokens=None,
+    ):
         r"""
         blank_token (`str`, *optional*, defaults to `"<blank>"`):
-            Blank token for TDT decoding.
+            Blank token for RNN-T decoding.
+        supported_num_lookahead_tokens (`list[int]`, *optional*):
+            Supported right attention contexts (lookaheads, in subsampled encoder frames), mirroring
+            `NemotronAsrEncoderConfig.supported_num_lookahead_tokens`. Used to validate `streaming_latency_ms` and to
+            derive the `num_lookahead_tokens` returned by [`~NemotronAsrProcessor.__call__`]. Defaults to the
+            NeMo cache-aware set `[13, 6, 1, 0]`.
+        default_num_lookahead_tokens (`int`, *optional*):
+            The right context used when `streaming_latency_ms` is not provided. Defaults to the first entry
+            of `supported_num_lookahead_tokens`.
         """
+        self.supported_num_lookahead_tokens = (
+            supported_num_lookahead_tokens
+            if supported_num_lookahead_tokens is not None
+            else DEFAULT_NUM_LOOKAHEAD_TOKENS
+        )
+        self.default_num_lookahead_tokens = (
+            default_num_lookahead_tokens
+            if default_num_lookahead_tokens is not None
+            else self.supported_num_lookahead_tokens[0]
+        )
         self.blank_token = blank_token
         self.blank_token_id = tokenizer.convert_tokens_to_ids(blank_token)
         super().__init__(feature_extractor, tokenizer)
@@ -63,15 +93,36 @@ class NemotronAsrProcessor(ProcessorMixin):
         audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         sampling_rate: int | None = None,
+        streaming_latency_ms: int | None = None,
+        is_streaming: bool = False,
+        is_first_audio_chunk: bool | None = True,
         **kwargs: Unpack[NemotronAsrProcessorKwargs],
     ):
         r"""
-        sampling_rate (`int`, *optional*):
-            The sampling rate of the input audio in Hz. This should match the sampling rate expected by the feature
-            extractor (defaults to 16000 Hz). If provided, it will be validated against the processor's expected
-            sampling rate, and an error will be raised if they don't match. If not provided, a warning will be
-            issued and the default sampling rate will be assumed.
+        streaming_latency_ms (`int`, *optional*):
+            Target streaming latency in milliseconds. Must equal one of the latencies supported by the model
+            (`(num_lookahead_tokens + 1) * encoder_frame_ms` for each supported right context); otherwise a
+            `ValueError` is raised. The selected latency determines the `num_lookahead_tokens` returned in the
+            output. If omitted, `default_num_lookahead_tokens` is used and a warning is issued.
+        is_streaming (`bool`, *optional*, defaults to `False`):
+            Whether to process audio in streaming mode. When `True`, audio can be passed in chunks, using
+            `is_first_audio_chunk` to distinguish the first chunk from subsequent ones.
+        is_first_audio_chunk (`bool`, *optional*, defaults to `True`):
+            Whether the current audio is the first chunk of a streaming session. The feature extractor uses
+            `center=True` for the first chunk (and for offline use) and `center=False` for subsequent chunks,
+            so that the per-chunk STFT reproduces, frame-for-frame, a single full-utterance pass. Must be
+            `True` when `is_streaming=False`.
+
+        Returns:
+            [`BatchFeature`]: the feature-extractor (and optional tokenizer) outputs, augmented with:
+
+            - **num_lookahead_tokens** -- The right attention context (lookahead, in subsampled encoder frames)
+              corresponding to the requested `streaming_latency_ms`. Pass it to the model/encoder forward (or
+              `generate`); it plays the role of Voxtral Realtime's `num_delay_tokens`.
         """
+        if not is_streaming and not is_first_audio_chunk:
+            raise ValueError("In non-streaming mode (`is_streaming=False`), `is_first_audio_chunk` must be `True`.")
+
         audio = make_list_of_audio(audio)
 
         output_kwargs = self._merge_kwargs(
@@ -90,16 +141,21 @@ class NemotronAsrProcessor(ProcessorMixin):
             )
 
         if audio is not None:
-            inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+            # `center=True` for the first/offline chunk, `center=False` for subsequent streaming chunks.
+            inputs = self.feature_extractor(audio, center=bool(is_first_audio_chunk), **output_kwargs["audio_kwargs"])
         if text is not None:
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
+
+        # The right attention context (akin to Voxtral Realtime's `num_delay_tokens`) selected by the
+        # requested streaming latency; pass it to the model/encoder forward or `generate`.
+        inputs["num_lookahead_tokens"] = self._resolve_num_lookahead_tokens(streaming_latency_ms)
 
         if text is None:
             return inputs
         else:
             inputs["labels"] = encodings["input_ids"]
             # Prepend blank token to labels to form decoder_input_ids.
-            # The TDT decoder expects [blank, label_0, ..., label_{U-1}] as input,
+            # The RNN-T decoder expects [blank, label_0, ..., label_{U-1}] as input,
             if isinstance(text, str):
                 text = [text]
             decoder_text = [self.blank_token + t for t in text]
@@ -172,6 +228,44 @@ class NemotronAsrProcessor(ProcessorMixin):
                 offset["end"] = offset["start"]
 
         return char_offsets
+
+    @property
+    def encoder_frame_ms(self) -> float:
+        """Duration in milliseconds of one subsampled encoder frame (`subsampling_factor * hop_length / sampling_rate`)."""
+        output_kwargs = self._merge_kwargs(
+            NemotronAsrProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs
+        )
+        subsampling_factor = output_kwargs["audio_kwargs"]["subsampling_factor"]
+        return subsampling_factor * self.feature_extractor.hop_length / self.feature_extractor.sampling_rate * 1000
+
+    @property
+    def supported_streaming_latencies_ms(self) -> dict[int, int]:
+        """
+        Mapping from each supported streaming latency (ms) to its right attention context (encoder frames).
+
+        The streaming delay of a right context `r` is `(r + 1)` encoder frames (the model emits a chunk only
+        once the chunk's last frame has its full lookahead), so the latency is `(r + 1) * encoder_frame_ms`.
+        """
+        frame_ms = self.encoder_frame_ms
+        return {round((right + 1) * frame_ms): right for right in self.supported_num_lookahead_tokens}
+
+    def _resolve_num_lookahead_tokens(self, streaming_latency_ms: int | None) -> int:
+        latencies = self.supported_streaming_latencies_ms
+        if streaming_latency_ms is None:
+            logger.warning_once(
+                f"`streaming_latency_ms` was not provided. Falling back to the model's default right attention "
+                f"context of {self.default_num_lookahead_tokens} frame(s) "
+                f"(~{round((self.default_num_lookahead_tokens + 1) * self.encoder_frame_ms)} ms). Supported "
+                f"streaming latencies (ms): {sorted(latencies)}. Pass `streaming_latency_ms` explicitly to "
+                f"select the latency/quality trade-off."
+            )
+            return self.default_num_lookahead_tokens
+        if streaming_latency_ms not in latencies:
+            raise ValueError(
+                f"`streaming_latency_ms={streaming_latency_ms}` is not supported by this model. Supported "
+                f"streaming latencies (ms): {sorted(latencies)}."
+            )
+        return latencies[streaming_latency_ms]
 
 
 __all__ = ["NemotronAsrProcessor"]

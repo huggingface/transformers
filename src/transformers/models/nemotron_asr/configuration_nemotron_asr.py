@@ -46,24 +46,17 @@ class NemotronAsrEncoderConfig(PreTrainedConfig):
         The dropout ratio for the positions in the input sequence.
     scale_input (`bool`, *optional*, defaults to `True`):
         Whether to scale the input embeddings.
-    att_context_size (`list[int]` or `list[list[int]]`, *optional*, defaults to `None`):
-        Attention context window `[left, right]` (in subsampled encoder frames). `None` (or `[-1, -1]`)
-        means full bidirectional context. A single pair like `[70, 13]` constrains attention to
-        ±frames per-position (cache-aware models). A list of pairs `[[70, 13], [70, 0]]` enables
-        multi-lookahead training; the first entry is the inference default.
-    att_context_style (`str`, *optional*, defaults to `"regular"`):
-        Attention context style. `"regular"` masks per-position with the chosen `att_context_size`.
-        `"chunked_limited"` groups frames into fixed chunks (size `right + 1`) and masks at chunk
-        boundaries — matches NeMo's cache-aware streaming semantics.
-    conv_context_size (`str` or `list[int]`, *optional*, defaults to `None`):
-        Padding for the depthwise Conformer convolution. `None` uses symmetric `[(k-1)//2, (k-1)//2]`.
-        `"causal"` uses left-only `[k-1, 0]`. A `[left, right]` pair (with `left + right + 1 == conv_kernel_size`)
-        applies custom asymmetric padding.
-    causal_downsampling (`bool`, *optional*, defaults to `False`):
-        Whether the input subsampling Conv2d uses causal (left-only) padding in the time dimension.
-        Required for cache-aware checkpoints.
-    conv_norm_type (`str`, *optional*, defaults to `"batch_norm"`):
-        Normalization for the depthwise convolution in the Conformer block: `"batch_norm"` or `"layer_norm"`.
+    sliding_window (`int`, *optional*, defaults to 71):
+        Size of the K/V attention sliding window (in subsampled encoder frames). It equals
+        `left_context + 1` (the current frame plus the left context), so the left attention context is
+        `sliding_window - 1` — the same across all supported lookaheads.
+    supported_num_lookahead_tokens (`list[int]`, *optional*, defaults to `(13, 6, 1, 0)`):
+        Supported right attention contexts (lookaheads, in subsampled encoder frames) the model was
+        trained with — a multi-lookahead cache-aware model. The streaming delay of a right context `r` is
+        `(r + 1)` encoder frames.
+    default_num_lookahead_tokens (`int`, *optional*, defaults to 13):
+        The right attention context used when none is passed to the forward. Must be one of
+        `supported_num_lookahead_tokens`.
 
     Example:
     ```python
@@ -105,27 +98,19 @@ class NemotronAsrEncoderConfig(PreTrainedConfig):
     scale_input: bool = True
     initializer_range: float = 0.02
 
-    att_context_size: list | None = None
-    att_context_style: str = "regular"
-    conv_context_size: str | list | None = None
-    causal_downsampling: bool = False
-    conv_norm_type: str = "batch_norm"
+    sliding_window: int = 71
+    supported_num_lookahead_tokens: list[int] | tuple[int, ...] = (13, 6, 1, 0)
+    default_num_lookahead_tokens: int = 13
 
     def __post_init__(self, **kwargs):
         self.num_key_value_heads = self.num_attention_heads
-        if isinstance(self.conv_context_size, list):
-            left, right = self.conv_context_size
-            if left + right + 1 != self.conv_kernel_size:
-                raise ValueError(
-                    f"conv_context_size {self.conv_context_size} must satisfy "
-                    f"left + right + 1 == conv_kernel_size ({self.conv_kernel_size})."
-                )
-        if self.att_context_style not in {"regular", "chunked_limited"}:
+        # The left attention context is carried by `sliding_window` (== left_context + 1); the right
+        # contexts are the supported lookaheads, and the default must be one of them.
+        if self.default_num_lookahead_tokens not in self.supported_num_lookahead_tokens:
             raise ValueError(
-                f"att_context_style must be 'regular' or 'chunked_limited', got {self.att_context_style!r}."
+                f"default_num_lookahead_tokens ({self.default_num_lookahead_tokens}) must be one of "
+                f"supported_num_lookahead_tokens ({self.supported_num_lookahead_tokens})."
             )
-        if self.conv_norm_type not in {"batch_norm", "layer_norm"}:
-            raise ValueError(f"conv_norm_type must be 'batch_norm' or 'layer_norm', got {self.conv_norm_type!r}.")
         super().__post_init__(**kwargs)
 
 

@@ -29,15 +29,18 @@ from ...feature_extraction_utils import BatchFeature
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMode
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import Unpack
+from ...audio_utils import AudioInput, make_list_of_audio
+from ...processing_utils import ProcessingKwargs, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TensorType,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     logging,
+    is_torchdynamo_compiling,
 )
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -90,24 +93,17 @@ class NemotronAsrEncoderConfig(ParakeetEncoderConfig):
         The dropout ratio for the positions in the input sequence.
     scale_input (`bool`, *optional*, defaults to `True`):
         Whether to scale the input embeddings.
-    att_context_size (`list[int]` or `list[list[int]]`, *optional*, defaults to `None`):
-        Attention context window `[left, right]` (in subsampled encoder frames). `None` (or `[-1, -1]`)
-        means full bidirectional context. A single pair like `[70, 13]` constrains attention to
-        ±frames per-position (cache-aware models). A list of pairs `[[70, 13], [70, 0]]` enables
-        multi-lookahead training; the first entry is the inference default.
-    att_context_style (`str`, *optional*, defaults to `"regular"`):
-        Attention context style. `"regular"` masks per-position with the chosen `att_context_size`.
-        `"chunked_limited"` groups frames into fixed chunks (size `right + 1`) and masks at chunk
-        boundaries — matches NeMo's cache-aware streaming semantics.
-    conv_context_size (`str` or `list[int]`, *optional*, defaults to `None`):
-        Padding for the depthwise Conformer convolution. `None` uses symmetric `[(k-1)//2, (k-1)//2]`.
-        `"causal"` uses left-only `[k-1, 0]`. A `[left, right]` pair (with `left + right + 1 == conv_kernel_size`)
-        applies custom asymmetric padding.
-    causal_downsampling (`bool`, *optional*, defaults to `False`):
-        Whether the input subsampling Conv2d uses causal (left-only) padding in the time dimension.
-        Required for cache-aware checkpoints.
-    conv_norm_type (`str`, *optional*, defaults to `"batch_norm"`):
-        Normalization for the depthwise convolution in the Conformer block: `"batch_norm"` or `"layer_norm"`.
+    sliding_window (`int`, *optional*, defaults to 71):
+        Size of the K/V attention sliding window (in subsampled encoder frames). It equals
+        `left_context + 1` (the current frame plus the left context), so the left attention context is
+        `sliding_window - 1` — the same across all supported lookaheads.
+    supported_num_lookahead_tokens (`list[int]`, *optional*, defaults to `(13, 6, 1, 0)`):
+        Supported right attention contexts (lookaheads, in subsampled encoder frames) the model was
+        trained with — a multi-lookahead cache-aware model. The streaming delay of a right context `r` is
+        `(r + 1)` encoder frames.
+    default_num_lookahead_tokens (`int`, *optional*, defaults to 13):
+        The right attention context used when none is passed to the forward. Must be one of
+        `supported_num_lookahead_tokens`.
 
     Example:
     ```python
@@ -127,27 +123,19 @@ class NemotronAsrEncoderConfig(ParakeetEncoderConfig):
     model_type = "nemotron_asr_encoder"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    att_context_size: list | None = None
-    att_context_style: str = "regular"
-    conv_context_size: str | list | None = None
-    causal_downsampling: bool = False
-    conv_norm_type: str = "batch_norm"
+    sliding_window: int = 71
+    supported_num_lookahead_tokens: list[int] | tuple[int, ...] = (13, 6, 1, 0)
+    default_num_lookahead_tokens: int = 13
 
     def __post_init__(self, **kwargs):
         self.num_key_value_heads = self.num_attention_heads
-        if isinstance(self.conv_context_size, list):
-            left, right = self.conv_context_size
-            if left + right + 1 != self.conv_kernel_size:
-                raise ValueError(
-                    f"conv_context_size {self.conv_context_size} must satisfy "
-                    f"left + right + 1 == conv_kernel_size ({self.conv_kernel_size})."
-                )
-        if self.att_context_style not in {"regular", "chunked_limited"}:
+        # The left attention context is carried by `sliding_window` (== left_context + 1); the right
+        # contexts are the supported lookaheads, and the default must be one of them.
+        if self.default_num_lookahead_tokens not in self.supported_num_lookahead_tokens:
             raise ValueError(
-                f"att_context_style must be 'regular' or 'chunked_limited', got {self.att_context_style!r}."
+                f"default_num_lookahead_tokens ({self.default_num_lookahead_tokens}) must be one of "
+                f"supported_num_lookahead_tokens ({self.supported_num_lookahead_tokens})."
             )
-        if self.conv_norm_type not in {"batch_norm", "layer_norm"}:
-            raise ValueError(f"conv_norm_type must be 'batch_norm' or 'layer_norm', got {self.conv_norm_type!r}.")
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
@@ -261,12 +249,173 @@ class NemotronAsrConfig(NemotronAsrRNNTConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-class NemotronAsrProcessor(ParakeetProcessor): ...
+class NemotronAsrProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "audio_kwargs": {
+            "sampling_rate": 16000,
+            "padding": "longest",
+            "return_attention_mask": True,
+            "subsampling_factor": 8,
+        },
+        "text_kwargs": {
+            "padding": True,
+            "padding_side": "right",
+            "add_special_tokens": False,
+        },
+        "common_kwargs": {"return_tensors": "pt"},
+    }
+
+
+# Default supported right attention contexts (lookaheads, in subsampled encoder frames) of the NeMo
+# cache-aware streaming FastConformer checkpoint. The first entry is the default.
+DEFAULT_NUM_LOOKAHEAD_TOKENS = [13, 6, 1, 0]
+
+
+@auto_docstring
+class NemotronAsrProcessor(ParakeetProcessor):
+    def __init__(
+        self,
+        feature_extractor,
+        tokenizer,
+        blank_token="<blank>",
+        supported_num_lookahead_tokens=None,
+        default_num_lookahead_tokens=None,
+    ):
+        r"""
+        blank_token (`str`, *optional*, defaults to `"<blank>"`):
+            Blank token for RNN-T decoding.
+        supported_num_lookahead_tokens (`list[int]`, *optional*):
+            Supported right attention contexts (lookaheads, in subsampled encoder frames), mirroring
+            `NemotronAsrEncoderConfig.supported_num_lookahead_tokens`. Used to validate `streaming_latency_ms` and to
+            derive the `num_lookahead_tokens` returned by [`~NemotronAsrProcessor.__call__`]. Defaults to the
+            NeMo cache-aware set `[13, 6, 1, 0]`.
+        default_num_lookahead_tokens (`int`, *optional*):
+            The right context used when `streaming_latency_ms` is not provided. Defaults to the first entry
+            of `supported_num_lookahead_tokens`.
+        """
+        self.supported_num_lookahead_tokens = supported_num_lookahead_tokens if supported_num_lookahead_tokens is not None else DEFAULT_NUM_LOOKAHEAD_TOKENS
+        self.default_num_lookahead_tokens = (
+            default_num_lookahead_tokens if default_num_lookahead_tokens is not None else self.supported_num_lookahead_tokens[0]
+        )
+        super().__init__(feature_extractor, tokenizer, blank_token=blank_token)
+
+    @property
+    def encoder_frame_ms(self) -> float:
+        """Duration in milliseconds of one subsampled encoder frame (`subsampling_factor * hop_length / sampling_rate`)."""
+        output_kwargs = self._merge_kwargs(
+            NemotronAsrProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs
+        )
+        subsampling_factor = output_kwargs["audio_kwargs"]["subsampling_factor"]
+        return subsampling_factor * self.feature_extractor.hop_length / self.feature_extractor.sampling_rate * 1000
+
+    @property
+    def supported_streaming_latencies_ms(self) -> dict[int, int]:
+        """
+        Mapping from each supported streaming latency (ms) to its right attention context (encoder frames).
+
+        The streaming delay of a right context `r` is `(r + 1)` encoder frames (the model emits a chunk only
+        once the chunk's last frame has its full lookahead), so the latency is `(r + 1) * encoder_frame_ms`.
+        """
+        frame_ms = self.encoder_frame_ms
+        return {round((right + 1) * frame_ms): right for right in self.supported_num_lookahead_tokens}
+
+    def _resolve_num_lookahead_tokens(self, streaming_latency_ms: int | None) -> int:
+        latencies = self.supported_streaming_latencies_ms
+        if streaming_latency_ms is None:
+            logger.warning_once(
+                f"`streaming_latency_ms` was not provided. Falling back to the model's default right attention "
+                f"context of {self.default_num_lookahead_tokens} frame(s) "
+                f"(~{round((self.default_num_lookahead_tokens + 1) * self.encoder_frame_ms)} ms). Supported "
+                f"streaming latencies (ms): {sorted(latencies)}. Pass `streaming_latency_ms` explicitly to "
+                f"select the latency/quality trade-off."
+            )
+            return self.default_num_lookahead_tokens
+        if streaming_latency_ms not in latencies:
+            raise ValueError(
+                f"`streaming_latency_ms={streaming_latency_ms}` is not supported by this model. Supported "
+                f"streaming latencies (ms): {sorted(latencies)}."
+            )
+        return latencies[streaming_latency_ms]
+
+    @auto_docstring
+    def __call__(
+        self,
+        audio: AudioInput,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        sampling_rate: int | None = None,
+        streaming_latency_ms: int | None = None,
+        is_streaming: bool = False,
+        is_first_audio_chunk: bool | None = True,
+        **kwargs: Unpack[NemotronAsrProcessorKwargs],
+    ):
+        r"""
+        streaming_latency_ms (`int`, *optional*):
+            Target streaming latency in milliseconds. Must equal one of the latencies supported by the model
+            (`(num_lookahead_tokens + 1) * encoder_frame_ms` for each supported right context); otherwise a
+            `ValueError` is raised. The selected latency determines the `num_lookahead_tokens` returned in the
+            output. If omitted, `default_num_lookahead_tokens` is used and a warning is issued.
+        is_streaming (`bool`, *optional*, defaults to `False`):
+            Whether to process audio in streaming mode. When `True`, audio can be passed in chunks, using
+            `is_first_audio_chunk` to distinguish the first chunk from subsequent ones.
+        is_first_audio_chunk (`bool`, *optional*, defaults to `True`):
+            Whether the current audio is the first chunk of a streaming session. The feature extractor uses
+            `center=True` for the first chunk (and for offline use) and `center=False` for subsequent chunks,
+            so that the per-chunk STFT reproduces, frame-for-frame, a single full-utterance pass. Must be
+            `True` when `is_streaming=False`.
+
+        Returns:
+            [`BatchFeature`]: the feature-extractor (and optional tokenizer) outputs, augmented with:
+
+            - **num_lookahead_tokens** -- The right attention context (lookahead, in subsampled encoder frames)
+              corresponding to the requested `streaming_latency_ms`. Pass it to the model/encoder forward (or
+              `generate`); it plays the role of Voxtral Realtime's `num_delay_tokens`.
+        """
+        if not is_streaming and not is_first_audio_chunk:
+            raise ValueError("In non-streaming mode (`is_streaming=False`), `is_first_audio_chunk` must be `True`.")
+
+        audio = make_list_of_audio(audio)
+
+        output_kwargs = self._merge_kwargs(
+            NemotronAsrProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        if sampling_rate is None:
+            logger.warning_once(
+                f"You've provided audio without specifying the sampling rate. It will be assumed to be {output_kwargs['audio_kwargs']['sampling_rate']}, which can result in silent errors."
+            )
+        elif sampling_rate != output_kwargs["audio_kwargs"]["sampling_rate"]:
+            raise ValueError(
+                f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({output_kwargs['audio_kwargs']['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
+            )
+
+        if audio is not None:
+            # `center=True` for the first/offline chunk, `center=False` for subsequent streaming chunks.
+            inputs = self.feature_extractor(audio, center=bool(is_first_audio_chunk), **output_kwargs["audio_kwargs"])
+        if text is not None:
+            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
+
+        # The right attention context (akin to Voxtral Realtime's `num_delay_tokens`) selected by the
+        # requested streaming latency; pass it to the model/encoder forward or `generate`.
+        inputs["num_lookahead_tokens"] = self._resolve_num_lookahead_tokens(streaming_latency_ms)
+
+        if text is None:
+            return inputs
+        else:
+            inputs["labels"] = encodings["input_ids"]
+            # Prepend blank token to labels to form decoder_input_ids.
+            # The RNN-T decoder expects [blank, label_0, ..., label_{U-1}] as input,
+            if isinstance(text, str):
+                text = [text]
+            decoder_text = [self.blank_token + t for t in text]
+            decoder_encodings = self.tokenizer(decoder_text, **output_kwargs["text_kwargs"])
+            inputs["decoder_input_ids"] = decoder_encodings["input_ids"]
+            return inputs
 
 
 class NemotronAsrFeatureExtractor(ParakeetFeatureExtractor):
     def _torch_extract_fbank_features(self, waveform, device="cpu", center=True):
-        # spectrogram
         window = torch.hann_window(self.win_length, periodic=False, device=device)
         stft = torch.stft(
             waveform,
@@ -278,8 +427,6 @@ class NemotronAsrFeatureExtractor(ParakeetFeatureExtractor):
             pad_mode="constant",
             center=center,
         )
-        # Let's math original implementation
-        # magnitudes = torch.abs(stft) ** 2
         magnitudes = torch.view_as_real(stft)
         magnitudes = torch.sqrt(magnitudes.pow(2).sum(-1))
         magnitudes = magnitudes.pow(2)
@@ -423,8 +570,7 @@ class NemotronAsrFeatureExtractor(ParakeetFeatureExtractor):
             features_lengths = torch.floor_divide(padded_inputs.audio_lengths - self.n_fft, self.hop_length) + 1
         attention_mask = torch.arange(input_features.shape[1], device=device)[None, :] < features_lengths[:, None]
 
-        # NemotronAsr never normalizes the mel features (the NeMo checkpoint uses `normalize="NA"`);
-        # we only zero out the padded frames.
+        # NemotronAsr never normalizes the mel features
         input_features *= attention_mask.unsqueeze(-1)
 
         return BatchFeature(
@@ -499,56 +645,20 @@ class NemotronAsrEncoderFeedForward(ParakeetEncoderFeedForward):
 
 class NemotronAsrEncoderConvolutionModule(FastSpeech2ConformerConvolutionModule):
     def __init__(self, config: NemotronAsrEncoderConfig, module_config=None, layer_idx: int | None = None):
-        """
-        Args:
-            config (NemotronAsrEncoderConfig): Configuration for the model.
-            module_config (dict): Configuration for the module (e.g., encoder or decoder).
-            layer_idx (int): Index of the conformer block; used to build a unique conv padding cache key.
-        """
         super().__init__(config, module_config)
         kernel_size = config.conv_kernel_size
         channels = config.hidden_size
 
-        # Replace BatchNorm with LayerNorm for cache-aware checkpoints.
-        if config.conv_norm_type == "layer_norm":
-            self.norm = nn.LayerNorm(channels)
-
-        # Resolve depthwise conv left/right padding.
-        ctx = config.conv_context_size
-        if ctx is None:
-            self._conv_left = (kernel_size - 1) // 2
-            self._conv_right = (kernel_size - 1) // 2
-        elif ctx == "causal":
-            self._conv_left = kernel_size - 1
-            self._conv_right = 0
-        else:  # explicit [left, right]
-            self._conv_left, self._conv_right = ctx
-
-        # A purely causal depthwise conv (left = kernel - 1, right = 0) supports streaming through the
-        # unified `NemotronAsrEncoderCausalConvPaddingCache`. Other (symmetric / asymmetric-with-right)
-        # configs keep a plain `Conv1d` with manual padding and are not streaming-capable.
-        sym = (kernel_size - 1) // 2
-        self._is_causal_streaming = self._conv_left == kernel_size - 1 and self._conv_right == 0
-        if self._is_causal_streaming:
-            self.depthwise_conv = NemotronAsrEncoderCausalConv1d(
-                channels,
-                channels,
-                kernel_size,
-                cache_key=f"conv.{layer_idx}",
-                stride=1,
-                groups=channels,
-                bias=config.convolution_bias,
-            )
-        elif self._conv_left != sym or self._conv_right != sym:
-            self.depthwise_conv = nn.Conv1d(
-                channels,
-                channels,
-                kernel_size,
-                stride=1,
-                padding=0,
-                groups=channels,
-                bias=config.convolution_bias,
-            )
+        self.norm = nn.LayerNorm(channels)
+        self.depthwise_conv = NemotronAsrEncoderCausalConv1d(
+            channels,
+            channels,
+            kernel_size,
+            cache_key=f"conv.{layer_idx}",
+            stride=1,
+            groups=channels,
+            bias=config.convolution_bias,
+        )
 
     def forward(
         self,
@@ -556,21 +666,6 @@ class NemotronAsrEncoderConvolutionModule(FastSpeech2ConformerConvolutionModule)
         attention_mask=None,
         padding_cache: "NemotronAsrEncoderCausalConvPaddingCache | None" = None,
     ):
-        """
-        Compute convolution module.
-
-        Args:
-            hidden_states (`torch.Tensor` of shape `(batch, time, channels)`): Input tensor.
-            attention_mask (`torch.Tensor` of shape `(batch, 1, time, time)`): Attention mask.
-            padding_cache (`NemotronAsrEncoderCausalConvPaddingCache`, *optional*): Streaming conv cache.
-
-        Returns:
-            `torch.Tensor`: Output tensor of shape `(batch, time, channels)`.
-
-        """
-        # Override the parent forward to support asymmetric (causal/custom) conv padding
-        # and LayerNorm (channel-last layout), plus an optional streaming padding cache.
-        # exchange the temporal dimension and the feature dimension
         hidden_states = hidden_states.transpose(1, 2)  # (B, C, T)
 
         # GLU mechanism
@@ -586,24 +681,13 @@ class NemotronAsrEncoderConvolutionModule(FastSpeech2ConformerConvolutionModule)
                 all_masked_rows = torch.all(attention_mask == 0.0, dim=-1)
             hidden_states = hidden_states.masked_fill(all_masked_rows, 0.0)
 
-        if self._is_causal_streaming:
-            # Causal depthwise conv: left context from `padding_cache` when streaming, else left-padded.
-            hidden_states = self.depthwise_conv(hidden_states, padding_cache=padding_cache)
-        else:
-            sym = (self.depthwise_conv.kernel_size[0] - 1) // 2
-            if self._conv_left != sym or self._conv_right != sym:
-                padded = nn.functional.pad(hidden_states, (self._conv_left, self._conv_right))
-                hidden_states = self.depthwise_conv(padded)
-            else:
-                hidden_states = self.depthwise_conv(hidden_states)
+        # Causal depthwise conv: left context from `padding_cache` when streaming, else left-padded.
+        hidden_states = self.depthwise_conv(hidden_states, padding_cache=padding_cache)
 
-        # Norm: BatchNorm1d expects (B,C,T); LayerNorm expects (B,T,C).
-        if isinstance(self.norm, nn.LayerNorm):
-            hidden_states = hidden_states.transpose(1, 2)
-            hidden_states = self.norm(hidden_states)
-            hidden_states = hidden_states.transpose(1, 2)
-        else:
-            hidden_states = self.norm(hidden_states)
+        # LayerNorm expects (B, T, C).
+        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = self.norm(hidden_states)
+        hidden_states = hidden_states.transpose(1, 2)
 
         hidden_states = self.activation(hidden_states)
         hidden_states = self.pointwise_conv2(hidden_states)
@@ -680,21 +764,6 @@ class NemotronAsrEncoderAttention(ParakeetEncoderAttention):
 
 
 class NemotronAsrEncoderCausalConvCacheLayer:
-    """
-    Per-convolution streaming cache holding the left time-context of one causal conv.
-
-    Works for **both** `Conv1d` (`(B, C, T)`) and `Conv2d` (`(B, C, T, F)`): the time axis is `dim=2`
-    in both layouts, so the cache always slices and concatenates along `dim=2`. For the `Conv2d` case
-    the (non-streamed) frequency axis is padded *before* the cache is consulted, so the cached tensor
-    keeps a constant frequency size across chunks.
-
-    The cache carries `conv_module.left_pad` frames between chunks, which for a causal conv is
-    `effective_kernel_size - stride` (`1` for the stride-2 kernel-3 subsampling convs, `8` for the
-    stride-1 kernel-9 conformer depthwise conv). The very first chunk instead needs the full offline
-    left padding `conv_module.left_pad_init` (`effective_kernel_size - 1`), which only differs from the
-    carry for strided convs; the extra `stride - 1` leading zeros reproduce the offline causal padding.
-    """
-
     def __init__(self):
         self.cache: torch.Tensor | None = None
         self.is_initialized: bool = False
@@ -704,6 +773,10 @@ class NemotronAsrEncoderCausalConvCacheLayer:
         cache_shape = list(hidden_states.shape)
         cache_shape[2] = conv_module.left_pad_init  # time axis (offline left padding for the first chunk)
         self.cache = torch.zeros(cache_shape, device=hidden_states.device, dtype=hidden_states.dtype)
+
+        if not is_torchdynamo_compiling():
+            torch._dynamo.mark_static_address(self.cache)
+
         self.is_initialized = True
 
     def update(self, hidden_states, conv_module=None):
@@ -711,13 +784,9 @@ class NemotronAsrEncoderCausalConvCacheLayer:
             self.lazy_initialization(hidden_states, conv_module)
         elif not self.is_initialized:
             raise ValueError(
-                "NemotronAsrEncoderCausalConvCacheLayer is not initialized. "
-                "Make sure to provide conv_module to the update method."
+                "NemotronAsrEncoderCausalConvCacheLayer is not initialized. Make sure to provide conv_module to the update method."
             )
 
-        # The current cache is prepended to this chunk; the new cache keeps the last `left_pad` frames of
-        # [previous_cache | hidden_states] along the time axis (== last `left_pad` frames the next chunk's
-        # leftmost conv window needs from this chunk).
         prepend = self.cache
         combined = torch.cat([self.cache, hidden_states], dim=2)
         if self.left_pad > 0:
@@ -728,16 +797,6 @@ class NemotronAsrEncoderCausalConvCacheLayer:
 
 
 class NemotronAsrEncoderCausalConvPaddingCache:
-    """
-    Unified streaming padding cache for **all** causal convolutions in the encoder: the depthwise
-    `Conv2d` layers of the subsampling **and** the depthwise `Conv1d` of every conformer block's
-    convolution module. Each conv registers under a unique `cache_key`.
-
-    This is the first transformers cache that backs both `Conv1d` and `Conv2d` layers. It mirrors
-    [`VoxtralRealtimeConv1dPaddingCache`] but caches along the time axis (`dim=2`) so the same logic
-    serves the 4D subsampling tensors and the 3D conformer-conv tensors.
-    """
-
     def __init__(self):
         self.layers: dict[str, NemotronAsrEncoderCausalConvCacheLayer] = {}
 
@@ -750,11 +809,6 @@ class NemotronAsrEncoderCausalConvPaddingCache:
 
 
 class NemotronAsrEncoderCausalConv1d(nn.Conv1d):
-    """
-    Causal `Conv1d` (left-only padding) used as the depthwise conv of the conformer convolution module,
-    with optional streaming support through [`NemotronAsrEncoderCausalConvPaddingCache`].
-    """
-
     def __init__(
         self,
         in_channels: int,
@@ -997,12 +1051,8 @@ class NemotronAsrPreTrainedModel(ParakeetPreTrainedModel):
         stride = encoder_config.subsampling_conv_stride
         num_layers = int(math.log2(encoder_config.subsampling_factor))
 
-        if getattr(encoder_config, "causal_downsampling", False):
-            # NeMo's CausalConv2D pads (left=kernel-1, right=stride-1) → total = kernel-1 + stride-1.
-            all_paddings = (kernel_size - 1) + (stride - 1)
-        else:
-            # Symmetric same-padding: total = (kernel-1)//2 * 2.
-            all_paddings = (kernel_size - 1) // 2 * 2
+        # The subsampling Conv2d is always causal: NeMo's CausalConv2D pads (left=kernel-1, right=stride-1).
+        all_paddings = (kernel_size - 1) + (stride - 1)
         add_pad = all_paddings - kernel_size
         lengths = input_lengths
 
@@ -1056,7 +1106,7 @@ class NemotronAsrEncoder(ParakeetEncoder):
         output_attention_mask: bool = True,
         use_cache: bool | None = None,
         padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None,
-        att_context_size: list | None = None,
+        num_lookahead_tokens: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -1067,8 +1117,10 @@ class NemotronAsrEncoder(ParakeetEncoder):
             streaming attention.
         padding_cache (`NemotronAsrEncoderCausalConvPaddingCache`, *optional*):
             Unified streaming cache backing the subsampling Conv2d layers and the conformer depthwise Conv1d.
-        att_context_size (`list[int]`, *optional*):
-            Override of the `[left, right]` attention context for this forward pass.
+        num_lookahead_tokens (`int`, *optional*):
+            Override of the right attention context (lookahead, in subsampled encoder frames) for this
+            forward pass. Combined with the left context `config.sliding_window - 1`. Defaults to
+            `config.default_num_lookahead_tokens`.
 
         Example:
 
@@ -1126,7 +1178,7 @@ class NemotronAsrEncoder(ParakeetEncoder):
         # `q_offset = past_key_values.get_seq_length()` and `kv_length, kv_offset = get_mask_sizes(...)` from
         # the sliding-window cache and offsets the `chunked_limited` overlay with the absolute frame positions
         # accordingly. `past_key_values=None` (offline) is the full-sequence case.
-        left_ctx, right_ctx = self._resolve_att_context_size(att_context_size)
+        left_ctx, right_ctx = self._resolve_attn_context(num_lookahead_tokens)
         attention_mask_4d = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
@@ -1161,29 +1213,28 @@ class NemotronAsrEncoder(ParakeetEncoder):
             past_key_values=past_key_values,
         )
 
-    def _resolve_att_context_size(self, att_context_size: list | None = None) -> list | None:
+    def _resolve_attn_context(self, num_lookahead_tokens: int | None = None) -> tuple[int, int]:
         """
-        Resolve the effective `[left, right]` attention context for this forward pass.
+        Resolve the effective `(left, right)` attention context for this forward pass.
 
-        - If the model is offline (config.att_context_size is None) → returns None.
-        - If `att_context_size` is provided by the caller → uses it (and warns once if the
-          requested context is outside the model's trained set).
-        - Otherwise → uses the first entry from config (the inference default).
+        - If `num_lookahead_tokens` is provided by the caller → uses it (and warns once if it is outside
+          the model's trained set `config.supported_num_lookahead_tokens`).
+        - Otherwise → uses `config.default_num_lookahead_tokens`.
+
+        The left context is `config.sliding_window - 1` (the window spans the left context plus the
+        current frame).
         """
-        configured = self.config.att_context_size
-        if configured is None:
-            return None
-        if att_context_size is not None:
-            if isinstance(configured[0], list) and att_context_size not in configured:
-                logger.warning_once(
-                    f"att_context_size {att_context_size} was not used during training "
-                    f"(trained contexts: {configured}). The model may still produce reasonable "
-                    f"output, but quality is not guaranteed."
-                )
-            return att_context_size
-        if isinstance(configured[0], list):
-            return configured[0]
-        return configured
+        left = self.config.sliding_window - 1
+        supported = self.config.supported_num_lookahead_tokens
+        if num_lookahead_tokens is None:
+            num_lookahead_tokens = self.config.default_num_lookahead_tokens
+        elif num_lookahead_tokens not in supported:
+            logger.warning_once(
+                f"num_lookahead_tokens {num_lookahead_tokens} was not used during training "
+                f"(trained right contexts: {supported}). The model may still produce reasonable "
+                f"output, but quality is not guaranteed."
+            )
+        return left, num_lookahead_tokens
 
 
 @dataclass
@@ -1208,6 +1259,7 @@ class NemotronAsrForRNNT(ParakeetForRNNT, NemotronAsrPreTrainedModel, NemotronAs
         use_decoder_cache: bool | None = None,
         encoder_outputs: NemotronAsrEncoderModelOutput | tuple[torch.FloatTensor] | None = None,
         labels: torch.Tensor | None = None,
+        num_lookahead_tokens: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> NemotronAsrRNNTOutput:
         r"""
@@ -1219,6 +1271,9 @@ class NemotronAsrForRNNT(ParakeetForRNNT, NemotronAsrPreTrainedModel, NemotronAs
             Whether to allocate and use a decoder cache when none is provided.
         encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
             Pre-computed encoder outputs (last_hidden_state, pooler_output, ...).
+        num_lookahead_tokens (`int`, *optional*):
+            Right attention context (lookahead, in subsampled encoder frames) forwarded to the encoder.
+            Defaults to `config.encoder_config.default_num_lookahead_tokens`.
 
         Example:
 
@@ -1241,6 +1296,7 @@ class NemotronAsrForRNNT(ParakeetForRNNT, NemotronAsrPreTrainedModel, NemotronAs
             encoder_outputs = self.get_audio_features(
                 input_features=input_features,
                 attention_mask=attention_mask,
+                num_lookahead_tokens=num_lookahead_tokens,
                 **kwargs,
             )
         elif not isinstance(encoder_outputs, NemotronAsrEncoderModelOutput):

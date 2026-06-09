@@ -165,11 +165,12 @@ class NemotronAsrGenerationMixin(GenerationMixin):
                 self._stream_exhausted = True
                 break
             chunk = chunk.to(device=self.device, dtype=self.dtype)
+            self._validate_stream_chunk(chunk, is_first_chunk=False)
             chunk_outputs = self.get_audio_features(
                 input_features=chunk,
                 past_key_values=model_kwargs["encoder_past_key_values"],
                 padding_cache=model_kwargs["padding_cache"],
-                att_context_size=self._streaming_att_context,
+                num_lookahead_tokens=self._streaming_num_lookahead_tokens,
                 use_cache=True,
                 output_attention_mask=False,
             )
@@ -215,6 +216,42 @@ class NemotronAsrGenerationMixin(GenerationMixin):
             inputs_tensor,
         )
 
+    def _required_stream_chunk_frames(self, is_first_chunk: bool) -> int:
+        """
+        The exact number of mel frames a streaming chunk must carry, given the attention right context.
+
+        For `chunked_limited` cache-aware streaming (NeMo `setup_streaming_params`, with the FastConformer
+        subsampling `get_sampling_frames() == [1, subsampling_factor]`):
+
+        - first chunk:      `1 + subsampling_factor * num_lookahead_tokens`
+        - subsequent chunk: `subsampling_factor * (num_lookahead_tokens + 1)`
+
+        e.g. for `num_lookahead_tokens == 6` and `subsampling_factor == 8`: 49 then 56 mel frames.
+        """
+        subsampling_factor = self.config.encoder_config.subsampling_factor
+        right = self._streaming_num_lookahead_tokens
+        if is_first_chunk:
+            return 1 + subsampling_factor * right
+        return subsampling_factor * (right + 1)
+
+    def _validate_stream_chunk(self, chunk, is_first_chunk: bool):
+        """
+        Check a streaming mel chunk has exactly the size required by the attention right context.
+
+        Cache-aware `chunked_limited` streaming consumes fixed-size chunks; a chunk of any other length
+        (including a short final chunk) is an error. Pad the final chunk to the required length if needed.
+        """
+        required = self._required_stream_chunk_frames(is_first_chunk)
+        n_frames = chunk.shape[1]
+        if n_frames != required:
+            which = "first" if is_first_chunk else "subsequent"
+            raise ValueError(
+                f"Streaming {which} chunk has {n_frames} mel frames but num_lookahead_tokens="
+                f"{self._streaming_num_lookahead_tokens} requires exactly {required} "
+                f"(first chunk = 1 + subsampling_factor * right, subsequent = subsampling_factor * "
+                f"(right + 1)). Pad the final chunk to the required length if needed."
+            )
+
     def _prepare_model_inputs(self, inputs=None, bos_token_id=None, model_kwargs=None):
         from .modeling_nemotron_asr import NemotronAsrEncoderCausalConvPaddingCache, NemotronAsrEncoderModelOutput
 
@@ -233,13 +270,14 @@ class NemotronAsrGenerationMixin(GenerationMixin):
             except StopIteration as e:
                 raise ValueError("The `input_features` generator did not yield any chunk.") from e
             first_chunk = first_chunk.to(device=self.device, dtype=self.dtype)
+            self._validate_stream_chunk(first_chunk, is_first_chunk=True)
             batch_size = first_chunk.shape[0]
 
             padding_cache = NemotronAsrEncoderCausalConvPaddingCache()
             encoder_outputs = self.get_audio_features(
                 input_features=first_chunk,
                 padding_cache=padding_cache,
-                att_context_size=self._streaming_att_context,
+                num_lookahead_tokens=self._streaming_num_lookahead_tokens,
                 use_cache=True,
                 output_attention_mask=False,
             )
@@ -312,8 +350,11 @@ class NemotronAsrGenerationMixin(GenerationMixin):
         self._streaming = isinstance(input_features, GeneratorType)
         if self._streaming:
             self._stream_exhausted = False
-            att_context_size = kwargs.pop("att_context_size", None)
-            self._streaming_att_context = att_context_size or self.encoder._resolve_att_context_size()
+            # Resolve the right attention context (lookahead) once; it sets the required mel-chunk sizes
+            # and the chunked_limited attention mask used for every chunk of this stream.
+            num_lookahead_tokens = kwargs.pop("num_lookahead_tokens", None)
+            resolved = self.encoder._resolve_attn_context(num_lookahead_tokens)
+            self._streaming_num_lookahead_tokens = resolved[1] if resolved is not None else num_lookahead_tokens
         self._encoder_finished = None
         self._symbols_at_frame = None
         try:
@@ -322,7 +363,7 @@ class NemotronAsrGenerationMixin(GenerationMixin):
             for attr in (
                 "_streaming",
                 "_stream_exhausted",
-                "_streaming_att_context",
+                "_streaming_num_lookahead_tokens",
                 "_encoder_finished",
                 "_symbols_at_frame",
             ):

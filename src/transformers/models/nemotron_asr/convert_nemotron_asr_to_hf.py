@@ -211,9 +211,20 @@ def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=
             raise ValueError(f"Key {key} not found in feature_extractor_config_keys_mapping")
 
     feature_extractor = NemotronAsrFeatureExtractor(**converted_feature_extractor_config)
+    # Carry the model's supported right attention contexts onto the processor so it can validate
+    # `streaming_latency_ms` and emit `num_lookahead_tokens`. NeMo stores a single [left, right] pair, a list
+    # of pairs (multi-lookahead), or [-1, -1] for full (offline) context.
+    att_context_size = nemo_config["encoder"].get("att_context_size")
+    supported_num_lookahead_tokens = default_num_lookahead_tokens = None
+    if att_context_size is not None and att_context_size not in ([-1, -1], [[-1, -1]]):
+        pairs = att_context_size if isinstance(att_context_size[0], (list, tuple)) else [att_context_size]
+        supported_num_lookahead_tokens = [right for _, right in pairs]
+        default_num_lookahead_tokens = pairs[0][1]
     processor = NemotronAsrProcessor(
         feature_extractor=feature_extractor,
         tokenizer=tokenizer_converted_fast,
+        supported_num_lookahead_tokens=supported_num_lookahead_tokens,
+        default_num_lookahead_tokens=default_num_lookahead_tokens,
     )
     processor.save_pretrained(output_dir)
 
@@ -243,6 +254,12 @@ def convert_encoder_config(nemo_config):
         "reduction_position",
         # Multi-lookahead training-only sampling probs; inference uses the first context only.
         "att_context_probs",
+        # These are inherent to the NemotronAsr cache-aware architecture and are not represented in the HF
+        # config: the conv module is always layer-norm + fully causal, and the subsampling is always causal.
+        "att_context_style",
+        "conv_norm_type",
+        "conv_context_size",
+        "causal_downsampling",
     ]
     # ff_expansion_factor combines with d_model to give intermediate_size in HF.
     ff_expansion = nemo_config["encoder"].get("ff_expansion_factor")
@@ -267,12 +284,8 @@ def convert_encoder_config(nemo_config):
         "use_bias": "attention_bias",
         # Derived from ff_expansion_factor * d_model in NeMo; consumed as hidden_size * factor here.
         "__intermediate_size__": "intermediate_size",
-        # Cache-aware (streaming-trained) fields — passed through verbatim.
+        # Cache-aware (streaming-trained) field.
         "att_context_size": "att_context_size",
-        "att_context_style": "att_context_style",
-        "conv_context_size": "conv_context_size",
-        "causal_downsampling": "causal_downsampling",
-        "conv_norm_type": "conv_norm_type",
     }
     converted_encoder_config = {}
 
@@ -280,8 +293,16 @@ def convert_encoder_config(nemo_config):
         if key in encoder_keys_to_ignore:
             continue
         if key in encoder_config_keys_mapping:
-            # Translate NeMo's full-context shorthand to HF's None default.
-            if key == "att_context_size" and value in ([-1, -1], [[-1, -1]]):
+            if key == "att_context_size":
+                # NeMo stores a single [left, right] pair, a list of pairs (multi-lookahead), or [-1, -1]
+                # for full (offline) context. The shared left context becomes `sliding_window` (= left + 1)
+                # and the per-lookahead rights become `supported_num_lookahead_tokens`.
+                if value in ([-1, -1], [[-1, -1]]):
+                    continue
+                pairs = value if isinstance(value[0], (list, tuple)) else [value]
+                converted_encoder_config["sliding_window"] = pairs[0][0] + 1
+                converted_encoder_config["supported_num_lookahead_tokens"] = [right for _, right in pairs]
+                converted_encoder_config["default_num_lookahead_tokens"] = pairs[0][1]
                 continue
             converted_encoder_config[encoder_config_keys_mapping[key]] = value
             if key == "use_bias":

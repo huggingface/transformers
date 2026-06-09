@@ -101,7 +101,6 @@ class NemotronAsrFeatureExtractor(SequenceFeatureExtractor):
         self.mel_filters = torch.from_numpy(mel_filters).to(torch.float32)
 
     def _torch_extract_fbank_features(self, waveform, device="cpu", center=True):
-        # spectrogram
         window = torch.hann_window(self.win_length, periodic=False, device=device)
         stft = torch.stft(
             waveform,
@@ -113,8 +112,6 @@ class NemotronAsrFeatureExtractor(SequenceFeatureExtractor):
             pad_mode="constant",
             center=center,
         )
-        # Let's math original implementation
-        # magnitudes = torch.abs(stft) ** 2
         magnitudes = torch.view_as_real(stft)
         magnitudes = torch.sqrt(magnitudes.pow(2).sum(-1))
         magnitudes = magnitudes.pow(2)
@@ -258,8 +255,7 @@ class NemotronAsrFeatureExtractor(SequenceFeatureExtractor):
             features_lengths = torch.floor_divide(padded_inputs.audio_lengths - self.n_fft, self.hop_length) + 1
         attention_mask = torch.arange(input_features.shape[1], device=device)[None, :] < features_lengths[:, None]
 
-        # NemotronAsr never normalizes the mel features (the NeMo checkpoint uses `normalize="NA"`);
-        # we only zero out the padded frames.
+        # NemotronAsr never normalizes the mel features
         input_features *= attention_mask.unsqueeze(-1)
 
         return BatchFeature(
