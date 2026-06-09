@@ -122,6 +122,7 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     mlp_bias: bool = False
     num_experts: int = 256
     head_dim: int = 64
+    first_k_dense_replace: int = 3
     # ``layer_types`` drives cache-class dispatch: every layer is DSA, so each gets a
     # ``DynamicIndexedLayer`` / ``StaticIndexedLayer`` via ``LAYER_TYPE_CACHE_MAPPING``.
     layer_types: list[str] | None = None
@@ -143,11 +144,10 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
                     "full" if (max(i - offset + 1, 0) % freq) == 0 else "shared" for i in range(self.num_hidden_layers)
                 ]
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
-        # MLP layer types: first 3 dense, rest sparse.
+        # MLP layer types: the first `first_k_dense_replace` layers are dense, the rest are MoE.
         if self.mlp_layer_types is None:
-            self.mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (
-                self.num_hidden_layers - 3
-            )
+            n_dense = min(self.first_k_dense_replace, self.num_hidden_layers)
+            self.mlp_layer_types = ["dense"] * n_dense + ["sparse"] * (self.num_hidden_layers - n_dense)
         # Every layer is DSA — drives cache-class dispatch.
         if self.layer_types is None:
             self.layer_types = ["dynamic_sparse_attention"] * self.num_hidden_layers

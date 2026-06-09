@@ -66,6 +66,8 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int`, *optional*, defaults to 64):
         Number of heads for the indexer projections (DSA).
+    first_k_dense_replace (`int`, *optional*, defaults to 3):
+        Number of leading layers that use a dense MLP; the rest use the MoE block.
 
     ```python
     >>> from transformers import DeepseekV32Config, DeepseekV32Model
@@ -136,6 +138,7 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
     mlp_bias: bool = False
     num_experts: int = 256
     head_dim: int = 64
+    first_k_dense_replace: int = 3
     pretraining_tp = AttributeError()
     rope_interleave = AttributeError()
     # ``layer_types`` drives cache-class dispatch: every layer is DSA, so each gets a
@@ -144,11 +147,10 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
 
     def __post_init__(self, **kwargs):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
-        # MLP layer types: first 3 dense, rest sparse.
+        # MLP layer types: the first `first_k_dense_replace` layers are dense, the rest are MoE.
         if self.mlp_layer_types is None:
-            self.mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (
-                self.num_hidden_layers - 3
-            )
+            n_dense = min(self.first_k_dense_replace, self.num_hidden_layers)
+            self.mlp_layer_types = ["dense"] * n_dense + ["sparse"] * (self.num_hidden_layers - n_dense)
         # Every layer is DSA — drives cache-class dispatch.
         if self.layer_types is None:
             self.layer_types = ["dynamic_sparse_attention"] * self.num_hidden_layers

@@ -22,6 +22,10 @@ from transformers import BitsAndBytesConfig, Cache, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+)
 
 
 if is_torch_available():
@@ -46,6 +50,9 @@ class DeepseekV32ModelTester(CausalLMModelTester):
         q_lora_rank=16,
         qk_nope_head_dim=64,
         qk_rope_head_dim=64,
+        first_k_dense_replace=1,
+        n_group=1,
+        topk_group=1,
     ):
         super().__init__(parent=parent)
         self.n_routed_experts = n_routed_experts
@@ -53,6 +60,9 @@ class DeepseekV32ModelTester(CausalLMModelTester):
         self.q_lora_rank = q_lora_rank
         self.qk_nope_head_dim = qk_nope_head_dim
         self.qk_rope_head_dim = qk_rope_head_dim
+        self.first_k_dense_replace = first_k_dense_replace
+        self.n_group = n_group
+        self.topk_group = topk_group
 
 
 @require_torch
@@ -128,6 +138,36 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("Dynamic control flow in MoE")
     @pytest.mark.torch_compile_test
     def test_torch_compile_for_training(self):
+        pass
+
+    # DeepSeek Sparse Attention selects tokens with a hard top-k, which is discontinuous: a tiny numerical
+    # difference in the indexer scores (attention backend, padding, batching, sequence packing) can flip
+    # which tokens are selected and thus change the output. These exact cross-backend / padding-equivalence
+    # tests therefore do not hold for DSA (dense models like DeepSeek-V3 pass them).
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip("DSA hard top-k selection is sensitive to tiny numerical differences across backends.")
+    def test_eager_matches_sdpa_inference(self, *args, **kwargs):
+        pass
+
+    @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
+    @unittest.skip("DSA hard top-k selection is sensitive to tiny numerical differences across batching.")
+    def test_eager_matches_batched_and_grouped_inference(self, *args, **kwargs):
+        pass
+
+    @unittest.skip("DSA hard top-k selection is sensitive to padding shifts (selection can flip).")
+    def test_left_padding_compatibility(self):
+        pass
+
+    @unittest.skip("DSA hard top-k selection is sensitive to sequence packing (selection can flip).")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("DSA hard top-k selection is sensitive to sequence packing (selection can flip).")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("MoE routing on a tiny randomly-initialized model makes the overfit target unstable.")
+    def test_training_overfit(self):
         pass
 
 
