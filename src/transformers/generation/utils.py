@@ -2099,18 +2099,24 @@ class GenerationMixin(ContinuousMixin):
     def _optimize_model_for_decode(self: "GenerativePreTrainedModel"):
         original_experts_implementation = self.config._experts_implementation
         # On non-CPU devices, 'batched_mm' can trade off a bit of memory (by duplicating selected experts weights)
-        # for much better speed during decoding, especially for smaller inputs. On CPU, grouped_mm is usually better.
-        if original_experts_implementation == "grouped_mm" and self.device.type != "cpu":
+        # for less overhead and much better speed during decoding, especially for smaller inputs.
+        # On CPU, grouped_mm is usually better.
+        should_swap = (
+            self.device.type != "cpu"
+            and original_experts_implementation == "grouped_mm"
+            and os.environ.get("TRANSFORMERS_DISABLE_EXPERTS_DECODE_OPTIMIZATION", "0") != "1"
+        )
+        if should_swap:
             logger.info_once(
                 "We will be switching to 'batched_mm' for the decoding stage as it is much more performant than 'grouped_mm' on smaller inputs. "
-                "If you experience any issues with this, please open an issue on the Hugging Face Transformers GitHub repository.",
+                "If you want to disable this optimization, set the environment variable `TRANSFORMERS_DISABLE_EXPERTS_DECODE_OPTIMIZATION=1`."
             )
             self.set_experts_implementation("batched_mm")
 
         try:
             yield
         finally:
-            if original_experts_implementation == "grouped_mm" and self.device.type != "cpu":
+            if should_swap:
                 self.set_experts_implementation(original_experts_implementation)
 
     def _get_deprecated_gen_repo(

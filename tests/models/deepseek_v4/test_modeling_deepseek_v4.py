@@ -579,6 +579,124 @@ if __name__ == "__main__":
 """
 
 
+# Combines ``_DISTRIBUTED_WORKER_SCRIPT_TEMPLATE`` (full ``generate`` + expected-text
+# check) with ``cache_implementation="static"`` and ``compile_config=CompileConfig(...)``
+# so ``generate`` runs the compiled decode path against a static KV cache. Catches
+# regressions in: static cache layout, decode-path graph breaks under compile, and
+# numerical drift specifically introduced by the compiled-decode codepath.
+_DISTRIBUTED_GENERATE_COMPILE_WORKER_SCRIPT_TEMPLATE = """\
+import os
+import sys
+
+import torch
+import torch.distributed as dist
+
+from transformers import AutoModelForCausalLM, AutoTokenizer, CompileConfig
+from transformers.distributed import DistributedConfig
+
+
+LOADTIME_DISPATCH = {loadtime_dispatch!r}
+RUNTIME_DISPATCHES = {runtime_dispatches!r}
+MODEL_ID = {model_id!r}
+PROMPT = {prompt!r}
+EXPECTED = {expected!r}
+ADD_SPECIAL_TOKENS = {add_special_tokens!r}
+
+
+def main() -> int:
+    rank = int(os.environ["RANK"])
+    model = AutoModelForCausalLM.from_pretrained(
+        MODEL_ID,
+        dtype="auto",
+        attn_implementation="eager",
+        experts_implementation=LOADTIME_DISPATCH,
+        distributed_config=DistributedConfig(enable_expert_parallel=True),
+    )
+    model.eval()
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+    inputs = tokenizer(PROMPT, return_tensors="pt", add_special_tokens=ADD_SPECIAL_TOKENS).to(model.device)
+
+    is_fp8 = getattr(model.config, "expert_dtype", "fp8") != "fp4"
+
+    failed = []
+    for dispatch in RUNTIME_DISPATCHES:
+        if dispatch != LOADTIME_DISPATCH:
+            model.set_experts_implementation(dispatch)
+        if is_fp8 and dispatch in ("batched_mm", "grouped_mm"):
+            os.environ["TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR"] = "1"
+        else:
+            os.environ.pop("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", None)
+        # Without this opt-out, ``generate``'s ``_optimize_model_for_decode`` silently
+        # swaps ``grouped_mm`` → ``batched_mm`` during decode, so the ``grouped_mm``
+        # entry would never exercise grouped_mm end-to-end.
+        os.environ["TRANSFORMERS_DISABLE_EXPERTS_DECODE_OPTIMIZATION"] = "1"
+        # Fresh compile cache per impl — different dispatches produce different graphs.
+        torch.compiler.reset()
+        dist.barrier()
+        try:
+            with torch.no_grad():
+                out = model.generate(
+                    **inputs,
+                    max_new_tokens=64,
+                    do_sample=False,
+                    pad_token_id=tokenizer.eos_token_id,
+                    cache_implementation="static",
+                    compile_config=CompileConfig(fullgraph=True),
+                )
+            decoded = tokenizer.decode(out[0], skip_special_tokens=True)
+            ok = EXPECTED in decoded
+            if not ok:
+                failed.append(f"[{{dispatch}}] {{decoded!r}} does not contain {{EXPECTED!r}}")
+        except Exception as e:
+            failed.append(f"[{{dispatch}}] {{type(e).__name__}}: {{e}}")
+            ok = False
+        dist.barrier()
+        if rank == 0:
+            print(f"[{{dispatch}}] {{'OK' if ok else 'FAIL'}}", flush=True)
+
+    dist.barrier()
+    dist.destroy_process_group()
+    if rank == 0 and failed:
+        print("FAILED:\\n" + "\\n".join(failed), flush=True)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+"""
+
+
+def _run_distributed_generate_compile_worker(
+    loadtime_dispatch,
+    runtime_dispatches,
+    model_id: str,
+    prompt: str,
+    expected: str,
+    add_special_tokens: bool,
+) -> int:
+    script = _DISTRIBUTED_GENERATE_COMPILE_WORKER_SCRIPT_TEMPLATE.format(
+        loadtime_dispatch=loadtime_dispatch,
+        runtime_dispatches=tuple(runtime_dispatches),
+        model_id=model_id,
+        prompt=prompt,
+        expected=expected,
+        add_special_tokens=add_special_tokens,
+    )
+    num_gpus = backend_device_count(torch_device)
+    if num_gpus < 1:
+        raise RuntimeError(f"No visible devices for torch_device={torch_device!r}")
+    redirects = ",".join(f"{r}:1" for r in range(1, num_gpus))
+    with tempfile.NamedTemporaryFile("w", suffix="_distributed_generate_compile_worker.py") as f:
+        f.write(script)
+        f.flush()
+        result = subprocess.run(
+            ["torchrun", f"--nproc_per_node={num_gpus}", f"--redirects={redirects}", f.name],
+            check=False,
+        )
+    return result.returncode
+
+
 def _run_distributed_compile_worker(
     loadtime_dispatch,
     runtime_dispatches,
@@ -733,6 +851,35 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(rc, 0, "torchrun forward-compile worker failed; see stdout above")
 
+    def test_v4_flash_fp4_generation_compile_static_distributed(self):
+        """EP=8 via ``torchrun``: full ``generate()`` with ``cache_implementation="static"``
+        and ``compile_config=CompileConfig(fullgraph=True)``. Catches regressions in the
+        compiled decode path (graph breaks, static-cache drift) that the forward-only
+        compile test can't surface."""
+        rc = _run_distributed_generate_compile_worker(
+            loadtime_dispatch=None,
+            runtime_dispatches=("batched_mm", "grouped_mm", "deepgemm"),
+            model_id=self.model_id,
+            prompt=self.prompt,
+            expected=self.expected_primes,
+            add_special_tokens=False,
+        )
+        self.assertEqual(rc, 0, "torchrun generate-compile worker failed; see stdout above")
+
+    def test_v4_flash_fp4_generation_compile_static_megamoe_distributed(self):
+        """Sibling of :meth:`test_v4_flash_fp4_generation_compile_static_distributed`
+        for the load-locked ``deepgemm_megamoe`` impl (TP plan + UTCCP layout baked
+        at load, so it gets its own ``loadtime_dispatch``)."""
+        rc = _run_distributed_generate_compile_worker(
+            loadtime_dispatch="deepgemm_megamoe",
+            runtime_dispatches=("deepgemm_megamoe",),
+            model_id=self.model_id,
+            prompt=self.prompt,
+            expected=self.expected_primes,
+            add_special_tokens=False,
+        )
+        self.assertEqual(rc, 0, "torchrun generate-compile worker failed; see stdout above")
+
 
 @require_torch
 @require_torch_accelerator
@@ -807,3 +954,23 @@ class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
             add_special_tokens=True,
         )
         self.assertEqual(rc, 0, "torchrun forward-compile worker failed; see stdout above")
+
+    def test_v4_flash_base_fp8_generation_compile_static_distributed(self):
+        """EP=8 via ``torchrun``: full ``generate()`` with ``cache_implementation="static"``
+        and ``compile_config=CompileConfig(fullgraph=True)``. Catches regressions in the
+        compiled FP8 decode path (graph breaks, static-cache drift) that the forward-only
+        compile test can't surface."""
+        runtime_dispatches = (
+            ("batched_mm", "grouped_mm", "deepgemm")
+            if torch.cuda.is_available()
+            else ("batched_mm", "grouped_mm")
+        )
+        rc = _run_distributed_generate_compile_worker(
+            loadtime_dispatch=None,
+            runtime_dispatches=runtime_dispatches,
+            model_id=self.model_id,
+            prompt=self.prompt,
+            expected=self.expected_primes,
+            add_special_tokens=True,
+        )
+        self.assertEqual(rc, 0, "torchrun generate-compile worker failed; see stdout above")
