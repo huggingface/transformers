@@ -211,6 +211,7 @@ class Tipsv2TextConfig(Siglip2TextConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        PreTrainedConfig.validate_architecture(self)
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
@@ -321,6 +322,20 @@ class Tipsv2Config(PreTrainedConfig):
         self.text_config = Tipsv2TextConfig(**text_config_kwargs)
         self.vision_config = Tipsv2VisionConfig(**vision_config_kwargs)
         super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        super().validate_architecture()
+        if (
+            isinstance(self.text_config, Tipsv2TextConfig)
+            and isinstance(self.vision_config, Tipsv2VisionConfig)
+            and self.text_config.hidden_size != self.vision_config.hidden_size
+        ):
+            raise ValueError(
+                f"`text_config.hidden_size` ({self.text_config.hidden_size}) and "
+                f"`vision_config.hidden_size` ({self.vision_config.hidden_size}) must be equal."
+            )
+        if self.temperature <= 0:
+            raise ValueError(f"`temperature` ({self.temperature}) must be strictly positive.")
 
 
 class Tipsv2Output(CLIPOutput):
@@ -634,14 +649,6 @@ class Tipsv2PreTrainedModel(PreTrainedModel):
 class Tipsv2Model(Tipsv2PreTrainedModel):
     def __init__(self, config: Tipsv2Config):
         super().__init__(config)
-        if config.text_config.hidden_size != config.vision_config.hidden_size:
-            raise ValueError(
-                "TIPSv2 does not define projection layers, so `text_config.hidden_size` and "
-                "`vision_config.hidden_size` must match."
-            )
-        if config.temperature <= 0:
-            raise ValueError("`temperature` must be strictly positive.")
-
         self.text_model = Tipsv2TextModel._from_config(config.text_config)
         self.vision_model = Tipsv2VisionModel._from_config(config.vision_config)
         self.post_init()

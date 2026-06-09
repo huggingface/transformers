@@ -923,14 +923,6 @@ def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
 class Tipsv2Model(Tipsv2PreTrainedModel):
     def __init__(self, config: Tipsv2Config):
         super().__init__(config)
-        if config.text_config.hidden_size != config.vision_config.hidden_size:
-            raise ValueError(
-                "TIPSv2 does not define projection layers, so `text_config.hidden_size` and "
-                "`vision_config.hidden_size` must match."
-            )
-        if config.temperature <= 0:
-            raise ValueError("`temperature` must be strictly positive.")
-
         self.text_model = Tipsv2TextModel._from_config(config.text_config)
         self.vision_model = Tipsv2VisionModel._from_config(config.vision_config)
         self.post_init()
