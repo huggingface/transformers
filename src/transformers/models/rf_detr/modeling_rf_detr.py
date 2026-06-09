@@ -453,6 +453,8 @@ class RfDetrDinov2Encoder(RfDetrDinov2PreTrainedModel):
         self.layer = nn.ModuleList([RfDetrDinov2Layer(config, i) for i in range(config.num_hidden_layers)])
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -470,7 +472,7 @@ class RfDetrDinov2Encoder(RfDetrDinov2PreTrainedModel):
     """
 )
 class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
-    def __init__(self, config: RfDetrDinov2Config):
+    def __init__(self, config):
         super().__init__(config)
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = RfDetrDinov2Embeddings(config)

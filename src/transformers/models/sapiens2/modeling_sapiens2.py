@@ -852,6 +852,8 @@ class Sapiens2Encoder(Sapiens2PreTrainedModel):
         )
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -877,8 +879,7 @@ class Sapiens2Model(Sapiens2PreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -918,7 +919,12 @@ class Sapiens2Model(Sapiens2PreTrainedModel):
         encoder_outputs: BaseModelOutput = self.model(hidden_states, position_embeddings=position_embeddings, **kwargs)
         sequence_output = self.norm(encoder_outputs.last_hidden_state)
         pooled_output = sequence_output[:, 0, :]
-        return BaseModelOutputWithPooling(last_hidden_state=sequence_output, pooler_output=pooled_output)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 @auto_docstring
@@ -935,8 +941,7 @@ class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @filter_output_hidden_states
     @auto_docstring
     def forward(
@@ -969,10 +974,10 @@ class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_state = self.embeddings(pixel_values)
         position_embeddings = self.rope_embeddings(pixel_values)
-        stage_hidden_states = (hidden_state,)
-        for layer in self.model.layer:
-            hidden_state = layer(hidden_state, position_embeddings=position_embeddings, **kwargs)
-            stage_hidden_states = stage_hidden_states + (hidden_state,)
+
+        kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
+        output: BaseModelOutput = self.model(hidden_state, position_embeddings, **kwargs)
+        stage_hidden_states = output.hidden_states
 
         batch_size, _, image_height, image_width = pixel_values.shape
         patch_size = self.config.patch_size
@@ -1007,6 +1012,8 @@ class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
         return Sapiens2BackboneOutput(
             feature_maps=tuple(feature_maps),
             cls_tokens=tuple(cls_tokens) if return_class_token else None,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
         )
 
 

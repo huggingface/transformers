@@ -38,7 +38,7 @@ from ...image_utils import (
     get_image_size_for_max_height_width,
     make_list_of_images,
 )
-from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput, SemanticSegmenterOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
@@ -1515,10 +1515,10 @@ class Sapiens2Backbone(DINOv3ViTBackbone):
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_state = self.embeddings(pixel_values)
         position_embeddings = self.rope_embeddings(pixel_values)
-        stage_hidden_states = (hidden_state,)
-        for layer in self.model.layer:
-            hidden_state = layer(hidden_state, position_embeddings=position_embeddings, **kwargs)
-            stage_hidden_states = stage_hidden_states + (hidden_state,)
+
+        kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
+        output: BaseModelOutput = self.model(hidden_state, position_embeddings, **kwargs)
+        stage_hidden_states = output.hidden_states
 
         batch_size, _, image_height, image_width = pixel_values.shape
         patch_size = self.config.patch_size
@@ -1553,6 +1553,8 @@ class Sapiens2Backbone(DINOv3ViTBackbone):
         return Sapiens2BackboneOutput(
             feature_maps=tuple(feature_maps),
             cls_tokens=tuple(cls_tokens) if return_class_token else None,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
         )
 
 

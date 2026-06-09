@@ -38,7 +38,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..swin.modeling_swin import SwinDropPath
 from .configuration_dinov3_vit import DINOv3ViTConfig
@@ -403,6 +403,8 @@ class DINOv3ViTEncoder(DINOv3ViTPreTrainedModel):
         self.layer = nn.ModuleList([DINOv3ViTLayer(config) for _ in range(config.num_hidden_layers)])
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -428,8 +430,7 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -449,7 +450,12 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         encoder_outputs: BaseModelOutput = self.model(hidden_states, position_embeddings=position_embeddings, **kwargs)
         sequence_output = self.norm(encoder_outputs.last_hidden_state)
         pooled_output = sequence_output[:, 0, :]
-        return BaseModelOutputWithPooling(last_hidden_state=sequence_output, pooler_output=pooled_output)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 @auto_docstring
@@ -466,8 +472,7 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @filter_output_hidden_states
     @auto_docstring
     def forward(
@@ -478,10 +483,10 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_state = self.embeddings(pixel_values)
         position_embeddings = self.rope_embeddings(pixel_values)
-        stage_hidden_states = (hidden_state,)
-        for layer in self.model.layer:
-            hidden_state = layer(hidden_state, position_embeddings=position_embeddings, **kwargs)
-            stage_hidden_states = stage_hidden_states + (hidden_state,)
+
+        kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
+        output: BaseModelOutput = self.model(hidden_state, position_embeddings, **kwargs)
+        stage_hidden_states = output.hidden_states
 
         batch_size, _, image_height, image_width = pixel_values.shape
         patch_height, patch_width = (
@@ -523,6 +528,8 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
         output = DINOv3ViTBackboneOutput(
             feature_maps=tuple(feature_maps),
             cls_tokens=tuple(cls_tokens) if return_class_token else None,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
         )
         output.last_hidden_state = sequence_output
 
