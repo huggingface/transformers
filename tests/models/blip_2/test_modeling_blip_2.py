@@ -68,6 +68,12 @@ if is_vision_available():
     from transformers import Blip2Processor
 
 
+def _prepare_blip2_composite_config_headdim(config, requested_dim):
+    config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+    config.qformer_config.encoder_hidden_size = config.vision_config.hidden_size
+    return config
+
+
 class Blip2VisionModelTester:
     def __init__(
         self,
@@ -468,6 +474,10 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
             self, config_class=Blip2Config, has_text_modality=False, common_properties=common_properties
         )
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        return _prepare_blip2_composite_config_headdim(config, requested_dim)
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -504,10 +514,6 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
         reason="QFormer is forced to fp32 via _keep_in_fp32_modules, incompatible with SDPA flash-only kernel"
     )
     def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="_prepare_config_headdim breaks the qformer/vision cross-attention hidden-size invariant")
-    def test_flex_attention_with_grads(self):
         pass
 
     def test_sdpa_can_dispatch_composite_models(self):
@@ -1256,6 +1262,10 @@ class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Blip2VisionModelWithProjectionTester(self)
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        return _prepare_blip2_composite_config_headdim(config, requested_dim)
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -1292,10 +1302,6 @@ class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
         reason="QFormer is forced to fp32 via _keep_in_fp32_modules, incompatible with SDPA flash-only kernel"
     )
     def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="_prepare_config_headdim breaks the qformer/vision cross-attention hidden-size invariant")
-    def test_flex_attention_with_grads(self):
         pass
 
     def test_model_common_attributes(self):
@@ -1414,6 +1420,10 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Blip2TextRetrievalModelTester(self)
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        return _prepare_blip2_composite_config_headdim(config, requested_dim)
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -1442,10 +1452,6 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         reason="QFormer is forced to fp32 via _keep_in_fp32_modules, incompatible with SDPA flash-only kernel"
     )
     def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="_prepare_config_headdim breaks the qformer/vision cross-attention hidden-size invariant")
-    def test_flex_attention_with_grads(self):
         pass
 
     def test_forward_signature(self):

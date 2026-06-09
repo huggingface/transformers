@@ -16,6 +16,7 @@
 import inspect
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -61,6 +62,12 @@ if is_torch_available():
         InstructBlipVideoModel,
         InstructBlipVideoVisionModel,
     )
+
+
+def _prepare_instructblipvideo_config_headdim(config, requested_dim):
+    config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+    config.qformer_config.encoder_hidden_size = config.vision_config.hidden_size
+    return config
 
 
 class InstructBlipVideoVisionModelTester:
@@ -500,6 +507,10 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
             self, config_class=InstructBlipVideoConfig, has_text_modality=False, common_properties=common_properties
         )
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        return _prepare_instructblipvideo_config_headdim(config, requested_dim)
+
     def test_for_conditional_generation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_conditional_generation(*config_and_inputs)
@@ -547,6 +558,27 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     )
     def test_sdpa_can_compile_dynamic(self):
         pass
+
+    def flash_attn_inference_equivalence(self, attn_implementation, padding_side, atol=4e-2, rtol=4e-2):
+        # The shared helper neither builds `qformer_input_ids` (required by InstructBLIP's Q-Former) nor can read
+        # the base `InstructBlipVideoModel`'s nested sub-outputs, so we inject the former and restrict to the
+        # generative class.
+        _, full_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        qformer_input_ids = full_inputs["qformer_input_ids"]
+        base_prepare_for_class = self._prepare_for_class
+
+        def _prepare_for_class(inputs, model_class, return_labels=False):
+            inputs = base_prepare_for_class(inputs, model_class, return_labels=return_labels)
+            inputs.setdefault("qformer_input_ids", qformer_input_ids[: inputs[model_class.main_input_name].shape[0]])
+            return inputs
+
+        with (
+            patch.object(self, "_prepare_for_class", _prepare_for_class),
+            patch.object(self, "all_model_classes", self.all_generative_model_classes),
+        ):
+            super().flash_attn_inference_equivalence(
+                attn_implementation=attn_implementation, padding_side=padding_side, atol=atol, rtol=rtol
+            )
 
     @require_flash_attn
     @require_torch_accelerator
@@ -652,22 +684,6 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
                 fa_model.save_pretrained(tmpdirname)
                 model_from_pretrained = model_class.from_pretrained(tmpdirname)
                 self.assertTrue(model_from_pretrained.config._attn_implementation != "flash_attention_2")
-
-    @unittest.skip(reason="_prepare_config_headdim breaks the qformer/vision cross-attention hidden-size invariant")
-    def test_flash_attn_2_inference_equivalence(self):
-        pass
-
-    @unittest.skip(reason="_prepare_config_headdim breaks the qformer/vision cross-attention hidden-size invariant")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
-    @unittest.skip(reason="_prepare_config_headdim breaks the qformer/vision cross-attention hidden-size invariant")
-    def test_flash_attn_kernels_inference_equivalence(self):
-        pass
-
-    @unittest.skip(reason="_prepare_config_headdim breaks the qformer/vision cross-attention hidden-size invariant")
-    def test_flex_attention_with_grads(self):
-        pass
 
     def test_forward_signature(self):
         for model_class in self.all_model_classes:

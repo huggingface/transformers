@@ -831,9 +831,10 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
         )
 
         if encoder_attention_mask is not None:
+            query_embedding_output = embedding_output[:, :query_length, :] if query_length > 0 else embedding_output
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,
-                inputs_embeds=embedding_output,
+                inputs_embeds=query_embedding_output,
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
             )
