@@ -643,9 +643,9 @@ def _run_distributed_worker(
 
 
 @require_torch
-@require_torch_gpu
+@require_torch_accelerator
 @require_torch_n_accelerators(n=8)
-@require_torch_large_accelerator(memory=64)
+@require_torch_large_accelerator(memory=30)
 @require_cuda_capability_at_least(10, 0)
 @slow
 class DeepseekV4FlashIntegrationTest(unittest.TestCase):
@@ -670,9 +670,16 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
     expected_primes = "2, 3, 5, 7, 11, 13, 17, 19, 23, 29"
 
     def test_v4_flash_fp4_generation_distributed(self):
+        # DeepGEMM is CUDA-only — drop it on non-CUDA backends (e.g. XPU) so the rest
+        # of the dispatch sweep still runs.
+        runtime_dispatches = (
+            ("eager", "batched_mm", "grouped_mm", "deepgemm")
+            if torch.cuda.is_available()
+            else ("eager", "batched_mm", "grouped_mm")
+        )
         rc = _run_distributed_worker(
             loadtime_dispatch=None,
-            runtime_dispatches=("eager", "batched_mm", "grouped_mm", "deepgemm"),
+            runtime_dispatches=runtime_dispatches,
             model_id=self.model_id,
             prompt=self.prompt,
             expected=self.expected_primes,
@@ -680,6 +687,7 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(rc, 0, "torchrun worker failed; see stdout above")
 
+    @require_torch_gpu
     def test_v4_flash_fp4_generation_megamoe_distributed(self):
         rc = _run_distributed_worker(
             loadtime_dispatch="deepgemm_megamoe",
@@ -714,15 +722,21 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
         """EP=8 via ``torchrun``: one forward per impl through ``torch.compile(fullgraph=True)``.
         Each rank drives one device so ``deepgemm`` and ``deepgemm_megamoe`` are available;
         megamoe is load-locked so it has its own sibling test."""
+        # DeepGEMM is CUDA-only — drop it on non-CUDA backends (e.g. XPU) so the rest
+        # of the dispatch sweep still runs.
+        runtime_dispatches = (
+            ("batched_mm", "grouped_mm", "deepgemm") if torch.cuda.is_available() else ("batched_mm", "grouped_mm")
+        )
         rc = _run_distributed_compile_worker(
             loadtime_dispatch=None,
-            runtime_dispatches=("batched_mm", "grouped_mm", "deepgemm"),
+            runtime_dispatches=runtime_dispatches,
             model_id=self.model_id,
             prompt=self.prompt,
             add_special_tokens=False,
         )
         self.assertEqual(rc, 0, "torchrun forward-compile worker failed; see stdout above")
 
+    @require_torch_gpu
     def test_v4_flash_fp4_forward_compile_fullgraph_megamoe_distributed(self):
         rc = _run_distributed_compile_worker(
             loadtime_dispatch="deepgemm_megamoe",
