@@ -108,9 +108,8 @@ class VibeVoiceAsrConfig(PreTrainedConfig):
             self.text_config = CONFIG_MAPPING["qwen2"]()
 
         # max_position_embeddings is derived, not a static field; refresh from chunk_size and hop_length.
-        hop_length = int(math.prod(self.acoustic_tokenizer_encoder_config.downsampling_ratios))
         self.acoustic_tokenizer_encoder_config.max_position_embeddings = math.ceil(
-            self.acoustic_tokenizer_chunk_size / hop_length
+            self.acoustic_tokenizer_chunk_size / self.acoustic_tokenizer_encoder_config.hop_length
         )
 
         super().__post_init__(**kwargs)
