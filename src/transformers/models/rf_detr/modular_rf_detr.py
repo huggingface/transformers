@@ -25,7 +25,6 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import (
     BackboneConfigMixin,
-    BackboneMixin,
     consolidate_backbone_kwargs_to_config,
     filter_output_hidden_states,
 )
@@ -728,17 +727,6 @@ class RfDetrDinov2Encoder(Dinov2Encoder):
 
 
 class RfDetrDinov2Backbone(Dinov2Backbone):
-    def __init__(self, config: RfDetrDinov2Config):
-        BackboneMixin.__init__(self, config)
-        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
-        self.embeddings = RfDetrDinov2Embeddings(config)
-        self.encoder = RfDetrDinov2Encoder(config)
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
-
     def window_unpartition(self, hidden_state: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         Reassembles windowed patch tokens into their original 2D patch layout (image-level grid structure)

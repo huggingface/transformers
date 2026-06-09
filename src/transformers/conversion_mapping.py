@@ -187,16 +187,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("attention.attention.value", "attention.v_proj"),
             WeightRenaming("attention.output.dense", "attention.o_proj"),
         ],
-        "Dinov2Backbone": [
-            WeightRenaming(r"^embeddings\.", "dinov2.embeddings."),
-            WeightRenaming(r"^encoder\.", "dinov2.encoder."),
-            WeightRenaming(r"^layernorm\.", "dinov2.layernorm."),
-        ],
-        "Dinov2WithRegistersBackbone": [
-            WeightRenaming(r"^embeddings\.", "dinov2_with_registers.embeddings."),
-            WeightRenaming(r"^encoder\.", "dinov2_with_registers.encoder."),
-            WeightRenaming(r"^layernorm\.", "dinov2_with_registers.layernorm."),
-        ],
         "ViTMSNForImageClassification": [
             WeightRenaming(r"^encoder\.", "vit.encoder."),
         ],
