@@ -405,6 +405,8 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 self.assertEqual(vlm.config.dtype, torch.float32)
                 self.assertEqual(vlm.config.text_config.dtype, torch.float32)
                 self.assertEqual(vlm.config.vision_config.dtype, torch.float32)
+                # Check the actual weights load in fp32, not just the config metadata.
+                self.assertTrue(all(param.dtype == torch.float32 for param in vlm.parameters()))
         finally:
             torch.set_default_dtype(default_dtype)
 
