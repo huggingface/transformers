@@ -12,13 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 import unittest
 
 import pytest
-
-
-logger = logging.getLogger(__name__)
 
 from transformers import is_torch_available
 from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
@@ -156,14 +152,19 @@ class AfmoeModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertTrue(found_fused_expert_converter)
 
 
-
+@require_torch_accelerator
+@slow
 class AfmoeIntegrationTest(unittest.TestCase):
     def tearDown(self):
         # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
         cleanup(torch_device, gc_collect=False)
 
-
+    @slow
+    @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
+        # We keep this small because the compiled generation with static cache with bfloat16 is sensitive and sometimes
+        # gives different outputs after a few tokens.
         num_tokens_to_generate = 4
         prompts = [
             "Simply put, the theory of relativity states that ",
@@ -178,17 +179,9 @@ class AfmoeIntegrationTest(unittest.TestCase):
         model = AfmoeForCausalLM.from_pretrained(checkpoint, device_map=torch_device, dtype=torch.bfloat16)
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
-        logger.warning("[DEBUG test_compile_static_cache] prompts=%s", prompts)
-        logger.warning("[DEBUG test_compile_static_cache] inputs.input_ids.shape=%s", inputs["input_ids"].shape)
-        logger.warning("[DEBUG test_compile_static_cache] inputs.input_ids=%s", inputs["input_ids"].tolist())
-        logger.warning("[DEBUG test_compile_static_cache] inputs.attention_mask=%s", inputs["attention_mask"].tolist())
-        assert inputs["input_ids"].shape == torch.Size([2, 11]), f"Unexpected input_ids shape: {inputs['input_ids'].shape}"
-        assert inputs["input_ids"].tolist() == [[0, 54628, 2226, 43, 296, 3663, 323, 31658, 3309, 384, 252], [0, 4909, 5912, 579, 749, 5912, 101354, 351, 75357, 45, 12]], f"Unexpected input_ids: {inputs['input_ids'].tolist()}"
-        assert inputs["attention_mask"].tolist() == [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0]], f"Unexpected attention_mask: {inputs['attention_mask'].tolist()}"
-
         generated_ids = model.generate(**inputs, max_new_tokens=num_tokens_to_generate, do_sample=False)
+        # On Nvidia A10, it's "My favorite all time favorite condiment is ketchup. ketchup is Heinz."
         dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        logger.warning("[DEBUG test_compile_static_cache] dynamic_text=%s", dynamic_text)
 
         generated_ids = model.generate(
             **inputs,
@@ -197,13 +190,9 @@ class AfmoeIntegrationTest(unittest.TestCase):
             cache_implementation="static",
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        logger.warning("[DEBUG test_compile_static_cache] static_text=%s", static_text)
         self.assertEqual(dynamic_text, static_text)
 
         model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        # # Warm-up run: let torch.compile capture the CUDA graph; output during capture is non-deterministic
-        # model.generate(**inputs, max_new_tokens=num_tokens_to_generate, do_sample=False, cache_implementation="static")
-        # Comparison run: CUDA graph is now captured and replays deterministically
         generated_ids = model.generate(
             **inputs,
             max_new_tokens=num_tokens_to_generate,
@@ -211,5 +200,4 @@ class AfmoeIntegrationTest(unittest.TestCase):
             cache_implementation="static",
         )
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        logger.warning("[DEBUG test_compile_static_cache] static_compiled_text=%s", static_compiled_text)
         self.assertEqual(dynamic_text, static_compiled_text)
