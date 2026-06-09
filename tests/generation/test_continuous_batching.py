@@ -1179,6 +1179,36 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             text_fa3 = tokenizer.decode(out_fa3.generated_tokens, skip_special_tokens=True)
             self.assertEqual(text_fa2, text_fa3, f"Mismatch:\nFA2: {text_fa2}\nFA3: {text_fa3}")
 
+    @slow
+    @require_kernels
+    def test_decode_fast_path_wide_batch_parity(self) -> None:
+        """Decode-fast-path output must match varlen when more requests decode concurrently than
+        `max_blocks_per_request` (regression test for the `pad_to_pow2` cap truncating the decode batch)."""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        tokenizer, model = get_tokenizer_and_model(
+            model_id, "paged|kernels-community/flash-attn3", torch_device, torch.bfloat16
+        )
+        # 12 requests but only 4 blocks per request: the decode batch is wider than max_blocks_per_request
+        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES * 4, tokenizer, for_continuous_batching=True)
+        gen_config = GenerationConfig(do_sample=False, max_new_tokens=20)
+        # CUDA graphs enable input padding, which is where the truncation happened
+        cb_config = ContinuousBatchingConfig(block_size=256, num_blocks=64, use_cuda_graph=True)
+
+        cb_config.max_blocks_per_request = 0  # varlen reference
+        outputs_varlen = model.generate_batch(
+            inputs=input_ids, generation_config=gen_config, continuous_batching_config=cb_config
+        )
+        cb_config.max_blocks_per_request = 4  # decode fast path, narrower than the batch
+        outputs_fast = model.generate_batch(
+            inputs=input_ids, generation_config=gen_config, continuous_batching_config=cb_config
+        )
+
+        self.assertEqual(len(outputs_varlen), len(outputs_fast))
+        for (_, out_varlen), (_, out_fast) in zip(outputs_varlen.items(), outputs_fast.items()):
+            text_varlen = tokenizer.decode(out_varlen.generated_tokens, skip_special_tokens=True)
+            text_fast = tokenizer.decode(out_fast.generated_tokens, skip_special_tokens=True)
+            self.assertEqual(text_varlen, text_fast, f"Mismatch:\nvarlen: {text_varlen}\nfast: {text_fast}")
+
     @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
     @slow
     def test_per_request_logits_processors(self, use_cuda_graph: bool, use_async_batching: bool) -> None:

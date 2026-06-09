@@ -28,6 +28,15 @@ from .requests import logger
 from .utils import WorkloadHints
 
 
+FALLBACK_DEFAULTS = {
+    "max_requests_per_batch": 1024,
+    "max_blocks_per_request": 32,
+    "q_padding_interval_size": 64,
+    "kv_padding_interval_size": 64 * 256,  # 64 blocks of 256 tokens ie. 16384 tokens
+    "max_cached_graphs": 32,
+}
+
+
 def resolve_continuous_batching_config(
     config: PretrainedConfig,
     cb_config: ContinuousBatchingConfig,
@@ -76,25 +85,35 @@ def resolve_continuous_batching_config(
 
 
 def resolve_using_hints(cb_config: ContinuousBatchingConfig, workload_hints: WorkloadHints | None) -> None:
-    """Fills `max_blocks_per_request` from the workload hints, when the user did not set it explicitly."""
+    """Fills some attributes from the workload hints, when the user did not set it explicitly: `max_blocks_per_request`
+    and `max_requests_per_batch`."""
     # The max number of blocks per request is an even number large enough to hold the max request length
     if cb_config.max_blocks_per_request is None and workload_hints is not None:
         max_sequence_length = workload_hints.max_prompt_length + workload_hints.max_generated_length
         if max_sequence_length > 0:
             blocks_per_request = int(ceil(max_sequence_length / cb_config.block_size)) + 1
             cb_config.max_blocks_per_request = blocks_per_request + (blocks_per_request % 2)
+    # The maximum number of requests per batch is the minimum of the workload hints and the fallback default
+    if cb_config.max_requests_per_batch is None and workload_hints is not None:
+        if workload_hints.num_requests > 0:  # guard against bad hints
+            max_requests_per_batch = min(workload_hints.num_requests, FALLBACK_DEFAULTS["max_requests_per_batch"])
+        else:
+            max_requests_per_batch = FALLBACK_DEFAULTS["max_requests_per_batch"]
+        cb_config.max_requests_per_batch = max_requests_per_batch
 
 
 def resolve_without_hints(cb_config: ContinuousBatchingConfig) -> None:
     """Fills any remaining unset/sentinel attribute with a fallback default."""
+    if cb_config.max_requests_per_batch is None:
+        cb_config.max_requests_per_batch = FALLBACK_DEFAULTS["max_requests_per_batch"]
     if cb_config.max_blocks_per_request is None:
-        cb_config.max_blocks_per_request = 32
+        cb_config.max_blocks_per_request = FALLBACK_DEFAULTS["max_blocks_per_request"]
     if cb_config.q_padding_interval_size == 0:
-        cb_config.q_padding_interval_size = 64
+        cb_config.q_padding_interval_size = FALLBACK_DEFAULTS["q_padding_interval_size"]
     if cb_config.kv_padding_interval_size == 0:
-        cb_config.kv_padding_interval_size = 64 * 256  # 64 blocks of 256 tokens ie. 16384 tokens
+        cb_config.kv_padding_interval_size = FALLBACK_DEFAULTS["kv_padding_interval_size"]
     if cb_config.max_cached_graphs == 0:
-        cb_config.max_cached_graphs = 32
+        cb_config.max_cached_graphs = FALLBACK_DEFAULTS["max_cached_graphs"]
 
 
 def ensure_decode_fast_path_is_available(
@@ -254,3 +273,21 @@ def decide_use_async_batching(cb_config: ContinuousBatchingConfig, is_attn_mask_
 def resolve_max_memory_percent(cb_config: ContinuousBatchingConfig, has_logit_processors: bool) -> None:
     if cb_config.max_memory_percent is None:
         cb_config.max_memory_percent = 0.8 if has_logit_processors else 0.9
+
+
+def update_cb_config_after_cache_creation(
+    cb_config: ContinuousBatchingConfig,
+    num_blocks: int,
+    max_batch_tokens: int,
+    use_prefix_sharing: bool,
+) -> None:
+    """Updates the continuous batching config with the concrete values inferred during the creation of the cache."""
+    # Memoize concrete values
+    cb_config.num_blocks = num_blocks
+    cb_config.max_batch_tokens = max_batch_tokens
+    # Cap the number of max requests per batch to the max tokens per batch
+    cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, max_batch_tokens)
+    # And if there is no prefix sharing, we can cap the number of request per batch (1 request = 1 block at least)
+    if not use_prefix_sharing:
+        cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, num_blocks)
+    # TODO: should we align the max number of request per batch to a multiple of 32 ?

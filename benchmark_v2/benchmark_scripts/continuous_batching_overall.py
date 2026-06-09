@@ -214,7 +214,7 @@ class BenchmarkResults:
                 inputs=data,
                 generation_config=gen_config,
                 continuous_batching_config=cb_config,
-                progress_bar=False,
+                progress_bar=True,
             )
             gen_start = min(out.created_time for out in outputs.values())
             gen_end = max(out.lifespan[1] for out in outputs.values())
