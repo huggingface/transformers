@@ -72,7 +72,6 @@ class Dinov2WithRegistersModelTester:
         num_register_tokens=2,
         mask_ratio=0.5,
         scope=None,
-        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -92,7 +91,6 @@ class Dinov2WithRegistersModelTester:
         self.initializer_range = initializer_range
         self.num_register_tokens = num_register_tokens
         self.scope = scope
-        self.attn_implementation = attn_implementation
 
         # in DINOv2 with Registers, the seq length equals the number of patches + 1 + num_register_tokens (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
@@ -127,7 +125,6 @@ class Dinov2WithRegistersModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             num_register_tokens=self.num_register_tokens,
-            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
