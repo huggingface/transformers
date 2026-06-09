@@ -67,6 +67,40 @@ Then install an up-to-date version of Transformers and some additional libraries
 !pip install -U transformers datasets evaluate accelerate timm
 ```
 
+## Agent skills
+
+[Hugging Face Skills](https://github.com/huggingface/skills) teach your coding agent how to work with Transformers. Instead of writing a training script yourself, ask your agent to fine-tune a vision model and let the skill guide it.
+
+Hugging Face skills live in [huggingface/skills](https://github.com/huggingface/skills) and work across all major coding agents.
+
+<hfoptions id="install">
+<hfoption id="Claude Code">
+
+```sh
+/plugin marketplace add huggingface/skills
+/plugin install hf-cli@huggingface/skills
+```
+
+</hfoption>
+<hfoption id="Codex">
+
+```sh
+codex plugin marketplace add huggingface/skills
+```
+
+Then run `/plugins` in Codex and install a skill from the `huggingface/skills` repository.
+
+</hfoption>
+</hfoptions>
+
+See the [Installation](https://github.com/huggingface/skills#installation) guide for more supported platforms like Cursor and Gemini.
+
+Once a skill is installed, include it in your instructions to your coding agent.
+
+```md
+Use the HF Trainer skill to fine-tune RT-DETRv2 on [Lekim89/sportsmot](https://huggingface.co/datasets/Lekim89/sportsmot) for basketball player tracking.
+```
+
 ## Pretrained models
 
 Each pretrained model inherits from three base classes.
