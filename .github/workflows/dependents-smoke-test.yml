@@ -49,7 +49,7 @@ jobs:
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
 
       - name: Install dependencies
-        run: uv pip install -e vllm -e transformers pytest --torch-backend auto
+        run: uv pip install -e vllm -e transformers pytest tblib --torch-backend auto
 
       - name: Run tests
         run: |
