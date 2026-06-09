@@ -28,7 +28,7 @@ from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import logging
 from ..utils.import_utils import get_cuda_runtime_version, is_kernels_available, resolve_internal_import
 from .hub_kernels import lazy_load_kernel
-from .moe import ExpertsInterface, _default_apply_gate, use_experts_implementation
+from .moe import ExpertsInterface, use_experts_implementation
 
 
 logger = logging.get_logger(__name__)
@@ -672,15 +672,7 @@ class FP8Experts(nn.Module):
         self.activation_scheme = activation_scheme
         self.num_experts = _first_attr(config, "num_local_experts", "num_experts")
         self.intermediate_dim = _first_attr(config, "moe_intermediate_size", "intermediate_size")
-        # Gated experts may carry a non-pointwise activation (e.g. SwiGLU-OAI) whose name
-        # has no ``ACT2FN`` entry and which is applied through ``_apply_gate`` instead; keep
-        # ``act_fn`` unset in that case rather than failing the lookup.
-        act_name = _first_attr(config, "hidden_activation", "hidden_act")
-        # NB: ``ACT2FN`` instantiates lazily in ``__getitem__``; ``.get`` would return the
-        # raw class, so we membership-check then index (and fall back to ``None``).
-        self.act_fn = None
-        if act_name in ACT2FN:
-            self.act_fn = ACT2FN[act_name]
+        self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
 
         if self.has_gate:
             gu_proj_out, gu_proj_in = 2 * self.intermediate_dim, self.hidden_dim
@@ -806,12 +798,10 @@ ALL_FP8_EXPERTS_FUNCTIONS = FP8ExpertsInterface()
 
 def _move_attributes(new_module: nn.Module, source_module: nn.Module) -> None:
     # some of the attributes like swiglu limits etc are needed for the gating
-    # here we commpy the attrs over.
+    # here we copy the attrs over.
     for name, value in vars(source_module).items():
         if isinstance(value, (int, float, bool)) and not hasattr(new_module, name):
             setattr(new_module, name, value)
-    new_module._apply_gate = types.MethodType(source_gate, new_module)
-
 
 def replace_with_fp8_linear(
     model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
