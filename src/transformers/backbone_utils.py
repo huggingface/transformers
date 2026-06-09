@@ -171,7 +171,8 @@ def filter_output_hidden_states(forward_function):
         kwargs["output_hidden_states"] = True
         output = forward_function(self, *args, **kwargs)
         if not output_hidden_states:
-            output = type(output)(**{k: v for k, v in output.items() if k != "hidden_states"})
+            filtered_output_data = {k: v for k, v in output.items() if k != "hidden_states"}
+            output = type(output)(**filtered_output_data)
         return output
 
     return wrapper
