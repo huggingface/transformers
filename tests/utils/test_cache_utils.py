@@ -125,6 +125,9 @@ class CacheTest(unittest.TestCase):
         self.assertIsInstance(cache.layers[0], StaticLayer)
         linear_layer = cache.layers[1]
         self.assertIsInstance(linear_layer, LinearAttentionLayer)
+        # Linear attention layers opt out of the key/value early-init path; attention layers opt in.
+        self.assertTrue(cache.layers[0].supports_early_init)
+        self.assertFalse(linear_layer.supports_early_init)
 
         cache.early_initialization(batch_size=1, num_heads=2, head_dim=8, dtype=torch.float32, device=torch_device)
         # The attention layer is initialized via the key/value layout, as expected.

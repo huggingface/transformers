@@ -38,6 +38,7 @@ class CacheLayerMixin(ABC):
     """Base, abstract class for a single layer's cache."""
 
     is_compileable = False
+    supports_early_init = True
     # Subclasses can set ``layer_type`` to auto-register themselves in
     # ``LAYER_TYPE_CACHE_MAPPING`` at import time (used by ``DynamicCache`` to dispatch
     # per-layer cache classes from ``config.layer_types``).
@@ -700,6 +701,8 @@ class LinearAttentionCacheLayerMixin(ABC):
 
     # All shapes are static by essence in a LinearAttention layer, so it is compileable
     is_compileable = True
+    # Linear attention layers track their own conv/recurrent states; they don't use the key/value early-init path.
+    supports_early_init = False
 
     def __init__(self):
         self.conv_states: torch.Tensor | None = None
@@ -1061,16 +1064,7 @@ class Cache:
             )
 
         for layer, layer_num_heads, layer_head_dim in zip(self.layers, num_heads, head_dim):
-            # Only attention layers use the `(num_heads, head_dim)` key/value layout and an `is_initialized` flag, so
-            # they are the only ones we can early-initialize here. Linear attention layers (mamba/conv/...) track their
-            # own conv/recurrent states, whose shapes (conv kernel size, SSM state size, ...) are not derivable from
-            # `(num_heads, head_dim)`, so there is no correct way to early-init them through this path: they are
-            # skipped and lazily initialize from the real states on their first update. (Consequence: under chunked
-            # prefill they may still trigger a recompile, since that lazy init then happens inside the compiled
-            # region.) Already-initialized layers are skipped too, so this is a no-op on a reused cache, which
-            # preserves the static tensor addresses across `compile` calls.
-            is_initialized = getattr(layer, "is_initialized", None)
-            if is_initialized is None or is_initialized:
+            if not layer.supports_early_init or layer.is_initialized:
                 continue
             # Note that the initialization needs all dimensions (except -2), as well as device and dtype, so we use
             # this fake tensor approach. It has size 0 on the -2 dimension, so it does not allocate any data (it only
@@ -1218,11 +1212,8 @@ class Cache:
     @property
     def is_initialized(self) -> bool:
         """Return whether the cache data is initialized"""
-        # Layers without an `is_initialized` flag (e.g. linear attention layers, which track their own conv/recurrent
-        # states) don't use this lazy-init mechanism, so skip them; a hybrid cache then reflects its attention layers.
-        flags = [getattr(layer, "is_initialized", None) for layer in self.layers]
-        flags = [flag for flag in flags if flag is not None]
-        return len(flags) > 0 and all(flags)
+        layers = [layer for layer in self.layers if layer.supports_early_init]
+        return len(layers) > 0 and all(layer.is_initialized for layer in layers)
 
     @property
     def is_sliding(self) -> list[bool]:
