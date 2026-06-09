@@ -44,6 +44,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "afmoe": "qwen2_moe",
     "deepseek_v2": "qwen2_moe",
     "deepseek_v3": "qwen2_moe",
+    "deepseek_v32": "qwen2_moe",
     "dots1": "qwen2_moe",
     "ernie4_5_moe": "qwen2_moe",
     "glm4_moe": "qwen2_moe",
@@ -1328,14 +1329,6 @@ def _build_checkpoint_conversion_mapping():
     mapping["minimax_m2"] = mapping["mixtral"].copy()
     mapping["minimax_m2"] += [
         WeightRenaming(".block_sparse_moe.e_score_correction_bias", ".mlp.e_score_correction_bias"),
-    ]
-    mapping["deepseek_v32"] = mapping["qwen2_moe"].copy()
-    mapping["deepseek_v32"] += [
-        WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias"),
-        WeightRenaming("indexer.wk", "indexer.k_proj"),
-        WeightRenaming("indexer.k_norm", "indexer.k_layernorm"),
-        WeightRenaming("indexer.wq_b", "indexer.q_b_proj"),
-        WeightRenaming("gate.e_score_correction_bias", "gate.bias"),
     ]
     mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
     mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]
