@@ -137,11 +137,11 @@ The image processor handles all the preprocessing: resizing images while maintai
 
 To fine-tune the model, you must preprocess the data to match the format the model expects. The `RfDetrImageProcessor` does all the heavy lifting when you pass it images and COCO-format annotations with `return_segmentation_masks=True`:
 
-1. **Rasterizes** polygon segmentations into binary masks
-2. **Resizes** images, bounding boxes, and masks to the model's input size
-3. **Normalizes** pixel values with ImageNet mean/std
-4. **Converts** bounding boxes from `[x, y, w, h]` to normalized `[cx, cy, w, h]`
-5. **Pads** images to a uniform size and creates a `pixel_mask`
+1. Rasterizes polygon segmentations into binary masks
+2. Resizes images, bounding boxes, and masks to the model's input size
+3. Normalizes pixel values with ImageNet mean/std
+4. Converts bounding boxes from `[x, y, w, h]` to normalized `[cx, cy, w, h]`
+5. Pads images to a uniform size and creates a `pixel_mask`
 
 The transform reconstructs the COCO-style annotation dicts that the image processor expects from the dataset's `objects` column.
 
@@ -237,7 +237,7 @@ RF-DETR-Seg's query masks are not gated by a class-score threshold, so the metri
 This gives a per-image metric of "how well does the model cover the buildings", which is averaged over the full validation set.
 
 > [!TIP]
-> Instance segmentation benchmarks (such as COCO) usually report **mask mean average precision (mAP)**, which scores each predicted instance mask against the ground truth across a range of IoU thresholds and therefore rewards correctly separating individual objects. The union-based mean IoU used here is a simpler, faster proxy: it measures overall pixel coverage rather than per-instance quality, which makes it convenient for tracking progress during training. For a standard, instance-aware evaluation, compute mask mAP instead, for example with `torchmetrics`' [`MeanAveragePrecision(iou_type="segm")`](https://lightning.ai/docs/torchmetrics/stable/detection/mean_average_precision.html).
+> Instance segmentation benchmarks (such as COCO) usually report mask mean average precision (mAP), which scores each predicted instance mask against the ground truth across a range of IoU thresholds and therefore rewards correctly separating individual objects. The union-based mean IoU used here is a simpler, faster proxy: it measures overall pixel coverage rather than per-instance quality, which makes it convenient for tracking progress during training. For a standard, instance-aware evaluation, compute mask mAP instead, for example with `torchmetrics`' [`MeanAveragePrecision(iou_type="segm")`](https://lightning.ai/docs/torchmetrics/stable/detection/mean_average_precision.html).
 
 Pass this to the [`Trainer`] as a `compute_metrics` function instead of subclassing the trainer. With `eval_do_concat_batches=False` (set in the [`TrainingArguments`] below), the predictions and labels produced by the standard evaluation pass are handed to `compute_metrics` as a list of per-batch outputs, so the metric reuses those predictions and no second forward pass over the validation set is needed. In the model output tuple, index `3` holds `pred_masks`:
 
