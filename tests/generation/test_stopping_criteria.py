@@ -175,6 +175,22 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         for i in range(len(false_strings)):
             self.assertFalse(criteria(false_input_ids["input_ids"][i : i + 1], scores))
 
+    def test_stop_string_criteria_byte_fragments(self):
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+        cases = [
+            ("대화 끝", "끝", True),
+            ("작업 완료", "완료", True),
+            ("응답 종료", "종료", True),
+            ("结束", "结束", True),
+            ("끝 대화", "끝", False),
+            ("완료 후속", "완료", False),
+        ]
+
+        for text, stop_string, expected in cases:
+            input_ids = tokenizer(text, return_tensors="pt", add_special_tokens=False)["input_ids"]
+            criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=[stop_string])
+            self.assertEqual(bool(criteria(input_ids, scores=None)[0]), expected)
+
     def test_stop_string_criteria_vocab_size_mismatch(self):
         """Test that StopStringCriteria handles tokens above len(tokenizer) correctly."""
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
