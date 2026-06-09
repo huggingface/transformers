@@ -548,7 +548,6 @@ def main() -> int:
             os.environ["TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR"] = "1"
         else:
             os.environ.pop("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", None)
-        torch.compiler.reset()
         compiled = torch.compile(model, fullgraph=True)
         dist.barrier()
         ok = True
@@ -630,8 +629,6 @@ def main() -> int:
         # swaps ``grouped_mm`` → ``batched_mm`` during decode, so the ``grouped_mm``
         # entry would never exercise grouped_mm end-to-end.
         os.environ["TRANSFORMERS_DISABLE_EXPERTS_DECODE_OPTIMIZATION"] = "1"
-        # Fresh compile cache per impl — different dispatches produce different graphs.
-        torch.compiler.reset()
         dist.barrier()
         try:
             with torch.no_grad():
