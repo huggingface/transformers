@@ -43,7 +43,6 @@ from ..auto import AutoConfig
 from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoderLayer
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
 from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
-from ..glm4v.modeling_glm4v import rotate_half_llm
 from ..laguna.modeling_laguna import LagunaSparseMoeBlock
 from ..llama.modeling_llama import eager_attention_forward
 from ..llava.modeling_llava import (
@@ -712,6 +711,13 @@ class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
         freqs = coords.repeat_interleave(band_freqs, dim=1) * inv_freq
         emb = freqs.repeat_interleave(2, dim=-1)
         return emb.cos().to(dtype), emb.sin().to(dtype)
+
+
+def rotate_half_llm(x):
+    """Rotates half the hidden dims of the input (interleaved layout)."""
+    x1 = x[..., 0::2]
+    x2 = x[..., 1::2]
+    return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
 def apply_rotary_pos_emb_vision(
