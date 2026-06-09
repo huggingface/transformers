@@ -261,6 +261,8 @@ IGNORE_NON_TESTED = (
         "MiniCPMV4_6Model",  # Building part of bigger (tested) model. Tested implicitly through MiniCPMV4_6ForConditionalGeneration.
         "MiniCPMV4_6ForConditionalGeneration",  # Tested in MiniCPMV4_6ModelTest via VLMModelTest; check_repo doesn't detect VLMModelTest.conditional_generation_class.
         "InternVLVisionModel",  # Building part of bigger (tested) model
+        "DeepseekOcr2TextModel",  # Building part of bigger (tested) model
+        "DeepseekOcr2VisionModel",  # Building part of bigger (tested) model
         "QianfanOCRVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model
@@ -313,6 +315,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/sam3_video/test_modeling_sam3_video.py",
     "models/edgetam_video/test_modeling_edgetam_video.py",
     "models/gemma4_assistant/test_modeling_gemma4_assistant.py",
+    "models/gemma4_unified_assistant/test_modeling_gemma4_unified_assistant.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
@@ -465,7 +468,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Siglip2VisionModel",
     "Siglip2TextModel",
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
-    "VitPoseForPoseEstimation",
     "CLIPTextModel",
     "MetaClip2TextModel",
     "MetaClip2TextModelWithProjection",
@@ -476,6 +478,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Emu3TextModel",  # Building part of bigger (tested) model
     "JanusVQVAE",  # no autoclass for VQ-VAE models
     "JanusVisionModel",  # Building part of bigger (tested) model
+    "DeepseekOcr2TextModel",  # Building part of bigger (tested) model
+    "DeepseekOcr2VisionModel",  # Building part of bigger (tested) model
     "SLANetSLAHead",  # Building part of bigger (tested) model
     "SLANetBackbone",  # Building part of bigger (tested) model
     "SLANeXtSLAHead",  # Building part of bigger (tested) model
@@ -1213,6 +1217,8 @@ UNDOCUMENTED_OBJECTS = [
     "Ernie4_5_VL_MoeVariableResolutionResamplerModel",  # BC Alias
     "Ernie4_5_VL_MoeVisionConfig",  # BC Alias
     "Ernie4_5_VL_MoeVisionTransformerPretrainedModel",  # BC Alias
+    # FIXME(SunMarc)
+    "GemmaQuantizationConfig",  # No docs, going for release
 ]
 
 # This list should be empty. Objects in it should get their own doc page.

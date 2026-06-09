@@ -412,9 +412,7 @@ class DeepseekV4HCACompressor(nn.Module):
         if chunk_kv.shape[1] > 0:  # there were at least self.compress_rate tokens
             n_windows = chunk_kv.shape[1] // self.compress_rate
             chunk_kv = chunk_kv.view(batch, n_windows, self.compress_rate, -1)
-            chunk_gate = chunk_gate.view(batch, n_windows, self.compress_rate, -1) + self.position_bias.to(
-                chunk_gate.dtype
-            )
+            chunk_gate = chunk_gate.view(batch, n_windows, self.compress_rate, -1) + self.position_bias
             compressed = self.kv_norm(
                 (chunk_kv * chunk_gate.softmax(dim=2, dtype=torch.float32).to(chunk_kv.dtype)).sum(dim=2)
             )
@@ -443,6 +441,22 @@ class DeepseekV4HCACompressor(nn.Module):
             float("-inf"),
         )
         return compressed_kv, block_bias
+
+
+class DeepseekV4IndexerScorer(nn.Module):
+    r"""Lightning-indexer scoring head: `∑_h w_{t,h} · ReLU(q_{t,h} · K^IComp_s)`."""
+
+    def __init__(self, config: DeepseekV4Config):
+        super().__init__()
+        self.softmax_scale = config.index_head_dim**-0.5
+        self.weights_scaling = config.index_n_heads**-0.5
+        self.weights_proj = nn.Linear(config.hidden_size, config.index_n_heads, bias=False)
+
+    def forward(self, q: torch.Tensor, compressed_kv: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
+        scores = torch.matmul(q.float(), compressed_kv.transpose(-1, -2).float().unsqueeze(1))  # [B, S, H, T]
+        scores = F.relu(scores) * self.softmax_scale
+        weights = self.weights_proj(hidden_states).float() * self.weights_scaling  # [B, S, H]
+        return (scores * weights.unsqueeze(-1)).sum(dim=2)  # [B, S, T]
 
 
 class DeepseekV4Indexer(nn.Module):
@@ -482,15 +496,13 @@ class DeepseekV4Indexer(nn.Module):
         self.num_heads = config.index_n_heads
         self.head_dim = config.index_head_dim
         self.index_topk = config.index_topk
-        self.softmax_scale = self.head_dim**-0.5
-        self.weights_scaling = self.num_heads**-0.5
         self.kv_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
         self.gate_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
         self.position_bias = nn.Parameter(torch.empty(self.compress_rate, 2 * self.head_dim))
         self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
-        self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
+        self.scorer = DeepseekV4IndexerScorer(config)
 
     def forward(
         self,
@@ -515,7 +527,7 @@ class DeepseekV4Indexer(nn.Module):
             n_windows = chunk_kv.shape[1] // self.compress_rate
             ratio = self.compress_rate
             chunk_kv = chunk_kv.view(batch, n_windows, ratio, -1)
-            chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias.to(chunk_gate.dtype)
+            chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias
 
             # Same Ca / Cb overlap layout as the outer CSA compressor, at index_head_dim.
             new_kv = chunk_kv.new_zeros((batch, n_windows, 2 * ratio, self.head_dim))
@@ -550,11 +562,7 @@ class DeepseekV4Indexer(nn.Module):
         q = self.q_b_proj(q_residual).view(batch, seq_len, -1, self.head_dim).transpose(1, 2)
         q = apply_rotary_pos_emb(q, cos_q, sin_q).transpose(1, 2)
 
-        # ReLU(q·kᵀ) * weights, then top-k
-        scores = torch.matmul(q.float(), compressed_kv.transpose(-1, -2).float().unsqueeze(1))  # [B, S, H, T]
-        scores = F.relu(scores) * self.softmax_scale
-        weights = self.weights_proj(hidden_states).float() * self.weights_scaling  # [B, S, H]
-        index_scores = (scores * weights.unsqueeze(-1)).sum(dim=2)  # [B, S, T]
+        index_scores = self.scorer(q, compressed_kv, hidden_states)  # [B, S, T]
         compressed_len = compressed_kv.shape[1]
         top_k = min(self.index_topk, compressed_len)
 
@@ -617,7 +625,7 @@ class DeepseekV4CSACompressor(nn.Module):
         position_ids: torch.Tensor,
         past_key_values: Cache | None,
         layer_idx: int,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch, seq_len, _ = hidden_states.shape
         cache_layer: DeepseekV4CSACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
         kv = self.kv_proj(hidden_states)
@@ -633,7 +641,7 @@ class DeepseekV4CSACompressor(nn.Module):
             n_windows = chunk_kv.shape[1] // self.compress_rate
             ratio = self.compress_rate
             chunk_kv = chunk_kv.view(batch, n_windows, ratio, -1)
-            chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias.to(chunk_gate.dtype)
+            chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias
 
             # Lay out the two series in [B, n_win, 2*ratio, head_dim]: Cb
             # (`[..., head_dim:]`) goes in the second half (current window),
@@ -885,10 +893,10 @@ class DeepseekV4HyperConnection(nn.Module):
                         [B, S, H]                 [B, S, H]                                 [B, S, H, H]
                         × scale[0]                × scale[1]                                × scale[2]
                         + base[:H]                + base[H:2H]                              + base[2H:]
-                        σ() + eps                 σ() + eps                                 σ() + eps
+                        σ() + eps                 2·σ()                                     softmax(-1) + eps
                         │                         │                                         │
-                        pre                        post                                     Sinkhorn(iters)
-                        (stream collapse weights)  (block-output placement)                 row/col normalise
+                        pre                       post                                      Sinkhorn(iters)
+                        (stream collapse weights) (block-output placement, range [0, 2])    row/col normalise
                                                                                             │
                                                                                             comb
                                                                                             (stream mixer)
@@ -960,7 +968,7 @@ class DeepseekV4HyperHead(nn.Module):
 
 
 class DeepseekV4MLP(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: DeepseekV4Config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -969,10 +977,12 @@ class DeepseekV4MLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
+        self.limit = config.swiglu_limit
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        gate = self.gate_proj(x).clamp(max=self.limit)
+        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
+        return self.down_proj(self.act_fn(gate) * up)
 
 
 @use_experts_implementation
@@ -1192,6 +1202,17 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
         "input_layernorm",
         "post_attention_layernorm",
         "norm",
+    ]
+    # DeepSeek-V4-Flash checkpoints mix FP8 and BF16 in the attention compressor /
+    # indexer branch: these projections ship in BF16 with no companion `scale_inv`.
+    # Listed here (non-strict) so the FP8 quantizer's `get_modules_to_not_convert`
+    # auto-skips them; non-strict has no dtype effect at BF16, so they stay BF16.
+    _keep_in_fp32_modules = [
+        "self_attn.compressor.kv_proj",
+        "self_attn.compressor.gate_proj",
+        "self_attn.compressor.indexer.kv_proj",
+        "self_attn.compressor.indexer.gate_proj",
+        "self_attn.compressor.indexer.scorer.weights_proj",
     ]
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
     # ``_is_stateful`` opts out of generation modes that need to roll the cache

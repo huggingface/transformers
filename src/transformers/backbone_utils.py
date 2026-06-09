@@ -18,9 +18,7 @@ import enum
 import functools
 import inspect
 
-from huggingface_hub import repo_exists
-
-from .utils import logging
+from .utils import hf_api, logging
 from .utils.output_capturing import maybe_install_capturing_hooks
 
 
@@ -334,7 +332,7 @@ def consolidate_backbone_kwargs_to_config(
     ):
         backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **timm_default_kwargs)
     elif backbone is not None and backbone_config is None:
-        if repo_exists(backbone):
+        if hf_api().repo_exists(backbone):
             config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
             config_class = CONFIG_MAPPING[config_dict["model_type"]]
             config_dict.update(backbone_kwargs)
