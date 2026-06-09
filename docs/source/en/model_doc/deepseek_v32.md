@@ -43,7 +43,7 @@ The abstract from the DeepSeek-V3.2-Exp release is the following:
 DSA reduces the quadratic cost of attention over long sequences by attending only to a selected subset of past tokens. It has two components:
 
 1. **Lightning indexer.** A lightweight, low-head-count scoring module computes an *index score* between each query and every preceding key. In the reference implementation it runs in FP8 with a Hadamard (`rotate_activation`) transform; because the transform is orthogonal (`Hq·Hk = q·k`) and FP8 is only a precision optimization, the transformers port computes the same scores directly in bf16/fp32, keeping the indexer cheap relative to the main attention.
-2. **Fine-grained token selection.** For each query the indexer keeps the top-`index_topk` (2048 by default) tokens, and main MLA attention is then computed only over those tokens via an additive mask. This turns the per-query attention cost from `O(L)` to `O(index_topk)` for long sequences.
+2. **Fine-grained token selection.** For each query the indexer keeps the top-`index_topk` (2048 by default) tokens, and main MLA attention is then computed only over those tokens via an additive mask. This turns the per-query attention cost from `O(L)` to `O(index_topk)` for long sequences when using `flash_mla`, which is not supported yet 😉.
 
 The indexer keeps its own small per-token key cache (single-head, `index_head_dim`) alongside the main K/V cache. In transformers this lives on a dedicated cache layer — [`DynamicIndexedLayer`] for growing caches and [`StaticIndexedLayer`] for static / `torch.compile` caches — and is updated through `past_key_values.update_indexer()`.
 
