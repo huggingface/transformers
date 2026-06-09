@@ -397,9 +397,32 @@ class ESMFold2Model(PreTrainedModel):
         # Pop the precision knob before forwarding to the HF loader.
         esmc_precision = kwargs.pop("esmc_precision", "bf16")
         model = super().from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
+        # Match the reference's bf16-rounded trunk norm weights (see the method docstring).
+        # Done before ``load_esmc`` so only the trunk is touched, never the separately
+        # loaded ESMC backbone (``self._esmc`` is still ``None`` here).
+        model._round_trunk_norms_to_bf16()
         if load_esmc:
             model.load_esmc(model.config.esmc_id, precision=esmc_precision)
         return model
+
+    def _round_trunk_norms_to_bf16(self) -> None:
+        """Round the trunk LayerNorm weights to bf16 (stored fp32) for a bf16 trunk.
+
+        The trunk LayerNorms are kept fp32 (``nn.LayerNorm(dtype=torch.float32)``) so the
+        dtype-honest call sites can feed them an upcast input. The reference, however,
+        loads the whole trunk in bf16 and recovers fp32 only for the norm *compute* (via
+        autocast) — i.e. its norm *weights* are bf16-ROUNDED. We reproduce that so a bf16
+        trunk matches the checkpoint's training regime: round each fp32 norm weight to
+        bf16 and back. No-op for an fp32 trunk (the fp32 reference keeps full precision),
+        and the values stay fp32-dtype so the fp32-compute call sites are unaffected.
+        """
+        if not any(p.dtype == torch.bfloat16 for p in self.parameters()):
+            return
+        for module in self.modules():
+            if isinstance(module, nn.LayerNorm) and module.weight is not None and module.weight.dtype == torch.float32:
+                module.weight.data = module.weight.data.bfloat16().float()
+                if module.bias is not None:
+                    module.bias.data = module.bias.data.bfloat16().float()
 
     def apply_torch_compile(self, mode: str = "fixed_seqlen", dynamic: bool | None = None) -> None:
         """Compile L²-heavy blocks. ``mode='fixed_seqlen'`` recompiles per L; ``'dynamic_seqlen'`` compiles once."""
