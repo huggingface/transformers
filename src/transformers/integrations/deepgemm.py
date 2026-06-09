@@ -140,32 +140,6 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
             f"DeepGEMM kernel is missing required symbols: {', '.join(missing)}. Update with `pip install -U kernels`."
         )
 
-    # FIXME(dirty patch): drop the GPU-syncing assert inside `pack_ue8m0_to_int`.
-    # Upstream `kernels-community/deep-gemm` ships:
-    #
-    #     def pack_ue8m0_to_int(x):
-    #         assert x.dtype == torch.float and x.size(-1) % 4 == 0       # CPU-side, OK
-    #         assert (x.view(torch.int) & ((1 << 23) - 1) == 0).all()     # GPU.all() + bool() → SYNC
-    #         return (x.view(torch.int) >> 23).to(torch.uint8).view(torch.int)
-    #
-    # The second assert forces a GPU→CPU readback per call — kills cudagraph capture
-    # and creates an unbacked symbol that breaks `torch.compile(fullgraph=True)`'s
-    # fake-tensor pass. The check is debug-only (validates UE8M0 mantissas are zero,
-    # which `ceil_to_ue8m0` upstream of it already guarantees). Drop it locally until
-    # the upstream patch lands. Module-level rebind so callers inside
-    # `deep_gemm.utils.math` (e.g. `per_token_cast_to_fp8`) pick it up via globals.
-    math_mod = getattr(getattr(kernel, "utils", None), "math", None)
-    if math_mod is not None and hasattr(math_mod, "pack_ue8m0_to_int"):
-
-        def _pack_ue8m0_to_int_no_sync(x: torch.Tensor) -> torch.Tensor:
-            # CPU-side checks kept (dtype + shape int compare — no GPU sync, no
-            # data-dependent guards). Only the second upstream assert is dropped:
-            # `(x.view(int) & 0x7FFFFF == 0).all()` forces a GPU→CPU readback.
-            assert x.dtype == torch.float and x.size(-1) % 4 == 0
-            return (x.view(torch.int) >> 23).to(torch.uint8).view(torch.int)
-
-        math_mod.pack_ue8m0_to_int = _pack_ue8m0_to_int_no_sync
-
     return DeepGEMM(
         fp8_fp4_matmul=fp8_fp4_matmul,
         grouped_fp8_fp4_matmul_nt=grouped_fp8_fp4_matmul_nt,
