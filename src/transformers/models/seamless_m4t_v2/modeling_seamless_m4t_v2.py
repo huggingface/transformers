@@ -403,7 +403,7 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
         self.num_heads = config.speech_encoder_attention_heads
         self.position_embeddings_type = config.position_embeddings_type if use_position_embeddings else None
         self.is_causal = False
-        self.scale = self.head_size**-0.5
+        self.scaling = self.head_size**-0.5
 
         self.linear_q = nn.Linear(config.hidden_size, config.hidden_size)
         self.linear_k = nn.Linear(config.hidden_size, config.hidden_size)
@@ -471,7 +471,7 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
             value,
             attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
-            scaling=self.scale,
+            scaling=self.scaling,
             **kwargs,
         )
 

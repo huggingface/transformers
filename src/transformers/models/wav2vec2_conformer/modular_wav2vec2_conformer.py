@@ -262,7 +262,7 @@ def _apply_relative_position_encoding(module, query, key, attention_mask, relati
     relative_attention_scores = relative_attention_scores[..., : key.size(2)]
 
     # 4. scale and combine with attention mask
-    relative_attention_scores = relative_attention_scores * module.scale
+    relative_attention_scores = relative_attention_scores * module.scaling
     if attention_mask is not None:
         relative_attention_scores = relative_attention_scores + attention_mask
 
@@ -285,7 +285,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.position_embeddings_type = config.position_embeddings_type
         self.is_causal = False
-        self.scale = self.head_size**-0.5
+        self.scaling = self.head_size**-0.5
 
         self.linear_q = nn.Linear(config.hidden_size, config.hidden_size)
         self.linear_k = nn.Linear(config.hidden_size, config.hidden_size)
@@ -346,7 +346,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
             value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
-            scaling=self.scale,
+            scaling=self.scaling,
             **kwargs,
         )
 
