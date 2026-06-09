@@ -277,6 +277,8 @@ class FeatureExtractionMixin(PushToHubMixin):
         kwargs.pop("processor_class", None)
         # Additional attributes without default values
         for key, value in kwargs.items():
+            if key in ("_auto_class", "_processor_class", "_name_or_path", "_commit_hash"):
+                continue
             try:
                 setattr(self, key, value)
             except AttributeError as err:

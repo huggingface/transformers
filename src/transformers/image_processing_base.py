@@ -75,6 +75,8 @@ class ImageProcessingMixin(PushToHubMixin):
         kwargs.pop("processor_class", None)
         # Additional attributes without default values
         for key, value in kwargs.items():
+            if key in ("_auto_class", "_processor_class", "_name_or_path", "_commit_hash"):
+                continue
             try:
                 setattr(self, key, value)
             except AttributeError as err:
@@ -373,6 +375,8 @@ class ImageProcessingMixin(PushToHubMixin):
         extra_keys = []
         for key in reversed(list(kwargs.keys())):
             if hasattr(image_processor, key) and key not in cls.valid_kwargs.__annotations__:
+                if key in ("_auto_class", "_processor_class", "_name_or_path", "_commit_hash"):
+                    continue
                 setattr(image_processor, key, kwargs.pop(key, None))
                 extra_keys.append(key)
         if extra_keys:
