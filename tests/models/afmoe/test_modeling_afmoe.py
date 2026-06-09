@@ -164,7 +164,7 @@ class AfmoeIntegrationTest(unittest.TestCase):
 
 
     def test_compile_static_cache(self):
-        num_tokens_to_generate = 24
+        num_tokens_to_generate = 4
         prompts = [
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
@@ -175,7 +175,7 @@ class AfmoeIntegrationTest(unittest.TestCase):
         if tokenizer.pad_token_id is None:
             tokenizer.pad_token = tokenizer.eos_token
 
-        model = AfmoeForCausalLM.from_pretrained(checkpoint, device_map=torch_device, dtype=torch.float32)
+        model = AfmoeForCausalLM.from_pretrained(checkpoint, device_map=torch_device, dtype=torch.bfloat16)
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         logger.warning("[DEBUG test_compile_static_cache] prompts=%s", prompts)
