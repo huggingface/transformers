@@ -123,7 +123,10 @@ class Qwen2_5_VisionPatchEmbed(PatchEmbed):
 
 
 class Qwen2_5_VisionRotaryEmbedding(VisionRotaryEmbedding):
-    pass
+    def forward(self, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        freqs = (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        return emb.cos(), emb.sin()
 
 
 class Qwen2_5_VLPatchMerger(PatchMerger):
@@ -270,12 +273,10 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         hidden_states = hidden_states[window_index, :, :]
         hidden_states = hidden_states.reshape(seq_len, -1)
 
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        rotary_pos_emb = rotary_pos_emb.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
-        rotary_pos_emb = rotary_pos_emb[window_index, :, :]
-        rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_ids_for_rope = position_ids.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
+        position_ids_for_rope = position_ids_for_rope[window_index, :, :]
+        position_ids_for_rope = position_ids_for_rope.reshape(seq_len, -1)
+        position_embeddings = self.rotary_pos_emb(position_ids_for_rope)
 
         for layer_num, blk in enumerate(self.blocks):
             if layer_num in self.fullatt_block_indexes:
