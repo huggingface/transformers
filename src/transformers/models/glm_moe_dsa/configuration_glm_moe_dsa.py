@@ -40,8 +40,10 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         Number of heads for the indexer projections (DSA).
     indexer_types (`list[str]`, *optional*):
         Per-layer indexer mode (`"full"` runs the indexer, `"shared"` reuses the previous full
-        layer's top-k). Defaults to the pattern derived from `index_topk_freq` /
+        layer's index mask). Defaults to the pattern derived from `index_topk_freq` /
         `index_skip_topk_offset` (or `index_topk_pattern`).
+    rope_interleave (`bool`, *optional*, defaults to `True`):
+        Whether to apply RoPE in the interleaved (GPT-J adjacent-pair) layout.
 
     ```python
     >>> from transformers import GlmMoeDsaConfig, GlmMoeDsaModel
@@ -113,6 +115,8 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     eos_token_id: int | list[int] | None = 1
     tie_word_embeddings: bool = False
     rope_parameters: dict | None = None
+    # DeepSeek V3.2 applies RoPE in the interleaved (GPT-J pair) layout, like DeepSeek V3.
+    rope_interleave: bool = True
     mlp_layer_types: list[str] | None = None
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
@@ -125,7 +129,7 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     # ``layer_types`` drives cache-class dispatch: every layer is DSA, so each gets a
     # ``DynamicIndexedLayer`` / ``StaticIndexedLayer`` via ``LAYER_TYPE_CACHE_MAPPING``.
     layer_types: list[str] | None = None
-    # `"full"` runs the indexer, `"shared"` reuses the previous full layer's top-k.
+    # `"full"` runs the indexer, `"shared"` reuses the previous full layer's index mask.
     indexer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):

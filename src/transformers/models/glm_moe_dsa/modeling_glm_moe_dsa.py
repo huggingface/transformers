@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Callable
 
 import torch
@@ -35,10 +36,9 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...models.llama.modeling_llama import rotate_half
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_glm_moe_dsa import GlmMoeDsaConfig
 
@@ -85,7 +85,7 @@ class GlmMoeDsaRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: GlmMoeDsaConfig | None = None,
+        config: "GlmMoeDsaConfig | None" = None,
         device=None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
@@ -136,40 +136,24 @@ def apply_rotary_pos_emb(
     sin: torch.Tensor,
     unsqueeze_dim: int = 1,
 ) -> torch.Tensor:
-    """
-    Applies Rotary Position Embedding to a single tensor (query, key, or the indexer's q/k stream).
-
-    This is the transformers equivalent of GLM-MoE-DSA's `apply_rotary_emb(x, freqs_cis, interleaved=True)`.
-    Instead of complex-number `freqs_cis`, we use pre-split `(cos, sin)` tensors from RotaryEmbedding.
-    Rotary pairs are always interpreted as adjacent elements (GPT-J style), so we first de-interleave `x` into
-    halves before applying the standard `rotate_half`.
-
-    Args:
-        x (`torch.Tensor`): Input tensor of shape `[..., head_dim]`.
-        cos (`torch.Tensor`): Cosine part from RotaryEmbedding, shape `[batch, seq_len, head_dim]`.
-        sin (`torch.Tensor`): Sine part from RotaryEmbedding, shape `[batch, seq_len, head_dim]`.
-        unsqueeze_dim (`int`): Dimension along which to unsqueeze cos/sin for broadcasting.
-            Use `1` when x is `[B, H, S, D]` (BHSD) and `2` when x is `[B, S, H, D]` (BSHD).
-
-    Returns:
-        `torch.Tensor`: Tensor with rotary embeddings applied, same shape as input.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    *leading_dims, head_dim = x.shape
-    x = x.view(*leading_dims, head_dim // 2, 2).transpose(-1, -2).reshape(*leading_dims, head_dim)
-    return (x * cos) + (rotate_half(x) * sin)
+    """Single-tensor interleaved RoPE for the indexer's q / k streams (the model's MLA attention uses
+    DeepSeek-V3's `apply_rotary_pos_emb_interleave`, which is the same rotation on `(q, k)` pairs)."""
+    cos = cos[..., : x.shape[-1] // 2].unsqueeze(unsqueeze_dim)
+    sin = sin[..., : x.shape[-1] // 2].unsqueeze(unsqueeze_dim)
+    x1 = x[..., ::2]
+    x2 = x[..., 1::2]
+    return torch.stack((x1 * cos - x2 * sin, x2 * cos + x1 * sin), dim=-1).flatten(-2)
 
 
 class GlmMoeDsaIndexer(nn.Module):
     """
     DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
 
-    The Indexer has its own lightweight projections (wq_b, wk) separate from the
-    main MLA attention. RoPE uses the same interleaved pair layout as main MLA
-    attention.
+    The Indexer has its own lightweight projections (wq_b, wk) separate from the main MLA attention,
+    and returns the additive top-k sparse mask directly (`0` at the selected tokens, `-inf` elsewhere);
+    the raw top-k indices are only ever scattered into that mask, so they are not surfaced.
 
-    **Cache strategy**: The indexer key cache is stored in the `DynamicIndexedLayer` (or the
+    **Cache strategy**: the indexer key cache lives on the per-layer `DynamicIndexedLayer` (or the
     `StaticIndexedLayer` for static caches) inside the shared cache, accessed via
     `past_key_values.update_indexer()`.
     """
@@ -258,7 +242,7 @@ class GlmMoeDsaIndexer(nn.Module):
         scores = torch.einsum("bshd,btd->bsht", q.float(), k_cached.float()) * self.softmax_scale
         scores = F.relu(scores)
         # Weight per head and sum across heads → [B, S, T]
-        index_scores = torch.einsum("bsht,bsh->bst", scores, weights)
+        index_scores = (scores * weights.unsqueeze(-1)).sum(dim=2)
 
         if attention_mask is not None:
             index_scores = index_scores + attention_mask
@@ -267,8 +251,7 @@ class GlmMoeDsaIndexer(nn.Module):
         topk = min(self.index_topk, total_len)
         # diff with classic attention, sample don't project :wink:
         topk_indices = index_scores.topk(topk, dim=-1).indices  # [B, S, topk]
-        # Return the additive sparse mask directly (0 at the selected tokens, -inf elsewhere): the raw
-        # top-k indices are not needed downstream, they would only ever be scattered into this mask.
+        # Return the additive sparse mask directly (0 at the selected tokens, -inf elsewhere).
         index_mask = torch.full(
             (batch_size, seq_len, total_len),
             float("-inf"),
@@ -277,6 +260,13 @@ class GlmMoeDsaIndexer(nn.Module):
         )
         index_mask.scatter_(-1, topk_indices, 0.0)  # [B, S, T]
         return index_mask
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -316,14 +306,58 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    r"""
+    TODO let's just use the original freqcis computation to not have the view
+    transpose + reshape! This is not optimized!
+    Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`):
+            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
+            used to pass offsetted position ids when working with a KV-cache.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+
+    b, h, s, d = q.shape
+    q = q.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
+
+    b, h, s, d = k.shape
+    k = k.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
+
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
+def yarn_get_mscale(scale=1, mscale=1):
+    if scale <= 1:
+        return 1.0
+    return 0.1 * mscale * math.log(scale) + 1.0
+
+
 class GlmMoeDsaAttention(nn.Module):
     """
-    DeepSeek-V3.2 MLA + DSA indexer, extended with **cross-layer indexer top-k sharing**.
+    DeepSeek-V3 MLA + a DSA indexer, extended with **cross-layer index-mask sharing**.
 
     `config.indexer_types[layer_idx]` decides whether this layer runs its own indexer (`"full"`) or
-    reuses the previous full layer's index mask (`"shared"`). Shared layers have no indexer of
-    their own (`self.indexer is None`); `next_skip_topk` signals that the *next* layer will reuse
-    this layer's selection, so it is propagated upward via `prev_index_mask`.
+    reuses the previous full layer's index mask (`"shared"`). Shared layers have no indexer of their
+    own (`self.indexer is None`); `next_skip_topk` signals that the *next* layer will reuse this
+    layer's mask, so it is propagated upward via `prev_index_mask`.
     """
 
     def __init__(self, config: GlmMoeDsaConfig, layer_idx: int):
@@ -342,8 +376,6 @@ class GlmMoeDsaAttention(nn.Module):
         self.qk_head_dim = config.qk_head_dim
 
         self.is_causal = True
-
-        # Query projection (with optional LoRA)
         if self.q_lora_rank is None:
             self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
         else:
@@ -351,7 +383,6 @@ class GlmMoeDsaAttention(nn.Module):
             self.q_a_layernorm = GlmMoeDsaRMSNorm(config.q_lora_rank)
             self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
 
-        # Key-Value projections (MLA compressed path)
         self.kv_a_proj_with_mqa = nn.Linear(
             config.hidden_size,
             self.kv_lora_rank + self.qk_rope_head_dim,
@@ -364,7 +395,6 @@ class GlmMoeDsaAttention(nn.Module):
             bias=False,
         )
 
-        # Output projection
         self.o_proj = nn.Linear(
             self.num_heads * self.v_head_dim,
             config.hidden_size,
@@ -372,17 +402,19 @@ class GlmMoeDsaAttention(nn.Module):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
-
-        # Every layer runs its own indexer (no cross-layer top-k sharing in DeepSeek V3.2).
-        self.indexer = GlmMoeDsaIndexer(config, layer_idx)
+        if self.config.rope_parameters.get("rope_type", "default") != "default":
+            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
+            scaling_factor = self.config.rope_parameters["factor"]
+            if mscale_all_dim:
+                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
+                self.scaling = self.scaling * mscale * mscale
         # Refer: https://arxiv.org/abs/2603.12201 for more details.
         self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.next_skip_topk = (
             config.indexer_types[layer_idx + 1] == "shared" if layer_idx < len(config.indexer_types) - 1 else False
         )
-        # Shared layers carry no indexer of their own.
-        if self.skip_topk:
-            self.indexer = None
+        # `"full"` layers run their own indexer; `"shared"` layers carry none and reuse the previous mask.
+        self.indexer = None if self.skip_topk else GlmMoeDsaIndexer(config, layer_idx)
 
     def forward(
         self,
@@ -392,109 +424,61 @@ class GlmMoeDsaAttention(nn.Module):
         past_key_values: Cache | None = None,
         prev_index_mask: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
+        query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
+        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
+
+        q_resid = self.q_a_layernorm(self.q_a_proj(hidden_states))
+        q_states = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
+        q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+
+        compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
+        k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
+        k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+
+        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
         cos, sin = position_embeddings
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
+        k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
 
-        # ===== Query path =====
-        if self.q_lora_rank is None:
-            query_states = self.q_proj(hidden_states)
-            q_resid = None
-        else:
-            q_resid = self.q_a_layernorm(self.q_a_proj(hidden_states))  # [B, S, q_lora_rank]
-            query_states = self.q_b_proj(q_resid)
-        query_states = query_states.view(batch_size, seq_length, -1, self.qk_head_dim).transpose(1, 2)
-        q_nope, q_pe = torch.split(query_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
-
-        # ===== KV path =====
-        compressed_kv = self.kv_a_proj_with_mqa(hidden_states)  # [B, S, kv_rank + rope_D]
-        k_compressed, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_compressed = self.kv_a_layernorm(k_compressed)  # [B, S, kv_rank]
-
-        kv_expanded = self.kv_b_proj(k_compressed)  # [B, S, H * (nope_D + v_D)]
-        kv_expanded = kv_expanded.view(batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
-        k_nope, value_states = torch.split(kv_expanded, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-        k_nope = k_nope.transpose(1, 2)  # [B, H, S, nope_D]
-        value_states = value_states.transpose(1, 2)  # [B, H, S, v_D]
-
-        k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)  # [B, 1, S, rope_D]
-        q_pe = apply_rotary_pos_emb(q_pe, cos, sin, unsqueeze_dim=1)
-        k_pe = apply_rotary_pos_emb(k_pe, cos, sin, unsqueeze_dim=1)
-        k_pe = k_pe.expand(-1, k_nope.shape[1], -1, -1)  # [B, H, S, rope_D]
-
-        query_states = torch.cat([q_nope, q_pe], dim=-1)  # [B, H, S, qk_head_dim]
-        key_states = torch.cat([k_nope, k_pe], dim=-1)  # [B, H, S, qk_head_dim]
+        query_states = torch.cat((q_pass, q_rot), dim=-1)
+        key_states = torch.cat((k_pass, k_rot), dim=-1)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        # ===== Indexer (DSA sparse mask), with optional cross-layer sharing =====
-        # `"full"` layers run their own indexer (returns the additive [B, S, T] mask); `"shared"` layers
-        # reuse the previous full layer's mask instead of recomputing it.
+        # DSA: compute this layer's additive sparse mask, or reuse the previous full layer's on `"shared"`
+        # layers, then fold it into the attention mask.
         if not self.skip_topk or prev_index_mask is None:
             if self.indexer is None:
                 raise ValueError("Shared DSA layers require an index mask from a previous full indexer layer.")
-            index_mask = self.compute_index_mask(
-                hidden_states, q_resid, position_embeddings, attention_mask, past_key_values=past_key_values
-            )  # [B, S, T]
+            indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
+            index_mask = self.indexer(
+                hidden_states, q_resid, position_embeddings, indexer_mask, past_key_values=past_key_values
+            ).unsqueeze(1)  # [B, 1, S, T]
         else:
-            index_mask = prev_index_mask  # [B, S, T]
-
-        total_len = key_states.shape[2]
-        index_mask_4d = index_mask.unsqueeze(1)  # [B, 1, S, T]
-        if attention_mask is not None and attention_mask.dim() == 4:
-            causal_mask = attention_mask[..., :total_len]
-            combined_mask = index_mask_4d + causal_mask
-        else:
-            combined_mask = (
-                attention_mask.masked_fill(index_mask_4d == float("-inf"), float("-inf"))
-                if attention_mask is not None
-                else index_mask_4d
-            )
-
-        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
-            value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
+            index_mask = prev_index_mask
+        attention_mask = attention_mask + index_mask if attention_mask is not None else index_mask
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
-            combined_mask,
+            attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
         )
 
-        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
-            attn_output = attn_output[:, :, :, : self.v_head_dim]
-
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights, index_mask if self.next_skip_topk else None
-
-    def compute_index_mask(
-        self,
-        hidden_states: torch.Tensor,
-        q_resid: torch.Tensor | None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-    ) -> torch.Tensor:
-        """Run this layer's indexer to build the additive top-k sparse mask `[B, S, T]`."""
-        # attention_mask is [B, 1, S, T] (4D) for eager and (2D) otherwise but the indexer works with [B, S, T] (3D)
-        indexer_mask = (
-            attention_mask[:, 0, :, :]
-            if attention_mask is not None and attention_mask.dim() == 4
-            else attention_mask.unsqueeze(1)
-            if attention_mask is not None
-            else None
-        )
-        return self.indexer(hidden_states, q_resid, position_embeddings, indexer_mask, past_key_values=past_key_values)
 
 
 class GlmMoeDsaMLP(nn.Module):
@@ -757,16 +741,13 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        if isinstance(attention_mask, dict):
-            causal_mask = attention_mask["dynamic_sparse_attention"]
-        else:
-            causal_mask = create_causal_mask(
-                config=self.config,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-                position_ids=position_ids,
-            )
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
