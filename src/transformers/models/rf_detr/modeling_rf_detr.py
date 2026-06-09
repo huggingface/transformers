@@ -487,7 +487,6 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
-    @can_return_tuple
     @filter_output_hidden_states
     @auto_docstring
     def forward(
@@ -1105,7 +1104,7 @@ class RfDetrPreTrainedModel(PreTrainedModel):
             init.constant_(module.bbox_embed.layers[-1].weight, 0)
             init.constant_(module.bbox_embed.layers[-1].bias, 0)
         if hasattr(module, "segmentation_bias") and isinstance(module.segmentation_bias, nn.Parameter):
-            nn.init.constant_(module.segmentation_bias, 0.0)
+            init.constant_(module.segmentation_bias, 0.0)
 
 
 @auto_docstring(
