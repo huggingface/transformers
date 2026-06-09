@@ -1772,7 +1772,12 @@ class GenerationMixin(ContinuousMixin):
         return generation_config, model_kwargs
 
     def _prepare_static_cache(
-        self: "GenerativePreTrainedModel", cache_implementation: str, batch_size: int, max_cache_len: int, model_kwargs
+        self: "GenerativePreTrainedModel",
+        cache_implementation: str,
+        batch_size: int,
+        max_cache_len: int,
+        prefill_chunk_size: int | None,
+        model_kwargs,
     ) -> Cache:
         """
         Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
@@ -1818,6 +1823,27 @@ class GenerationMixin(ContinuousMixin):
                     "offloading": offload_cache,
                 }
                 self._cache = EncoderDecoderCache(self._cache, StaticCache(**cross_attention_cache_kwargs))
+            elif prefill_chunk_size is not None:
+                # Chunked prefill compiles the prefill, so eagerly init the fresh cache to avoid a recompile next call
+                # (#46421) -- only when single-device and the heads shard evenly across TP ranks (else lazy init).
+                text_config = self.config.get_text_config(decoder=True)
+                tp_size = getattr(self, "_tp_size", None) or 1
+                num_key_value_heads = (
+                    getattr(text_config, "num_key_value_heads", None) or text_config.num_attention_heads
+                )
+                device_mapped = hasattr(self, "hf_device_map") and len(set(self.hf_device_map.values())) > 1
+                if not device_mapped and num_key_value_heads % tp_size == 0:
+                    head_dim = (
+                        getattr(text_config, "head_dim", None)
+                        or text_config.hidden_size // text_config.num_attention_heads
+                    )
+                    self._cache.early_initialization(
+                        batch_size=batch_size,
+                        num_heads=num_key_value_heads // tp_size,
+                        head_dim=head_dim,
+                        dtype=self.dtype,
+                        device=self.device,
+                    )
         else:
             self._cache.reset()
         return self._cache
@@ -1926,39 +1952,13 @@ class GenerationMixin(ContinuousMixin):
             if cache_config.get("max_cache_len") is not None:
                 max_cache_length = max(max_cache_length, cache_config["max_cache_len"])
             cache_batch_size = max(generation_config.num_beams, generation_config.num_return_sequences) * batch_size
-            cache = self._prepare_static_cache(
+            model_kwargs[cache_name] = self._prepare_static_cache(
                 cache_implementation=generation_config.cache_implementation,
                 batch_size=cache_batch_size,
                 max_cache_len=max_cache_length,
+                prefill_chunk_size=generation_config.prefill_chunk_size,
                 model_kwargs=model_kwargs,
             )
-            # With chunked prefill, the prefill itself runs inside a compiled region.
-            # Initializing the cache eagerly here to avoid a recompilation on the second generate() call. See #46421.
-            # It uses a single device and `num_heads // tp_size`, so only when the model is not device-mapped across
-            # devices and the heads shard evenly; otherwise fall back to lazy init.
-            text_config = self.config.get_text_config(decoder=True)
-            tp_size = getattr(self, "_tp_size", None) or 1
-            num_key_value_heads = getattr(text_config, "num_key_value_heads", None) or text_config.num_attention_heads
-            device_mapped = hasattr(self, "hf_device_map") and len(set(self.hf_device_map.values())) > 1
-            compatible = not device_mapped and num_key_value_heads % tp_size == 0
-            if (
-                generation_config.prefill_chunk_size is not None
-                and isinstance(cache, StaticCache)
-                and not cache.is_initialized
-                and compatible
-            ):
-                head_dim = (
-                    getattr(text_config, "head_dim", None)
-                    or text_config.hidden_size // text_config.num_attention_heads
-                )
-                cache.early_initialization(
-                    batch_size=cache_batch_size,
-                    num_heads=num_key_value_heads // tp_size,
-                    head_dim=head_dim,
-                    dtype=self.dtype,
-                    device=self.device,
-                )
-            model_kwargs[cache_name] = cache
         elif generation_config.cache_implementation == "quantized":
             if self.config.is_encoder_decoder or not self._supports_default_dynamic_cache():
                 raise ValueError(
