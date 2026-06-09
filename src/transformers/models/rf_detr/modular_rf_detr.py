@@ -25,6 +25,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import (
     BackboneConfigMixin,
+    BackboneMixin,
     consolidate_backbone_kwargs_to_config,
     filter_output_hidden_states,
 )
@@ -727,6 +728,17 @@ class RfDetrDinov2Encoder(Dinov2Encoder):
 
 
 class RfDetrDinov2Backbone(Dinov2Backbone):
+    def __init__(self, config: RfDetrDinov2Config):
+        BackboneMixin.__init__(self, config)
+        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
+        self.embeddings = RfDetrDinov2Embeddings(config)
+        self.encoder = RfDetrDinov2Encoder(config)
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embeddings.patch_embeddings
+
     def window_unpartition(self, hidden_state: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         Reassembles windowed patch tokens into their original 2D patch layout (image-level grid structure)
@@ -789,10 +801,10 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        embedding_output = self.rf_detr_dinov2.embeddings(pixel_values)
+        embedding_output = self.embeddings(pixel_values)
         hidden_state = embedding_output
         hidden_states = (hidden_state,)
-        for layer in self.rf_detr_dinov2.encoder.layer:
+        for layer in self.encoder.layer:
             hidden_state = layer(hidden_state, **kwargs)
             hidden_states = hidden_states + (hidden_state,)
 
@@ -800,7 +812,7 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
                 if self.config.apply_layernorm:
-                    hidden_state = self.rf_detr_dinov2.layernorm(hidden_state)
+                    hidden_state = self.layernorm(hidden_state)
                 if self.config.reshape_hidden_states:
                     hidden_state = hidden_state[:, 1:]
                     # this was actually a bug in the original implementation that we copied here,
