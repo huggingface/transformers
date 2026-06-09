@@ -378,7 +378,23 @@ class ESMFold2Model(PreTrainedModel):
             raise ValueError(f"precision must be one of {list(dtype_map)}, got {precision!r}")
         dtype = dtype_map[precision]
 
-        esmc = AutoModel.from_pretrained(esmc_model_path).to(device=self.device, dtype=dtype).eval()
+        # Load directly in the target dtype so the ~25GB fp32 6B backbone is never
+        # materialised (it would not fit alongside the trunk on a 24GB GPU).
+        esmc = AutoModel.from_pretrained(esmc_model_path, dtype=dtype).to(device=self.device, dtype=dtype)
+        if dtype == torch.bfloat16:
+            # The ESMFold2 checkpoint was trained against a bf16-cast backbone, so
+            # reproduce that exactly. ESMC keeps its norm weights in fp32 on a bf16
+            # load (``_keep_in_fp32_modules_strict``); the ``.to(bf16)`` above forced
+            # those down to bf16, matching the trained rounding. Now upcast just the
+            # norm weights back to fp32 so the LayerNorms still run in fp32 (the
+            # reference ran them under autocast). Values stay bf16-rounded — only the
+            # storage/maths are fp32. Net: bit-identical to "load fp32 -> .to(bf16) ->
+            # autocast" without ever holding the fp32 backbone.
+            norm_markers = getattr(esmc, "_keep_in_fp32_modules_strict", None) or ()
+            for name, param in esmc.named_parameters():
+                if any(marker in name for marker in norm_markers):
+                    param.data = param.data.float()
+        esmc = esmc.eval()
         for p in esmc.parameters():
             p.requires_grad_(False)
 
