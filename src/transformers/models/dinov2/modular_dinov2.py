@@ -334,7 +334,6 @@ class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
-    @can_return_tuple
     @filter_output_hidden_states
     @auto_docstring
     def forward(
