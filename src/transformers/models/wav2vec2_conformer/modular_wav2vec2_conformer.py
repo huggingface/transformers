@@ -234,7 +234,7 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
         return hidden_states
 
 
-def _apply_conformer_relative_position_encoding(module, query, key, attention_mask, relative_position_embeddings):
+def _apply_relative_position_encoding(module, query, key, attention_mask, relative_position_embeddings):
     if relative_position_embeddings is None:
         raise ValueError(
             "`relative_position_embeddings` has to be defined when `self.position_embeddings_type == 'relative'`"
@@ -328,7 +328,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         key_states = self.linear_k(query_key_states).view(hidden_shape).transpose(1, 2)
         value_states = self.linear_v(value_states).view(hidden_shape).transpose(1, 2)
 
-        query_states, attention_mask = self._apply_relative_position_encoding(
+        query_states, attention_mask = self._apply_relative_embedding(
             query=query_states,
             key=key_states,
             attention_mask=attention_mask,
@@ -374,7 +374,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
 
         return hidden_states
 
-    def _apply_relative_position_encoding(self, query, key, attention_mask, relative_position_embeddings):
+    def _apply_relative_embedding(self, query, key, attention_mask, relative_position_embeddings):
         """Compute relative position bias (matrix b+d) as described in
         https://huggingface.co/papers/1901.02860, and modify query
         with pos_bias_u for content-based attention (matrix a+c).
@@ -382,9 +382,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         if self.position_embeddings_type != "relative":
             return query, attention_mask
 
-        return _apply_conformer_relative_position_encoding(
-            self, query, key, attention_mask, relative_position_embeddings
-        )
+        return _apply_relative_position_encoding(self, query, key, attention_mask, relative_position_embeddings)
 
 
 class Wav2Vec2ConformerEncoderLayer(GradientCheckpointingLayer):

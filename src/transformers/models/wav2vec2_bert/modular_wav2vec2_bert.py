@@ -32,7 +32,7 @@ from ..wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerRelPositionalEmbedding,
     Wav2Vec2ConformerRotaryPositionalEmbedding,
     Wav2Vec2ConformerSelfAttention,
-    _apply_conformer_relative_position_encoding,
+    _apply_relative_position_encoding,
     eager_attention_forward,
 )
 from .configuration_wav2vec2_bert import Wav2Vec2BertConfig
@@ -247,12 +247,12 @@ class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
 
         return query, attention_mask
 
-    def _apply_relative_position_encoding(self, query, key, attention_mask, relative_position_embeddings):
+    def _apply_relative_embedding(self, query, key, attention_mask, relative_position_embeddings):
         """Compute relative position bias and modify query/attention_mask.
         Reuses the Conformer implementation for 'relative' and adds support for 'relative_key'.
         """
         if self.position_embeddings_type == "relative":
-            return _apply_conformer_relative_position_encoding(
+            return _apply_relative_position_encoding(
                 self, query, key, attention_mask, relative_position_embeddings
             )
 
@@ -287,7 +287,7 @@ class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
         key_states = self.linear_k(query_key_states).view(hidden_shape).transpose(1, 2)
         value_states = self.linear_v(value_states).view(hidden_shape).transpose(1, 2)
 
-        query_states, attention_mask = self._apply_relative_position_encoding(
+        query_states, attention_mask = self._apply_relative_embedding(
             query=query_states,
             key=key_states,
             attention_mask=attention_mask,
