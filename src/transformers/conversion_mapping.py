@@ -737,6 +737,27 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Transpose(1, 2, check_dims=True)],
             ),
         ],
+        "cosmos3_omni": [
+            # Cosmos3 unified checkpoints store the Reasoner LLM with the old `model.` prefix
+            # stripped off and the ViT under flat `blocks.*` / `merger.*` / `patch_embed.*` /
+            # `pos_embed.*` / `deepstack_merger_list.*`. Re-target both to the nested Qwen3-VL
+            # layout (`model.language_model.*` and `model.visual.*`). Newer checkpoints also
+            # use Diffusers-style attention names; map them back to Qwen3-VL module names.
+            WeightRenaming(
+                source_patterns=r"^(layers\.|embed_tokens\.|norm\.)",
+                target_patterns=r"model.language_model.\1",
+            ),
+            WeightRenaming(
+                source_patterns=r"^(blocks\.|merger\.|patch_embed\.|pos_embed\.|deepstack_merger_list\.)",
+                target_patterns=r"model.visual.\1",
+            ),
+            WeightRenaming(source_patterns=r"\.self_attn\.to_q\.", target_patterns=".self_attn.q_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.to_k\.", target_patterns=".self_attn.k_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.to_v\.", target_patterns=".self_attn.v_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.to_out\.", target_patterns=".self_attn.o_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.norm_q\.", target_patterns=".self_attn.q_norm."),
+            WeightRenaming(source_patterns=r"\.self_attn\.norm_k\.", target_patterns=".self_attn.k_norm."),
+        ],
         "phimoe": [
             WeightRenaming(".block_sparse_moe.", ".mlp."),
             WeightRenaming(".gate.weight", ".router.weight"),

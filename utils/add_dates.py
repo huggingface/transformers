@@ -347,7 +347,7 @@ def insert_dates(model_card_list: list[str]):
 
             if _dates_differ_significantly(existing_hf_date, hf_commit_date) or existing_release_date != release_date:
                 old_line = match.group(0)
-                if release_date != r"{release_date}":
+                if release_date not in [r"{release_date}", None]:
                     new_line = f"\n*This model was published in HF papers on {release_date} and contributed to Hugging Face Transformers on {hf_commit_date}.*"
                 else:
                     new_line = f"\n*This model was contributed to Hugging Face Transformers on {hf_commit_date}.*"
@@ -357,7 +357,7 @@ def insert_dates(model_card_list: list[str]):
         else:
             # Insert new dates line after copyright marker
             insert_index = markers[0].end()
-            if release_date != r"{release_date}":
+            if release_date not in [r"{release_date}", None]:
                 date_info = f"\n*This model was published in HF papers on {release_date} and contributed to Hugging Face Transformers on {hf_commit_date}.*"
             else:
                 date_info = f"\n*This model was contributed to Hugging Face Transformers on {hf_commit_date}.*"
