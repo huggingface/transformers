@@ -132,6 +132,10 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_nextn_predict_layers",
         "router_jitter_noise",
     ],
+    # `layer_types` drives cache-class dispatch (read by `DynamicCache` / masking, not the modeling
+    # forward); `head_dim` / `mlp_bias` are config-compat surface MLA / the MoE MLPs never read.
+    "DeepseekV32Config": ["head_dim", "layer_types", "mlp_bias"],
+    "GlmMoeDsaConfig": ["head_dim", "layer_types", "mlp_bias"],
     "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
     "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
     "SeamlessM4TConfig": True,

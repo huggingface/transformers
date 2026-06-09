@@ -38,8 +38,6 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int`, *optional*, defaults to 64):
         Number of heads for the indexer projections (DSA).
-    rope_interleave (`bool`, *optional*, defaults to `True`):
-        Whether to apply RoPE in the interleaved (GPT-J adjacent-pair) layout.
 
     ```python
     >>> from transformers import DeepseekV32Config, DeepseekV32Model
@@ -109,8 +107,6 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     eos_token_id: int | list[int] | None = 1
     tie_word_embeddings: bool = False
     rope_parameters: dict | None = None
-    # DeepSeek V3.2 applies RoPE in the interleaved (GPT-J pair) layout, like DeepSeek V3.
-    rope_interleave: bool = True
     mlp_layer_types: list[str] | None = None
     attention_bias: bool = False
     attention_dropout: float | int = 0.0

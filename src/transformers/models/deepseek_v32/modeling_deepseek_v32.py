@@ -217,6 +217,7 @@ class DeepseekV32Indexer(nn.Module):
         q_resid: torch.Tensor,  # [B, S, q_lora_rank]
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
+        position_ids: torch.Tensor,
         past_key_values: Cache | None = None,
     ) -> torch.Tensor:
         """
@@ -264,15 +265,25 @@ class DeepseekV32Indexer(nn.Module):
             k = past_key_values.update_indexer(k, self.layer_idx)
 
         # === Scoring: index_score[b,s,t] = Σ_h weight[b,s,h] · softmax_scale · ReLU(q[b,s,h,:] · k[b,t,:]) ===
-        weights = self.weights_proj(hidden_states).float() * (self.n_heads**-0.5)  # [B, S, H]
+        # `weights_proj` is normally kept in fp32 (`_keep_in_fp32_modules`); match the input to its weight dtype
+        # so the matmul is valid whether or not the module was force-cast, then score in fp32.
+        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
         # q·k^T per head: [B, S, H, D] @ [B, 1, D, T] → [B, S, H, T]
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
         scores = F.relu(scores)
         # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
+        # The indexer must select only top-k keys at or before each query. When an explicit mask is passed
+        # (eager, or any padded/packed input) it already encodes causality + padding, so use it directly.
+        # SDPA may instead defer plain causality to `is_causal` and pass no mask; in that (unpadded) case we
+        # reconstruct causality from `position_ids` (key `t` sits at absolute position `t`).
         if attention_mask is not None:
             index_scores = index_scores + attention_mask
+        else:
+            key_positions = torch.arange(index_scores.shape[-1], device=index_scores.device)
+            causal = key_positions[None, None, :] > position_ids[:, :, None]  # [B, S, T]
+            index_scores = index_scores.masked_fill(causal, float("-inf"))
 
         topk = min(self.index_topk, index_scores.shape[-1])
         # diff with classic attention, sample don't project :wink:
@@ -381,6 +392,7 @@ class DeepseekV32Attention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
@@ -412,7 +424,7 @@ class DeepseekV32Attention(nn.Module):
         # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
         indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
         topk_indices = self.indexer(
-            hidden_states, q_resid, position_embeddings, indexer_mask, past_key_values=past_key_values
+            hidden_states, q_resid, position_embeddings, indexer_mask, position_ids, past_key_values=past_key_values
         )  # [B, S, topk]
 
         # The dense eager / SDPA paths apply sparsity as an additive `-inf` mask (materialized here, so it

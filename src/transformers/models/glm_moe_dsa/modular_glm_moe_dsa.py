@@ -68,10 +68,8 @@ class GlmMoeDsaConfig(DeepseekV32Config):
         Number of heads for the indexer projections (DSA).
     indexer_types (`list[str]`, *optional*):
         Per-layer indexer mode (`"full"` runs the indexer, `"shared"` reuses the previous full
-        layer's index mask). Defaults to the pattern derived from `index_topk_freq` /
+        layer's top-k). Defaults to the pattern derived from `index_topk_freq` /
         `index_skip_topk_offset` (or `index_topk_pattern`).
-    rope_interleave (`bool`, *optional*, defaults to `True`):
-        Whether to apply RoPE in the interleaved (GPT-J adjacent-pair) layout.
 
     ```python
     >>> from transformers import GlmMoeDsaConfig, GlmMoeDsaModel
@@ -171,6 +169,7 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
+        position_ids: torch.Tensor | None = None,
         prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
@@ -204,7 +203,12 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
                 raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
             indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
             topk_indices = self.indexer(
-                hidden_states, q_resid, position_embeddings, indexer_mask, past_key_values=past_key_values
+                hidden_states,
+                q_resid,
+                position_embeddings,
+                indexer_mask,
+                position_ids,
+                past_key_values=past_key_values,
             )  # [B, S, topk]
         else:
             topk_indices = prev_topk_indices
