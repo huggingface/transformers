@@ -23,6 +23,7 @@ from transformers.testing_utils import (
     require_cuda_capability_at_least,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_large_accelerator,
     require_torch_n_accelerators,
     slow,
@@ -686,7 +687,7 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(rc, 0, "torchrun worker failed; see stdout above")
 
-    @unittest.skipIf(not torch.cuda.is_available(), "deepgemm_megamoe requires CUDA")
+    @require_torch_gpu
     def test_v4_flash_fp4_generation_megamoe_distributed(self):
         rc = _run_distributed_worker(
             loadtime_dispatch="deepgemm_megamoe",
@@ -735,7 +736,7 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(rc, 0, "torchrun forward-compile worker failed; see stdout above")
 
-    @unittest.skipIf(not torch.cuda.is_available(), "deepgemm_megamoe requires CUDA")
+    @require_torch_gpu
     def test_v4_flash_fp4_forward_compile_fullgraph_megamoe_distributed(self):
         rc = _run_distributed_compile_worker(
             loadtime_dispatch="deepgemm_megamoe",
