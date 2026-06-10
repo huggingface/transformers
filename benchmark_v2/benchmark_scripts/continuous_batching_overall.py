@@ -169,6 +169,7 @@ class BenchmarkResults:
         self.attn_impl = attn_impl
         self.tp_size = tp_size
         self.dp_size = dp_size
+        self._start_time = time.perf_counter()
         # For now, TP and DP are mutually exclusive
         if self.tp_size > 1 and self.dp_size > 1:
             raise ValueError("TP and DP cannot be used together")
@@ -306,6 +307,9 @@ class BenchmarkResults:
 
     # Display
     def print_summary(self) -> None:
+        print("-" * 80)
+        print(f"Total time: {time.perf_counter() - self._start_time:.2f}s")
+        print("-" * 80)
         rows = [
             {
                 "label": e.label,
