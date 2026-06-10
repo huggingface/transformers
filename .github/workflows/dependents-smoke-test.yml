@@ -41,8 +41,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install -r requirements/build/cpu.txt --torch-backend cpu
-          uv pip install -r requirements/cpu.txt --torch-backend cpu
+          uv pip install -r vllm/requirements/build/cpu.txt --torch-backend cpu
+          uv pip install -r vllm/requirements/cpu.txt --torch-backend cpu
           VLLM_TARGET_DEVICE=cpu uv pip install -e vllm -e transformers --no-build-isolation
 
       - name: Run tests
