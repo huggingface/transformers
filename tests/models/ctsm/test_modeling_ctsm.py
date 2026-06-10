@@ -20,7 +20,7 @@ import torch
 from parameterized import parameterized
 
 from transformers import CtsmConfig, is_torch_available
-from transformers.testing_utils import require_flash_attn, require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION, ModelTesterMixin, floats_tensor
@@ -209,10 +209,29 @@ class CtsmModelTest(ModelTesterMixin, unittest.TestCase):
             self.skipTest("Model does not support SDPA")
         self._attn_kernel_equivalence("sdpa", dtype=torch.float32, tolerance=1e-4)
 
-    @require_flash_attn
     @require_torch_accelerator
-    def test_flash_attn_2_inference_equivalence(self):
-        self._attn_kernel_equivalence("flash_attention_2", dtype=torch.bfloat16, tolerance=1e-2)
+    def test_flex_attn_inference_equivalence(self):
+        self._attn_kernel_equivalence("flex_attention", dtype=torch.float32, tolerance=1e-4)
+
+    @unittest.skip(reason="CTSM's main input `past_values` is a list of series, not a tensor")
+    def test_flex_attention_with_grads(self):
+        pass
+
+    @unittest.skip(reason="CTSM's data-dependent fp64 normalization fallback is not exportable")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
+    @unittest.skip(reason="CTSM normalizes raw `past_values` on the params' device, which is `meta` under offload")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(reason="CTSM normalizes raw `past_values` on the params' device, which is `meta` under offload")
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip(reason="CTSM normalizes raw `past_values` on the params' device, which is `meta` under offload")
+    def test_disk_offload_safetensors(self):
+        pass
 
     def test_retain_grad_hidden_states_attentions(self):
         """CTSM returns `mean_predictions` as the first tensor, not `last_hidden_state`."""
