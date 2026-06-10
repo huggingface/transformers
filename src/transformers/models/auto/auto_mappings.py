@@ -1199,6 +1199,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("swin2sr", {"pil": "Swin2SRImageProcessorPil", "torchvision": "Swin2SRImageProcessor"}),
         ("textnet", {"pil": "TextNetImageProcessorPil", "torchvision": "TextNetImageProcessor"}),
         ("tipsv2", {"torchvision": "Tipsv2ImageProcessor"}),
+        ("tipsv2_dpt", {"torchvision": "Tipsv2DptImageProcessor"}),
         ("tvp", {"pil": "TvpImageProcessorPil", "torchvision": "TvpImageProcessor"}),
         ("uvdoc", {"torchvision": "UVDocImageProcessor"}),
         ("video_llama_3", {"pil": "VideoLlama3ImageProcessorPil", "torchvision": "VideoLlama3ImageProcessor"}),

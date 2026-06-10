@@ -64,37 +64,6 @@ if is_torch_available():
     from transformers.image_utils import load_image_as_tensor
 
 
-class Tipsv2ModelTesterMixin(ModelTesterMixin):
-    def test_sdpa_can_dispatch_composite_models(self):
-        for model_class in self.all_model_classes:
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(tmpdirname)
-                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
-
-            if hasattr(model_sdpa, "vision_model"):
-                self.assertEqual(model_sdpa.vision_model.config._attn_implementation, "sdpa")
-                self.assertEqual(model_eager.vision_model.config._attn_implementation, "eager")
-
-            if hasattr(model_sdpa, "text_model"):
-                self.assertEqual(model_sdpa.text_model.config._attn_implementation, "sdpa")
-                self.assertEqual(model_eager.text_model.config._attn_implementation, "eager")
-
-            self.assertEqual(model_sdpa.config._attn_implementation, "sdpa")
-            self.assertEqual(model_eager.config._attn_implementation, "eager")
-
-    @unittest.skip(reason="TIPSv2 does not use grouped expert implementations.")
-    def test_eager_matches_batched_and_grouped_inference(self, name, dtype):
-        pass
-
-    @unittest.skip(reason="TIPSv2 SDPA flash dispatch is covered by generic accelerator tests when available.")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-
 class Tipsv2VisionModelTester:
     def __init__(
         self,
@@ -166,7 +135,7 @@ class Tipsv2VisionModelTester:
 
 
 @require_torch
-class Tipsv2VisionModelTest(Tipsv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Tipsv2VisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     TIPSv2VisionModel is a DINOv2-with-registers vision tower. It does not use token input ids, token embeddings, or
     text attention masks.
