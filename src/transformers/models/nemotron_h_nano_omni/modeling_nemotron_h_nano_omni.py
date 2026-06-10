@@ -26,10 +26,11 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationConfig
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ..nemotron_h import NemotronHForCausalLM, NemotronHRMSNorm
+from ..nemotron_h import NemotronHForCausalLM
 from ..radio import RADIOModel
 from .configuration_nemotron_h_nano_omni import NemotronH_Nano_Omni_Reasoning_V3_Config
 
@@ -37,8 +38,25 @@ from .configuration_nemotron_h_nano_omni import NemotronH_Nano_Omni_Reasoning_V3
 logger = logging.get_logger(__name__)
 
 
-class NemotronH_Nano_Omni_RMSNorm(NemotronHRMSNorm):
-    pass
+@use_kernel_forward_from_hub("RMSNorm")
+class NemotronH_Nano_Omni_RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        NemotronHNanoOmniRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return (self.weight.to(torch.float32) * hidden_states).to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class EfficientVideoSampling:

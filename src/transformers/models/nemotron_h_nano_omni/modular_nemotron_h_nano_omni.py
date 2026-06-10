@@ -24,7 +24,8 @@ from ...generation import GenerationConfig
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ..nemotron_h import NemotronHForCausalLM, NemotronHRMSNorm
+from ..nemotron_h import NemotronHForCausalLM
+from ..nemotron_h.modeling_nemotron_h import NemotronHRMSNorm
 from ..radio import RADIOModel
 from .configuration_nemotron_h_nano_omni import NemotronH_Nano_Omni_Reasoning_V3_Config
 
