@@ -49,12 +49,9 @@ MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("moonshine", "Wav2Vec2FeatureExtractor"),
         ("moshi", "EncodecFeatureExtractor"),
         ("musicgen", "EncodecFeatureExtractor"),
-<<<<<<< HEAD
         ("musicgen_melody", "MusicgenMelodyFeatureExtractor"),
         ("nemotron_asr", "NemotronAsrFeatureExtractor"),
         ("nemotron_asr_encoder", "NemotronAsrFeatureExtractor"),
-=======
->>>>>>> parakeet-rnnt-from-scratch
         ("parakeet_ctc", "ParakeetFeatureExtractor"),
         ("parakeet_encoder", "ParakeetFeatureExtractor"),
         ("parakeet_rnnt", "ParakeetFeatureExtractor"),
