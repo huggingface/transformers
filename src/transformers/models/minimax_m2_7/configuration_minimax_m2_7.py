@@ -21,7 +21,6 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
@@ -66,7 +65,6 @@ class MiniMaxM27Config(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-    default_theta = 5000000.0
 
     vocab_size: int = 32000
     hidden_size: int = 4096
@@ -93,7 +91,6 @@ class MiniMaxM27Config(PreTrainedConfig):
     router_aux_loss_coef: float = 0.001
     router_jitter_noise: float = 0.0
     use_qk_norm: bool = False
-    rope_parameters: RopeParameters | dict | None = None
 
 
 __all__ = ["MiniMaxM27Config"]

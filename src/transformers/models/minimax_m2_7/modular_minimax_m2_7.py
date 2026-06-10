@@ -16,32 +16,26 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
 from ...modeling_layers import (
     GenericForQuestionAnswering,
     GenericForSequenceClassification,
     GenericForTokenClassification,
+    GradientCheckpointingLayer,
 )
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.output_capturing import OutputRecorder
 from ..minimax_m2.modeling_minimax_m2 import (
     MiniMaxM2Attention,
-    MiniMaxM2DecoderLayer,
+    MiniMaxM2Experts,
     MiniMaxM2ForCausalLM,
     MiniMaxM2Model,
-    MiniMaxM2PreTrainedModel,
     MiniMaxM2RMSNorm,
     MiniMaxM2RotaryEmbedding,
-    MiniMaxM2SparseMoeBlock,
-    apply_rotary_pos_emb,  # noqa: F401
-    eager_attention_forward,  # noqa: F401
-    load_balancing_loss_func,  # noqa: F401
-    repeat_kv,  # noqa: F401
-    rotate_half,  # noqa: F401
 )
 
 
@@ -76,10 +70,10 @@ class MiniMaxM27Config(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.block_sparse_moe.gate": "colwise_rep",
-        "layers.*.block_sparse_moe.experts.*.w1": "colwise",
-        "layers.*.block_sparse_moe.experts.*.w2": "rowwise",
-        "layers.*.block_sparse_moe.experts.*.w3": "colwise",
+        "layers.*.mlp.gate": "colwise_rep",
+        "layers.*.mlp.experts.*.w1": "colwise",
+        "layers.*.mlp.experts.*.w2": "rowwise",
+        "layers.*.mlp.experts.*.w3": "colwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -113,56 +107,44 @@ class MiniMaxM27Config(PreTrainedConfig):
     router_aux_loss_coef: float = 0.001
     router_jitter_noise: float = 0.0
     use_qk_norm: bool = False
+    rotary_dim: int | None = None
     rope_parameters: RopeParameters | dict | None = None
 
-
-class MiniMaxM27MLP(nn.Module):
-    def __init__(self, config: MiniMaxM27Config):
-        super().__init__()
-        self.ffn_dim = config.intermediate_size
-        self.hidden_dim = config.hidden_size
-        self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-        self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
-        self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states):
-        current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
-        current_hidden_states = self.w2(current_hidden_states)
-        return current_hidden_states
+    def convert_rope_params_to_dict(self, **kwargs):
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
+        if self.rotary_dim is not None and "partial_rotary_factor" not in kwargs:
+            kwargs["partial_rotary_factor"] = self.rotary_dim / self.head_dim
+        return super().convert_rope_params_to_dict(**kwargs)
 
 
-class MiniMaxM27Experts(nn.Module):
-    def __init__(self, config: MiniMaxM27Config):
-        nn.Module.__init__(self)
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        for i in range(self.num_experts):
-            self.add_module(str(i), MiniMaxM27MLP(config))
-
-    def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
-    ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hit:
-            expert_module = self._modules[str(int(expert_idx))]
-            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = expert_module(current_state) * top_k_weights[top_x, idx, None]
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
-        return final_hidden_states
+class MiniMaxM27Experts(MiniMaxM2Experts):
+    pass
 
 
-class MiniMaxM27SparseMoeBlock(MiniMaxM2SparseMoeBlock):
+class MiniMaxM27SparseMoeBlock(nn.Module):
     def __init__(self, config):
-        nn.Module.__init__(self)
+        super().__init__()
         self.top_k = config.num_experts_per_tok
         self.jitter_noise = config.router_jitter_noise
         self.gate = nn.Linear(config.hidden_size, config.num_local_experts, bias=False)
         self.experts = MiniMaxM27Experts(config)
         self.register_buffer("e_score_correction_bias", torch.zeros(config.num_local_experts))
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        if self.training and self.jitter_noise > 0:
+            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        router_logits = self.gate(hidden_states.to(self.gate.weight.dtype))
+        top_k_index, top_k_weights = self.route_tokens_to_experts(router_logits)
+        hidden_states = self.experts(
+            hidden_states.to(self.experts.gate_up_proj.dtype),
+            top_k_index,
+            top_k_weights.to(self.experts.gate_up_proj.dtype),
+        )
+        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        return hidden_states, router_logits
 
     def route_tokens_to_experts(self, router_logits):
         routing_weights = torch.nn.functional.sigmoid(router_logits.float())
@@ -172,29 +154,8 @@ class MiniMaxM27SparseMoeBlock(MiniMaxM2SparseMoeBlock):
         top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
         return top_k_index, top_k_weights.to(router_logits.dtype)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        if self.training and self.jitter_noise > 0:
-            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        router_logits = self.gate(hidden_states.to(self.gate.weight.dtype))
-        top_k_index, top_k_weights = self.route_tokens_to_experts(router_logits)
-        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights.to(hidden_states.dtype))
-        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return hidden_states
-
 
 class MiniMaxM27RMSNorm(MiniMaxM2RMSNorm):
-    pass
-
-
-class MiniMaxM27Attention(MiniMaxM2Attention):
-    def __init__(self, config: MiniMaxM27Config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-
-class MiniMaxM27DecoderLayer(MiniMaxM2DecoderLayer):
     pass
 
 
@@ -202,45 +163,83 @@ class MiniMaxM27RotaryEmbedding(MiniMaxM2RotaryEmbedding):
     pass
 
 
+class MiniMaxM27Attention(MiniMaxM2Attention):
+    pass
+
+
+class MiniMaxM27DecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: MiniMaxM27Config, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = MiniMaxM27Attention(config, layer_idx)
+
+        self.mlp = MiniMaxM27SparseMoeBlock(config)
+        self.input_layernorm = MiniMaxM27RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MiniMaxM27RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states, _ = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+        return hidden_states
+
+
 @auto_docstring
-class MiniMaxM27PreTrainedModel(MiniMaxM2PreTrainedModel):
+class MiniMaxM27PreTrainedModel(PreTrainedModel):
     config: MiniMaxM27Config
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
     _no_split_modules = ["MiniMaxM27DecoderLayer"]
-    _can_compile_fullgraph = False
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+    _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(MiniMaxM27SparseMoeBlock, index=1),
         "hidden_states": MiniMaxM27DecoderLayer,
         "attentions": MiniMaxM27Attention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
-        PreTrainedModel._init_weights(self, module)
+        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, MiniMaxM27Experts):
+            nn.init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            nn.init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, MiniMaxM27SparseMoeBlock):
+            nn.init.zeros_(module.e_score_correction_bias)
 
 
-@auto_docstring
 class MiniMaxM27Model(MiniMaxM2Model):
-    def __init__(self, config: MiniMaxM27Config):
-        super().__init__(config)
-        self.layers = nn.ModuleList(
-            [MiniMaxM27DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = MiniMaxM27RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = MiniMaxM27RotaryEmbedding(config=config)
+    pass
 
 
-@auto_docstring
-class MiniMaxM27ForCausalLM(MiniMaxM2ForCausalLM, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+class MiniMaxM27ForCausalLM(MiniMaxM2ForCausalLM):
     _tp_plan = {"lm_head": "colwise_rep"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = MiniMaxM27Model(config)
-        self.router_aux_loss_coef = config.router_aux_loss_coef
-        self.num_experts = config.num_local_experts
-        self.num_experts_per_tok = config.num_experts_per_tok
-        self.post_init()
 
 
 class MiniMaxM27ForSequenceClassification(GenericForSequenceClassification, MiniMaxM27PreTrainedModel):
