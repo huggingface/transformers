@@ -36,7 +36,7 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -118,8 +118,10 @@ class Glm4vVisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
-        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+    def forward(self, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        freqs = (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        return emb.cos(), emb.sin()
 
 
 class Glm4vVisionPatchMerger(nn.Module):
@@ -285,11 +287,11 @@ class Glm4vVisionAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.is_causal = False
 
-    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
+        rotary_pos_emb: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
@@ -362,22 +364,25 @@ class Glm4vVisionBlock(GradientCheckpointingLayer):
         self.attn = Glm4vVisionAttention(config)
         self.mlp = Glm4VisionMlp(config, bias=False)
 
-    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
+        rotary_pos_emb: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
         r"""
         cu_seqlens (`torch.Tensor`):
             Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
+        rotary_pos_emb (`torch.Tensor`, *optional*):
+            Precomputed rotary positional embeddings applied to the vision attention query/key states.
         """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,
+            rotary_pos_emb=rotary_pos_emb,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -647,15 +652,27 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-@auto_docstring
 @dataclass
-class Glm4vModelOutputWithPast(BaseModelOutputWithPast):
+@auto_docstring(
+    custom_intro="""
+    Base class for Llava outputs, with hidden states and attentions.
+    """
+)
+class Glm4vModelOutputWithPast(ModelOutput):
     r"""
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
+    last_hidden_state: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
 
 
@@ -666,7 +683,7 @@ class Glm4vPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -747,9 +764,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
 
         hidden_states = self.patch_embed(hidden_states)
         hidden_states = self.post_conv_layernorm(hidden_states)
-        rotary_emb = self.rotary_pos_emb(position_ids)
-        emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_embeddings = self.rotary_pos_emb(position_ids)
 
         seqlens = cu_seqlens[1:] - cu_seqlens[:-1]
         hidden_states = self.embeddings(
@@ -905,6 +920,12 @@ class Glm4vModel(Glm4vPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.language_model.set_input_embeddings(value)
+
     def get_vision_position_ids(
         self,
         start_position: int,
@@ -948,17 +969,15 @@ class Glm4vModel(Glm4vPreTrainedModel):
             grid_thw[2].item() // spatial_merge_size,
         )
 
-        # Add `start_position` after arange for compile
-        position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
-        position_width = torch.arange(llm_grid_w, device=device) + start_position
-        position_height = torch.arange(llm_grid_h, device=device) + start_position
-
-        # Repeat the positions per each grid and per video frame. Repeat patterns are important
-        # do not modify without checking values!
-        position_width = position_width.repeat(llm_grid_h * llm_grid_t)
-        position_height = position_height.repeat_interleave(llm_grid_w).repeat(llm_grid_t)
-        # Important: add `start_positions` after applying `time_interval`, order matters
-        position_temporal = position_temporal.repeat_interleave(llm_grid_h * llm_grid_w) + start_position
+        image_seq_length = llm_grid_h * llm_grid_w * llm_grid_t
+        position_width = torch.arange(start_position, start_position + llm_grid_w, device=device).repeat(
+            llm_grid_h * llm_grid_t
+        )
+        position_height = torch.arange(start_position, start_position + llm_grid_h, device=device).repeat_interleave(
+            llm_grid_w * llm_grid_t
+        )
+        position_temporal = torch.full((image_seq_length,), start_position, device=device, dtype=torch.long)
+        position_temporal = position_temporal * time_interval
         vision_position_ids = torch.stack([position_temporal, position_height, position_width], dim=0)
 
         return vision_position_ids
@@ -1088,7 +1107,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
 
         return vision_outputs
 
-    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -1273,15 +1291,32 @@ class Glm4vModel(Glm4vPreTrainedModel):
         )
 
 
-@auto_docstring
 @dataclass
-class Glm4vCausalLMOutputWithPast(CausalLMOutputWithPast):
+@auto_docstring(
+    custom_intro="""
+    Base class for Glm4v causal language model (or autoregressive) outputs.
+    """
+)
+class Glm4vCausalLMOutputWithPast(ModelOutput):
     r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
 
 
@@ -1297,6 +1332,12 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
 
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
     @auto_docstring
     def get_video_features(
         self,
@@ -1310,7 +1351,9 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+        return self.model.get_video_features(
+            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
+        )
 
     @auto_docstring
     def get_image_features(
@@ -1325,9 +1368,8 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
+        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(

@@ -246,7 +246,10 @@ class Glm4vVisionPatchEmbed(Qwen2_5_VisionPatchEmbed):
 
 
 class Glm4vVisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
-    pass
+    def forward(self, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        freqs = (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        return emb.cos(), emb.sin()
 
 
 class Glm4vVisionPatchMerger(nn.Module):
@@ -637,9 +640,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
 
         hidden_states = self.patch_embed(hidden_states)
         hidden_states = self.post_conv_layernorm(hidden_states)
-        rotary_emb = self.rotary_pos_emb(position_ids)
-        emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_embeddings = self.rotary_pos_emb(position_ids)
 
         seqlens = cu_seqlens[1:] - cu_seqlens[:-1]
         hidden_states = self.embeddings(
