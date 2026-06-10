@@ -207,9 +207,11 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
 
         sparse_indices = None
         if self.config._attn_implementation in ("eager", "sdpa"):
-            index_mask = topk_indices.new_ones(
-                (batch_size, seq_length, key_states.shape[2]), dtype=torch.bool
-            ).scatter(-1, topk_indices.long(), False).unsqueeze(1)
+            index_mask = (
+                topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
+                .scatter(-1, topk_indices.long(), False)
+                .unsqueeze(1)
+            )
             if attention_mask is None:
                 key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
                 index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
@@ -247,7 +249,7 @@ class GlmMoeDsaDecoderLayer(DeepseekV32DecoderLayer):
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        prev_topk_indices: torch.Tensor | None = None, # MAIN DIFF with DSV3.2
+        prev_topk_indices: torch.Tensor | None = None,  # MAIN DIFF with DSV3.2
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         residual = hidden_states
@@ -260,7 +262,7 @@ class GlmMoeDsaDecoderLayer(DeepseekV32DecoderLayer):
             past_key_values=past_key_values,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
-            prev_topk_indices=prev_topk_indices, # MAIN DIFF with DSV3.2
+            prev_topk_indices=prev_topk_indices,  # MAIN DIFF with DSV3.2
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -312,7 +314,7 @@ class GlmMoeDsaModel(DeepseekV32Model):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        topk_indices = None # MAIN DIFF with DSV3.2
+        topk_indices = None  # MAIN DIFF with DSV3.2
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states, topk_indices = decoder_layer(
                 hidden_states,
@@ -321,7 +323,7 @@ class GlmMoeDsaModel(DeepseekV32Model):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                prev_topk_indices=topk_indices, # MAIN DIFF with DSV3.2
+                prev_topk_indices=topk_indices,  # MAIN DIFF with DSV3.2
                 **kwargs,
             )
 
