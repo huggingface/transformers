@@ -64,16 +64,16 @@ class CtsmConfig(TimesFmConfig):
         Length of the prediction horizon produced per autoregressive step.
     freq_size (`int`, *optional*, defaults to 3):
         Number of frequency embeddings.
+    num_hidden_layers (`int`, *optional*, defaults to 25):
+        Number of decoder layers (CTSM 1.0 uses 25 instead of TimesFM 2.0's 50).
     tolerance (`float`, *optional*, defaults to 1e-06):
         Numerical tolerance used in normalization.
+    quantiles (`list[float]`, *optional*, defaults to 15 values between 0.01 and 0.99):
+        Quantile levels predicted by the model (CTSM widens TimesFM's 9 quantiles to 15).
     pad_val (`float`, *optional*, defaults to 1123581321.0):
         Sentinel value marking padded positions in the input series.
     use_positional_embedding (`bool`, *optional*, defaults to `False`):
         CTSM uses rotary position embeddings and does not add sinusoidal positional embeddings.
-    num_hidden_layers (`int`, *optional*, defaults to 25):
-        Number of decoder layers (CTSM 1.0 uses 25 instead of TimesFM 2.0's 50).
-    quantiles (`list[float]`, *optional*, defaults to 15 values between 0.01 and 0.99):
-        Quantile levels predicted by the model (CTSM widens TimesFM's 9 quantiles to 15).
     use_resolution_embeddings (`bool`, *optional*, defaults to `True`):
         Whether to add a learned embedding per resolution bucket (coarse / special / fine).
     use_special_token (`bool`, *optional*, defaults to `True`):
