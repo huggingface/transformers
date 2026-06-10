@@ -104,10 +104,7 @@ class DeepseekV32RotaryEmbedding(nn.Module):
         """
         base = config.rope_parameters["rope_theta"]
         head_dim = config.qk_rope_head_dim
-        attention_factor = 1.0
-
-        if head_dim == 0:
-            return torch.empty(0, device=device), attention_factor
+        attention_factor = 1.0  # Unused in this type of RoPE
 
         inv_freq = 1.0 / (
             base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / head_dim)
@@ -130,18 +127,14 @@ class DeepseekV32RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
 def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     r"""
-    TODO let's just use the original freqcis computation to not have the view
-    transpose + reshape! This is not optimized!
-    Applies Rotary Position Embedding to the query and key tensors.
+    Applies interleaved Rotary Position Embedding to the query and key tensors.
+
+    DeepSeek lays the rotary dimensions out in interleaved pairs `(x0, x1), (x2, x3), ...`, each rotated by a
+    single frequency. We compute that rotation directly on the even/odd slices instead of de-interleaving with a
+    `view`/`transpose`/`reshape`; the output is bit-identical to the de-interleaved `rotate_half` formulation while
+    avoiding the extra contiguous copy.
 
     Args:
         q (`torch.Tensor`): The query tensor.
@@ -161,17 +154,15 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
+    # `cos`/`sin` are `cat(freqs, freqs)`; the first half holds the per-pair angle.
+    cos = cos[..., : cos.shape[-1] // 2].unsqueeze(unsqueeze_dim)
+    sin = sin[..., : sin.shape[-1] // 2].unsqueeze(unsqueeze_dim)
 
-    b, h, s, d = q.shape
-    q = q.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
+    q1, q2 = q[..., 0::2], q[..., 1::2]
+    k1, k2 = k[..., 0::2], k[..., 1::2]
 
-    b, h, s, d = k.shape
-    k = k.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
-
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
+    q_embed = torch.cat([q1 * cos - q2 * sin, q2 * cos + q1 * sin], dim=-1)
+    k_embed = torch.cat([k1 * cos - k2 * sin, k2 * cos + k1 * sin], dim=-1)
     return q_embed, k_embed
 
 

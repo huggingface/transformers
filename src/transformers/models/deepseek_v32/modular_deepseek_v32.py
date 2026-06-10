@@ -170,10 +170,7 @@ class DeepseekV32RotaryEmbedding(DeepseekV3RotaryEmbedding):
     ):
         base = config.rope_parameters["rope_theta"]
         head_dim = config.qk_rope_head_dim
-        attention_factor = 1.0
-
-        if head_dim == 0:
-            return torch.empty(0, device=device), attention_factor
+        attention_factor = 1.0  # Unused in this type of RoPE
 
         inv_freq = 1.0 / (
             base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / head_dim)

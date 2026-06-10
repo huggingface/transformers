@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch DeepSeekV2 model."""
+"""Testing suite for the PyTorch DeepSeekV3.2 model."""
 
 import unittest
 
@@ -174,12 +174,12 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class DeepseekV32IntegrationTest(unittest.TestCase):
-    def test_deepseek_v2_lite(self):
+    def test_deepseek_v32(self):
         EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors.\n\nAttention functions are used in a variety of applications, including natural language processing, computer vision, and reinforcement learning.\n\nThe attention function is a function that takes a query and a set of key-value pairs as input and outputs a vector']  # fmt: skip
 
-        tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V2-Lite")
+        tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp")
         model = DeepseekV32ForCausalLM.from_pretrained(
-            "deepseek-ai/DeepSeek-V2-Lite",
+            "deepseek-ai/DeepSeek-V3.2-Exp",
             device_map=torch_device,
             dtype=torch.bfloat16,
             quantization_config=BitsAndBytesConfig(load_in_8bit=True),
@@ -198,7 +198,7 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
         model = DeepseekV32ForCausalLM.from_pretrained(
-            "deepseek-ai/DeepSeek-V2-Lite",
+            "deepseek-ai/DeepSeek-V3.2-Exp",
             device_map=torch_device,
             dtype=torch.bfloat16,
             quantization_config=BitsAndBytesConfig(load_in_8bit=True),
@@ -225,11 +225,11 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
             "My favorite all time favorite condiment is ketchup.",
         ]
         tokenizer = AutoTokenizer.from_pretrained(
-            "deepseek-ai/DeepSeek-V2-Lite", pad_token="</s>", padding_side="right"
+            "deepseek-ai/DeepSeek-V3.2-Exp", pad_token="</s>", padding_side="right"
         )
 
         model = DeepseekV32ForCausalLM.from_pretrained(
-            "deepseek-ai/DeepSeek-V2-Lite",
+            "deepseek-ai/DeepSeek-V3.2-Exp",
             device_map=torch_device,
             dtype=torch.bfloat16,
             quantization_config=BitsAndBytesConfig(load_in_8bit=True),
