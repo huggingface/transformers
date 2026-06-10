@@ -1150,6 +1150,16 @@ def offload_and_maybe_resave_param(
     loading_info.missing_keys.discard(target_name)
     # If not already offloaded, or if we applied any special Operation except Renaming, we need to re-save
     if target_name not in disk_offload_index or isinstance(applied_ops, WeightConverter):
+        logger.warning(
+            f"Offloading parameter to disk — "
+            f"target_name={target_name!r}, "
+            f"in_disk_offload_index={target_name in disk_offload_index}, "
+            f"applied_ops={applied_ops!r}, "
+            f"param shape={tuple(param.shape)}, dtype={param.dtype}, "
+            f"device={param.device if hasattr(param, 'device') else 'unknown'}, "
+            f"numel={param.numel() if hasattr(param, 'numel') else 'unknown'}, "
+            f"disk_offload_folder={disk_offload_folder!r}"
+        )
         disk_offload_index = offload_weight(param, target_name, disk_offload_folder, disk_offload_index)
     return disk_offload_index
 
@@ -1471,6 +1481,18 @@ def convert_and_load_state_dict_in_model(
                     param_device = get_device(device_map, target_name)
                     # Offloading support
                     if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
+                        logger.warning(
+                            f"Offloading parameter to disk — "
+                            f"target_name={target_name!r}, "
+                            f"param_device={param_device!r}, "
+                            f"in_model_buffers={target_name in model_buffers}, "
+                            f"offload_buffers={offload_buffers}, "
+                            f"param shape={tuple(param.shape)}, dtype={param.dtype}, "
+                            f"device={param.device if hasattr(param, 'device') else 'unknown'}, "
+                            f"numel={param.numel() if hasattr(param, 'numel') else 'unknown'}, "
+                            f"disk_offload_folder={disk_offload_folder!r}, "
+                            f"mapping={mapping!r}"
+                        )
                         disk_offload_index = offload_and_maybe_resave_param(
                             target_name, param, loading_info, disk_offload_folder, disk_offload_index, mapping
                         )
