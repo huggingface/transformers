@@ -1,4 +1,4 @@
 {
-  "num_samples": 2,
-  "expected_mean_loss": 0.005984
+  "num_samples": 4,
+  "expected_mean_loss": 0.004235
 }
