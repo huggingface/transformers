@@ -464,7 +464,6 @@ class EosTokenCriteria(StoppingCriteria):
             eos_token_id = torch.tensor(eos_token_id)
         self.eos_token_id = eos_token_id
 
-    @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(
         self, input_ids: torch.LongTensor, scores: torch.FloatTensor, new_token_length: int = 1, **kwargs
     ) -> torch.BoolTensor:
