@@ -602,6 +602,17 @@ EXPECTED = {expected!r}
 ADD_SPECIAL_TOKENS = {add_special_tokens!r}
 
 
+def _setup_env(dispatch, is_fp8):
+    if is_fp8 and dispatch in ("batched_mm", "grouped_mm"):
+        os.environ["TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR"] = "1"
+    else:
+        os.environ.pop("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", None)
+    # Without this opt-out, ``generate``'s ``_optimize_model_for_decode`` silently
+    # swaps ``grouped_mm`` → ``batched_mm`` during decode, so the ``grouped_mm``
+    # entry would never exercise grouped_mm end-to-end.
+    os.environ["TRANSFORMERS_DISABLE_EXPERTS_DECODE_OPTIMIZATION"] = "1"
+
+
 def main() -> int:
     rank = int(os.environ["RANK"])
     model = AutoModelForCausalLM.from_pretrained(
@@ -616,19 +627,16 @@ def main() -> int:
     inputs = tokenizer(PROMPT, return_tensors="pt", add_special_tokens=ADD_SPECIAL_TOKENS).to(model.device)
 
     is_fp8 = getattr(model.config, "expert_dtype", "fp8") != "fp4"
-
+    current_dispatch = LOADTIME_DISPATCH
     failed = []
+
+    # Phase 1: full model + static cache, eager — correctness check
+    # (``EXPECTED`` substring must appear in the decoded completion).
     for dispatch in RUNTIME_DISPATCHES:
-        if dispatch != LOADTIME_DISPATCH:
+        if dispatch != current_dispatch:
             model.set_experts_implementation(dispatch)
-        if is_fp8 and dispatch in ("batched_mm", "grouped_mm"):
-            os.environ["TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR"] = "1"
-        else:
-            os.environ.pop("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", None)
-        # Without this opt-out, ``generate``'s ``_optimize_model_for_decode`` silently
-        # swaps ``grouped_mm`` → ``batched_mm`` during decode, so the ``grouped_mm``
-        # entry would never exercise grouped_mm end-to-end.
-        os.environ["TRANSFORMERS_DISABLE_EXPERTS_DECODE_OPTIMIZATION"] = "1"
+            current_dispatch = dispatch
+        _setup_env(dispatch, is_fp8)
         dist.barrier()
         try:
             with torch.no_grad():
@@ -638,18 +646,52 @@ def main() -> int:
                     do_sample=False,
                     pad_token_id=tokenizer.eos_token_id,
                     cache_implementation="static",
-                    compile_config=CompileConfig(fullgraph=True),
                 )
             decoded = tokenizer.decode(out[0], skip_special_tokens=True)
             ok = EXPECTED in decoded
             if not ok:
-                failed.append(f"[{{dispatch}}] {{decoded!r}} does not contain {{EXPECTED!r}}")
+                failed.append(f"[eager {{dispatch}}] {{decoded!r}} does not contain {{EXPECTED!r}}")
         except Exception as e:
-            failed.append(f"[{{dispatch}}] {{type(e).__name__}}: {{e}}")
+            failed.append(f"[eager {{dispatch}}] {{type(e).__name__}}: {{e}}")
             ok = False
         dist.barrier()
         if rank == 0:
-            print(f"[{{dispatch}}] {{'OK' if ok else 'FAIL'}}", flush=True)
+            print(f"[eager {{dispatch}}] {{'OK' if ok else 'FAIL'}}", flush=True)
+
+    # Phase 2: trim to 2 layers + static cache + compile — smoke-test that the
+    # compile path doesn't break. Output is not checked (2 layers can't
+    # produce the reference completion); the bar is "generate returns without
+    # raising". Drop the stale full-model cache so generate allocates a fresh
+    # one sized for the trimmed stack.
+    model.model.layers = torch.nn.ModuleList(list(model.model.layers)[:2])
+    if hasattr(model.config, "num_hidden_layers"):
+        model.config.num_hidden_layers = 2
+    if hasattr(model, "_cache"):
+        del model._cache
+
+    for dispatch in RUNTIME_DISPATCHES:
+        if dispatch != current_dispatch:
+            model.set_experts_implementation(dispatch)
+            current_dispatch = dispatch
+        _setup_env(dispatch, is_fp8)
+        dist.barrier()
+        try:
+            with torch.no_grad():
+                model.generate(
+                    **inputs,
+                    max_new_tokens=8,
+                    do_sample=False,
+                    pad_token_id=tokenizer.eos_token_id,
+                    cache_implementation="static",
+                    compile_config=CompileConfig(fullgraph=True),
+                )
+            ok = True
+        except Exception as e:
+            failed.append(f"[compile {{dispatch}}] {{type(e).__name__}}: {{e}}")
+            ok = False
+        dist.barrier()
+        if rank == 0:
+            print(f"[compile {{dispatch}}] {{'OK' if ok else 'FAIL'}}", flush=True)
 
     dist.barrier()
     dist.destroy_process_group()
@@ -849,10 +891,13 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
         self.assertEqual(rc, 0, "torchrun forward-compile worker failed; see stdout above")
 
     def test_v4_flash_fp4_generation_compile_static_distributed(self):
-        """EP=8 via ``torchrun``: full ``generate()`` with ``cache_implementation="static"``
-        and ``compile_config=CompileConfig(fullgraph=True)``. Catches regressions in the
-        compiled decode path (graph breaks, static-cache drift) that the forward-only
-        compile test can't surface."""
+        """EP=8 via ``torchrun``: two-phase worker — (1) full model + static cache,
+        eager, must produce the reference completion (``EXPECTED in decoded``);
+        (2) decoder stack trimmed to 2 layers + static cache +
+        ``compile_config=CompileConfig(fullgraph=True)`` must complete without
+        raising. Phase 2 catches regressions in the compiled decode path (graph
+        breaks, static-cache drift) without paying the cost of compiling all 43
+        layers."""
         rc = _run_distributed_generate_compile_worker(
             loadtime_dispatch=None,
             runtime_dispatches=("batched_mm", "grouped_mm", "deepgemm"),
@@ -866,7 +911,7 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
     def test_v4_flash_fp4_generation_compile_static_megamoe_distributed(self):
         """Sibling of :meth:`test_v4_flash_fp4_generation_compile_static_distributed`
         for the load-locked ``deepgemm_megamoe`` impl (TP plan + UTCCP layout baked
-        at load, so it gets its own ``loadtime_dispatch``)."""
+        at load, so it gets its own ``loadtime_dispatch``). Same two-phase shape."""
         rc = _run_distributed_generate_compile_worker(
             loadtime_dispatch="deepgemm_megamoe",
             runtime_dispatches=("deepgemm_megamoe",),

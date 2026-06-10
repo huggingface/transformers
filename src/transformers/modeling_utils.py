@@ -84,10 +84,6 @@ from .integrations.tensor_parallel import (
     shard_and_distribute_module,
     verify_tp_plan,
 )
-from .integrations.torch_compile import (
-    install_compile_patches,
-    mark_repeated_decoder_layers_as_compile_regions,
-)
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import (
     FLASH_ATTENTION_COMPATIBILITY_MATRIX,
@@ -4711,8 +4707,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             or getattr(self, "_last_compile_config", default_config) != compile_config
         ):
             self._last_compile_config = compile_config
-            mark_repeated_decoder_layers_as_compile_regions(self)
-            install_compile_patches()
             self._compiled_call = torch.compile(self.__call__, **compile_config.to_dict())
         return self._compiled_call
 
