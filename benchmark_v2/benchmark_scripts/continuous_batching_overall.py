@@ -292,18 +292,17 @@ class BenchmarkResults:
 
     @classmethod
     def load_most_recent(cls, name: str) -> "BenchmarkResults":
-        """Load the most recent JSON file matching name."""
-        candidates = sorted(RESULTS_DIR.glob(f"{name}__*.json"))
-        if not candidates:
-            raise FileNotFoundError(f"No baseline with name '{name}' in {RESULTS_DIR}")
-        data = json.loads(candidates[-1].read_text())
-        instance = cls(
-            model_id=data.get("model_id"),
-            attn_impl=data.get("attn_impl"),
-        )
-        instance.entries = [BenchmarkEntry(**e) for e in data["entries"]]
-        print(f"Loaded baseline from {candidates[-1]}")
-        return instance
+        """Load the most recent run matching name, skipping files in an incompatible legacy format."""
+        candidates = sorted(RESULTS_DIR.glob(f"{name}__*.json"), reverse=True)
+        for path in candidates:
+            data = json.loads(path.read_text())
+            if not (isinstance(data, dict) and "entries" in data):
+                continue
+            instance = cls(model_id=data.get("model_id"), attn_impl=data.get("attn_impl"))
+            instance.entries = [BenchmarkEntry(**e) for e in data["entries"]]
+            print(f"Loaded baseline from {path}")
+            return instance
+        raise FileNotFoundError(f"No compatible baseline with name '{name}' in {RESULTS_DIR}")
 
     # Display
     def print_summary(self) -> None:
@@ -481,8 +480,8 @@ if __name__ == "__main__":
 
     if write_results:
         results.print_summary()
+        if args.name:
+            results.save(args.name)
         if args.compare_to:
             baseline = BenchmarkResults.load_most_recent(args.compare_to)
             results.compare_to(baseline=baseline)
-        if args.name:
-            results.save(args.name)
