@@ -87,6 +87,7 @@ Transformers works with Python 3.10+, and [PyTorch](https://pytorch.org/get-star
 Create and activate a virtual environment with [venv](https://docs.python.org/3/library/venv.html) or [uv](https://docs.astral.sh/uv/), a fast Rust-based Python package and project manager.
 
 ```py
+
 # venv
 
 <!-- AUTO-PACKAGE-BADGES:START -->
@@ -98,6 +99,7 @@ Create and activate a virtual environment with [venv](https://docs.python.org/3/
 <!-- AUTO-PACKAGE-BADGES:END -->
 python -m venv .my-env
 source .my-env/bin/activate
+
 # uv
 uv venv .my-env
 source .my-env/bin/activate
@@ -106,6 +108,7 @@ source .my-env/bin/activate
 Install Transformers in your virtual environment.
 
 ```py
+
 # pip
 pip install "transformers[torch]"
 
