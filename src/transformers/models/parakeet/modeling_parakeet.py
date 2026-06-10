@@ -1033,12 +1033,19 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
         )
 
     def loss_function(self, logits, labels, encoder_outputs, **kwargs):
+        logit_lengths = encoder_outputs.attention_mask.sum(-1)
+        # The subsampling conv runs over the batch-padded input, so the encoder output can carry a trailing
+        # all-padding frame (one step beyond the longest valid sequence) for some input lengths. torchaudio's
+        # rnnt_loss requires `logits.shape[1] == max(logit_lengths)`, so drop those extra time steps; they lie
+        # past every sequence's length and do not affect the loss.
+        logits = logits[:, : int(logit_lengths.max())]
         return super().loss_function(
             logits=logits,
             labels=labels,
-            logit_lengths=encoder_outputs.attention_mask.sum(-1),
+            logit_lengths=logit_lengths,
             label_lengths=(labels != self.config.blank_token_id).sum(-1),
             blank_token_id=self.config.blank_token_id,
+            reduction=self.config.loss_reduction,
         )
 
 
@@ -1076,6 +1083,7 @@ class ParakeetForTDT(ParakeetTDTGenerationMixin, ParakeetForRNNT):
             label_lengths=(labels != self.config.pad_token_id).sum(-1),
             blank_token_id=self.config.blank_token_id,
             durations=self.config.durations,
+            reduction=self.config.loss_reduction,
         )
 
 

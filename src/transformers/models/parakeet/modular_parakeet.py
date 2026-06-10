@@ -882,10 +882,12 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
         )
 
     def loss_function(self, logits, labels, encoder_outputs, **kwargs):
+        logit_lengths = encoder_outputs.attention_mask.sum(-1) 
+        logits = logits[:, : int(logit_lengths.max())]
         return super().loss_function(
             logits=logits,
             labels=labels,
-            logit_lengths=encoder_outputs.attention_mask.sum(-1),
+            logit_lengths=logit_lengths,
             label_lengths=(labels != self.config.blank_token_id).sum(-1),
             blank_token_id=self.config.blank_token_id,
             reduction=self.config.loss_reduction,
