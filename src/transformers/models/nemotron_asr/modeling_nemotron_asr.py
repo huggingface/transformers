@@ -891,6 +891,7 @@ class NemotronAsrEncoder(NemotronAsrPreTrainedModel):
         if use_cache:
             if past_key_values is None:
                 past_key_values = DynamicCache(config=self.config)
+
             if padding_cache is None:
                 padding_cache = NemotronAsrEncoderCausalConvPaddingCache()
 

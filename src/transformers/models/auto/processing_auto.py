@@ -62,7 +62,6 @@ else:
             ("mm-grounding-dino", "GroundingDinoProcessor"),
             ("modernvbert", "Idefics3Processor"),
             ("moonshine", "Wav2Vec2Processor"),
-<<<<<<< HEAD
             ("moonshine_streaming", "MoonshineStreamingProcessor"),
             ("musicflamingo", "MusicFlamingoProcessor"),
             ("nemotron_asr", "NemotronAsrProcessor"),
@@ -73,8 +72,6 @@ else:
             ("owlvit", "OwlViTProcessor"),
             ("paddleocr_vl", "PaddleOCRVLProcessor"),
             ("paligemma", "PaliGemmaProcessor"),
-=======
->>>>>>> parakeet-rnnt-from-scratch
             ("parakeet_ctc", "ParakeetProcessor"),
             ("parakeet_rnnt", "ParakeetProcessor"),
             ("parakeet_tdt", "ParakeetProcessor"),

@@ -58,12 +58,16 @@ class NemotronAsrProcessor(ProcessorMixin):
         feature_extractor,
         tokenizer,
         blank_token="<blank>",
+        decoder_type=None,
         supported_num_lookahead_tokens=None,
         default_num_lookahead_tokens=None,
     ):
         r"""
         blank_token (`str`, *optional*, defaults to `"<blank>"`):
             Blank token for RNN-T decoding.
+        decoder_type (`str`, *optional*):
+            Decoding/timestamp emission mode (e.g. `"ctc"`, `"rnnt"`, `"tdt"`). If `None` (older checkpoints)
+            the decoder type is inferred automatically for backward compatibility.
         supported_num_lookahead_tokens (`list[int]`, *optional*):
             Supported right attention contexts (lookaheads, in subsampled encoder frames), mirroring
             `NemotronAsrEncoderConfig.supported_num_lookahead_tokens`. Used to validate `streaming_latency_ms` and to
