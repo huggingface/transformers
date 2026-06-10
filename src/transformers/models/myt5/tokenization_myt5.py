@@ -346,9 +346,9 @@ class MyT5Tokenizer(PreTrainedTokenizer):
 
         out_tokens = []
         for token in tokens:
-            if token in self.added_tokens_decoder:
-                out_tokens.append(self.added_tokens_decoder[token])
-            elif token in self.added_tokens_encoder:
+            if token in self._added_tokens_decoder:
+                out_tokens.append(self._added_tokens_decoder[token])
+            elif token in self._added_tokens_encoder:
                 out_tokens.append(token)
             else:
                 out_tokens.append(token)
