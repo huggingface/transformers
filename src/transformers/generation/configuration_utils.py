@@ -145,7 +145,7 @@ class GenerationConfig(PushToHubMixin):
         max_time (`float`, *optional*):
             The maximum amount of time you allow the computation to run for in seconds. generation will still finish
             the current pass after allocated time has been passed.
-        stop_strings (`str or list[str]`, *optional*):
+        stop_strings (`str` or `list[str]`, *optional*):
             A string or a list of strings that should terminate generation if the model outputs them.
 
         > Parameters that control the generation strategy used
@@ -570,6 +570,13 @@ class GenerationConfig(PushToHubMixin):
 
     @staticmethod
     def _get_default_generation_params() -> dict[str, Any]:
+        """
+        Defaults to be applied when unset by the model OR by the user, such that `model.generate()` works with minimal
+        paremeterization.
+
+        Pretrained checkpoints should set these as appropriate in their `generation_config.json`, to establish
+        a better default baseline. Be mindful that tests will often use these values.
+        """
         return {
             "max_length": 20,
             "min_length": 0,
@@ -1187,7 +1194,9 @@ class GenerationConfig(PushToHubMixin):
             if isinstance(obj, dict):
                 return {key: convert_dataclass_to_dict(value) for key, value in obj.items()}
             elif is_dataclass(obj):
-                return obj.to_dict()
+                # Some of our dataclasses have a custom `to_dict()` method, and we prefer it
+                if hasattr(obj, "to_dict"):
+                    return obj.to_dict()
             else:
                 return obj
 

@@ -292,6 +292,9 @@ IGNORE_NON_TESTED = (
         "Sam3LiteTextTextModel",  # Building part of a bigger model, tested implicitly through Sam3LiteTextModel
         "Exaone4_5_VisionModel",  # Building part of a bigger model
         "Granite4VisionTextModel",  # Building part of bigger (tested) model. Tested implicitly through Granite4VisionModel.
+        "DiffusionGemmaDecoderModel",  # TODO(joaogante)
+        "DiffusionGemmaEncoderModel",  # TODO(joaogante)
+        "DiffusionGemmaEncoderTextModel",  # TODO(joaogante)
     ]
 )
 
