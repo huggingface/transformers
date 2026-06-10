@@ -53,7 +53,6 @@ MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("parakeet_encoder", "ParakeetFeatureExtractor"),
         ("parakeet_rnnt", "ParakeetFeatureExtractor"),
         ("parakeet_tdt", "ParakeetFeatureExtractor"),
-        ("pe_audio", "PeAudioFeatureExtractor"),
         ("pe_audio_video", "PeAudioFeatureExtractor"),
         ("qwen2_5_omni", "WhisperFeatureExtractor"),
         ("qwen2_audio", "WhisperFeatureExtractor"),
