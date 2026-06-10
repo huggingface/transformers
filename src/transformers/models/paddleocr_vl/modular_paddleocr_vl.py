@@ -568,7 +568,10 @@ class PaddleOCRProjector(nn.Module):
 
 
 class PaddleOCRVisionRotaryEmbedding(VisionRotaryEmbedding):
-    pass
+    def forward(self, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        freqs = (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        return emb.cos(), emb.sin()
 
 
 class PaddleOCRRotaryEmbedding(Qwen2VLRotaryEmbedding):
@@ -810,9 +813,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
-        rotary_embeddings = self.rotary_pos_emb(position_ids)
-        rotary_embeddings = rotary_embeddings.repeat(1, 2)
-        position_embeddings = (rotary_embeddings.cos(), rotary_embeddings.sin())
+        position_embeddings = self.rotary_pos_emb(position_ids)
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
