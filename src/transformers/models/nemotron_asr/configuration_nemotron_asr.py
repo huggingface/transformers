@@ -160,6 +160,7 @@ class NemotronAsrRNNTConfig(PreTrainedConfig):
     encoder_config: dict | PreTrainedConfig | None = None
     pad_token_id: int = 2
     blank_token_id: int = 8192
+    loss_reduction: str = "mean_volume"
     is_encoder_decoder: bool = True
 
     def __post_init__(self, **kwargs):

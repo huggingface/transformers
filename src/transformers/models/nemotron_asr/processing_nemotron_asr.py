@@ -85,7 +85,17 @@ class NemotronAsrProcessor(ProcessorMixin):
         )
         self.blank_token = blank_token
         self.blank_token_id = tokenizer.convert_tokens_to_ids(blank_token)
+        self.decoder_type = decoder_type
         super().__init__(feature_extractor, tokenizer)
+
+    @property
+    def _decoder_type(self):
+        if self.decoder_type is not None:
+            return self.decoder_type
+        # BC: CTC and TDT checkpoints pushed to the hub before `decoder_type` existed, so it is unset for them.
+        # If decoder_type is not specified, use TDT when there is no blank token, otherwise CTC;
+        # if it is specified, use the provided decoder type
+        return "ctc" if self.blank_token not in self.tokenizer.get_vocab() else "tdt"
 
     @auto_docstring
     def __call__(
@@ -99,6 +109,11 @@ class NemotronAsrProcessor(ProcessorMixin):
         **kwargs: Unpack[NemotronAsrProcessorKwargs],
     ):
         r"""
+        sampling_rate (`int`, *optional*):
+            The sampling rate of the input audio in Hz. This should match the sampling rate expected by the feature
+            extractor (defaults to 16000 Hz). If provided, it will be validated against the processor's expected
+            sampling rate, and an error will be raised if they don't match. If not provided, a warning will be
+            issued and the default sampling rate will be assumed.
         streaming_latency_ms (`int`, *optional*):
             Target streaming latency in milliseconds. Must equal one of the latencies supported by the model
             (`(num_lookahead_tokens + 1) * encoder_frame_ms` for each supported right context); otherwise a
@@ -168,11 +183,16 @@ class NemotronAsrProcessor(ProcessorMixin):
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return feature_extractor_input_names + ["labels", "decoder_input_ids"]
 
+    def batch_decode(self, *args, **kwargs):
+        kwargs.setdefault("group_tokens", self._decoder_type == "ctc")
+        return self.tokenizer.batch_decode(*args, **kwargs)
+
     def decode(self, *args, durations=None, **kwargs):
         """
         Forward arguments to [`~PreTrainedTokenizer.decode`] and post-process the timestamps (if provided for TDT) as
         in the NeMo library.
         """
+        kwargs.setdefault("group_tokens", self._decoder_type == "ctc")
         decoded = self.tokenizer.decode(*args, **kwargs)
 
         if durations is not None:
@@ -202,19 +222,23 @@ class NemotronAsrProcessor(ProcessorMixin):
                         continue
                     chunk = stream.step(self.tokenizer._tokenizer, int(token_id))
                     if chunk is not None:
+                        # TDT sizes a token by its predicted duration; RNN-T tokens each span a single frame
+                        # (their per-step value is a 0/1 encoder advance, not a span).
+                        token_span = int(batch_durations[i]) if self._decoder_type == "tdt" else 1
+                        start = int(batch_timestamps[i])
                         timestamp_dict.append(
                             {
                                 "token": chunk,
-                                "start": int(batch_timestamps[i]),
-                                "end": int(batch_timestamps[i] + batch_durations[i]),
+                                "start": start,
+                                "end": start + token_span,
                             }
                         )
-                proc_timestamps.append(self._refine_timestamps_tdt(timestamp_dict, frame_rate))
+                proc_timestamps.append(self._refine_timestamps(timestamp_dict, frame_rate))
 
             return decoded, proc_timestamps
         return decoded
 
-    def _refine_timestamps_tdt(
+    def _refine_timestamps(
         self, char_offsets, frame_rate, supported_punctuation=["?", "'", "¡", "¿", "-", ":", ",", "%", "/", ".", "!"]
     ):
         for i, offset in enumerate(char_offsets):
@@ -222,8 +246,10 @@ class NemotronAsrProcessor(ProcessorMixin):
             offset["start"] = offset["start"] * frame_rate
             offset["end"] = offset["end"] * frame_rate
 
-            # If token is a punctuation mark, set its start and end offset as start and end of previous token
-            if offset["token"] in supported_punctuation and i > 0:
+            # If token is a punctuation mark, set its start and end offset as start and end of previous token.
+            # This is part of the TDT timestamp post-processing; RNN-T mirrors NeMo's raw char-level timestamps,
+            # which keep every token (punctuation included) at its own emitted frame, so it is skipped there.
+            if self._decoder_type == "tdt" and offset["token"] in supported_punctuation and i > 0:
                 offset["start"] = char_offsets[i - 1]["end"]
                 offset["end"] = offset["start"]
 

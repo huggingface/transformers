@@ -349,6 +349,11 @@ class NemotronAsrProcessor(ParakeetProcessor):
         **kwargs: Unpack[NemotronAsrProcessorKwargs],
     ):
         r"""
+        sampling_rate (`int`, *optional*):
+            The sampling rate of the input audio in Hz. This should match the sampling rate expected by the feature
+            extractor (defaults to 16000 Hz). If provided, it will be validated against the processor's expected
+            sampling rate, and an error will be raised if they don't match. If not provided, a warning will be
+            issued and the default sampling rate will be assumed.
         streaming_latency_ms (`int`, *optional*):
             Target streaming latency in milliseconds. Must equal one of the latencies supported by the model
             (`(num_lookahead_tokens + 1) * encoder_frame_ms` for each supported right context); otherwise a
@@ -589,7 +594,6 @@ class NemotronAsrFeatureExtractor(ParakeetFeatureExtractor):
     """
 )
 @dataclass
-@dataclass
 class NemotronAsrEncoderModelOutput(BaseModelOutputWithPooling):
     r"""
     attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -600,18 +604,23 @@ class NemotronAsrEncoderModelOutput(BaseModelOutputWithPooling):
         - 0 for tokens that are **masked**.
     past_key_values (`Cache`, *optional*):
         Updated attention K/V sliding-window cache from the encoder. Pass to the next chunk call.
+    padding_cache (`NemotronAsrEncoderCausalConvPaddingCache`, *optional*):
+        Unified streaming cache backing the subsampling Conv2d layers and the conformer depthwise Conv1d.
     """
 
     attention_mask: torch.Tensor | None = None
     past_key_values: Cache | None = None
+    padding_cache: "NemotronAsrEncoderCausalConvPaddingCache | None" = None
 
 
 
 class NemotronAsrEncoderRelPositionalEncoding(ParakeetEncoderRelPositionalEncoding):
     @torch.no_grad()
-    def forward(self, hidden_states: torch.Tensor, context_length: int | None = None):
-        # `context_length` overrides hidden_states.shape[1] for streaming (cache + chunk).
-        seq_length = context_length if context_length is not None else hidden_states.shape[1]
+    def forward(self, hidden_states: torch.Tensor, past_seen_tokens: int | None = None):
+        # `past_seen_tokens` is the number of cached left-context frames (0 offline). This Transformer-XL
+        # style relative encoding spans the full key length `L = current chunk + past_seen_tokens`, with
+        # relative distances running from `L - 1` down to `-(L - 1)`.
+        seq_length = hidden_states.shape[1] + (past_seen_tokens if past_seen_tokens is not None else 0)
         if seq_length > self.max_position_embeddings:
             raise ValueError(
                 f"Sequence Length: {seq_length} has to be less or equal than "
@@ -639,10 +648,6 @@ class NemotronAsrEncoderRelPositionalEncoding(ParakeetEncoderRelPositionalEncodi
         return pos_embed.to(dtype=hidden_states.dtype)
 
 
-class NemotronAsrEncoderFeedForward(ParakeetEncoderFeedForward):
-    pass
-
-
 class NemotronAsrEncoderConvolutionModule(FastSpeech2ConformerConvolutionModule):
     def __init__(self, config: NemotronAsrEncoderConfig, module_config=None, layer_idx: int | None = None):
         super().__init__(config, module_config)
@@ -662,8 +667,8 @@ class NemotronAsrEncoderConvolutionModule(FastSpeech2ConformerConvolutionModule)
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor = None,
         padding_cache: "NemotronAsrEncoderCausalConvPaddingCache | None" = None,
     ):
         hidden_states = hidden_states.transpose(1, 2)  # (B, C, T)
@@ -769,14 +774,20 @@ class NemotronAsrEncoderCausalConvCacheLayer:
         self.is_initialized: bool = False
 
     def lazy_initialization(self, hidden_states, conv_module):
+        # Fixed-size cache holding the steady-state left context (`left_pad`). The very first chunk needs the
+        # larger offline causal padding `left_pad_init` (== `left_pad + stride - 1` for the strided
+        # subsampling conv); those `init_pad` extra leading zeros are added on the fly for that chunk only,
+        # so the cache buffer keeps a constant shape and a stable address (for cudagraphs / torch.compile).
         self.left_pad = conv_module.left_pad
+        self.init_pad = conv_module.left_pad_init - conv_module.left_pad
         cache_shape = list(hidden_states.shape)
-        cache_shape[2] = conv_module.left_pad_init  # time axis (offline left padding for the first chunk)
+        cache_shape[2] = self.left_pad  # time axis (dim 2 for both Conv1d `(B, C, T)` and Conv2d `(B, C, T, F)`)
         self.cache = torch.zeros(cache_shape, device=hidden_states.device, dtype=hidden_states.dtype)
 
         if not is_torchdynamo_compiling():
             torch._dynamo.mark_static_address(self.cache)
 
+        self.is_first_chunk = True
         self.is_initialized = True
 
     def update(self, hidden_states, conv_module=None):
@@ -787,13 +798,29 @@ class NemotronAsrEncoderCausalConvCacheLayer:
                 "NemotronAsrEncoderCausalConvCacheLayer is not initialized. Make sure to provide conv_module to the update method."
             )
 
-        prepend = self.cache
-        combined = torch.cat([self.cache, hidden_states], dim=2)
+        # Left context to prepend to this chunk: the current cache (cloned, since we refresh it in place
+        # below), plus `init_pad` extra leading zeros on the first chunk to reproduce the offline causal
+        # padding of the strided subsampling conv.
+        padding_states = self.cache.clone()
+        if self.is_first_chunk and self.init_pad > 0:
+            init_shape = list(padding_states.shape)
+            init_shape[2] = self.init_pad
+            init_zeros = padding_states.new_zeros(init_shape)
+            padding_states = torch.cat([init_zeros, padding_states], dim=2)
+        self.is_first_chunk = False
+
+        # Refresh the fixed-size cache in place (`copy_` preserves the static address) with the last
+        # `left_pad` frames of [cache, hidden_states]. When the chunk is shorter than `left_pad`
+        # (shortfall), keep the tail of the old cache too so the window stays full.
         if self.left_pad > 0:
-            self.cache = combined.narrow(2, combined.shape[2] - self.left_pad, self.left_pad).clone()
-        else:
-            self.cache = combined.narrow(2, 0, 0)
-        return prepend
+            time = hidden_states.shape[2]
+            shortfall = max(0, self.left_pad - time)
+            if shortfall > 0:
+                new_cache = torch.cat([self.cache.narrow(2, self.left_pad - shortfall, shortfall), hidden_states], dim=2)
+            else:
+                new_cache = hidden_states.narrow(2, time - self.left_pad, self.left_pad)
+            self.cache.copy_(new_cache)
+        return padding_states
 
 
 class NemotronAsrEncoderCausalConvPaddingCache:
@@ -835,7 +862,7 @@ class NemotronAsrEncoderCausalConv1d(nn.Conv1d):
         effective_kernel_size = (self.kernel_size[0] - 1) * self.dilation[0] + 1
         return effective_kernel_size - 1
 
-    def forward(self, x: torch.Tensor, padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None):
+    def forward(self, x: torch.Tensor, padding_cache: "NemotronAsrEncoderCausalConvPaddingCache | None" = None):
         # x: (B, C, T). Conv1d caches along dim=2 (== last dim here).
         if padding_cache is not None:
             x = padding_cache.update(x, self.cache_key, self)
@@ -893,7 +920,7 @@ class NemotronAsrEncoderCausalConv2D(nn.Conv2d):
     def forward(
         self,
         x: torch.Tensor,
-        padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None,
+        padding_cache: "NemotronAsrEncoderCausalConvPaddingCache | None" = None,
     ) -> torch.Tensor:
         # x: (B, C, T, F). Always pad the (non-streamed) frequency axis (the last dim).
         x = nn.functional.pad(x, (self.freq_pad[0], self.freq_pad[1]))
@@ -972,7 +999,7 @@ class NemotronAsrEncoderSubsamplingConv2D(nn.Module):
         self,
         input_features: torch.Tensor,
         attention_mask: torch.Tensor = None,
-        padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None,
+        padding_cache: "NemotronAsrEncoderCausalConvPaddingCache | None" = None,
     ):
         hidden_states = input_features.unsqueeze(1)
         current_lengths = attention_mask.sum(-1) if attention_mask is not None else None
@@ -1010,7 +1037,7 @@ class NemotronAsrEncoderBlock(ParakeetEncoderBlock):
         attention_mask: torch.Tensor | None = None,
         position_embeddings: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None,
+        padding_cache: "NemotronAsrEncoderCausalConvPaddingCache | None" = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -1105,7 +1132,7 @@ class NemotronAsrEncoder(ParakeetEncoder):
         past_key_values: Cache | None = None,
         output_attention_mask: bool = True,
         use_cache: bool | None = None,
-        padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None,
+        padding_cache: "NemotronAsrEncoderCausalConvPaddingCache | None" = None,
         num_lookahead_tokens: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
@@ -1141,31 +1168,22 @@ class NemotronAsrEncoder(ParakeetEncoder):
         >>> print(encoder_outputs.last_hidden_state.shape)
         ```
         """
-        # Lazily allocate the streaming caches when requested without one. The K/V cache is a standard
-        # `DynamicCache` built from the config: `config.sliding_window` makes it a sliding-window cache of
-        # order-preserving `DynamicSlidingWindowLayer`s (exactly what the relative-position attention needs).
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
-        if use_cache and padding_cache is None:
-            padding_cache = NemotronAsrEncoderCausalConvPaddingCache()
-
+        if use_cache:
+            if past_key_values is None:
+                past_key_values = DynamicCache(config=self.config)
+            if padding_cache is None:
+                padding_cache = NemotronAsrEncoderCausalConvPaddingCache()
+    
         inputs_embeds = self.subsampling(input_features, attention_mask, padding_cache=padding_cache)
         inputs_embeds *= self.input_scale
 
         seq_length = inputs_embeds.shape[1]
-        # In streaming, attention also attends to the cached frames on the left (sliding window). The
-        # rel-pos encoding spans the full key length = cached frames (capped at the window) + current chunk.
+        # The key length spans the cached frames (capped at the sliding window) plus this chunk.
         if past_key_values is not None:
             kv_length, _ = past_key_values.get_mask_sizes(seq_length, 0)
             past_seen = past_key_values.get_seq_length()
         else:
             kv_length, past_seen = seq_length, 0
-        position_embeddings = self.encode_positions(inputs_embeds, context_length=kv_length)
-
-        inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.dropout, training=self.training)
-        position_embeddings = nn.functional.dropout(
-            position_embeddings, p=self.dropout_positions, training=self.training
-        )
 
         if position_ids is None:
             position_ids = (torch.arange(seq_length, device=inputs_embeds.device) + past_seen).unsqueeze(0)
@@ -1174,21 +1192,26 @@ class NemotronAsrEncoder(ParakeetEncoder):
         if attention_mask is not None:
             output_mask = self._get_output_attention_mask(attention_mask, target_length=seq_length)
 
-        # The standard masking machinery handles the cache offset: `create_bidirectional_mask` reads
-        # `q_offset = past_key_values.get_seq_length()` and `kv_length, kv_offset = get_mask_sizes(...)` from
-        # the sliding-window cache and offsets the `chunked_limited` overlay with the absolute frame positions
-        # accordingly. `past_key_values=None` (offline) is the full-sequence case.
-        left_ctx, right_ctx = self._resolve_attn_context(num_lookahead_tokens)
-        attention_mask_4d = create_bidirectional_mask(
+        attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=output_mask,
             past_key_values=past_key_values,
             position_ids=position_ids,
-            and_mask_function=chunked_limited_mask_function(left_ctx, right_ctx),
+            and_mask_function=chunked_limited_mask_function(*self._resolve_attn_context(num_lookahead_tokens)),
+        )
+
+        # Relative positional encoding spans the full key length (cached frames + current chunk): pass the
+        # cached-frame count as `past_seen_tokens` so it reconstructs distances `kv_length - 1 ... -(kv_length - 1)`.
+        position_embeddings = self.encode_positions(inputs_embeds, past_seen_tokens=kv_length - seq_length)
+
+        inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.dropout, training=self.training)
+        position_embeddings = nn.functional.dropout(
+            position_embeddings, p=self.dropout_positions, training=self.training
         )
 
         hidden_states = inputs_embeds
+
         for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
@@ -1200,10 +1223,11 @@ class NemotronAsrEncoder(ParakeetEncoder):
             if not to_drop:
                 hidden_states = encoder_layer(
                     hidden_states,
-                    attention_mask=attention_mask_4d,
+                    attention_mask=attention_mask,
                     position_embeddings=position_embeddings,
                     past_key_values=past_key_values,
                     padding_cache=padding_cache,
+                    use_cache=use_cache,
                     **kwargs,
                 )
 
@@ -1211,6 +1235,7 @@ class NemotronAsrEncoder(ParakeetEncoder):
             last_hidden_state=hidden_states,
             attention_mask=output_mask.int() if output_mask is not None and output_attention_mask else None,
             past_key_values=past_key_values,
+            padding_cache=padding_cache,
         )
 
     def _resolve_attn_context(self, num_lookahead_tokens: int | None = None) -> tuple[int, int]:

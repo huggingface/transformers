@@ -13,25 +13,34 @@
 # limitations under the License.
 """Testing suite for the PyTorch NemotronAsr model."""
 
+import json
 import tempfile
 import unittest
+from pathlib import Path
+from threading import Thread
 
-from transformers import is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers import is_datasets_available, is_torch_available
+from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
+if is_datasets_available():
+    from datasets import Audio, load_dataset
+
 if is_torch_available():
     import torch
 
     from transformers import (
+        AutoProcessor,
         NemotronAsrConfig,
         NemotronAsrEncoder,
         NemotronAsrEncoderConfig,
         NemotronAsrForRNNT,
+        TextIteratorStreamer,
     )
+    from transformers.audio_utils import load_audio
 
 
 class NemotronAsrEncoderModelTester:
@@ -349,3 +358,142 @@ class NemotronAsrForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
                     class_name = submodule.__class__.__name__
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
+
+
+# Local conversion of the original NeMo `nvidia/nemotron-speech-streaming-en-0.6b` checkpoint. Replace with the
+# public Hub id once the converted weights are published.
+NEMOTRON_ASR_CHECKPOINT = "/raid/eustache/nemotron-speech-streaming-en-0.6b-hf"
+# Long, single-speaker sample (~16 min of Obama's farewell address), used to exercise chunked streaming.
+OBAMA_AUDIO_URL = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3"
+
+
+@require_torch
+class NemotronAsrForRNNTIntegrationTest(unittest.TestCase):
+    """Integration tests for NemotronAsrForRNNT.
+
+    Expected transcriptions are the outputs of the original NeMo cache-aware streaming model
+    `nvidia/nemotron-speech-streaming-en-0.6b` on the same audio, loaded from the
+    `fixtures/nemotron_asr/expected_results_*.json` fixtures. The reproducers that regenerate these reference
+    values live at https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb (run `run_reproducers.sh`).
+    Inference runs in float32 to track the NeMo reference as closely as possible.
+
+    - Offline (non-streaming) `generate` uses the model's default attention context `[70, 13]` (the widest /
+      best-WER setting, the first entry of `att_context_size`), matching the NeMo offline reference. The HF
+      offline transcripts match NeMo exactly.
+    - The streaming test feeds mel-frame chunks through a cache-aware `generate` at `[70, 6]`, mirroring the
+      `test_stream_generate.py` recipe. Because the HF FastConformer encoder is a re-implementation and chunks
+      differently from NeMo's `CacheAwareStreamingAudioBuffer`, a single sub-word can drift (~1e-3 numerical
+      noise over the conformer stack flipping a borderline greedy emission); the one difference is annotated
+      inline below.
+    """
+
+    _dataset = None
+
+    @classmethod
+    def setUp(cls):
+        cls.checkpoint_name = NEMOTRON_ASR_CHECKPOINT
+        cls.dtype = torch.float32
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    @classmethod
+    def _load_dataset(cls):
+        if cls._dataset is None:
+            cls._dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+            cls._dataset = cls._dataset.cast_column(
+                "audio", Audio(sampling_rate=cls.processor.feature_extractor.sampling_rate)
+            )
+
+    def _load_datasamples(self, num_samples):
+        self._load_dataset()
+        ds = self._dataset
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
+        return [x["array"] for x in speech_samples]
+
+    @slow
+    def test_rnnt_model_integration(self):
+        # NeMo `nvidia/nemotron-speech-streaming-en-0.6b` reference; HF matches it exactly.
+        # reproducer: https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb#file-reproducer_single_rnnt-py
+        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/nemotron_asr/expected_results_single.json"
+        with open(RESULTS_PATH) as f:
+            EXPECTED_TRANSCRIPTIONS = json.load(f)["transcriptions"]
+
+        samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
+        model = NemotronAsrForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
+
+        inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
+        inputs.to(model.device, dtype=model.dtype)
+        output = model.generate(**inputs, return_dict_in_generate=True)
+        predicted_transcripts = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
+        self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
+
+    @slow
+    def test_rnnt_model_integration_batched(self):
+        # NeMo reference; all five HF transcripts match it exactly.
+        # reproducer: https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb#file-reproducer_batch_rnnt-py
+        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/nemotron_asr/expected_results_batch.json"
+        with open(RESULTS_PATH) as f:
+            EXPECTED_TRANSCRIPTIONS = json.load(f)["transcriptions"]
+
+        samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
+        model = NemotronAsrForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
+
+        inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
+        inputs.to(model.device, dtype=model.dtype)
+        output = model.generate(**inputs, return_dict_in_generate=True)
+        predicted_transcripts = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
+        self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
+
+    @slow
+    def test_rnnt_model_integration_streaming(self):
+        """Cache-aware streaming generation from a generator of mel-frame chunks.
+
+        Mirrors `test_stream_generate.py`: the full mel spectrogram is sliced into contiguous chunks (49 frames
+        for the first chunk, then 56) and fed to `generate` as a generator together with the streaming
+        attention context `[70, 6]`. The decoder/encoder caches are threaded across chunks internally and the
+        transcript is consumed incrementally via a `TextIteratorStreamer`.
+
+        reproducer: https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb#file-reproducer_streaming_rnnt-py
+        """
+        # The fixture holds the NeMo cache-aware streaming reference. The HF re-implementation matches it
+        # except a single sub-word: NeMo emits "...rescued our economy from the worst crisis of our
+        # lifetimes...", the Transformers re-implementation emits "cris" instead — a borderline greedy
+        # emission flipped by ~1e-3 numerical drift in the re-implemented FastConformer encoder (WER-neutral).
+        # We assert against the NeMo reference, so this test is expected to fail on that one sub-word until the
+        # encoder drift is closed.
+        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/nemotron_asr/expected_results_streaming.json"
+        with open(RESULTS_PATH) as f:
+            EXPECTED_TRANSCRIPTION = json.load(f)["transcription"]
+
+        audio = load_audio(OBAMA_AUDIO_URL, sampling_rate=self.processor.feature_extractor.sampling_rate)
+        model = NemotronAsrForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
+
+        inputs = self.processor(audio, sampling_rate=self.processor.feature_extractor.sampling_rate)
+        inputs.to(model.device, dtype=model.dtype)
+
+        def input_features_generator():
+            start_idx, first_chunk_size, chunk_size = 0, 49, 56
+            chunk = first_chunk_size
+            input_length = inputs.input_features.shape[1]
+            while start_idx < input_length:
+                end_idx = min(start_idx + chunk, input_length)
+                yield inputs.input_features[:, start_idx:end_idx, :]
+                start_idx = end_idx
+                chunk = chunk_size
+
+        streamer = TextIteratorStreamer(
+            self.processor.tokenizer, skip_special_tokens=True, clean_up_tokenization_spaces=True
+        )
+        generate_kwargs = {
+            "input_features": input_features_generator(),
+            "att_context_size": [70, 6],
+            "streamer": streamer,
+        }
+        thread = Thread(target=model.generate, kwargs=generate_kwargs)
+        thread.start()
+        streamed_text = "".join(streamer)
+        thread.join()
+
+        self.assertEqual(streamed_text, EXPECTED_TRANSCRIPTION)
