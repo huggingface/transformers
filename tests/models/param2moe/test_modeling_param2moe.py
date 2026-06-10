@@ -35,14 +35,9 @@ class Param2MoEModelTester(CausalLMModelTester):
     def __init__(
         self,
         parent,
-        # Param2MoE uses plain GQA attention (Qwen3-style), NOT MLA.
-        # num_attention_heads must be divisible by num_key_value_heads AND by the
-        # number of TP ranks used in tensor-parallel tests (2 by default in
-        # CausalLMModelTest). Using 4/2 satisfies both constraints at small scale.
         num_attention_heads=4,
         num_key_value_heads=2,
         head_dim=8,
-        # MoE params kept small for fast unit tests
         num_experts=8,
         num_experts_per_tok=2,
         moe_intermediate_size=32,
@@ -139,9 +134,6 @@ class Param2MoEModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Param2MoEForCausalLM if is_torch_available() else None
 
-    # ------------------------------------------------------------------ #
-    # Cache-shape check
-    # ------------------------------------------------------------------ #
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         """
         Param2MoE uses standard GQA (no MLA), so key/value shapes follow the
@@ -159,9 +151,6 @@ class Param2MoEModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(layer.keys.shape, expected_key_shape)
             self.assertEqual(layer.values.shape, expected_value_shape)
 
-    # ------------------------------------------------------------------ #
-    # RoPE scaling test
-    # ------------------------------------------------------------------ #
     def test_model_rope_scaling_frequencies(self):
         """
         Param2MoE uses real-domain RoPE (cos/sin), not complex-domain.
@@ -218,9 +207,6 @@ class Param2MoEModelTest(CausalLMModelTest, unittest.TestCase):
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(cos_yarn_long, cos_long)
 
-    # ------------------------------------------------------------------ #
-    # TP plan test
-    # ------------------------------------------------------------------ #
     def test_tp_plan_matches_params(self):
         """
         Param2MoE uses plain GQA (no LoRA projections), so we must strip out
@@ -258,9 +244,9 @@ class Param2MoEIntegrationTest(unittest.TestCase):
             "outputs a vector"
         ]  # fmt: skip
 
-        tokenizer = AutoTokenizer.from_pretrained("bharatgenai/Param2-17B-A2.4B-Thinking")
+        tokenizer = AutoTokenizer.from_pretrained("Bhargav369/hf_v5_test")
         model = Param2MoEForCausalLM.from_pretrained(
-            "bharatgenai/Param2-17B-A2.4B-Thinking",
+            "Bhargav369/hf_v5_test",
             device_map=torch_device,
             dtype=torch.bfloat16,
             quantization_config=BitsAndBytesConfig(load_in_8bit=True),
@@ -280,7 +266,7 @@ class Param2MoEIntegrationTest(unittest.TestCase):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
         model = Param2MoEForCausalLM.from_pretrained(
-            "bharatgenai/Param2-17B-A2.4B-Thinking",
+            "Bhargav369/hf_v5_test",
             device_map=torch_device,
             dtype=torch.bfloat16,
             quantization_config=BitsAndBytesConfig(load_in_8bit=True),
@@ -317,11 +303,11 @@ class Param2MoEIntegrationTest(unittest.TestCase):
             "My favorite all time favorite condiment is ketchup.",
         ]
         tokenizer = AutoTokenizer.from_pretrained(
-            "bharatgenai/Param2-17B-A2.4B-Thinking", pad_token="</s>", padding_side="right"
+            "Bhargav369/hf_v5_test", pad_token="</s>", padding_side="right"
         )
 
         model = Param2MoEForCausalLM.from_pretrained(
-            "bharatgenai/Param2-17B-A2.4B-Thinking",
+            "Bhargav369/hf_v5_test",
             device_map=torch_device,
             dtype=torch.bfloat16,
             quantization_config=BitsAndBytesConfig(load_in_8bit=True),

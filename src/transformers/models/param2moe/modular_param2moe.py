@@ -52,10 +52,6 @@ class Param2MoEConfig(PreTrainedConfig):
         Number of dense layers in the shallow layers before switching to MoE layers.
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
-    use_bias (`bool`, *optional*, defaults to `False`):
-        Whether to use bias in linear layers. Also sets `mlp_bias` in `__post_init__`.
-    moe_shared_expert_intermediate_size (`int`, *optional*, defaults to 4096):
-        Intermediate size for the always-active shared expert MLP.
     router_dtype (`str`, *optional*, defaults to `"fp32"`):
         Data type used for router weight computation. Using float32 improves numerical
         stability of the routing scores.
@@ -87,9 +83,6 @@ class Param2MoEConfig(PreTrainedConfig):
         competitive normalization across all experts.
     torch_dtype (`str`, *optional*, defaults to `"bfloat16"`):
         Default torch dtype for model weights when loading with `from_pretrained`.
-    use_rmsnorm (`bool`, *optional*, defaults to `True`):
-        Whether to use RMSNorm (Root Mean Square Layer Normalization) instead of
-        standard LayerNorm for all normalization layers.
 
     Example:
 
@@ -108,9 +101,10 @@ class Param2MoEConfig(PreTrainedConfig):
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.q_b_proj": "colwise",
-        "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
-        "layers.*.self_attn.kv_b_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
@@ -142,9 +136,8 @@ class Param2MoEConfig(PreTrainedConfig):
     pad_token_id: int | None = 0
     eos_token_id: int | list[int] | None = 3
     tie_word_embeddings: bool = True
-    use_qkv_bias: bool = False
+    attention_bias: bool = False
     attention_dropout: float | None = 0.0
-    use_bias: bool = False
     head_dim: int | None = 64
     first_k_dense_replace: int = 1
     n_group: int | None = 1
@@ -155,7 +148,6 @@ class Param2MoEConfig(PreTrainedConfig):
     norm_topk_prob: bool | None = True
     num_experts_per_tok: int | None = 6
     moe_intermediate_size: int = 2048
-    moe_shared_expert_intermediate_size: int = 4096
     rope_parameters: RopeParameters | dict | None = None
     router_aux_loss_coef: float = 0.0
     router_dtype: str = "fp32"
@@ -165,19 +157,12 @@ class Param2MoEConfig(PreTrainedConfig):
     mtp_loss_scaling_factor: float = 0.0
     moe_router_enable_expert_bias: bool = True
     output_router_logits: bool = False
-    use_qk_norm: bool = True
     output_dropout: float = 0.0
     rope_scaling: str | dict | None = None
     sliding_window: int | None = None
     rope_theta: float = 1000000.0
     score_function: str = "sigmoid"
     torch_dtype: str = "bfloat16"
-    use_rmsnorm: bool = True
-
-    def __post_init__(self, **kwargs):
-        self.attention_bias = self.use_qkv_bias
-        self.mlp_bias = self.use_bias
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
@@ -243,11 +228,7 @@ class Param2MoERouter(nn.Module):
         Returns:
             Tuple of (router_logits, topk_weights, topk_idx)
         """
-        # ---- 1. Compute raw logits in fp32 --------------------------------
         router_logits = F.linear(hidden_states.float(), self.weight.float())
-        # router_logits: [tokens, num_experts]
-
-        # ---- 2. Compute unbiased scores (used as output weights) ----------
         if self.score_function == "sigmoid":
             scores = torch.sigmoid(router_logits)
         else:  # "softmax"
@@ -310,27 +291,15 @@ class Param2MoESparseMoeBlock(nn.Module):
         super().__init__()
         self.experts = Param2MoEExperts(config)
         self.gate = Param2MoERouter(config)
-        # Shared expert uses moe_shared_expert_intermediate_size (4096),
-        # not the routed expert size (moe_intermediate_size = 2048).
-        self.shared_experts = Param2MoEMLP(config, intermediate_size=config.moe_shared_expert_intermediate_size)
+        self.shared_experts = Param2MoEMLP(config, intermediate_size=config.moe_intermediate_size * config.num_shared_experts)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # Keep a reference for the shared expert residual addition
         residual = hidden_states
         batch_size, seq_len, hidden_dim = hidden_states.shape
-
-        # Flatten to [tokens, hidden_size] for the router and experts
         hidden_states_flat = hidden_states.view(-1, hidden_dim)
-
-        # Router: logits are captured automatically by OutputRecorder;
-        # we only consume the weights and indices here.
         _, routing_weights, selected_experts = self.gate(hidden_states_flat)
-
-        # Routed experts: sparse computation over selected_experts
         routed_output = self.experts(hidden_states_flat, selected_experts, routing_weights)
         routed_output = routed_output.view(batch_size, seq_len, hidden_dim)
-
-        # Shared expert: dense computation on all tokens, added to routed output
         hidden_states = routed_output + self.shared_experts(residual)
         return hidden_states
 
