@@ -16,6 +16,7 @@
 
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from parameterized import parameterized
 
@@ -119,14 +120,24 @@ class PhimoeIntegrationTest(unittest.TestCase):
     @classmethod
     def get_model(cls):
         if cls.model is None:
+            import accelerate.utils
+
+            _original_get_max_memory = accelerate.utils.get_max_memory
+
+            def _cap_cpu_memory(max_memory=None):
+                result = _original_get_max_memory(max_memory)
+                result["cpu"] = min(result.get("cpu", float("inf")), 60 * 1024**3)
+                return result
+
             cls.offload_dir = tempfile.TemporaryDirectory()
-            cls.model = PhimoeForCausalLM.from_pretrained(
-                "microsoft/Phi-3.5-MoE-instruct",
-                experts_implementation="eager",
-                dtype="auto",
-                device_map="auto",
-                offload_folder=cls.offload_dir.name,
-            )
+            with patch("transformers.integrations.accelerate.accelerate_max_memory", _cap_cpu_memory):
+                cls.model = PhimoeForCausalLM.from_pretrained(
+                    "microsoft/Phi-3.5-MoE-instruct",
+                    experts_implementation="eager",
+                    dtype="auto",
+                    device_map="auto",
+                    offload_folder=cls.offload_dir.name,
+                )
         return cls.model
 
     @classmethod
