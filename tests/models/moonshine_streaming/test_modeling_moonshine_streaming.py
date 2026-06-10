@@ -36,6 +36,7 @@ if is_torch_available():
         MoonshineStreamingForConditionalGeneration,
         MoonshineStreamingModel,
     )
+    from transformers.models.moonshine_streaming.modeling_moonshine_streaming import sliding_window_mask_function
 
 from datasets import load_dataset
 
@@ -155,6 +156,13 @@ class MoonshineStreamingModelTest(ModelTesterMixin, PipelineTesterMixin, unittes
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_sliding_window_right_context_includes_boundary_frame(self):
+        mask = sliding_window_mask_function((16, 4))
+
+        future = [kv_idx for kv_idx in range(11, 16) if mask(0, 0, 10, kv_idx)]
+
+        self.assertEqual(future, [11, 12, 13, 14])
 
     def test_can_init_all_missing_weights(self):
         self.skipTest("MoonshineStreaming uses special parameter initialization that conflicts with this test")
