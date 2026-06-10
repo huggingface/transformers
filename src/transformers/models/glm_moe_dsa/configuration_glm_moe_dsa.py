@@ -126,8 +126,6 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     num_experts: int = 256
     head_dim: int = 64
     first_k_dense_replace: int = 3
-    # ``layer_types`` drives cache-class dispatch: every layer is DSA, so each gets a
-    # ``DynamicIndexedLayer`` / ``StaticIndexedLayer`` via ``LAYER_TYPE_CACHE_MAPPING``.
     layer_types: list[str] | None = None
     # `"full"` runs the indexer, `"shared"` reuses the previous full layer's index mask.
     indexer_types: list[str] | None = None
