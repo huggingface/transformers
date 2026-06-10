@@ -1018,6 +1018,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("deepseek_ocr2", "DeepseekOcr2ForConditionalGeneration"),
         ("deepseek_vl", "DeepseekVLForConditionalGeneration"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridForConditionalGeneration"),
+        ("diffusion_gemma", "DiffusionGemmaForBlockDiffusion"),
         ("emu3", "Emu3ForConditionalGeneration"),
         ("ernie4_5_vl_moe", "Ernie4_5_VLMoeForConditionalGeneration"),
         ("evolla", "EvollaForProteinText2Text"),

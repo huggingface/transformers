@@ -465,9 +465,36 @@ class EosTokenCriteria(StoppingCriteria):
         self.eos_token_id = eos_token_id
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, new_token_length: int = 1, **kwargs
+    ) -> torch.BoolTensor:
+        r"""
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary.
+
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
+
+                [What are input IDs?](../glossary#input-ids)
+            scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
+                Prediction scores of a language modeling head. These can be scores for each vocabulary token before SoftMax
+                or scores for each vocabulary token after SoftMax. If this stopping criteria depends on the `scores` input,
+                make sure you pass `return_dict_in_generate=True, output_scores=True` to `generate`.
+            new_token_length (`int`, *optional*, defaults to `1`):
+                The number of tokens that will be checked for the criteria. The latest `new_token_length` tokens on
+                each batch item will be checked.
+            kwargs (`dict[str, Any]`, *optional*):
+                Additional stopping criteria specific kwargs.
+
+        Return:
+            `torch.BoolTensor`. (`torch.BoolTensor` of shape `(batch_size, 1)`):
+                `True` indicates we stop generation for a particular row.
+                `False` indicates we should continue.
+
+        """
         self.eos_token_id = self.eos_token_id.to(input_ids.device)
-        is_done = torch.isin(input_ids[:, -1], self.eos_token_id)
+        is_done = torch.isin(input_ids[:, -new_token_length:], self.eos_token_id).any(dim=-1)
         return is_done
 
 
