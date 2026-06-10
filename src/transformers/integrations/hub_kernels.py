@@ -436,13 +436,45 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
-def kernelize(model: "PreTrainedModel", mode: "Mode"):
-    if model.kernel_config is not None:
-        inherit_mapping = not model.kernel_config.use_local_kernel
-        with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
+def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
+    """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
+    if not is_kernels_available():
+        raise ValueError(
+            "Kernels are not available. To use kernels, please install kernels using `pip install -U kernels`"
+        )
+
+    def attach_hidden_kernels(module):
+        for name, fn in getattr(module, "_hidden_kernels", {}).items():
+            if name not in dict(module.named_children()):
+                if not isinstance(fn, nn.Module):
+                    raise ValueError(
+                        f"Attempted to register a kernel for {name}, but it was not a `torch.nn.Module`. "
+                        "This means the underlying function needs to be decorated with `@use_kernel_func_from_hub`. "
+                        "Please submit and issue to the transformers repo: `https://github.com/huggingface/transformers/issues`."
+                    )
+                module.register_module(name, fn)
+
+    def detach_hidden_kernels(module):
+        for name in getattr(module, "_hidden_kernels", {}):
+            # Skip deregistering if it failed to properly register,
+            # i.e. `ValueError` will be raised afterwards
+            if hasattr(module, name):
+                delattr(module, name)
+
+    try:
+        model.apply(attach_hidden_kernels)
+
+        mode = Mode.INFERENCE if not model.training else Mode.TRAINING if mode is None else mode
+        if model.kernel_config is not None:
+            inherit_mapping = not model.kernel_config.use_local_kernel
+            with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
+                _kernels_kernelize(model, device=Device(type=model.device.type), mode=mode)
+        else:
             _kernels_kernelize(model, device=Device(type=model.device.type), mode=mode)
-    else:
-        _kernels_kernelize(model, device=Device(type=model.device.type), mode=mode)
+
+        model._use_kernels = True
+    finally:
+        model.apply(detach_hidden_kernels)
 
 
 def get_kernel(
