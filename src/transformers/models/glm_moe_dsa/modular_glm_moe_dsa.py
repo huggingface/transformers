@@ -186,9 +186,7 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
-        if not self.skip_topk or prev_topk_indices is None:
-            if self.indexer is None:
-                raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
+        if self.indexer is not None:
             indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
             topk_indices = self.indexer(
                 hidden_states,
@@ -199,6 +197,8 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
                 past_key_values=past_key_values,
             )  # [B, S, topk]
         else:
+            if prev_topk_indices is None:
+                raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
             topk_indices = prev_topk_indices
 
         sparse_indices = None
