@@ -14,6 +14,7 @@
 
 """Testing suite for the PyTorch PhiMoE model."""
 
+import tempfile
 import unittest
 
 from parameterized import parameterized
@@ -113,18 +114,27 @@ class PhimoeModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch
 class PhimoeIntegrationTest(unittest.TestCase):
     model = None
+    offload_dir = None
 
     @classmethod
     def get_model(cls):
         if cls.model is None:
+            cls.offload_dir = tempfile.TemporaryDirectory()
             cls.model = PhimoeForCausalLM.from_pretrained(
-                "microsoft/Phi-3.5-MoE-instruct", experts_implementation="eager", dtype="auto", device_map="auto"
+                "microsoft/Phi-3.5-MoE-instruct",
+                experts_implementation="eager",
+                dtype="auto",
+                device_map="auto",
+                offload_folder=cls.offload_dir.name,
             )
         return cls.model
 
     @classmethod
     def tearDownClass(cls):
         del cls.model
+        if cls.offload_dir is not None:
+            cls.offload_dir.cleanup()
+            cls.offload_dir = None
         cleanup(torch_device, gc_collect=True)
 
     def setUp(self):
