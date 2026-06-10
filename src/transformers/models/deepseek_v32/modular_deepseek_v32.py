@@ -42,6 +42,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3PreTrainedModel,
     DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
+    apply_rotary_pos_emb,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
@@ -250,7 +251,9 @@ class DeepseekV32Indexer(nn.Module):
         k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
         k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        # The indexer uses NON-interleaved (half-split) RoPE — unlike the main MLA attention, which is
+        # interleaved. This matches the reference (`apply_rotary_emb(..., interleaved=False)` in the indexer).
+        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
         q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
 
@@ -330,14 +333,16 @@ class DeepseekV32Attention(DeepseekV3Attention):
 
         sparse_indices = None
         if self.config._attn_implementation in ("eager", "sdpa"):
-            index_mask = torch.full(
-                (batch_size, seq_length, key_states.shape[2]),
-                float("-inf"),
-                device=hidden_states.device,
-                dtype=hidden_states.dtype,
-            )
-            index_mask = index_mask.scatter(-1, topk_indices.long(), 0.0).unsqueeze(1)  # [B, 1, S, T]
-            attention_mask = attention_mask.masked_fill(index_mask, float("-inf")) if attention_mask is not None else index_mask
+            # Boolean mask: `True` at keys *not* selected by the indexer (to be masked out). `masked_fill`
+            # sets `finfo.min` idempotently — unlike adding a `-inf` mask, which can overflow / stack to NaN.
+            index_mask = topk_indices.new_ones(
+                (batch_size, seq_length, key_states.shape[2]), dtype=torch.bool
+            ).scatter(-1, topk_indices.long(), False).unsqueeze(1)  # [B, 1, S, T]; True = masked
+            if attention_mask is None:
+                key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
+                index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
+                attention_mask = hidden_states.new_zeros((batch_size, 1, seq_length, key_states.shape[2]))
+            attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
         else:
             sparse_indices = topk_indices
 

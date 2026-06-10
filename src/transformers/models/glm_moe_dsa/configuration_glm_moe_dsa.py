@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -123,10 +124,14 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     num_experts: int = 256
     head_dim: int = 64
     first_k_dense_replace: int = 3
+    # ``layer_types`` drives cache-class dispatch: every layer is DSA, so each gets a
+    # ``DynamicIndexedLayer`` / ``StaticIndexedLayer`` via ``LAYER_TYPE_CACHE_MAPPING``.
     layer_types: list[str] | None = None
+    # `"full"` runs the indexer, `"shared"` reuses the previous full layer's index mask.
     indexer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
+        # Per-layer indexer mode: a pattern (e.g. `"FSSF..."`) overrides the freq/offset schedule.
         if self.indexer_types is None:
             pattern = kwargs.get("index_topk_pattern")
             if pattern is not None:

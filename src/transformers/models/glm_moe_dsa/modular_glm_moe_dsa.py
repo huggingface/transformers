@@ -207,14 +207,14 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
 
         sparse_indices = None
         if self.config._attn_implementation in ("eager", "sdpa"):
-            index_mask = torch.full(
-                (batch_size, seq_length, key_states.shape[2]),
-                float("-inf"),
-                device=hidden_states.device,
-                dtype=hidden_states.dtype,
-            )
-            index_mask = index_mask.scatter(-1, topk_indices.long(), 0.0).unsqueeze(1)  # [B, 1, S, T]
-            attention_mask = attention_mask + index_mask if attention_mask is not None else index_mask
+            index_mask = topk_indices.new_ones(
+                (batch_size, seq_length, key_states.shape[2]), dtype=torch.bool
+            ).scatter(-1, topk_indices.long(), False).unsqueeze(1)
+            if attention_mask is None:
+                key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
+                index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
+                attention_mask = hidden_states.new_zeros((batch_size, 1, seq_length, key_states.shape[2]))
+            attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
         else:
             sparse_indices = topk_indices
 
