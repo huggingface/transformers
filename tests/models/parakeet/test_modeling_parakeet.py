@@ -962,9 +962,10 @@ class ParakeetForRNNTIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUp(cls):
-        cls.checkpoint_name = "eustlb/parakeet-rnnt-0.6b"
+        cls.checkpoint_name = "nvidia/parakeet-rnnt-0.6b"
+        cls.revision = "refs/pr/4"
         cls.dtype = torch.float32
-        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name, revision=cls.revision)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -994,7 +995,9 @@ class ParakeetForRNNTIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = ParakeetForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
+        model = ParakeetForRNNT.from_pretrained(
+            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
+        )
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
@@ -1013,7 +1016,9 @@ class ParakeetForRNNTIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = ParakeetForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
+        model = ParakeetForRNNT.from_pretrained(
+            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
+        )
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
@@ -1036,7 +1041,9 @@ class ParakeetForRNNTIntegrationTest(unittest.TestCase):
         EXPECTED_END_TIMESTAMPS = raw_data["end_timestamps"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = ParakeetForRNNT.from_pretrained(self.checkpoint_name, dtype=torch.float32, device_map="auto")
+        model = ParakeetForRNNT.from_pretrained(
+            self.checkpoint_name, revision=self.revision, dtype=torch.float32, device_map="auto"
+        )
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
@@ -1073,7 +1080,9 @@ class ParakeetForRNNTIntegrationTest(unittest.TestCase):
         transcripts = [t.lower() for t in transcripts]
 
         # Use float32 for loss precision
-        model = ParakeetForRNNT.from_pretrained(self.checkpoint_name, dtype=torch.float32, device_map="auto")
+        model = ParakeetForRNNT.from_pretrained(
+            self.checkpoint_name, revision=self.revision, dtype=torch.float32, device_map="auto"
+        )
 
         inputs = self.processor(
             audio=samples,
