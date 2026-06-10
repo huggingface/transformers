@@ -130,7 +130,7 @@ def with_flush_memory(func):
         generation_config = kwargs.get("generation_config")
         if isinstance(cb_config, ContinuousBatchingConfig):
             flush_compile = (
-                cb_config.use_default_compile_configs
+                cb_config.default_compile_level > 0
                 or cb_config.varlen_compile_config is not None
                 or cb_config.decode_compile_config is not None
             )
@@ -594,7 +594,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         # If the config turns on compile, change the generation config to use the default mode instead of
         # max-autotune-no-cudagraphs which can change the kernels between generate_batch and generate
-        if continuous_batching_config.use_default_compile_configs:
+        if continuous_batching_config.default_compile_level > 0:
             fullgraph = not is_flash_attention_requested(requested_attention_implementation=attn_implementation)
             compile_config = CompileConfig(mode="default", fullgraph=fullgraph, dynamic=True)
             continuous_batching_config.varlen_compile_config = compile_config
@@ -693,7 +693,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         continuous_batching_config = ContinuousBatchingConfig(
             allow_block_sharing=allow_block_sharing,
             use_cuda_graph=use_cuda_graph,
-            use_default_compile_configs=False,
+            default_compile_level=0,
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -711,7 +711,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
             use_cuda_graph=use_cuda_graph,
-            use_default_compile_configs=True,
+            default_compile_level=1,
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -733,7 +733,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     @slow
     def test_continuous_batching_diverse_models(self, model_id: str, use_cuda_graph: bool, use_compile: bool) -> None:
         continuous_batching_config = ContinuousBatchingConfig(
-            use_cuda_graph=use_cuda_graph, use_default_compile_configs=use_compile
+            use_cuda_graph=use_cuda_graph, default_compile_level=1 if use_compile else 0
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -763,7 +763,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             use_cuda_graph=False,
             allow_block_sharing=False,
             use_async_batching=False,
-            use_default_compile_configs=False,
+            default_compile_level=0,
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -774,7 +774,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     def test_continuous_batching_long_generate(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
-            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, use_default_compile_configs=True
+            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, default_compile_level=1
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -1128,7 +1128,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
                 allow_block_sharing=True,
                 use_cuda_graph=use_cuda_graph,
                 use_async_batching=True,
-                use_default_compile_configs=use_compile,
+                default_compile_level=1 if use_compile else 0,
             ),
             attn_implementation=attn_implementation,
         )

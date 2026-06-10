@@ -1646,8 +1646,9 @@ class ContinuousBatchingConfig:
         decode_compile_config (`CompileConfig`, *optional*):
             CompileConfig for decode (fast) path. Default is None (uses generation_config fallback)
             The decode path handles batches has no dynamic KV length, so static shapes are a better fit.
-        use_default_compile_configs (`bool`, *optional*, defaults to `False`):
-            If True, a default compile config will be used for paths that are not explicitly set.
+        default_compile_level (`int`, *optional*, defaults to 0):
+            If this is >0 and no compile config is provided for varlen or decode path, a default compile config will be
+            provided. The level can go up to 3, and a higher level means more performance but longer warmup time.
         scheduler_type (`str`, *optional*, defaults to `"fifo"`):
             Scheduler type to use.
         return_logprobs (`bool`, *optional*, defaults to `False`):
@@ -1711,12 +1712,13 @@ class ContinuousBatchingConfig:
     max_cached_graphs: int = 0
 
     # Compile configs for the two execution paths. If None, uses the compile_config from generation_config as fallback.
-    # The varlen path is used for prefill and when fast decode is unavailable. The decode path is used when
-    # max_blocks_per_request > 0 (fast decode with block table).
     varlen_compile_config: CompileConfig | None = None
     decode_compile_config: CompileConfig | None = None
-    # If this flag is set to True, a default compile config will be used for paths that are not explicitly set.
-    use_default_compile_configs: bool = False
+    # Compile level for the executions path, if no compile config is provided for the path. Default is 0 (no compile).
+    # Level 1: `mode=default, dynamic=True`
+    # Level 2: `mode=max-autotune-no-cudagraphs, dynamic=True`
+    # Level 3: `mode=max-autotune-no-cudagraphs, dynamic=False`
+    default_compile_level: int = 0
 
     # Scheduler type. FIFO by default. For all types available, checks SCHEDULER_MAPPING in scheduler.py
     scheduler_type: str = "fifo"

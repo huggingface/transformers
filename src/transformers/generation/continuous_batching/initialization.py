@@ -143,7 +143,7 @@ def resolve_compile_configs(
     Default config use full compile over regional compile, because the throughput is significantly higher (~15%)"""
     # For each config, priority is: explicit config, default config, fallback config, None
     if cb_config.varlen_compile_config is None:
-        if cb_config.use_default_compile_configs:
+        if cb_config.default_compile_level > 0:
             # We don't use compile with flash varlen, because max_seqlen_k is volatile and introduces recompilations
             if is_flash_attn:
                 varlen_config = None
@@ -157,9 +157,11 @@ def resolve_compile_configs(
         varlen_config = cb_config.varlen_compile_config
 
     if cb_config.decode_compile_config is None:
-        if cb_config.use_default_compile_configs:
+        if cb_config.default_compile_level > 0:
             # Paged attention is wrapped in @torch.compiler.disable so we can't use fullgraph
-            decode_config = CompileConfig(mode="max-autotune-no-cudagraphs", fullgraph=False, dynamic=False)
+            mode = "max-autotune-no-cudagraphs" if cb_config.default_compile_level >= 2 else "default"
+            dynamic = cb_config.default_compile_level >= 3
+            decode_config = CompileConfig(mode=mode, fullgraph=False, dynamic=dynamic)
         elif fallback_compile_config is not None:
             decode_config = fallback_compile_config
         else:
