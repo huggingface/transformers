@@ -13,14 +13,19 @@
 # limitations under the License.
 """Processor class for HunYuanVL."""
 
+from __future__ import annotations
+
 import numpy as np
-import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, is_torch_available, logging
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -178,6 +183,8 @@ class HunYuanVLProcessor(ProcessorMixin):
     ) -> BatchFeature:
         if images is None and text is None:
             raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
+        if text is not None and not is_torch_available():
+            raise ImportError("HunYuanVLProcessor requires PyTorch when processing text inputs.")
 
         output_kwargs = self._merge_kwargs(
             HunYuanVLProcessorKwargs,
