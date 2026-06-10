@@ -281,14 +281,6 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
-    @property
-    def model_input_names(self):
-        return super().model_input_names + ["mm_token_type_ids"]
-
-    @property
-    def unused_input_names(self) -> list[str]:
-        return ["num_soft_tokens_per_image", "num_soft_tokens_per_video"]
-
     def _compute_audio_num_tokens(self, audio_waveform, sampling_rate: int) -> int:
         """Compute the number of audio soft tokens for a single waveform.
 
@@ -310,6 +302,14 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         num_samples = len(audio_waveform)
         audio_samples_per_token = getattr(self.feature_extractor, "audio_samples_per_token", 640)
         return math.ceil(num_samples / audio_samples_per_token)
+
+    @property
+    def model_input_names(self):
+        return super().model_input_names + ["mm_token_type_ids"]
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        return ["num_soft_tokens_per_image", "num_soft_tokens_per_video"]
 
 
 __all__ = ["Gemma4UnifiedProcessor"]
