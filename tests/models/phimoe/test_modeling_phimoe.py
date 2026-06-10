@@ -122,6 +122,12 @@ class PhimoeIntegrationTest(unittest.TestCase):
         if cls.model is None:
             import accelerate.utils
 
+            # Our CI runners with A10 GPU use instance sharing, which makes each runner report ~750 GB of CPU RAM.
+            # With that much CPU memory visible, `device_map="auto"` fits all layers on GPU+CPU with nothing
+            # spilling to disk. This produces a device map that causes GPU OOM when the model is actually run.
+            # We patch `accelerate_max_memory` to cap CPU at 60 GiB — the amount a dedicated A10 instance
+            # normally sees — so that the same layers are offloaded to disk as on a real single-tenant runner,
+            # avoiding the OOM.
             _original_get_max_memory = accelerate.utils.get_max_memory
 
             def _cap_cpu_memory(max_memory=None):
