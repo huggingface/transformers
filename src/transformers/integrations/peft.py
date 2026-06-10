@@ -191,7 +191,7 @@ class FlattenDims(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        raise NotImplementedError("Reversing flatteing operatio is not supported.")
+        raise NotImplementedError("Reversing flatteing operation is not supported.")
 
     def __repr__(self):
         return f"{self.__class__.__name__}(dims={self.dims})"
@@ -220,7 +220,7 @@ class PermuteDims(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        raise NotImplementedError("Reversing flatteing operatio is not supported yet.")
+        raise NotImplementedError("Reversing flatteing operation is not supported yet.")
 
     def __repr__(self):
         return f"{self.__class__.__name__}(dims={self.dims})"
