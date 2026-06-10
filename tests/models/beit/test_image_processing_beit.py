@@ -21,7 +21,11 @@ from transformers.modeling_outputs import SemanticSegmenterOutput
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+    prepare_image_inputs,
+)
 
 
 if is_torch_available():
@@ -123,7 +127,7 @@ def prepare_semantic_batch_inputs():
 
 @require_torch
 @require_vision
-class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class BeitImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.image_processor_tester = BeitImageProcessingTester(self)

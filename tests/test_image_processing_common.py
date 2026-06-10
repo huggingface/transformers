@@ -661,24 +661,42 @@ class ImageProcessingTestMixin:
 
         self.assertIsNone(getattr(reloaded, test_attr), f"Explicit None for {test_attr} was lost after reload")
 
-    def _check_run_test_post_process_semantic_segmentation(self):
-        implements_post_process_semantic_segmentation = any(
-            hasattr(image_processing_class, "post_process_semantic_segmentation")
-            for image_processing_class in self.image_processing_classes.values()
-        )
-        if not implements_post_process_semantic_segmentation:
-            self.skipTest(reason="Processor does not implement post_process_semantic_segmentation")
-
-        if not hasattr(self.image_processor_tester, "prepare_post_process_semantic_segmentation_inputs"):
-            raise ValueError(
-                f"{self.image_processor_tester.__class__.__name__} must implement `prepare_post_process_semantic_segmentation_inputs` "
-                "as processor class implements `post_process_semantic_segmentation`"
+    def test_post_process_test_mixin_inheritance(self):
+        """
+        Ensures that we have the post-process tester mixin if the processor implements the corresponding method.
+        The test will fail otherwise, forcing the mixin to be added -- and ensuring proper test coverage.
+        """
+        METHOD_TO_MIXIN = {
+            "post_process_semantic_segmentation": PostProcessSemanticSegmentationTestMixin,
+        }
+        for method_name, mixin_class in METHOD_TO_MIXIN.items():
+            implements_method = any(
+                hasattr(image_processing_class, method_name)
+                for image_processing_class in self.image_processing_classes.values()
             )
+            if implements_method:
+                self.assertTrue(
+                    issubclass(self.__class__, mixin_class),
+                    msg=(
+                        f"This processor implements `{method_name}`, so the tester must inherit from "
+                        f"`{mixin_class.__name__}` to run the corresponding tests. Either add the inheritance "
+                        f"or, if the processor only partially supports `{method_name}`, overwrite the test."
+                    ),
+                )
+            else:
+                self.assertFalse(
+                    issubclass(self.__class__, mixin_class),
+                    msg=(
+                        f"This processor does not implement `{method_name}`, so the tester must not inherit from "
+                        f"`{mixin_class.__name__}`. If the processor was recently updated to support "
+                        f"`{method_name}`, add the `{mixin_class.__name__}` inheritance instead."
+                    ),
+                )
 
+
+class PostProcessSemanticSegmentationTestMixin:
     @require_torch
     def test_post_process_semantic_segmentation(self):
-        self._check_run_test_post_process_semantic_segmentation()
-
         for image_processing_class in self.image_processing_classes.values():
             with self.subTest(image_processing_class):
                 image_processor = image_processing_class(**self.image_processor_dict)
@@ -704,8 +722,6 @@ class ImageProcessingTestMixin:
 
     @require_torch
     def test_post_process_semantic_segmentation_target_sizes(self):
-        self._check_run_test_post_process_semantic_segmentation()
-
         inputs, expected_shape = self.image_processor_tester.prepare_post_process_semantic_segmentation_inputs()
 
         if "target_sizes" in inputs:

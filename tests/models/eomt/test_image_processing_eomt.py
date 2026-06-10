@@ -22,7 +22,11 @@ from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+    prepare_image_inputs,
+)
 from ...test_processing_common import url_to_local_path
 
 
@@ -127,7 +131,7 @@ def prepare_semantic_batch_inputs():
 
 @require_torch
 @require_vision
-class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.image_processor_tester = EomtImageProcessingTester(self)

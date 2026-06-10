@@ -22,7 +22,12 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    AnnotationFormatTestMixin,
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+    prepare_image_inputs,
+)
 
 
 if is_torch_available():
@@ -150,7 +155,9 @@ class ConditionalDetrImageProcessingTester:
 
 @require_torch
 @require_vision
-class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
+class ConditionalDetrImageProcessingTest(
+    AnnotationFormatTestMixin, ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
+):
     def setUp(self):
         super().setUp()
         self.image_processor_tester = ConditionalDetrImageProcessingTester(self)
