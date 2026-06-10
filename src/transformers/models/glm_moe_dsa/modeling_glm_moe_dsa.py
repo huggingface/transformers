@@ -251,9 +251,7 @@ class GlmMoeDsaIndexer(nn.Module):
         # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
-        # Mask out non-causal keys before the top-k so the selection respects causality. An explicit mask already
-        # encodes causality (+ padding); otherwise SDPA skipped it, so rebuild causality from `position_ids`
-        # (key `t` sits at absolute position `t`) — this stays correct per batch row, unlike a shared `triu`.
+        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
         if attention_mask is not None:
             index_scores = index_scores + attention_mask
         else:
@@ -465,17 +463,12 @@ class GlmMoeDsaAttention(nn.Module):
 
         sparse_indices = None
         if self.config._attn_implementation in ("eager", "sdpa"):
-            # Boolean mask: `True` at keys *not* selected by the indexer (to be masked out). `masked_fill`
-            # sets `finfo.min` idempotently — unlike adding a `-inf` mask, which can overflow / stack to NaN.
             index_mask = (
                 topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
                 .scatter(-1, topk_indices.long(), False)
                 .unsqueeze(1)
-            )  # [B, 1, S, T]; True = masked
+            )
             if attention_mask is None:
-                # SDPA may skip the dense causal mask (is_causal fast-path); the indexer fold needs causality
-                # explicitly. Rebuild it from `position_ids` (key `t` sits at absolute position `t`) so it stays
-                # correct per batch row — a shared `triu` would ignore row-specific positions / cache offsets.
                 key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
                 index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
                 attention_mask = hidden_states.new_zeros((batch_size, 1, seq_length, key_states.shape[2]))
