@@ -24,7 +24,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...masking_utils import create_causal_mask
 from ...modeling_rope_utils import RopeParameters
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
@@ -264,16 +264,6 @@ class CtsmPreTrainedModel(TimesFmPreTrainedModel):
     config: CtsmConfig
     base_model_prefix = "model"
     _supports_flash_attn = False
-
-    def _check_and_adjust_attn_implementation(
-        self, attn_implementation: str | None, is_init_check: bool = False, allow_all_kernels: bool = False
-    ) -> str:
-        if attn_implementation is None:
-            on_accelerator = torch.cuda.is_available() or (hasattr(torch, "xpu") and torch.xpu.is_available())
-            attn_implementation = "flex_attention" if on_accelerator else "sdpa"
-        return PreTrainedModel._check_and_adjust_attn_implementation(
-            self, attn_implementation, is_init_check, allow_all_kernels
-        )
 
     @torch.no_grad()
     def _init_weights(self, module):

@@ -459,14 +459,6 @@ class CtsmPreTrainedModel(PreTrainedModel):
         if isinstance(module, CtsmModel) and module.special_token is not None:
             init.normal_(module.special_token, mean=0.0, std=self.config.initializer_range)
 
-    def _check_and_adjust_attn_implementation(
-        self, attn_implementation: str | None, is_init_check: bool = False, allow_all_kernels: bool = False
-    ) -> str:
-        if attn_implementation is None:
-            on_accelerator = torch.cuda.is_available() or (hasattr(torch, "xpu") and torch.xpu.is_available())
-            attn_implementation = "flex_attention" if on_accelerator else "sdpa"
-        return super()._check_and_adjust_attn_implementation(attn_implementation, is_init_check, allow_all_kernels)
-
 
 _STREAM_NORM_EPS = 1e-8
 
