@@ -4285,7 +4285,27 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Prepare the full device map
         if device_map is not None:
+            import psutil
+            _vm_before = psutil.virtual_memory()
+            logger.warning(
+                f"[device_map] Before _get_device_map — "
+                f"device_map={device_map!r}, "
+                f"max_memory={max_memory!r}, "
+                f"CPU RAM total={_vm_before.total / 1024**3:.2f} GB, "
+                f"available={_vm_before.available / 1024**3:.2f} GB, "
+                f"used={_vm_before.used / 1024**3:.2f} GB, "
+                f"percent={_vm_before.percent}%"
+            )
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
+            _vm_after = psutil.virtual_memory()
+            logger.warning(
+                f"[device_map] After _get_device_map — "
+                f"device_map={device_map!r}, "
+                f"CPU RAM total={_vm_after.total / 1024**3:.2f} GB, "
+                f"available={_vm_after.available / 1024**3:.2f} GB, "
+                f"used={_vm_after.used / 1024**3:.2f} GB, "
+                f"percent={_vm_after.percent}%"
+            )
 
         # Finalize model weight initialization
         load_config = LoadStateDictConfig(
