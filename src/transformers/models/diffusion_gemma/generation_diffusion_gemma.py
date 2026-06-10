@@ -224,8 +224,6 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
             "t_max": 0.8,
             "stability_threshold": 1,
             "confidence_threshold": 0.005,
-            "eos_token_id": [1, 106, 50],
-            "pad_token_id": 0,
         }
 
     # Overriding GenerationMixin-related functions that are not relevant to DiffusionGemma.
@@ -655,6 +653,7 @@ class DiffusionGemmaGenerationMixin:
         device = input_ids.device
         canvas_length = self.config.canvas_length
         current_canvas = None
+        eos_tensor = None
         finished_sequences = torch.zeros(batch_size, dtype=torch.bool, device=device)
         decoder_forward_passes = torch.zeros(batch_size, dtype=torch.int, device=device)
         if past_key_values is None:
