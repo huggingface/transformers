@@ -958,7 +958,7 @@ class ParakeetForRNNTIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUp(cls):
-        cls.checkpoint_name = "/raid/eustache/parakeet-rnnt-0.6b-hf"
+        cls.checkpoint_name = "eustlb/parakeet-rnnt-0.6b"
         cls.dtype = torch.float32
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
 
