@@ -386,6 +386,8 @@
         title: Video classification
       - local: tasks/object_detection
         title: Object detection
+      - local: tasks/instance_segmentation
+        title: Instance segmentation
       - local: tasks/zero_shot_object_detection
         title: Zero-shot object detection
       - local: tasks/zero_shot_image_classification
@@ -567,6 +569,8 @@
         title: DeepSeek-V2
       - local: model_doc/deepseek_v3
         title: DeepSeek-V3
+      - local: model_doc/deepseek_v32
+        title: DeepSeek-V3.2
       - local: model_doc/deepseek_v4
         title: DeepSeek-V4
       - local: model_doc/dialogpt
@@ -1213,6 +1217,8 @@
         title: ColPali
       - local: model_doc/colqwen2
         title: ColQwen2
+      - local: model_doc/cosmos3_omni
+        title: Cosmos3 Omni
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/deepseek_vl
@@ -1221,6 +1227,8 @@
         title: DeepseekVLHybrid
       - local: model_doc/deplot
         title: DePlot
+      - local: model_doc/diffusion_gemma
+        title: DiffusionGemma
       - local: model_doc/donut
         title: Donut
       - local: model_doc/edgetam
