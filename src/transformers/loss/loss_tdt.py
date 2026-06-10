@@ -48,7 +48,8 @@ def tdt_loss(
         durations: List of duration values (e.g., `[0, 1, 2, 3, 4]`).
         sigma: Logit undernormalization constant (see TDT paper). Defaults to `0.0`.
         reduction: Loss reduction method. One of `"mean_volume"`, `"mean_batch"`, `"mean"`, `"sum"`, or `"none"`,
-            mirroring NeMo's `RNNTLoss` (TDT shares the same reduction knob as RNN-T). Defaults to `"mean_volume"`.
+            mirroring NeMo's `RNNTLoss` (TDT shares the same reduction knob as RNN-T). Defaults to `"mean_volume"`,
+            the `rnnt_reduction` of the released Parakeet TDT checkpoints.
 
     Returns:
         Scalar loss tensor (or per-example losses if `reduction="none"`).

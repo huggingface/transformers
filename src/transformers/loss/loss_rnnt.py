@@ -29,7 +29,7 @@ def rnnt_loss(
     logit_lengths: torch.Tensor,
     target_lengths: torch.Tensor,
     blank_token_id: int,
-    reduction: str = "mean",
+    reduction: str = "mean_volume",
 ) -> torch.Tensor:
     """
     Compute standard RNN-T (RNN Transducer) loss (https://arxiv.org/abs/1211.3711).
