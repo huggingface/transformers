@@ -101,7 +101,7 @@ Parakeet RNN-T transcribes without casing or punctuation (like CTC), and the mod
 ```py
 from transformers import pipeline
 
-pipe = pipeline("automatic-speech-recognition", model="nvidia/parakeet-rnnt-0.6b")
+pipe = pipeline("automatic-speech-recognition", model="nvidia/parakeet-rnnt-0.6b", revision="refs/pr/4")
 out = pipe("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
 print(out)
 # {'text': 'yesterday it was thirty five degrees in barcelona but today the temperature will go down to minus twenty degrees'}
@@ -115,8 +115,9 @@ from transformers import AutoModelForRNNT, AutoProcessor
 from datasets import load_dataset, Audio
 
 model_id = "nvidia/parakeet-rnnt-0.6b"
-processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForRNNT.from_pretrained(model_id, dtype="auto", device_map="auto")
+revision = "refs/pr/4"
+processor = AutoProcessor.from_pretrained(model_id, revision=revision)
+model = AutoModelForRNNT.from_pretrained(model_id, revision=revision, dtype="auto", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -138,8 +139,9 @@ from datasets import Audio, load_dataset
 from transformers import AutoModelForRNNT, AutoProcessor
 
 model_id = "nvidia/parakeet-rnnt-0.6b"
-processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForRNNT.from_pretrained(model_id, dtype="auto", device_map="auto")
+revision = "refs/pr/4"
+processor = AutoProcessor.from_pretrained(model_id, revision=revision)
+model = AutoModelForRNNT.from_pretrained(model_id, revision=revision, dtype="auto", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -357,10 +359,11 @@ import torch
 from transformers import AutoModelForRNNT, AutoProcessor
 
 model_id = "nvidia/parakeet-rnnt-0.6b"
+revision = "refs/pr/4"
 NUM_SAMPLES = 4
 
-processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForRNNT.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+processor = AutoProcessor.from_pretrained(model_id, revision=revision)
+model = AutoModelForRNNT.from_pretrained(model_id, revision=revision, dtype=torch.bfloat16, device_map="auto")
 model.train()
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
