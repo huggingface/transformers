@@ -125,6 +125,7 @@ class PhimoeIntegrationTest(unittest.TestCase):
                 experts_implementation="eager",
                 dtype="auto",
                 device_map="auto",
+                max_memory={"cpu": "60GB"},
                 offload_folder=cls.offload_dir.name,
             )
         return cls.model
