@@ -37,10 +37,18 @@ from ..glm4v.modeling_glm4v import (
     Glm4vVisionBlock,
     Glm4vVisionModel,
     Glm4vVisionPatchMerger,
+    Glm4vVisionRotaryEmbedding,
     apply_rotary_pos_emb_vision,
     eager_attention_forward,
     is_flash_attention_requested,
 )
+
+
+class GlmOcrVisionRotaryEmbedding(Glm4vVisionRotaryEmbedding):
+    def forward(self, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        freqs = (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        return emb.cos(), emb.sin()
 
 
 class GlmOcrRMSNorm(Glm4vRMSNorm):
@@ -265,9 +273,7 @@ class GlmOcrVisionModel(Glm4vVisionModel):
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
-        rotary_emb = self.rotary_pos_emb(position_ids)
-        emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_embeddings = self.rotary_pos_emb(position_ids)
 
         for blk in self.blocks:
             hidden_states = blk(
