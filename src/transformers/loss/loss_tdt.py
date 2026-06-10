@@ -29,7 +29,7 @@ def tdt_loss(
     blank_token_id: int,
     durations: list[int],
     sigma: float = 0.0,
-    reduction: str = "mean",
+    reduction: str = "mean_volume",
 ) -> torch.Tensor:
     """
     Compute TDT (Token-and-Duration Transducer) loss (https://arxiv.org/abs/2304.06795).
@@ -47,15 +47,19 @@ def tdt_loss(
         blank_token_id: Blank token id.
         durations: List of duration values (e.g., `[0, 1, 2, 3, 4]`).
         sigma: Logit undernormalization constant (see TDT paper). Defaults to `0.0`.
-        reduction: Loss reduction method. One of `"mean"`, `"sum"`, or `"none"`. Defaults to `"mean"`.
+        reduction: Loss reduction method. One of `"mean_volume"`, `"mean_batch"`, `"mean"`, `"sum"`, or `"none"`,
+            mirroring NeMo's `RNNTLoss` (TDT shares the same reduction knob as RNN-T). Defaults to `"mean_volume"`.
 
     Returns:
         Scalar loss tensor (or per-example losses if `reduction="none"`).
 
     """
 
-    if reduction not in ("mean", "sum", "none"):
-        raise ValueError(f'Invalid reduction mode "{reduction}". Expected one of "mean", "sum", or "none".')
+    valid_reductions = ("mean_volume", "mean_batch", "mean", "sum", "none")
+    if reduction not in valid_reductions:
+        raise ValueError(
+            f'Invalid reduction mode "{reduction}". Expected one of {", ".join(repr(r) for r in valid_reductions)}.'
+        )
 
     device = token_logits.device
     batch_size, max_t, max_u, _ = token_logits.shape
@@ -150,8 +154,13 @@ def tdt_loss(
 
     losses = -log_probs
 
-    if reduction == "mean":
-        return (losses / target_lengths.float()).mean()
+    target_lengths = target_lengths.float()
+    if reduction == "mean_volume":
+        return losses.sum() / target_lengths.sum()
+    elif reduction == "mean_batch":
+        return losses.mean()
+    elif reduction == "mean":
+        return (losses / target_lengths).mean()
     elif reduction == "sum":
         return losses.sum()
     return losses
@@ -166,7 +175,7 @@ def ParakeetForTDTLoss(
     blank_token_id,
     durations,
     sigma=0.0,
-    reduction="mean",
+    reduction="mean_volume",
     **kwargs,
 ):
     device = token_logits.device
