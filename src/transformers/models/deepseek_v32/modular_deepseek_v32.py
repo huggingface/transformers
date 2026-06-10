@@ -142,12 +142,13 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
     first_k_dense_replace: int = 3
     pretraining_tp = AttributeError()
     rope_interleave = AttributeError()
-    # ``layer_types`` drives cache-class dispatch: every layer is DSA, so each gets a
-    # ``DynamicIndexedLayer`` / ``StaticIndexedLayer`` via ``LAYER_TYPE_CACHE_MAPPING``.
     layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
+        # RoPE applies only to the rope slice, so point `head_dim` at it: the inherited (Llama) rotary
+        # embedding reads `config.head_dim` and then computes the right frequencies with no override needed.
+        self.head_dim = self.qk_rope_head_dim
         # MLP layer types: the first `first_k_dense_replace` layers are dense, the rest are MoE.
         if self.mlp_layer_types is None:
             n_dense = min(self.first_k_dense_replace, self.num_hidden_layers)
@@ -163,20 +164,7 @@ class DeepseekV32RMSNorm(DeepseekV3RMSNorm):
 
 
 class DeepseekV32RotaryEmbedding(DeepseekV3RotaryEmbedding):
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: "DeepseekV32Config | None" = None,
-        device=None,
-        seq_len: int | None = None,
-    ):
-        base = config.rope_parameters["rope_theta"]
-        head_dim = config.qk_rope_head_dim
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / head_dim)
-        )
-        return inv_freq, attention_factor
+    pass
 
 
 class DeepseekV32Indexer(nn.Module):
@@ -251,8 +239,7 @@ class DeepseekV32Indexer(nn.Module):
         k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
         k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-        # The indexer uses NON-interleaved (half-split) RoPE — unlike the main MLA attention, which is
-        # interleaved. This matches the reference (`apply_rotary_emb(..., interleaved=False)` in the indexer).
+        # The indexer uses NON-interleaved (half-split) RoPE — unlike the main MLA attention
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
         q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
@@ -260,14 +247,11 @@ class DeepseekV32Indexer(nn.Module):
         if past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)
 
-        # === Scoring: index_score[b,s,t] = Σ_h weight[b,s,h] · softmax_scale · ReLU(q[b,s,h,:] · k[b,t,:]) ===
-        # `weights_proj` is normally kept in fp32 (`_keep_in_fp32_modules`); match the input to its weight dtype
-        # so the matmul is valid whether or not the module was force-cast, then score in fp32.
-        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
-        # q·k^T per head: [B, S, H, D] @ [B, 1, D, T] → [B, S, H, T]
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
         scores = F.relu(scores)
+
         # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
+        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
         # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
@@ -333,13 +317,10 @@ class DeepseekV32Attention(DeepseekV3Attention):
 
         sparse_indices = None
         if self.config._attn_implementation in ("eager", "sdpa"):
-            # Boolean mask: `True` at keys *not* selected by the indexer (to be masked out). `masked_fill`
-            # sets `finfo.min` idempotently — unlike adding a `-inf` mask, which can overflow / stack to NaN.
-            index_mask = (
-                topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
-                .scatter(-1, topk_indices.long(), False)
-                .unsqueeze(1)
-            )  # [B, 1, S, T]; True = masked
+            # Boolean mask: `True` at keys *not* selected by the indexer (to be masked out).
+            index_mask = topk_indices.new_ones(
+                (batch_size, seq_length, key_states.shape[2]), dtype=torch.bool
+            ).scatter(-1, topk_indices.long(), False).unsqueeze(1)  # [B, 1, S, T]; True = masked
             if attention_mask is None:
                 key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
                 index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])

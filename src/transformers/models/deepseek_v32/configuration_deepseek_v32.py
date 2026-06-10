@@ -119,12 +119,13 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     num_experts: int = 256
     head_dim: int = 64
     first_k_dense_replace: int = 3
-    # ``layer_types`` drives cache-class dispatch: every layer is DSA, so each gets a
-    # ``DynamicIndexedLayer`` / ``StaticIndexedLayer`` via ``LAYER_TYPE_CACHE_MAPPING``.
     layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
+        # RoPE applies only to the rope slice, so point `head_dim` at it: the inherited (Llama) rotary
+        # embedding reads `config.head_dim` and then computes the right frequencies with no override needed.
+        self.head_dim = self.qk_rope_head_dim
         # MLP layer types: the first `first_k_dense_replace` layers are dense, the rest are MoE.
         if self.mlp_layer_types is None:
             n_dense = min(self.first_k_dense_replace, self.num_hidden_layers)

@@ -19,7 +19,7 @@ import math
 import os
 import re
 import traceback
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -80,7 +80,7 @@ def build_glob_alternation(
     return alternation, src_group_to_glob, tgt_group_to_glob
 
 
-class ConversionOps:
+class ConversionOps(ABC):
     """Base class for weight conversion operations."""
 
     def __repr__(self):

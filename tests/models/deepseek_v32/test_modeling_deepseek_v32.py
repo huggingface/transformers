@@ -259,7 +259,7 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
         model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
         generated_ids = model.generate(**model_inputs, max_new_tokens=50, do_sample=False)
-        generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(generated_text, EXPECTED_TEXT)
 
     def test_logits_eager(self):
