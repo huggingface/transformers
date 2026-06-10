@@ -31,8 +31,6 @@ from .utils import WorkloadHints
 FALLBACK_DEFAULTS = {
     "max_requests_per_batch": 1024,
     "max_blocks_per_request": 32,
-    "q_padding_interval_size": 64,
-    "kv_padding_interval_size": 64 * 256,  # 64 blocks of 256 tokens ie. 16384 tokens
     "max_cached_graphs": 128,
 }
 

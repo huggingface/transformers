@@ -49,11 +49,11 @@ generation goes on, there are two dimensions that change:
 - the number of queries tokens (Q), which can vary from batch to batch
 - the number of keys/values tokens (KV), which grows as the cache does
 
-To solve this, we pad along those dimensions to the nearest power of 2. Since graphs memory and time to create, we use
-an LRU cache with a fixed size to limit memory usage.
+To solve this, we pad along those dimensions to the nearest power of 2. Since graphs take memory and time to create, we
+use an LRU cache with a fixed size to limit memory usage.
 
 The maximum number of cached graphs is controlled by max_cached_graphs (default 128), which uses LRU eviction.
-All defaults are stored in ContinuousBatchingConfig.resolve_sentinel_values().
+All defaults are stored in initialization.py.
 """
 
 

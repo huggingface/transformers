@@ -74,14 +74,6 @@ def attn_mask_is_needed(config: PretrainedConfig) -> bool:
     return config._attn_implementation in ["paged|eager", "paged|sdpa"]
 
 
-def pad_to_interval(size: int, interval_size: int, max_value: int) -> int:
-    """Return the smallest multiple of (interval_size) >= (size), capped at (max_value)."""
-    if interval_size <= 0:
-        return max_value
-    padded = ceil(size / interval_size) * interval_size if size > 0 else interval_size
-    return min(padded, max_value)
-
-
 def pad_to_pow2(value: int, max_value: int, min_value: int = 0) -> int:
     """Return the smallest power of 2 >= (value), capped at (max_value). If a minimum value is provided, the value is at
     least padded to that value."""
