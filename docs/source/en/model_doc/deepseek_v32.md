@@ -16,6 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2025-12-02 and contributed to Hugging Face Transformers on 2026-06-10.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
