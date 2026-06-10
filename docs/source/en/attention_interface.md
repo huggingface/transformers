@@ -309,9 +309,9 @@ During generation, [`~GenerationMixin.generate`] builds masks through [`create_m
 
 ## Pass a custom 4D attention mask
 
-Pass your own 4D mask when you need an attention pattern the `create_*_mask` functions can't express. A 4D mask has the shape `(batch_size, 1, query_length, kv_length)`, which Transformers detects and uses the mask as-is, skipping `create_*_mask`.
+Pass your own 4D mask when you need an attention pattern the `create_*_mask` functions can't express. A 4D mask has the shape `(batch_size, 1, query_length, kv_length)`, where `1` broadcasts the same mask across every attention head. Transformers detects and uses the mask as-is, skipping `create_*_mask`.
 
-A 4D mask must use one of two value conventions.
+A 4D mask uses one of two value conventions.
 
 | dtype | attend | mask out |
 |---|---|---|
@@ -319,6 +319,9 @@ A 4D mask must use one of two value conventions.
 | float | `0.0` | `-inf` |
 
 The float convention adds the mask to the attention scores before the softmax. A score plus `0.0` stays unchanged, so the position contributes. A score plus `-inf` drops to zero after the softmax, so the position is excluded.
+
+> [!IMPORTANT]
+> The accepted convention depends on the attention backend. `sdpa` takes a boolean or a float mask. `eager` adds the mask to the scores, so it takes a float mask only. `flash_attention_2` and `flex_attention` consume their own formats (a 2D padding mask and a [BlockMask](https://docs.pytorch.org/docs/stable/nn.attention.flex_attention.html#torch.nn.attention.flex_attention.BlockMask)) and don't accept a raw 4D mask.
 
 A common mistake is to reuse the `1`/`0` convention of a 2D padding mask in a float 4D mask. Because the mask is added to the scores, `0.0` keeps a position and `1.0` only adds a small bias.
 
@@ -328,7 +331,7 @@ The example below contrasts a wrong mask with a correct one. Both start from the
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+model = AutoModelForCausalLM.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0", attn_implementation="sdpa")
 tokenizer = AutoTokenizer.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
 
 input_ids = tokenizer("my favorite condiment on a", return_tensors="pt").input_ids
