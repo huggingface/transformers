@@ -127,6 +127,7 @@ from .trainer_utils import (
     TrainerMemoryTracker,
     TrainOutput,
     _is_peft_model,
+    _re_checkpoint,
     align_special_tokens,
     compare_trainer_and_checkpoint_args,
     default_compute_objective,
@@ -144,6 +145,7 @@ from .trainer_utils import (
     set_seed,
     sort_checkpoints,
     speed_metrics,
+    split_bucket_id,
     suppress_progress_bars,
     unwrap_peft_model,
     validate_quantization_for_training,
@@ -576,15 +578,17 @@ class Trainer:
         # ---- 9. Hub & output ---------------------------------------------------------
         self.hub_model_id = None  # Set by init_hf_repo() when push_to_hub is enabled
         self._bucket_id = None  # Canonical id of the checkpoint bucket when push_to_bucket is enabled
+        self._bucket_prefix = ""  # Optional sub-path inside the bucket (from `args.bucket_id` extra components)
         self.push_in_progress = None  # Tracks the in-flight push (repo and/or bucket)
         if self.args.push_to_hub:
             self.init_hf_repo()
         if self.args.push_to_bucket and self.is_world_process_zero():
+            # `bucket_id` may carry a sub-path ("ns/name/expt-1"): the bucket is the first two components,
+            # the rest is a prefix the checkpoints are sync'd under (several runs can share one bucket).
+            bucket, self._bucket_prefix = split_bucket_id(self.args.bucket_id)
             self._bucket_id = (
                 hf_api()
-                .create_bucket(
-                    self.args.bucket_id, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True
-                )
+                .create_bucket(bucket, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True)
                 .bucket_id
             )
         if self.args.should_save:
@@ -1354,7 +1358,9 @@ class Trainer:
                 If a `str`, local path to a saved checkpoint as saved by a previous instance of [`Trainer`]. A bucket
                 handle resumes from a [bucket](https://huggingface.co/docs/huggingface_hub/guides/buckets) instead:
                 `"hf://buckets/namespace/name"` downloads the latest checkpoint in that bucket, and
-                `"hf://buckets/namespace/name/checkpoint-500"` downloads that specific one. If a `bool` and equals
+                `"hf://buckets/namespace/name/checkpoint-500"` downloads that specific one. Both forms accept a
+                sub-path inside the bucket (e.g. `"hf://buckets/namespace/name/expt-1"` for the latest checkpoint
+                synced with `bucket_id="namespace/name/expt-1"`). If a `bool` and equals
                 `True`, load the last checkpoint in *args.output_dir* as saved by a previous instance of [`Trainer`].
                 If present, training will resume from the model/optimizer/scheduler states loaded here.
             trial (`optuna.Trial` or `dict[str, Any]`, *optional*):
@@ -1423,12 +1429,13 @@ class Trainer:
                 DebugUnderflowOverflow(self.model)
 
         # Load potential model checkpoint. Resume from a bucket via its handle:
-        #   - "hf://buckets/<ns>/<name>"                     -> latest checkpoint in that bucket
-        #   - "hf://buckets/<ns>/<name>/checkpoint-<step>"   -> that specific checkpoint
+        #   - "hf://buckets/<ns>/<name>[/<prefix>]"                   -> latest checkpoint under that path
+        #   - "hf://buckets/<ns>/<name>[/<prefix>]/checkpoint-<step>" -> that specific checkpoint
         # Only the main process downloads (ranks share the filesystem); the others wait at the barrier.
         if isinstance(resume_from_checkpoint, str) and resume_from_checkpoint.startswith("hf://buckets/"):
             body = resume_from_checkpoint.removeprefix("hf://buckets/").rstrip("/")
-            is_specific = body.count("/") > 1  # "namespace/name/checkpoint-<step>" vs just "namespace/name"
+            # A specific checkpoint ends in "checkpoint-<step>"; anything else is a bucket(/prefix) handle.
+            is_specific = _re_checkpoint.search(body.rsplit("/", 1)[-1]) is not None
             if self.is_world_process_zero():
                 if is_specific:
                     download_checkpoint_from_bucket(resume_from_checkpoint, args.output_dir, token=args.hub_token)
@@ -4215,13 +4222,16 @@ class Trainer:
                     )
                 )
 
-        # Sync output_dir (model snapshot + checkpoints)
+        # Sync output_dir (model snapshot + checkpoints), under the bucket prefix when one was given
         if self.args.push_to_bucket:
+            bucket_dest = f"hf://buckets/{self._bucket_id}"
+            if self._bucket_prefix:
+                bucket_dest = f"{bucket_dest}/{self._bucket_prefix}"
             push_jobs.append(
                 hf_api().run_as_future(
                     hf_api().sync_bucket,
                     self.args.output_dir,
-                    f"hf://buckets/{self._bucket_id}",
+                    bucket_dest,
                     delete=False,
                     token=self.args.hub_token,
                     quiet=True,

@@ -279,10 +279,22 @@ def get_last_checkpoint(folder):
     return os.path.join(folder, max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])))
 
 
+def split_bucket_id(bucket_id: str) -> tuple[str, str]:
+    """Split a bucket id with an optional sub-path into `(bucket, prefix)`.
+
+    Buckets are identified by exactly two path components (`namespace/name`); anything beyond that is a
+    prefix inside the bucket, e.g. `"ns/name/expt-1"` -> `("ns/name", "expt-1")`. The prefix is `""` when
+    the id is a plain bucket.
+    """
+    components = bucket_id.strip("/").split("/")
+    return "/".join(components[:2]), "/".join(components[2:])
+
+
 def download_checkpoint_from_bucket(checkpoint_uri: str, output_dir: str, token: str | None = None) -> str:
     """Download a specific bucket checkpoint into `output_dir` and return its local path.
 
-    `checkpoint_uri` is a full bucket handle, e.g. `hf://buckets/namespace/name/checkpoint-500`. The
+    `checkpoint_uri` is a full bucket handle, e.g. `hf://buckets/namespace/name/checkpoint-500` (possibly
+    with a prefix inside the bucket, e.g. `hf://buckets/namespace/name/expt-1/checkpoint-500`). The
     checkpoint is placed at `output_dir/<last path component>` (e.g. `output_dir/checkpoint-500`) so the
     step is recovered on resume.
     """
@@ -297,14 +309,23 @@ def download_checkpoint_from_bucket(checkpoint_uri: str, output_dir: str, token:
 def download_latest_checkpoint_from_bucket(bucket_id: str, output_dir: str, token: str | None = None) -> str | None:
     """Download the latest `checkpoint-<step>` from `bucket_id` into `output_dir`.
 
-    Returns the local checkpoint path (named `checkpoint-<step>` so the step is recovered on resume), or
-    `None` if the bucket holds no checkpoint.
+    `bucket_id` may include a prefix inside the bucket (e.g. `"ns/name/expt-1"`), in which case the latest
+    checkpoint under that prefix is downloaded. Returns the local checkpoint path (named `checkpoint-<step>`
+    so the step is recovered on resume), or `None` if the bucket holds no checkpoint.
     """
     from .utils.hub import hf_api
 
+    bucket, prefix = split_bucket_id(bucket_id)
+    # Scope the listing to the prefix when there is one (trailing "/" so "expt-1" doesn't match "expt-10").
+    list_kwargs = {"prefix": f"{prefix}/", "recursive": True} if prefix else {}
     steps = set()
-    for item in hf_api().list_bucket_tree(bucket_id, token=token):
-        top = item.path.strip("/").split("/", 1)[0]  # first path component, e.g. "checkpoint-500"
+    for item in hf_api().list_bucket_tree(bucket, token=token, **list_kwargs):
+        rel = item.path.strip("/")
+        if prefix:
+            if not rel.startswith(f"{prefix}/"):
+                continue
+            rel = rel[len(prefix) + 1 :]
+        top = rel.split("/", 1)[0]  # first path component under the prefix, e.g. "checkpoint-500"
         suffix = top[len(PREFIX_CHECKPOINT_DIR) + 1 :]
         if top.startswith(f"{PREFIX_CHECKPOINT_DIR}-") and suffix.isdigit():
             steps.add(int(suffix))

@@ -269,6 +269,8 @@ trainer.train()
 
 `bucket_id` is optional. When it isn't set, it defaults to `hub_model_id` if you provided one, otherwise to the `output_dir` name under your namespace (the same name [`Trainer`] would give the model repository).
 
+Several runs can share one bucket: extra path components in `bucket_id` become a prefix inside the bucket. With `bucket_id="my-org/my-runs/expt-1"`, checkpoints sync under `expt-1/` in the `my-org/my-runs` bucket, so each experiment keeps its own subfolder.
+
 [`Trainer`] uploads each checkpoint to the bucket under its own `checkpoint-<step>/` prefix and keeps it there even after [`~TrainingArguments.save_total_limit`] rotates it off local disk. The bucket accumulates every checkpoint. Uploads run asynchronously, so they don't block training.
 
 `push_to_bucket` is independent of `push_to_hub`. Use it on its own to store checkpoints without creating a model repository, or together with `push_to_hub` to also publish the model.
@@ -278,4 +280,5 @@ To resume from a bucket, pass its handle to `resume_from_checkpoint`. [`Trainer`
 ```py
 trainer.train(resume_from_checkpoint="hf://buckets/my-org/my-run")                 # latest in that bucket
 trainer.train(resume_from_checkpoint="hf://buckets/my-org/my-run/checkpoint-500")  # a specific checkpoint
+trainer.train(resume_from_checkpoint="hf://buckets/my-org/my-runs/expt-1")         # latest under a prefix
 ```

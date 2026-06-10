@@ -1216,8 +1216,10 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": "Bucket id ('namespace/name') used when `push_to_bucket=True`. Defaults to `hub_model_id` if set, "
-            "otherwise the `output_dir` name under your namespace. Checkpoints are stored under a prefix named after "
-            "`output_dir`, so several runs can share one bucket. Resume from it with `resume_from_checkpoint='bucket'`."
+            "otherwise the `output_dir` name under your namespace. Extra path components form a prefix inside the "
+            "bucket ('namespace/name/expt-1' syncs checkpoints under 'expt-1/'), so several runs can share one "
+            "bucket. Resume with `resume_from_checkpoint='hf://buckets/<bucket_id>'` (latest checkpoint) or "
+            "`'hf://buckets/<bucket_id>/checkpoint-<step>'`."
         },
     )
 
