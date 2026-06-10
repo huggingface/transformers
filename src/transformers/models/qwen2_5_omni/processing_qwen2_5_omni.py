@@ -103,6 +103,8 @@ class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Qwen2_5OmniProcessor(ProcessorMixin):
+    valid_processor_kwargs = Qwen2_5OmniProcessorKwargs
+
     def __init__(
         self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
     ):

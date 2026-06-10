@@ -19,23 +19,23 @@ from typing import Any
 
 import numpy as np
 
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, to_numpy
+
+
+class MusicgenProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
 
 
 @auto_docstring
 class MusicgenProcessor(ProcessorMixin):
+    valid_processor_kwargs = MusicgenProcessorKwargs
+
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         return self.tokenizer.get_decoder_prompt_ids(task=task, language=language, no_timestamps=no_timestamps)
-
-    @auto_docstring
-    def __call__(self, *args, **kwargs):
-        if len(args) > 0:
-            kwargs["audio"] = args[0]
-        return super().__call__(*args, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
         """

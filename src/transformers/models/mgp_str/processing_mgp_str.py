@@ -17,7 +17,7 @@ from transformers import AutoTokenizer
 from transformers.utils import is_torch_available
 from transformers.utils.generic import ExplicitEnum
 
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
 from ...utils.import_utils import requires
 
@@ -35,9 +35,15 @@ class DecodeType(ExplicitEnum):
 SUPPORTED_ANNOTATION_FORMATS = (DecodeType.CHARACTER, DecodeType.BPE, DecodeType.WORDPIECE)
 
 
+class MgpstrProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
+
+
 @requires(backends=("sentencepiece",))
 @auto_docstring
 class MgpstrProcessor(ProcessorMixin):
+    valid_processor_kwargs = MgpstrProcessorKwargs
+
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         self.char_tokenizer = tokenizer
         self.bpe_tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
@@ -46,22 +52,11 @@ class MgpstrProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
 
     @auto_docstring
-    def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
-        if images is None and text is None:
-            raise ValueError("You need to specify either an `images` or `text` input to process.")
-
-        if images is not None:
-            inputs = self.image_processor(images, return_tensors=return_tensors, **kwargs)
-        if text is not None:
-            encodings = self.char_tokenizer(text, return_tensors=return_tensors, **kwargs)
-
-        if text is None:
-            return inputs
-        elif images is None:
-            return encodings
-        else:
-            inputs["labels"] = encodings["input_ids"]
-            return inputs
+    def __call__(self, text=None, images=None, **kwargs):
+        result = super().__call__(images=images, text=text, **kwargs)
+        if text is not None and images is not None and "input_ids" in result:
+            result["labels"] = result.pop("input_ids")
+        return result
 
     def batch_decode(self, sequences):
         """
