@@ -318,9 +318,11 @@ class DeepseekV32Attention(DeepseekV3Attention):
         sparse_indices = None
         if self.config._attn_implementation in ("eager", "sdpa"):
             # Boolean mask: `True` at keys *not* selected by the indexer (to be masked out).
-            index_mask = topk_indices.new_ones(
-                (batch_size, seq_length, key_states.shape[2]), dtype=torch.bool
-            ).scatter(-1, topk_indices.long(), False).unsqueeze(1)  # [B, 1, S, T]; True = masked
+            index_mask = (
+                topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
+                .scatter(-1, topk_indices.long(), False)
+                .unsqueeze(1)
+            )  # [B, 1, S, T]; True = masked
             if attention_mask is None:
                 key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
                 index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
@@ -360,6 +362,7 @@ class DeepseekV32PreTrainedModel(DeepseekV3PreTrainedModel):
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
     _supports_flex_attn = False
+
 
 class DeepseekV32Model(DeepseekV3Model):
     pass
