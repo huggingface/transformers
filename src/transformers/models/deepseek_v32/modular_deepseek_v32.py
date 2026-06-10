@@ -142,8 +142,6 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
     first_k_dense_replace: int = 3
     pretraining_tp = AttributeError()
     rope_interleave = AttributeError()
-    # ``layer_types`` drives cache-class dispatch: every layer is DSA, so each gets a
-    # ``DynamicIndexedLayer`` / ``StaticIndexedLayer`` via ``LAYER_TYPE_CACHE_MAPPING``.
     layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
