@@ -230,8 +230,8 @@ class Tipsv2Config(PreTrainedConfig):
         Dictionary of configuration options used to initialize [`Tipsv2TextConfig`].
     vision_config (`dict`, *optional*):
         Dictionary of configuration options used to initialize [`Tipsv2VisionConfig`].
-    temperature (`float`, *optional*, defaults to `0.01`):
-        Temperature used to scale cosine-similarity logits in [`Tipsv2Model`].
+    temperature_init_value (`float`, *optional*, defaults to `0.01`):
+        Initial value for the learnable temperature parameter used to scale cosine-similarity logits in [`Tipsv2Model`].
 
     Example:
 
@@ -254,7 +254,7 @@ class Tipsv2Config(PreTrainedConfig):
 
     text_config: dict | Tipsv2TextConfig | None = None
     vision_config: dict | Tipsv2VisionConfig | None = None
-    temperature: float = 0.01
+    temperature_init_value: float = 0.005065968260169029
 
     def __post_init__(self, **kwargs):
         text_config_kwargs = {}
@@ -337,8 +337,8 @@ class Tipsv2Config(PreTrainedConfig):
                 f"`text_config.hidden_size` ({self.text_config.hidden_size}) and "
                 f"`vision_config.hidden_size` ({self.vision_config.hidden_size}) must be equal."
             )
-        if self.temperature <= 0:
-            raise ValueError(f"`temperature` ({self.temperature}) must be strictly positive.")
+        if self.temperature_init_value <= 0:
+            raise ValueError(f"`temperature_init_value` ({self.temperature_init_value}) must be strictly positive.")
 
 
 class Tipsv2Output(CLIPOutput):
@@ -673,6 +673,11 @@ class Tipsv2PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Tipsv2Model):
+            init.copy_(module.temperature, torch.tensor(module.config.temperature_init_value))
+
 
 @auto_docstring
 class Tipsv2Model(Tipsv2PreTrainedModel):
@@ -680,6 +685,7 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
         super().__init__(config)
         self.text_model = Tipsv2TextModel._from_config(config.text_config)
         self.vision_model = Tipsv2VisionModel._from_config(config.vision_config)
+        self.temperature = nn.Parameter(torch.tensor(config.temperature_init_value))
         self.post_init()
 
     @can_return_tuple
@@ -777,7 +783,7 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
         loss = None
         if image_embeds is not None and text_embeds is not None:
             logits_per_text = torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device))
-            logits_per_text = logits_per_text / self.config.temperature
+            logits_per_text = logits_per_text / self.temperature
             logits_per_image = logits_per_text.t()
             if return_loss:
                 loss = image_text_contrastive_loss(logits_per_text)

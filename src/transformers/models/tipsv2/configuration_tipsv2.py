@@ -155,8 +155,8 @@ class Tipsv2Config(PreTrainedConfig):
         Dictionary of configuration options used to initialize [`Tipsv2TextConfig`].
     vision_config (`dict`, *optional*):
         Dictionary of configuration options used to initialize [`Tipsv2VisionConfig`].
-    temperature (`float`, *optional*, defaults to `0.01`):
-        Temperature used to scale cosine-similarity logits in [`Tipsv2Model`].
+    temperature_init_value (`float`, *optional*, defaults to `0.01`):
+        Initial value for the learnable temperature parameter used to scale cosine-similarity logits in [`Tipsv2Model`].
 
     Example:
 
@@ -179,7 +179,7 @@ class Tipsv2Config(PreTrainedConfig):
 
     text_config: dict | Tipsv2TextConfig | None = None
     vision_config: dict | Tipsv2VisionConfig | None = None
-    temperature: float = 0.01
+    temperature_init_value: float = 0.005065968260169029
 
     def __post_init__(self, **kwargs):
         text_config_kwargs = {}
@@ -262,8 +262,8 @@ class Tipsv2Config(PreTrainedConfig):
                 f"`text_config.hidden_size` ({self.text_config.hidden_size}) and "
                 f"`vision_config.hidden_size` ({self.vision_config.hidden_size}) must be equal."
             )
-        if self.temperature <= 0:
-            raise ValueError(f"`temperature` ({self.temperature}) must be strictly positive.")
+        if self.temperature_init_value <= 0:
+            raise ValueError(f"`temperature_init_value` ({self.temperature_init_value}) must be strictly positive.")
 
 
 __all__ = ["Tipsv2Config", "Tipsv2TextConfig", "Tipsv2VisionConfig"]

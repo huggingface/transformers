@@ -968,6 +968,11 @@ class Tipsv2PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Tipsv2Model):
+            init.copy_(module.temperature, torch.tensor(module.config.temperature_init_value))
+
 
 # contrastive loss function, adapted from
 # https://sachinruk.github.io/blog/2021-03-07-tipsv2.html
@@ -998,6 +1003,7 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
         super().__init__(config)
         self.text_model = Tipsv2TextModel._from_config(config.text_config)
         self.vision_model = Tipsv2VisionModel._from_config(config.vision_config)
+        self.temperature = nn.Parameter(torch.tensor(config.temperature_init_value))
         self.post_init()
 
     @can_return_tuple
@@ -1095,7 +1101,7 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
         loss = None
         if image_embeds is not None and text_embeds is not None:
             logits_per_text = torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device))
-            logits_per_text = logits_per_text / self.config.temperature
+            logits_per_text = logits_per_text / self.temperature
             logits_per_image = logits_per_text.t()
             if return_loss:
                 loss = image_text_contrastive_loss(logits_per_text)

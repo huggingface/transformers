@@ -365,7 +365,7 @@ class Tipsv2ModelTester:
         return Tipsv2Config(
             text_config=self.text_model_tester.get_config().to_dict(),
             vision_config=self.vision_model_tester.get_config().to_dict(),
-            temperature=0.01,
+            temperature_init_value=0.01,
         )
 
     def prepare_config_and_inputs(self):
@@ -400,7 +400,7 @@ class Tipsv2ModelTester:
         return config, inputs_dict
 
 
-def get_b14_tipsv2_config(temperature=0.005065968260169029):
+def get_b14_tipsv2_config(temperature_init_value=0.005065968260169029):
     hidden_size = 768
     return Tipsv2Config(
         text_config=Tipsv2TextConfig(
@@ -420,7 +420,7 @@ def get_b14_tipsv2_config(temperature=0.005065968260169029):
             mlp_ratio=4.0,
             use_swiglu_ffn=False,
         ),
-        temperature=temperature,
+        temperature_init_value=temperature_init_value,
     )
 
 
@@ -517,7 +517,7 @@ class Tipsv2ModelTest(Tipsv2ModelTesterMixin, PipelineTesterMixin, unittest.Test
             atol=1e-5,
             rtol=1e-5,
         )
-        expected_logits = torch.matmul(outputs.text_embeds, outputs.image_embeds.t()) / config.temperature
+        expected_logits = torch.matmul(outputs.text_embeds, outputs.image_embeds.t()) / config.temperature_init_value
         torch.testing.assert_close(outputs.logits_per_text, expected_logits, atol=1e-5, rtol=1e-5)
 
     def test_auto_model_mappings(self):
