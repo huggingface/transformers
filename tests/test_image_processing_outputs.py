@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import unittest
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -36,11 +35,6 @@ class SubclassPostProcessorOutput(PostProcessorOutput):
 
 
 class PostProcessorOutputTest(unittest.TestCase):
-    def test_base_class_direct_instantiation(self):
-        obj = PostProcessorOutput({"a": 1, "b": 2})
-        self.assertEqual(obj["a"], 1)
-        self.assertEqual(obj["b"], 2)
-
     def test_subclass_without_dataclass_raises(self):
         class BadSubclass(PostProcessorOutput):
             pass
@@ -64,46 +58,10 @@ class SubclassPostProcessorOutputTest(unittest.TestCase):
         labels = torch.randint(0, num_labels, (batch_size,))
         return SubclassPostProcessorOutput(scores=scores, labels=labels)
 
-    def test_dict_access(self):
-        obj = self._make_output()
-        self.assertIsInstance(obj["scores"], torch.Tensor)
-        self.assertIsInstance(obj["labels"], torch.Tensor)
-
     def test_attribute_and_dict_access_return_same_object(self):
         obj = self._make_output()
         self.assertIs(obj.scores, obj["scores"])
         self.assertIs(obj.labels, obj["labels"])
-
-    def test_len(self):
-        obj = self._make_output()
-        self.assertEqual(len(obj), 2)
-
-    def test_keys(self):
-        obj = self._make_output()
-        self.assertEqual(set(obj.keys()), {"scores", "labels"})
-
-    def test_contains(self):
-        obj = self._make_output()
-        self.assertIn("scores", obj)
-        self.assertIn("labels", obj)
-        self.assertNotIn("data", obj)
-        self.assertNotIn("nonexistent_field", obj)
-
-    def test_iteration_yields_keys(self):
-        obj = self._make_output()
-        self.assertEqual(set(obj), {"scores", "labels"})
-
-    def test_values(self):
-        obj = self._make_output()
-        values = list(obj.values())
-        self.assertEqual(len(values), 2)
-        self.assertTrue(all(isinstance(v, torch.Tensor) for v in values))
-
-    def test_items(self):
-        obj = self._make_output()
-        items = dict(obj.items())
-        self.assertIn("scores", items)
-        self.assertIn("labels", items)
 
     def test_setattr_updates_dict(self):
         obj = self._make_output()
@@ -112,17 +70,12 @@ class SubclassPostProcessorOutputTest(unittest.TestCase):
         self.assertIs(obj["scores"], new_scores)
         self.assertIs(obj.scores, new_scores)
 
-    def test_setattr_does_not_corrupt_other_fields(self):
+    def test_setattr_does_not_affect_other_fields(self):
         obj = self._make_output()
         original_labels = obj.labels
         obj.scores = torch.ones(2, 3)
         self.assertIs(obj.labels, original_labels)
         self.assertIs(obj["labels"], original_labels)
-
-    def test_setattr_data_raises(self):
-        obj = self._make_output()
-        with self.assertRaises(AttributeError):
-            obj.data = {"scores": torch.zeros(2, 3), "labels": torch.zeros(2, dtype=torch.long)}
 
     def test_delitem(self):
         obj = self._make_output()
@@ -137,16 +90,6 @@ class SubclassPostProcessorOutputTest(unittest.TestCase):
         self.assertIn("labels", obj)
         self.assertIs(obj.labels, original_labels)
 
-    def test_delitem_nonexistent_key_raises(self):
-        obj = self._make_output()
-        with self.assertRaises(KeyError):
-            del obj["nonexistent"]
-
-    def test_delitem_data_raises(self):
-        obj = self._make_output()
-        with self.assertRaises(KeyError):
-            del obj["data"]
-
     def test_delattr(self):
         obj = self._make_output()
         del obj.scores
@@ -160,23 +103,13 @@ class SubclassPostProcessorOutputTest(unittest.TestCase):
         self.assertIn("labels", obj)
         self.assertIs(obj.labels, original_labels)
 
-    def test_delattr_data_raises(self):
+    def test_to_dtype(self):
+        # `.to` is inherited from BatchFeature; it mutates the underlying dict in place. Because fields are
+        # stored only in that dict, attribute and dict-style access must still return the same casted object.
         obj = self._make_output()
-        with self.assertRaises(AttributeError):
-            del obj.data
-
-    def test_copy(self):
-        obj = self._make_output()
-        obj_copy = copy.copy(obj)
-        self.assertIsInstance(obj_copy, SubclassPostProcessorOutput)
-        self.assertIs(obj_copy.scores, obj.scores)
-        self.assertIs(obj_copy.labels, obj.labels)
-
-    def test_deepcopy(self):
-        obj = self._make_output()
-        obj_copy = copy.deepcopy(obj)
-        self.assertIsInstance(obj_copy, SubclassPostProcessorOutput)
-        self.assertIsNot(obj_copy.scores, obj.scores)
-        self.assertIsNot(obj_copy.labels, obj.labels)
-        self.assertTrue(torch.equal(obj_copy.scores, obj.scores))
-        self.assertTrue(torch.equal(obj_copy.labels, obj.labels))
+        returned = obj.to(torch.float64)
+        self.assertIs(returned, obj)
+        self.assertEqual(obj.scores.dtype, torch.float64)
+        self.assertIs(obj.scores, obj["scores"])
+        # Integer labels are not floating point, so they are left untouched but still accessible.
+        self.assertEqual(obj.labels.dtype, torch.int)

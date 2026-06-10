@@ -12,20 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections import UserDict
 from dataclasses import dataclass, fields, is_dataclass
 from typing import TYPE_CHECKING
+
+from .feature_extraction_utils import BatchFeature
 
 
 if TYPE_CHECKING:
     import torch
 
 
-class PostProcessorOutput(UserDict):
+class PostProcessorOutput(BatchFeature):
     """Base class for image processor post-processing outputs.
 
-    Behaves like a dict, so fields are accessible via both attribute access (``output.segmentation``)
-    and dict-style access (``output["segmentation"]``).
+    Behaves like a dict with additional attribute access. Fields are accessible via
+    dict-style access (``output["segmentation"]``) and attribute access (``output.segmentation``).
+    Device/dtype casting is supported via ``output.to(...)`` and tensor conversion via
+    ``output.convert_to_tensors("np")``. Dtype casting is only supported for float tensors.
 
     Subclasses must use the ``@dataclass`` decorator and define typed fields for each output.
 
@@ -37,13 +40,13 @@ class PostProcessorOutput(UserDict):
             segmentation_scores: torch.Tensor
     """
 
+    skip_tensor_conversion: "list[str] | set[str] | None"
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Subclasses of PostProcessorOutput must use the @dataclass decorator
-        # This check is done in __init__ because the @dataclass decorator operates after __init_subclass__
-        # issubclass() would return True for issubclass(PostProcessorOutput, PostProcessorOutput) when False is needed
-        # Just need to check that the current class is not PostProcessorOutput
+        # Subclasses must use the @dataclass decorator.
+        # Note that dataclass subclasses generate their own __init__ and bypass this one.
         is_post_process_output_subclass = self.__class__ != PostProcessorOutput
 
         if is_post_process_output_subclass and not is_dataclass(self):
@@ -53,34 +56,30 @@ class PostProcessorOutput(UserDict):
             )
 
     def __post_init__(self):
-        # @dataclass generates its own __init__ which replaces UserDict.__init__, so self.data
-        # is never initialized. __post_init__ runs at the end of the generated __init__ after
-        # all fields are assigned, making it the right place to populate self.data so that
-        # dict-style access (obj["key"], iteration, len, etc.) works correctly.
-        self.data = {field.name: getattr(self, field.name) for field in fields(self)}
+        # Dataclasses generate their own __init__ which bypasses BatchFeature.__init__.
+        # We set any potentially missing attributes here to match BatchFeature.__init__.
+        if "data" not in self.__dict__:
+            # "data" is already populated through dataclass __init__.
+            # Add it here in case the dataclass doesn't have any fields.
+            super().__setattr__("data", {})
+        if "skip_tensor_conversion" not in self.__dict__:
+            super().__setattr__("skip_tensor_conversion", None)
 
     def __setattr__(self, name: str, value) -> None:
-        if is_dataclass(self):
-            if name == "data" and "data" in self.__dict__:
-                raise AttributeError(
-                    f"Cannot set 'data' directly on {self.__class__.__name__}. Update individual fields instead."
-                )
-            # Keep self.data in sync when a field is updated after construction (e.g. obj.scores = x).
-            elif "data" in self.__dict__ and name in {field.name for field in fields(self)}:
-                super().__setitem__(name, value)
-        super().__setattr__(name, value)
-
-    def __delitem__(self, key: str) -> None:
-        super().__delitem__(key)
-        if is_dataclass(self) and key in {field.name for field in fields(self)}:
-            object.__delattr__(self, key)
+        # Dataclass field values live in BatchFeature.data
+        if is_dataclass(self) and name in {field.name for field in fields(self)}:
+            if "data" not in self.__dict__:
+                super().__setattr__("data", {})
+            self.data[name] = value
+        else:
+            super().__setattr__(name, value)
 
     def __delattr__(self, name: str) -> None:
-        if is_dataclass(self) and name == "data":
-            raise AttributeError(f"Cannot delete 'data' on {self.__class__.__name__}.")
-        object.__delattr__(self, name)
-        if "data" in self.__dict__ and name in self.data:
+        # Dataclass field values live in BatchFeature.data
+        if is_dataclass(self) and "data" in self.__dict__ and name in self.data:
             del self.data[name]
+        else:
+            super().__delattr__(name)
 
 
 @dataclass
