@@ -234,13 +234,11 @@ class Param2MoERouter(nn.Module):
         else:  # "softmax"
             scores = torch.softmax(router_logits, dim=-1)
 
-        # ---- 3. Compute biased scores (used for routing decision only) ----
         if self.expert_bias is not None:
             scores_for_routing = scores + self.expert_bias.float()
         else:
             scores_for_routing = scores
 
-        # ---- 4. Group-limited top-k (no-op when n_group == 1) -------------
         if self.n_group > 1 and self.topk_group < self.n_group:
             num_tokens = hidden_states.shape[0]
             experts_per_group = self.num_experts // self.n_group
@@ -257,13 +255,10 @@ class Param2MoERouter(nn.Module):
             )
             scores_for_routing = scores_for_routing.masked_fill(~score_mask.bool(), 0.0)
 
-        # ---- 5. Select top-k experts using biased scores ------------------
         _, topk_idx = torch.topk(scores_for_routing, k=self.top_k, dim=-1, sorted=False)
 
-        # ---- 6. Gather *unbiased* scores as actual output weights ---------
         topk_weights = scores.gather(1, topk_idx)
 
-        # ---- 7. Normalize and scale ---------------------------------------
         if self.norm_topk_prob:
             topk_weights = topk_weights / (topk_weights.sum(dim=-1, keepdim=True) + 1e-9)
 

@@ -139,23 +139,17 @@ class Param2MoERouter(nn.Module):
         Returns:
             Tuple of (router_logits, topk_weights, topk_idx)
         """
-        # ---- 1. Compute raw logits in fp32 --------------------------------
         router_logits = F.linear(hidden_states.float(), self.weight.float())
-        # router_logits: [tokens, num_experts]
-
-        # ---- 2. Compute unbiased scores (used as output weights) ----------
         if self.score_function == "sigmoid":
             scores = torch.sigmoid(router_logits)
         else:  # "softmax"
             scores = torch.softmax(router_logits, dim=-1)
 
-        # ---- 3. Compute biased scores (used for routing decision only) ----
         if self.expert_bias is not None:
             scores_for_routing = scores + self.expert_bias.float()
         else:
             scores_for_routing = scores
 
-        # ---- 4. Group-limited top-k (no-op when n_group == 1) -------------
         if self.n_group > 1 and self.topk_group < self.n_group:
             num_tokens = hidden_states.shape[0]
             experts_per_group = self.num_experts // self.n_group
@@ -172,13 +166,10 @@ class Param2MoERouter(nn.Module):
             )
             scores_for_routing = scores_for_routing.masked_fill(~score_mask.bool(), 0.0)
 
-        # ---- 5. Select top-k experts using biased scores ------------------
         _, topk_idx = torch.topk(scores_for_routing, k=self.top_k, dim=-1, sorted=False)
 
-        # ---- 6. Gather *unbiased* scores as actual output weights ---------
         topk_weights = scores.gather(1, topk_idx)
 
-        # ---- 7. Normalize and scale ---------------------------------------
         if self.norm_topk_prob:
             topk_weights = topk_weights / (topk_weights.sum(dim=-1, keepdim=True) + 1e-9)
 
@@ -211,22 +202,12 @@ class Param2MoESparseMoeBlock(nn.Module):
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # Keep a reference for the shared expert residual addition
         residual = hidden_states
         batch_size, seq_len, hidden_dim = hidden_states.shape
-
-        # Flatten to [tokens, hidden_size] for the router and experts
         hidden_states_flat = hidden_states.view(-1, hidden_dim)
-
-        # Router: logits are captured automatically by OutputRecorder;
-        # we only consume the weights and indices here.
         _, routing_weights, selected_experts = self.gate(hidden_states_flat)
-
-        # Routed experts: sparse computation over selected_experts
         routed_output = self.experts(hidden_states_flat, selected_experts, routing_weights)
         routed_output = routed_output.view(batch_size, seq_len, hidden_dim)
-
-        # Shared expert: dense computation on all tokens, added to routed output
         hidden_states = routed_output + self.shared_experts(residual)
         return hidden_states
 
