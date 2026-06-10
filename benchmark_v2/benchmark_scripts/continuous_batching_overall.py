@@ -214,7 +214,7 @@ class BenchmarkResults:
                 inputs=data,
                 generation_config=gen_config,
                 continuous_batching_config=cb_config,
-                progress_bar=False,
+                progress_bar=True,
             )
             gen_start = min(out.created_time for out in outputs.values())
             gen_end = max(out.lifespan[1] for out in outputs.values())
@@ -317,78 +317,113 @@ if __name__ == "__main__":
     parser.add_argument("--model-id", type=str, default="meta-llama/Llama-3.1-8B-Instruct")
     parser.add_argument("--attn", type=str, default="kernels-community/flash-attn3")
     parser.add_argument("--tp-size", type=int, default=1, help="Tensor parallel size (1 = no TP).")
+    parser.add_argument(
+        "--rollouts-lengths",
+        "-rl",
+        type=int,
+        nargs="+",
+        help="If this is specified, only the rollouts benchmarks run, with the given sizes (in tokens).",
+    )
     cli_args = parser.parse_args()
 
     results = BenchmarkResults(model_id=cli_args.model_id, attn_impl=cli_args.attn, tp_size=cli_args.tp_size)
-
-    # GSM8K benchmarks (256 max new tokens) — gsm8k_platinum dataset, 8-shot, lighteval extractive_match
     tokenizer = AutoTokenizer.from_pretrained(cli_args.model_id, padding_side="left")
-    gsm8k_data, gsm8k_score_fn = get_tokenized_gsm8k(tokenizer)
 
-    ## No options
-    results.add_benchmark(
-        data=gsm8k_data,
-        max_new_tokens=256,
-        cb_config=ContinuousBatchingConfig(),
-        gen_config=GenerationConfig(eos_token_id=-1),
-        label="gsm8k_default",
-        score_fn=gsm8k_score_fn,
-    )
+    if cli_args.rollouts_lengths is not None:
+        rollouts_only = True
+        rollout_sizes = cli_args.rollouts_lengths
+    else:
+        rollouts_only = False
+        rollout_sizes = [1024, 2048, 4096, 8192, 16384]
 
-    ## With sampling. Recommended chat sampling (T=0.6, top_p=0.9), low enough that math reasoning isn't derailed
-    results.add_benchmark(
-        data=gsm8k_data,
-        max_new_tokens=256,
-        cb_config=ContinuousBatchingConfig(),
-        gen_config=GenerationConfig(eos_token_id=-1, do_sample=True, temperature=0.6, top_p=0.9),
-        label="gsm8k_sampling",
-        score_fn=gsm8k_score_fn,
-    )
+    if not rollouts_only:
+        # GSM8K benchmarks (256 max new tokens) — gsm8k_platinum dataset, 8-shot, lighteval extractive_match
+        gsm8k_data, gsm8k_score_fn = get_tokenized_gsm8k(tokenizer)
 
-    ## With compile
-    results.add_benchmark(
-        data=gsm8k_data,
-        max_new_tokens=256,
-        cb_config=ContinuousBatchingConfig(use_default_compile_configs=True),
-        gen_config=GenerationConfig(eos_token_id=-1),
-        label="gsm8k_compile",
-        score_fn=gsm8k_score_fn,
-    )
+        ## No options
+        results.add_benchmark(
+            data=gsm8k_data,
+            max_new_tokens=256,
+            cb_config=ContinuousBatchingConfig(),
+            gen_config=GenerationConfig(eos_token_id=-1),
+            label="gsm8k_default",
+            score_fn=gsm8k_score_fn,
+        )
 
-    ## No decode fast path
-    results.add_benchmark(
-        data=gsm8k_data,
-        max_new_tokens=256,
-        cb_config=ContinuousBatchingConfig(max_blocks_per_request=0),
-        gen_config=GenerationConfig(eos_token_id=-1),
-        label="gsm8k_no_fast_decode",
-        score_fn=gsm8k_score_fn,
-    )
+        ## With sampling. Recommended chat sampling (T=0.6, top_p=0.9), low enough that math reasoning isn't derailed
+        results.add_benchmark(
+            data=gsm8k_data,
+            max_new_tokens=256,
+            cb_config=ContinuousBatchingConfig(),
+            gen_config=GenerationConfig(eos_token_id=-1, do_sample=True, temperature=0.6, top_p=0.9),
+            label="gsm8k_sampling",
+            score_fn=gsm8k_score_fn,
+        )
 
-    ## Bare-bones CB config
-    results.add_benchmark(
-        data=gsm8k_data,
-        max_new_tokens=256,
-        cb_config=ContinuousBatchingConfig(max_blocks_per_request=0, use_async_batching=False, use_cuda_graph=False),
-        gen_config=GenerationConfig(eos_token_id=-1),
-        label="gsm8k_bare_bones",
-        score_fn=gsm8k_score_fn,
-    )
+        ## With compile
+        results.add_benchmark(
+            data=gsm8k_data,
+            max_new_tokens=256,
+            cb_config=ContinuousBatchingConfig(use_default_compile_configs=True),
+            gen_config=GenerationConfig(eos_token_id=-1),
+            label="gsm8k_compile",
+            score_fn=gsm8k_score_fn,
+        )
 
-    # IFEval: 0-shot chat prompts; uses real EOS so instruction-following metrics see the model's natural stop.
-    ifeval_data, ifeval_score_fn = get_tokenized_ifeval(tokenizer)
-    results.add_benchmark(
-        data=ifeval_data,
-        max_new_tokens=1280,
-        cb_config=ContinuousBatchingConfig(),
-        label="ifeval_default",
-        score_fn=ifeval_score_fn,
-    )
+        ## No decode fast path
+        results.add_benchmark(
+            data=gsm8k_data,
+            max_new_tokens=256,
+            cb_config=ContinuousBatchingConfig(max_blocks_per_request=0),
+            gen_config=GenerationConfig(eos_token_id=-1),
+            label="gsm8k_no_fast_decode",
+            score_fn=gsm8k_score_fn,
+        )
 
-    # Raw benchmarks (synthetic data, variable max new tokens)
+        ## Bare-bones CB config
+        results.add_benchmark(
+            data=gsm8k_data,
+            max_new_tokens=256,
+            cb_config=ContinuousBatchingConfig(
+                max_blocks_per_request=0, use_async_batching=False, use_cuda_graph=False
+            ),
+            gen_config=GenerationConfig(eos_token_id=-1),
+            label="gsm8k_bare_bones",
+            score_fn=gsm8k_score_fn,
+        )
+
+        # IFEval: 0-shot chat prompts; uses real EOS so instruction-following metrics see the model's natural stop.
+        ifeval_data, ifeval_score_fn = get_tokenized_ifeval(tokenizer)
+        results.add_benchmark(
+            data=ifeval_data,
+            max_new_tokens=1280,
+            cb_config=ContinuousBatchingConfig(),
+            label="ifeval_default",
+            score_fn=ifeval_score_fn,
+        )
+
+        # Raw benchmarks (various options)
+
+        ## Few blocks — tight cache pressure
+        results.add_benchmark(
+            data=get_random_data(batch_size=20, num_tokens=256),
+            max_new_tokens=256,
+            cb_config=ContinuousBatchingConfig(num_blocks=16),
+            gen_config=GenerationConfig(eos_token_id=-1),
+            label="few_blocks",
+        )
+
+        ## Multiple return sequences (sampling + parallel decoding)
+        results.add_benchmark(
+            data=get_random_data(batch_size=50, num_tokens=256),
+            max_new_tokens=256,
+            cb_config=ContinuousBatchingConfig(),
+            gen_config=GenerationConfig(eos_token_id=-1, do_sample=True, num_return_sequences=8),
+            label="multi_return_seq",
+        )
 
     ## RL rollouts: small batch, growing generation lengths
-    for length in [1024, 2048, 4096, 8192, 16384]:
+    for length in rollout_sizes:
         results.add_benchmark(
             data=get_random_data(batch_size=32, num_tokens=256),
             max_new_tokens=length,
@@ -396,24 +431,6 @@ if __name__ == "__main__":
             gen_config=GenerationConfig(eos_token_id=-1),
             label=f"rollouts_{length}",
         )
-
-    ## Few blocks — tight cache pressure
-    results.add_benchmark(
-        data=get_random_data(batch_size=20, num_tokens=256),
-        max_new_tokens=256,
-        cb_config=ContinuousBatchingConfig(num_blocks=16),
-        gen_config=GenerationConfig(eos_token_id=-1),
-        label="few_blocks",
-    )
-
-    ## Multiple return sequences (sampling + parallel decoding)
-    results.add_benchmark(
-        data=get_random_data(batch_size=50, num_tokens=256),
-        max_new_tokens=256,
-        cb_config=ContinuousBatchingConfig(),
-        gen_config=GenerationConfig(eos_token_id=-1, do_sample=True, num_return_sequences=8),
-        label="multi_return_seq",
-    )
 
     # Post processing and display. Only on rank 0 in TP runs to avoid duplicate output / file writes.
     is_rank_zero = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0

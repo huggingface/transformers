@@ -368,7 +368,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             continuous_batching_config=ContinuousBatchingConfig(block_size=16, num_blocks=8, max_batch_tokens=8),
             device=torch_device,
             tp_plan={},
-            distributed_helper=DistributedHelper(device_mesh=None),
+            distributed_helper=DistributedHelper(device_mesh=None, cpu_group_timeout=300),
         )
 
         # Overload cache parameters to match test scenario
@@ -495,7 +495,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
     def test_distributed_helper_no_dist(self) -> None:
         """Test that DistributedHelper falls back to a single-rank, TP-driver setup when distributed is not on."""
-        helper = DistributedHelper(device_mesh=None)
+        helper = DistributedHelper(device_mesh=None, cpu_group_timeout=300)
         self.assertFalse(helper.dist_on)
         self.assertEqual(helper.global_rank, 0)
         self.assertEqual(helper.world_size, 1)
@@ -511,7 +511,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         tensor = torch.tensor([1.0, 2.0])
         self.assertTrue(torch.equal(helper.tp_broadcast_from_rank_0(tensor), tensor))
         obj = {"some_request": "payload"}
-        self.assertIs(helper.tp_broadcast_object(obj), obj)
+        self.assertIs(helper.tp_broadcast_object_from_rank_0(obj), obj)
 
         # All-reduce-min should be a no-op without a TP group
         reduce_tensor = torch.tensor([7, 3], dtype=torch.int64)
@@ -520,7 +520,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
     def test_distributed_helper_set_tp_seed_no_dist(self) -> None:
         """Test that set_tp_seed sets a torch seed without distributed initialized, both with and without a user seed."""
-        helper = DistributedHelper(device_mesh=None)
+        helper = DistributedHelper(device_mesh=None, cpu_group_timeout=300)
 
         # Explicit seed: torch RNG state must be reproducible across calls
         helper.set_tp_seed(seed=42, model_device=torch.device("cpu"))
@@ -1179,6 +1179,36 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             text_fa3 = tokenizer.decode(out_fa3.generated_tokens, skip_special_tokens=True)
             self.assertEqual(text_fa2, text_fa3, f"Mismatch:\nFA2: {text_fa2}\nFA3: {text_fa3}")
 
+    @slow
+    @require_kernels
+    def test_decode_fast_path_wide_batch_parity(self) -> None:
+        """Decode-fast-path output must match varlen when more requests decode concurrently than
+        `max_blocks_per_request` (regression test for the `pad_to_pow2` cap truncating the decode batch)."""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        tokenizer, model = get_tokenizer_and_model(
+            model_id, "paged|kernels-community/flash-attn3", torch_device, torch.bfloat16
+        )
+        # 12 requests but only 4 blocks per request: the decode batch is wider than max_blocks_per_request
+        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES * 4, tokenizer, for_continuous_batching=True)
+        gen_config = GenerationConfig(do_sample=False, max_new_tokens=20)
+        # CUDA graphs enable input padding, which is where the truncation happened
+        cb_config = ContinuousBatchingConfig(block_size=256, num_blocks=64, use_cuda_graph=True)
+
+        cb_config.max_blocks_per_request = 0  # varlen reference
+        outputs_varlen = model.generate_batch(
+            inputs=input_ids, generation_config=gen_config, continuous_batching_config=cb_config
+        )
+        cb_config.max_blocks_per_request = 4  # decode fast path, narrower than the batch
+        outputs_fast = model.generate_batch(
+            inputs=input_ids, generation_config=gen_config, continuous_batching_config=cb_config
+        )
+
+        self.assertEqual(len(outputs_varlen), len(outputs_fast))
+        for (_, out_varlen), (_, out_fast) in zip(outputs_varlen.items(), outputs_fast.items()):
+            text_varlen = tokenizer.decode(out_varlen.generated_tokens, skip_special_tokens=True)
+            text_fast = tokenizer.decode(out_fast.generated_tokens, skip_special_tokens=True)
+            self.assertEqual(text_varlen, text_fast, f"Mismatch:\nvarlen: {text_varlen}\nfast: {text_fast}")
+
     @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
     @slow
     def test_per_request_logits_processors(self, use_cuda_graph: bool, use_async_batching: bool) -> None:
@@ -1472,9 +1502,9 @@ def _tp_continuous_batching_worker(
     ).eval()
 
     # Direct broadcast tests: only rank 0's value should propagate to every TP rank
-    helper = DistributedHelper(device_mesh=model._device_mesh)
+    helper = DistributedHelper(device_mesh=model._device_mesh, cpu_group_timeout=300)
 
-    received_obj = helper.tp_broadcast_object({"src_rank": rank})
+    received_obj = helper.tp_broadcast_object_from_rank_0({"src_rank": rank})
     assert received_obj == {"src_rank": 0}, f"tp_broadcast_object: rank {rank} got {received_obj}"
 
     sent_tensor = torch.tensor([float(rank)], device=model.device)
@@ -1538,7 +1568,7 @@ def _tp_cancellation_worker(
     use_cuda_graph: bool = False,
     use_async_batching: bool = False,
 ) -> None:
-    """Loads `model_id` with `tp_plan="auto"`, submits a long-running streaming request, and cancels it mid-flight.
+    """Loads `model_id` with `DistributedConfig(tp_size=...)`, submits a long-running streaming request, and cancels it mid-flight.
     The cancellation goes through the cancel-queue + `tp_broadcast_object` path: if the broadcast were broken, the
     non-driver rank's scheduler would not learn about the cancellation and the test would hang or crash on the next
     TP forward pass. Rank 0 owns the assertions."""
@@ -1601,12 +1631,12 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
     def tp_size(self) -> int:
         return min(torch.cuda.device_count(), 2)
 
-    def _run_cb_worker(self, **worker_kwargs) -> None:
+    def _run_cb_worker(self, max_new_tokens: int = 20, **worker_kwargs) -> None:
         """Spawn `_tp_continuous_batching_worker` on `tp_size` NCCL processes with sensible defaults."""
         defaults = {
             "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
             "attn_implementation": "sdpa",
-            "max_new_tokens": 20,
+            "max_new_tokens": max_new_tokens,
             "do_sample": False,
             "seed": 42,
             "use_cuda_graph": False,
@@ -1615,9 +1645,14 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         defaults.update(worker_kwargs)
         _init_distributed(tp=self.tp_size, backend="nccl")(_tp_continuous_batching_worker)(**defaults)
 
+    def test_continuous_batching_tp_fast(self) -> None:
+        """Test that continuous batching with `DistributedConfig(tp_size=...)` produces non-empty, reproducible greedy outputs and
+        that all TP ranks agree on the generated tokens."""
+        self._run_cb_worker(max_new_tokens=4)
+
     @slow
     def test_continuous_batching_tp_greedy(self) -> None:
-        """Test that continuous batching with `tp_plan="auto"` produces non-empty, reproducible greedy outputs and
+        """Test that continuous batching with `DistributedConfig(tp_size=...)` produces non-empty, reproducible greedy outputs and
         that all TP ranks agree on the generated tokens."""
         self._run_cb_worker()
 

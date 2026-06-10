@@ -31,6 +31,11 @@ RUN python3 -m pip uninstall -y transformer-engine
 # Uninstall `torch-tensorrt` shipped with the base image
 RUN python3 -m pip uninstall -y torch-tensorrt
 
+# Uninstall outdated `nvtx` (0.2.5 from /rapids/) shipped with the base image:
+# DeepSpeed calls `nvtx.get_domain` (added in 0.2.12) and will crash otherwise.
+# DeepSpeed falls back to `torch.cuda.nvtx` when the standalone package is absent.
+RUN python3 -m pip uninstall -y nvtx
+
 # recompile apex
 RUN python3 -m pip uninstall -y apex
 # RUN git clone https://github.com/NVIDIA/apex

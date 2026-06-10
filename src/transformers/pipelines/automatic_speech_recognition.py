@@ -591,7 +591,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             outputs = self.model.generate(**inputs)
             out = {"tokens": outputs.sequences}
         else:
-            raise ValueError("Unsupported model type {self.type}.")
+            raise ValueError(f"Unsupported model type {self.type}.")
 
         # Leftover
         extra = model_inputs

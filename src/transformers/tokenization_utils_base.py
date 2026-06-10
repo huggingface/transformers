@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic, NamedTuple, Union, overload
 
 import numpy as np
-from huggingface_hub import create_repo, is_offline_mode, list_repo_files
+from huggingface_hub import is_offline_mode
 from packaging import version
 from typing_extensions import TypeVar
 
@@ -49,6 +49,7 @@ from .utils import (
     cached_file,
     copy_func,
     extract_commit_hash,
+    hf_api,
     is_mlx_available,
     is_numpy_array,
     is_protobuf_available,
@@ -1682,7 +1683,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         remote_files = []
         if not is_local and not local_files_only:
             try:
-                remote_files = list_repo_files(pretrained_model_name_or_path, revision=revision)
+                remote_files = hf_api().list_repo_files(pretrained_model_name_or_path, revision=revision)
             except Exception:
                 remote_files = []
         elif pretrained_model_name_or_path and os.path.isdir(pretrained_model_name_or_path):
@@ -2027,7 +2028,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         tokenizer_config_file = os.path.join(
@@ -3444,9 +3445,7 @@ def find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs):
     # Hub listing if allowed
     if not local_files_only:
         try:
-            from huggingface_hub import list_repo_tree
-
-            entries = list_repo_tree(
+            entries = hf_api().list_repo_tree(
                 repo_id=pretrained_model_name_or_path,
                 revision=kwargs.get("revision"),
                 path_in_repo=subfolder if subfolder else None,

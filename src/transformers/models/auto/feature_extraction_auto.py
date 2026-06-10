@@ -23,6 +23,7 @@ from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, cached_file, logging, safe_load_json_file
 from .auto_factory import _LazyAutoMapping
+from .auto_mappings import FEATURE_EXTRACTOR_MAPPING_NAMES
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
@@ -33,67 +34,45 @@ from .configuration_auto import (
 
 logger = logging.get_logger(__name__)
 
-FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
+MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
-        ("audio-spectrogram-transformer", "ASTFeatureExtractor"),
         ("audioflamingo3", "WhisperFeatureExtractor"),
-        ("clap", "ClapFeatureExtractor"),
-        ("clvp", "ClvpFeatureExtractor"),
-        ("cohere_asr", "CohereAsrFeatureExtractor"),
         ("csm", "EncodecFeatureExtractor"),
-        ("dac", "DacFeatureExtractor"),
         ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
-        ("dia", "DiaFeatureExtractor"),
-        ("encodec", "EncodecFeatureExtractor"),
-        ("gemma3n", "Gemma3nAudioFeatureExtractor"),
-        ("gemma4", "Gemma4AudioFeatureExtractor"),
         ("glmasr", "WhisperFeatureExtractor"),
-        ("granite_speech", "GraniteSpeechFeatureExtractor"),
         ("granite_speech_plus", "GraniteSpeechFeatureExtractor"),
         ("higgs_audio_v2_tokenizer", "DacFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
-        ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
         ("lasr_ctc", "LasrFeatureExtractor"),
         ("lasr_encoder", "LasrFeatureExtractor"),
-        ("markuplm", "MarkupLMFeatureExtractor"),
         ("mimi", "EncodecFeatureExtractor"),
         ("moonshine", "Wav2Vec2FeatureExtractor"),
         ("moshi", "EncodecFeatureExtractor"),
         ("musicgen", "EncodecFeatureExtractor"),
-        ("musicgen_melody", "MusicgenMelodyFeatureExtractor"),
         ("parakeet_ctc", "ParakeetFeatureExtractor"),
         ("parakeet_encoder", "ParakeetFeatureExtractor"),
         ("parakeet_rnnt", "ParakeetFeatureExtractor"),
         ("parakeet_tdt", "ParakeetFeatureExtractor"),
         ("pe_audio", "PeAudioFeatureExtractor"),
         ("pe_audio_video", "PeAudioFeatureExtractor"),
-        ("phi4_multimodal", "Phi4MultimodalFeatureExtractor"),
-        ("pop2piano", "Pop2PianoFeatureExtractor"),
         ("qwen2_5_omni", "WhisperFeatureExtractor"),
         ("qwen2_audio", "WhisperFeatureExtractor"),
         ("qwen3_omni_moe", "WhisperFeatureExtractor"),
-        ("seamless_m4t", "SeamlessM4TFeatureExtractor"),
         ("seamless_m4t_v2", "SeamlessM4TFeatureExtractor"),
         ("sew", "Wav2Vec2FeatureExtractor"),
         ("sew-d", "Wav2Vec2FeatureExtractor"),
-        ("speech_to_text", "Speech2TextFeatureExtractor"),
-        ("speecht5", "SpeechT5FeatureExtractor"),
         ("unispeech", "Wav2Vec2FeatureExtractor"),
         ("unispeech-sat", "Wav2Vec2FeatureExtractor"),
-        ("univnet", "UnivNetFeatureExtractor"),
-        ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerFeatureExtractor"),
         ("vibevoice_asr", "VibeVoiceAcousticTokenizerFeatureExtractor"),
         ("voxtral", "WhisperFeatureExtractor"),
-        ("voxtral_realtime", "VoxtralRealtimeFeatureExtractor"),
-        ("wav2vec2", "Wav2Vec2FeatureExtractor"),
         ("wav2vec2-bert", "Wav2Vec2FeatureExtractor"),
         ("wav2vec2-conformer", "Wav2Vec2FeatureExtractor"),
         ("wavlm", "Wav2Vec2FeatureExtractor"),
-        ("whisper", "WhisperFeatureExtractor"),
         ("xcodec", "DacFeatureExtractor"),
     ]
 )
 
+FEATURE_EXTRACTOR_MAPPING_NAMES.update(MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES)
 FEATURE_EXTRACTOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FEATURE_EXTRACTOR_MAPPING_NAMES)
 
 
