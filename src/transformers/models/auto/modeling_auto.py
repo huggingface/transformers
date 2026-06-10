@@ -126,6 +126,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("detr", "DetrModel"),
         ("dia", "DiaModel"),
         ("diffllama", "DiffLlamaModel"),
+        ("diffusion_gemma", "DiffusionGemmaModel"),
         ("dinat", "DinatModel"),
         ("dinov2", "Dinov2Model"),
         ("dinov2_with_registers", "Dinov2WithRegistersModel"),

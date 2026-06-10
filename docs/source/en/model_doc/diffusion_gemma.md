@@ -127,6 +127,21 @@ model.generate(**inputs, max_new_tokens=256, streamer=streamer)
 [[autodoc]] DiffusionGemmaModel
     - forward
 
+## DiffusionGemmaEncoderModel
+
+[[autodoc]] DiffusionGemmaEncoderModel
+    - forward
+
+## DiffusionGemmaEncoderTextModel
+
+[[autodoc]] DiffusionGemmaEncoderTextModel
+    - forward
+
+## DiffusionGemmaDecoderModel
+
+[[autodoc]] DiffusionGemmaDecoderModel
+    - forward
+
 ## DiffusionGemmaForBlockDiffusion
 
 [[autodoc]] DiffusionGemmaForBlockDiffusion

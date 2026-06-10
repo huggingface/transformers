@@ -89,6 +89,11 @@ class DiffusionGemmaTextConfig(Gemma4TextConfig):
     model_type = "diffusion_gemma_text"
     final_logit_softcapping = 30.0
 
+    base_model_pp_plan = {
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+
     enable_moe_block = AttributeError()
     attention_k_eq_v = AttributeError()
     use_double_wide_mlp = AttributeError()
@@ -820,6 +825,9 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
         self.vision_tower = AutoModel.from_config(config.vision_config)
         self.embed_vision = DiffusionGemmaMultimodalEmbedder(config.vision_config, config.text_config)
 
+        # Initialize weights and apply final processing
+        self.post_init()
+
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1427,5 +1435,8 @@ __all__ = [
     "DiffusionGemmaConfig",
     "DiffusionGemmaPreTrainedModel",
     "DiffusionGemmaModel",
+    "DiffusionGemmaDecoderModel",
+    "DiffusionGemmaEncoderModel",
+    "DiffusionGemmaEncoderTextModel",
     "DiffusionGemmaForBlockDiffusion",
 ]

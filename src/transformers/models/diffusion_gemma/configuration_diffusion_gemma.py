@@ -75,8 +75,8 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
         "layers.*.experts.down_proj": "grouped_gemm",
         "layers.*.experts": "moe_tp_experts",
     }
+
     base_model_pp_plan = {
-        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }

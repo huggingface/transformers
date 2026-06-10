@@ -993,6 +993,9 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
         self.vision_tower = AutoModel.from_config(config.vision_config)
         self.embed_vision = DiffusionGemmaMultimodalEmbedder(config.vision_config, config.text_config)
 
+        # Initialize weights and apply final processing
+        self.post_init()
+
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
     def get_image_features(
@@ -1632,4 +1635,11 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
         )
 
 
-__all__ = ["DiffusionGemmaPreTrainedModel", "DiffusionGemmaModel", "DiffusionGemmaForBlockDiffusion"]
+__all__ = [
+    "DiffusionGemmaPreTrainedModel",
+    "DiffusionGemmaModel",
+    "DiffusionGemmaDecoderModel",
+    "DiffusionGemmaEncoderModel",
+    "DiffusionGemmaEncoderTextModel",
+    "DiffusionGemmaForBlockDiffusion",
+]
