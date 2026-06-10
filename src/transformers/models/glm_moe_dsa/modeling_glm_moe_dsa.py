@@ -350,8 +350,8 @@ class GlmMoeDsaAttention(nn.Module):
     DeepSeek-V3 MLA + a DSA indexer, extended with **cross-layer top-k sharing**.
 
     `config.indexer_types[layer_idx]` decides whether this layer runs its own indexer (`"full"`) or
-    reuses the previous full layer's top-k selection (`"shared"`). Shared layers have no indexer of
-    their own (`self.indexer is None`); `next_skip_topk` signals that the *next* layer will reuse this
+    reuses the previous full layer's top-k selection (`"shared"`).
+    `next_skip_topk` signals that the *next* layer will reuse this
     layer's top-k, so it is propagated upward via `prev_topk_indices`.
     """
 
@@ -405,10 +405,6 @@ class GlmMoeDsaAttention(nn.Module):
                 self.scaling = self.scaling * mscale * mscale
         # Refer: https://arxiv.org/abs/2603.12201 for more details.
         self.skip_topk = config.indexer_types[layer_idx] == "shared"
-        self.next_skip_topk = (
-            config.indexer_types[layer_idx + 1] == "shared" if layer_idx < len(config.indexer_types) - 1 else False
-        )
-        # `"full"` layers run their own indexer; `"shared"` layers carry none and reuse the previous top-k.
         self.indexer = None if self.skip_topk else GlmMoeDsaIndexer(config, layer_idx)
 
     def forward(
@@ -493,7 +489,7 @@ class GlmMoeDsaAttention(nn.Module):
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights, topk_indices if self.next_skip_topk else None
+        return attn_output, attn_weights, topk_indices
 
 
 class GlmMoeDsaMLP(nn.Module):
