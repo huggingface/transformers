@@ -18,8 +18,8 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import BitsAndBytesConfig, Cache, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+from transformers import Cache, is_torch_available
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import (
@@ -175,14 +175,13 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 class DeepseekV32IntegrationTest(unittest.TestCase):
     def test_deepseek_v32(self):
-        EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors.\n\nAttention functions are used in a variety of applications, including natural language processing, computer vision, and reinforcement learning.\n\nThe attention function is a function that takes a query and a set of key-value pairs as input and outputs a vector']  # fmt: skip
+        EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key. The output is computed as a weighted sum of the values, where the weight assigned to']  # fmt: skip
 
         tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp")
         model = DeepseekV32ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V3.2-Exp",
-            device_map=torch_device,
+            device_map="auto",
             dtype=torch.bfloat16,
-            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         )
 
         input_text = [
@@ -199,25 +198,24 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
 
         model = DeepseekV32ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V3.2-Exp",
-            device_map=torch_device,
+            device_map="auto",
             dtype=torch.bfloat16,
-            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
             attn_implementation="eager",
         )
 
         with torch.no_grad():
-            out = model(torch.tensor([input_ids]).to(torch_device))
+            out = model(torch.tensor([input_ids]).to(model.device))
 
-        EXPECTED_MEAN = torch.tensor([[-6.1232, -5.0952, -4.4493, -2.6536, -2.0608, -2.3991, -3.8013, -2.8681]], device=torch_device)  # fmt: skip
+        EXPECTED_MEAN = torch.tensor([[5.0182, 6.1787, 5.3601, 5.7569, 5.7146, 5.1751, 4.2580, 3.3002]], device=out.logits.device)  # fmt: skip
         torch.testing.assert_close(out.logits.float().mean(-1), EXPECTED_MEAN, atol=1e-3, rtol=1e-3)
 
-        EXPECTED_SLICE = torch.tensor([-1.2500, -0.9961, -0.0194, -3.1562,  1.2812, -2.7656, -0.8438, -3.0469, -2.7812, -0.6328, -0.4160, -1.9688, -2.4219, -1.0391, -3.8906], device=torch_device)  # fmt: skip
+        EXPECTED_SLICE = torch.tensor([17.3750, 12.4375,  2.1406, 15.0625, 13.5625, 14.8750, 13.7500, 13.6250, 13.5625, 14.0000, 13.0000, 15.1875, 13.6250, 13.3750, 15.3750], device=out.logits.device)  # fmt: skip
         torch.testing.assert_close(out.logits[0, 0, :15].float(), EXPECTED_SLICE, atol=1e-3, rtol=1e-3)
 
     def test_batch_fa2(self):
         EXPECTED_TEXT = [
-            "Simply put, the theory of relativity states that \nthe laws of physics are the same for all observers, regardless of their \nrelative motion.\nThe theory of relativity is a theory of space, time, and gravity.\nThe theory of",  # fmt: skip
-            "My favorite all time favorite condiment is ketchup. I love ketchup. I love ketchup on my hot dogs, hamburgers, french fries, and even on my eggs. I love ketchup. I love ketchup so much that I",  # fmt: skip
+            "Simply put, the theory of relativity states that 1) the laws of physics are the same for all observers, and 2) the speed of light in a vacuum is the same for all observers, regardless of their motion or the motion of the",  # fmt: skip
+            "My favorite all time favorite condiment is ketchup. I love it. I love it. I love it. I love it. I love it. I love it. I love it. I love it. I love it. I love it.",  # fmt: skip
         ]
 
         prompts = [
@@ -225,14 +223,13 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
             "My favorite all time favorite condiment is ketchup.",
         ]
         tokenizer = AutoTokenizer.from_pretrained(
-            "deepseek-ai/DeepSeek-V3.2-Exp", pad_token="</s>", padding_side="right"
+            "deepseek-ai/DeepSeek-V3.2-Exp", pad_token="</s>", padding_side="left"
         )
 
         model = DeepseekV32ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V3.2-Exp",
-            device_map=torch_device,
+            device_map="auto",
             dtype=torch.bfloat16,
-            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
