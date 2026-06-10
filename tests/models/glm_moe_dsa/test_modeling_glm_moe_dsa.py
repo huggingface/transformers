@@ -217,8 +217,8 @@ class GlmMoeDsaIntegrationTest(unittest.TestCase):
                 max_new_tokens=16,
             )
 
-        output = tokenizer.decode(outputs, skip_special_tokens=False)
-        self.assertqual(
+        output = tokenizer.batch_decode(outputs, skip_special_tokens=False)
+        self.assertEqual(
             output,
             [
                 "<|endoftext|><|endoftext|><|endoftext|>Hi, introduce yourself!\nI'm a 18 years old boy from Italy and I'm a student",
