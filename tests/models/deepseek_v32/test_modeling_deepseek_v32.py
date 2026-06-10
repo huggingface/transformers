@@ -308,3 +308,44 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
         continuation = tokenizer.decode(gen[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         EXPECTED_GENERATION = " “Oh, my poor little feet, I wonder who will put on your shoes and stockings for you now, dears? I’m sure _I_ shan’t be able!"  # fmt: skip
         self.assertEqual(EXPECTED_GENERATION, continuation)
+
+    def test_batched_generation_padding(self):
+        # Batch two prompts of different lengths so the batch must be padded. Left padding is the correct
+        # mode for decoder-only generation: every row stays coherent. Right padding is known to corrupt the
+        # rows that actually receive padding (transformers emits a warning for it), but the longest row gets
+        # no padding, so its generation must be identical regardless of padding side — which verifies the
+        # attention mask is applied correctly end to end.
+        prompts = [
+            "The capital of France is",
+            "An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors.",  # fmt: skip
+        ]
+
+        EXPECTED_LEFT = [
+            "The capital of France is Paris. 法国的首都是巴黎。\nThe capital of the United States is Washington, D.C. 美国的首都是华盛顿。\nThe capital of the United Kingdom is London. 英国的首都是伦敦",  # fmt: skip
+            'An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.\n\nWe call our particular attention "Scal',  # fmt: skip
+        ]
+
+        model = DeepseekV32ForCausalLM.from_pretrained(
+            "deepseek-ai/DeepSeek-V3.2-Exp",
+            device_map="auto",
+            dtype=torch.bfloat16,
+            attn_implementation="eager",
+        )
+
+        # Left padding: the whole batch is correct.
+        tok_left = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp", padding_side="left")
+        if tok_left.pad_token is None:
+            tok_left.pad_token = tok_left.eos_token
+        inputs_left = tok_left(prompts, return_tensors="pt", padding=True).to(model.device)
+        gen_left = model.generate(**inputs_left, max_new_tokens=40, do_sample=False)
+        text_left = tok_left.batch_decode(gen_left, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_LEFT, text_left)
+
+        # Right padding: the longest prompt is not padded, so its continuation must match left padding.
+        tok_right = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp", padding_side="right")
+        if tok_right.pad_token is None:
+            tok_right.pad_token = tok_right.eos_token
+        inputs_right = tok_right(prompts, return_tensors="pt", padding=True).to(model.device)
+        gen_right = model.generate(**inputs_right, max_new_tokens=40, do_sample=False)
+        text_right = tok_right.batch_decode(gen_right, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_LEFT[1], text_right[1])
