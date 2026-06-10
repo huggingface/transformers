@@ -85,5 +85,5 @@ if __name__ == "__main__":
         if len(d[start:end]) > 0:
             model_splits.append(d[start:end])
 
-    model_splits = [["models/afmoe"] * 16]
+    model_splits = [["models/phimoe"] * 1]
     print(model_splits)
