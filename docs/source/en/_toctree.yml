@@ -1227,6 +1227,8 @@
         title: DeepseekVLHybrid
       - local: model_doc/deplot
         title: DePlot
+      - local: model_doc/diffusion_gemma
+        title: DiffusionGemma
       - local: model_doc/donut
         title: Donut
       - local: model_doc/edgetam
