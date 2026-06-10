@@ -131,7 +131,7 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             self.mlp_layer_types = ["dense"] * n_dense + ["sparse"] * (self.num_hidden_layers - n_dense)
         # Every layer is DSA — drives cache-class dispatch.
         if self.layer_types is None:
-            self.layer_types = ["dynamic_sparse_attention"] * self.num_hidden_layers
+            self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
         # Default to MoE from the second layer and on
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)

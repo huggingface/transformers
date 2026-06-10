@@ -153,7 +153,7 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
             self.mlp_layer_types = ["dense"] * n_dense + ["sparse"] * (self.num_hidden_layers - n_dense)
         # Every layer is DSA — drives cache-class dispatch.
         if self.layer_types is None:
-            self.layer_types = ["dynamic_sparse_attention"] * self.num_hidden_layers
+            self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
         super().__post_init__(**kwargs)
 
 
@@ -203,21 +203,17 @@ class DeepseekV32Indexer(nn.Module):
         self.index_topk: int = config.index_topk
         self.q_lora_rank: int = config.q_lora_rank
 
-        # Named to match checkpoint: wq_b, wk, k_norm
         self.wq_b = nn.Linear(self.q_lora_rank, self.n_heads * self.head_dim, bias=False)
         self.wk = nn.Linear(self.hidden_size, self.head_dim, bias=False)
         self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
-        # Named to match checkpoint: weights_proj
-        # In the reference, this is fp32; the HF FP8 checkpoint stores a bf16 tensor.
-        # Keeping it as a plain Linear prevents FP8 conversion (see `_keep_in_fp32_modules`).
         self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
         self.softmax_scale = self.head_dim**-0.5
 
     @torch.no_grad()
     def forward(
         self,
-        hidden_states: torch.Tensor,  # [B, S, hidden]
-        q_resid: torch.Tensor,  # [B, S, q_lora_rank]
+        hidden_states: torch.Tensor,
+        q_resid: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         position_ids: torch.Tensor,
@@ -247,23 +243,17 @@ class DeepseekV32Indexer(nn.Module):
         """
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
-
-        # === Queries ===
         q = self.wq_b(q_resid)  # [B, S, H*D]
         q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
-        q_pe, q_nope = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+        q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-        # === Keys ===
         k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
-        k_pe, k_nope = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+        k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-        # Interleaved RoPE on the rope slice of q / k (single-head k), then recombine.
-        q_pe, k_pe = apply_rotary_pos_emb_interleave(q_pe, k_pe, cos, sin, unsqueeze_dim=2)
-        q = torch.cat([q_pe, q_nope], dim=-1)  # [B, S, H, D]
-        k = torch.cat([k_pe, k_nope], dim=-1).squeeze(2)  # [B, S, D]
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
+        k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
 
-        # The indexer key cache lives on the per-layer indexed cache layer (not on the module), so it
-        # integrates with the shared cache and offloading / beam-search / crop bookkeeping.
         if past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)
 
@@ -277,10 +267,7 @@ class DeepseekV32Indexer(nn.Module):
         # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
-        # The indexer must select only top-k keys at or before each query. When an explicit mask is passed
-        # (eager, or any padded/packed input) it already encodes causality + padding, so use it directly.
-        # SDPA may instead defer plain causality to `is_causal` and pass no mask; in that (unpadded) case we
-        # reconstruct causality from `position_ids` (key `t` sits at absolute position `t`).
+        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
         if attention_mask is not None:
             index_scores = index_scores + attention_mask
         else:
@@ -289,12 +276,14 @@ class DeepseekV32Indexer(nn.Module):
             index_scores = index_scores.masked_fill(causal, float("-inf"))
 
         topk = min(self.index_topk, index_scores.shape[-1])
-        # diff with classic attention, sample don't project :wink:
         return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
 
 
 class DeepseekV32Attention(DeepseekV3Attention):
-    """DeepSeek-V3 MLA, with a DSA indexer whose top-k sparse mask is folded into the attention mask."""
+    """
+    DeepSeek-V3 MLA, with a DSA indexer whose top-k sparse mask is folded into the attention mask.
+    Qlora rank formulation is dropped as it is never used in released models.
+    """
 
     def __init__(self, config: DeepseekV32Config, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -313,7 +302,6 @@ class DeepseekV32Attention(DeepseekV3Attention):
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
         key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
 
-        # ===== Query / KV projections (MLA) =====
         q_resid = self.q_a_layernorm(self.q_a_proj(hidden_states))
         q_states = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
@@ -334,15 +322,12 @@ class DeepseekV32Attention(DeepseekV3Attention):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        # ===== DSA: select the top-k tokens per query =====
         # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
         indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
         topk_indices = self.indexer(
             hidden_states, q_resid, position_embeddings, indexer_mask, position_ids, past_key_values=past_key_values
         )  # [B, S, topk]
 
-        # The dense eager / SDPA paths apply sparsity as an additive `-inf` mask (materialized here, so it
-        # shows up in output recorders); the `flash-mla` kernel instead gathers the top-k tokens itself.
         sparse_indices = None
         if self.config._attn_implementation in ("eager", "sdpa"):
             index_mask = torch.full(
@@ -352,7 +337,7 @@ class DeepseekV32Attention(DeepseekV3Attention):
                 dtype=hidden_states.dtype,
             )
             index_mask = index_mask.scatter(-1, topk_indices.long(), 0.0).unsqueeze(1)  # [B, 1, S, T]
-            attention_mask = attention_mask + index_mask if attention_mask is not None else index_mask
+            attention_mask = attention_mask.masked_fill(index_mask, float("-inf")) if attention_mask is not None else index_mask
         else:
             sparse_indices = topk_indices
 
@@ -367,7 +352,7 @@ class DeepseekV32Attention(DeepseekV3Attention):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            indices=sparse_indices,  # consumed by flash_mla_with_kvcache; ignored by eager / SDPA
+            indices=sparse_indices,
             **kwargs,
         )
 
@@ -381,16 +366,12 @@ class DeepseekV32DecoderLayer(Glm4MoeLiteDecoderLayer):
 
 
 class DeepseekV32PreTrainedModel(DeepseekV3PreTrainedModel):
-    # NOTE: FP8 quantization uses `_keep_in_fp32_modules` (not `_strict`) to decide which modules to NOT convert.
-    # We must keep `indexer.weights_proj` as a plain Linear to match the checkpoint (no `weight_scale_inv`).
     _keep_in_fp32_modules = ["indexer.weights_proj"]
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
     _supports_flex_attn = False
-    _compatible_flash_implementations = ["kernels-community/flash-mla"]
-
 
 class DeepseekV32Model(DeepseekV3Model):
     pass

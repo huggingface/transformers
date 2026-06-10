@@ -11,14 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""GLM-MoE-DSA: DeepSeek-V3.2's sparse attention plus cross-layer indexer top-k sharing.
-
-GLM-MoE-DSA reuses DeepSeek-V3.2's DSA stack (`models/deepseek_v32`) and adds its own innovation on
-top: a per-layer `indexer_types` schedule (`"full"` / `"shared"`) where `"shared"` layers skip running
-their own indexer and instead reuse the previous full layer's index mask (`skip_topk` / `next_skip_topk`
-/ `prev_index_mask`), saving the per-layer indexer Q/K compute on long-context decoding (see arXiv
-2603.12201).
-"""
 
 from collections.abc import Callable
 
@@ -213,8 +205,6 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
         else:
             topk_indices = prev_topk_indices
 
-        # Dense eager / SDPA paths materialize the additive `-inf` mask (visualizable); `flash-mla` gathers
-        # the top-k tokens itself.
         sparse_indices = None
         if self.config._attn_implementation in ("eager", "sdpa"):
             index_mask = torch.full(
@@ -257,7 +247,7 @@ class GlmMoeDsaDecoderLayer(DeepseekV32DecoderLayer):
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        prev_topk_indices: torch.Tensor | None = None,
+        prev_topk_indices: torch.Tensor | None = None, # MAIN DIFF with DSV3.2
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         residual = hidden_states
@@ -270,12 +260,11 @@ class GlmMoeDsaDecoderLayer(DeepseekV32DecoderLayer):
             past_key_values=past_key_values,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
-            prev_topk_indices=prev_topk_indices,
+            prev_topk_indices=prev_topk_indices, # MAIN DIFF with DSV3.2
             **kwargs,
         )
         hidden_states = residual + hidden_states
 
-        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
@@ -323,8 +312,7 @@ class GlmMoeDsaModel(DeepseekV32Model):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        # Thread the previous full layer's top-k selection through `"shared"` layers.
-        topk_indices = None
+        topk_indices = None # MAIN DIFF with DSV3.2
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states, topk_indices = decoder_layer(
                 hidden_states,
@@ -333,7 +321,7 @@ class GlmMoeDsaModel(DeepseekV32Model):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                prev_topk_indices=topk_indices,
+                prev_topk_indices=topk_indices, # MAIN DIFF with DSV3.2
                 **kwargs,
             )
 

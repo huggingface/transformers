@@ -284,7 +284,7 @@ class DynamicIndexedLayer(DynamicLayer):
     """
 
     # Auto-registers in ``LAYER_TYPE_CACHE_MAPPING`` so ``DynamicCache`` dispatches DSA layers here.
-    layer_type = "dynamic_sparse_attention"
+    layer_type = "deepseek_sparse_attention"
 
     def __init__(self, config: PreTrainedConfig | None = None):
         super().__init__(config)
@@ -1578,7 +1578,7 @@ class StaticCache(Cache):
             # LinearAttention layers are static by essence - using `"moe"` as well is a trick, see the comment about it on DynamicCache
             elif layer_type in ("mamba", "conv", "linear_attention", "moe"):
                 layer = LinearAttentionLayer()
-            elif layer_type == "dynamic_sparse_attention":
+            elif layer_type == "deepseek_sparse_attention":
                 # Static / compile-friendly indexed layer (preallocated indexer key cache).
                 layer = StaticIndexedLayer(max_cache_len=max_cache_len)
             else:

@@ -123,14 +123,10 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     num_experts: int = 256
     head_dim: int = 64
     first_k_dense_replace: int = 3
-    # ``layer_types`` drives cache-class dispatch: every layer is DSA, so each gets a
-    # ``DynamicIndexedLayer`` / ``StaticIndexedLayer`` via ``LAYER_TYPE_CACHE_MAPPING``.
     layer_types: list[str] | None = None
-    # `"full"` runs the indexer, `"shared"` reuses the previous full layer's index mask.
     indexer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
-        # Per-layer indexer mode: a pattern (e.g. `"FSSF..."`) overrides the freq/offset schedule.
         if self.indexer_types is None:
             pattern = kwargs.get("index_topk_pattern")
             if pattern is not None:
@@ -150,7 +146,7 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             self.mlp_layer_types = ["dense"] * n_dense + ["sparse"] * (self.num_hidden_layers - n_dense)
         # Every layer is DSA — drives cache-class dispatch.
         if self.layer_types is None:
-            self.layer_types = ["dynamic_sparse_attention"] * self.num_hidden_layers
+            self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
         # Default to MoE from the second layer and on
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)

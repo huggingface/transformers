@@ -1446,9 +1446,7 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "chunked_attention": create_chunked_causal_mask,
     "compressed_sparse_attention": create_sliding_window_causal_mask,
     "heavily_compressed_attention": create_sliding_window_causal_mask,
-    # DSA (DeepSeek Sparse Attention) layers are causal at the mask level; the top-k token
-    # sparsification is applied separately inside the indexer, not via the layer mask.
-    "dynamic_sparse_attention": create_causal_mask,
+    "deepseek_sparse_attention": create_causal_mask,
 }
 
 
@@ -1506,8 +1504,7 @@ def create_masks_for_generate(
     }
 
     # If the attribute exist, we need several masks - unless every layer shares the same type, in which
-    # case we return a single mask (e.g. fully-DSA models set `layer_types` only to drive cache dispatch,
-    # and their forward consumes a single causal mask, not a per-pattern dict).
+    # case we return a single mask.
     if hasattr(effective_config, "layer_types"):
         layer_patterns = set(effective_config.layer_types)
         if len(layer_patterns) == 1:
