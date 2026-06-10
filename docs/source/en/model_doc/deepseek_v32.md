@@ -49,6 +49,9 @@ The indexer keeps its own small per-token key cache (single-head, `index_head_di
 
 In DeepSeek-V3.2 **every layer runs its own indexer** — there is no cross-layer top-k sharing.
 
+> [!NOTE]
+> **The MLA query LoRA path (`q_lora_rank`) is required.** The indexer scores queries from the low-rank query latent `q_a_layernorm(q_a_proj(x))` (its `wq_b` projection is sized by `q_lora_rank`), so the model always uses the LoRA query path and `q_lora_rank` must be set — the released checkpoint uses `1536`. The optional non-LoRA `q_proj` path that [DeepSeek-V3](./deepseek_v3) exposes for `q_lora_rank=None` is **not supported** here: without the query latent there is nothing for the indexer to consume.
+
 ## Usage examples
 
 DeepSeek-V3.2-Exp is distributed as an FP8 checkpoint. The indexer projections are kept out of FP8 quantization, since the checkpoint stores them in bf16/fp32:
