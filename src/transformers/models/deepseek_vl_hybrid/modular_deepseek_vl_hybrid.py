@@ -22,7 +22,6 @@ import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import PilBackend, TorchvisionBackend
@@ -250,10 +249,12 @@ class DeepseekVLHybridModel(DeepseekVLModel):
     def get_high_res_image_features(
         self,
         pixel_values: torch.FloatTensor,
+        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         high_res_outputs = self.high_res_vision_model(
             pixel_values=pixel_values,
+            output_hidden_states=True,  # Ignore arg on purpose
             return_dict=True,
             **kwargs,
         )
@@ -275,7 +276,6 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         return high_res_outputs
 
     @can_return_tuple
-    @filter_output_hidden_states
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def get_image_features(
         self,

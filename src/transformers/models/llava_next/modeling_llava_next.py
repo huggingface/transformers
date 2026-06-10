@@ -22,7 +22,6 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
@@ -333,7 +332,6 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
-    @filter_output_hidden_states
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -343,6 +341,7 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -377,6 +376,7 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
 
         image_outputs = self.vision_tower(
             pixel_values,
+            output_hidden_states=True,  # Ignore arg on purpose
             return_dict=True,
             **kwargs,
         )

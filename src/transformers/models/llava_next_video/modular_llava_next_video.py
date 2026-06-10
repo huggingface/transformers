@@ -30,7 +30,6 @@ from transformers.models.llava_next.modeling_llava_next import (
     image_size_to_num_patches,
 )
 
-from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -228,7 +227,6 @@ class LlavaNextVideoModel(LlavaNextModel):
 
     @merge_with_config_defaults
     @can_return_tuple
-    @filter_output_hidden_states
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -238,6 +236,7 @@ class LlavaNextVideoModel(LlavaNextModel):
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -272,6 +271,7 @@ class LlavaNextVideoModel(LlavaNextModel):
 
         image_outputs = self.vision_tower(
             pixel_values,
+            output_hidden_states=True,  # Ignore arg on purpose
             return_dict=True,
             **kwargs,
         )
@@ -300,7 +300,6 @@ class LlavaNextVideoModel(LlavaNextModel):
 
     @merge_with_config_defaults
     @can_return_tuple
-    @filter_output_hidden_states
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
     )
@@ -309,6 +308,7 @@ class LlavaNextVideoModel(LlavaNextModel):
         pixel_values: torch.FloatTensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -326,6 +326,7 @@ class LlavaNextVideoModel(LlavaNextModel):
         pixel_values = pixel_values.reshape(batch_size * frames, channels, height, width)
         video_outputs = self.vision_tower(
             pixel_values,
+            output_hidden_states=True,  # Ignore arg on purpose
             return_dict=True,
             **kwargs,
         )

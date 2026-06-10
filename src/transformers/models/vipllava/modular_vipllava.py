@@ -24,7 +24,6 @@ from transformers.models.llava.modeling_llava import (
 )
 
 from ...activations import ACT2FN
-from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...processing_utils import Unpack
@@ -74,7 +73,6 @@ class VipLlavaPreTrainedModel(LlavaPreTrainedModel):
 
 class VipLlavaModel(LlavaModel):
     @can_return_tuple
-    @filter_output_hidden_states
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -94,6 +92,8 @@ class VipLlavaModel(LlavaModel):
         vision_feature_layers = (
             vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
         )
+        # We need hidden states to select intermediate vision features by layer index below.
+        kwargs["output_hidden_states"] = True
         image_outputs = self.vision_tower(
             pixel_values,
             **kwargs,

@@ -26,7 +26,6 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
@@ -895,7 +894,6 @@ class AriaModel(AriaPreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
-    @filter_output_hidden_states
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -904,12 +902,14 @@ class AriaModel(AriaPreTrainedModel):
         pixel_values: torch.FloatTensor,
         pixel_mask: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] = -1,
+        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
         image_outputs = self.vision_tower(
             pixel_values,
             patch_attention_mask=patch_attention_mask,
+            output_hidden_states=True,  # Ignore arg on purpose
             return_dict=True,
             **kwargs,
         )
@@ -919,9 +919,9 @@ class AriaModel(AriaPreTrainedModel):
             image_attn_mask = torch.logical_not(flattened_mask)
 
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-        pooler_output = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
+        image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
 
-        return BaseModelOutputWithPooling(pooler_output=pooler_output, **image_outputs)
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
