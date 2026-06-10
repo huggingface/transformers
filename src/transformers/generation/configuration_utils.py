@@ -1761,7 +1761,7 @@ class ContinuousBatchingConfig:
     cpu_group_timeout: float | None = 300.0
 
     # Deprecated arguments
-    use_default_compile_configs: bool = None
+    use_default_compile_configs: bool | None = None
 
     def __post_init__(self):
         # Only turn off graph mixing support if TP is on
@@ -1772,11 +1772,16 @@ class ContinuousBatchingConfig:
             os.environ.setdefault("NCCL_GRAPH_MIXING_SUPPORT", "0")
         # Warn about deprecated arguments
         if self.use_default_compile_configs is not None:  # Deprecated in 5.11
+            if self.use_default_compile_configs:
+                level_msg = "setting default_compile_level to 3. Consider using a lower level for faster warmup time."
+                self.default_compile_level = 3
+            else:
+                level_msg = "setting default_compile_level to 0."
+                self.default_compile_level = 0
             logger.warning(
-                "use_default_compile_configs is deprecated: use default_compile_level instead. For backwards "
-                "compatibility, using default_compile_level = 3. Consider using a lower level for faster warmup time."
+                "use_default_compile_configs is deprecated: please use default_compile_level instead. For backwards "
+                f"compatibility, {level_msg}"
             )
-            self.default_compile_level = 3
 
     @property
     def cuda_graph_booleans(self) -> tuple[bool, bool]:

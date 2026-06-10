@@ -141,14 +141,17 @@ def resolve_compile_configs(
 ) -> None:
     """Resolve if the compile configs for varlen and decode paths, modifying these attributes in place if needed.
     Default config use full compile over regional compile, because the throughput is significantly higher (~15%)"""
+    default_mode = "max-autotune-no-cudagraphs" if cb_config.default_compile_level >= 2 else "default"
+    default_dynamic = cb_config.default_compile_level <= 2
     # For each config, priority is: explicit config, default config, fallback config, None
     if cb_config.varlen_compile_config is None:
         if cb_config.default_compile_level > 0:
+            # TODO: now that max_seqlen_k is bucketted, is that still True?
             # We don't use compile with flash varlen, because max_seqlen_k is volatile and introduces recompilations
             if is_flash_attn:
                 varlen_config = None
             else:
-                varlen_config = CompileConfig(mode="max-autotune-no-cudagraphs", fullgraph=True, dynamic=True)
+                varlen_config = CompileConfig(mode=default_mode, fullgraph=True, dynamic=default_dynamic)
         elif fallback_compile_config is not None:
             varlen_config = fallback_compile_config
         else:
@@ -159,9 +162,7 @@ def resolve_compile_configs(
     if cb_config.decode_compile_config is None:
         if cb_config.default_compile_level > 0:
             # Paged attention is wrapped in @torch.compiler.disable so we can't use fullgraph
-            mode = "max-autotune-no-cudagraphs" if cb_config.default_compile_level >= 2 else "default"
-            dynamic = cb_config.default_compile_level >= 3
-            decode_config = CompileConfig(mode=mode, fullgraph=False, dynamic=dynamic)
+            decode_config = CompileConfig(mode=default_mode, fullgraph=False, dynamic=default_dynamic)
         elif fallback_compile_config is not None:
             decode_config = fallback_compile_config
         else:
