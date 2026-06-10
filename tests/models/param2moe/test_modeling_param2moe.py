@@ -302,9 +302,7 @@ class Param2MoEIntegrationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = AutoTokenizer.from_pretrained(
-            "Bhargav369/hf_v5_test", pad_token="</s>", padding_side="right"
-        )
+        tokenizer = AutoTokenizer.from_pretrained("Bhargav369/hf_v5_test", pad_token="</s>", padding_side="right")
 
         model = Param2MoEForCausalLM.from_pretrained(
             "Bhargav369/hf_v5_test",

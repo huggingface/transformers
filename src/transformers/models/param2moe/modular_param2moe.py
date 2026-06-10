@@ -270,7 +270,9 @@ class Param2MoESparseMoeBlock(nn.Module):
         super().__init__()
         self.experts = Param2MoEExperts(config)
         self.gate = Param2MoERouter(config)
-        self.shared_experts = Param2MoEMLP(config, intermediate_size=config.moe_intermediate_size * config.num_shared_experts)
+        self.shared_experts = Param2MoEMLP(
+            config, intermediate_size=config.moe_intermediate_size * config.num_shared_experts
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residual = hidden_states
