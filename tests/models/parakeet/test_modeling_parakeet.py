@@ -748,6 +748,11 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
 
         # Use float32 for loss precision
         model = ParakeetForTDT.from_pretrained(self.checkpoint_name, dtype=torch.float32, device_map="auto")
+        # This fixture was generated with an HF-style "mean" reduction (per-sample / target_length, then
+        # averaged), not NeMo's native reduction, so pin "mean" to match it. The model's default is
+        # "mean_volume" (parakeet-tdt-0.6b-v3's NeMo rnnt_reduction). TODO: regenerate this fixture from NeMo's
+        # native `model.loss` (mean_volume), like reproducer_rnnt_loss.py does, and drop this override.
+        model.config.loss_reduction = "mean"
 
         inputs = self.processor(
             audio=samples,
