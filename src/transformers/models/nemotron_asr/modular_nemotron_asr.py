@@ -591,6 +591,73 @@ class NemotronAsrFeatureExtractor(ParakeetFeatureExtractor):
         )
 
 
+class NemotronAsrEncoderCausalConvCacheLayer:
+    def __init__(self):
+        self.cache: torch.Tensor | None = None
+        self.is_initialized: bool = False
+
+    def lazy_initialization(self, hidden_states, conv_module):
+        # Fixed-size cache holding the steady-state left context (`left_pad`). The very first chunk needs the
+        # larger offline causal padding `left_pad_init` (== `left_pad + stride - 1` for the strided
+        # subsampling conv); those `init_pad` extra leading zeros are added on the fly for that chunk only,
+        # so the cache buffer keeps a constant shape and a stable address (for cudagraphs / torch.compile).
+        self.left_pad = conv_module.left_pad
+        self.init_pad = conv_module.left_pad_init - conv_module.left_pad
+        cache_shape = list(hidden_states.shape)
+        cache_shape[2] = self.left_pad  # time axis (dim 2 for both Conv1d `(B, C, T)` and Conv2d `(B, C, T, F)`)
+        self.cache = torch.zeros(cache_shape, device=hidden_states.device, dtype=hidden_states.dtype)
+
+        if not is_torchdynamo_compiling():
+            torch._dynamo.mark_static_address(self.cache)
+
+        self.is_first_chunk = True
+        self.is_initialized = True
+
+    def update(self, hidden_states, conv_module=None):
+        if not self.is_initialized and conv_module is not None:
+            self.lazy_initialization(hidden_states, conv_module)
+        elif not self.is_initialized:
+            raise ValueError(
+                "NemotronAsrEncoderCausalConvCacheLayer is not initialized. Make sure to provide conv_module to the update method."
+            )
+
+        # Left context to prepend to this chunk: the current cache (cloned, since we refresh it in place
+        # below), plus `init_pad` extra leading zeros on the first chunk to reproduce the offline causal
+        # padding of the strided subsampling conv.
+        padding_states = self.cache.clone()
+        if self.is_first_chunk and self.init_pad > 0:
+            init_shape = list(padding_states.shape)
+            init_shape[2] = self.init_pad
+            init_zeros = padding_states.new_zeros(init_shape)
+            padding_states = torch.cat([init_zeros, padding_states], dim=2)
+        self.is_first_chunk = False
+
+        # Refresh the fixed-size cache in place (`copy_` preserves the static address) with the last
+        # `left_pad` frames of [cache, hidden_states]. When the chunk is shorter than `left_pad`
+        # (shortfall), keep the tail of the old cache too so the window stays full.
+        if self.left_pad > 0:
+            time = hidden_states.shape[2]
+            shortfall = max(0, self.left_pad - time)
+            if shortfall > 0:
+                new_cache = torch.cat([self.cache.narrow(2, self.left_pad - shortfall, shortfall), hidden_states], dim=2)
+            else:
+                new_cache = hidden_states.narrow(2, time - self.left_pad, self.left_pad)
+            self.cache.copy_(new_cache)
+        return padding_states
+
+
+class NemotronAsrEncoderCausalConvPaddingCache:
+    def __init__(self):
+        self.layers: dict[str, NemotronAsrEncoderCausalConvCacheLayer] = {}
+
+    def update(self, hidden_states, cache_key, conv_module):
+        if cache_key not in self.layers:
+            self.layers[cache_key] = NemotronAsrEncoderCausalConvCacheLayer()
+
+        padding_states = self.layers[cache_key].update(hidden_states, conv_module)
+        return torch.cat([padding_states, hidden_states], dim=2)
+
+
 @auto_docstring(
     custom_intro="""
     Extends [`ParakeetEncoderModelOutput`] with optional streaming caches. Caches are only populated for
@@ -614,7 +681,7 @@ class NemotronAsrEncoderModelOutput(BaseModelOutputWithPooling):
 
     attention_mask: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    padding_cache: "NemotronAsrEncoderCausalConvPaddingCache | None" = None
+    padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None
 
 
 
@@ -673,7 +740,7 @@ class NemotronAsrEncoderConvolutionModule(FastSpeech2ConformerConvolutionModule)
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor = None,
-        padding_cache: "NemotronAsrEncoderCausalConvPaddingCache | None" = None,
+        padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None,
     ):
         hidden_states = hidden_states.transpose(1, 2)  # (B, C, T)
 
@@ -772,73 +839,6 @@ class NemotronAsrEncoderAttention(ParakeetEncoderAttention):
         return attn_output, attn_weights
 
 
-class NemotronAsrEncoderCausalConvCacheLayer:
-    def __init__(self):
-        self.cache: torch.Tensor | None = None
-        self.is_initialized: bool = False
-
-    def lazy_initialization(self, hidden_states, conv_module):
-        # Fixed-size cache holding the steady-state left context (`left_pad`). The very first chunk needs the
-        # larger offline causal padding `left_pad_init` (== `left_pad + stride - 1` for the strided
-        # subsampling conv); those `init_pad` extra leading zeros are added on the fly for that chunk only,
-        # so the cache buffer keeps a constant shape and a stable address (for cudagraphs / torch.compile).
-        self.left_pad = conv_module.left_pad
-        self.init_pad = conv_module.left_pad_init - conv_module.left_pad
-        cache_shape = list(hidden_states.shape)
-        cache_shape[2] = self.left_pad  # time axis (dim 2 for both Conv1d `(B, C, T)` and Conv2d `(B, C, T, F)`)
-        self.cache = torch.zeros(cache_shape, device=hidden_states.device, dtype=hidden_states.dtype)
-
-        if not is_torchdynamo_compiling():
-            torch._dynamo.mark_static_address(self.cache)
-
-        self.is_first_chunk = True
-        self.is_initialized = True
-
-    def update(self, hidden_states, conv_module=None):
-        if not self.is_initialized and conv_module is not None:
-            self.lazy_initialization(hidden_states, conv_module)
-        elif not self.is_initialized:
-            raise ValueError(
-                "NemotronAsrEncoderCausalConvCacheLayer is not initialized. Make sure to provide conv_module to the update method."
-            )
-
-        # Left context to prepend to this chunk: the current cache (cloned, since we refresh it in place
-        # below), plus `init_pad` extra leading zeros on the first chunk to reproduce the offline causal
-        # padding of the strided subsampling conv.
-        padding_states = self.cache.clone()
-        if self.is_first_chunk and self.init_pad > 0:
-            init_shape = list(padding_states.shape)
-            init_shape[2] = self.init_pad
-            init_zeros = padding_states.new_zeros(init_shape)
-            padding_states = torch.cat([init_zeros, padding_states], dim=2)
-        self.is_first_chunk = False
-
-        # Refresh the fixed-size cache in place (`copy_` preserves the static address) with the last
-        # `left_pad` frames of [cache, hidden_states]. When the chunk is shorter than `left_pad`
-        # (shortfall), keep the tail of the old cache too so the window stays full.
-        if self.left_pad > 0:
-            time = hidden_states.shape[2]
-            shortfall = max(0, self.left_pad - time)
-            if shortfall > 0:
-                new_cache = torch.cat([self.cache.narrow(2, self.left_pad - shortfall, shortfall), hidden_states], dim=2)
-            else:
-                new_cache = hidden_states.narrow(2, time - self.left_pad, self.left_pad)
-            self.cache.copy_(new_cache)
-        return padding_states
-
-
-class NemotronAsrEncoderCausalConvPaddingCache:
-    def __init__(self):
-        self.layers: dict[str, NemotronAsrEncoderCausalConvCacheLayer] = {}
-
-    def update(self, hidden_states, cache_key, conv_module):
-        if cache_key not in self.layers:
-            self.layers[cache_key] = NemotronAsrEncoderCausalConvCacheLayer()
-
-        padding_states = self.layers[cache_key].update(hidden_states, conv_module)
-        return torch.cat([padding_states, hidden_states], dim=2)
-
-
 class NemotronAsrEncoderCausalConv1d(nn.Conv1d):
     def __init__(
         self,
@@ -866,7 +866,7 @@ class NemotronAsrEncoderCausalConv1d(nn.Conv1d):
         effective_kernel_size = (self.kernel_size[0] - 1) * self.dilation[0] + 1
         return effective_kernel_size - 1
 
-    def forward(self, x: torch.Tensor, padding_cache: "NemotronAsrEncoderCausalConvPaddingCache | None" = None):
+    def forward(self, x: torch.Tensor, padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None):
         # x: (B, C, T). Conv1d caches along dim=2 (== last dim here).
         if padding_cache is not None:
             x = padding_cache.update(x, self.cache_key, self)
@@ -924,7 +924,7 @@ class NemotronAsrEncoderCausalConv2D(nn.Conv2d):
     def forward(
         self,
         x: torch.Tensor,
-        padding_cache: "NemotronAsrEncoderCausalConvPaddingCache | None" = None,
+        padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None,
     ) -> torch.Tensor:
         # x: (B, C, T, F). Always pad the (non-streamed) frequency axis (the last dim).
         x = nn.functional.pad(x, (self.freq_pad[0], self.freq_pad[1]))
@@ -1003,7 +1003,7 @@ class NemotronAsrEncoderSubsamplingConv2D(nn.Module):
         self,
         input_features: torch.Tensor,
         attention_mask: torch.Tensor = None,
-        padding_cache: "NemotronAsrEncoderCausalConvPaddingCache | None" = None,
+        padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None,
     ):
         hidden_states = input_features.unsqueeze(1)
         current_lengths = attention_mask.sum(-1) if attention_mask is not None else None
@@ -1041,7 +1041,7 @@ class NemotronAsrEncoderBlock(ParakeetEncoderBlock):
         attention_mask: torch.Tensor | None = None,
         position_embeddings: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        padding_cache: "NemotronAsrEncoderCausalConvPaddingCache | None" = None,
+        padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -1136,7 +1136,7 @@ class NemotronAsrEncoder(ParakeetEncoder):
         past_key_values: Cache | None = None,
         output_attention_mask: bool = True,
         use_cache: bool | None = None,
-        padding_cache: "NemotronAsrEncoderCausalConvPaddingCache | None" = None,
+        padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None,
         num_lookahead_tokens: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
