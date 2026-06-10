@@ -58,6 +58,8 @@ class GlmMoeDsaConfig(DeepseekV32Config):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int`, *optional*, defaults to 32):
         Number of heads for the indexer projections (DSA).
+    first_k_dense_replace (`int`, *optional*, defaults to 3):
+        Number of leading layers that use a dense MLP; the rest use the MoE block.
     indexer_types (`list[str]`, *optional*):
         Per-layer indexer mode (`"full"` runs the indexer, `"shared"` reuses the previous full
         layer's top-k). Defaults to the pattern derived from `index_topk_freq` /

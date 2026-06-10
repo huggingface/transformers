@@ -20,6 +20,7 @@
 
 import math
 from collections.abc import Callable
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -85,8 +86,8 @@ class GlmMoeDsaRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: "GlmMoeDsaConfig | None" = None,
-        device=None,
+        config: GlmMoeDsaConfig | None = None,
+        device: Optional["torch.device"] = None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
         """
@@ -103,11 +104,13 @@ class GlmMoeDsaRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        head_dim = config.qk_rope_head_dim
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
         attention_factor = 1.0  # Unused in this type of RoPE
 
+        # Compute the inverse frequencies
         inv_freq = 1.0 / (
-            base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / head_dim)
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
         )
         return inv_freq, attention_factor
 
@@ -232,8 +235,7 @@ class GlmMoeDsaIndexer(nn.Module):
         k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
         k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-        # The indexer uses NON-interleaved (half-split) RoPE — unlike the main MLA attention, which is
-        # interleaved. This matches the reference (`apply_rotary_emb(..., interleaved=False)` in the indexer).
+        # The indexer uses NON-interleaved (half-split) RoPE — unlike the main MLA attention
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
         q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
@@ -241,14 +243,11 @@ class GlmMoeDsaIndexer(nn.Module):
         if past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)
 
-        # === Scoring: index_score[b,s,t] = Σ_h weight[b,s,h] · softmax_scale · ReLU(q[b,s,h,:] · k[b,t,:]) ===
-        # `weights_proj` is normally kept in fp32 (`_keep_in_fp32_modules`); match the input to its weight dtype
-        # so the matmul is valid whether or not the module was force-cast, then score in fp32.
-        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
-        # q·k^T per head: [B, S, H, D] @ [B, 1, D, T] → [B, S, H, T]
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
         scores = F.relu(scores)
+
         # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
+        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
         # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
@@ -442,9 +441,7 @@ class GlmMoeDsaAttention(nn.Module):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
-        if not self.skip_topk or prev_topk_indices is None:
-            if self.indexer is None:
-                raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
+        if self.indexer is not None:
             indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
             topk_indices = self.indexer(
                 hidden_states,
@@ -455,6 +452,8 @@ class GlmMoeDsaAttention(nn.Module):
                 past_key_values=past_key_values,
             )  # [B, S, topk]
         else:
+            if prev_topk_indices is None:
+                raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
             topk_indices = prev_topk_indices
 
         sparse_indices = None

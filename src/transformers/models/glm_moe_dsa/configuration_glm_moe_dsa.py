@@ -39,6 +39,8 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int`, *optional*, defaults to 32):
         Number of heads for the indexer projections (DSA).
+    first_k_dense_replace (`int`, *optional*, defaults to 3):
+        Number of leading layers that use a dense MLP; the rest use the MoE block.
     indexer_types (`list[str]`, *optional*):
         Per-layer indexer mode (`"full"` runs the indexer, `"shared"` reuses the previous full
         layer's top-k). Defaults to the pattern derived from `index_topk_freq` /
@@ -145,6 +147,9 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
                     "full" if (max(i - offset + 1, 0) % freq) == 0 else "shared" for i in range(self.num_hidden_layers)
                 ]
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
+        # RoPE applies only to the rope slice, so point `head_dim` at it: the inherited (Llama) rotary
+        # embedding reads `config.head_dim` and then computes the right frequencies with no override needed.
+        self.head_dim = self.qk_rope_head_dim
         # MLP layer types: the first `first_k_dense_replace` layers are dense, the rest are MoE.
         if self.mlp_layer_types is None:
             n_dense = min(self.first_k_dense_replace, self.num_hidden_layers)

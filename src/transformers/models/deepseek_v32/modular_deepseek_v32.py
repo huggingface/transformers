@@ -148,6 +148,9 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
 
     def __post_init__(self, **kwargs):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
+        # RoPE applies only to the rope slice, so point `head_dim` at it: the inherited (Llama) rotary
+        # embedding reads `config.head_dim` and then computes the right frequencies with no override needed.
+        self.head_dim = self.qk_rope_head_dim
         # MLP layer types: the first `first_k_dense_replace` layers are dense, the rest are MoE.
         if self.mlp_layer_types is None:
             n_dense = min(self.first_k_dense_replace, self.num_hidden_layers)
@@ -163,20 +166,7 @@ class DeepseekV32RMSNorm(DeepseekV3RMSNorm):
 
 
 class DeepseekV32RotaryEmbedding(DeepseekV3RotaryEmbedding):
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: "DeepseekV32Config | None" = None,
-        device=None,
-        seq_len: int | None = None,
-    ):
-        base = config.rope_parameters["rope_theta"]
-        head_dim = config.qk_rope_head_dim
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / head_dim)
-        )
-        return inv_freq, attention_factor
+    pass
 
 
 class DeepseekV32Indexer(nn.Module):
