@@ -2639,6 +2639,8 @@ BASE_FILE_REQUIREMENTS = {
     ),
     lambda name, content: "image_processing_" in name: ("vision",),
     lambda name, content: "video_processing_" in name: ("vision", "torch", "torchvision"),
+    # Some models have specific generation and it always depends on torch (guard if importable via main module)
+    lambda name, content: "generation_" in name: ("torch"),
 }
 
 
