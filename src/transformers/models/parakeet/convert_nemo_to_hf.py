@@ -351,6 +351,8 @@ def convert_tdt_config(nemo_config, encoder_config):
         encoder_config=encoder_config.to_dict(),
         pad_token_id=labels.index("<pad>"),
         blank_token_id=blank_token_id,  # blank token is different from pad token for TDT
+        # NeMo applies one shared `rnnt_reduction` knob to both RNN-T and TDT (default `mean_batch` when absent).
+        loss_reduction=nemo_config.get("rnnt_reduction", "mean_batch"),
     )
 
 
@@ -438,6 +440,8 @@ def convert_rnnt_config(nemo_config, encoder_config):
         encoder_config=encoder_config.to_dict(),
         pad_token_id=labels.index("<pad>") if "<pad>" in labels else 0,
         blank_token_id=blank_token_id,  # blank token is different from pad token for RNN-T
+        # NeMo applies one shared `rnnt_reduction` knob to both RNN-T and TDT (default `mean_batch` when absent).
+        loss_reduction=nemo_config.get("rnnt_reduction", "mean_batch"),
     )
 
 
