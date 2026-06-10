@@ -183,8 +183,6 @@ class Granite4VisionConfig(LlavaNextConfig):
 
 
 class Granite4VisionProcessor(LlavaNextProcessor):
-    valid_processor_kwargs = Granite4VisionProcessorKwargs
-
     def __init__(
         self,
         image_processor=None,

@@ -13,7 +13,7 @@
 # limitations under the License.
 import math
 
-from ...image_utils import ImageInput, make_nested_list_of_images
+from ...image_utils import make_nested_list_of_images
 from ...processing_utils import (
     ImagesKwargs,
     ProcessingKwargs,
@@ -87,9 +87,7 @@ class Lfm2VlProcessor(ProcessorMixin):
         if text is not None:
             n_images_in_text = [sample.count(self.image_token) for sample in text]
             if sum(n_images_in_text) > 0 and images is None:
-                raise ValueError(
-                    f"We detected {sum(n_images_in_text)} tokens in the text but no images were passed"
-                )
+                raise ValueError(f"We detected {sum(n_images_in_text)} tokens in the text but no images were passed")
             if images is not None:
                 n_images_in_images = [len(sublist) for sublist in images]
                 if n_images_in_images != n_images_in_text:

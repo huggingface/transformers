@@ -36,6 +36,7 @@ class VideoLlavaProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class VideoLlavaProcessor(ProcessorMixin):
     valid_processor_kwargs = VideoLlavaProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,

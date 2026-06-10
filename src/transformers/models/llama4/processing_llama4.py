@@ -15,7 +15,7 @@
 
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin
 
-from ...image_utils import ImageInput, make_flat_list_of_images
+from ...image_utils import make_flat_list_of_images
 from ...utils import auto_docstring
 
 

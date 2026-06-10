@@ -25,12 +25,9 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -273,10 +270,7 @@ class Florence2Processor(ProcessorMixin):
         if images is not None and text is not None:
             if len(images) != len(text):
                 raise ValueError(f"Number of images ({len(images)}) must match number of texts ({len(text)}).")
-            text = [
-                self.image_token + self.tokenizer.bos_token + t + self.tokenizer.eos_token
-                for t in text
-            ]
+            text = [self.image_token + self.tokenizer.bos_token + t + self.tokenizer.eos_token for t in text]
         return images, text, videos, audio
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:

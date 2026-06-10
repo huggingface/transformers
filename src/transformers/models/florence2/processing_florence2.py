@@ -44,6 +44,7 @@ class Florence2ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class Florence2Processor(ProcessorMixin):
     valid_processor_kwargs = Florence2ProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,
@@ -145,10 +146,7 @@ class Florence2Processor(ProcessorMixin):
         if images is not None and text is not None:
             if len(images) != len(text):
                 raise ValueError(f"Number of images ({len(images)}) must match number of texts ({len(text)}).")
-            text = [
-                self.image_token + self.tokenizer.bos_token + t + self.tokenizer.eos_token
-                for t in text
-            ]
+            text = [self.image_token + self.tokenizer.bos_token + t + self.tokenizer.eos_token for t in text]
         return images, text, videos, audio
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:

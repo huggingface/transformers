@@ -30,7 +30,6 @@ from ...cache_utils import Cache, DynamicCache
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
-    ImageInput,
     PILImageResampling,
     SizeDict,
 )
@@ -44,7 +43,6 @@ from ...processing_utils import (
     ProcessorMixin,
     Unpack,
 )
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TensorType,
     TransformersKwargs,

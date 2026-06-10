@@ -156,9 +156,7 @@ class SmolVLMProcessor(ProcessorMixin):
         if text is not None:
             n_images_in_text = sum(sample.count(self.image_token) for sample in text)
             if n_images_in_text > 0 and images is None and videos is None:
-                raise ValueError(
-                    f"We detected {n_images_in_text} tokens in the text but no images/videos were passed"
-                )
+                raise ValueError(f"We detected {n_images_in_text} tokens in the text but no images/videos were passed")
             if images is not None:
                 n_images_per_sample = [sample.count(self.image_token) for sample in text]
                 n_images_in_images = [len(sublist) for sublist in images]

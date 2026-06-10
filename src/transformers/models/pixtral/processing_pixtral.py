@@ -110,9 +110,7 @@ class PixtralProcessor(ProcessorMixin):
         height, width = image_inputs["image_sizes"][image_idx]
         num_height_tokens = height // patch_size
         num_width_tokens = width // patch_size
-        replace_tokens = [
-            [self.image_token] * num_width_tokens + [self.image_break_token]
-        ] * num_height_tokens
+        replace_tokens = [[self.image_token] * num_width_tokens + [self.image_break_token]] * num_height_tokens
         replace_tokens = [item for sublist in replace_tokens for item in sublist]
         replace_tokens[-1] = self.image_end_token
         return "".join(replace_tokens)
