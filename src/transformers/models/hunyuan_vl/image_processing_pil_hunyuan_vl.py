@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (C) 2025 THL A29 Limited, a Tencent company and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +14,6 @@
 """PIL Image processor class for HunYuanVL."""
 
 import math
-from collections.abc import Iterable
-from typing import Optional, Union
 
 import numpy as np
 
@@ -80,11 +77,11 @@ class HunYuanVLImageProcessorKwargs(ImagesKwargs, total=False):
         The merge size of the vision encoder to llm encoder.
     """
 
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
+    min_pixels: int | None
+    max_pixels: int | None
+    patch_size: int | None
+    temporal_patch_size: int | None
+    merge_size: int | None
 
 
 @auto_docstring
@@ -150,9 +147,9 @@ class HunYuanVLImageProcessorPil(PilBackend):
 
     def _further_process_kwargs(
         self,
-        size: Optional[SizeDict] = None,
-        min_pixels: Optional[int] = None,
-        max_pixels: Optional[int] = None,
+        size: SizeDict | None = None,
+        min_pixels: int | None = None,
+        max_pixels: int | None = None,
         **kwargs,
     ) -> dict:
         if min_pixels is not None and max_pixels is not None:
@@ -191,12 +188,12 @@ class HunYuanVLImageProcessorPil(PilBackend):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         patch_size: int,
         temporal_patch_size: int,
         merge_size: int,
-        return_tensors: Optional[Union[str, TensorType]],
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         all_patches = []

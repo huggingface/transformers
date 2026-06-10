@@ -942,6 +942,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("glpn", {"pil": "GLPNImageProcessorPil", "torchvision": "GLPNImageProcessor"}),
         ("got_ocr2", {"pil": "GotOcr2ImageProcessorPil", "torchvision": "GotOcr2ImageProcessor"}),
         ("grounding-dino", {"pil": "GroundingDinoImageProcessorPil", "torchvision": "GroundingDinoImageProcessor"}),
+        ("hunyuan_vl", {"pil": "HunYuanVLImageProcessorPil"}),
         ("idefics", {"pil": "IdeficsImageProcessorPil", "torchvision": "IdeficsImageProcessor"}),
         ("idefics2", {"pil": "Idefics2ImageProcessorPil", "torchvision": "Idefics2ImageProcessor"}),
         ("idefics3", {"pil": "Idefics3ImageProcessorPil", "torchvision": "Idefics3ImageProcessor"}),
