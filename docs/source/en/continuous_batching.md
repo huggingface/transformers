@@ -251,14 +251,12 @@ CUDA graphs eliminate CPU dispatch overhead by recording the GPU execution graph
 cb_config = ContinuousBatchingConfig(use_cuda_graph=True)
 ```
 
-When active, the manager pads query and KV lengths to fixed intervals so shapes repeat and graphs reuse. Smaller values of `q_padding_interval_size` and `kv_padding_interval_size` reduce wasted compute on padding, but this means there are more unique shapes the graph has to record and store which costs more memory.
+When active, the manager pads query and KV lengths to the next power of 2 so shapes repeat and graphs reuse.
 
 ```py
 cb_config = ContinuousBatchingConfig(
     use_cuda_graph=True,
-    q_padding_interval_size=64,
-    kv_padding_interval_size=16384,
-    max_cached_graphs=32,
+    max_cached_graphs=128,
 )
 ```
 

@@ -230,7 +230,7 @@ class Scheduler(ABC):
             # If we are out the safety margin, we only accept decoding requests or the first prefill request
             outside_safety_margin = num_free_blocks < safety_margins
             if outside_safety_margin and scheduled_requests and state.status != RequestStatus.DECODING:
-                logger.info(
+                logger.debug(
                     f"Outside safety margin, breaking out of scheduling loop. {num_free_blocks = } {safety_margins = }"
                 )
                 break

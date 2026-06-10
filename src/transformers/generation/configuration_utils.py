@@ -1643,12 +1643,6 @@ class ContinuousBatchingConfig:
             Whether to enable CUDA graphs. This can be a tuple of booleans (one for the varlen path and one for the
             decode fast path), a boolean which will apply to both paths, or None (automatically inferred). After calling
             `decide_use_cuda_graphs`, the attribute will be a tuple of booleans. Default is None (automatically inferred).
-        q_padding_interval_size (`int`, *optional*, defaults to 0):
-            Query padding granularity in tokens for CUDA graphs. Uses a preset from `continuous_api.py` when
-            set to 0.
-        kv_padding_interval_size (`int`, *optional*, defaults to 0):
-            KV padding granularity in tokens for CUDA graphs. Uses a preset from `continuous_api.py` when
-            set to 0.
         max_cached_graphs (`int`, *optional*, defaults to 0):
             Maximum number of cached CUDA graphs. Uses a preset from `continuous_api.py` when set to 0.
         varlen_compile_config (`CompileConfig`, *optional*):
@@ -1685,6 +1679,12 @@ class ContinuousBatchingConfig:
         cpu_group_timeout (`float`, *optional*, defaults to 300.0):
             The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None
             for no timeout. Default is 300 seconds.
+
+    Deprecated arguments:
+        q_padding_interval_size (`int`, *optional*, defaults to 0):
+            Used to control the padding granularity for query lengths in CUDA graphs.
+        kv_padding_interval_size (`int`, *optional*, defaults to 0):
+            Used to control the padding granularity for KV lengths in CUDA graphs.
     """
 
     # Size of each KV cache block
@@ -1720,11 +1720,8 @@ class ContinuousBatchingConfig:
     # the attribute will ALWAYS be a tuple of booleans.
     use_cuda_graph: bool | tuple[bool, bool] | None = None
 
-    # If any of these parameters are set to a non-default, CUDA graphs will be used. Otherwise we automatically infer
-    # if they should be turned on. Padding interval sizes are in tokens and further explained in the docstring at the
-    # top of the continuous_batching/continuous_api.py file.
-    q_padding_interval_size: int = 0
-    kv_padding_interval_size: int = 0
+    # Controls how much graphs can be cached at the same time. If set to something other than 0, CUDA graphs will be
+    # used.
     max_cached_graphs: int = 0
 
     # Compile configs for the two execution paths. If None, uses the compile_config from generation_config as fallback.
@@ -1778,13 +1775,25 @@ class ContinuousBatchingConfig:
     # long for almost all use cases.
     cpu_group_timeout: float | None = 300.0
 
+    # ! Deprecated arguments
+    q_padding_interval_size: int = 0
+    kv_padding_interval_size: int = 0
+
     def __post_init__(self):
         # Only turn off graph mixing support if TP is on
-        if self.disable_nccl_graph_mixing and int(os.environ.get("WORLD_SIZE", "1")) > 1:
+        graph_mixing_supported = os.environ.get("NCCL_GRAPH_MIXING_SUPPORT", "1") == "1"
+        distributed = int(os.environ.get("WORLD_SIZE", "1")) > 1
+        if self.disable_nccl_graph_mixing and graph_mixing_supported and distributed:
             logger.warning(
                 "Setting NCCL_GRAPH_MIXING_SUPPORT = 0 because disable_nccl_graph_mixing is True and WORLD_SIZE > 1."
             )
             os.environ.setdefault("NCCL_GRAPH_MIXING_SUPPORT", "0")
+        # Warn about deprecated arguments
+        if self.q_padding_interval_size != 0 or self.kv_padding_interval_size != 0:  # Deprecated in 5.11
+            logger.warning(
+                "q_padding_interval_size and kv_padding_interval_size are deprecated: padding is now done to the "
+                "nearest power of 2. Ignoring these values."
+            )
 
     @property
     def cuda_graph_booleans(self) -> tuple[bool, bool]:

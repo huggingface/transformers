@@ -23,7 +23,7 @@ from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .requests import RequestStatus, logger
-from .utils import create_warmup_future_states, get_cuda_pools, mem_pool_ctx, pad_to_interval, pad_to_pow2
+from .utils import create_warmup_future_states, get_cuda_pools, mem_pool_ctx, pad_to_pow2
 
 
 class ModelRunner:
@@ -79,11 +79,10 @@ class ModelRunner:
         if not self.pad_inputs:
             return num_q_tokens, max_kv_read
         max_batch_tokens = self.cache.max_batch_tokens
-        # For varlen batches, we pad using interval sizes
+        # Padding differs for varlen and decode fast path (upper bound for Q, Kv not used in decode fast path)
         if not use_decode_fast_path:
-            num_q_tokens = pad_to_interval(num_q_tokens, self.cb_config.q_padding_interval_size, max_batch_tokens)
-            max_kv_read = pad_to_interval(max_kv_read, self.cb_config.kv_padding_interval_size, self.cache.num_pages)
-        # For decode fast path batches, we pad using powers of 2 and use no KV
+            num_q_tokens = pad_to_pow2(num_q_tokens, max_batch_tokens)
+            max_kv_read = pad_to_pow2(max_kv_read, self.cache.num_pages)
         else:
             num_q_tokens = pad_to_pow2(num_q_tokens, self.cb_config.max_requests_per_batch)
             max_kv_read = 0

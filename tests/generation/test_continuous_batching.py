@@ -1240,7 +1240,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             use_async_batching=use_async_batching,
             per_request_processors=True,
             return_logprobs=True,
-            q_padding_interval_size=16,  # allows for exact comparison between CB and regular generation
         )
         manager = model.init_continuous_batching(
             generation_config=generation_config,

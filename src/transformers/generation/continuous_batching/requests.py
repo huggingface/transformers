@@ -208,21 +208,11 @@ class RequestState:
             self.lifespan = (time.perf_counter(), -1)
         elif value == RequestStatus.FINISHED:
             self.lifespan = (self.lifespan[0], time.perf_counter())
-            self.log_end_of_request()
         self._status = value
 
     @property
     def timestamps(self) -> list[float] | None:
         return self._timestamps if self.record_timestamps else None
-
-    def log_end_of_request(self):
-        prefill_len = len(self.initial_tokens)
-        decode_len = self.generated_len()
-        start_time = self.lifespan[0] - self.created_time
-        end_time = self.lifespan[1] - self.created_time
-        logger.info(
-            f"Request {self.request_id} finished: {prefill_len = } {decode_len = } {start_time = } {end_time = }"
-        )
 
     def current_len(self) -> int:
         """Get the current length of the sequence (prompt + generated tokens)."""

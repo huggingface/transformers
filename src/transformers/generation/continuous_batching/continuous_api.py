@@ -49,19 +49,11 @@ generation goes on, there are two dimensions that change:
 - the number of queries tokens (Q), which can vary from batch to batch
 - the number of keys/values tokens (KV), which grows as the cache does
 
-To solve this, we slice along those dimensions to fixed lengths. The size of the slices is controlled by interval sizes:
-- q_padding_interval_size: the padding granularity for queries (in tokens)
-- kv_padding_interval_size: the padding granularity for KV cache (in tokens)
+To solve this, we pad along those dimensions to the nearest power of 2. Since graphs take memory and time to create, we
+use an LRU cache with a fixed size to limit memory usage.
 
-For example, with q_padding_interval_size=64 and an actual query length of 100, we pad to 128 tokens.
-
-Smaller intervals mean finer granularity and thus less padding, but more unique graph signatures. Since graphs take
-memory and time to create, we use an LRU cache with a fixed size to limit memory usage. Good defaults:
-- Q: 64 tokens gives ~4 graphs for max_batch_tokens=256, which is a good balance
-- KV: 8192 tokens (256 blocks at block_size=32) gives reasonable granularity for large caches
-
-The maximum number of cached graphs is controlled by max_cached_graphs (default 32), which uses LRU eviction.
-All defaults are stored in ContinuousBatchingConfig.resolve_sentinel_values().
+The maximum number of cached graphs is controlled by max_cached_graphs (default 128), which uses LRU eviction.
+All defaults are stored in initialization.py.
 """
 
 
