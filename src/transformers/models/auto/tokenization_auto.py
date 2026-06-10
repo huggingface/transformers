@@ -363,7 +363,6 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "h2ovl_chat",
     "hyperclovax_vlm",
     "internlm2",
-    "internvl_chat",
     "jamba",
     "janus",
     "llava",
