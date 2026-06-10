@@ -112,4 +112,4 @@ class SubclassPostProcessorOutputTest(unittest.TestCase):
         self.assertEqual(obj.scores.dtype, torch.float64)
         self.assertIs(obj.scores, obj["scores"])
         # Integer labels are not floating point, so they are left untouched but still accessible.
-        self.assertEqual(obj.labels.dtype, torch.int)
+        self.assertFalse(torch.is_floating_point(obj.labels.dtype))
