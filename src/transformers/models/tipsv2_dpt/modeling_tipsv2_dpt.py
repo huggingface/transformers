@@ -470,7 +470,7 @@ class Tipsv2DptForSemanticSegmentation(Tipsv2DptPreTrainedModel):
         patch_width = width // self.config.backbone_config.patch_size
 
         fused = self.neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
-        seg_logits = self.decoder(fused)  # (B, num_labels, H', W')
+        seg_logits = self.decoder(fused)
 
         loss = None
         if labels is not None:
@@ -483,3 +483,12 @@ class Tipsv2DptForSemanticSegmentation(Tipsv2DptPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "Tipsv2DptPreTrainedModel",
+    "Tipsv2DptModel",
+    "Tipsv2DptForDepthEstimation",
+    "Tipsv2DptForNormalEstimation",
+    "Tipsv2DptForSemanticSegmentation",
+]

@@ -91,3 +91,6 @@ class Tipsv2DptConfig(PreTrainedConfig):
             **kwargs,
         )
         super().__post_init__(**kwargs)
+
+
+__all__ = ["Tipsv2DptConfig"]
