@@ -88,6 +88,14 @@ Create and activate a virtual environment with [venv](https://docs.python.org/3/
 
 ```py
 # venv
+
+<!-- AUTO-PACKAGE-BADGES:START -->
+<!-- Auto-generated package badges -->
+
+![PyPI version](https://img.shields.io/pypi/v/transformers?style=flat-square&logo=pypi&color=green) ![PyPI downloads](https://img.shields.io/pypi/dm/transformers?style=flat-square&color=brightgreen) ![PyPI license](https://img.shields.io/pypi/l/transformers?style=flat-square) [![Deployed](https://img.shields.io/badge/deployed-5.10.0.dev0-blue?style=flat-square)](https://pypi.org/project/transformers)
+![TestPyPI version](https://img.shields.io/testpypi/v/transformers?style=flat-square&logo=pypi&color=orange) ![TestPyPI](https://img.shields.io/badge/testpypi-preview-orange?style=flat-square&logo=pypi) [![Deployed](https://img.shields.io/badge/deployed-5.10.0.dev0-blue?style=flat-square)](https://test.pypi.org/project/transformers)
+
+<!-- AUTO-PACKAGE-BADGES:END -->
 python -m venv .my-env
 source .my-env/bin/activate
 # uv
