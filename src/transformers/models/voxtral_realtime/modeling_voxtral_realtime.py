@@ -224,9 +224,12 @@ class VoxtralRealtimeCausalConv1d(nn.Conv1d):
         cache_key: str,
         stride: int = 1,
         dilation: int = 1,
+        groups: int = 1,
         bias: bool = True,
     ):
-        super().__init__(in_channels, out_channels, kernel_size, stride=stride, dilation=dilation, bias=bias)
+        super().__init__(
+            in_channels, out_channels, kernel_size, stride=stride, dilation=dilation, groups=groups, bias=bias
+        )
         self.cache_key = cache_key
 
     @cached_property
