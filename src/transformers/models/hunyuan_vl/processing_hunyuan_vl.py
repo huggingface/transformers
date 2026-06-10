@@ -13,8 +13,6 @@
 # limitations under the License.
 """Processor class for HunYuanVL."""
 
-from __future__ import annotations
-
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
@@ -31,7 +29,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class HunYuanVLImagesKwargs(ImagesKwargs):
+class HunYuanVLImagesKwargs(ImagesKwargs, total=False):
     """
     min_pixels (`int`, *optional*):
         Minimum number of pixels used when resizing images.
@@ -122,8 +120,8 @@ class HunYuanVLProcessor(ProcessorMixin):
         )
 
     def _build_position_ids(
-        self, input_ids: torch.LongTensor, image_grid_thw: torch.LongTensor | None = None
-    ) -> torch.LongTensor:
+        self, input_ids: "torch.LongTensor", image_grid_thw: "torch.LongTensor | None" = None
+    ) -> "torch.LongTensor":
         """
         Build the 4-channel `(text_pos, width, height, temporal)` position ids tensor.
 
