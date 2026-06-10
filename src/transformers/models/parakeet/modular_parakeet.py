@@ -882,7 +882,16 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
         )
 
     def loss_function(self, logits, labels, encoder_outputs, **kwargs):
-        raise NotImplementedError("RNN-T loss function is not implemented yet")
+        logit_lengths = encoder_outputs.attention_mask.sum(-1)
+        logits = logits[:, : int(logit_lengths.max())]
+        return super().loss_function(
+            logits=logits,
+            labels=labels,
+            logit_lengths=logit_lengths,
+            label_lengths=(labels != self.config.blank_token_id).sum(-1),
+            blank_token_id=self.config.blank_token_id,
+            reduction=self.config.loss_reduction,
+        )
 
 
 class ParakeetTDTJointNetwork(ParakeetRNNTJointNetwork):
@@ -911,7 +920,7 @@ class ParakeetForTDT(ParakeetTDTGenerationMixin, ParakeetForRNNT):
         self.post_init()
 
     def loss_function(self, logits, labels, encoder_outputs, **kwargs):
-        return self.loss_function(
+        return super(ParakeetForRNNT, self).loss_function(
             token_logits=logits[..., : self.config.vocab_size],
             duration_logits=logits[..., self.config.vocab_size :],
             labels=labels,
@@ -919,6 +928,7 @@ class ParakeetForTDT(ParakeetTDTGenerationMixin, ParakeetForRNNT):
             label_lengths=(labels != self.config.pad_token_id).sum(-1),
             blank_token_id=self.config.blank_token_id,
             durations=self.config.durations,
+            reduction=self.config.loss_reduction,
         )
 
 

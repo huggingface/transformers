@@ -151,6 +151,9 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
         # Advance the encoder frame pointer on blank (or forced) emissions; stay put otherwise.
         advance = (blank_mask | force_advance).long()
         model_kwargs["encoder_frame_idxs"] = model_kwargs["encoder_frame_idxs"] + advance
+        # The per-step frame advance is the RNN-T analogue of a TDT duration: cumulatively summed it yields the
+        # encoder frame index of each emitted token, which is sufficient to reconstruct timestamps.
+        self._step_durations.append(advance)
         self._encoder_finished = model_kwargs["encoder_frame_idxs"] >= model_kwargs["encoder_valid_lengths"]
 
         return model_kwargs
@@ -235,12 +238,20 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
     def generate(self, inputs=None, generation_config=None, **kwargs):
         self._encoder_finished = None
         self._symbols_at_frame = None
+        self._step_durations = []
 
         outputs = super().generate(inputs=inputs, generation_config=generation_config, **kwargs)
-        del self._encoder_finished, self._symbols_at_frame
+
+        durations = torch.stack(self._step_durations, dim=1)  # (batch, steps)
+        # Prepend a zero duration for the decoder_start_token_id that generate() prepends to sequences
+        durations = torch.cat(
+            [torch.zeros(durations.shape[0], 1, dtype=durations.dtype, device=durations.device), durations], dim=1
+        )
+        del self._encoder_finished, self._symbols_at_frame, self._step_durations
 
         return ParakeetRNNTGenerateOutput(
             sequences=outputs.sequences if isinstance(outputs, ModelOutput) else outputs,
+            durations=durations,
         )
 
 
@@ -273,21 +284,3 @@ class ParakeetTDTGenerationMixin(ParakeetRNNTGenerationMixin):
         self._encoder_finished = model_kwargs["encoder_frame_idxs"] >= model_kwargs["encoder_valid_lengths"]
 
         return model_kwargs
-
-    def generate(self, inputs=None, generation_config=None, **kwargs):
-        # TODO @eustlb: this is temporary — we're going to modularize generate to allow doing this cleanly.
-        self._step_durations = []
-        self._encoder_finished = None
-
-        outputs = GenerationMixin.generate(self, inputs=inputs, generation_config=generation_config, **kwargs)
-        durations = torch.stack(self._step_durations, dim=1)  # (batch, steps)
-        # Prepend a zero duration for the decoder_start_token_id that generate() prepends to sequences
-        durations = torch.cat(
-            [torch.zeros(durations.shape[0], 1, dtype=durations.dtype, device=durations.device), durations], dim=1
-        )
-        del self._step_durations, self._encoder_finished
-
-        return ParakeetRNNTGenerateOutput(
-            sequences=outputs.sequences if isinstance(outputs, ModelOutput) else outputs,
-            durations=durations,
-        )

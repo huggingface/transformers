@@ -21,8 +21,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-from huggingface_hub import create_repo
-
 from .. import __version__
 from ..utils import (
     GENERATION_CONFIG_NAME,
@@ -30,6 +28,7 @@ from ..utils import (
     PushToHubMixin,
     cached_file,
     extract_commit_hash,
+    hf_api,
     is_torch_available,
     logging,
 )
@@ -866,7 +865,7 @@ class GenerationConfig(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         output_config_file = os.path.join(save_directory, config_file_name)
@@ -1620,6 +1619,8 @@ class ContinuousBatchingConfig:
             Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache. When `None`,
             resolved at runtime to 0.9 if there is no logit processing and 0.8 if there is, to leave headroom for
             vocabulary-sized temporary tensors.
+        max_requests_per_batch (`int`, *optional*):
+            Maximum number of requests per batch. Auto-inferred from workload hints when `None`, with fallback of 1024.
         max_blocks_per_request (`int`, *optional*):
             Maximum blocks per request, used in the `flash_attn_with_kvcache` fast decode path to dimension
             the block table. Setting this to 0 disables the fast decode path. Default is None (auto-inferred).
@@ -1651,6 +1652,8 @@ class ContinuousBatchingConfig:
             If True, a default compile config will be used for paths that are not explicitly set.
         scheduler_type (`str`, *optional*, defaults to `"fifo"`):
             Scheduler type to use.
+        safety_margin (`float`, *optional*):
+            Safety margin used to limit the amount of offloading. Defaults to None (use class default).
         return_logprobs (`bool`, *optional*, defaults to `False`):
             Whether to return log probabilities along with the generated tokens.
         seed (`int | None`, *optional*):
@@ -1670,6 +1673,9 @@ class ContinuousBatchingConfig:
             Remove unsupported logits processors instead of erroring. Default is True.
         disable_nccl_graph_mixing (`bool`, *optional*, defaults to `True`):
             Disable NCCL's safety net for parallel graph-captured comms. Never happens in CB and gives TP a perf boost.
+        cpu_group_timeout (`float`, *optional*, defaults to 300.0):
+            The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None
+            for no timeout. Default is 300 seconds.
     """
 
     # Size of each KV cache block
@@ -1683,6 +1689,10 @@ class ContinuousBatchingConfig:
     # The max percentage of free GPU memory (after the model is loaded) to use for the KV cache. If None, auto resolved
     # to 0.9 (no logit processing) or 0.8 (logit processing) to leave headroom for temporary tensors.
     max_memory_percent: float | None = None
+
+    # The maximum number of requests in a batch. Helps limiting the memory footprint of the logits, which scale with the
+    # vocabulary size.
+    max_requests_per_batch: int | None = None
 
     # This is only used in the flash_attn_with_kvcache fast decode path to dimension the block table. If it is set to 0,
     # the fast decode path will not be used. Auto-inferred from GPU memory when `None` (default).
@@ -1718,6 +1728,9 @@ class ContinuousBatchingConfig:
 
     # Scheduler type. FIFO by default. For all types available, checks SCHEDULER_MAPPING in scheduler.py
     scheduler_type: str = "fifo"
+    # Safety margin: if the number of free blocks falls below (safety_margin * num_blocks), then new prefill requests
+    # will not be scheduled to prioritize decoding active requests. Defaults to None (use class default).
+    safety_margin: float | None = None
 
     # Whether to generate log probabilities, which is the log of the softmax of the processed logits. If True, the log
     # probabilities will be returned along with the generated tokens in the generation output.
@@ -1750,6 +1763,11 @@ class ContinuousBatchingConfig:
     # CUDA graph with NCCL communication at the same time as 1. another CUDA graph with captured comms 2. an eager comm.
     # This is turned on by default because the above never happens in CB and this gives a nice perf boost.
     disable_nccl_graph_mixing: bool = True
+
+    # The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None for
+    # no timeout. Default is 300 seconds. This exists because dist has a gloo timeout of 30 minutes, which is way too
+    # long for almost all use cases.
+    cpu_group_timeout: float | None = 300.0
 
     def __post_init__(self):
         # Only turn off graph mixing support if TP is on

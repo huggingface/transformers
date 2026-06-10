@@ -45,6 +45,11 @@ SPECIAL_CASES_TO_ALLOW = {
     # `att_context_style` selects the attention-masking convention; it is validated in the config and
     # consumed by the streaming tooling rather than directly in the modeling forward.
     "NemotronAsrEncoderConfig": ["att_context_style"],
+    "Gemma4UnifiedAudioConfig": ["audio_embed_dim"],  # Used as meta data for other attributes/properties
+    "Gemma4UnifiedVisionConfig": [
+        "patch_size",
+        "pooling_kernel_size",
+    ],  # Used as meta data for other attributes/properties
     "MiniCPMV4_6Config": ["drop_vision_last_layer"],
     "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
     "HYV3Config": ["output_router_logits"],
@@ -90,6 +95,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "TimeSeriesTransformerConfig": ["num_static_real_features", "num_time_features"],
     "AutoformerConfig": ["num_static_real_features", "num_time_features"],
     "SamVisionConfig": ["mlp_ratio"],
+    "DeepseekOcr2SamVisionConfig": ["mlp_ratio"],
     "Sam3VisionConfig": ["backbone_feature_sizes"],
     "SamHQVisionConfig": ["mlp_ratio"],
     "ClapAudioConfig": ["num_classes"],
@@ -197,6 +203,12 @@ SPECIAL_CASES_TO_ALLOW = {
     "PPChart2TableConfig": True,
     "PPChart2TableVisionConfig": True,
     "GlmgaConfig": ["vision_config"],
+    "Sapiens2Config": [
+        "num_first_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
+        "num_key_value_attention_heads",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
+        "num_last_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
+        "flip_pairs",  # used externally for post-processing keypoints, not in forward pass
+    ],
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)

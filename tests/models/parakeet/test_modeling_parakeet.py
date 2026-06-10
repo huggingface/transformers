@@ -19,7 +19,7 @@ import unittest
 from pathlib import Path
 
 from transformers import is_datasets_available, is_torch_available
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import cleanup, require_torch, require_torchaudio, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -748,6 +748,11 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
 
         # Use float32 for loss precision
         model = ParakeetForTDT.from_pretrained(self.checkpoint_name, dtype=torch.float32, device_map="auto")
+        # This fixture was generated with an HF-style "mean" reduction (per-sample / target_length, then
+        # averaged), not NeMo's native reduction, so pin "mean" to match it. The model's default is
+        # "mean_volume" (parakeet-tdt-0.6b-v3's NeMo rnnt_reduction). TODO: regenerate this fixture from NeMo's
+        # native `model.loss` (mean_volume), like reproducer_rnnt_loss.py does, and drop this override.
+        model.config.loss_reduction = "mean"
 
         inputs = self.processor(
             audio=samples,
@@ -953,25 +958,14 @@ class ParakeetForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class ParakeetForRNNTIntegrationTest(unittest.TestCase):
-    """Integration tests for ParakeetForRNNT.
-
-    Expected transcriptions are the outputs of the original NeMo `nvidia/parakeet-rnnt-0.6b` model on the
-    same audio (reproducer: run `nemo_asr.models.ASRModel.from_pretrained("nvidia/parakeet-rnnt-0.6b")` and
-    `.transcribe(...)` on the samples below). Inference is run in float32 to track the NeMo reference as
-    closely as possible.
-
-    disclaimer: Perfect token matching with NeMo cannot be guaranteed: the Transformers FastConformer encoder
-    is a re-implementation, so ~1e-3 numerical differences accumulate over the conformer stack and can flip a
-    borderline greedy emission. This is WER-neutral; the one sample that differs is annotated inline below.
-    """
-
     _dataset = None
 
     @classmethod
     def setUp(cls):
         cls.checkpoint_name = "nvidia/parakeet-rnnt-0.6b"
+        cls.revision = "refs/pr/4"
         cls.dtype = torch.float32
-        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name, revision=cls.revision)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -992,13 +986,18 @@ class ParakeetForRNNTIntegrationTest(unittest.TestCase):
 
     @slow
     def test_rnnt_model_integration(self):
-        # Matches NeMo `nvidia/parakeet-rnnt-0.6b` exactly.
-        EXPECTED_TRANSCRIPTIONS = [
-            "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
-        ]
+        """
+        reproducer: https://gist.github.com/eustlb/2b9a9a85ec447b176d14b23fc1484496#file-reproducer_single_rnnt-py
+        """
+        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/parakeet/expected_results_single_rnnt.json"
+        with open(RESULTS_PATH, "r") as f:
+            raw_data = json.load(f)
+        EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = ParakeetForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
+        model = ParakeetForRNNT.from_pretrained(
+            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
+        )
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
@@ -1008,26 +1007,103 @@ class ParakeetForRNNTIntegrationTest(unittest.TestCase):
 
     @slow
     def test_rnnt_model_integration_batched(self):
-        EXPECTED_TRANSCRIPTIONS = [
-            # matches NeMo
-            "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
-            # matches NeMo
-            "nor is mister quilter's manner less interesting than his matter",
-            # NeMo transcribes "...its results occur most readily...". The Transformers re-implementation
-            # emits "ocur" instead — a single sub-word difference from ~1e-3 numerical drift in the
-            # re-implemented FastConformer encoder flipping a borderline greedy emission (WER-neutral).
-            "he tells us that at this festive season of the year with christmas and roast beef looming before us similes drawn from eating and its results ocur most readily to the mind",
-            # matches NeMo
-            "he has grave doubts whether sir frederick leighton's work is really greek after all and can discover in it but little of rocky ithaca",
-            # matches NeMo
-            "linnell's pictures are a sort of up guards and adam paintings and mason's exquisite idylls are as national as a jingo poem mr burkett foster's landscapes smile at one much in the same way that mr carker used to flash his teeth and mr john collier gives his sitter a cheerful slap on the back before he says like a shampooer in a turkish bath next man",
-        ]
+        """
+        reproducer: https://gist.github.com/eustlb/2b9a9a85ec447b176d14b23fc1484496#file-reproducer_batch_rnnt-py
+        """
+        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/parakeet/expected_results_batch_rnnt.json"
+        with open(RESULTS_PATH, "r") as f:
+            raw_data = json.load(f)
+        EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = ParakeetForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
+        model = ParakeetForRNNT.from_pretrained(
+            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
+        )
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
         output = model.generate(**inputs, return_dict_in_generate=True)
         predicted_transcripts = self.processor.decode(output.sequences, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
+
+    @slow
+    def test_rnnt_model_integration_timestamps(self):
+        """
+        reproducer: https://gist.github.com/eustlb/2b9a9a85ec447b176d14b23fc1484496#file-reproducer_batch_rnnt_timestamps-py
+        """
+        RESULTS_PATH = (
+            Path(__file__).parent.parent.parent / "fixtures/parakeet/expected_results_batch_rnnt_timestamp.json"
+        )
+        with open(RESULTS_PATH, "r") as f:
+            raw_data = json.load(f)
+        EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
+        EXPECTED_START_TIMESTAMPS = raw_data["start_timestamps"]
+        EXPECTED_END_TIMESTAMPS = raw_data["end_timestamps"]
+
+        samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
+        model = ParakeetForRNNT.from_pretrained(
+            self.checkpoint_name, revision=self.revision, dtype=torch.float32, device_map="auto"
+        )
+
+        inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
+        inputs.to(model.device, dtype=model.dtype)
+        output = model.generate(**inputs, return_dict_in_generate=True)
+        predicted_transcripts, predicted_timestamps = self.processor.decode(
+            output.sequences,
+            durations=output.durations,
+            skip_special_tokens=True,
+        )
+        self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
+
+        self.assertIsNotNone(output.durations, "durations should be returned")
+        predicted_start_times = [[entry["start"] for entry in el] for el in predicted_timestamps]
+        predicted_end_times = [[entry["end"] for entry in el] for el in predicted_timestamps]
+        torch.testing.assert_close(predicted_start_times, EXPECTED_START_TIMESTAMPS)
+        torch.testing.assert_close(predicted_end_times, EXPECTED_END_TIMESTAMPS)
+
+    @slow
+    @require_torchaudio
+    def test_rnnt_model_integration_loss(self):
+        """
+        Verify that ParakeetForRNNT loss matches the standard RNN-T loss reference.
+        The loss delegates to torchaudio.functional.rnnt_loss, hence the @require_torchaudio guard.
+        reproducer: https://gist.github.com/eustlb/2b9a9a85ec447b176d14b23fc1484496#file-reproducer_rnnt_loss-py
+        """
+        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/parakeet/expected_loss_rnnt.json"
+        with open(RESULTS_PATH, "r") as f:
+            raw_data = json.load(f)
+        EXPECTED_MEAN_LOSS = torch.tensor(raw_data["expected_mean_loss"])
+        num_samples = raw_data["num_samples"]
+
+        samples = self._load_datasamples(num_samples)
+        transcripts = self._dataset.sort("id")[:num_samples]["text"]
+        transcripts = [t.lower() for t in transcripts]
+
+        # Use float32 for loss precision
+        model = ParakeetForRNNT.from_pretrained(
+            self.checkpoint_name, revision=self.revision, dtype=torch.float32, device_map="auto"
+        )
+
+        inputs = self.processor(
+            audio=samples,
+            text=transcripts,
+            sampling_rate=self.processor.feature_extractor.sampling_rate,
+        )
+        inputs.to(model.device)
+
+        # Forward in eval mode — check loss matches the reference
+        with torch.no_grad():
+            outputs = model(**inputs)
+        self.assertIsNotNone(outputs.loss, "Loss must be computed when labels are provided")
+        self.assertEqual(outputs.logits.dim(), 4, "Training logits must be 4D (B, T, U+1, V)")
+        torch.testing.assert_close(outputs.loss.cpu(), EXPECTED_MEAN_LOSS, rtol=1e-3, atol=1e-3)
+
+        # Backward — verify gradients flow
+        del outputs
+        torch.cuda.empty_cache()
+        model.train()
+        model.zero_grad()
+        outputs = model(**inputs)
+        outputs.loss.backward()
+        n_with_grad = sum(1 for p in model.parameters() if p.grad is not None)
+        self.assertGreater(n_with_grad, 0, "No gradients after backward")
