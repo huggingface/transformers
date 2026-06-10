@@ -97,6 +97,10 @@ class Kosmos2Processor(ProcessorMixin):
         self.boi_token = "<image>"
         self.eoi_token = "</image>"
 
+        # The (fake) `<image>` token is used as the multimodal placeholder that the centralized
+        # `get_text_with_replacements` API expands into the full image subsequence.
+        self.image_token = self.boi_token
+
         self.eoc_token = "</chunk>"
         self.eol_token = "</line>"
 
@@ -310,11 +314,18 @@ class Kosmos2Processor(ProcessorMixin):
                         "batches or both for a single example."
                     )
 
-    def _preprocess_single_example(self, text, image, bboxes, img_info_tokens):
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        """Return the full image subsequence `<image> ... (fake) image tokens ... </image>` that the
+        single `<image>` placeholder is expanded into for one image."""
+        img_tokens = [self.boi_token] * self.num_image_tokens
+        return " ".join([self.boi_token] + img_tokens + [self.eoi_token])
+
+    def _preprocess_single_example(self, text, image, bboxes):
         text = text.strip()
         if image is not None:
-            # Add `<image> ... (fake) image tokens ... </image>`
-            text = f"{img_info_tokens} {text}"
+            # Prepend a single `<image>` placeholder; it is later expanded into the full image
+            # subsequence by `get_text_with_replacements`.
+            text = f"{self.boi_token} {text}"
 
         # Add `<object> <patch_idx_xxxx> <patch_idx_yyy> </object>` after `<phrase> phrase text </phrase>`
         text = self._insert_patch_index_tokens(text, bboxes)
@@ -341,9 +352,9 @@ class Kosmos2Processor(ProcessorMixin):
         Returns:
             `Union[TextInput, list[TextInput]]`: The processed texts with image and patch index tokens.
         """
-        # These are fake `<image>` tokens enclosed between (the actual) `<image>` token and `</image>`.
-        img_tokens = [self.boi_token] * num_image_tokens
-        img_info_tokens = " ".join([self.boi_token] + img_tokens + [self.eoi_token])
+        # Used by `replace_image_token` to build the (fake) `<image>` subsequence enclosed between
+        # (the actual) `<image>` token and `</image>`.
+        self.num_image_tokens = num_image_tokens
 
         # make batch to simplify processing logic
         batched = True
@@ -377,9 +388,16 @@ class Kosmos2Processor(ProcessorMixin):
             )
 
         result = [
-            self._preprocess_single_example(text, image, bbox, img_info_tokens)
-            for text, image, bbox in zip(texts, images, bboxes)
+            self._preprocess_single_example(text, image, bbox) for text, image, bbox in zip(texts, images, bboxes)
         ]
+
+        # Expand the single `<image>` placeholder of each example with an image into the full image
+        # subsequence via the centralized token-expansion API (one replacement per image, in order).
+        images_replacements = [
+            self.replace_image_token(None, image_idx=idx) for idx, image in enumerate(images) if image is not None
+        ]
+        result, _ = self.get_text_with_replacements(result, images_replacements=images_replacements)
+
         # un-batch if necessary
         if not batched:
             result = result[0]

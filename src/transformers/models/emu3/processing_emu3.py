@@ -114,27 +114,18 @@ class Emu3Processor(ProcessorMixin):
 
         image_features = {}
         image_start_tokens = f"{self.image_start_token}"
-        image_end_tokens = f"{self.eof_token}{self.image_end_token}"
 
         # generate text from image + text input, so we add placeholders for image tokens
         if not return_for_image_generation and images is not None:
             image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
-            image_sizes = iter(image_features.image_sizes)
 
-            prompt_strings = []
-            for sample in text:
-                while self.image_token in sample:
-                    image_size = next(image_sizes)
-                    height, width = image_size
-                    height = height // self.downsample_ratio
-                    width = width // self.downsample_ratio
-                    image_seq_length = height * (width + 1)  # +1 for extra row when converting to BPE in modeling code
+            # Prepend BOS once per image token occurrence (GPT tokenizer doesn't add it), matching the
+            # legacy per-occurrence behavior, then expand image tokens via the shared helper.
+            prompt_strings = [f"{self.bos_token * sample.count(self.image_token)}{sample}" for sample in text]
 
-                    image_placeholder = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}{'<placeholder>' * image_seq_length}{image_end_tokens}"
-                    sample = sample.replace(self.image_token, image_placeholder, 1)
-                    sample = f"{self.bos_token}{sample}"  # add BOS because GPT tokenizer doesn't add it
-                prompt_strings.append(sample)
-            text = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
+            num_images = sum(sample.count(self.image_token) for sample in text)
+            images_replacements = [self.replace_image_token(image_features, i) for i in range(num_images)]
+            text, _ = self.get_text_with_replacements(prompt_strings, images_replacements=images_replacements)
 
         # generate image from text input, so we add begin-of-image tokens from where image generation starts
         elif return_for_image_generation:
@@ -152,6 +143,20 @@ class Emu3Processor(ProcessorMixin):
         if return_mm_token_type_ids:
             text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_features}, tensor_type=return_tensors)
+
+    def replace_image_token(self, image_inputs, image_idx: int) -> str:
+        image_start_tokens = f"{self.image_start_token}"
+        image_end_tokens = f"{self.eof_token}{self.image_end_token}"
+
+        height, width = image_inputs.image_sizes[image_idx]
+        height = height // self.downsample_ratio
+        width = width // self.downsample_ratio
+        image_seq_length = height * (width + 1)  # +1 for extra row when converting to BPE in modeling code
+
+        return (
+            f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}"
+            f"{self.image_token * image_seq_length}{image_end_tokens}"
+        )
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """

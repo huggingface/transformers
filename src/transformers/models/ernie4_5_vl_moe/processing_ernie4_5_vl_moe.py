@@ -79,6 +79,16 @@ class Ernie4_5_VLMoeProcessor(ProcessorMixin):
 
         return super().save_pretrained(save_directory, push_to_hub, **kwargs)
 
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        merge_length = self.image_processor.merge_size**2
+        num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
+        return self.image_token * num_image_tokens
+
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+        merge_length = self.video_processor.merge_size**2 * self.video_processor.temporal_patch_size
+        num_video_tokens = video_inputs["video_grid_thw"][video_idx].prod() // merge_length
+        return self.video_token * num_video_tokens
+
     def __call__(
         self,
         images: ImageInput | None = None,
@@ -142,25 +152,15 @@ class Ernie4_5_VLMoeProcessor(ProcessorMixin):
 
         text = text.copy()  # below lines change text in-place
 
+        images_replacements = videos_replacements = []
         if images is not None:
-            merge_length = self.image_processor.merge_size**2
-            index = 0
-            for i in range(len(text)):
-                while self.image_token in text[i]:
-                    num_image_tokens = image_grid_thw[index].prod() // merge_length
-                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
-
+            images_replacements = [self.replace_image_token(image_inputs, i) for i in range(len(image_grid_thw))]
         if videos is not None:
-            merge_length = self.video_processor.merge_size**2 * self.video_processor.temporal_patch_size
-            index = 0
-            for i in range(len(text)):
-                while self.video_token in text[i]:
-                    num_video_tokens = video_grid_thw[index].prod() // merge_length
-                    text[i] = text[i].replace(self.video_token, "<|placeholder|>" * num_video_tokens, 1)
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.video_token)
+            videos_replacements = [self.replace_video_token(videos_inputs, i) for i in range(len(video_grid_thw))]
+        if images is not None or videos is not None:
+            text, _ = self.get_text_with_replacements(
+                text, images_replacements=images_replacements, videos_replacements=videos_replacements
+            )
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)

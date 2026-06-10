@@ -21,6 +21,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -788,6 +789,37 @@ class ProcessorTesterMixin:
         # Test that it raises error when no input is passed
         with self.assertRaises((TypeError, ValueError)):
             processor()
+
+    def test_processor_expands_tokens_via_get_text_with_replacements(self):
+        """
+        Multimodal placeholder expansion must go through the shared `get_text_with_replacements`
+        helper (see #45493) instead of bespoke per-processor `.replace`/`re.sub` logic, so that
+        placeholder handling, replacement offsets and `mm_token_type_ids` stay consistent across
+        models. This asserts the processor actually calls the helper when expanding image tokens.
+        """
+        processor = self.get_processor()
+        call_signature = inspect.signature(processor.__call__)
+        input_args = [param.name for param in call_signature.parameters.values() if param.annotation != param.empty]
+
+        if "text" not in input_args or "images" not in input_args:
+            self.skipTest(f"{self.processor_class} doesn't support image+text inputs.")
+
+        if processor.tokenizer.pad_token_id is None:
+            processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        text = self.prepare_text_inputs(batch_size=2, modalities=["image"])
+        image_inputs = self.prepare_image_inputs(batch_size=2)
+        # nested input type is the format supported by all multimodal processors
+        image_inputs = [[image] if not isinstance(image, list) else image for image in image_inputs]
+
+        with patch.object(processor, "get_text_with_replacements", wraps=processor.get_text_with_replacements) as spy:
+            processor(text=text, images=image_inputs, padding=True, return_tensors="pt")
+
+        self.assertTrue(
+            spy.called,
+            f"{self.processor_class.__name__} must expand multimodal tokens via "
+            "`get_text_with_replacements` rather than bespoke logic.",
+        )
 
     def test_processor_text_has_no_visual(self):
         """

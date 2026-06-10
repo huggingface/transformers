@@ -682,6 +682,7 @@ class ProcessorMixin(PushToHubMixin):
                 images_replacements,
                 videos_replacements,
                 audio_replacements,
+                return_replacement_offsets=return_text_replacement_offsets,
             )
             text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
             self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
@@ -805,6 +806,7 @@ class ProcessorMixin(PushToHubMixin):
         images_replacements: list[str] = [],
         videos_replacements: list[str] = [],
         audio_replacements: list[str] = [],
+        return_replacement_offsets: bool = False,
     ) -> tuple[list[str], list[dict[str, Any]]]:
         """
         Replace multimodal placeholder tokens in a batch of text strings with their
@@ -836,12 +838,16 @@ class ProcessorMixin(PushToHubMixin):
             audio_replacements (`list[str]`, *optional*, defaults to `[]`):
                 Expanded replacement strings for each audio input. Produced by
                 `self._process_audio`.
+            return_replacement_offsets (`bool`, *optional*, defaults to `False`):
+                Whether to compute and return `batch_replacement_offsets`. Building the offset
+                metadata is skipped when `False` (the returned offset lists are then empty), as it
+                is only needed by callers that pass `return_text_replacement_offsets=True`.
 
         Returns:
             `tuple[list[str], list[dict[str, Any]]]`: A tuple of:
                 - The modified `text` batch with all placeholder tokens expanded.
                 - `batch_replacement_offsets`: one entry per batch item, each being a
-                list of dicts with keys:
+                list of dicts (empty unless `return_replacement_offsets=True`) with keys:
                     - `"type"` (`str`): modality name — `"image"`, `"video"`, or `"audio"`
                     - `"span"` (`tuple[int, int]`): original `(start, end)` char offsets of the placeholder token
                     - `"new_span"` (`tuple[int, int]`): `(start, end)` offsets of placeholder in the expanded string
@@ -881,15 +887,16 @@ class ProcessorMixin(PushToHubMixin):
 
                 mm_type = m.lastgroup
                 replacement_text = next(replacements_iters[mm_type])
-                replacement_offsets.append(
-                    {
-                        "type": mm_type,
-                        "span": (start, end),
-                        "new_span": (start, start + len(replacement_text)),
-                        "text": m.group(),
-                        "replacement": replacement_text,
-                    }
-                )
+                if return_replacement_offsets:
+                    replacement_offsets.append(
+                        {
+                            "type": mm_type,
+                            "span": (start, end),
+                            "new_span": (start, start + len(replacement_text)),
+                            "text": m.group(),
+                            "replacement": replacement_text,
+                        }
+                    )
                 expanded_sample.append(replacement_text)
                 last = end
 

@@ -86,9 +86,9 @@ class InternVLProcessor(ProcessorMixin):
         """
         image_index = 0
         video_index = 0
-        processed_text = []
         image_video_patches = []
-        replace_strings = []
+        images_replacements = []
+        videos_replacements = []
         # Support interleaved image and video in prompts:
         # Processed patches of images and videos are inserted in `image_video_patches` in the order they appear in the prompts
         for prompt in text:
@@ -102,11 +102,11 @@ class InternVLProcessor(ProcessorMixin):
                     start_index = image_num_patches_indices[image_index - 1] if image_index > 0 else 0
                     end_index = image_num_patches_indices[image_index]
                     image_video_patches.append(image_pixel_values[start_index:end_index])
-                    # Replace the corresponding image placeholder with the correct number of image tokens
-                    new_prompt = new_prompt.replace(self.image_token, "<placeholder>", 1)
-                    replace_strings.append(
+                    # Build the replacement string with the correct number of image tokens
+                    images_replacements.append(
                         f"{self.start_image_token}{self.image_token * self.image_seq_length * image_num_patches[image_index]}{self.end_image_token}"
                     )
+                    new_prompt = new_prompt.replace(self.image_token, "", 1)
                     image_index += 1
                 else:
                     # Get the slice of patches corresponding to the current video
@@ -117,19 +117,19 @@ class InternVLProcessor(ProcessorMixin):
                     start_index = video_num_patches_indices[current_patch_index]
                     end_index = video_num_patches_indices[end_patch_index]
                     image_video_patches.append(video_pixel_values[start_index:end_index])
-                    # Get the number of patches per frame and replace the video placeholder with the correct number of image tokens
+                    # Get the number of patches per frame and build the replacement string with the correct number of image tokens
                     num_patches = list(video_num_patches[current_patch_index:end_patch_index])
                     video_prompt = "\n".join(
                         f"Frame{i + 1}: {self.start_image_token}{self.image_token * self.image_seq_length * num_patches[i]}{self.end_image_token}"
                         for i in range(len(num_patches))
                     )
-                    replace_strings.append(video_prompt)
-                    new_prompt = new_prompt.replace(self.video_token, "<placeholder>", 1)
+                    videos_replacements.append(video_prompt)
+                    new_prompt = new_prompt.replace(self.video_token, "", 1)
                     video_index += 1
-            while "<placeholder>" in new_prompt:
-                replace_str = replace_strings.pop(0)
-                new_prompt = new_prompt.replace("<placeholder>", replace_str, 1)
-            processed_text.append(new_prompt)
+
+        processed_text, _ = self.get_text_with_replacements(
+            list(text), images_replacements=images_replacements, videos_replacements=videos_replacements
+        )
 
         return processed_text, image_video_patches, image_index, video_index
 

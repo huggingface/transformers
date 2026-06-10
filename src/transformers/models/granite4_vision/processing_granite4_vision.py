@@ -80,6 +80,18 @@ class Granite4VisionProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
         self.downsample_rate = downsample_rate
 
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
+        image_size = image_inputs["image_sizes"][image_idx]
+        if not isinstance(image_size, (list, tuple)):
+            # cast to list to avoid numerical precision errors when calculating unpadding
+            image_size = image_size.tolist()
+        orig_height, orig_width = image_size
+        num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
+        if self.vision_feature_select_strategy == "default":
+            num_image_tokens -= 1
+        return self.image_token * num_image_tokens
+
     @auto_docstring
     def __call__(
         self,
@@ -117,22 +129,11 @@ class Granite4VisionProcessor(ProcessorMixin):
 
         prompt_strings = text
         if image_inputs:
-            image_sizes = iter(image_inputs["image_sizes"])
-            height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
-            prompt_strings = []
-            for sample in text:
-                while self.image_token in sample:
-                    image_size = next(image_sizes)
-                    if not isinstance(image_size, (list, tuple)):
-                        # cast to list to avoid numerical precision errors when calculating unpadding
-                        image_size = image_size.tolist()
-                    orig_height, orig_width = image_size
-                    num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
-                    if self.vision_feature_select_strategy == "default":
-                        num_image_tokens -= 1
-                    sample = sample.replace(self.image_token, "<placeholder>" * num_image_tokens, 1)
-                prompt_strings.append(sample)
-            prompt_strings = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
+            images_replacements = [
+                self.replace_image_token(image_inputs, i) for i in range(len(image_inputs["image_sizes"]))
+            ]
+            # `get_text_with_replacements` mutates the list in place, so copy to avoid editing the caller's input
+            prompt_strings, _ = self.get_text_with_replacements(list(text), images_replacements=images_replacements)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)

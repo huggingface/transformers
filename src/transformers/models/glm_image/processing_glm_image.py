@@ -79,6 +79,11 @@ class GlmImageProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        grid = image_inputs["image_grid_thw"][image_idx]
+        num_image_tokens = int(grid[1] * grid[2])
+        return self.image_token * num_image_tokens
+
     def __call__(
         self,
         images: ImageInput | None = None,
@@ -149,14 +154,8 @@ class GlmImageProcessor(ProcessorMixin):
 
         # Replace image tokens with the correct number of placeholder tokens
         if not is_text_to_image:
-            index = 0
-            for i in range(batch_size):
-                while self.image_token in text[i]:
-                    grid = image_grid_thw[index]
-                    num_image_tokens = int(grid[1] * grid[2])
-                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
+            images_replacements = [self.replace_image_token(image_inputs, i) for i in range(len(image_grid_thw))]
+            text, _ = self.get_text_with_replacements(text, images_replacements=images_replacements)
 
         # Build prompt with target shape and combine grids in a single loop
         # Format: [sample0_source_grids..., sample0_target_grids, sample1_source_grids..., sample1_target_grids, ...]

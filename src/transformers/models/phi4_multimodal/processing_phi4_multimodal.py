@@ -16,8 +16,6 @@
 Processor class for Phi4Multimodal
 """
 
-import re
-
 from ...audio_utils import AudioInput
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -106,15 +104,19 @@ class Phi4MultimodalProcessor(ProcessorMixin):
                 f"Input contains {concatenated_prompt.count(audio_token)} tokens != {len(audio_embed_sizes)} audios"
             )
 
-        # Add appropriate number of image/audio tokens (note that the count of replacement is dynamic)
-        image_count_iter = iter(num_img_tokens)
-        audio_count_iter = iter(audio_embed_sizes)
-        processed_text = [
-            re.sub(re.escape(image_token), lambda _: image_token * next(image_count_iter), t) for t in text
+        # Add appropriate number of image/audio tokens (note that the count of replacement is dynamic) through
+        # the shared `get_text_with_replacements` helper (see #45493).
+        images_replacements = [
+            self.replace_image_token(num_img_tokens, image_idx=idx) for idx in range(len(num_img_tokens))
         ]
-        processed_text = [
-            re.sub(re.escape(audio_token), lambda _: audio_token * next(audio_count_iter), t) for t in processed_text
+        audio_replacements = [
+            self.replace_audio_token(audio_embed_sizes, audio_idx=idx) for idx in range(len(audio_embed_sizes))
         ]
+        processed_text, _ = self.get_text_with_replacements(
+            list(text),
+            images_replacements=images_replacements,
+            audio_replacements=audio_replacements,
+        )
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(processed_text, **output_kwargs["text_kwargs"])
@@ -128,6 +130,14 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         }
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def replace_image_token(self, image_inputs, image_idx: int) -> str:
+        """Return the per-image expansion of the image placeholder token, see #45493."""
+        return self.image_token * image_inputs[image_idx]
+
+    def replace_audio_token(self, audio_inputs, audio_idx: int) -> str:
+        """Return the per-audio expansion of the audio placeholder token, see #45493."""
+        return self.audio_token * audio_inputs[audio_idx]
 
 
 __all__ = ["Phi4MultimodalProcessor"]

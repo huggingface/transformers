@@ -157,6 +157,13 @@ class LightOnOcrProcessor(ProcessorMixin):
     def image_token_ids(self) -> list[int]:
         return [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
 
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        image_height, image_width = image_inputs["image_sizes"][image_idx]
+        num_height_tokens = image_height // self.effective_patch_size
+        num_width_tokens = image_width // self.effective_patch_size
+        num_patches = num_height_tokens * num_width_tokens
+        return self.image_token * num_patches
+
     def __call__(
         self,
         images: ImageInput | None = None,
@@ -182,28 +189,9 @@ class LightOnOcrProcessor(ProcessorMixin):
             raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         if image_inputs.get("pixel_values") is not None:
-            image_sizes_iter = iter(image_inputs["image_sizes"])
-            prompt_strings = []
-
-            for sample in text:
-                replace_strings = []
-
-                while self.image_token in sample:
-                    image_height, image_width = next(image_sizes_iter)
-                    num_height_tokens = image_height // self.effective_patch_size
-                    num_width_tokens = image_width // self.effective_patch_size
-                    num_patches = num_height_tokens * num_width_tokens
-
-                    replace_str = self.image_token * num_patches
-                    replace_strings.append(replace_str)
-
-                    sample = sample.replace(self.image_token, "<placeholder>", 1)
-
-                while "<placeholder>" in sample:
-                    replace_str = replace_strings.pop(0)
-                    sample = sample.replace("<placeholder>", replace_str, 1)
-
-                prompt_strings.append(sample)
+            num_images = len(image_inputs["image_sizes"])
+            images_replacements = [self.replace_image_token(image_inputs, i) for i in range(num_images)]
+            prompt_strings, _ = self.get_text_with_replacements(list(text), images_replacements=images_replacements)
         else:
             prompt_strings = text
 

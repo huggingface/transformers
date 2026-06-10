@@ -59,6 +59,17 @@ class Cohere2VisionProcessor(ProcessorMixin):
             ]
         )
 
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        num_patches = image_inputs["num_patches"][image_idx]
+        img_patches_per_tile = int(self.patch_size**2)
+
+        img_string = f"{self.boi_token}"
+        for idx in range(1, num_patches):
+            img_string += self.image_token * img_patches_per_tile + self.img_line_break_token
+        img_string += self.image_token * img_patches_per_tile + self.img_line_break_token
+        img_string += f"{self.eoi_token}"
+        return img_string
+
     @auto_docstring
     def __call__(
         self,
@@ -91,22 +102,10 @@ class Cohere2VisionProcessor(ProcessorMixin):
         image_inputs = {}
         if images is not None:
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            batch_num_patches = iter(image_inputs.pop("num_patches"))
-            processed_text = []
-            for sample in text:
-                while self.image_token in sample:
-                    num_patches = next(batch_num_patches)
-                    img_patches_per_tile = int(self.patch_size**2)
-
-                    img_string = f"{self.boi_token}"
-                    for idx in range(1, num_patches):
-                        img_string += "<placeholder>" * img_patches_per_tile + self.img_line_break_token
-                    img_string += "<placeholder>" * img_patches_per_tile + self.img_line_break_token
-                    img_string += f"{self.eoi_token}"
-
-                    sample = sample.replace(self.image_token, img_string, 1)
-                processed_text.append(sample)
-            text = [sample.replace("<placeholder>", self.image_token) for sample in processed_text]
+            num_images = len(image_inputs["num_patches"])
+            images_replacements = [self.replace_image_token(image_inputs, i) for i in range(num_images)]
+            image_inputs.pop("num_patches")
+            text, _ = self.get_text_with_replacements(list(text), images_replacements=images_replacements)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)

@@ -56,6 +56,10 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_tokenizer_defaults(self):
         pass
 
+    @unittest.skip("Mllama uses one image token per image + cross-attention; no token expansion to centralize")
+    def test_processor_expands_tokens_via_get_text_with_replacements(self):
+        pass
+
     # Override as Mllama needs images to be an explicitly nested batch
     def prepare_image_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""

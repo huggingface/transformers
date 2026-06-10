@@ -96,19 +96,21 @@ class Qwen2AudioProcessor(ProcessorMixin):
             # rename attention_mask to prevent conflicts later on
             audio_inputs["feature_attention_mask"] = audio_inputs.pop("attention_mask")
 
-            expanded_text = []
             audio_lengths = audio_inputs["feature_attention_mask"].sum(-1).tolist()
 
+            # Build the per-audio replacement strings in document order. The replacement for each
+            # audio token depends on the surrounding text (whether it is already wrapped in
+            # bos/eos), so it must be computed inline here rather than via `replace_audio_token`.
+            audio_replacements = []
             for sample in text:
-                replace_str = []
-                while self.audio_token in sample:
+                search_idx = 0
+                while (audio_token_start_idx := sample.find(self.audio_token, search_idx)) != -1:
                     audio_length = audio_lengths.pop(0)
                     input_length = (audio_length - 1) // 2 + 1
                     num_audio_tokens = (input_length - 2) // 2 + 1
 
                     expanded_audio_token = self.audio_token * num_audio_tokens
 
-                    audio_token_start_idx = sample.find(self.audio_token)
                     audio_token_end_idx = audio_token_start_idx + len(self.audio_token)
 
                     has_bos = (
@@ -124,13 +126,10 @@ class Qwen2AudioProcessor(ProcessorMixin):
                     if not has_bos and not has_eos:
                         expanded_audio_token = self.audio_bos_token + expanded_audio_token + self.audio_eos_token
 
-                    replace_str.append(expanded_audio_token)
-                    sample = sample.replace(self.audio_token, "<placeholder>", 1)
+                    audio_replacements.append(expanded_audio_token)
+                    search_idx = audio_token_end_idx
 
-                while "<placeholder>" in sample:
-                    sample = sample.replace("<placeholder>", replace_str.pop(0), 1)
-                expanded_text.append(sample)
-            text = expanded_text
+            text, _ = self.get_text_with_replacements(list(text), audio_replacements=audio_replacements)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])

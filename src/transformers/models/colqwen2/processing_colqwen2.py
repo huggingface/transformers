@@ -115,15 +115,8 @@ class ColQwen2Processor(ProcessorMixin):
             image_grid_thw = image_inputs["image_grid_thw"]
 
             if image_grid_thw is not None:
-                merge_length = self.image_processor.merge_size**2
-                index = 0
-                for i in range(len(texts_doc)):
-                    while self.image_token in texts_doc[i]:
-                        texts_doc[i] = texts_doc[i].replace(
-                            self.image_token, "<|placeholder|>" * (image_grid_thw[index].prod() // merge_length), 1
-                        )
-                        index += 1
-                    texts_doc[i] = texts_doc[i].replace("<|placeholder|>", self.image_token)
+                images_replacements = [self.replace_image_token(image_inputs, i) for i in range(len(image_grid_thw))]
+                texts_doc, _ = self.get_text_with_replacements(texts_doc, images_replacements=images_replacements)
 
             text_inputs = self.tokenizer(
                 texts_doc,
@@ -350,6 +343,11 @@ class ColQwen2Processor(ProcessorMixin):
             scores.append(torch.cat(batch_scores, dim=1).to(output_dtype).to(output_device))
 
         return torch.cat(scores, dim=0)
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        merge_length = self.image_processor.merge_size**2
+        num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
+        return self.image_token * num_image_tokens
 
 
 __all__ = ["ColQwen2Processor"]
