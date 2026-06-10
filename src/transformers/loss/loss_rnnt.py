@@ -35,8 +35,16 @@ def rnnt_loss(
     Compute standard RNN-T (RNN Transducer) loss (https://arxiv.org/abs/1211.3711).
 
     Thin wrapper around [`torchaudio.functional.rnnt_loss`]. torchaudio is queried with `reduction="none"` to get
-    the per-sample negative log-likelihoods, and the requested reduction is applied here so that `"mean"` matches
-    the HF-style convention (per-sample loss divided by its target length, then averaged over the batch).
+    the per-sample negative log-likelihoods, and the requested reduction is applied here. The reduction names and
+    formulas mirror NeMo's `RNNTLoss` (the reference implementation used to train/finetune Parakeet), so that loss
+    magnitudes and gradient scaling match when finetuning a Parakeet checkpoint:
+
+    - `"mean_volume"`: sum of per-sample losses divided by the sum of target lengths (per-token average over the
+      whole batch). This is what `nvidia/parakeet-rnnt-0.6b` is trained with (`rnnt_reduction: mean_volume`).
+    - `"mean_batch"`: plain average of per-sample losses over the batch (NeMo's default).
+    - `"mean"`: per-sample loss divided by its own target length, then averaged over the batch.
+    - `"sum"`: sum of per-sample losses.
+    - `"none"`: per-sample losses, unreduced.
 
     Args:
         logits: Joint token logits of shape `(batch, T, U+1, vocab_size)`.
@@ -44,7 +52,7 @@ def rnnt_loss(
         logit_lengths: Encoder output lengths of shape `(batch,)`.
         target_lengths: Target lengths of shape `(batch,)`.
         blank_token_id: Blank token id.
-        reduction: Loss reduction method. One of `"mean"`, `"sum"`, or `"none"`. Defaults to `"mean"`.
+        reduction: Loss reduction method. One of `"mean_volume"`, `"mean_batch"`, `"mean"`, `"sum"`, or `"none"`.
 
     Returns:
         Scalar loss tensor (or per-example losses if `reduction="none"`).
@@ -56,8 +64,11 @@ def rnnt_loss(
             "Computing the Parakeet RNN-T loss requires torchaudio. Install it with `pip install torchaudio`."
         )
 
-    if reduction not in ("mean", "sum", "none"):
-        raise ValueError(f'Invalid reduction mode "{reduction}". Expected one of "mean", "sum", or "none".')
+    valid_reductions = ("mean_volume", "mean_batch", "mean", "sum", "none")
+    if reduction not in valid_reductions:
+        raise ValueError(
+            f'Invalid reduction mode "{reduction}". Expected one of {", ".join(repr(r) for r in valid_reductions)}.'
+        )
 
     target_lengths = target_lengths.to(logits.device)
     losses = torchaudio.functional.rnnt_loss(
@@ -69,7 +80,11 @@ def rnnt_loss(
         reduction="none",
     )
 
-    if reduction == "mean":
+    if reduction == "mean_volume":
+        return losses.sum() / target_lengths.float().sum()
+    elif reduction == "mean_batch":
+        return losses.mean()
+    elif reduction == "mean":
         return (losses / target_lengths.float()).mean()
     elif reduction == "sum":
         return losses.sum()
@@ -82,7 +97,7 @@ def ParakeetForRNNTLoss(
     logit_lengths,
     label_lengths,
     blank_token_id,
-    reduction="mean",
+    reduction="mean_volume",
     **kwargs,
 ):
     return rnnt_loss(
