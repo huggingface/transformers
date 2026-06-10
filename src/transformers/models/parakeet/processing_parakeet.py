@@ -49,13 +49,13 @@ class ParakeetProcessor(ProcessorMixin):
             Blank token for transducer decoding.
         decoder_type (`str`, *optional*):
             Decoding/timestamp emission mode. Possible values:
-            
+
             - `"ctc"`: Consecutive identical tokens are merged into one emission.
             - `"rnnt"`: Repeated tokens are kept; each token gets a 1-frame timestamp span.
             - `"tdt"`: Repeated tokens are kept; each token span is based on its predicted duration. Punctuation is attached to the preceding token.
-            
+
             If `None` (older checkpoints) the decoder type is inferred automatically for backward compatibility.
-        """ 
+        """
         self.blank_token = blank_token
         self.blank_token_id = tokenizer.convert_tokens_to_ids(blank_token)
         self.decoder_type = decoder_type
@@ -66,7 +66,7 @@ class ParakeetProcessor(ProcessorMixin):
         if self.decoder_type is not None:
             return self.decoder_type
         # BC: CTC and TDT checkpoints pushed to the hub before `decoder_type` existed, so it is unset for them.
-        # If decoder_type is not specified, use TDT when there is no blank token, otherwise CTC; 
+        # If decoder_type is not specified, use TDT when there is no blank token, otherwise CTC;
         # if it is specified, use the provided decoder type
         return "ctc" if self.blank_token not in self.tokenizer.get_vocab() else "tdt"
 

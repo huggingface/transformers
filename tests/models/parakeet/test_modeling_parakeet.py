@@ -958,7 +958,6 @@ class ParakeetForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class ParakeetForRNNTIntegrationTest(unittest.TestCase):
-
     _dataset = None
 
     @classmethod

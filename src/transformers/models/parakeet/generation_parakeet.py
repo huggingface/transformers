@@ -284,4 +284,3 @@ class ParakeetTDTGenerationMixin(ParakeetRNNTGenerationMixin):
         self._encoder_finished = model_kwargs["encoder_frame_idxs"] >= model_kwargs["encoder_valid_lengths"]
 
         return model_kwargs
-

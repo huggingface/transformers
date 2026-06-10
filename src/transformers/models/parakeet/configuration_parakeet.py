@@ -135,11 +135,6 @@ class ParakeetCTCConfig(PreTrainedConfig):
 @strict
 class ParakeetRNNTConfig(PreTrainedConfig):
     r"""
-    This is the base Parakeet transducer configuration. A conventional RNN-T (RNN Transducer) joint network
-    emits token logits only (so the joint head outputs just `vocab_size` logits), and during greedy decoding
-    the encoder frame pointer advances by exactly one frame on each blank emission. The duration-aware
-    [`ParakeetTDTConfig`] extends this configuration with a `durations` field.
-
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network and joint network.
     num_decoder_layers (`int`, *optional*, defaults to 2):
@@ -153,6 +148,7 @@ class ParakeetRNNTConfig(PreTrainedConfig):
     loss_reduction (`str`, *optional*, defaults to `"mean_volume"`):
         Reduction applied to the loss. One of `"mean_volume"`, `"mean_batch"`, `"mean"`, `"sum"`, or
         `"none"`.
+
     Example:
     ```python
     >>> from transformers import ParakeetForRNNT, ParakeetRNNTConfig
