@@ -1342,13 +1342,12 @@ class NemotronAsrForRNNT(ParakeetForRNNT, NemotronAsrPreTrainedModel, NemotronAs
             decoder_hidden_states=decoder_hidden_states[:, None, :, :],
         ).squeeze(2)
 
+        loss = None
         if labels is not None:
-            raise NotImplementedError(
-                "RNN-T training loss is not yet implemented for NemotronAsrForRNNT. Inference (greedy decoding) works."
-            )
+            loss = self.loss_function(logits=logits, labels=labels, encoder_outputs=encoder_outputs)
 
         return NemotronAsrRNNTOutput(
-            loss=None,
+            loss=loss,
             logits=logits,
             last_hidden_state=encoder_outputs.last_hidden_state,
             pooler_output=encoder_outputs.pooler_output,

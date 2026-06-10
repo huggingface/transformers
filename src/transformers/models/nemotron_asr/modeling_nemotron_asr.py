@@ -1172,13 +1172,12 @@ class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin)
             decoder_hidden_states=decoder_hidden_states[:, None, :, :],
         ).squeeze(2)
 
+        loss = None
         if labels is not None:
-            raise NotImplementedError(
-                "RNN-T training loss is not yet implemented for NemotronAsrForRNNT. Inference (greedy decoding) works."
-            )
+            loss = self.loss_function(logits=logits, labels=labels, encoder_outputs=encoder_outputs)
 
         return NemotronAsrRNNTOutput(
-            loss=None,
+            loss=loss,
             logits=logits,
             last_hidden_state=encoder_outputs.last_hidden_state,
             pooler_output=encoder_outputs.pooler_output,
@@ -1189,10 +1188,6 @@ class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin)
 
     def loss_function(self, logits, labels, encoder_outputs, **kwargs):
         logit_lengths = encoder_outputs.attention_mask.sum(-1)
-        # The subsampling conv runs over the batch-padded input, so the encoder output can carry a trailing
-        # all-padding frame (one step beyond the longest valid sequence) for some input lengths. torchaudio's
-        # rnnt_loss requires `logits.shape[1] == max(logit_lengths)`, so drop those extra time steps; they lie
-        # past every sequence's length and do not affect the loss.
         logits = logits[:, : int(logit_lengths.max())]
         return super().loss_function(
             logits=logits,
