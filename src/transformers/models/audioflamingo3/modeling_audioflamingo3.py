@@ -567,7 +567,7 @@ class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
 )
 class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, GenerationMixin):
     _keep_in_fp32_modules_strict = ["embed_positions"]
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tied_weights_keys = None
 
     def __init__(self, config):
         super().__init__(config)
