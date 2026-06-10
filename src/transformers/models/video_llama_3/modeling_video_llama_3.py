@@ -33,7 +33,12 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    torch_compilable_check,
+)
 from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
@@ -51,8 +56,10 @@ class VideoLlama3VisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
-        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+    def forward(self, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        freqs = (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        return emb.cos(), emb.sin()
 
 
 class VideoLlama3VisionEmbeddings(nn.Module):
@@ -346,7 +353,7 @@ class VideoLlama3PreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["VideoLlama3VisionEncoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -426,9 +433,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
 
         hidden_states = self.embeddings(pixel_values.type(self.dtype))
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_embeddings = self.rotary_pos_emb(position_ids)
 
         encoder_outputs: BaseModelOutput = self.encoder(
             hidden_states,
@@ -504,6 +509,12 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         self.language_model = AutoModel.from_config(config.text_config)
 
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.language_model.set_input_embeddings(value)
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -729,6 +740,12 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
 
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
     @auto_docstring
     def get_video_features(
         self,
@@ -742,7 +759,9 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+        return self.model.get_video_features(
+            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
+        )
 
     @auto_docstring
     def get_image_features(
@@ -757,7 +776,7 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
+        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
