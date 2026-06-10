@@ -16,14 +16,10 @@ Processor class for SmolVLM.
 """
 
 from datetime import timedelta
-from typing import TYPE_CHECKING, Union
 
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import BatchEncoding, TextInput
+from ...image_utils import make_nested_list_of_images
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, is_num2words_available, logging
-from ...video_utils import VideoInput
 
 
 # Adapted from transformers.models.smolvlm.video_processing_smolvlm.DEFAULT_VIDEO_INTRO
@@ -34,9 +30,6 @@ DEFAULT_VIDEO_INTRO = (
 DEFAULT_MEDIA_OUTTRO = "\n\n"
 # Adapted from transformers.models.smolvlm.video_processing_smolvlm.FRAME_TIMESTAMP_MESSAGE
 FRAME_TIMESTAMP_MESSAGE = "\nFrame from {timestamp}:"
-
-if TYPE_CHECKING:
-    from ...tokenization_utils_base import PreTokenizedInput
 
 logger = logging.get_logger(__name__)
 
@@ -115,6 +108,9 @@ class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class SmolVLMProcessor(ProcessorMixin):
+    valid_processor_kwargs = SmolVLMProcessorKwargs
+    unused_input_names = ["rows", "cols", "video_metadata"]
+
     def __init__(
         self,
         image_processor,
@@ -145,150 +141,75 @@ class SmolVLMProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
 
-    def expand_text_with_image_tokens(self, text, image_rows, image_cols):
-        prompt_strings = []
-        for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
-            # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
-            image_prompt_strings = []
-            for n_rows, n_cols in zip(sample_rows, sample_cols):
-                image_prompt_string = get_image_prompt_string(
-                    n_rows,
-                    n_cols,
-                    self.image_seq_len,
-                    image_token=self.image_token,
-                    fake_token_around_image=self.fake_image_token,
-                    global_image_token=self.global_image_token,
-                )
-                image_prompt_strings.append(image_prompt_string)
-
-            split_sample = sample.split(self.image_token)
-            if len(split_sample) == 0:
-                raise ValueError("The image token should be present in the text.")
-
-            # Place in the image prompt strings where the image tokens are
-            sample = split_sample[0]
-            for i, image_prompt_string in enumerate(image_prompt_strings):
-                sample += image_prompt_string + split_sample[i + 1]
-            prompt_strings.append(sample)
-
-        return prompt_strings
-
-    def expand_text_with_video_tokens(self, text, video_inputs):
-        num_frames = video_inputs["pixel_values"].shape[1]
-        video_metadata = iter(video_inputs["video_metadata"])
-
-        prompt_strings = []
-        for sample in text:
-            while self.video_token in sample:
-                metadata = next(video_metadata)
-                if metadata.fps is None:
-                    logger.warning_once(
-                        "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
-                        "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
-                        "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
-                    )
-                    metadata.fps = 24  # Set the default fps to 24 for BC, otherwise `timestamps` can't be inferred
-                timestamps = [(int(second // 60), int(second % 60)) for second in metadata.timestamps]
-                duration = int(metadata.duration) if metadata.duration is not None else int(metadata.timestamps[-1])
-                duration_td = timedelta(seconds=int(duration))
-                image_prompt_strings = DEFAULT_VIDEO_INTRO.format(
-                    frame_count=num2words(num_frames), video_duration=str(duration_td)
-                )
-                for timestamp in timestamps:
-                    image_prompt_string = _prompt_single_image(
-                        self.image_seq_len,
-                        image_token=self.image_token,
-                        fake_token_around_image=self.fake_image_token,
-                        global_image_token=self.global_image_token,
-                    )
-                    timestamp = f"{timestamp[0]:02d}:{timestamp[1]:02d}"
-                    image_prompt_string = FRAME_TIMESTAMP_MESSAGE.format(timestamp=timestamp) + image_prompt_string
-                    image_prompt_strings += image_prompt_string
-
-                image_prompt_strings += DEFAULT_MEDIA_OUTTRO
-                sample = sample.replace(self.video_token, image_prompt_strings, 1)
-            prompt_strings.append(sample)
-        return prompt_strings
-
-    @auto_docstring
-    def __call__(
-        self,
-        images: ImageInput | list[ImageInput] | list[list[ImageInput]] = None,
-        text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        videos: VideoInput | None = None,
-        **kwargs: Unpack[SmolVLMProcessorKwargs],
-    ) -> BatchEncoding:
-        if text is None and images is None and videos is None:
-            raise ValueError("You must provide one of `text`, `images` or `videos'.")
-
-        if text is None and ((images is None) ^ (videos is not None)):
-            raise ValueError("You must specify exactly one of `images` or `videos`")
-
-        output_kwargs = self._merge_kwargs(
-            SmolVLMProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        if text is not None:
-            if isinstance(text, str):
-                text = [text]
-            elif not isinstance(text, list) and not isinstance(text[0], str):
-                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-            n_images_in_text = sum(sample.count(self.image_token) for sample in text)
-            if n_images_in_text > 0 and (images is None and videos is None):
-                raise ValueError(f"We detected {n_images_in_text} tokens in the text but no images/videos were passed")
-
-        inputs = {}
-        # Images and videos are mutually exclusive, so process one which is present
+    def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
         if images is not None:
             images = self.image_processor.fetch_images(images)
             images = make_nested_list_of_images(images)
-            vision_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
+        return super().prepare_inputs_layout(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
-            image_rows = vision_inputs.pop("rows", None)
-            image_cols = vision_inputs.pop("cols", None)
-            inputs.update(vision_inputs)
-
-            if text is not None:
-                n_images_in_text = [sample.count(self.image_token) for sample in text]
-                n_images_in_images = [len(sublist) for sublist in images]
-                if n_images_in_images != n_images_in_text:
-                    raise ValueError(
-                        f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
-                    )
-                # Set default values for image_rows and image_cols if not provided
-                if image_rows is None:
-                    image_rows = [[0] * n_images for n_images in n_images_in_text]
-                if image_cols is None:
-                    image_cols = [[0] * n_images for n_images in n_images_in_text]
-                text = self.expand_text_with_image_tokens(text, image_rows=image_rows, image_cols=image_cols)
-
-        elif videos is not None:
-            vision_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
-            if text is not None:
-                n_videos_in_text = [sample.count(self.video_token) for sample in text]
-                n_videos_in_videos = [len(sublist) for sublist in videos]
-                if n_videos_in_videos != n_videos_in_text:
-                    raise ValueError(
-                        f"The number of videos in the text {n_videos_in_text} and videos {n_videos_in_videos} should be the same."
-                    )
-                text = self.expand_text_with_video_tokens(text, vision_inputs)
-
-            # If user has not requested video metadata, pop it. By default metadata
-            # is always returned to expand video tokens correctly
-            if not kwargs.get("return_metadata"):
-                vision_inputs.pop("video_metadata")
-            inputs.update(vision_inputs)
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-
+    def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwargs):
+        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
+        if text is None and images is None and videos is None:
+            raise ValueError("You must provide one of `text`, `images` or `videos`.")
+        if text is None and ((images is None) ^ (videos is not None)):
+            raise ValueError("You must specify exactly one of `images` or `videos`")
         if text is not None:
-            text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-            self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
-            inputs.update(text_inputs)
+            n_images_in_text = sum(sample.count(self.image_token) for sample in text)
+            if n_images_in_text > 0 and images is None and videos is None:
+                raise ValueError(
+                    f"We detected {n_images_in_text} tokens in the text but no images/videos were passed"
+                )
+            if images is not None:
+                n_images_per_sample = [sample.count(self.image_token) for sample in text]
+                n_images_in_images = [len(sublist) for sublist in images]
+                if n_images_in_images != n_images_per_sample:
+                    raise ValueError(
+                        f"The number of images in the text {n_images_per_sample} and images {n_images_in_images} should be the same."
+                    )
+            if videos is not None:
+                n_videos_per_sample = [sample.count(self.video_token) for sample in text]
+                n_videos_in_videos = [len(sublist) for sublist in videos]
+                if n_videos_in_videos != n_videos_per_sample:
+                    raise ValueError(
+                        f"The number of videos in the text {n_videos_per_sample} and videos {n_videos_in_videos} should be the same."
+                    )
 
-        return BatchFeature(inputs, tensor_type=return_tensors)
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        rows = [row for row_list in image_inputs["rows"] for row in row_list]
+        cols = [col for col_list in image_inputs["cols"] for col in col_list]
+        return get_image_prompt_string(
+            rows[image_idx],
+            cols[image_idx],
+            self.image_seq_len,
+            fake_token_around_image=self.fake_image_token,
+            image_token=self.image_token,
+            global_image_token=self.global_image_token,
+        )
+
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+        num_frames = video_inputs["pixel_values"].shape[1]
+        metadata = video_inputs["video_metadata"][video_idx]
+        if metadata.fps is None:
+            logger.warning_once(
+                "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+            )
+            metadata.fps = 24
+        timestamps = [(int(second // 60), int(second % 60)) for second in metadata.timestamps]
+        duration = int(metadata.duration) if metadata.duration is not None else int(metadata.timestamps[-1])
+        duration_td = timedelta(seconds=int(duration))
+        prompt = DEFAULT_VIDEO_INTRO.format(frame_count=num2words(num_frames), video_duration=str(duration_td))
+        for timestamp in timestamps:
+            image_prompt_string = _prompt_single_image(
+                self.image_seq_len,
+                image_token=self.image_token,
+                fake_token_around_image=self.fake_image_token,
+                global_image_token=self.global_image_token,
+            )
+            timestamp_str = f"{timestamp[0]:02d}:{timestamp[1]:02d}"
+            prompt += FRAME_TIMESTAMP_MESSAGE.format(timestamp=timestamp_str) + image_prompt_string
+        return prompt + DEFAULT_MEDIA_OUTTRO
 
     def apply_chat_template(
         self,

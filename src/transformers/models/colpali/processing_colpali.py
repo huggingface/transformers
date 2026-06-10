@@ -24,10 +24,8 @@ from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available
 
-
 if is_torch_available():
     import torch
-
 
 class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
@@ -43,10 +41,8 @@ class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
         "common_kwargs": {"return_tensors": "pt"},
     }
 
-
 IMAGE_TOKEN = "<image>"
 EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
-
 
 @auto_docstring
 class ColPaliProcessor(ProcessorMixin):
@@ -163,7 +159,6 @@ class ColPaliProcessor(ProcessorMixin):
         Query augmentation buffers are used as reasoning buffers during inference.
         """
         return self.tokenizer.pad_token
-
     def process_images(
         self,
         images: ImageInput | None = None,

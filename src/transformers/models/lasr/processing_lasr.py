@@ -20,7 +20,7 @@
 
 
 from ...audio_utils import AudioInput, make_list_of_audio
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 
@@ -39,6 +39,7 @@ class LasrProcessorKwargs(ProcessingKwargs, total=False):
             "padding": True,
             "padding_side": "right",
             "add_special_tokens": False,
+            "return_attention_mask": False,
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
@@ -46,8 +47,15 @@ class LasrProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class LasrProcessor(ProcessorMixin):
+    valid_processor_kwargs = LasrProcessorKwargs
+
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
+
+    def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
+        if audio is not None:
+            audio = make_list_of_audio(audio)
+        return super().prepare_inputs_layout(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
     @auto_docstring
     def __call__(
@@ -55,7 +63,7 @@ class LasrProcessor(ProcessorMixin):
         audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         sampling_rate: int | None = None,
-        **kwargs: Unpack[LasrProcessorKwargs],
+        **kwargs,
     ):
         r"""
         sampling_rate (`int`, *optional*):
@@ -64,8 +72,6 @@ class LasrProcessor(ProcessorMixin):
             sampling rate, and an error will be raised if they don't match. If not provided, a warning will be
             issued and the default sampling rate will be assumed.
         """
-        audio = make_list_of_audio(audio)
-
         output_kwargs = self._merge_kwargs(
             LasrProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -81,16 +87,10 @@ class LasrProcessor(ProcessorMixin):
                 f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({output_kwargs['audio_kwargs']['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
             )
 
-        if audio is not None:
-            inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
-        if text is not None:
-            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
-        if text is None:
-            return inputs
-        else:
-            inputs["labels"] = encodings["input_ids"]
-            return inputs
+        result = super().__call__(audio=audio, text=text, **output_kwargs)
+        if "input_ids" in result:
+            result["labels"] = result.pop("input_ids")
+        return result
 
     @property
     def model_input_names(self):

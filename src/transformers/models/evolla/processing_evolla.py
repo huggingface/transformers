@@ -16,9 +16,7 @@ Processor class for EVOLLA.
 """
 
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import (
-    ProcessorMixin,
-)
+from ...processing_utils import ProcessorMixin
 from ...utils import auto_docstring
 
 
@@ -170,12 +168,6 @@ class EvollaProcessor(ProcessorMixin):
                 "attention_mask": text_tokens["attention_mask"],
             }
         )
-
-    def batch_decode(self, *args, **kwargs):
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        return self.tokenizer.decode(*args, **kwargs)
 
     def protein_batch_decode(self, *args, **kwargs):
         return self.protein_tokenizer.batch_decode(*args, **kwargs)

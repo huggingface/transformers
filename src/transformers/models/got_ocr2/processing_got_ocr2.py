@@ -17,7 +17,7 @@ import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_vision_available, logging
 
@@ -110,6 +110,8 @@ def preprocess_box_annotation(box: list | tuple, image_size: tuple[int, int]) ->
 
 @auto_docstring
 class GotOcr2Processor(ProcessorMixin):
+    valid_processor_kwargs = GotOcr2ProcessorKwargs
+
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
@@ -149,7 +151,7 @@ class GotOcr2Processor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[GotOcr2ProcessorKwargs],
+        **kwargs,
     ) -> BatchFeature:
         r"""
         Returns:

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from transformers.models.paligemma.processing_paligemma import PaliGemmaProcessor
+from transformers.models.paligemma.processing_paligemma import IMAGE_TOKEN, PaliGemmaProcessor
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
@@ -20,12 +20,10 @@ from ...processing_utils import ProcessingKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available, logging
 
-
 if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
-
 
 class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
@@ -40,7 +38,6 @@ class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
-
 
 class ColPaliProcessor(PaliGemmaProcessor):
     valid_processor_kwargs = ColPaliProcessorKwargs
@@ -113,7 +110,6 @@ class ColPaliProcessor(PaliGemmaProcessor):
         if "token_type_ids" in return_data:
             return_data["labels"] = return_data["input_ids"].masked_fill(return_data["token_type_ids"] == 0, -100)
         return return_data
-
     def process_images(
         self,
         images: ImageInput | None = None,

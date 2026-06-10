@@ -24,6 +24,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import select_best_resolution
+from ...image_utils import get_image_size, to_numpy_array
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...processing_utils import Unpack
@@ -182,6 +183,8 @@ class Granite4VisionConfig(LlavaNextConfig):
 
 
 class Granite4VisionProcessor(LlavaNextProcessor):
+    valid_processor_kwargs = Granite4VisionProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,
@@ -218,6 +221,17 @@ class Granite4VisionProcessor(LlavaNextProcessor):
             num_additional_image_tokens=num_additional_image_tokens,
         )
         self.downsample_rate = downsample_rate
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        image_size = image_inputs["image_sizes"][image_idx]
+        if not isinstance(image_size, (list, tuple)):
+            image_size = image_size.tolist()
+        orig_height, orig_width = image_size
+        height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
+        num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
+        if self.vision_feature_select_strategy == "default":
+            num_image_tokens -= 1
+        return self.image_token * num_image_tokens
 
     def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:
         image_grid_pinpoints = self.image_processor.image_grid_pinpoints

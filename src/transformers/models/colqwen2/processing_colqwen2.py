@@ -24,10 +24,8 @@ from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available
 
-
 if is_torch_available():
     import torch
-
 
 class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
@@ -42,7 +40,6 @@ class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
-
 
 @auto_docstring
 class ColQwen2Processor(ProcessorMixin):
@@ -77,10 +74,7 @@ class ColQwen2Processor(ProcessorMixin):
         if images is not None:
             if is_valid_image(images):
                 images = [images]
-            elif not (
-                isinstance(images, list)
-                and (is_valid_image(images[0]) or (isinstance(images[0], list) and is_valid_image(images[0][0])))
-            ):
+            elif not (isinstance(images, list) and (is_valid_image(images[0]) or (isinstance(images[0], list) and is_valid_image(images[0][0])))):
                 raise ValueError("images must be an image, list of images or list of list of images")
             images, _, videos, audio = super().prepare_inputs_layout(images=images, **kwargs)
             text = [self.visual_prompt_prefix] * len(images)
@@ -163,7 +157,6 @@ class ColQwen2Processor(ProcessorMixin):
         Query augmentation buffers are used as reasoning buffers during inference.
         """
         return self.tokenizer.pad_token
-
     def process_images(
         self,
         images: ImageInput | None = None,

@@ -24,7 +24,6 @@ from ...image_utils import ImageInput, is_valid_image, load_image
 from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
-    Unpack,
 )
 from ...tokenization_utils_base import AddedToken, TextInput
 from ...utils import auto_docstring, logging
@@ -57,6 +56,8 @@ class Idefics2ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Idefics2Processor(ProcessorMixin):
+    valid_processor_kwargs = Idefics2ProcessorKwargs
+
     def __init__(
         self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: str | None = None, **kwargs
     ):
@@ -100,7 +101,7 @@ class Idefics2Processor(ProcessorMixin):
         self,
         images: ImageInput | list[ImageInput] | list[list[ImageInput]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        **kwargs: Unpack[Idefics2ProcessorKwargs],
+        **kwargs,
     ) -> BatchFeature:
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")

@@ -23,7 +23,6 @@ from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
     TextKwargs,
-    Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available
@@ -144,6 +143,8 @@ def is_url(string):
 
 @auto_docstring
 class IdeficsProcessor(ProcessorMixin):
+    valid_processor_kwargs = IdeficsProcessorKwargs
+
     def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
         r"""
         image_size (int, *optional*, defaults to 224):
@@ -178,7 +179,7 @@ class IdeficsProcessor(ProcessorMixin):
         | list[PreTokenizedInput]
         | list[list[TextInput]]
         | list[list[PreTokenizedInput]] = None,
-        **kwargs: Unpack[IdeficsProcessorKwargs],
+        **kwargs,
     ) -> BatchFeature:
         r"""
         Returns:

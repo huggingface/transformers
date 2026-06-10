@@ -1265,6 +1265,7 @@ class GlmImageProcessor(ProcessorMixin):
             in a chat into a tokenizable string.
     """
 
+    valid_processor_kwargs = GlmImageProcessorKwargs
     model_input_names = ["input_ids", "attention_mask", "pixel_values", "image_grid_thw", "images_per_sample"]
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
@@ -1279,7 +1280,7 @@ class GlmImageProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[GlmImageProcessorKwargs],
+        **kwargs,
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`

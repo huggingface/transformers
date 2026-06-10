@@ -16,7 +16,6 @@ Image/Text processor class for GIT
 """
 
 import re
-from typing import Union
 
 import numpy as np
 
@@ -26,7 +25,6 @@ from ...processing_utils import (
     MultiModalData,
     ProcessingKwargs,
     ProcessorMixin,
-    Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging, requires_backends
@@ -102,7 +100,7 @@ def full_unpacked_stream_to_tensor(
 
 
 def construct_full_unpacked_stream(
-    num_real_text_tokens: Union[list[list[int]], "torch.Tensor"],
+    num_real_text_tokens: list[list[int]] | "torch.Tensor",
     input_stream: "torch.Tensor",
     image_tokens: list[list["torch.Tensor"]],
     batch_size: int,
@@ -235,7 +233,7 @@ def _tokenize_prompts_with_image_and_batch(
     scale_factors: list[list["torch.Tensor"]] | None,
     max_tokens_to_generate: int,
     max_position_embeddings: int,
-    add_BOS: bool,  # Same issue with types as above
+    add_BOS: bool,
     add_beginning_of_answer_token: bool,
 ) -> tuple["torch.Tensor", "torch.Tensor"]:
     """
@@ -331,6 +329,8 @@ def scale_bbox_to_transformed_image(
 @requires(backends=("vision",))
 @auto_docstring
 class FuyuProcessor(ProcessorMixin):
+    valid_processor_kwargs = FuyuProcessorKwargs
+
     @classmethod
     def _load_tokenizer_from_pretrained(
         cls, sub_processor_type, pretrained_model_name_or_path, subfolder="", **kwargs
@@ -487,7 +487,7 @@ class FuyuProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: str | list[str] | TextInput | PreTokenizedInput | None = None,
-        **kwargs: Unpack[FuyuProcessorKwargs],
+        **kwargs,
     ) -> "BatchFeature":
         r"""
         Returns:

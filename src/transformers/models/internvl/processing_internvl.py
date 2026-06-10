@@ -17,7 +17,7 @@ import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, concatenate_list, make_flat_list_of_images
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
 from ...video_utils import VideoInput
@@ -40,6 +40,8 @@ class InternVLProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class InternVLProcessor(ProcessorMixin):
+    valid_processor_kwargs = InternVLProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,
@@ -139,7 +141,7 @@ class InternVLProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos: VideoInput | None = None,
-        **kwargs: Unpack[InternVLProcessorKwargs],
+        **kwargs,
     ) -> BatchFeature:
         r"""
         Returns:

@@ -16,17 +16,10 @@ Processor class for LLaVa-Onevision.
 """
 
 import math
-from collections.abc import Iterable
 
-import numpy as np
-
-from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import select_best_resolution
-from ...image_utils import ImageInput, get_image_size, to_numpy_array
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
-from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
@@ -39,12 +32,13 @@ class LlavaOnevisionProcessorKwargs(ProcessingKwargs, total=False):
             "padding": False,
             "return_mm_token_type_ids": False,
         },
-        "image_kwargs": {},
     }
 
 
 @auto_docstring
 class LlavaOnevisionProcessor(ProcessorMixin):
+    valid_processor_kwargs = LlavaOnevisionProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,
@@ -88,111 +82,37 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         self.vision_aspect_ratio = vision_aspect_ratio
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
-    @auto_docstring
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        videos: VideoInput | None = None,
-        **kwargs: Unpack[LlavaOnevisionProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        batch_num_images = image_inputs["batch_num_images"]
+        cumulative = 0
+        is_multi_image = False
+        for n in batch_num_images:
+            if image_idx < cumulative + n:
+                is_multi_image = n != 1
+                break
+            cumulative += n
 
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **pixel_values_videos** -- Pixel values of a video input to be fed to a model. Returned when `videos` is not `None`.
-            - **image_sizes** -- Size of each image that will be used to unpad an image. Returned when `images` is not `None`.
-        """
+        if is_multi_image:
+            num_image_tokens = self.num_image_tokens + 1  # +1 for image_newline
+        else:
+            image_size = image_inputs["image_sizes"][image_idx]
+            if not isinstance(image_size, (list, tuple)):
+                image_size = image_size.tolist()
+            orig_height, orig_width = image_size
+            height, width = image_inputs["pixel_values"][0][0].shape[-2:]
+            num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
 
-        output_kwargs = self._merge_kwargs(
-            LlavaOnevisionProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
+        if self.vision_feature_select_strategy == "default":
+            num_image_tokens -= 1
+        return self.image_token * num_image_tokens
 
-        if isinstance(text, str):
-            text = [text]
-        elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
-
-        image_inputs = video_inputs = {}
-
-        if images is not None:
-            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-
-            batch_num_images = iter(image_inputs["batch_num_images"])
-            image_sizes = iter(image_inputs["image_sizes"])
-            height, width = get_image_size(
-                to_numpy_array(image_inputs["pixel_values"][0][0]),
-                channel_dim=output_kwargs["images_kwargs"].get("data_format"),
-            )
-            text, num_image_tokens = self._expand_image_tokens(
-                text, image_sizes, height, width, self.image_token, batch_num_images
-            )
-
-        if videos is not None:
-            video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
-
-            one_video = video_inputs.get("pixel_values_videos")[0]
-            if isinstance(video_inputs.get("pixel_values_videos")[0], (list, tuple)):
-                one_video = np.array(one_video)
-            else:
-                one_video = to_numpy_array(one_video)
-            height, width = get_image_size(one_video[0], channel_dim=output_kwargs["images_kwargs"].get("data_format"))
-            num_frames = one_video.shape[0]  # frame dim is always after batch dim
-            patches_height_width = int(math.sqrt(self.num_image_tokens))
-            pooled_height_width = math.ceil(patches_height_width / 2)
-            num_video_tokens = (num_frames * pooled_height_width * pooled_height_width) + 1  # +1 for newline token
-            text = [sample.replace(self.video_token, self.video_token * num_video_tokens) for sample in text]
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
-
-        if return_mm_token_type_ids:
-            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-        return BatchFeature(data={**text_inputs, **image_inputs, **video_inputs}, tensor_type=return_tensors)
-
-    def _expand_image_tokens(
-        self,
-        text: list[TextInput],
-        image_sizes: Iterable[list[int] | int],
-        height: int,
-        width: int,
-        special_token: str,
-        batch_num_images: Iterable[int],
-    ):
-        prompt_strings = []
-        max_num_vision_tokens = 0
-        for sample in text:
-            if special_token in sample:
-                num_images = next(batch_num_images)  # should consume iterable
-                is_multi_image = num_images != 1
-            else:
-                is_multi_image = False
-            while special_token in sample:
-                original_size = next(image_sizes)  # should consume iterable
-                if is_multi_image:
-                    num_image_tokens = self.num_image_tokens + 1  # one for image_newline
-                else:
-                    if not isinstance(original_size, (list, tuple)):
-                        # cast to list to avoid numerical precision errors when calculating unpadding
-                        original_size = original_size.tolist()
-                    orig_height, orig_width = original_size
-                    num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
-                max_num_vision_tokens = max(max_num_vision_tokens, num_image_tokens)
-                if self.vision_feature_select_strategy == "default":
-                    num_image_tokens -= 1
-                sample = sample.replace(special_token, "<placeholder>" * num_image_tokens, 1)
-            prompt_strings.append(sample)
-        text = [sample.replace("<placeholder>", special_token) for sample in prompt_strings]
-        return text, max_num_vision_tokens
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+        processed_video = video_inputs["pixel_values_videos"][video_idx]
+        num_frames = len(processed_video) if isinstance(processed_video, (list, tuple)) else processed_video.shape[0]
+        patches_height_width = int(math.sqrt(self.num_image_tokens))
+        pooled_height_width = math.ceil(patches_height_width / 2)
+        num_video_tokens = (num_frames * pooled_height_width * pooled_height_width) + 1  # +1 for newline token
+        return self.video_token * num_video_tokens
 
     def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:
         image_grid_pinpoints = self.image_processor.image_grid_pinpoints
