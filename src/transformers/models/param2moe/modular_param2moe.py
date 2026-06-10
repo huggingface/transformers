@@ -58,22 +58,10 @@ class Param2MoEConfig(PreTrainedConfig):
     partial_rotary_factor (`float`, *optional*, defaults to 1.0):
         Fraction of each attention head's dimension to apply rotary position embeddings
         to. A value of 1.0 applies RoPE to the full head dimension.
-    num_nextn_predict_layers (`int`, *optional*, defaults to 0):
-        Number of next-n token prediction layers used for multi-token prediction (MTP).
-        Set to 0 to disable MTP.
-    mtp_loss_scaling_factor (`float`, *optional*, defaults to 0.0):
-        Scaling factor applied to the multi-token prediction auxiliary loss.
-        Set to 0.0 to disable the MTP loss contribution.
     moe_router_enable_expert_bias (`bool`, *optional*, defaults to `True`):
         Whether to add a per-expert learnable scalar bias to routing scores before
         top-k selection. The bias affects routing decisions only; output weights
         use unbiased scores to avoid distorting gradients.
-    output_dropout (`float`, *optional*, defaults to 0.0):
-        Dropout probability applied to layer outputs. Set to 0.0 to disable.
-    rope_scaling (`str` or `dict`, *optional*):
-        RoPE scaling configuration. Can be a preset name string or a dictionary
-        with scaling parameters (e.g. `{"type": "linear", "factor": 4.0}`).
-        Set to `None` to use standard (unscaled) RoPE.
     rope_theta (`float`, *optional*, defaults to 1000000.0):
         Base period (theta) for rotary position embeddings. Larger values extend
         the effective context length.
@@ -153,12 +141,8 @@ class Param2MoEConfig(PreTrainedConfig):
     router_dtype: str = "fp32"
     partial_rotary_factor: float = 1.0
     max_window_layers: int = 20
-    num_nextn_predict_layers: int = 0
-    mtp_loss_scaling_factor: float = 0.0
     moe_router_enable_expert_bias: bool = True
     output_router_logits: bool = False
-    output_dropout: float = 0.0
-    rope_scaling: str | dict | None = None
     sliding_window: int | None = None
     rope_theta: float = 1000000.0
     score_function: str = "sigmoid"
