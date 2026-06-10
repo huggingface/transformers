@@ -1178,20 +1178,15 @@ class NemotronAsrEncoder(ParakeetEncoder):
 
             if padding_cache is None:
                 padding_cache = NemotronAsrEncoderCausalConvPaddingCache()
-    
+
         inputs_embeds = self.subsampling(input_features, attention_mask, padding_cache=padding_cache)
         inputs_embeds *= self.input_scale
 
         seq_length = inputs_embeds.shape[1]
-        # The key length spans the cached frames (capped at the sliding window) plus this chunk.
-        if past_key_values is not None:
-            kv_length, _ = past_key_values.get_mask_sizes(seq_length, 0)
-            past_seen = past_key_values.get_seq_length()
-        else:
-            kv_length, past_seen = seq_length, 0
-
         if position_ids is None:
-            position_ids = (torch.arange(seq_length, device=inputs_embeds.device) + past_seen).unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         output_mask = None
         if attention_mask is not None:
@@ -1206,9 +1201,10 @@ class NemotronAsrEncoder(ParakeetEncoder):
             and_mask_function=chunked_limited_mask_function(*self._resolve_attn_context(num_lookahead_tokens)),
         )
 
-        # Relative positional encoding spans the full key length (cached frames + current chunk): pass the
-        # cached-frame count as `past_seen_tokens` so it reconstructs distances `kv_length - 1 ... -(kv_length - 1)`.
-        position_embeddings = self.encode_positions(inputs_embeds, past_seen_tokens=kv_length - seq_length)
+        cached_frames = (
+            past_key_values.get_mask_sizes(seq_length, 0)[0] - seq_length if past_key_values is not None else 0
+        )
+        position_embeddings = self.encode_positions(inputs_embeds, cached_frames=cached_frames)
 
         inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.dropout, training=self.training)
         position_embeddings = nn.functional.dropout(
