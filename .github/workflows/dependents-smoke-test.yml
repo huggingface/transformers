@@ -7,9 +7,6 @@ on:
   workflow_dispatch:
 env:
   UV_SYSTEM_PYTHON: "1"
-  VLLM_USE_PRECOMPILED: "1"
-  VLLM_PRECOMPILED_WHEEL_VARIANT: cpu
-  VLLM_TARGET_DEVICE: cpu
 
 permissions:
   contents: read
@@ -32,13 +29,7 @@ jobs:
         with:
           repository: vllm-project/vllm
           persist-credentials: false
-          fetch-depth: 11
           path: vllm
-
-      - name: Check out an older vLLM commit
-        working-directory: vllm
-        # Step back 10 commits to increase the chance of the precompiled wheel existing
-        run: git checkout HEAD~10
 
       - name: Set up Python 3.12
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
@@ -49,7 +40,10 @@ jobs:
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
 
       - name: Install dependencies
-        run: uv pip install -e vllm -e transformers pytest tblib --torch-backend auto
+        run: |
+          uv pip install -r requirements/build/cpu.txt --torch-backend cpu
+          uv pip install -r requirements/cpu.txt --torch-backend cpu
+          VLLM_TARGET_DEVICE=cpu uv pip install -e vllm -e transformers --no-build-isolation
 
       - name: Run tests
         run: |
