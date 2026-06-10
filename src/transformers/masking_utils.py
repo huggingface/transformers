@@ -1458,6 +1458,7 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "chunked_attention": create_chunked_causal_mask,
     "compressed_sparse_attention": create_sliding_window_causal_mask,
     "heavily_compressed_attention": create_sliding_window_causal_mask,
+    "deepseek_sparse_attention": create_causal_mask,
 }
 
 
@@ -1514,10 +1515,14 @@ def create_masks_for_generate(
         "block_sequence_ids": block_sequence_ids,
     }
 
-    # If the attribute exist, we need several masks
+    # If the attribute exist, we need several masks - unless every layer shares the same type, in which
+    # case we return a single mask.
     if hasattr(effective_config, "layer_types"):
+        layer_patterns = set(effective_config.layer_types)
+        if len(layer_patterns) == 1:
+            return LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[next(iter(layer_patterns))](**mask_kwargs)
         causal_masks = {}
-        for layer_pattern in set(effective_config.layer_types):
+        for layer_pattern in layer_patterns:
             causal_masks[layer_pattern] = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[layer_pattern](**mask_kwargs)
         return causal_masks
     # In this case, all layers are sliding
