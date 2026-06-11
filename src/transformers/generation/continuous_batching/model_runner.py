@@ -48,6 +48,7 @@ class ModelRunner:
         self.return_logprobs = return_logprobs
         self.use_cuda_graph_varlen, self.use_cuda_graph_decode = self.cb_config.cuda_graph_booleans
         self.cache = cache
+        self.__cached_supports_logits_to_keep = None  # boolean variable that we cache in the first forward
 
         # Padding only happen when CUDA graphs or compile is used
         cuda_graph = self.use_cuda_graph_varlen or self.use_cuda_graph_decode
@@ -89,6 +90,12 @@ class ModelRunner:
             max_kv_read = 0
         return num_q_tokens, max_kv_read
 
+    def supports_logits_to_keep(self, model: nn.Module) -> bool:
+        """Returns True if the model supports the logits_to_keep kwarg."""
+        if self.__cached_supports_logits_to_keep is None:
+            self.__cached_supports_logits_to_keep = hasattr(model, "_supports_logits_to_keep") and model._supports_logits_to_keep()
+        return self.__cached_supports_logits_to_keep
+
     def compute_batch(self, model: nn.Module, batch_data: dict) -> None:
         """Runs the forward pass, processes the logits and samples the next tokens. It also handles which version of
         the forward pass to use (varlen or decode), whether to use CUDA graphs (with the eventual capture of the graph)
@@ -98,6 +105,13 @@ class ModelRunner:
         # This is the stream on which the compute happens
         compute_stream = self.inputs_and_outputs.compute_stream
 
+        # If the model supports logits to keep, we use that instead of manual slicing
+        if self.supports_logits_to_keep(model):
+            batch_data["logits_to_keep"] = batch_data["logits_indices"]
+            slice_logits = False
+        else:
+            slice_logits = True
+
         # Get the appropriate forward function (compiled or not, based on current path)
         forward_fn, use_cuda_graph = self._get_forward_fn(use_block_table=self.inputs_and_outputs.use_block_table)
 
@@ -105,7 +119,7 @@ class ModelRunner:
         if not use_cuda_graph:
             maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
             with maybe_stream:
-                forward_fn(model, batch_data, carry_over_ids, prev_output_ids, output_ids)
+                forward_fn(model, batch_data, carry_over_ids, prev_output_ids, output_ids, slice_logits)
 
         # Otherwise, we either create or replay the graph (CUDA is available in this path)
         else:
@@ -116,7 +130,7 @@ class ModelRunner:
                     graph.replay()
             # Otherwise, the graph does not exist, so we create it
             else:
-                args = (model, batch_data, carry_over_ids, prev_output_ids, output_ids)
+                args = (model, batch_data, carry_over_ids, prev_output_ids, output_ids, slice_logits)
                 self._capture_graph(forward_fn, compute_stream, *args)
 
     def _get_forward_fn(self, use_block_table: bool) -> tuple[Callable, bool]:
@@ -150,6 +164,7 @@ class ModelRunner:
         carry_over_ids: torch.Tensor,
         prev_output_ids: torch.Tensor,
         output_ids: torch.Tensor,
+        slice_logits: bool,
     ) -> None:
         """This function performs the forward pass, logits processing, and sampling. This is what is either captured
         and/or compiled."""
@@ -157,12 +172,12 @@ class ModelRunner:
         self.inputs_and_outputs.carry_over_tokens(batch_data["input_ids"], carry_over_ids, prev_output_ids)
 
         # Run model forward pass
-        logits = model(**batch_data).logits  # shape [1, seq_len, vocab_size]
+        logits = model(**batch_data).logits  # shape [1, seq_len OR num_logits, vocab_size]
 
-        # Extract prediction + some padding: this reduces the size of the logits from the nb of query tokens (capped at
-        # max_batch_tokens) to the nb of requests in the batch (capped at max_requests_per_batch <= max_batch_tokens)
+        # If it has not been done already, extract only the logits that are used to predict new tokens
         logits_indices = batch_data["logits_indices"]  # shape [num_logits]
-        logits = logits[:, logits_indices, :]  # shape [1, num_logits, vocab_size]
+        if slice_logits:
+            logits = logits[:, logits_indices, :]  # shape [1, num_logits, vocab_size]
         # Convert to fp32 to match generate
         logits = logits.float()  # shape [1, num_logits, vocab_size]
 
@@ -284,14 +299,7 @@ class ModelRunner:
                 future_states, self.logit_processor, use_decode_fast_path, padded_q, padded_kv, use_padding=True
             )
             batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=True)
-            carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
-            forward_fn, use_cuda_graph = self._get_forward_fn(use_block_table=self.inputs_and_outputs.use_block_table)
-            forward_fn_args = (model, batch_data, carry_over_ids, prev_output_ids, output_ids)
-            if use_cuda_graph:
-                self._capture_graph(forward_fn, self.inputs_and_outputs.compute_stream, *forward_fn_args)
-            else:
-                with torch.cuda.stream(self.inputs_and_outputs.compute_stream):
-                    forward_fn(*forward_fn_args)
+            self.compute_batch(model, batch_data)
             duration = time.perf_counter() - start
             logger.debug(f"Warmup completed in {duration:.2f}s")
 
