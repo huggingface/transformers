@@ -510,6 +510,56 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
         self.assertIsNotNone(outputs.predictor_output)
 
     @slow
+    def test_inference_vjepa2_1_integration(self):
+        """Integration test: load vjepa2.1-vitb from Hub and compare encoder output against Meta's original implementation."""
+        model = VJEPA2Model.from_pretrained("davevanveen/vjepa2.1-vitb-fpc64-384").to(torch_device)
+        model.eval()
+
+        video_processor = AutoVideoProcessor.from_pretrained("davevanveen/vjepa2.1-vitb-fpc64-384")
+        image = prepare_img()
+        inputs = video_processor(torch.Tensor(np.array(image)), return_tensors="pt").to(torch_device)
+        pixel_values_videos = inputs.pixel_values_videos
+        pixel_values_videos = pixel_values_videos.repeat(1, model.config.frames_per_clip, 1, 1, 1)
+
+        # compute total number of encoder tokens: (crop_size // patch_size)^2 * (frames_per_clip // tubelet_size)
+        num_patches = (model.config.crop_size // model.config.patch_size) ** 2 * (
+            model.config.frames_per_clip // model.config.tubelet_size
+        )
+        # use full context mask so hierarchical_hidden_state is computed (matches converter validation)
+        batch_size = pixel_values_videos.shape[0]
+        context_mask = [
+            torch.arange(num_patches, device=pixel_values_videos.device).unsqueeze(0).repeat((batch_size, 1))
+        ]
+        predictor_mask = context_mask
+
+        # forward pass with full mask
+        with torch.no_grad():
+            outputs = model(pixel_values_videos, context_mask=context_mask, target_mask=predictor_mask)
+
+        # for vjepa2.1 models, the encoder output to compare is hierarchical_hidden_state
+        # (mirrors the converter's validation: hf_encoder = outputs.hierarchical_hidden_state ?? outputs.last_hidden_state)
+        # reference values from Meta's original implementation — see workstream_001_build.md
+        # allclose passed at atol=1e-3 in workstream_001 converter validation
+        hf_encoder = (
+            outputs.hierarchical_hidden_state
+            if outputs.hierarchical_hidden_state is not None
+            else outputs.last_hidden_state
+        )
+        expected_encoder_slice = torch.tensor(
+            [
+                [0.24165302515029907, 0.5494657158851624, 0.00034073402639478445, -0.3474652171134949],
+                [-0.3851822316646576, 0.03926074877381325, 0.42013248801231384, 0.1775028109550476],
+                [0.5560275912284851, 0.8459381461143494, 0.037836603820323944, 0.7014947533607483],
+                [0.31093376874923706, 1.8635334968566895, -0.16667403280735016, 1.002286434173584],
+            ],
+            device=torch_device,
+        )
+        self.assertTrue(
+            torch.allclose(hf_encoder[:, :4, :4], expected_encoder_slice, atol=1e-3),
+            f"Encoder output slice mismatch. Got:\n{hf_encoder[:, :4, :4]}",
+        )
+
+    @slow
     def test_video_classification(self):
         checkpoint = "facebook/vjepa2-vitl-fpc16-256-ssv2"
 
