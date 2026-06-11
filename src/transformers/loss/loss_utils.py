@@ -17,7 +17,6 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, MSELoss
 
-from ..integrations import use_kernel_func_from_hub
 from .loss_d_fine import DFineForObjectDetectionLoss
 from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, DeformableDetrForSegmentationLoss
 from .loss_deimv2 import Deimv2ForObjectDetectionLoss
@@ -45,7 +44,6 @@ def fixed_cross_entropy(
     return loss
 
 
-@use_kernel_func_from_hub("ForCausalLMLoss")
 def ForCausalLMLoss(
     logits,
     labels,
@@ -53,21 +51,15 @@ def ForCausalLMLoss(
     num_items_in_batch: torch.Tensor | None = None,
     ignore_index: int = -100,
     shift_labels: torch.Tensor | None = None,
-    hidden_states: torch.Tensor | None = None,
-    lm_head_weight: torch.Tensor | None = None,
-    lm_head_bias: torch.Tensor | None = None,
     **kwargs,
 ) -> torch.Tensor:
+    # Upcast to float if we need to compute the loss to avoid potential precision issues
+    logits = logits.float()
+
     if shift_labels is None:
         # Shift so that tokens < n predict n
         labels = nn.functional.pad(labels, (0, 1), value=ignore_index)
         shift_labels = labels[..., 1:].contiguous()
-
-    if logits is None and hidden_states is not None and lm_head_weight is not None:
-        logits = nn.functional.linear(hidden_states, lm_head_weight, lm_head_bias)
-
-    # Upcast to float if we need to compute the loss to avoid potential precision issues
-    logits = logits.float()
 
     # Flatten the tokens
     logits = logits.view(-1, vocab_size)

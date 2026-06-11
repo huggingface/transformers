@@ -26,7 +26,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
-from ...loss.loss_utils import ForCausalLMLoss
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import (
     GenericForQuestionAnswering,
@@ -169,7 +168,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-@use_kernel_forward_from_hub("SwiGLUMLP")
 class LlamaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -427,7 +425,6 @@ class LlamaModel(LlamaPreTrainedModel):
         )
 
 
-@use_kernelized_func(ForCausalLMLoss)
 @auto_docstring
 class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
@@ -487,23 +484,11 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        hidden_states = hidden_states[:, slice_indices, :]
-
-        # We only compute logits during inference (no labels given) or when we do not use any kernel (materialization of logits needed)
-        logits = self.lm_head(hidden_states) if labels is None or not self.use_kernels else None
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                hidden_states=hidden_states,
-                lm_head_weight=self.lm_head.weight,
-                lm_head_bias=self.lm_head.bias,
-                logits=logits,
-                labels=labels,
-                vocab_size=self.config.vocab_size,
-                hidden_size=hidden_states.shape[-1],
-                **kwargs,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         return CausalLMOutputWithPast(
             loss=loss,
