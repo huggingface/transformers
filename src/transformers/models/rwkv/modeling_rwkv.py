@@ -438,9 +438,6 @@ class RwkvPreTrainedModel(PreTrainedModel):
             shape = module.weight.shape
             gain = 1e-4 * math.sqrt(max(shape[0], shape[1]))
             init.orthogonal_(module.weight, gain=gain)
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
 
 
 @auto_docstring(

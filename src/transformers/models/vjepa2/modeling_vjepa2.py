@@ -882,9 +882,6 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
             init.trunc_normal_(module.weight, std=init_std)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 @auto_docstring

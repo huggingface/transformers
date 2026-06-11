@@ -1016,17 +1016,6 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
                 init.xavier_uniform_(layer[0].weight)
         elif isinstance(module, OmDetTurboLanguageBackbone):
             init.normal_(module.text_projection, std=self.config.text_projection_in_dim**-0.5)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=self.config.init_std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, OmDetTurboDecoder):

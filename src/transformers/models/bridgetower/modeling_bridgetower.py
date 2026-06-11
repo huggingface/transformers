@@ -906,9 +906,6 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
             init.normal_(module.embeddings.position_embedding.weight, std=attn_std * std)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Embedding)):
             init.normal_(module.weight, mean=0.0, std=0.05 * std)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, BridgeTowerForContrastiveLearning):
             init.constant_(module.logit_scale, self.config.logit_scale_init_value)
         elif isinstance(module, BridgeTowerVisionEmbeddings):

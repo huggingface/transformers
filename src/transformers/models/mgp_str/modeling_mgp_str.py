@@ -286,9 +286,6 @@ class MgpstrPreTrainedModel(PreTrainedModel):
             init.trunc_normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 @auto_docstring
