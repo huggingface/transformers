@@ -13,15 +13,39 @@ jobs:
     # Members/collaborators/owners trigger PR CI directly — gate only needed for forks
     if: "!contains(fromJSON('[\"MEMBER\",\"OWNER\",\"COLLABORATOR\"]'), github.event.pull_request.author_association)"
     runs-on: ubuntu-22.04
-    outputs:
-      result: ${{ steps.check.outputs.result }}
     steps:
-      - name: Security check
-        id: check
+      - name: Checkout PR code for static analysis
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Deny changes to CI and build infrastructure files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
         run: |
-          # TODO: add real checks (e.g. no workflow file changes, no CI infra changes)
-          sleep 60
-          echo "result=pass" >> "$GITHUB_OUTPUT"
+          changed=$(gh pr diff "$PR_NUMBER" --name-only --repo "$REPO")
+          echo "Changed files:"
+          echo "$changed"
+          if echo "$changed" | grep -qE '^\.github/|^Dockerfile|^docker-compose|^Makefile|^setup\.py$|^pyproject\.toml$|^setup\.cfg$|^requirements'; then
+            echo "::error::PR modifies CI or build infrastructure — manual review required"
+            exit 1
+          fi
+
+      - name: Run Bandit on changed Python files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          py_files=$(gh pr diff "$PR_NUMBER" --name-only --repo "$REPO" | grep '\.py$' || true)
+          if [ -z "$py_files" ]; then
+            echo "No Python files changed — skipping Bandit"
+            exit 0
+          fi
+          pip install bandit --quiet
+          echo "$py_files" | xargs bandit --severity-level high --confidence-level medium -q
 
   approve-pr-ci:
     needs: security-check
