@@ -16,6 +16,8 @@
 from typing import Union
 
 import numpy as np
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -29,14 +31,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+from ...utils import TensorType, auto_docstring, requires_backends
 
 
 # See https://huggingface.co/papers/2212.02499 at 3.1 Redefining Output Spaces as "Images" - Semantic Segmentation

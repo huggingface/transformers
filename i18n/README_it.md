@@ -252,7 +252,7 @@ Hugging Face Hub. Vogliamo che Transformers consenta a sviluppatori, ricercatori
 di realizzare i propri progetti dei sogni.
 
 Per celebrare le 100.000 stelle di Transformers, abbiamo voluto puntare i riflettori sulla
-comunità con la pagina [awesome-transformers](./awesome-transformers.md), che elenca 100
+comunità con la pagina [awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md), che elenca 100
 incredibili progetti realizzati con Transformers.
 
 Se possiedi o utilizzi un progetto che ritieni debba essere inserito nell'elenco, apri una PR per aggiungerlo!
@@ -321,7 +321,7 @@ Espandi ciascuna modalità qui sotto per vedere alcuni modelli di esempio per va
 
 ## Citazione
 
-Ora abbiamo un [paper](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) che puoi citare per la libreria 🤗 Transformers:
+Ora abbiamo un [paper](https://aclanthology.org/2020.emnlp-demos.6/) che puoi citare per la libreria 🤗 Transformers:
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
@@ -331,7 +331,7 @@ Ora abbiamo un [paper](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) che
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://aclanthology.org/2020.emnlp-demos.6/",
     pages = "38--45"
 }
 ```

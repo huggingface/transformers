@@ -123,7 +123,7 @@ Em Tarefas Multimodais:
 
 Transformers é mais do que um conjunto de ferramentas para usar modelos pré-treinados: é uma comunidade de projetos construídos ao seu redor e o Hugging Face Hub. Queremos que o Transformers permita que desenvolvedores, pesquisadores, estudantes, professores, engenheiros e qualquer outra pessoa construa seus projetos dos sonhos.
 
-Para celebrar as 100.000 estrelas do Transformers, decidimos destacar a comunidade e criamos a página [awesome-transformers](./awesome-transformers.md), que lista 100 projetos incríveis construídos nas proximidades dos Transformers.
+Para celebrar as 100.000 estrelas do Transformers, decidimos destacar a comunidade e criamos a página [awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md), que lista 100 projetos incríveis construídos nas proximidades dos Transformers.
 
 Se você possui ou utiliza um projeto que acredita que deveria fazer parte da lista, abra um PR para adicioná-lo!
 
@@ -313,7 +313,7 @@ Essas implementações foram testadas em vários conjuntos de dados (veja os scr
 
 ## Citação
 
-Agora temos um [artigo](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) que você pode citar para a biblioteca 🤗 Transformers:
+Agora temos um [artigo](https://aclanthology.org/2020.emnlp-demos.6/) que você pode citar para a biblioteca 🤗 Transformers:
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
@@ -323,7 +323,7 @@ Agora temos um [artigo](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) qu
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://aclanthology.org/2020.emnlp-demos.6/",
     pages = "38--45"
 }
 ```

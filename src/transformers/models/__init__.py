@@ -68,7 +68,9 @@ if TYPE_CHECKING:
     from .codegen import *
     from .cohere import *
     from .cohere2 import *
+    from .cohere2_moe import *
     from .cohere2_vision import *
+    from .cohere_asr import *
     from .colmodernvbert import *
     from .colpali import *
     from .colqwen2 import *
@@ -76,6 +78,7 @@ if TYPE_CHECKING:
     from .convbert import *
     from .convnext import *
     from .convnextv2 import *
+    from .cosmos3_reasoner import *
     from .cpm import *
     from .cpmant import *
     from .csm import *
@@ -90,11 +93,15 @@ if TYPE_CHECKING:
     from .deberta import *
     from .deberta_v2 import *
     from .decision_transformer import *
+    from .deepseek_ocr2 import *
     from .deepseek_v2 import *
     from .deepseek_v3 import *
+    from .deepseek_v4 import *
+    from .deepseek_v32 import *
     from .deepseek_vl import *
     from .deepseek_vl_hybrid import *
     from .deformable_detr import *
+    from .deimv2 import *
     from .deit import *
     from .deprecated import *
     from .depth_anything import *
@@ -132,6 +139,7 @@ if TYPE_CHECKING:
     from .esm import *
     from .evolla import *
     from .exaone4 import *
+    from .exaone4_5 import *
     from .exaone_moe import *
     from .falcon import *
     from .falcon_h1 import *
@@ -151,6 +159,10 @@ if TYPE_CHECKING:
     from .gemma2 import *
     from .gemma3 import *
     from .gemma3n import *
+    from .gemma4 import *
+    from .gemma4_assistant import *
+    from .gemma4_unified import *
+    from .gemma4_unified_assistant import *
     from .git import *
     from .glm import *
     from .glm4 import *
@@ -163,6 +175,7 @@ if TYPE_CHECKING:
     from .glm_moe_dsa import *
     from .glm_ocr import *
     from .glmasr import *
+    from .glmga import *
     from .glpn import *
     from .got_ocr2 import *
     from .gpt2 import *
@@ -174,7 +187,9 @@ if TYPE_CHECKING:
     from .gpt_sw3 import *
     from .gptj import *
     from .granite import *
+    from .granite4_vision import *
     from .granite_speech import *
+    from .granite_speech_plus import *
     from .granitemoe import *
     from .granitemoehybrid import *
     from .granitemoeshared import *
@@ -189,6 +204,8 @@ if TYPE_CHECKING:
     from .hubert import *
     from .hunyuan_v1_dense import *
     from .hunyuan_v1_moe import *
+    from .hy_v3 import *
+    from .hyperclovax import *
     from .ibert import *
     from .idefics import *
     from .idefics2 import *
@@ -207,6 +224,7 @@ if TYPE_CHECKING:
     from .kosmos2 import *
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
+    from .laguna import *
     from .lasr import *
     from .layoutlm import *
     from .layoutlmv2 import *
@@ -242,9 +260,11 @@ if TYPE_CHECKING:
     from .mbart50 import *
     from .megatron_bert import *
     from .megatron_gpt2 import *
+    from .mellum import *
     from .metaclip_2 import *
     from .mgp_str import *
     from .mimi import *
+    from .minicpmv4_6 import *
     from .minimax import *
     from .minimax_m2 import *
     from .ministral import *
@@ -272,6 +292,7 @@ if TYPE_CHECKING:
     from .mpt import *
     from .mra import *
     from .mt5 import *
+    from .musicflamingo import *
     from .musicgen import *
     from .musicgen_melody import *
     from .mvp import *
@@ -281,6 +302,7 @@ if TYPE_CHECKING:
     from .nemotron_h import *
     from .nllb import *
     from .nllb_moe import *
+    from .nomic_bert import *
     from .nougat import *
     from .nystromformer import *
     from .olmo import *
@@ -291,6 +313,7 @@ if TYPE_CHECKING:
     from .omdet_turbo import *
     from .oneformer import *
     from .openai import *
+    from .openai_privacy_filter import *
     from .opt import *
     from .ovis2 import *
     from .owlv2 import *
@@ -326,12 +349,18 @@ if TYPE_CHECKING:
     from .pp_doclayout_v3 import *
     from .pp_lcnet import *
     from .pp_lcnet_v3 import *
+    from .pp_lcnet_v4 import *
     from .pp_ocrv5_mobile_det import *
     from .pp_ocrv5_server_det import *
+    from .pp_ocrv6_medium_det import *
+    from .pp_ocrv6_small_det import *
+    from .pp_ocrv6_small_rec import *
+    from .pp_ocrv6_tiny_rec import *
     from .prompt_depth_anything import *
     from .prophetnet import *
     from .pvt import *
     from .pvt_v2 import *
+    from .qianfan_ocr import *
     from .qwen2 import *
     from .qwen2_5_omni import *
     from .qwen2_5_vl import *
@@ -352,6 +381,7 @@ if TYPE_CHECKING:
     from .regnet import *
     from .rembert import *
     from .resnet import *
+    from .rf_detr import *
     from .roberta import *
     from .roberta_prelayernorm import *
     from .roc_bert import *
@@ -363,10 +393,12 @@ if TYPE_CHECKING:
     from .sam2 import *
     from .sam2_video import *
     from .sam3 import *
+    from .sam3_lite_text import *
     from .sam3_tracker import *
     from .sam3_tracker_video import *
     from .sam3_video import *
     from .sam_hq import *
+    from .sapiens2 import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
     from .seed_oss import *
@@ -377,6 +409,7 @@ if TYPE_CHECKING:
     from .shieldgemma2 import *
     from .siglip import *
     from .siglip2 import *
+    from .slanet import *
     from .slanext import *
     from .smollm3 import *
     from .smolvlm import *
@@ -421,6 +454,7 @@ if TYPE_CHECKING:
     from .video_llama_3 import *
     from .video_llava import *
     from .videomae import *
+    from .videomt import *
     from .vilt import *
     from .vipllava import *
     from .vision_encoder_decoder import *

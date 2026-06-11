@@ -52,7 +52,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5_server_det_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class PPOCRV5ServerDetConfig(PreTrainedConfig):
     r"""
     interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
@@ -428,14 +428,6 @@ class PPOCRV5ServerDetImageProcessor(TorchvisionBackend):
 
         resize_height = max(int(round(resize_height / 32) * 32), 32)
         resize_width = max(int(round(resize_width / 32) * 32), 32)
-
-        if resize_height == height and resize_width == width:
-            return SizeDict(height=resize_height, width=resize_width), torch.tensor(
-                [height, width], dtype=torch.float32, device=image.device
-            )
-
-        if resize_width <= 0 or resize_height <= 0:
-            return None, (None, None)
 
         return SizeDict(height=resize_height, width=resize_width), torch.tensor(
             [height, width], dtype=torch.float32, device=image.device

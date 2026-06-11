@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="abeja/gpt-neox-japanese-2.7b")
-@strict(accept_kwargs=True)
+@strict
 class GPTNeoXJapaneseConfig(PreTrainedConfig):
     r"""
     intermediate_multiple_size (`int`, *optional*, defaults to 4):
@@ -72,7 +72,7 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
         # Standardize and validate the correctness of rotary position embeddings parameters
         # Model uses non-standard naming for rope params, overwrite!
         self.rope_parameters.setdefault("rope_theta", kwargs.pop("rotary_emb_base", self.default_theta))
-        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("rotary_pct", 1.0)
+        self.rope_parameters.setdefault("partial_rotary_factor", kwargs.pop("rotary_pct", 1.0))
         self.standardize_rope_params()
         return kwargs
 

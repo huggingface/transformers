@@ -13,8 +13,6 @@
 # limitations under the License.
 """Image processor class for ViTMatte."""
 
-from typing import Union
-
 import numpy as np
 
 from ...image_processing_backends import PilBackend
@@ -28,13 +26,22 @@ from ...image_utils import (
     ImageInput,
     get_image_size,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
-from .image_processing_vitmatte import VitMatteImageProcessorKwargs
 
 
 if is_torch_available():
-    import torch
+    pass
+
+
+# Adapted from transformers.models.vitmatte.image_processing_vitmatte.VitMatteImageProcessorKwargs
+class VitMatteImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
+        The width and height of the image will be padded to be divisible by this number.
+    """
+
+    size_divisor: int
 
 
 @auto_docstring
@@ -102,7 +109,7 @@ class VitMatteImageProcessorPil(PilBackend):
         trimaps: ImageInput,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Union[str, "torch.device"] | None = None,
+        device: str | None = None,
         **kwargs: Unpack[VitMatteImageProcessorKwargs],
     ) -> BatchFeature:
         """

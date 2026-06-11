@@ -27,6 +27,7 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -48,6 +49,7 @@ EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i i
 
 
 @auto_docstring
+@requires(backends=("vision", "torch"))
 class PI0Processor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.height, self.width = image_processor.size["height"], image_processor.size["width"]

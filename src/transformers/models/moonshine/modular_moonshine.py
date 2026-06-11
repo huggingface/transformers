@@ -48,13 +48,9 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="UsefulSensors/moonshine-tiny")
-@strict(accept_kwargs=True)
+@strict
 class MoonshineConfig(PreTrainedConfig):
     r"""
-    encoder_hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-        The non-linear activation function (function or string) in the encoder.
-    decoder_hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-        The non-linear activation function (function or string) in the decoder.
     encoder_num_key_value_heads (`int`, *optional*):
         This is the number of key_value heads that should be used to implement Grouped Query Attention. If
         `encoder_num_key_value_heads=encoder_num_attention_heads`, the model will use Multi Head Attention (MHA), if
@@ -74,6 +70,10 @@ class MoonshineConfig(PreTrainedConfig):
     pad_head_dim_to_multiple_of (`int`, *optional*):
         Pad head dimension in encoder and decoder to the next multiple of this value. Necessary for using certain
         optimized attention implementations.
+    encoder_hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function (function or string) in the encoder.
+    decoder_hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+        The non-linear activation function (function or string) in the decoder.
 
     Example:
 
@@ -135,13 +135,22 @@ class MoonshineConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Extends [~modeling_outputs.BaseModelOutput] to include the output attention mask since sequence length is not preserved in the model's forward.
     """
 )
+@dataclass
 class MoonshineEncoderModelOutput(BaseModelOutput):
+    r"""
+    attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Mask to avoid performing attention on padding token indices after sequence compression. Returned because the
+        sequence length may differ from the input sequence length. Mask values selected in `[0, 1]`:
+
+        - 1 for tokens that are **not masked**,
+        - 0 for tokens that are **masked**.
+    """
+
     attention_mask: torch.Tensor | None = None
 
 

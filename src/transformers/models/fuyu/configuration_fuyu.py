@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="adept/fuyu-8b")
-@strict(accept_kwargs=True)
+@strict
 class FuyuConfig(PreTrainedConfig):
     r"""
     Example:

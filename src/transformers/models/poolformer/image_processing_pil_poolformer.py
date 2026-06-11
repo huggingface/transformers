@@ -25,13 +25,18 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
-from .image_processing_poolformer import PoolFormerImageProcessorKwargs
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+# Adapted from transformers.models.poolformer.image_processing_poolformer.PoolFormerImageProcessorKwargs
+class PoolFormerImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    crop_pct (`float`, *optional*, defaults to `self.crop_pct`):
+        Percentage of the image to crop. Only has an effect if `do_resize` is set to `True`.
+    """
+
+    crop_pct: float
 
 
 @auto_docstring
@@ -60,7 +65,7 @@ class PoolFormerImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: "PILImageResampling | None" = None,
         crop_pct: float | None = None,
         **kwargs,
     ) -> np.ndarray:
@@ -92,7 +97,7 @@ class PoolFormerImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

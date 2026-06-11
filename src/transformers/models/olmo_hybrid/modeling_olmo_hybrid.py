@@ -31,7 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -61,8 +61,7 @@ class OlmoHybridDynamicCache:
     """
     Cache for hybrid model supporting both attention KV cache and linear attention state.
 
-    Inherits from Qwen3NextDynamicCache. The main difference is that this cache
-    stores separate conv states for q, k, v (instead of a single conv_states list).
+    The main difference is that this cache stores separate conv states for q, k, v (instead of a single conv_states).
     """
 
     is_compileable = False
@@ -155,7 +154,6 @@ class OlmoHybridDynamicCache:
         kv_length = query_length + past_seen_tokens
         return kv_length, kv_offset
 
-    @property
     def has_previous_state(self):
         """We have a previous state if the last linear (conv) layer was already updated."""
         return self.conv_states_q[self.last_linear_layer] is not None
@@ -231,8 +229,8 @@ class OlmoHybridShortConvolution(nn.Conv1d):
 
         hidden_states = hidden_states.transpose(1, 2)
 
-        if use_precomputed:
-            # Single token update (decoding mode)
+        if use_precomputed and seq_len == 1:
+            # Single-token decode: rolling-window update against the cached context.
             x_with_state = torch.cat([cache, hidden_states], dim=-1)
             out = F.conv1d(
                 x_with_state,
@@ -243,10 +241,17 @@ class OlmoHybridShortConvolution(nn.Conv1d):
             )
             conv_state = x_with_state[:, :, 1:]
         else:
-            # Multi-token forward (prefill mode)
+            # Multi-token forward (prefill, or chunked-tokens decode when the cache has prior state).
+            if use_precomputed:
+                # Cached chunked-tokens decode: prepend the cached conv context so the causal conv
+                # sees the correct left-context rather than zero-padding. Dropped from the output
+                # at the end of this branch.
+                hidden_states = torch.cat([cache, hidden_states], dim=-1)
             out = F.conv1d(hidden_states, self.weight, self.bias, padding=self.conv_kernel_size - 1, groups=dim)
-            out = out[:, :, :seq_len]
+            out = out[:, :, : hidden_states.shape[-1]]
             conv_state = F.pad(hidden_states, (self.conv_kernel_size - 1 - hidden_states.shape[-1], 0))
+            if use_precomputed:
+                out = out[:, :, -seq_len:]
 
         out = self.act_fn(out)
 
@@ -290,6 +295,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -504,6 +510,7 @@ def torch_chunk_gated_delta_rule(
     initial_state=None,
     output_final_state=False,
     use_qk_l2norm_in_kernel=False,
+    **kwargs,
 ):
     initial_dtype = query.dtype
     if use_qk_l2norm_in_kernel:
@@ -546,7 +553,7 @@ def torch_chunk_gated_delta_rule(
     value = attn @ v_beta
     k_cumdecay = attn @ (k_beta * g.exp().unsqueeze(-1))
     last_recurrent_state = (
-        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim).to(value)
+        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim, dtype=value.dtype, device=value.device)
         if initial_state is None
         else initial_state.to(value)
     )
@@ -556,7 +563,7 @@ def torch_chunk_gated_delta_rule(
     # for each chunk
     for i in range(0, total_sequence_length // chunk_size):
         q_i, k_i, v_i = query[:, :, i], key[:, :, i], value[:, :, i]
-        attn = (q_i @ k_i.transpose(-1, -2) * decay_mask[:, :, i]).masked_fill_(mask, 0)
+        attn = q_i @ k_i.transpose(-1, -2) * decay_mask[:, :, i]
         v_prime = (k_cumdecay[:, :, i]) @ last_recurrent_state
         v_new = v_i - v_prime
         attn_inter = (q_i * g[:, :, i, :, None].exp()) @ last_recurrent_state
@@ -590,9 +597,11 @@ def torch_recurrent_gated_delta_rule(
     scale = 1 / (query.shape[-1] ** 0.5)
     query = query * scale
 
-    core_attn_out = torch.zeros(batch_size, num_heads, sequence_length, v_head_dim).to(value)
+    core_attn_out = torch.zeros(
+        batch_size, num_heads, sequence_length, v_head_dim, dtype=value.dtype, device=value.device
+    )
     last_recurrent_state = (
-        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim).to(value)
+        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim, dtype=value.dtype, device=value.device)
         if initial_state is None
         else initial_state.to(value)
     )
@@ -725,7 +734,10 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         batch_size, seq_len, _ = hidden_states.shape
 
         use_cache = cache_params is not None
-        use_precomputed = use_cache and getattr(cache_params, "has_previous_state", False) and seq_len == 1
+        # Reads "we have cached conv/recurrent state to continue from". Single-token vs multi-token
+        # branching lives inside `ShortConvolution` and in the recurrent-vs-chunk kernel dispatch
+        # below, each of which gates on `seq_len == 1` locally.
+        use_precomputed = use_cache and cache_params.has_previous_state()
 
         conv_state_q = cache_params.conv_states_q[self.layer_idx] if cache_params else None
         conv_state_k = cache_params.conv_states_k[self.layer_idx] if cache_params else None
@@ -766,7 +778,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
 
         g = -self.A_log.float().exp() * F.softplus(self.a_proj(hidden_states).float() + self.dt_bias)
 
-        if use_precomputed:
+        if use_precomputed and seq_len == 1:
             output, new_recurrent_state = self.recurrent_gated_delta_rule(
                 q,
                 k,
@@ -784,7 +796,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                 v,
                 g=g,
                 beta=beta,
-                initial_state=recurrent_state,
+                initial_state=recurrent_state if use_precomputed else None,
                 output_final_state=use_cache,
                 use_qk_l2norm_in_kernel=True,
             )
@@ -905,7 +917,7 @@ class OlmoHybridPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OlmoHybridAttentionDecoderLayer", "OlmoHybridLinearAttentionDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
@@ -984,7 +996,7 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             position_ids=position_ids,
@@ -1024,7 +1036,7 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
             2. Attending to all inputs
         """
         linear_attn_mask = attention_mask
-        if (past_key_values is not None and past_key_values.has_previous_state) or (
+        if (past_key_values is not None and past_key_values.has_previous_state()) or (
             attention_mask is not None and torch.all(attention_mask == 1)
         ):
             linear_attn_mask = None

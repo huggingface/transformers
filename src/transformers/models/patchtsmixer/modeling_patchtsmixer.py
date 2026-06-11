@@ -318,18 +318,17 @@ class PatchTSMixerAttention(nn.Module):
         is_cross_attention = key_value_states is not None
 
         # determine input shapes
-        bsz, tgt_len = hidden_states.shape[:-1]
-        src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
+        input_shape = hidden_states.shape[:-1]
 
-        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
-        kv_input_shape = (bsz, src_len, -1, self.head_dim)
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         # get query proj
-        query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        key_states = self.k_proj(current_states).view(*kv_input_shape).transpose(1, 2)
-        value_states = self.v_proj(current_states).view(*kv_input_shape).transpose(1, 2)
+        kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
+        key_states = self.k_proj(current_states).view(kv_shape).transpose(1, 2)
+        value_states = self.v_proj(current_states).view(kv_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -347,7 +346,7 @@ class PatchTSMixerAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights, None
@@ -1093,12 +1092,12 @@ class PatchTSMixerNOPScaler(nn.Module):
         return data, loc, scale
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for `PatchTSMixerEncoderOutput`, with potential hidden states.
     """
 )
+@dataclass
 class PatchTSMixerEncoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, d_model)`):
@@ -1180,12 +1179,12 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         return PatchTSMixerEncoderOutput(last_hidden_state=last_hidden_state, hidden_states=hidden_states)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model's outputs, with potential hidden states.
     """
 )
+@dataclass
 class PatchTSMixerModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor`  of shape `(batch_size, num_channels, num_patches, d_model)`):
@@ -1314,12 +1313,12 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`PatchTSMixerForPreTrainingOutput`].
     """
 )
+@dataclass
 class PatchTSMixerForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
@@ -1427,12 +1426,12 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`PatchTSMixerForPredictionOutput`].
     """
 )
+@dataclass
 class PatchTSMixerForPredictionOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
@@ -1457,13 +1456,13 @@ class PatchTSMixerForPredictionOutput(ModelOutput):
     scale: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for time series model's predictions outputs that contains the sampled values from the chosen
     distribution.
     """
 )
+@dataclass
 class SamplePatchTSMixerPredictionOutput(ModelOutput):
     r"""
     sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, prediction_length, number_channels)`):
@@ -1473,13 +1472,13 @@ class SamplePatchTSMixerPredictionOutput(ModelOutput):
     sequences: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for time series model's predictions outputs that contains the sampled values from the chosen
     distribution.
     """
 )
+@dataclass
 class SamplePatchTSMixerRegressionOutput(ModelOutput):
     r"""
     sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, prediction_length, number_channels)`):
@@ -1737,12 +1736,12 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
         return SamplePatchTSMixerPredictionOutput(sequences=samples)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`PatchTSMixerForTimeSeriesClassificationOutput`].
     """
 )
+@dataclass
 class PatchTSMixerForTimeSeriesClassificationOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
@@ -1871,12 +1870,12 @@ class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`PatchTSMixerForRegressionOutput`].
     """
 )
+@dataclass
 class PatchTSMixerForRegressionOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):

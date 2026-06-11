@@ -38,7 +38,7 @@ from ...utils import auto_docstring, can_return_tuple
 
 
 @auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
-@strict(accept_kwargs=True)
+@strict
 class InstructBlipVideoVisionConfig(InstructBlipVisionConfig):
     r"""
     Example:
@@ -58,7 +58,7 @@ class InstructBlipVideoVisionConfig(InstructBlipVisionConfig):
 
 
 @auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
-@strict(accept_kwargs=True)
+@strict
 class InstructBlipVideoQFormerConfig(InstructBlipQFormerConfig):
     r"""
     cross_attention_frequency (`int`, *optional*, defaults to 2):
@@ -82,7 +82,7 @@ class InstructBlipVideoQFormerConfig(InstructBlipQFormerConfig):
 
 
 @auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
-@strict(accept_kwargs=True)
+@strict
 class InstructBlipVideoConfig(InstructBlipConfig):
     r"""
     qformer_config (`dict`, *optional*):
@@ -182,6 +182,7 @@ class InstructBlipVideoModel(InstructBlipModel):
 
         qformer_input_ids = qformer_input_ids.repeat_interleave(frames, dim=0)
         qformer_attention_mask = qformer_attention_mask.repeat_interleave(frames, dim=0)
+        qformer_attention_mask = qformer_attention_mask.to(query_attention_mask.device)
         qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
         query_outputs = self.qformer(
             input_ids=qformer_input_ids,
@@ -288,6 +289,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
 
         qformer_input_ids = qformer_input_ids.repeat_interleave(frames, dim=0)
         qformer_attention_mask = qformer_attention_mask.repeat_interleave(frames, dim=0)
+        qformer_attention_mask = qformer_attention_mask.to(query_attention_mask.device)
         qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
         qformer_outputs = self.qformer(
             input_ids=qformer_input_ids,

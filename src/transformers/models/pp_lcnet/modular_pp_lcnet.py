@@ -46,7 +46,7 @@ from ..resnet.modeling_resnet import ResNetConvLayer
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     scale (`float`, *optional*, defaults to 1.0):
@@ -83,7 +83,7 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
     hidden_act: str = "hardswish"
     _out_features: list[str] | None = None
     _out_indices: list[int] | None = None
-    hidden_dropout_prob: float = 0.2
+    hidden_dropout_prob: float | int = 0.2
 
     def __post_init__(self, **kwargs):
         # Default block configs for PP-LCNet
@@ -229,17 +229,20 @@ class PPLCNetConvLayer(ResNetConvLayer):
         out_channels: int,
         kernel_size: int = 3,
         stride: int = 1,
-        activation: str = "hardswish",
+        bias: bool = False,
+        dilation: int | tuple[int, int] = 1,
         groups: int = 1,
+        activation: str = "hardswish",
     ):
         super().__init__()
         self.convolution = nn.Conv2d(
-            in_channels,
-            out_channels,
+            in_channels=in_channels,
+            out_channels=out_channels,
             kernel_size=kernel_size,
             stride=stride,
             padding=kernel_size // 2,
-            bias=False,
+            bias=bias,
+            dilation=dilation,
             groups=groups,
         )
 
@@ -500,7 +503,8 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
         Examples:
 
         ```python
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoModelForImageClassification, AutoImageProcessor
 
@@ -509,7 +513,8 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
         >>> image_processor = AutoImageProcessor.from_pretrained(model_path)
 
         >>> url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)

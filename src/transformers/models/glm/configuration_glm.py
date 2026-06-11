@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="THUDM/glm-4-9b-chat")
-@strict(accept_kwargs=True)
+@strict
 class GlmConfig(PreTrainedConfig):
     r"""
     Example:

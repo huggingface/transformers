@@ -32,13 +32,13 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="tencent/Youtu-LLM-2B")
-@strict(accept_kwargs=True)
+@strict
 class YoutuConfig(PreTrainedConfig):
     r"""
-    embedding_initializer_range (`float`, *optional*):
-        The standard deviation of the truncated_normal_initializer for initializing all embedding matrices.
     rope_interleave (`bool`, *optional*, defaults to `True`):
         Whether to interleave the rotary position embeddings.
+    embedding_initializer_range (`float`, *optional*):
+        The standard deviation of the truncated_normal_initializer for initializing all embedding matrices.
 
     ```python
     >>> from transformers import YoutuModel, YoutuConfig

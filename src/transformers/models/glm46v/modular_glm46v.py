@@ -28,7 +28,7 @@ from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
-@strict(accept_kwargs=True)
+@strict
 class Glm46VConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 151339):
@@ -105,8 +105,8 @@ class Glm46VForConditionalGeneration(Glm4vForConditionalGeneration):
 
 
 class Glm46VProcessor(Glm4vProcessor):
-    def replace_frame_token_id(self, timestamp_sec):
-        return f"<|begin_of_image|>{self.image_token}<|end_of_image|>{timestamp_sec:.1f} seconds"
+    def replace_frame_token_id(self, timestamp_sec, num_image_tokens: int = 1):
+        return f"<|begin_of_image|>{self.image_token * num_image_tokens}<|end_of_image|>{timestamp_sec:.1f} seconds"
 
 
 class Glm46VImageProcessorPil(Glm4vImageProcessorPil):

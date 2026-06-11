@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2Config(PreTrainedConfig):
     r"""
     Example:

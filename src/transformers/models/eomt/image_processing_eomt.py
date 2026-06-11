@@ -18,6 +18,7 @@ from typing import Union
 
 import numpy as np
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -35,12 +36,7 @@ from ...utils import (
     TensorType,
     auto_docstring,
     filter_out_non_signature_kwargs,
-    is_torchvision_available,
 )
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 class EomtImageProcessorKwargs(ImagesKwargs, total=False):

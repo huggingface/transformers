@@ -16,134 +16,380 @@ rendered properly in your Markdown viewer.
 
 # Continuous batching
 
-Continuous batching maximizes GPU utilization. It increases throughput and reduces latency by using dynamic scheduling to rearrange the batch at each step. The system removes completed requests and adds new requests immediately to prevent GPU idling. Chunked prefill prevents expensive prefill work from stalling the batch while still allowing new requests still join.
+Continuous batching maximizes GPU utilization by dynamically rescheduling the batch at every generation step. As requests finish, new ones join immediately instead of waiting for the whole batch to complete. The GPU stays full and throughput stays high.
 
-Continuous batching works with [transformers serve](./serving), a server for deploying local models, and [`~ContinuousMixin.generate_batch`].
+> [!TIP]
+> For production deployments, use [transformers serve](./serve-cli/serving_optims#continuous-batching). It builds on [`ContinuousBatchingManager`] and exposes an OpenAI-compatible HTTP endpoint.
 
 ## generate_batch
 
-The [`~ContinuousMixin.generate_batch`] method works with all autoregressive text models. It accepts a list of tokenized inputs and a [`GenerationConfig`] to configure generation settings.
+Continuous batching is supported through [`~ContinuousMixin.generate_batch`]. Pass a list of tokenized prompts and get back results for all of them when they're done. `generate_batch` handles scheduling internally and blocks until all requests are complete.
+
+For serving and streaming use cases, use [ContinuousBatchingManager](#continuousbatchingmanager) directly to manage requests.
 
 ```py
-import datasets
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.generation import GenerationConfig
+from transformers.generation import ContinuousBatchingConfig, GenerationConfig
 
 model = AutoModelForCausalLM.from_pretrained(
-    "Qwen/Qwen3-4B-Instruct-2507",
-    attn_implementation="sdpa_paged",
+    "Qwen/Qwen3-4B",
+    attn_implementation="flash_attention_2",
     device_map="cuda",
     dtype=torch.bfloat16,
 )
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-4B-Instruct-2507", padding_side="left")
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-4B")
 
-dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
-dataset = dataset.select(range(args.samples))
-tokenized_datasets = dataset.map(lambda x: tokenizer(x["question"]), batched=True)
-simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets]
+prompts = [
+    "Whats up?",
+    "Name a cat breed.",
+    "Write a detailed history of quantum mechanics.",
+]
+inputs = [tokenizer.encode(p) for p in prompts]
 
 generation_config = GenerationConfig(
-    max_new_tokens=32,
-    use_cuda_graph=False,
+    max_new_tokens=64,
     eos_token_id=tokenizer.eos_token_id,
-    pad_token_id=tokenizer.pad_token_id,
-    do_sample=False,
-    max_batch_tokens=512,
 )
 
-batch_outputs = model.generate_batch(
-    inputs=simple_batch_inputs,
-    generation_config=generation_config,
-)
+outputs = model.generate_batch(inputs=inputs, generation_config=generation_config)
 
-for request_id, output in batch_outputs.items():
-    generated_text = tokenizer.decode(output.generated_tokens, skip_special_tokens=True)
-    print(f"Request {request_id} output: {generated_text}")
+for request_id, output in outputs.items():
+    text = tokenizer.decode(output.generated_tokens, skip_special_tokens=True)
+    print(f"[{request_id}] {text}")
 ```
+
 
 ## ContinuousBatchingManager
 
-The [`ContinuousBatchingManager`] orchestrates the background thread by pulling requests from the queue and filling the GPU to capacity. Every iteration checks for finished requests and schedules new ones to join the batch. Use this manager to customize request scheduling.
+[`ContinuousBatchingManager`] runs a background thread and lets you submit requests and retrieve results independently. Every generation step, it checks for finished requests and schedules new ones to join the batch. This is useful for streaming, real-time serving, or submitting requests as they arrive.
 
-Call [`~ContinuousMixin.init_continuous_batching`] to initialize the manager with a [`GenerationConfig`] and [`~ContinuousBatchingManager.start`] the background thread.
+Use [`~ContinuousMixin.continuous_batching_context_manager`] to start and stop the manager safely. The example below contains variable length inputs. As soon as the shortest prompt is complete, it leaves the batch while the longer prompts continue generating. With static batching, you'd have to pad them all to the same length. Continuous batching frees up the completed prompt so you can start processing the next prompt immediately.
 
 ```py
-from transformers.generation.continuous_batching import RequestStatus
+with model.continuous_batching_context_manager(generation_config=generation_config) as manager:
+    manager.add_request(
+        input_ids=tokenizer.encode("Write a detailed history of quantum mechanics."),
+        request_id="long",
+        max_new_tokens=512,
+    )
+    manager.add_request(
+        input_ids=tokenizer.encode("What's up?"),
+        request_id="short_0",
+        max_new_tokens=32,
+    )
+    manager.add_request(
+        input_ids=tokenizer.encode("Name a cat breed."),
+        request_id="short_1",
+        max_new_tokens=32,
+    )
 
+    for result in manager:
+        text = tokenizer.decode(result.generated_tokens, skip_special_tokens=True)
+        print(f"[{result.request_id}] {text}")
+```
+
+You could also call [`~ContinuousMixin.init_continuous_batching`] to manage the lifecycle yourself.
+
+```py
 manager = model.init_continuous_batching(generation_config=generation_config)
 manager.start()
+
+# submit and retrieve requests...
 ```
 
-Use [`~ContinuousBatchingManager.add_request`] to asynchronously submit individual requests. Provide a specific request id or the manager wgenerates one automatically.
+### Shutting down the manager
 
-```py
-for i, input_ids in enumerate(simple_batch_inputs):
-    request_id = manager.add_request(input_ids=input_ids, request_id=f"request_{i}")
-```
+The manager runs a background thread and holds distributed resources. Shutdown happens in two stages so you can choose what to do with in-flight work.
 
-Retrieve *all* results as they arrive with [`~ContinuousBatchingManager.get_result`].
-
-```py
-for request_id, request in manager.get_result():
-    generated_text = tokenizer.decode(request.generated_tokens, skip_special_tokens=True)
-    print(f"Request {request_id} output: {generated_text}")
-```
-
-Use the `request_id` of a specific request to get its results. This is a blocking operation that waits until the result is ready.
-
-```py
-result = manager.get_result(request_id="request_5")
-```
-
-Stream partial results for a specific request with [`~ContinuousBatchingManager.request_id_iter`].
-
-```py
-manager.add_request(
-    input_ids=input_ids,
-    request_id="streaming_request",
-    stream=True,
-)
-for chunk in manager.request_id_iter(request_id="streaming_request"):
-    generated_text = tokenizer.decode(chunk.generated_tokens, skip_special_tokens=True)
-    print(generated_text)
-    # FIXME: stop iteration in `request_id_iter` when finished instead of doing it externally
-    if chunk.status == RequestStatus.FINISHED:
-        break
-```
-
-Call [`~ContinuousBatchingManager.stop`] to terminate the manager.
+Call [`~ContinuousBatchingManager.stop`] to halt the background thread. By default, the manager stops accepting new submissions and waits for queued and active requests to finish before the thread exits.
 
 ```py
 manager.stop()
 ```
 
-## PagedAttention
-
-PagedAttention breaks large key-value caches into smaller, non-contiguous fixed-size pages to avoid GPU memory fragmentation and support variable-length requests. Transformers automatically enables PagedAttention when using continuous batching.
-
-You could explicitly enable PagedAttention when instantiating a model rather than waiting for [`~ContinuousMixin.generate_batch`] to dynamically enable it.
+Pass `hard_stop=True` to abandon pending work immediately. Queued and active requests are failed with a `RuntimeError` instead of finishing.
 
 ```py
-import torch
-from transformers import AutoModelForCausalLM
+manager.stop(hard_stop=True)
+```
 
-model = AutoModelForCausalLM.from_pretrained(
-    "Qwen/Qwen3-4B-Instruct-2507",
-    attn_implementation="paged|flash_attention_2",
-    device_map="cuda",
-    torch_dtype=torch.bfloat16
+Once `stop` is called, [`~ContinuousBatchingManager.add_request`] and [`~ContinuousBatchingManager.add_requests`] drop new submissions and log a warning. You can still call `start` again to run another generation session with the same manager.
+
+Call [`~ContinuousBatchingManager.destroy`] to release distributed resources. `destroy` stops the manager first if it's still running, and the manager cannot be restarted afterwards. Use it when you're done with continuous batching for the lifetime of the process.
+
+```py
+manager.destroy()
+```
+
+[`~ContinuousMixin.continuous_batching_context_manager`] handles this process. It calls `stop` on exit and `destroy` unless you pass `persistent_manager=True` to cache the manager on the model for the next session.
+
+### Adding requests
+
+[`~ContinuousBatchingManager.add_request`] submits a single request. Provide a `request_id` or let the manager generate one automatically.
+
+```py
+manager.add_request(input_ids=input_ids, request_id="my_request")
+```
+
+[`~ContinuousBatchingManager.add_requests`] submits a batch at once. It sorts inputs automatically to maximize prefix cache hits when block sharing is enabled.
+
+```py
+manager.add_requests(inputs=inputs)
+```
+
+Cancel a request with [`~ContinuousBatchingManager.cancel_request`].
+
+```py
+manager.cancel_request(request_id="my_request")
+```
+
+### Per-request sampling parameters
+
+Enable `per_request_processors` to apply `temperature`, `top_k`, and `top_p` independently per request within the same forward pass to allow different sampling parameters for different requests (creative, high-temperature outputs versus precise, low-temperature ones for example).
+
+```py
+cb_config = ContinuousBatchingConfig(per_request_processors=True)
+
+# each request gets its own sampling parameters
+manager.add_request(input_ids=inputs_a, temperature=0.9, top_p=0.95)
+manager.add_request(input_ids=inputs_b, temperature=0.1, top_k=10)
+```
+
+Each parameter in [`GenerationConfig`] must be a non-default value in order to create the associated logits processor at runtime. For example, set `temperature` to a value other than `None` or `1` to support per-request temperature control. Requests with temperatures of `1` can still be created afterwards.
+
+### Retrieving results
+
+Iterate over the manager to receive results as they arrive.
+
+```py
+for result in manager:
+    print(tokenizer.decode(result.generated_tokens, skip_special_tokens=True))
+```
+
+[`~ContinuousBatchingManager.get_result`] fetches the next result from the output queue. Pass a `request_id` to filter for a specific request. If the next result in the queue doesn't match, it's requeued and the method returns `None`.
+
+```py
+# next available result
+result = manager.get_result()
+
+# filter for a specific request
+result = manager.get_result(request_id="my_request")
+```
+
+### Streaming
+
+Set `streaming=True` on a request, then use [`~ContinuousBatchingManager.request_id_iter`] to iterate over partial outputs as tokens are generated.
+
+```py
+from transformers.generation.continuous_batching import RequestStatus
+
+manager.add_request(input_ids=input_ids, request_id="streamed", streaming=True)
+
+for chunk in manager.request_id_iter(request_id="streamed"):
+    token = tokenizer.decode(chunk.generated_tokens[-1:], skip_special_tokens=True)
+    print(token, end="", flush=True)
+    if chunk.status == RequestStatus.FINISHED:
+        break
+```
+
+## ContinuousBatchingConfig
+
+[`ContinuousBatchingConfig`] controls the KV cache, scheduling, CUDA graphs, memory usage, and more. Pass it alongside [`GenerationConfig`] to customize continuous batching.
+
+By default, `num_blocks` and `max_batch_tokens` are inferred automatically from available GPU memory. Use the table below to help you pick the appropriate features.
+
+| Feature | Memory | Throughput | Latency |
+|---|---|---|---|
+| `max_memory_percent` / `block_size` | ✓ controls KV budget | | |
+| `scheduler` | | ✓ scheduling policy | ✓ TTFT |
+| CUDA graphs | ↑ graph storage | ✓ less dispatch overhead | ✓ |
+| Async batching | ↑ ~2× I/O buffers | ✓ overlaps CPU/GPU | |
+| Decode fast path | ↑ block table per request | ✓ faster decode-only steps | ✓ |
+| CPU offloading | ↑ pinned CPU memory | ✓ skips some re-prefills | |
+| Prefix caching | ↓ shared KV blocks | ✓ skips redundant prefill | ✓ TTFT |
+| Paged attention | ↓ no fragmentation | ✓ dynamic batch membership | |
+| Sliding window | ↓ bounded KV per layer | | |
+| Per-request processors | | ✓ mixed sampling params per batch | |
+
+```py
+from transformers.generation import ContinuousBatchingConfig
+
+cb_config = ContinuousBatchingConfig(
+    max_memory_percent=0.8,  # fraction of free GPU memory to use for the KV cache
+    block_size=256,          # KV cache block size in tokens
+    scheduler_type="fifo",        # "fifo" or "prefill_first"
+)
+
+outputs = model.generate_batch(
+    inputs=inputs,
+    generation_config=generation_config,
+    continuous_batching_config=cb_config,
 )
 ```
 
-## Sliding window attention
+### Log probabilities
 
-Sliding window attention limits the backward context of a token to save compute. Generation cost stays proportional to window size. This reduces compute per step and simplifies continuous batching.
-
-Transformers models like Mistral and Gemma 2 natively support sliding window attention. Manually enable it in the model config if the architecture supports it. This helps with fine-tuning or running custom experiments.
+[`ContinuousBatchingConfig`] returns each generated token's log probability when `return_logprobs=True`. This is useful for RL where logprobs are an input to some of the training loops.
 
 ```py
-from transformers import AutoConfig
+cb_config = ContinuousBatchingConfig(return_logprobs=True)
+
+# generate_batch()
+
+for request_id, output in outputs.items():
+    for token_id, log_prob in zip(output.generated_tokens, output.logprobs):
+        token = tokenizer.decode([token_id])
+        print(f"{token} | logprob: {log_prob}")
+```
+
+### CUDA graphs
+
+CUDA graphs eliminate CPU dispatch overhead by recording the GPU execution graph once and replaying it for batches with matching shapes. Enable them explicitly with `use_cuda_graph=True`.
+
+```py
+cb_config = ContinuousBatchingConfig(use_cuda_graph=True)
+```
+
+When active, the manager pads query and KV lengths to fixed intervals so shapes repeat and graphs reuse. Smaller values of `q_padding_interval_size` and `kv_padding_interval_size` reduce wasted compute on padding, but this means there are more unique shapes the graph has to record and store which costs more memory.
+
+```py
+cb_config = ContinuousBatchingConfig(
+    use_cuda_graph=True,
+    q_padding_interval_size=64,
+    kv_padding_interval_size=16384,
+    max_cached_graphs=32,
+)
+```
+
+### Async batching
+
+Async batching overlaps CPU scheduling of the next batch with GPU computation of the current one. It requires CUDA graphs and roughly doubles the VRAM used for input tensors.
+
+```py
+cb_config = ContinuousBatchingConfig(
+    use_cuda_graph=True,
+    use_async_batching=True,
+)
+```
+
+### Decode fast path
+
+When a batch contains only decode requests (one query token per sequence), the manager can dispatch to the `flash_attn_with_kvcache` kernel instead of the variable-length kernel. This is faster than the varlen path because the kernel reads and writes the paged KV cache in-place through a block table rather than going through a manual update. See [Paged attention](./paged_attention) for kernel-level details.
+
+The fast path is sized by `max_blocks_per_request`, which dimensions the per-request block table. By default this is auto-inferred. If `max_prompt_length` and `max_generated_length` are set on the manager, the block table is sized to fit the maximum sequence length. Otherwise, a fallback default (32 blocks per request) is used.
+
+Set `max_blocks_per_request` to a specific value to size the block table explicitly. This is useful when you know the maximum sequence length per request and want to bound the block table memory cost.
+
+```py
+cb_config = ContinuousBatchingConfig(max_blocks_per_request=64)
+```
+
+Set `max_blocks_per_request=0` to disable the fast path and force every batch through the varlen kernel. This recovers the pre-default behavior and is useful when the fast path is unavailable for your attention implementation (the manager also disables it automatically when the underlying kernel can't be used).
+
+```py
+cb_config = ContinuousBatchingConfig(max_blocks_per_request=0)
+```
+
+The fast path relies on the `flash_attn_with_kvcache` kernel, which is available for two device and attention implementation combinations.
+
+| Device | `attn_implementation` |
+|---|---|
+| CUDA | `flash_attention_3` |
+| XPU | [flash_attention_2](https://huggingface.co/kernels-community/flash-attn2) |
+
+For any other combination, or when the kernel can't be imported, the manager falls back to the varlen path. It logs a warning only when you set `max_blocks_per_request` explicitly.
+
+### CPU offloading
+
+CPU offloading copies evicted KV cache blocks to a pre-allocated pinned CPU buffer when the GPU KV cache is full. After cache space becomes available, the manager copies the blocks back to the GPU and resumes the request without recomputing its prompt and generated tokens.
+
+Set `cpu_offload_space` to the CPU swap space in GiB. The default value, `0.0`, disables CPU offloading.
+
+```py
+cb_config = ContinuousBatchingConfig(cpu_offload_space=8.0)
+```
+
+By default, `cpu_offload_space_safety_threshold=0.8` limits the requested space to 80% of available system RAM when `psutil` is installed. Set `cpu_offload_space=None` to size the swap pool from the safety threshold.
+
+### Tensor parallel timeout
+
+Under tensor parallelism, the manager creates a CPU communication group to coordinate request submissions, cancellations, and shutdown across ranks. `cpu_group_timeout` limits how long a collective on this group can block before the process crashes. If one rank stalls, the timeout prevents the others from waiting forever.
+
+Set a longer timeout for workloads that issue infrequent collectives, or pass `None` to disable it.
+
+```py
+cb_config = ContinuousBatchingConfig(cpu_group_timeout=600.0)
+```
+
+### Prefix caching
+
+When multiple requests share a common prefix, like a system prompt, the manager reuses their KV cache blocks instead of recomputing them. This is enabled by default and requires all model layers to use full attention (it's automatically disabled for sliding window models).
+
+```py
+cb_config = ContinuousBatchingConfig(
+    allow_block_sharing=True,  # default
+)
+```
+
+## Paged attention
+
+Continuous batching requires a paged attention backend. Set `attn_implementation` when loading the model. If you load a model with a non-paged backend (`"flash_attention_2"`), the `"paged|"` prefix is added automatically when continuous batching starts.
+
+| Backend | `attn_implementation` | Requirements |
+|---|---|---|
+| FlashAttention | <code>"paged&#124;flash_attention_2"</code> | `flash-attn` package |
+| SDPA (PyTorch native) | <code>"paged&#124;sdpa"</code> | None |
+| Eager | <code>"paged&#124;eager"</code> | None |
+
+```py
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-4B",
+    attn_implementation="paged|flash_attention_2",
+    device_map="cuda",
+    dtype=torch.bfloat16,
+)
+```
+
+## Tensor parallelism
+
+For models too large to fit on a single GPU, shard the weights across devices with tensor parallelism. Load the model with `tp_plan="auto"` and continuous batching reads the tensor parallel size from the model to size the paged KV cache per shard. See [Tensor parallelism](./tensor_parallelism) for the list of supported architectures and how sharding works.
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.generation import ContinuousBatchingConfig, GenerationConfig
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-32B",
+    attn_implementation="paged|flash_attention_2",
+    tp_plan="auto",
+)
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-32B")
+
+inputs = [tokenizer.encode(p) for p in ["Whats up?", "Name a cat breed."]]
+generation_config = GenerationConfig(max_new_tokens=64, eos_token_id=tokenizer.eos_token_id)
+
+outputs = model.generate_batch(inputs=inputs, generation_config=generation_config)
+```
+
+Launch the script with `torchrun`, setting `--nproc-per-node` to the number of GPUs you want to shard across.
+
+```shell
+torchrun --nproc-per-node 4 cb_tp.py
+```
+
+The tensor parallel size must divide the model's `num_key_value_heads` (check the model config). The paged cache raises an error at startup otherwise, so choose an appropriate `--nproc-per-node`.
+
+> [!WARNING]
+> Don't set `device_map` with `tp_plan`. The two conflict because `device_map` places whole modules on specific GPUs, while `tp_plan` shards those same parameters across all GPUs.
+
+## Sliding window attention
+
+Models with sliding window attention (Mistral, Gemma 2) work with continuous batching. To manually configure a sliding window for fine-tuning or custom experiments, set it in the model config before loading.
+
+```py
+from transformers import AutoConfig, AutoModelForCausalLM
 
 config = AutoConfig.from_pretrained("google/gemma-2-2b")
 config.sliding_window = 4096
@@ -151,32 +397,15 @@ config.sliding_window = 4096
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2-2b",
     config=config,
-    attn_implementation="paged|flash_attention_2",
+    attn_implementation="paged|sdpa",
     device_map="cuda",
     dtype=torch.bfloat16,
 )
 ```
 
-Usage remains the same with [`~ContinuousMixin.generate_batch`].
+Prefix caching is disabled automatically when sliding window attention is active.
 
-## How it works
+## Next steps
 
-The [`ContinuousMixin`] class serves as the main interface for continuous batching through [`~ContinuousMixin.generate_batch`]. This method internally creates a [`ContinuousBatchingManager`].
-
-[`ContinuousBatchingManager`] manages requests by creating a background thread for the generation loop and adding requests to the queue. The manager is thread-safe, allowing asynchronous request additions while the model generates.
-
-The [`Scheduler`] selects requests for processing at each step based on the token budget. [`FIFOScheduler`] is the default scheduler. It prioritizes decoding requests over prefilling requests and assigns them to specific memory blocks. [`PrefillFirstScheduler`] prioritizes prefill requests instead.
-
-[`ContinuousBatchingManager`] runs the model forward pass for the scheduled requests. It then collects and returns the results.
-
-[`ContinuousBatchingConfig`] is the object used to store all parameters needed for continuous batching, that are not already in [`GenerationConfig`]
-
-## Continuous batching config
-
-[[autodoc]] ContinuousBatchingConfig
-    - __call__
-
-
-## Resources
-
-The [Continuous batching](https://huggingface.co/blog/continuous_batching) blog post explains KV caching, chunked prefill, and ragged batching with dynamic scheduling in more detail.
+- The [Continuous batching blog post](https://huggingface.co/blog/continuous_batching) covers KV caching, chunked prefill, and dynamic scheduling with performance benchmark numbers.
+- For a deeper look at how the continuous batching system works, see the [Continuous batching architecture](./continuous_batching_architecture) doc.

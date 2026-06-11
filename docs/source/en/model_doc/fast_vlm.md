@@ -13,13 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-
-*This model was released on 2025-05-06 and added to Hugging Face Transformers on 2025-12-02.*
+*This model was published in HF papers on 2024-12-17 and contributed to Hugging Face Transformers on 2025-12-02.*
 
 # FastVLM
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -49,11 +47,11 @@ Hugging Face models use SDPA by default; however, this model’s visual backbone
 
 If you want to use a different attention implementation in the language decoder, make sure to set it explicitly, for example:
 
-`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation={"text_config": "flash_attention_2"})`
+`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation={"text_config": "flash_attention_2"}, device_map="auto")`
 
 Setting it for the entire model, e.g.
 
-`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation="flash_attention_2")`
+`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation="flash_attention_2", device_map="auto")`
 
 will result in an error.
 
@@ -73,10 +71,12 @@ Each **checkpoint** is trained with a specific prompt format, depending on the u
 
 ```python
 import torch
+
 from transformers import AutoProcessor, FastVlmForConditionalGeneration
 
+
 # Load the model in half-precision
-model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", dtype=torch.bfloat16, device_map="auto")
+model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", device_map="auto")
 processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-0.5B")
 
 conversation = [
@@ -108,10 +108,12 @@ FastVLM also supports batched inference. Here is how you can do it:
 
 ```python
 import torch
+
 from transformers import AutoProcessor, FastVlmForConditionalGeneration
 
+
 # Load the model in half-precision
-model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", dtype=torch.bfloat16, device_map="auto")
+model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", device_map="auto")
 processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-0.5B")
 
 

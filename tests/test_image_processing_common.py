@@ -99,7 +99,7 @@ def prepare_video(num_frames, num_channels, width=10, height=10, numpify=False, 
     """This function prepares a video as a list of PIL images/NumPy arrays/PyTorch tensors."""
 
     video = []
-    for i in range(num_frames):
+    for frame_idx in range(num_frames):
         video.append(np.random.randint(255, size=(num_channels, width, height), dtype=np.uint8))
 
     if not numpify and not torchify:
@@ -571,8 +571,9 @@ class ImageProcessingTestMixin:
 
         image_processor = torch.compile(image_processor, mode="reduce-overhead")
         output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
+        # torch.compile can introduce 1-level rounding differences in uint8 resize; after normalization this can reach 2 / 255.
         self._assert_tensors_equivalence(
-            output_eager.pixel_values, output_compiled.pixel_values, atol=1e-4, rtol=1e-4, mean_atol=1e-5
+            output_eager.pixel_values, output_compiled.pixel_values, atol=1e-2, rtol=1e-4, mean_atol=1e-5
         )
 
     def test_new_models_require_torchvision_backend(self):
@@ -591,7 +592,7 @@ class ImageProcessingTestMixin:
             try:
                 # Convert model_type to directory name and construct file path
                 model_dir = model_type.replace("-", "_")
-                slow_processor_file = f"src/transformers/models/{model_dir}/image_processing_{model_dir}.py"
+                slow_processor_file = f"src/transformers/models/{model_dir}"
                 # Check if the file exists otherwise skip the test
                 if not os.path.exists(slow_processor_file):
                     return None

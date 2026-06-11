@@ -18,7 +18,9 @@ import os
 from typing import Union
 
 import torch
+from huggingface_hub.utils import RepositoryNotFoundError
 from torch import nn
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -33,27 +35,10 @@ from ...image_utils import (
     get_max_height_width,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torchvision_available,
-    logging,
-)
-
-
-try:
-    from huggingface_hub import hf_hub_download
-    from huggingface_hub.utils import RepositoryNotFoundError
-except ImportError:
-    hf_hub_download = None
-    RepositoryNotFoundError = None
+from ...utils import TensorType, auto_docstring, hf_api, logging
 
 
 logger = logging.get_logger(__name__)
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 class OneFormerImageProcessorKwargs(ImagesKwargs, total=False):
@@ -100,15 +85,11 @@ def load_metadata(repo_id, class_info_file):
     if not os.path.exists(fname) or not os.path.isfile(fname):
         if repo_id is None:
             raise ValueError(f"Could not file {fname} locally. repo_id must be defined if loading from the hub")
-        if hf_hub_download is None:
-            raise ImportError(
-                "huggingface_hub is required to download metadata files. Install it with `pip install huggingface_hub`"
-            )
         # We try downloading from a dataset by default for backward compatibility
         try:
-            fname = hf_hub_download(repo_id, class_info_file, repo_type="dataset")
+            fname = hf_api().hf_hub_download(repo_id, class_info_file, repo_type="dataset")
         except RepositoryNotFoundError:
-            fname = hf_hub_download(repo_id, class_info_file)
+            fname = hf_api().hf_hub_download(repo_id, class_info_file)
 
     with open(fname, "r") as f:
         class_info = json.load(f)
@@ -295,12 +276,10 @@ class OneFormerImageProcessor(TorchvisionBackend):
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
     size = {"shortest_edge": 800, "longest_edge": 1333}
-    crop_size = None
     do_resize = True
     do_rescale = True
     do_normalize = True
     default_to_square = False
-    do_center_crop = False
     do_convert_rgb = True
     rescale_factor = 1 / 255
     ignore_index = None

@@ -20,7 +20,7 @@ from functools import partial
 from typing import Any
 
 import numpy as np
-from huggingface_hub import create_repo, is_offline_mode
+from huggingface_hub import is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 
 from .dynamic_module_utils import custom_object_save
@@ -28,8 +28,8 @@ from .image_processing_backends import TorchvisionBackend
 from .image_processing_utils import BatchFeature
 from .image_utils import (
     ChannelDimension,
-    PILImageResampling,
     SizeDict,
+    is_vision_available,
     validate_kwargs,
 )
 from .processing_utils import Unpack, VideosKwargs
@@ -46,7 +46,7 @@ from .utils import (
     logging,
     safe_load_json_file,
 )
-from .utils.hub import cached_file
+from .utils.hub import cached_file, hf_api
 from .utils.import_utils import requires
 from .video_utils import (
     VideoInput,
@@ -66,6 +66,9 @@ if is_torch_available():
 
 if is_torchvision_v2_available():
     import torchvision.transforms.v2.functional as tvF
+
+if is_vision_available():
+    from .image_utils import PILImageResampling
 
 
 logger = logging.get_logger(__name__)
@@ -280,7 +283,7 @@ class BaseVideoProcessor(TorchvisionBackend):
             if isinstance(videos[0], list):
                 # Videos sometimes are passed as a list of image URLs, especially through templates
                 videos = [
-                    torch.stack([tvF.pil_to_tensor(image) for image in images], dim=0)
+                    torch.stack([self.process_image(image) for image in images], dim=0)
                     for images in self.fetch_images(videos)
                 ]
                 if do_sample_frames:
@@ -436,7 +439,7 @@ class BaseVideoProcessor(TorchvisionBackend):
                 - a path to a *directory* containing a video processor file saved using the
                   [`~video_processing_utils.VideoProcessorBase.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-                - a path or url to a saved video processor JSON *file*, e.g.,
+                - a path to a saved video processor JSON *file*, e.g.,
                   `./my_model_directory/video_preprocessor_config.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model video processor should be cached if the
@@ -535,7 +538,7 @@ class BaseVideoProcessor(TorchvisionBackend):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be

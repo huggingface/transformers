@@ -21,7 +21,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="mistralai/Voxtral-Mini-3B-2507")
-@strict(accept_kwargs=True)
+@strict
 class VoxtralEncoderConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
@@ -38,7 +38,8 @@ class VoxtralEncoderConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "voxtral_encoder"
 
@@ -71,7 +72,7 @@ class VoxtralEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="mistralai/Voxtral-Mini-3B-2507")
-@strict(accept_kwargs=True)
+@strict
 class VoxtralConfig(PreTrainedConfig):
     r"""
     Example:

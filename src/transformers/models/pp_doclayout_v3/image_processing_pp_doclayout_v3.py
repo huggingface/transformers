@@ -21,17 +21,15 @@
 
 import numpy as np
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
-from ...utils import auto_docstring, is_cv2_available, is_torchvision_available, requires_backends
+from ...utils import auto_docstring, is_cv2_available, requires_backends
 from ...utils.generic import TensorType
 
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 if is_cv2_available():
     import cv2
@@ -204,6 +202,9 @@ class PPDocLayoutV3ImageProcessor(TorchvisionBackend):
             y_coordinates = [int(round((y_min * scale_height).item())), int(round((y_max * scale_height).item()))]
             y_start, y_end = np.clip(y_coordinates, 0, mask_height)
             cropped_mask = masks[i, y_start:y_end, x_start:x_end]
+            if cropped_mask.size == 0 or np.sum(cropped_mask) == 0:
+                polygon_points.append(rect)
+                continue
 
             # resize mask to match box size
             resized_mask = cv2.resize(cropped_mask.astype(np.uint8), (box_w, box_h), interpolation=cv2.INTER_NEAREST)

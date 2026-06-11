@@ -37,7 +37,7 @@ from ..olmoe.modeling_olmoe import (
 
 
 @auto_docstring(checkpoint="allenai/FlexOlmo-7x7B-1T")
-@strict(accept_kwargs=True)
+@strict
 class FlexOlmoConfig(PreTrainedConfig):
     r"""
     Example:

@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/gemma2-7b")
-@strict(accept_kwargs=True)
+@strict
 class Gemma2Config(PreTrainedConfig):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):

@@ -40,7 +40,7 @@ class FuyuPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _no_split_modules = []
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
 
 
 @auto_docstring(
@@ -61,12 +61,6 @@ class FuyuModel(FuyuPreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     def gather_continuous_embeddings(
         self,
@@ -219,12 +213,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         self.model = FuyuModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring

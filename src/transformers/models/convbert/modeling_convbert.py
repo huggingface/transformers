@@ -22,6 +22,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN, get_activation
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
@@ -179,7 +180,8 @@ class ConvBertSelfAttention(nn.Module):
         encoder_hidden_states: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size, seq_length, _ = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
@@ -194,15 +196,11 @@ class ConvBertSelfAttention(nn.Module):
         mixed_key_conv_attn_layer = mixed_key_conv_attn_layer.transpose(1, 2)
 
         mixed_query_layer = self.query(hidden_states)
-        query_layer = mixed_query_layer.view(
-            batch_size, -1, self.num_attention_heads, self.attention_head_size
-        ).transpose(1, 2)
-        key_layer = mixed_key_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(
-            1, 2
-        )
-        value_layer = mixed_value_layer.view(
-            batch_size, -1, self.num_attention_heads, self.attention_head_size
-        ).transpose(1, 2)
+        query_layer = mixed_query_layer.view(hidden_shape).transpose(1, 2)
+
+        key_layer = mixed_key_layer.view(hidden_shape).transpose(1, 2)
+        value_layer = mixed_value_layer.view(hidden_shape).transpose(1, 2)
+
         conv_attn_layer = torch.multiply(mixed_key_conv_attn_layer, mixed_query_layer)
 
         conv_kernel_layer = self.conv_kernel_layer(conv_attn_layer)
@@ -210,7 +208,7 @@ class ConvBertSelfAttention(nn.Module):
         conv_kernel_layer = torch.softmax(conv_kernel_layer, dim=1)
 
         conv_out_layer = self.conv_out_layer(hidden_states)
-        conv_out_layer = torch.reshape(conv_out_layer, [batch_size, -1, self.all_head_size])
+        conv_out_layer = torch.reshape(conv_out_layer, [input_shape[0], -1, self.all_head_size])
         conv_out_layer = conv_out_layer.transpose(1, 2).contiguous().unsqueeze(-1)
         conv_out_layer = nn.functional.unfold(
             conv_out_layer,
@@ -220,7 +218,7 @@ class ConvBertSelfAttention(nn.Module):
             stride=1,
         )
         conv_out_layer = conv_out_layer.transpose(1, 2).reshape(
-            batch_size, -1, self.all_head_size, self.conv_kernel_size
+            input_shape[0], -1, self.all_head_size, self.conv_kernel_size
         )
         conv_out_layer = torch.reshape(conv_out_layer, [-1, self.attention_head_size, self.conv_kernel_size])
         conv_out_layer = torch.matmul(conv_out_layer, conv_kernel_layer)
@@ -243,7 +241,9 @@ class ConvBertSelfAttention(nn.Module):
         context_layer = torch.matmul(attention_probs, value_layer)
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
 
-        conv_out = torch.reshape(conv_out_layer, [batch_size, -1, self.num_attention_heads, self.attention_head_size])
+        conv_out = torch.reshape(
+            conv_out_layer, [input_shape[0], -1, self.num_attention_heads, self.attention_head_size]
+        )
         context_layer = torch.cat([context_layer, conv_out], 2)
 
         # conv and context
@@ -631,8 +631,6 @@ class ConvBertModel(ConvBertPreTrainedModel):
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
-
         hidden_states = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
@@ -640,9 +638,15 @@ class ConvBertModel(ConvBertPreTrainedModel):
         if hasattr(self, "embeddings_project"):
             hidden_states = self.embeddings_project(hidden_states)
 
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+        )
+
         encoder_outputs: BaseModelOutputWithCrossAttentions = self.encoder(
             hidden_states,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             **kwargs,
         )
 

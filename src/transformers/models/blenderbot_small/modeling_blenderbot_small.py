@@ -172,14 +172,12 @@ class BlenderbotSmallAttention(nn.Module):
         is_cross_attention = key_value_states is not None
 
         # determine input shapes
-        bsz, tgt_len = hidden_states.shape[:-1]
-        src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
+        input_shape = hidden_states.shape[:-1]
 
-        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
-        kv_input_shape = (bsz, src_len, -1, self.head_dim)
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         # get query proj
-        query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         is_updated = False
         if past_key_values is not None:
@@ -201,8 +199,9 @@ class BlenderbotSmallAttention(nn.Module):
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
-            key_states = key_states.view(*kv_input_shape).transpose(1, 2)
-            value_states = value_states.view(*kv_input_shape).transpose(1, 2)
+            kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
+            key_states = key_states.view(kv_shape).transpose(1, 2)
+            value_states = value_states.view(kv_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
@@ -225,7 +224,7 @@ class BlenderbotSmallAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights

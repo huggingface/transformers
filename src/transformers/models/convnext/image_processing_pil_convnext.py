@@ -25,13 +25,18 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
-from .image_processing_convnext import ConvNextImageProcessorKwargs
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+# Adapted from transformers.models.convnext.image_processing_convnext.ConvNextImageProcessorKwargs
+class ConvNextImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    crop_pct (`float`, *optional*, defaults to `self.crop_pct`):
+        Percentage of the image to crop. Only has an effect if size < 384.
+    """
+
+    crop_pct: float
 
 
 @auto_docstring
@@ -57,7 +62,7 @@ class ConvNextImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         crop_pct: float = 224 / 256,
         **kwargs,
     ) -> np.ndarray:
@@ -98,7 +103,7 @@ class ConvNextImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

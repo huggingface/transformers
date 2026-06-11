@@ -21,12 +21,9 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Qwen/Qwen1.5-MoE-A2.7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2MoeConfig(PreTrainedConfig):
     r"""
-    max_window_layers (`int`, *optional*, defaults to 28):
-        The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
-        additional layer afterwards will use SWA (Sliding Window Attention).
     decoder_sparse_step (`int`, *optional*, defaults to 1):
         The frequency of the MoE layer.
     shared_expert_intermediate_size (`int`, *optional*, defaults to 5632):
@@ -49,7 +46,8 @@ class Qwen2MoeConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "qwen2_moe"
     keys_to_ignore_at_inference = ["past_key_values"]

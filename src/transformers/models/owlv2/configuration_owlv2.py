@@ -22,7 +22,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@strict(accept_kwargs=True)
+@strict
 @auto_docstring(checkpoint="google/owlv2-base-patch16")
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTTextConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
 class Owlv2TextConfig(PreTrainedConfig):
@@ -61,7 +61,7 @@ class Owlv2TextConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = 49407
 
 
-@strict(accept_kwargs=True)
+@strict
 @auto_docstring(checkpoint="google/owlv2-base-patch16")
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTVisionConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2, 32->16
 class Owlv2VisionConfig(PreTrainedConfig):
@@ -98,7 +98,7 @@ class Owlv2VisionConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
 
 
-@strict(accept_kwargs=True)
+@strict
 @auto_docstring(checkpoint="google/owlv2-base-patch16")
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
 class Owlv2Config(PreTrainedConfig):

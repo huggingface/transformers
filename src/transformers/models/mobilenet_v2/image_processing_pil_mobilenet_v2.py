@@ -13,9 +13,13 @@
 # limitations under the License.
 """Image processor class for MobileNetV2."""
 
-from typing import Union
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+
+if TYPE_CHECKING:
+    pass
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -27,16 +31,21 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
-from .image_processing_mobilenet_v2 import MobileNetV2ImageProcessorKwargs
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring
+from ...utils.import_utils import requires
 
 
-if is_torch_available():
-    import torch
+# Adapted from transformers.models.mobilenet_v2.image_processing_mobilenet_v2.MobileNetV2ImageProcessorKwargs
+class MobileNetV2ImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
+    """
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+    do_reduce_labels: bool
 
 
 @auto_docstring
@@ -80,7 +89,7 @@ class MobileNetV2ImageProcessorPil(PilBackend):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
-        device: Union[str, "torch.device"] | None = None,
+        device: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""
@@ -136,7 +145,7 @@ class MobileNetV2ImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -163,12 +172,13 @@ class MobileNetV2ImageProcessorPil(PilBackend):
             processed_images.append(image)
         return processed_images
 
+    @requires(backends=("torch",))
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
         """
         Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps.
         """
-        if not is_torch_available():
-            raise ImportError("PyTorch is required for post_process_semantic_segmentation")
+        import torch
+
         logits = outputs.logits
         if target_sizes is not None:
             if len(logits) != len(target_sizes):

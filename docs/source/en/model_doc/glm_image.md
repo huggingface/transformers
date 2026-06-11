@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-01-10 and added to Hugging Face Transformers on 2026-01-13.*
+*This model was contributed to Hugging Face Transformers on 2026-01-13.*
 
 # GlmImage
 
@@ -48,12 +48,12 @@ This model was contributed by [Raushan Turganbay](https://huggingface.co/Raushan
 Using GLM-Image with image input to generate vision token for DIT using.
 
 ```python
-from transformers import GlmImageForConditionalGeneration, AutoProcessor
-import torch
+
+from transformers import AutoProcessor, GlmImageForConditionalGeneration
+
 
 model = GlmImageForConditionalGeneration.from_pretrained(
     pretrained_model_name_or_path="zai-org/GLM-Image/vision_language_encoder",
-    dtype=torch.bfloat16,
     device_map="cuda:0"
 )
 processor = AutoProcessor.from_pretrained(

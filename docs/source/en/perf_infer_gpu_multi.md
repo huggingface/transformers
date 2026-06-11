@@ -309,3 +309,5 @@ The `placement` attribute tells PyTorch how to place a tensor on devices in `Dev
 - Check the [expert parallelism](./expert_parallelism) guide if you're using a mixture-of-experts (MoE) model. These models support tensor parallelism and expert parallelism.
 
 - Read the [Tensor Parallelism (TP) in Transformers: 5 Minutes to Understand](https://huggingface.co/blog/qgallouedec/tp) blog post for a quick overview of tensor parallelism and learn how column and row parallel setups differ.
+
+- See the [Tensor parallelism](./tensor_parallelism) training guide to learn how to use it in a training setting.

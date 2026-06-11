@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "5.3.0.dev0"
+__version__ = "5.10.0.dev0"
 
 import importlib
 import sys
@@ -113,6 +113,7 @@ _import_structure = {
         "CompileConfig",
         "ContinuousBatchingConfig",
         "GenerationConfig",
+        "TextDiffusionStreamer",
         "TextIteratorStreamer",
         "TextStreamer",
         "WatermarkingConfig",
@@ -259,6 +260,7 @@ _import_structure = {
         "FineGrainedFP8Config",
         "FourOverSixConfig",
         "FPQuantConfig",
+        "GemmaQuantizationConfig",
         "GPTQConfig",
         "HiggsConfig",
         "HqqConfig",
@@ -330,7 +332,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_vision_objects) if not name.startswith("_")
     ]
 else:
-    _import_structure["image_processing_backends"] = ["PilBackend", "TorchvisionBackend"]
+    _import_structure["image_processing_backends"] = ["PilBackend"]
     _import_structure["image_processing_base"] = ["ImageProcessingMixin"]
     _import_structure["image_processing_utils"] = ["BaseImageProcessor"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
@@ -345,6 +347,8 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_torchvision_objects) if not name.startswith("_")
     ]
 else:
+    _import_structure.setdefault("image_processing_backends", [])
+    _import_structure["image_processing_backends"] += ["TorchvisionBackend"]
     _import_structure["video_processing_utils"] = ["BaseVideoProcessor"]
 
 # PyTorch-backed objects
@@ -363,7 +367,9 @@ else:
     _import_structure["cache_utils"] = [
         "CacheLayerMixin",
         "DynamicLayer",
+        "DynamicIndexedLayer",
         "StaticLayer",
+        "StaticIndexedLayer",
         "StaticSlidingWindowLayer",
         "QuantoQuantizedLayer",
         "HQQQuantizedLayer",
@@ -483,12 +489,14 @@ if TYPE_CHECKING:
     from .backbone_utils import BackboneConfigMixin, BackboneMixin
     from .cache_utils import Cache as Cache
     from .cache_utils import DynamicCache as DynamicCache
+    from .cache_utils import DynamicIndexedLayer as DynamicIndexedLayer
     from .cache_utils import DynamicLayer as DynamicLayer
     from .cache_utils import EncoderDecoderCache as EncoderDecoderCache
     from .cache_utils import HQQQuantizedLayer as HQQQuantizedLayer
     from .cache_utils import QuantizedCache as QuantizedCache
     from .cache_utils import QuantoQuantizedLayer as QuantoQuantizedLayer
     from .cache_utils import StaticCache as StaticCache
+    from .cache_utils import StaticIndexedLayer as StaticIndexedLayer
     from .cache_utils import StaticLayer as StaticLayer
     from .cache_utils import StaticSlidingWindowLayer as StaticSlidingWindowLayer
     from .configuration_utils import PreTrainedConfig as PreTrainedConfig
@@ -589,6 +597,7 @@ if TYPE_CHECKING:
     from .generation import SynthIDTextWatermarkingConfig as SynthIDTextWatermarkingConfig
     from .generation import SynthIDTextWatermarkLogitsProcessor as SynthIDTextWatermarkLogitsProcessor
     from .generation import TemperatureLogitsWarper as TemperatureLogitsWarper
+    from .generation import TextDiffusionStreamer as TextDiffusionStreamer
     from .generation import TextIteratorStreamer as TextIteratorStreamer
     from .generation import TextStreamer as TextStreamer
     from .generation import TopHLogitsWarper as TopHLogitsWarper
@@ -632,7 +641,6 @@ if TYPE_CHECKING:
     from .modeling_utils import AttentionInterface as AttentionInterface
     from .modeling_utils import PreTrainedModel as PreTrainedModel
     from .models import *
-    from .models.mamba.modeling_mamba import MambaCache as MambaCache
     from .models.timm_wrapper import TimmWrapperImageProcessor as TimmWrapperImageProcessor
 
     # Optimization
@@ -774,6 +782,7 @@ if TYPE_CHECKING:
     from .utils.quantization_config import FineGrainedFP8Config as FineGrainedFP8Config
     from .utils.quantization_config import FourOverSixConfig as FourOverSixConfig
     from .utils.quantization_config import FPQuantConfig as FPQuantConfig
+    from .utils.quantization_config import GemmaQuantizationConfig as GemmaQuantizationConfig
     from .utils.quantization_config import GPTQConfig as GPTQConfig
     from .utils.quantization_config import HiggsConfig as HiggsConfig
     from .utils.quantization_config import HqqConfig as HqqConfig
@@ -822,6 +831,31 @@ else:
     _create_module_alias(f"{__name__}.tokenization_utils", ".tokenization_utils_sentencepiece")
     _create_module_alias(f"{__name__}.image_processing_utils_fast", ".image_processing_backends")
 
+    for _proc_file in sorted((Path(__file__).parent / "models").rglob("image_processing_*.py")):
+        _model = _proc_file.parent.name
+        _module = _proc_file.stem
+        _target = f".models.{_model}.{_module}"
+        _create_module_alias(f"{__name__}.models.{_model}.{_module}_fast", _target)
+
+        # Also map XImageProcessorFast -> XImageProcessor for backward compat with old class names.
+        def getattr_factory(target):
+            def _getattr(name):
+                if name.endswith("Fast"):
+                    new_name = name.removesuffix("Fast")
+                    logger.warning_once(
+                        "Accessing `%s` from `%s`. Returning `%s` instead. Behavior may be "
+                        "different and this alias will be removed in future versions.",
+                        name,
+                        target,
+                        new_name,
+                    )
+                    return getattr(importlib.import_module(target, __name__), new_name)
+                # Silently forward non-Fast names to target (transparent alias behavior)
+                return getattr(importlib.import_module(target, __name__), name)
+
+            return _getattr
+
+        sys.modules[f"{__name__}.models.{_model}.{_module}_fast"].__getattr__ = getattr_factory(_target)
 
 if not is_torch_available():
     logger.warning_advice(

@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -64,12 +63,12 @@ class JanusPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Janus VQ-VAE mode model outputs.
     """
 )
+@dataclass
 class JanusVQVAEOutput(ModelOutput):
     r"""
     decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
@@ -82,12 +81,12 @@ class JanusVQVAEOutput(ModelOutput):
     embedding_loss: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Janus model's outputs that may also contain a past key/values (to speed up sequential decoding).
     """
 )
+@dataclass
 class JanusBaseModelOutputWithPast(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -115,12 +114,12 @@ class JanusBaseModelOutputWithPast(ModelOutput):
     image_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Janus causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class JanusCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -829,8 +828,8 @@ class JanusVQVAEDecoder(nn.Module):
         return hidden_state
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class JanusVQVAEModelOutput(BaseModelOutputWithPooling):
     r"""
     quantized_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
@@ -986,12 +985,6 @@ class JanusModel(JanusPreTrainedModel):
         # Initialize weights and apply final processing.
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -1088,12 +1081,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing.
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.language_model.set_input_embeddings(value)
 
     def prepare_embeddings_for_image_generation(self, inputs: torch.Tensor) -> torch.Tensor:
         hidden_state = self.model.generation_embeddings(inputs)
@@ -1204,11 +1191,13 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         # 1. Handle generation config and model kwargs
-        generation_config = kwargs.pop("generation_config", self.generation_config)
-        generation_config = copy.deepcopy(generation_config)
+        # Pop generation_mode first since it's specific to Janus
+        generation_mode = kwargs.pop("generation_mode", "text")
+        generation_config, model_kwargs = self._prepare_generation_config(
+            kwargs.pop("generation_config", None), **kwargs
+        )
 
         # Default to "text" generation if mode isn't provided
-        generation_mode = kwargs.pop("generation_mode", "text")
         if generation_mode == "text":
             # Set guidance_scale=None to prevent running UnbatchedCFG processor.
             return super().generate(
@@ -1216,10 +1205,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 attention_mask=attention_mask,
                 generation_config=generation_config,
                 guidance_scale=None,
-                **kwargs,
+                **model_kwargs,
             )
-
-        model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
 
         # Validate generation mode
         if generation_config.get_generation_mode() not in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
@@ -1326,8 +1313,14 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
         for i in range(num_image_tokens):
+            # Set `is_first_iteration=True` to force using `inputs_embeds` instead of `input_ids`.
+            # Without this, `prepare_inputs_for_generation` would use `input_ids` (the full prompt)
+            # instead of our prepared `inputs_embeds` (1 new token).
+            # This causes CUDA error: device-side assert triggered, seen around the call to ` self.self_attn`.
+            # Set this to `True` is also necessary to match the expected output, see the more detailed comment
+            # https://github.com/huggingface/transformers/pull/45044#discussion_r3020805374.
             model_inputs = self.prepare_inputs_for_generation(
-                inputs_embeds=inputs_embeds, input_ids=input_tokens, **model_kwargs
+                inputs_embeds=inputs_embeds, input_ids=input_tokens, is_first_iteration=True, **model_kwargs
             )
             if "attention_mask" in model_inputs:
                 model_inputs["attention_mask"] = model_inputs["attention_mask"].to(inputs_embeds.device)

@@ -36,6 +36,7 @@ if is_jinja_available():
     import jinja2
     import jinja2.exceptions
     import jinja2.ext
+    import jinja2.meta
     import jinja2.nodes
     import jinja2.runtime
     from jinja2.ext import Extension
@@ -45,10 +46,6 @@ else:
 
 if is_vision_available():
     from PIL.Image import Image
-
-if is_torch_available():
-    from torch import Tensor
-
 
 ChatType = list[dict[str, Any]]
 
@@ -92,7 +89,9 @@ def _get_json_schema_type(param_type: type) -> dict[str, str]:
     if is_vision_available():
         type_mapping[Image] = {"type": "image"}
     if is_torch_available():
-        type_mapping[Tensor] = {"type": "audio"}
+        import torch
+
+        type_mapping[torch.Tensor] = {"type": "audio"}
     return type_mapping.get(param_type, {"type": "object"})
 
 
@@ -382,6 +381,23 @@ def get_json_schema(func: Callable) -> dict:
     return {"type": "function", "function": output}
 
 
+@lru_cache
+@no_type_check
+def _get_template_variables(chat_template: str | None) -> frozenset[str]:
+    """Return the set of undeclared variables referenced by a chat template.
+
+    Uses ``jinja2.meta.find_undeclared_variables`` so that callers can
+    automatically distinguish template-level kwargs from processor kwargs
+    without maintaining a manual allowlist. Needed only to support BC as we
+    allowed all `kwargs` to be merged into one in the past
+    """
+    if chat_template is None:
+        return frozenset()
+    compiled = _compile_jinja_template(chat_template)
+    ast = compiled.environment.parse(chat_template)
+    return frozenset(jinja2.meta.find_undeclared_variables(ast))
+
+
 def _render_with_assistant_indices(
     compiled_template, messages, tools, documents, add_generation_prompt, **template_kwargs
 ):
@@ -485,7 +501,7 @@ def render_jinja_template(
     documents: ChatType | None = None,
     chat_template: str | None = None,
     return_assistant_tokens_mask: bool = False,
-    continue_final_message: bool = False,
+    continue_final_message: bool | str = False,
     add_generation_prompt: bool = False,
     **kwargs,
 ) -> str:
@@ -527,8 +543,18 @@ def render_jinja_template(
             chat = chat.messages
         if continue_final_message:
             chat = deepcopy(chat)
-            final_message = chat[-1]["content"]
-            if isinstance(final_message, (list, tuple)):
+            continue_final_message = continue_final_message if isinstance(continue_final_message, str) else "content"
+
+            if (final_message := chat[-1].get(continue_final_message)) is None:
+                raise ValueError(
+                    f'continue_final_message is set but the final message has no "{continue_final_message}" to continue!'
+                )
+            if continue_final_message not in chat_template:
+                raise ValueError(
+                    f'continue_final_message is set to "{continue_final_message}" but this is not an accepted field in the chat_template'
+                )
+
+            elif isinstance(final_message, (list, tuple)):
                 for content_block in reversed(final_message):
                     if "text" in content_block:
                         # Pick the last text block in the message (the first one we hit while iterating in reverse)
@@ -540,7 +566,7 @@ def render_jinja_template(
                         "continue_final_message is set but we could not find any text to continue in the final message!"
                     )
             else:
-                chat[-1]["content"] = chat[-1]["content"] + continue_final_message_tag
+                chat[-1][continue_final_message] = chat[-1][continue_final_message] + continue_final_message_tag
         if return_assistant_tokens_mask:
             rendered_chat, generation_indices = _render_with_assistant_indices(
                 compiled_template=compiled_template,
@@ -568,6 +594,7 @@ def render_jinja_template(
                     "applying the chat template! This can happen if the chat template deletes portions of "
                     "the final message. Please verify the chat template and final message in your chat to "
                     "ensure they are compatible."
+                    f"Final message to continue: {final_message.strip()}\nRendered chat:\n{rendered_chat}"
                 )
             tag_loc = rendered_chat.rindex(continue_final_message_tag.strip())
             if rendered_chat[tag_loc : tag_loc + len(continue_final_message_tag)] == continue_final_message_tag:

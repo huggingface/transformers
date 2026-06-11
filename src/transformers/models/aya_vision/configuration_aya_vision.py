@@ -21,7 +21,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="CohereForAI/aya-vision-8b")
-@strict(accept_kwargs=True)
+@strict
 class AyaVisionConfig(PreTrainedConfig):
     r"""
     downsample_factor (`int`, *optional*, defaults to 2):

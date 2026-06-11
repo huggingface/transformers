@@ -40,7 +40,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class SmolVLMVisionConfig(Idefics3VisionConfig):
     r"""
     Example:
@@ -71,7 +71,7 @@ class SmolVLMVisionTransformer(Idefics3VisionTransformer):
 
 
 @auto_docstring(checkpoint="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class SmolVLMConfig(Idefics3Config):
     r"""
     scale_factor (`int`, *optional*, defaults to 2):

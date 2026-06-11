@@ -14,6 +14,7 @@
 """Image processor class for Vilt."""
 
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -29,12 +30,7 @@ from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
 )
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 # Set maximum size based on the typical aspect ratio of the COCO dataset

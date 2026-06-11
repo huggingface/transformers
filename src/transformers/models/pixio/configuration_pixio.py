@@ -25,17 +25,17 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/pixio-huge")
-@strict(accept_kwargs=True)
+@strict
 class PixioConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    n_cls_tokens (`int`, *optional*, defaults to 8):
-        Number of class tokens in the Transformer encoder.
     apply_layernorm (`bool`, *optional*, defaults to `True`):
         Whether to apply layer normalization to the feature maps in case the model is used as backbone.
     reshape_hidden_states (`bool`, *optional*, defaults to `True`):
         Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
         case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
         seq_len, hidden_size)`.
+    n_cls_tokens (`int`, *optional*, defaults to 8):
+        Number of class tokens in the Transformer encoder.
 
     Example:
 
@@ -59,15 +59,15 @@ class PixioConfig(BackboneConfigMixin, PreTrainedConfig):
     num_attention_heads: int = 16
     mlp_ratio: int = 4
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-6
     image_size: int | list[int] | tuple[int, int] = 256
     patch_size: int | list[int] | tuple[int, int] = 16
     num_channels: int = 3
     qkv_bias: bool = True
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     _out_features: list[str] | None = None
     _out_indices: list[int] | None = None
     apply_layernorm: bool = True

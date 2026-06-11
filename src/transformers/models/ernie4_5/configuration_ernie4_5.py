@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-0.3B-PT")
-@strict(accept_kwargs=True)
+@strict
 class Ernie4_5Config(PreTrainedConfig):
     r"""
     use_bias (`bool`, *optional*, defaults to `False`):
@@ -71,7 +71,7 @@ class Ernie4_5Config(PreTrainedConfig):
     max_position_embeddings: int = 131072
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-05
-    use_cache: int | None = True
+    use_cache: bool | None = True
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
     eos_token_id: int | list[int] | None = 2

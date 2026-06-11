@@ -26,17 +26,17 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="facebook/sam-vit-huge")
-@strict(accept_kwargs=True)
+@strict
 class PPChart2TableVisionConfig(PreTrainedConfig):
     r"""
     output_channels (`int`, *optional*, defaults to 256):
         Dimensionality of the output channels in the Patch Encoder.
-    window_size (`int`, *optional*, defaults to 14):
-        Window size for relative position.
     use_abs_pos (`bool`, *optional*, defaults to `True`):
         Whether to use absolute position embedding.
     use_rel_pos (`bool`, *optional*, defaults to `True`):
         Whether to use relative position embedding.
+    window_size (`int`, *optional*, defaults to 14):
+        Window size for relative position.
     global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
         The indexes of the global attention layers.
     mlp_dim (`int`, *optional*, defaults to 3072):
@@ -64,7 +64,7 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-Chart2Table_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class PPChart2TableConfig(PreTrainedConfig):
     r"""
     Example:

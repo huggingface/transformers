@@ -248,6 +248,10 @@ class EdgeTamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(reason="The model has TimmWrapper backbone but doesn't apply any conversion")
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
+
     @unittest.skip(reason="Timm model does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass

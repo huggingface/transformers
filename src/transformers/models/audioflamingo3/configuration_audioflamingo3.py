@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="nvidia/audio-flamingo-3-hf")
-@strict(accept_kwargs=True)
+@strict
 class AudioFlamingo3EncoderConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
@@ -69,7 +69,7 @@ class AudioFlamingo3EncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="nvidia/audio-flamingo-3-hf")
-@strict(accept_kwargs=True)
+@strict
 class AudioFlamingo3Config(PreTrainedConfig):
     r"""
     Example:
@@ -94,10 +94,7 @@ class AudioFlamingo3Config(PreTrainedConfig):
     ```"""
 
     model_type = "audioflamingo3"
-    sub_configs = {
-        "audio_config": AudioFlamingo3EncoderConfig,
-        "text_config": AutoConfig,
-    }
+    sub_configs = {"audio_config": AutoConfig, "text_config": AutoConfig}
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     audio_token_id: int = 151669

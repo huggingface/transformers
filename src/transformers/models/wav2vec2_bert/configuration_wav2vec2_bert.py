@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/wav2vec2-bert-rel-pos-large")
-@strict(accept_kwargs=True)
+@strict
 class Wav2Vec2BertConfig(PreTrainedConfig):
     r"""
     feature_projection_input_dim (`int`, *optional*, defaults to 160):
@@ -118,6 +118,7 @@ class Wav2Vec2BertConfig(PreTrainedConfig):
         Kernel size of convolutional depthwise 1D layer in Conformer blocks.
     conformer_conv_dropout (`float`, *optional*, defaults to 0.1):
         The dropout probability for all convolutional layers in Conformer blocks.
+
     Example:
 
     ```python
@@ -151,10 +152,10 @@ class Wav2Vec2BertConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-5
     apply_spec_augment: bool = True
-    mask_time_prob: float = 0.05
+    mask_time_prob: float | int = 0.05
     mask_time_length: int = 10
     mask_time_min_masks: int = 2
-    mask_feature_prob: float = 0.0
+    mask_feature_prob: float | int = 0.0
     mask_feature_length: int = 10
     mask_feature_min_masks: int = 0
     ctc_loss_reduction: str = "sum"

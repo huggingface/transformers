@@ -22,7 +22,7 @@ from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="microsoft/table-transformer-detection")
-@strict(accept_kwargs=True)
+@strict
 class TableTransformerConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 100):
@@ -35,8 +35,6 @@ class TableTransformerConfig(PreTrainedConfig):
     dilation (`bool`, *optional*, defaults to `False`):
         Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
         `use_timm_backbone` = `True`.
-    eos_coefficient (`float`, *optional*, defaults to 0.1):
-        Relative classification weight of the 'no-object' class in the object detection loss.
 
     Examples:
 

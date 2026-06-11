@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-10-27 and added to Hugging Face Transformers on 2026-01-09.*
+*This model was contributed to Hugging Face Transformers on 2026-01-09.*
 
 
 # MiniMax-M2
@@ -32,6 +32,7 @@ For more details refer to the [release blog post](https://www.minimax.io/news/mi
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 model = AutoModelForCausalLM.from_pretrained(
     "MiniMaxAI/MiniMax-M2",
     device_map="auto",
@@ -46,7 +47,7 @@ messages = [
     {"role": "user", "content": "Do you have mayonnaise recipes?"}
 ]
 
-model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to("cuda")
+model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to(model.device)
 
 generated_ids = model.generate(**model_inputs, max_new_tokens=100)
 

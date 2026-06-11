@@ -20,19 +20,15 @@ import numpy as np
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling, SizeDict
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
-from .image_processing_superpoint import SuperPointImageProcessorKwargs
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring
+from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
-    from .modeling_superpoint import SuperPointKeypointDescriptionOutput
-
-if is_torch_available():
     import torch
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+    from .modeling_superpoint import SuperPointKeypointDescriptionOutput
 
 
 def is_grayscale(image: np.ndarray) -> bool:
@@ -62,6 +58,16 @@ def convert_to_grayscale(image: np.ndarray) -> np.ndarray:
     return gray_image
 
 
+# Adapted from transformers.models.superpoint.image_processing_superpoint.SuperPointImageProcessorKwargs
+class SuperPointImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_grayscale (`bool`, *optional*, defaults to `self.do_grayscale`):
+        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
+    """
+
+    do_grayscale: bool
+
+
 @auto_docstring
 class SuperPointImageProcessorPil(PilBackend):
     valid_kwargs = SuperPointImageProcessorKwargs
@@ -82,7 +88,7 @@ class SuperPointImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | None,
         do_rescale: bool,
         rescale_factor: float,
         return_tensors: str | TensorType | None,
@@ -104,6 +110,7 @@ class SuperPointImageProcessorPil(PilBackend):
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
+    @requires(backends=("torch",))
     def post_process_keypoint_detection(
         self, outputs: "SuperPointKeypointDescriptionOutput", target_sizes: TensorType | list[tuple]
     ) -> list[dict[str, "torch.Tensor"]]:
@@ -122,7 +129,7 @@ class SuperPointImageProcessorPil(PilBackend):
             `list[Dict]`: A list of dictionaries, each dictionary containing the keypoints in absolute format according
             to target_sizes, scores and descriptors for an image in the batch as predicted by the model.
         """
-        requires_backends(self, "torch")
+        import torch
 
         if len(outputs.mask) != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")

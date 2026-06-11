@@ -23,13 +23,8 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="microsoft/kosmos-2-patch14-224")
-@strict(accept_kwargs=True)
+@strict
 class Kosmos2TextConfig(PreTrainedConfig):
-    r"""
-    activation_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout ratio for activations inside the fully connected layer.
-    ```"""
-
     model_type = "kosmos_2_text_model"
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -54,6 +49,7 @@ class Kosmos2TextConfig(PreTrainedConfig):
     init_std: float = 0.02
     scale_embedding: bool = True
     use_cache: bool = True
+    tie_word_embeddings: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
     eos_token_id: int | list[int] | None = 2
@@ -61,7 +57,7 @@ class Kosmos2TextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="microsoft/kosmos-2-patch14-224")
-@strict(accept_kwargs=True)
+@strict
 class Kosmos2VisionConfig(PreTrainedConfig):
     model_type = "kosmos_2_vision_model"
     base_config_key = "vision_config"
@@ -81,7 +77,7 @@ class Kosmos2VisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="microsoft/kosmos-2-patch14-224")
-@strict(accept_kwargs=True)
+@strict
 class Kosmos2Config(PreTrainedConfig):
     r"""
     latent_query_num (`int`, *optional*, defaults to 64):
@@ -126,4 +122,4 @@ class Kosmos2Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Kosmos2Config"]
+__all__ = ["Kosmos2Config", "Kosmos2TextConfig", "Kosmos2VisionConfig"]

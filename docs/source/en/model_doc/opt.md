@@ -13,12 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-05-02 and added to Hugging Face Transformers on 2022-05-12.*
+*This model was published in HF papers on 2022-05-02 and contributed to Hugging Face Transformers on 2022-05-12.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-           <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-           <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+              <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
            <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
@@ -39,22 +38,22 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
 
-pipeline = pipeline(task="text-generation", model="facebook/opt-125m", dtype=torch.float16, device=0)
+
+pipeline = pipeline(task="text-generation", model="facebook/opt-125m", device=0)
 pipeline("Once upon a time, in a land far, far away,", max_length=50, num_return_sequences=1)
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", device_map="auto", attn_implementation="sdpa")
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
 
 prompt = ("Once upon a time, in a land far, far away, ")
@@ -72,15 +71,12 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](..quantization/bitsandbytes) to quantize the weights to 8-bits.
 
-```py
-import torch
-from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
-from accelerate import Accelerator
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-device = Accelerator().device
 
 bnb_config = BitsAndBytesConfig(load_in_8bit=True)
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-13b", dtype=torch.float16, attn_implementation="sdpa", quantization_config=bnb_config).to(device)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-13b", attn_implementation="sdpa", quantization_config=bnb_config, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-13b")
 
 prompt = ("Once upon a time, in a land far, far away, ")

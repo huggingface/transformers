@@ -26,7 +26,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
@@ -35,20 +35,6 @@ from .configuration_pop2piano import Pop2PianoConfig
 
 
 logger = logging.get_logger(__name__)
-
-_load_pop2piano_layer_norm = True
-
-try:
-    from apex.normalization import FusedRMSNorm
-
-    _load_pop2piano_layer_norm = False
-
-    logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of Pop2PianoLayerNorm")
-except ImportError:
-    # using the normal Pop2PianoLayerNorm
-    pass
-except Exception:
-    logger.warning("Discovered apex but it failed to load, falling back to Pop2PianoLayerNorm")
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->Pop2Piano
@@ -75,10 +61,6 @@ class Pop2PianoLayerNorm(nn.Module):
             hidden_states = hidden_states.to(self.weight.dtype)
 
         return self.weight * hidden_states
-
-
-if not _load_pop2piano_layer_norm:
-    Pop2PianoLayerNorm = FusedRMSNorm
 
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->Pop2Piano,t5->pop2piano
@@ -269,7 +251,8 @@ class Pop2PianoAttention(nn.Module):
         """
         # Input is (batch_size, seq_length, dim)
         # Mask is (batch_size, 1, 1, key_length) (non-causal encoder) or (batch_size, 1, seq_length, key_length) (causal decoder)
-        batch_size, seq_length = hidden_states.shape[:2]
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.key_value_proj_dim)
         past_seen_tokens = past_key_values.get_seq_length(self.layer_idx) if past_key_values is not None else 0
         # We clone here for StaticCache, as we get the value before updating it, but use it after and it's the same ref
         past_seen_tokens = past_seen_tokens.clone() if isinstance(past_seen_tokens, torch.Tensor) else past_seen_tokens
@@ -277,8 +260,7 @@ class Pop2PianoAttention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
         is_cross_attention = key_value_states is not None
 
-        query_states = self.q(hidden_states)
-        query_states = query_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+        query_states = self.q(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
         is_updated = False
@@ -298,10 +280,9 @@ class Pop2PianoAttention(nn.Module):
             key_states = curr_past_key_values.layers[self.layer_idx].keys
             value_states = curr_past_key_values.layers[self.layer_idx].values
         else:
-            key_states = self.k(current_states)
-            value_states = self.v(current_states)
-            key_states = key_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
-            value_states = value_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+            kv_shape = (*current_states.shape[:-1], -1, self.key_value_proj_dim)
+            key_states = self.k(current_states).view(kv_shape).transpose(1, 2)
+            value_states = self.v(current_states).view(kv_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
@@ -316,13 +297,13 @@ class Pop2PianoAttention(nn.Module):
             key_length = key_states.shape[-2]
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
-                    (1, self.n_heads, seq_length, key_length), device=scores.device, dtype=scores.dtype
+                    (1, query_states.shape[1], input_shape[1], key_length), device=scores.device, dtype=scores.dtype
                 )
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
             else:
                 position_bias = self.compute_bias(
-                    seq_length, key_length, device=scores.device, past_seen_tokens=past_seen_tokens
+                    input_shape[1], key_length, device=scores.device, past_seen_tokens=past_seen_tokens
                 )
 
             if mask is not None:
@@ -339,7 +320,7 @@ class Pop2PianoAttention(nn.Module):
         attn_output = torch.matmul(attn_weights, value_states)
 
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(batch_size, -1, self.inner_dim)
+        attn_output = attn_output.reshape(*input_shape, -1)
         attn_output = self.o(attn_output)
 
         outputs = (attn_output, position_bias)
@@ -689,16 +670,13 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
             causal_mask = causal_mask.to(dtype=inputs_embeds.dtype)
             causal_mask = (1.0 - causal_mask) * torch.finfo(inputs_embeds.dtype).min
 
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=inputs_embeds.device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_extended_attention_mask = None
+        if encoder_attention_mask is not None:
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
 
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -717,7 +695,7 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
                 causal_mask,
                 position_bias,
                 encoder_hidden_states,
-                encoder_extended_attention_mask,
+                encoder_attention_mask,
                 encoder_decoder_position_bias,  # as a positional argument for gradient checkpointing
                 past_key_values=past_key_values,
                 use_cache=use_cache,

@@ -15,6 +15,9 @@
 
 from typing import Union
 
+import torch
+from torchvision.transforms.v2 import functional as tvF
+
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -30,18 +33,10 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     logging,
     requires_backends,
 )
 
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 logger = logging.get_logger(__name__)
 

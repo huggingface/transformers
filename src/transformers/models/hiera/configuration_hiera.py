@@ -21,11 +21,9 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/hiera-base-224")
-@strict(accept_kwargs=True)
+@strict
 class HieraConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    layer_norm_init (`float`, *optional*, defaults to 1.0):
-        The initial weight value for layer normalization layers.
     patch_stride (`list(int)`, *optional*, defaults to `[4, 4]`):
         The stride of the patch.
     patch_padding (`list(int)`, *optional*, defaults to `[3, 3]`):
@@ -42,6 +40,8 @@ class HieraConfig(BackboneConfigMixin, PreTrainedConfig):
         The size of the masked unit.
     masked_unit_attention (`list(bool)`, *optional*, defaults to `[True, True, False, False]`):
         Whether to use masked unit attention in each layer of the Transformer encoder.
+    layer_norm_init (`float`, *optional*, defaults to 1.0):
+        The initial weight value for layer normalization layers.
     decoder_depth (`int`, *optional*):
         Depth of the decoder for MAE pretraining.
     normalize_pixel_loss (`bool`, *optional*, defaults to `True`):
@@ -76,12 +76,12 @@ class HieraConfig(BackboneConfigMixin, PreTrainedConfig):
     mlp_ratio: float = 4.0
     depths: list[int] | tuple[int, ...] = (2, 3, 16, 3)
     num_heads: list[int] | tuple[int, ...] = (1, 2, 4, 8)
-    embed_dim_multiplier: float = 2.0
+    embed_dim_multiplier: float | int = 2.0
     num_query_pool: int = 3
     query_stride: list[int] | tuple[int, ...] = (2, 2)
     masked_unit_size: list[int] | tuple[int, ...] = (8, 8)
     masked_unit_attention: list[bool] | tuple[bool, ...] = (True, True, False, False)
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     num_channels: int = 3
     hidden_act: str = "gelu"
     initializer_range: float = 0.02

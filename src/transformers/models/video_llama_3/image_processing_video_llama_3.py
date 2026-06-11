@@ -27,11 +27,7 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+from ...utils import TensorType, auto_docstring
 
 
 class VideoLlama3ImageProcessorKwargs(ImagesKwargs, total=False):
@@ -150,7 +146,7 @@ class VideoLlama3ImageProcessor(TorchvisionBackend):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -191,19 +187,10 @@ class VideoLlama3ImageProcessor(TorchvisionBackend):
             patches = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            if patches.ndim == 4:
-                patches = patches.unsqueeze(1)
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
-                patches = torch.cat([patches, repeats], dim=1)
-            batch_size, grid_t, channel = patches.shape[:3]
-            grid_t = grid_t // temporal_patch_size
+            batch_size, channel = patches.shape[:2]
             grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-
-            patches = patches.view(
+            patches = patches.reshape(
                 batch_size,
-                grid_t,
-                temporal_patch_size,
                 channel,
                 grid_h // merge_size,
                 merge_size,
@@ -212,15 +199,22 @@ class VideoLlama3ImageProcessor(TorchvisionBackend):
                 merge_size,
                 patch_size,
             )
-            patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
-            flatten_patches = patches.reshape(
-                batch_size,
-                grid_t * grid_h * grid_w,
-                channel * temporal_patch_size * patch_size * patch_size,
+            # Reorder dimensions to group grid and patch information for subsequent flattening.
+            # [batch, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
+            patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
+
+            flatten_patches = (
+                patches.unsqueeze(6)
+                .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
+                .reshape(
+                    batch_size,
+                    grid_h * grid_w,
+                    channel * temporal_patch_size * patch_size * patch_size,
+                )
             )
 
             processed_images_grouped[shape] = flatten_patches
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+            processed_grids[shape] = [[1, grid_h, grid_w]] * batch_size
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_grids_ordered = reorder_images(processed_grids, grouped_images_index)

@@ -18,17 +18,14 @@ from collections import defaultdict
 from functools import lru_cache
 
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images, split_to_tiles
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
-
-
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
+from ...utils import TensorType, auto_docstring
 
 
 def get_factors(dividend: int) -> set[int]:
@@ -358,6 +355,12 @@ class Llama4ImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
+        if not do_resize:
+            raise ValueError(
+                "Llama4 always resizes images to one of its supported resolutions; `do_resize=False` is not "
+                "supported because the resulting pixel values would have inconsistent shapes and could not be "
+                "tensorized."
+            )
         possible_resolutions = find_supported_resolutions(max_num_chunks=max_patches, patch_size=size)
         possible_resolutions = torch.tensor(possible_resolutions, device=images[0].device)
         # process images by batch, grouped by shape

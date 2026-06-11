@@ -14,6 +14,7 @@
 
 import copy
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -382,10 +383,11 @@ class AutoModelTest(unittest.TestCase):
 
         # Test that it works with a custom cache dir too
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model = AutoModel.from_pretrained(
-                "hf-internal-testing/test_dynamic_model_v1.0", trust_remote_code=True, cache_dir=tmp_dir
-            )
-            self.assertEqual(model.__class__.__name__, "NewModel")
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                model = AutoModel.from_pretrained(
+                    "hf-internal-testing/test_dynamic_model_v1.0", trust_remote_code=True, cache_dir=tmp_dir
+                )
+                self.assertEqual(model.__class__.__name__, "NewModel")
 
     def test_new_model_registration(self):
         AutoConfig.register("custom", CustomConfig)
@@ -459,7 +461,13 @@ class AutoModelTest(unittest.TestCase):
             model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=False)
             self.assertEqual(model.config.__class__.__name__, "NewModelConfigLocal")
 
-            # If remote is enabled, we load from the Hub
+            # If remote code is enabled but the user explicitly registered the local one, we load the local one.
+            model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
+            self.assertEqual(model.config.__class__.__name__, "NewModelConfigLocal")
+
+            # If remote code is enabled but local code originated from transformers, we load the remote one.
+            NewModelConfigLocal.__module__ = "transformers.models.new_model.configuration_new_model"
+            NewModel.__module__ = "transformers.models.new_model.modeling_new_model"
             model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
             self.assertEqual(model.config.__class__.__name__, "NewModelConfig")
 

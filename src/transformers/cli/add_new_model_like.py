@@ -19,7 +19,7 @@ import textwrap
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import typer
 
@@ -57,10 +57,11 @@ if is_libcst_available():
                 body=[m.Assign(targets=[m.AssignTarget(target=m.Name())])]
             )
             if not self.is_in_class and m.matches(node, simple_top_level_assign_structure):
-                assigned_variable = node.body[0].targets[0].target.value
+                stmt = cast(cst.Assign, node.body[0])
+                assigned_variable = cast(cst.Name, stmt.targets[0].target).value
                 if assigned_variable == "__all__":
-                    elements = node.body[0].value.elements
-                    self.public_classes = [element.value.value for element in elements]
+                    elements = cast(cst.Tuple, stmt.value).elements
+                    self.public_classes = [cast(cst.SimpleString, element.value).value for element in elements]
 
 
 CURRENT_YEAR = date.today().year
@@ -82,6 +83,14 @@ COPYRIGHT = f"""
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """.lstrip()
+
+# Don't modify the following dict unless you changed the format of `models/auto/auto_mappings.py`
+_AUTO_MAPPING_NAMES = {
+    "image_processing_auto.py": "IMAGE_PROCESSOR_MAPPING_NAMES",
+    "video_processing_auto.py": "VIDEO_PROCESSOR_MAPPING_NAMES",
+    "processing_auto.py": "PROCESSOR_MAPPING_NAMES",
+    "feature_extraction_auto.py": "FEATURE_EXTRACTOR_MAPPING_NAMES",
+}
 
 ### Entrypoint
 
@@ -119,7 +128,7 @@ class ModelInfos:
     """
 
     def __init__(self, lowercase_name: str):
-        from ..models.auto.configuration_auto import CONFIG_MAPPING_NAMES, MODEL_NAMES_MAPPING
+        from ..models.auto.configuration_auto import CONFIG_MAPPING_NAMES
         from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
         from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
         from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
@@ -133,7 +142,6 @@ class ModelInfos:
         if self.lowercase_name not in CONFIG_MAPPING_NAMES:
             raise ValueError(f"{lowercase_name} is not a valid model name")
 
-        self.paper_name = MODEL_NAMES_MAPPING[self.lowercase_name]
         self.config_class = CONFIG_MAPPING_NAMES[self.lowercase_name]
         self.camelcase_name = self.config_class.replace("Config", "")
 
@@ -202,36 +210,45 @@ def add_model_to_auto_mappings(
     filenames_to_add = [
         (filename.replace(old_lowercase_name, "auto"), to_add) for filename, to_add in filenames_to_add[1:]
     ]
-    # fast tokenizer/image processor have the same auto mappings as normal ones
+    # fast tokenizer has the same auto mappings as normal ones
     corrected_filenames_to_add = []
     for file, to_add in filenames_to_add:
-        if re.search(r"(?:tokenization)|(?:image_processing)_auto_fast.py", file):
+        if "tokenization_auto_fast.py" in file:
             previous_file, previous_to_add = corrected_filenames_to_add[-1]
             corrected_filenames_to_add[-1] = (previous_file, previous_to_add or to_add)
         else:
             corrected_filenames_to_add.append((file, to_add))
 
-    # Add the config mappings directly as the handling for config is a bit different
+    # Add the config and image/video processor mappings directly as the handling is a bit different
     add_content_to_file(
-        repo_path / "src" / "transformers" / "models" / "auto" / "configuration_auto.py",
-        new_content=f'        ("{new_lowercase_name}", "{new_cased_name}Config"),\n',
-        add_after="CONFIG_MAPPING_NAMES = OrderedDict[str, str](\n    [\n        # Add configs here\n",
+        repo_path / "src" / "transformers" / "models" / "auto" / "auto_mappings.py",
+        new_content=f'("{new_lowercase_name}", "{new_cased_name}Config"),\n        ',
+        add_after="CONFIG_MAPPING_NAMES = OrderedDict(\n    [\n        ",
     )
-    add_content_to_file(
-        repo_path / "src" / "transformers" / "models" / "auto" / "configuration_auto.py",
-        new_content=f'        ("{new_lowercase_name}", "{new_model_paper_name}"),\n',
-        add_after="MODEL_NAMES_MAPPING = OrderedDict[str, str](\n    [\n        # Add full (and cased) model names here\n",
-    )
+    autofile = (repo_path / "src" / "transformers" / "models" / "auto" / "auto_mappings.py").read_text()
 
     for filename, to_add in corrected_filenames_to_add:
         if to_add:
-            # The auto mapping
-            filename = filename.replace("_fast.py", ".py")
-            file = (repo_path / "src" / "transformers" / "models" / "auto" / filename).read_text()
-            # The regex has to be a bit complex like this as the tokenizer mapping has new lines everywhere
-            matching_lines = re.findall(
-                rf'( {{8,12}}\(\s*"{old_lowercase_name}",.*?\),\n)(?: {{4,12}}\(|\])', file, re.DOTALL
-            )
+            if filename in _AUTO_MAPPING_NAMES:
+                # These are saved in `auto_mapping.py` and require a slighlty diff regex match
+                mapping_name = _AUTO_MAPPING_NAMES[filename]
+                filename = "auto_mappings.py"  # use the unified mapping filename to write content!
+                block_match = re.search(
+                    rf"[^\w_]{mapping_name}\s*=\s*OrderedDict\(\s*\[(.*?)\]\s*\)", autofile, re.DOTALL
+                )
+                block = block_match.group(1)  # type: ignore
+                matching_lines = re.findall(
+                    rf'( {{8,12}}\(\s*"{old_lowercase_name}",.*?\),\n)(?: {{4,12}}\(|\])', block, re.DOTALL
+                )
+            else:
+                # These auto mappings are filled-in manually (tokenization and modeling files)
+                filename = filename.replace("_fast.py", ".py")
+                file = (repo_path / "src" / "transformers" / "models" / "auto" / filename).read_text()
+                # The regex has to be a bit complex like this as the tokenizer mapping has new lines everywhere
+                matching_lines = re.findall(
+                    rf'( {{8,12}}\(\s*"{old_lowercase_name}",.*?\),\n)(?: {{4,12}}\(|\])', file, re.DOTALL
+                )
+
             for match in matching_lines:
                 add_content_to_file(
                     repo_path / "src" / "transformers" / "models" / "auto" / filename,
@@ -316,7 +333,10 @@ def insert_model_in_doc_toc(
     with open(toc_file, "r") as f:
         content = f.read()
 
-    old_model_toc = re.search(rf"- local: model_doc/{old_lowercase_name}\n {{8}}title: .*?\n", content).group(0)
+    toc_match = re.search(rf"- local: model_doc/{old_lowercase_name}\n {{8}}title: .*?\n", content)
+    if toc_match is None:
+        raise ValueError(f"Could not find TOC entry for {old_lowercase_name}")
+    old_model_toc = toc_match.group(0)
     new_toc = f"      - local: model_doc/{new_lowercase_name}\n        title: {new_model_paper_name}\n"
     add_content_to_file(
         repo_path / "docs" / "source" / "en" / "_toctree.yml", new_content=new_toc, add_after=old_model_toc
@@ -378,7 +398,7 @@ def find_all_classes_from_file(module_name: str) -> set:
 
 
 def find_modular_structure(
-    module_name: str, old_model_infos: ModelInfos, new_cased_name: str
+    module_name: Path, old_model_infos: ModelInfos, new_cased_name: str
 ) -> tuple[str, str, list]:
     """
     Extract the modular structure that will be needed to copy a file `module_name` using modular.
@@ -666,9 +686,9 @@ def get_user_input():
     """
     Ask the user for the necessary inputs to add the new model.
     """
-    from transformers.models.auto.configuration_auto import MODEL_NAMES_MAPPING
+    from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
 
-    model_types = list(MODEL_NAMES_MAPPING.keys())
+    model_types = list(CONFIG_MAPPING_NAMES.keys())
 
     # Get old model type
     valid_model_type = False

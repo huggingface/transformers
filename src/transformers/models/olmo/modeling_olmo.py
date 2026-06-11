@@ -33,9 +33,9 @@ import torch.nn.functional as F
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernelized_func
+from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -184,6 +184,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -496,4 +497,8 @@ class OlmoForCausalLM(OlmoPreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["OlmoForCausalLM", "OlmoModel", "OlmoPreTrainedModel"]
+class OlmoForSequenceClassification(GenericForSequenceClassification, OlmoPreTrainedModel):
+    pass
+
+
+__all__ = ["OlmoForCausalLM", "OlmoForSequenceClassification", "OlmoModel", "OlmoPreTrainedModel"]

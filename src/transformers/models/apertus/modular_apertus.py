@@ -44,7 +44,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="swiss-ai/Apertus-8B-Instruct-2509")
-@strict(accept_kwargs=True)
+@strict
 class ApertusConfig(PreTrainedConfig):
     r"""
     ```python

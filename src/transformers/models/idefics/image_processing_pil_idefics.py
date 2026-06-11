@@ -13,11 +13,38 @@
 # limitations under the License.
 """Image processor class for Idefics."""
 
+from collections.abc import Callable
+
 from ...image_processing_backends import PilBackend
 from ...image_utils import ImageInput, PILImageResampling, make_flat_list_of_images
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import auto_docstring, is_torch_available
-from .image_processing_idefics import IDEFICS_STANDARD_MEAN, IDEFICS_STANDARD_STD, IdeficsImageProcessorKwargs
+
+
+# Adapted from transformers.models.idefics.image_processing_idefics.IDEFICS_STANDARD_MEAN
+IDEFICS_STANDARD_MEAN = [0.48145466, 0.4578275, 0.40821073]
+
+# Adapted from transformers.models.idefics.image_processing_idefics.IDEFICS_STANDARD_STD
+IDEFICS_STANDARD_STD = [0.26862954, 0.26130258, 0.27577711]
+
+
+# Adapted from transformers.models.idefics.image_processing_idefics.IdeficsImageProcessorKwargs
+class IdeficsImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    transform (`Callable`, *optional*, defaults to `None`):
+        A custom transform function that accepts a single image can be passed for training. For example,
+        `torchvision.Compose` can be used to compose multiple transforms. If `None` - an inference mode is
+        assumed - and then a preset of inference-specific transforms will be applied to the images.
+    image_size (`int`, *optional*, defaults to `self.image_size`):
+        Resize to image size. This is a backward-compatible alias for `size`. When provided, it overrides
+        `size` and sets it to `{"height": image_size, "width": image_size}`.
+    image_num_channels (`int`, *optional*, defaults to `3`):
+        The number of channels of the image.
+    """
+
+    transform: Callable | None
+    image_size: int
+    image_num_channels: int
 
 
 @auto_docstring

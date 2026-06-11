@@ -13,13 +13,8 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-10-23 and added to Hugging Face Transformers on 2020-11-27.*
+*This model was published in HF papers on 2020-10-23 and contributed to Hugging Face Transformers on 2020-11-27.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # BARThez
 
@@ -36,14 +31,13 @@ The example below demonstrates how to predict the `<mask>` token with [`Pipeline
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
     model="moussaKam/barthez",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Les plantes produisent <mask> grâce à un processus appelé photosynthèse.")
@@ -52,16 +46,17 @@ pipeline("Les plantes produisent <mask> grâce à un processus appelé photosynt
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "moussaKam/barthez",
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "moussaKam/barthez",
-    dtype=torch.float16,
     device_map="auto",
 )
 inputs = tokenizer("Les plantes produisent <mask> grâce à un processus appelé photosynthèse.", return_tensors="pt").to(model.device)

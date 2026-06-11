@@ -20,16 +20,16 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/vit-mae-base")
-@strict(accept_kwargs=True)
+@strict
 class ViTMAEConfig(PreTrainedConfig):
     r"""
+    decoder_num_hidden_layers (`int`, *optional*, defaults to 8):
+        Number of hidden layers in the decoder.
     mask_ratio (`float`, *optional*, defaults to 0.75):
         The ratio of the number of masked tokens in the input sequence.
     norm_pix_loss (`bool`, *optional*, defaults to `False`):
         Whether or not to train with normalized pixels (see Table 3 in the paper). Using normalized pixels improved
         representation quality in the experiments of the authors.
-    decoder_num_hidden_layers (`int`, *optional*, defaults to 8):
-        Number of hidden layers in the decoder.
 
     Example:
 
@@ -53,8 +53,8 @@ class ViTMAEConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
     image_size: int | list[int] | tuple[int, int] = 224

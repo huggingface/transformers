@@ -28,13 +28,13 @@ if is_timm_available():
     import timm
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output class for models TimmWrapperModel, containing the last hidden states, an optional pooled output,
     and optional hidden states.
     """
 )
+@dataclass
 class TimmWrapperModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor`):
@@ -243,7 +243,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
                 "different architecture or updating the timm package to a compatible version."
             )
 
-        pixel_values = pixel_values.to(self.device)
+        pixel_values = pixel_values.to(self.device, self.dtype)
 
         if self.features_only:
             last_hidden_state = self.timm_model.forward(pixel_values, **kwargs)

@@ -13,12 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-11-16 and added to Hugging Face Transformers on 2024-05-15.*
+*This model was published in HF papers on 2023-11-16 and contributed to Hugging Face Transformers on 2024-05-15.*
 
 # Video-LLaVA
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -72,9 +71,10 @@ The model can accept both images and videos as input. Here's an example code for
 
 ```python
 import av
-import torch
 import numpy as np
+
 from transformers import VideoLlavaForConditionalGeneration, VideoLlavaProcessor
+
 
 def read_video_pyav(container, indices):
     '''
@@ -97,7 +97,7 @@ def read_video_pyav(container, indices):
     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 # Load the model in half-precision
-model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", dtype=torch.float16, device_map="auto")
+model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", device_map="auto")
 processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
 
 # Load the video as an np.arrau, sampling uniformly 8 frames
@@ -109,7 +109,7 @@ video = read_video_pyav(container, indices)
 
 # For better results, we recommend to prompt the model in the following format
 prompt = "USER: <video>\nWhy is this funny? ASSISTANT:"
-inputs = processor(text=prompt, videos=video, return_tensors="pt")
+inputs = processor(text=prompt, videos=video, return_tensors="pt").to(model.device)
 
 out = model.generate(**inputs, max_new_tokens=60)
 processor.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True)
@@ -126,8 +126,9 @@ For multiple turns conversation change the prompt format to:
 The model can also generate from an interleaved image-video inputs. However note, that it was not trained in interleaved image-video setting which might affect the performance. Below is an example usage for mixed media input, add the following lines to the above code snippet:
 
 ```python
-from PIL import Image
 import requests
+from PIL import Image
+
 
 # Generate from image and video mixed inputs
 # Load and image and write a new prompt
@@ -135,12 +136,11 @@ url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 prompt = "USER: <image>\nHow many cats are there in the image? ASSISTANT: There are two cats. USER: <video>\nWhy is this video funny? ASSISTANT:"
 
-inputs = processor(text=prompt, images=image, videos=clip, padding=True, return_tensors="pt")
+inputs = processor(text=prompt, images=image, videos=clip, padding=True, return_tensors="pt").to(model.device)
 
 # Generate
 generate_ids = model.generate(**inputs, max_length=50)
 processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-
 ```
 
 ## Model optimization
@@ -162,7 +162,8 @@ We value your feedback to help identify bugs before the full release! Check out 
 Load the quantized model by simply adding [`BitsAndBytesConfig`](../main_classes/quantization#transformers.BitsAndBytesConfig) as shown below:
 
 ```python
-from transformers import VideoLlavaForConditionalGeneration, BitsAndBytesConfig
+from transformers import BitsAndBytesConfig, VideoLlavaForConditionalGeneration
+
 
 # specify how to quantize the model
 quantization_config = BitsAndBytesConfig(
@@ -192,10 +193,9 @@ To load and run a model using Flash Attention-2, simply add `attn_implementation
 from transformers import VideoLlavaForConditionalGeneration
 
 model = VideoLlavaForConditionalGeneration.from_pretrained(
-    "LanguageBind/Video-LLaVA-7B-hf", 
-    dtype=torch.float16, 
+    "LanguageBind/Video-LLaVA-7B-hf", , 
     attn_implementation="flash_attention_2",
-).to(0)
+).to(0, device_map="auto")
 ```
 
 ## VideoLlavaConfig

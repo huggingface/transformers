@@ -28,15 +28,8 @@ from ...image_processing_utils import BatchFeature
 from ...image_transforms import center_to_corners_format, pad, to_channel_dimension_format
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_scipy_available,
-    is_torch_available,
-    is_torchvision_available,
-    requires_backends,
-)
-from ..owlv2.image_processing_owlv2 import box_iou
+from ...utils import TensorType, auto_docstring, is_scipy_available, is_torch_available, requires_backends
+from ...utils.import_utils import requires
 
 
 if is_scipy_available():
@@ -47,8 +40,50 @@ if TYPE_CHECKING:
     from .modeling_owlv2 import Owlv2ObjectDetectionOutput
 if is_torch_available():
     import torch
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
+
+
+def _upcast(t):
+    # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
+    import torch
+
+    if t.is_floating_point():
+        return t if t.dtype in (torch.float32, torch.float64) else t.float()
+    else:
+        return t if t.dtype in (torch.int32, torch.int64) else t.int()
+
+
+def box_area(boxes):
+    """
+    Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
+
+    Args:
+        boxes (`torch.FloatTensor` of shape `(number_of_boxes, 4)`):
+            Boxes for which the area will be computed. They are expected to be in (x1, y1, x2, y2) format with `0 <= x1
+            < x2` and `0 <= y1 < y2`.
+    Returns:
+        `torch.FloatTensor`: a tensor containing the area for each box.
+    """
+    boxes = _upcast(boxes)
+    return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+
+
+# Adapted from transformers.models.owlv2.image_processing_owlv2.box_iou
+def box_iou(boxes1, boxes2):
+    import torch
+
+    area1 = box_area(boxes1)
+    area2 = box_area(boxes2)
+
+    left_top = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
+    right_bottom = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
+
+    width_height = (right_bottom - left_top).clamp(min=0)  # [N,M,2]
+    inter = width_height[:, :, 0] * width_height[:, :, 1]  # [N,M]
+
+    union = area1[:, None] + area2 - inter
+
+    iou = inter / union
+    return iou, union
 
 
 def _preprocess_resize_output_shape(image, output_shape):
@@ -152,6 +187,7 @@ def _scale_boxes(boxes, target_sizes):
 
 
 @auto_docstring
+@requires(backends=("torch",))
 class Owlv2ImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = OPENAI_CLIP_MEAN
@@ -178,6 +214,7 @@ class Owlv2ImageProcessorPil(PilBackend):
 
         super().__init__(**kwargs)
 
+    @requires(backends=("torch",))
     def post_process_object_detection(
         self,
         outputs: "Owlv2ObjectDetectionOutput",
@@ -203,7 +240,8 @@ class Owlv2ImageProcessorPil(PilBackend):
             - "labels": Indexes of the classes predicted by the model on the image.
             - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
         """
-        requires_backends(self, "torch")
+        import torch
+
         batch_logits, batch_boxes = outputs.logits, outputs.pred_boxes
         batch_size = len(batch_logits)
 
@@ -232,6 +270,7 @@ class Owlv2ImageProcessorPil(PilBackend):
 
         return results
 
+    @requires(backends=("torch",))
     def post_process_image_guided_detection(self, outputs, threshold=0.0, nms_threshold=0.3, target_sizes=None):
         """
         Converts the output of [`Owlv2ForObjectDetection.image_guided_detection`] into the format expected by the COCO
@@ -254,7 +293,8 @@ class Owlv2ImageProcessorPil(PilBackend):
             in the batch as predicted by the model. All labels are set to None as
             `Owlv2ForObjectDetection.image_guided_detection` perform one-shot object detection.
         """
-        requires_backends(self, "torch")
+        import torch
+
         logits, target_boxes = outputs.logits, outputs.target_pred_boxes
 
         if target_sizes is not None and len(logits) != len(target_sizes):
@@ -310,7 +350,7 @@ class Owlv2ImageProcessorPil(PilBackend):
 
         return results
 
-    def pad(self, image: "np.ndarray", constant_value: float = 0.0) -> "np.ndarray":
+    def pad(self, image: np.ndarray, constant_value: float = 0.0) -> np.ndarray:
         """
         Pad an image with zeros to the given size.
         """
@@ -384,10 +424,10 @@ class Owlv2ImageProcessorPil(PilBackend):
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_pad: bool,
         do_rescale: bool,
         rescale_factor: float,

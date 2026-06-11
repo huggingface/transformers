@@ -74,7 +74,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
-@strict(accept_kwargs=True)
+@strict
 class T5Gemma2TextConfig(Gemma3TextConfig, PreTrainedConfig):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):
@@ -101,7 +101,7 @@ class T5Gemma2TextConfig(Gemma3TextConfig, PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
-@strict(accept_kwargs=True)
+@strict
 class T5Gemma2EncoderConfig(Gemma3Config):
     model_type = "t5gemma2_encoder"
 
@@ -112,7 +112,7 @@ class T5Gemma2EncoderConfig(Gemma3Config):
 
 
 @auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
-@strict(accept_kwargs=True)
+@strict
 class T5Gemma2DecoderConfig(Gemma3TextConfig, PreTrainedConfig):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):
@@ -139,7 +139,7 @@ class T5Gemma2DecoderConfig(Gemma3TextConfig, PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
-@strict(accept_kwargs=True)
+@strict
 class T5Gemma2Config(PreTrainedConfig):
     r"""
     encoder (`Union[T5Gemma2EncoderConfig, dict]`, optional, *optional*):
@@ -173,9 +173,9 @@ class T5Gemma2Config(PreTrainedConfig):
     encoder: T5Gemma2EncoderConfig | dict[str, Any] | None = None
     decoder: T5Gemma2DecoderConfig | dict[str, Any] | None = None
     is_encoder_decoder: bool = True
-    dropout_rate: float = 0.0
+    dropout_rate: float | int = 0.0
     attention_dropout: float | int = 0.0
-    classifier_dropout_rate: float = 0.0
+    classifier_dropout_rate: float | int = 0.0
     initializer_range: float = 0.02
     image_token_index: int = 256_001
     eoi_token_index: int | None = None
@@ -513,7 +513,7 @@ class T5Gemma2PreTrainedModel(Gemma3PreTrainedModel):
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
-    def prepare_decoder_input_ids_from_labels(self, input_ids):
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         """
         Shifts input_ids to the right, prepends the decoder_start_token_id, and handles
         pad_token_id replacement for labels that were -100.
@@ -527,8 +527,8 @@ class T5Gemma2PreTrainedModel(Gemma3PreTrainedModel):
             raise ValueError("self.model.config.decoder.bos_token_id has to be defined. ")
 
         # shift inputs to the right
-        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+        shifted_input_ids = labels.new_zeros(labels.shape)
+        shifted_input_ids[..., 1:] = labels[..., :-1].clone()
         shifted_input_ids[..., 0] = decoder_start_token_id
 
         if pad_token_id is None:
@@ -620,17 +620,17 @@ class T5Gemma2TextEncoder(T5Gemma2PreTrainedModel):
 
         # global and local position embeddings
         position_embeddings = {}
-        for layer_type in self.config.layer_types:
+        for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         # dropout
         hidden_states = self.dropout(hidden_states)
 
-        for layer_module in self.layers[: self.config.num_hidden_layers]:
+        for i, layer_module in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = layer_module(
                 hidden_states,
-                position_embeddings[layer_module.attention_type],
-                self_attn_mask_mapping[layer_module.attention_type],
+                position_embeddings[self.config.layer_types[i]],
+                self_attn_mask_mapping[self.config.layer_types[i]],
                 position_ids,
                 **kwargs,
             )
@@ -849,17 +849,17 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
 
         # global and local position embeddings
         position_embeddings = {}
-        for layer_type in self.config.layer_types:
+        for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         # dropout
         hidden_states = self.dropout(hidden_states)
 
-        for layer_module in self.layers[: self.config.num_hidden_layers]:
+        for i, layer_module in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = layer_module(
                 hidden_states,
-                position_embeddings[layer_module.attention_type],
-                merged_attn_mask_mapping[layer_module.attention_type],
+                position_embeddings[self.config.layer_types[i]],
+                merged_attn_mask_mapping[self.config.layer_types[i]],
                 position_ids,
                 past_key_values,
                 use_cache,
@@ -1129,8 +1129,8 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
         cross_attn_config = copy.deepcopy(self.config.get_text_config(decoder=True))
 
         # cross-attention does not use sliding window
-        del cross_attn_config.sliding_window
-        del cross_attn_config.layer_types
+        cross_attn_config.sliding_window = None
+        cross_attn_config.layer_types = ["full_attention"] * cross_attn_config.num_hidden_layers
 
         cross_attn_cache_kwargs = {
             "config": cross_attn_config,

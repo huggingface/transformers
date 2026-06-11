@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
-@strict(accept_kwargs=True)
+@strict
 class InstructBlipVideoVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -66,7 +66,7 @@ class InstructBlipVideoVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
-@strict(accept_kwargs=True)
+@strict
 class InstructBlipVideoQFormerConfig(PreTrainedConfig):
     r"""
     cross_attention_frequency (`int`, *optional*, defaults to 2):
@@ -97,8 +97,8 @@ class InstructBlipVideoQFormerConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 512
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
@@ -108,7 +108,7 @@ class InstructBlipVideoQFormerConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
-@strict(accept_kwargs=True)
+@strict
 class InstructBlipVideoConfig(PreTrainedConfig):
     r"""
     qformer_config (`dict`, *optional*):

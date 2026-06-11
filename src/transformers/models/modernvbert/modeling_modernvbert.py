@@ -149,7 +149,7 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = []
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -406,7 +406,7 @@ class ModernVBertPredictionHead(nn.Module):
 class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embeddings.tok_embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: ModernVBertConfig):
         super().__init__(config)
 
         self.vocab_size = config.text_config.vocab_size

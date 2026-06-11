@@ -21,7 +21,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-3.3-2b")
-@strict(accept_kwargs=True)
+@strict
 class GraniteSpeechEncoderConfig(PreTrainedConfig):
     r"""
     feedforward_mult (`int`, *optional*, defaults to 4):
@@ -53,13 +53,19 @@ class GraniteSpeechEncoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "granite_speech_encoder"
+    attribute_map = {
+        "hidden_size": "hidden_dim",
+        "num_hidden_layers": "num_layers",
+        "num_attention_heads": "num_heads",
+        "num_mel_bins": "input_dim",
+    }
 
     input_dim: int = 160
     num_layers: int = 10
     hidden_dim: int = 1024
     feedforward_mult: int = 4
     num_heads: int = 8
-    dim_head: int = 128
+    dim_head: int | None = None
     output_dim: int = 42
     context_size: int = 200
     max_pos_emb: int = 512
@@ -67,18 +73,23 @@ class GraniteSpeechEncoderConfig(PreTrainedConfig):
     conv_kernel_size: int = 15
     conv_expansion_factor: int = 2
 
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
+        if self.dim_head is None:
+            self.dim_head = self.hidden_dim // self.num_heads
+
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-3.3-2b")
-@strict(accept_kwargs=True)
+@strict
 class GraniteSpeechConfig(PreTrainedConfig):
     r"""
+    projector_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Blip2QFormerConfig`):
+        The config object or dictionary of the audio projector.
     has_lora_adapter (`bool`, *optional*, defaults to `True`):
         Indicates whether or not the model has a lora adapter that should only
         be activate when processing audio inputs.
     downsample_rate (`int`, *optional*, defaults to 5):
         Downsample rate for the audio feature extractor.
-    projector_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Blip2QFormerConfig`):
-        The config object or dictionary of the audio projector.
     window_size (`int`, *optional*, defaults to 15):
         Window size for the audio feature projector.
 
@@ -115,6 +126,7 @@ class GraniteSpeechConfig(PreTrainedConfig):
     has_lora_adapter: bool = True
     downsample_rate: int = 5
     window_size: int = 15
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):

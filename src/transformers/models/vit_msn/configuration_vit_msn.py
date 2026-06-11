@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/vit_msn_base")
-@strict(accept_kwargs=True)
+@strict
 class ViTMSNConfig(PreTrainedConfig):
     r"""
     Example:
@@ -45,8 +45,8 @@ class ViTMSNConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-06
     image_size: int | list[int] | tuple[int, int] = 224

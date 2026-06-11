@@ -13,13 +13,8 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-04-10 and added to Hugging Face Transformers on 2021-01-05.*
+*This model was published in HF papers on 2020-04-10 and contributed to Hugging Face Transformers on 2021-01-05.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-           <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # LED
 
@@ -39,14 +34,15 @@ The example below demonstrates how to summarize text with [`Pipeline`], [`AutoMo
 
 ```python
 import torch
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "allenai/led-base-16384"
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "allenai/led-base-16384",
-    dtype=torch.float16,
     device_map="auto"
 )
 
@@ -73,16 +69,16 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quan
 
 ```python
 import torch
-from transformers import BitsAndBytesConfig, AutoModelForSeq2SeqLM, AutoTokenizer
+
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.bfloat16,
     bnb_4bit_quant_type="nf4"
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "allenai/led-large-16384",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )

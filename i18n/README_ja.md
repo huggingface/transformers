@@ -278,7 +278,7 @@ pipeline(
 
 Transformersは事前学習済みモデルを使用するためのツールキット以上のものであり、それとHugging Face Hubを中心に構築されたプロジェクトのコミュニティです。私たちは、開発者、研究者、学生、教授、エンジニア、そしてその他の誰もが夢のプロジェクトを構築できるようにTransformersを提供したいと考えています。
 
-Transformersの10万スターを記念して、Transformersで構築された100の素晴らしいプロジェクトをリストアップした[awesome-transformers](./awesome-transformers.md)ページで、コミュニティにスポットライトを当てたいと考えました。
+Transformersの10万スターを記念して、Transformersで構築された100の素晴らしいプロジェクトをリストアップした[awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md)ページで、コミュニティにスポットライトを当てたいと考えました。
 
 もしあなたがリストに加えるべきだと思うプロジェクトを所有または使用しているなら、ぜひPRを開いて追加してください！
 
@@ -346,7 +346,7 @@ Transformersの10万スターを記念して、Transformersで構築された100
 
 ## 引用
 
-🤗 Transformersライブラリについて引用できる[論文](https://www.aclweb.org/anthology/2020.emnlp-demos.6/)ができました:
+🤗 Transformersライブラリについて引用できる[論文](https://aclanthology.org/2020.emnlp-demos.6/)ができました:
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
@@ -356,7 +356,7 @@ Transformersの10万スターを記念して、Transformersで構築された100
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://aclanthology.org/2020.emnlp-demos.6/",
     pages = "38--45"
 }
 ```

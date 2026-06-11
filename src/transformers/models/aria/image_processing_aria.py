@@ -18,17 +18,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_transforms import divide_to_patches
 from ...image_utils import ChannelDimension, PILImageResampling, SizeDict, get_image_size
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+from ...utils import TensorType, auto_docstring
 
 
 class AriaImageProcessorKwargs(ImagesKwargs, total=False):

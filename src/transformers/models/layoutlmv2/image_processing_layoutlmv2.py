@@ -25,7 +25,6 @@ from ...utils import (
     TensorType,
     auto_docstring,
     is_pytesseract_available,
-    is_torchvision_available,
     logging,
     requires_backends,
 )
@@ -34,8 +33,8 @@ from ...utils import (
 if is_pytesseract_available():
     import pytesseract
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+from torchvision.transforms.v2 import functional as tvF
+
 
 logger = logging.get_logger(__name__)
 

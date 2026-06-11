@@ -22,19 +22,19 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="meituan-longcat/LongCat-Flash-Chat")
-@strict(accept_kwargs=True)
+@strict
 class LongcatFlashConfig(PreTrainedConfig):
     r"""
     ffn_hidden_size (`int`, *optional*, defaults to 12288):
         Dimension of the MLP representations.
-    zero_expert_num (`int`, *optional*, defaults to 256):
-        Number of zero experts (identity function) to add to the expert pool.
-    expert_ffn_hidden_size (`int`, *optional*, defaults to 2048):
-        Hidden size of individual expert FFN layers.
     qk_head_dim (`int`, *optional*):
         The total dimension of query/key heads. If not specified, set to `qk_nope_head_dim + qk_rope_head_dim`.
     moe_topk (`int`, *optional*, defaults to 12):
         Number of experts to route to for each token in the MoE layer.
+    zero_expert_num (`int`, *optional*, defaults to 256):
+        Number of zero experts (identity function) to add to the expert pool.
+    expert_ffn_hidden_size (`int`, *optional*, defaults to 2048):
+        Hidden size of individual expert FFN layers.
 
     ```python
     >>> from transformers import LongcatFlashModel, LongcatFlashConfig
@@ -47,7 +47,8 @@ class LongcatFlashConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "longcat_flash"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -112,21 +113,6 @@ class LongcatFlashConfig(PreTrainedConfig):
             self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
 
         super().__post_init__(**kwargs)
-
-    def convert_rope_params_to_dict(self, **kwargs):
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or self.rope_parameters
-        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
-
-        # Standardize and validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
-        self.standardize_rope_params()
-
-        # Convert to float because RoPE fn expect a float. Models on the hub were saved as int
-        for key in ["beta_fast", "beta_slow", "factor"]:
-            if key in self.rope_parameters:
-                self.rope_parameters[key] = float(self.rope_parameters[key])
-        return kwargs
 
 
 __all__ = ["LongcatFlashConfig"]

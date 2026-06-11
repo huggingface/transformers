@@ -17,7 +17,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -37,10 +36,10 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..bart.modeling_bart import eager_attention_forward, shift_tokens_right
-from ..beit.modeling_beit import BeitDropPath
 from ..llama4.modeling_llama4 import Llama4VisionMLP
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel, LlavaPreTrainedModel
 from ..llava.processing_llava import LlavaProcessorKwargs
+from ..swin.modeling_swin import SwinDropPath
 
 
 if is_torch_available():
@@ -50,11 +49,9 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="florence-community/Florence-2-base")
-@strict(accept_kwargs=True)
+@strict
 class Florence2VisionConfig(PreTrainedConfig):
     r"""
-    window_size (`int`, *optional*, defaults to 12):
-        The window size of the model.
     depths (`Tuple[int]`, *optional*, defaults to `(1, 1, 9, 1)`):
         The depth of the model.
     patch_stride (`Tuple[int]`, *optional*, defaults to `(4, 2, 2, 2)`):
@@ -65,6 +62,8 @@ class Florence2VisionConfig(PreTrainedConfig):
         Whether to apply layer normalization before the patch embedding layer.
     num_groups (`Tuple[int]`, *optional*, defaults to `(4, 8, 16, 32)`):
         The number of groups.
+    window_size (`int`, *optional*, defaults to 12):
+        The window size of the model.
     max_temporal_embeddings (`int`, *optional*, defaults to 100):
         The configuration of the visual temporal embedding.
 
@@ -95,7 +94,7 @@ class Florence2VisionConfig(PreTrainedConfig):
     num_heads: list[int] | tuple[int, ...] = (4, 8, 16, 32)
     num_groups: list[int] | tuple[int, ...] = (4, 8, 16, 32)
     window_size: int = 12
-    drop_path_rate: float = 0.1
+    drop_path_rate: float | int = 0.1
     mlp_ratio: float = 4.0
     qkv_bias: bool = True
     activation_function: str = "gelu"
@@ -106,7 +105,7 @@ class Florence2VisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="florence-community/Florence-2-base")
-@strict(accept_kwargs=True)
+@strict
 class Florence2Config(PreTrainedConfig):
     r"""
     Example:
@@ -321,11 +320,7 @@ class Florence2Processor(ProcessorMixin):
         self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**image_inputs, **text_inputs}, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
@@ -884,10 +879,6 @@ class Florence2PostProcessor:
         return parsed_dict
 
 
-class Florence2VisionDropPath(BeitDropPath):
-    pass
-
-
 class Florence2VisionLearnedAbsolutePositionEmbedding2D(nn.Module):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -996,6 +987,10 @@ class Florence2VisionConvEmbed(nn.Module):
         return hidden_states
 
 
+class Florence2DropPath(SwinDropPath):
+    pass
+
+
 class Florence2VisionChannelAttention(nn.Module):
     def __init__(self, config: Florence2VisionConfig, stage_idx: int):
         super().__init__()
@@ -1056,7 +1051,7 @@ class Florence2VisionChannelBlock(nn.Module):
         )
         self.norm1 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.channel_attn = Florence2VisionChannelAttention(config=config, stage_idx=stage_idx)
-        self.drop_path1 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path1 = Florence2DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
         self.conv2 = nn.Conv2d(
             dim_in,
@@ -1067,7 +1062,7 @@ class Florence2VisionChannelBlock(nn.Module):
         )
         self.norm2 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.ffn = Florence2VisionMLP(config=config, stage_idx=stage_idx)
-        self.drop_path2 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path2 = Florence2DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor):
         batch_size, embed_dim, height, width = hidden_states.shape
@@ -1192,7 +1187,7 @@ class Florence2VisionSpatialBlock(nn.Module):
         )
         self.norm1 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.window_attn = Florence2VisionWindowAttention(config=config, stage_idx=stage_idx)
-        self.drop_path1 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path1 = Florence2DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
         self.conv2 = nn.Conv2d(
             config.embed_dim[stage_idx],
@@ -1203,7 +1198,7 @@ class Florence2VisionSpatialBlock(nn.Module):
         )
         self.norm2 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.ffn = Florence2VisionMLP(config=config, stage_idx=stage_idx)
-        self.drop_path2 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path2 = Florence2DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor):
         batch_size, embed_dim, height, width = hidden_states.shape
@@ -1366,13 +1361,13 @@ class Florence2MultiModalProjector(nn.Module):
         return image_features
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Florence-2 base model's outputs that also contains : pre-computed hidden states that can speed up sequential
     decoding.
     """
 )
+@dataclass
 class Florence2Seq2SeqModelOutput(Seq2SeqModelOutput):
     r"""
     image_hidden_states (`torch.FloatTensor`, *optional*):
@@ -1383,13 +1378,13 @@ class Florence2Seq2SeqModelOutput(Seq2SeqModelOutput):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Florence-2 model's outputs that also contains : pre-computed hidden states that can speed up sequential
     decoding.
     """
 )
+@dataclass
 class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

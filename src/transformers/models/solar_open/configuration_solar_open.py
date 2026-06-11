@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="upstage/Solar-Open-100B")
-@strict(accept_kwargs=True)
+@strict
 class SolarOpenConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):

@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="shi-labs/dinat-mini-in1k-224")
-@strict(accept_kwargs=True)
+@strict
 class DinatConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     dilations (`list[list[int]]`, *optional*, defaults to `[[1, 8, 1], [1, 4, 1, 4], [1, 2, 1, 2, 1, 2], [1, 1, 1, 1, 1]]`):
@@ -58,9 +58,9 @@ class DinatConfig(BackboneConfigMixin, PreTrainedConfig):
     dilations: list | tuple | None = None
     mlp_ratio: float = 3.0
     qkv_bias: bool = True
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
-    drop_path_rate: float = 0.1
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
+    drop_path_rate: float | int = 0.1
     hidden_act: str = "gelu"
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-5

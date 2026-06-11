@@ -25,6 +25,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -162,12 +163,9 @@ class BigBirdSelfAttention(nn.Module):
         past_key_values=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        batch_size, seq_length, _ = hidden_states.shape
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
+        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
 
         is_cross_attention = encoder_hidden_states is not None
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
@@ -177,16 +175,9 @@ class BigBirdSelfAttention(nn.Module):
             key_layer = past_key_values.layers[self.layer_idx].keys
             value_layer = past_key_values.layers[self.layer_idx].values
         else:
-            key_layer = (
-                self.key(current_states)
-                .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-                .transpose(1, 2)
-            )
-            value_layer = (
-                self.value(current_states)
-                .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-                .transpose(1, 2)
-            )
+            kv_shape = (*current_states.shape[:-1], -1, self.attention_head_size)
+            key_layer = self.key(current_states).view(kv_shape).transpose(1, 2)
+            value_layer = self.value(current_states).view(kv_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
@@ -1468,12 +1459,12 @@ class BigBirdPreTrainedModel(PreTrainedModel):
             init.zeros_(module.token_type_ids)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`BigBirdForPreTraining`].
     """
 )
+@dataclass
 class BigBirdForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -1493,12 +1484,12 @@ class BigBirdForPreTrainingOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of question answering models.
     """
 )
+@dataclass
 class BigBirdForQuestionAnsweringModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -1661,36 +1652,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
         else:
             padding_len = 0
 
-        if self.attention_type == "block_sparse":
-            blocked_encoder_mask, band_mask, from_mask, to_mask = self.create_masks_for_block_sparse_attn(
-                attention_mask, self.block_size
-            )
-            extended_attention_mask = None
-
-        elif self.attention_type == "original_full":
-            blocked_encoder_mask = None
-            band_mask = None
-            from_mask = None
-            to_mask = None
-            # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-            # ourselves in which case we just need to make it broadcastable to all heads.
-            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-        else:
-            raise ValueError(
-                f"attention_type can either be original_full or block_sparse, but is {self.attention_type}"
-            )
-
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.config.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_extended_attention_mask = None
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -1699,11 +1660,40 @@ class BigBirdModel(BigBirdPreTrainedModel):
             past_key_values_length=past_key_values_length,
         )
 
+        if self.attention_type == "block_sparse":
+            blocked_encoder_mask, band_mask, from_mask, to_mask = self.create_masks_for_block_sparse_attn(
+                attention_mask, self.block_size
+            )
+            attention_mask = None
+
+        elif self.attention_type == "original_full":
+            blocked_encoder_mask = None
+            band_mask = None
+            from_mask = None
+            to_mask = None
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=embedding_output,
+                attention_mask=attention_mask,
+            )
+        else:
+            raise ValueError(
+                f"attention_type can either be original_full or block_sparse, but is {self.attention_type}"
+            )
+
+        if self.config.is_decoder and encoder_attention_mask is not None:
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=embedding_output,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
+
         encoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_extended_attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             band_mask=band_mask,

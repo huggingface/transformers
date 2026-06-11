@@ -34,11 +34,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        Mamba2ForCausalLM,
-        Mamba2Model,
-    )
-    from transformers.models.mamba2.modeling_mamba2 import Mamba2Cache, Mamba2Mixer
+    from transformers import DynamicCache, Mamba2ForCausalLM, Mamba2Model
+    from transformers.models.mamba2.modeling_mamba2 import Mamba2Mixer
 
 
 class Mamba2ConfigTester(ConfigTester):
@@ -247,20 +244,17 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             self, config_class=Mamba2Config, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, Mamba2Cache)
-
+    def _get_conv_state_shape(self, batch_size: int, config):
         intermediate_size = config.expand * config.hidden_size
         conv_shape = (
-            config.num_hidden_layers,
             batch_size,
             intermediate_size + 2 * config.n_groups * config.state_size,
             config.conv_kernel,
         )
-        ssm_shape = (config.num_hidden_layers, batch_size, config.num_heads, config.head_dim, config.state_size)
+        return conv_shape
 
-        self.assertEqual(past_key_values.conv_states.shape, conv_shape)
-        self.assertEqual(past_key_values.ssm_states.shape, ssm_shape)
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        return (batch_size, config.num_heads, config.head_dim, config.state_size)
 
     def test_mamba2_caching(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -291,9 +285,12 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, Mamba2Cache):  # MODIFIED PART START
-                        recursive_check(tuple_object.conv_states, dict_object.conv_states)
-                        recursive_check(tuple_object.ssm_states, dict_object.ssm_states)
+                    if isinstance(tuple_object, DynamicCache):  # MODIFIED PART START
+                        for idx in range(len(tuple_object)):
+                            recursive_check(tuple_object.layers[idx].conv_states, dict_object.layers[idx].conv_states)
+                            recursive_check(
+                                tuple_object.layers[idx].recurrent_states, dict_object.layers[idx].recurrent_states
+                            )
                     elif isinstance(tuple_object, (list, tuple)):  # MODIFIED PART END
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)

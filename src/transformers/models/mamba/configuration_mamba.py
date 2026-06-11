@@ -22,9 +22,9 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="state-spaces/mamba-2.8b")
-@strict(accept_kwargs=True)
+@strict
 class MambaConfig(PreTrainedConfig):
-    """
+    r"""
     layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
         The epsilon to use in the layer normalization layers.
     expand (`int`, *optional*, defaults to 2):
@@ -97,6 +97,10 @@ class MambaConfig(PreTrainedConfig):
             math.ceil(self.hidden_size / 16) if self.time_step_rank == "auto" else self.time_step_rank
         )
         super().__post_init__(**kwargs)
+
+    @property
+    def layer_types(self):
+        return ["mamba"] * self.num_hidden_layers
 
 
 __all__ = ["MambaConfig"]

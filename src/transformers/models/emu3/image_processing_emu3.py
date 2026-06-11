@@ -45,6 +45,11 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
+# NOTE: this file is not consistent with image processing backends and is still using an old format.
+# Emu3 needs a fast image processor after which we can add the new backends. We keep it current way
+# for now so there's one model to test BC.
+
+
 class Emu3ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     ratio (`str`, *optional*, defaults to `"1:1"`):

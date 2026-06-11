@@ -47,11 +47,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        BambaForCausalLM,
-        BambaModel,
-    )
-    from transformers.models.bamba.modeling_bamba import HybridMambaAttentionDynamicCache
+    from transformers import BambaForCausalLM, BambaModel
 
 
 class BambaModelTester:
@@ -228,14 +224,9 @@ class BambaModelTester:
         model.eval()
 
         # first forward pass
-        # Attention: Jamba needs the cache to be initialized to return a cache!
-        past_key_values = HybridMambaAttentionDynamicCache(
-            config, input_ids.shape[0], model.dtype, device=model.device
-        )
         outputs = model(
             input_ids,
             attention_mask=input_mask,
-            past_key_values=past_key_values,
             use_cache=True,
         )
         past_key_values = outputs.past_key_values
@@ -288,48 +279,16 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, HybridMambaAttentionDynamicCache)
-
-        # (batch, kv heads, seq_length, head_dim)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        attention_shape = (batch_size, num_heads, seq_length, head_dim)
-
+    def _get_conv_state_shape(self, batch_size: int, config):
         conv_shape = (
             batch_size,
             config.mamba_expand * config.hidden_size + 2 * config.mamba_n_groups * config.mamba_d_state,
             config.mamba_d_conv,
         )
-        ssm_shape = (batch_size, config.mamba_n_heads, config.mamba_d_head, config.mamba_d_state)
+        return conv_shape
 
-        self.assertTrue(config.num_hidden_layers, len(past_key_values))
-
-        for idx in range(len(past_key_values)):
-            if config.layers_block_type[idx] == "mamba":
-                self.assertEqual(past_key_values.conv_states[idx].shape, conv_shape)
-                self.assertEqual(past_key_values.ssm_states[idx].shape, ssm_shape)
-            else:
-                self.assertEqual(past_key_values.key_cache[idx].shape, attention_shape)
-                self.assertEqual(past_key_values.value_cache[idx].shape, attention_shape)
-
-    def _check_caches_are_equal(
-        self, cache1: HybridMambaAttentionDynamicCache, cache2: HybridMambaAttentionDynamicCache
-    ):
-        if not isinstance(cache1, HybridMambaAttentionDynamicCache) or not isinstance(
-            cache2, HybridMambaAttentionDynamicCache
-        ):
-            raise ValueError("The wrong cache is being used!")
-
-        if not len(cache1) == len(cache2):
-            raise ValueError("Both caches do not have the same number of layers.")
-
-        num_layers = len(cache1)
-        for idx in range(num_layers):
-            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
-            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
-            torch.testing.assert_close(cache1.conv_states[idx], cache2.conv_states[idx])
-            torch.testing.assert_close(cache1.ssm_states[idx], cache2.ssm_states[idx])
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        return (batch_size, config.mamba_n_heads, config.mamba_d_head, config.mamba_d_state)
 
     def setUp(self):
         self.model_tester = self.model_tester_class(self)

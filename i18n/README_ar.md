@@ -122,7 +122,7 @@ limitations under the License.
 
 🤗 Transformers هو أكثر من مجرد مجموعة أدوات لاستخدام النماذج المُدربة مسبقًا: إنه مجتمع من المشاريع المبنية حوله ومركز Hugging Face. نريد أن يمكّن 🤗 Transformers المطورين والباحثين والطلاب والأساتذة والمهندسين وأي شخص آخر من بناء مشاريعهم التي يحلمون بها.
 
-للاحتفال بالـ 100,000 نجمة من النماذج المحولة، قررنا تسليط الضوء على المجتمع، وقد أنشأنا صفحة [awesome-transformers](./awesome-transformers.md) التي تُدرج 100 مشروعًا رائعًا تم بناؤها بالقرب من النماذج المحولة.
+للاحتفال بالـ 100,000 نجمة من النماذج المحولة، قررنا تسليط الضوء على المجتمع، وقد أنشأنا صفحة [awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md) التي تُدرج 100 مشروعًا رائعًا تم بناؤها بالقرب من النماذج المحولة.
 
 إذا كنت تمتلك أو تستخدم مشروعًا تعتقد أنه يجب أن يكون جزءًا من القائمة، فالرجاء فتح PR لإضافته!
 
@@ -304,7 +304,7 @@ conda install conda-forge::transformers
 
 ## الاستشهاد
 
-لدينا الآن [ورقة](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) يمكنك الاستشهاد بها لمكتبة 🤗 Transformers:
+لدينا الآن [ورقة](https://aclanthology.org/2020.emnlp-demos.6/) يمكنك الاستشهاد بها لمكتبة 🤗 Transformers:
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers،
     title = "Transformers: State-of-the-Art Natural Language Processing"،
@@ -314,7 +314,7 @@ conda install conda-forge::transformers
     year = "2020"،
     address = "Online"،
     publisher = "Association for Computational Linguistics"،
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6"،
+    url = "https://aclanthology.org/2020.emnlp-demos.6/"،
     pages = "38--45"
 }
 ```

@@ -26,7 +26,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
-@strict(accept_kwargs=True)
+@strict
 class EdgeTamVideoPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -50,7 +50,7 @@ class EdgeTamVideoPromptEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
-@strict(accept_kwargs=True)
+@strict
 class EdgeTamVideoMaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -88,7 +88,7 @@ class EdgeTamVideoMaskDecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
-@strict(accept_kwargs=True)
+@strict
 class EdgeTamVideoConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `EdgeTamVideoPromptEncoderConfig`], *optional*):

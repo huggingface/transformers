@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-10-29 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2019-10-29 and contributed to Hugging Face Transformers on 2020-11-16.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
     <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
     <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -33,33 +32,32 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
 
-pipeline = pipeline(
+
+fill_mask_pipeline = pipeline(
     task="fill-mask",
     model="facebook/bart-large",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create <mask> through a process known as photosynthesis.")
-
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "facebook/bart-large",
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "facebook/bart-large",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -81,7 +79,7 @@ print(f"The predicted token is: {predicted_token}")
 
 ## Notes
 
-- Inputs should be padded on the right because BERT uses absolute position embeddings.
+- Inputs should be padded on the right because BART uses absolute position embeddings.
 - The [facebook/bart-large-cnn](https://huggingface.co/facebook/bart-large-cnn) checkpoint doesn't include `mask_token_id` which means it can't perform mask-filling tasks.
 - BART doesn't use `token_type_ids` for sequence classification. Use [`BartTokenizer`] or [`~PreTrainedTokenizerBase.encode`] to get the proper splitting.
 - The forward pass of [`BartModel`] creates the `decoder_input_ids` if they're not passed. This can be different from other model APIs, but it is a useful feature for mask-filling tasks.

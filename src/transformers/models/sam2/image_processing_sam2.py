@@ -38,11 +38,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_vision_available,
-)
+from ...utils import TensorType, auto_docstring, is_vision_available
 
 
 if is_vision_available():

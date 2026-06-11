@@ -18,7 +18,6 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torchvision.transforms.v2.functional as tvF
 from torch import nn
 
 from ... import initialization as init
@@ -52,12 +51,14 @@ from ...utils import (
     torch_int,
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..conditional_detr.modeling_conditional_detr import inverse_sigmoid
 from ..deformable_detr.modeling_deformable_detr import DeformableDetrMultiscaleDeformableAttention
 from ..detr.image_processing_detr import DetrImageProcessor
 from ..detr.image_processing_pil_detr import DetrImageProcessorPil
 from ..detr.modeling_detr import DetrFrozenBatchNorm2d, DetrMLPPredictionHead, DetrSelfAttention, replace_batch_norm
+from ..vit_mae.modeling_vit_mae import build_2d_sinusoidal_position_embedding
 from .configuration_rt_detr import RTDetrConfig
 
 
@@ -246,7 +247,7 @@ class RTDetrImageProcessor(DetrImageProcessor):
         masks_path: str | pathlib.Path | None,
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -426,6 +427,7 @@ class RTDetrImageProcessor(DetrImageProcessor):
         raise NotImplementedError("Panoptic segmentation post-processing is not implemented for RT-DETR yet.")
 
 
+@requires(backends=("torch",))
 class RTDetrImageProcessorPil(DetrImageProcessorPil):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -478,7 +480,7 @@ class RTDetrImageProcessorPil(DetrImageProcessorPil):
         masks_path: str | pathlib.Path | None,
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -661,7 +663,6 @@ class RTDetrImageProcessorPil(DetrImageProcessorPil):
         raise NotImplementedError("Panoptic segmentation post-processing is not implemented for RT-DETR yet.")
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RTDetrDecoder. This class adds two attributes to
@@ -670,6 +671,7 @@ class RTDetrImageProcessorPil(DetrImageProcessorPil):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class RTDetrDecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -699,12 +701,12 @@ class RTDetrDecoderOutput(ModelOutput):
     cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RT-DETR encoder-decoder model.
     """
 )
+@dataclass
 class RTDetrModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -757,12 +759,12 @@ class RTDetrModelOutput(ModelOutput):
     denoising_meta_values: dict | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`RTDetrForObjectDetection`].
     """
 )
+@dataclass
 class RTDetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -1266,7 +1268,11 @@ class RTDetrSinePositionEmbedding(nn.Module):
         self.embed_dim = embed_dim
         self.temperature = temperature
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=32)
+    def _cached_build_2d_sinusoidal_position_embedding(*args, **kwargs) -> torch.Tensor:
+        return build_2d_sinusoidal_position_embedding(*args, **kwargs)
+
     def forward(
         self,
         width: int,
@@ -1280,19 +1286,14 @@ class RTDetrSinePositionEmbedding(nn.Module):
         Returns:
             Position embeddings of shape (1, height*width, embed_dim)
         """
-        grid_w = torch.arange(torch_int(width), device=device).to(dtype)
-        grid_h = torch.arange(torch_int(height), device=device).to(dtype)
-        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="xy")
-        if self.embed_dim % 4 != 0:
-            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
-        pos_dim = self.embed_dim // 4
-        omega = torch.arange(pos_dim, device=device).to(dtype) / pos_dim
-        omega = 1.0 / (self.temperature**omega)
-
-        out_w = grid_w.flatten()[..., None] @ omega[None]
-        out_h = grid_h.flatten()[..., None] @ omega[None]
-
-        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
+        return self._cached_build_2d_sinusoidal_position_embedding(
+            height=torch_int(height),
+            width=torch_int(width),
+            embed_dim=self.embed_dim,
+            temperature=self.temperature,
+            device=device,
+            dtype=dtype,
+        ).unsqueeze(0)
 
 
 class RTDetrAIFILayer(nn.Module):
@@ -1325,7 +1326,7 @@ class RTDetrAIFILayer(nn.Module):
         batch_size = hidden_states.shape[0]
         height, width = hidden_states.shape[2:]
 
-        hidden_states = hidden_states.flatten(2).permute(0, 2, 1)
+        hidden_states = hidden_states.flatten(2).transpose(1, 2)
 
         if self.training or self.eval_size is None:
             pos_embed = self.position_embedding(
@@ -1346,7 +1347,7 @@ class RTDetrAIFILayer(nn.Module):
             )
 
         hidden_states = (
-            hidden_states.permute(0, 2, 1).reshape(batch_size, self.encoder_hidden_dim, height, width).contiguous()
+            hidden_states.transpose(1, 2).reshape(batch_size, self.encoder_hidden_dim, height, width).contiguous()
         )
 
         return hidden_states
@@ -1742,13 +1743,14 @@ class RTDetrModel(RTDetrPreTrainedModel):
         for param in self.backbone.parameters():
             param.requires_grad_(True)
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=32)
-    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
-        if spatial_shapes is None:
-            spatial_shapes = [
-                [int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s)]
-                for s in self.config.feat_strides
-            ]
+    def _cached_generate_anchors(
+        spatial_shapes: tuple[tuple[int, int], ...],
+        grid_size: float,
+        device: torch.device | str = "cpu",
+        dtype: torch.dtype = torch.float32,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         anchors = []
         for level, (height, width) in enumerate(spatial_shapes):
             grid_y, grid_x = torch.meshgrid(
@@ -1770,6 +1772,14 @@ class RTDetrModel(RTDetrPreTrainedModel):
         anchors = torch.where(valid_mask, anchors, torch.tensor(torch.finfo(dtype).max, dtype=dtype, device=device))
 
         return anchors, valid_mask
+
+    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
+        if spatial_shapes is None:
+            spatial_shapes = (
+                (int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s))
+                for s in self.config.feat_strides
+            )
+        return self._cached_generate_anchors(spatial_shapes, grid_size, device, dtype)
 
     @auto_docstring
     @can_return_tuple
@@ -1797,10 +1807,12 @@ class RTDetrModel(RTDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, RTDetrModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
         >>> model = RTDetrModel.from_pretrained("PekingU/rtdetr_r50vd")
@@ -2022,11 +2034,13 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         ```python
         >>> from transformers import RTDetrImageProcessor, RTDetrForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
         >>> model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd")

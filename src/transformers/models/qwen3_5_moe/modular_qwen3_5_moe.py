@@ -20,7 +20,7 @@ from ... import initialization as init
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, logging, no_inherit_decorator
 from ..qwen3_5.configuration_qwen3_5 import Qwen3_5VisionConfig
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5GatedDeltaNet,
@@ -35,7 +35,6 @@ from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextAttention,
     Qwen3NextDecoderLayer,
-    Qwen3NextDynamicCache,
     Qwen3NextExperts,
     Qwen3NextForCausalLM,
     Qwen3NextPreTrainedModel,
@@ -55,7 +54,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-35B-A3B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3_5MoeTextConfig(Qwen3NextConfig):
     r"""
     linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
@@ -118,13 +117,13 @@ class Qwen3_5MoeTextConfig(Qwen3NextConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-35B-A3B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3_5MoeVisionConfig(Qwen3_5VisionConfig):
     pass
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-35B-A3B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3_5MoeConfig(Qwen3VLConfig):
     r"""
     Example:
@@ -156,14 +155,11 @@ class Qwen3_5MoeTextRotaryEmbedding(Qwen3_5TextRotaryEmbedding):
     pass
 
 
-class Qwen3_5MoeDynamicCache(Qwen3NextDynamicCache):
-    pass
-
-
 class Qwen3_5MoeGatedDeltaNet(Qwen3_5GatedDeltaNet):
     pass
 
 
+@no_inherit_decorator
 class Qwen3_5MoeAttention(Qwen3NextAttention):
     pass
 
@@ -253,6 +249,8 @@ class Qwen3_5MoeForCausalLM(Qwen3NextForCausalLM):
 
 
 class Qwen3_5MoeForConditionalGeneration(Qwen3VLMoeForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
     def forward(self, **super_kwargs):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -266,8 +264,6 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3VLMoeForConditionalGeneration):
 
         Example:
         ```python
-        >>> from PIL import Image
-        >>> import requests
         >>> from transformers import AutoProcessor, Qwen3_5MoeForConditionalGeneration
 
         >>> model = Qwen3_5MoeForConditionalGeneration.from_pretrained("Qwen/Qwen3.5-35B-A3B-Instruct", dtype="auto", device_map="auto")
@@ -322,6 +318,7 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3VLMoeForConditionalGeneration):
 __all__ = [
     "Qwen3_5MoeConfig",
     "Qwen3_5MoeTextConfig",
+    "Qwen3_5MoeVisionConfig",
     "Qwen3_5MoeVisionModel",
     "Qwen3_5MoeTextModel",
     "Qwen3_5MoeModel",

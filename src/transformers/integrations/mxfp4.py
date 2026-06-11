@@ -18,10 +18,9 @@ from ..utils import is_torch_available, logging
 if is_torch_available():
     import torch
     from torch import nn
-from contextlib import contextmanager
 
-from ..core_model_loading import ConversionOps
-from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
+from ..core_model_loading import ConversionOps, _IdentityOp
+from ..quantizers.quantizers_utils import get_module_from_name, on_device, should_convert_module
 
 
 logger = logging.get_logger(__name__)
@@ -44,28 +43,6 @@ FP4_VALUES = [
     -4.0,
     -6.0,
 ]
-
-
-@contextmanager
-def on_device(dev):
-    if is_torch_available():
-        import torch
-
-        if isinstance(dev, torch.Tensor):
-            dev = dev.device
-        elif isinstance(dev, str):
-            dev = torch.device(dev)
-        dev_type = getattr(dev, "type", None)
-        if dev_type == "cuda":
-            with torch.cuda.device(dev):
-                yield
-                return
-        if dev_type == "xpu" and hasattr(torch, "xpu"):
-            with torch.xpu.device(dev):
-                yield
-                return
-    # other: CPU
-    yield
 
 
 class Mxfp4Quantize(ConversionOps):
@@ -144,6 +121,10 @@ class Mxfp4Dequantize(ConversionOps):
         # Here we are dequantizing the weights
         dequantized = dequantize_convertops(param_data[f"{proj}_blocks"], param_data[f"{proj}_scales"])
         return {full_layer_name: dequantized}
+
+    @property
+    def reverse_op(self) -> "ConversionOps":
+        return _IdentityOp()
 
 
 class Mxfp4Deserialize(ConversionOps):

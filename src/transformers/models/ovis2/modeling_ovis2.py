@@ -41,8 +41,8 @@ from ..auto import AutoModel
 from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithVisualIndicatorFeatures(BaseModelOutputWithPooling):
     r"""
     visual_indicator_features (`torch.FloatTensor` of shape `(batch_size, visual_indicator_size)`):
@@ -52,12 +52,12 @@ class BaseModelOutputWithVisualIndicatorFeatures(BaseModelOutputWithPooling):
     visual_indicator_features: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Ovis2ModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -73,12 +73,12 @@ class Ovis2ModelOutputWithPast(BaseModelOutputWithPast):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Ovis2 causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Ovis2CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -226,15 +226,12 @@ class Ovis2VisionAttention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
-        batch_size, seq_length, embed_dim = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
 
-        queries = self.q_proj(hidden_states)
-        keys = self.k_proj(hidden_states)
-        values = self.v_proj(hidden_states)
-
-        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        hidden_shape = (*input_shape, -1, self.head_dim)
+        queries = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        keys = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -251,7 +248,7 @@ class Ovis2VisionAttention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
         )
 
-        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
@@ -372,7 +369,7 @@ class Ovis2PreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Ovis2VisionAttention"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_cache_class = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -479,12 +476,6 @@ class Ovis2Model(Ovis2PreTrainedModel):
         self.visual_indicator_token_ids = config.visual_indicator_token_ids
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
@@ -572,6 +563,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 image_features=image_features,
             )
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
             for i, visual_indicator_id in enumerate(self.visual_indicator_token_ids):
@@ -614,12 +606,6 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
         self.model = Ovis2Model(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head

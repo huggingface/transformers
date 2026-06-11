@@ -79,15 +79,12 @@ class JinaEmbeddingsV3Embeddings(nn.Module):
         input_shape = embeddings.shape[:-1]
         device = embeddings.device
 
-        if position_ids is None:
-            position_ids = self.position_ids[:, : input_shape[1]]
-
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 # NOTE: We assume either pos ids to have bsz == 1 (broadcastable) or bsz == effective bsz (input_shape[0])
-                buffered_token_type_ids = self.token_type_ids.expand(input_shape[0], -1)
+                buffered_token_type_ids = self.token_type_ids.expand(position_ids.shape[0], -1)
                 buffered_token_type_ids = torch.gather(buffered_token_type_ids, dim=1, index=position_ids)
-                token_type_ids = buffered_token_type_ids
+                token_type_ids = buffered_token_type_ids.expand(*input_shape)
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
@@ -412,26 +409,31 @@ class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if input_ids is not None:
+            seq_length = input_ids.shape[1]
+            device = input_ids.device
+        else:
+            seq_length = inputs_embeds.shape[1]
+            device = inputs_embeds.device
+
+        if position_ids is None:
+            position_ids = torch.arange(seq_length, dtype=torch.long, device=device)[None, :]
+
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
-        hidden_states = embedding_output
-
-        if position_ids is None:
-            # Default RoPE positions assume right padding; left padding requires explicit corrected position_ids for RoPE.
-            position_ids = torch.arange(hidden_states.shape[1], dtype=torch.long, device=hidden_states.device)
-            position_ids = position_ids.unsqueeze(0)
-
-        position_embeddings = self.rotary_emb(embedding_output, position_ids)
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=embedding_output,
             attention_mask=attention_mask,
         )
+
+        hidden_states = embedding_output
+        position_embeddings = self.rotary_emb(embedding_output, position_ids)
 
         for encoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = encoder_layer(

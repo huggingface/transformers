@@ -33,7 +33,7 @@ The kernel call is ``affine_qmm_t(x, weight, scales, qbiases, group_size, bits)`
 which computes ``y = x @ dequant(weight).T``, identical to ``nn.Linear``.
 """
 
-from ..core_model_loading import ConversionOps
+from ..core_model_loading import ConversionOps, _IdentityOp
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import is_torch_available, logging
 
@@ -294,3 +294,7 @@ class MetalDequantize(ConversionOps):
 
         w_deq = _affine_dequantize_tensor(quantized, scales, qbiases, group_size, bits)
         return {full_layer_name: w_deq.to(scales.dtype)}
+
+    @property
+    def reverse_op(self) -> "ConversionOps":
+        return _IdentityOp()

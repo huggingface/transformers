@@ -15,7 +15,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-03-16 and added to Hugging Face Transformers on 2026-03-16.*
+*This model was contributed to Hugging Face Transformers on 2026-03-16.*
 
 # Mistral4 
 
@@ -45,8 +45,7 @@ Mistral 4 offers the following capabilities:
 
 ## Usage examples
 
-```py
-import torch
+```python
 from transformers import AutoProcessor, Mistral3ForConditionalGeneration
 
 
@@ -72,7 +71,7 @@ messages = [
     },
 ]
 
-inputs = processor.apply_chat_template(messages, return_tensors="pt", tokenize=True, return_dict=True, reasoning_effort="high")
+inputs = processor.apply_chat_template(messages, return_tensors="pt", tokenize=True, return_dict=True, reasoning_effort="high").to(model.device)
 inputs = inputs.to(model.device)
 
 output = model.generate(
@@ -81,7 +80,7 @@ output = model.generate(
 )[0]
 
 # Setting `skip_special_tokens=False` to visualize reasoning trace between [THINK] [/THINK] tags.
-decoded_output = processor.decode(output[len(inputs["input_ids"][0]):], skip_special_tokens=False) 
+decoded_output = processor.decode(output[len(inputs["input_ids"][0]):], skip_special_tokens=False)
 print(decoded_output)
 ```
 

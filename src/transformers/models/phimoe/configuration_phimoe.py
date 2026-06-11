@@ -22,13 +22,15 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/Phi-3.5-MoE-instruct")
-@strict(accept_kwargs=True)
+@strict
 class PhimoeConfig(PreTrainedConfig):
     r"""
     num_local_experts (`int`, *optional*, defaults to 16):
         Number of experts per Sparse MLP layer.
-    input_jitter_noise (`float`, *optional*, defaults to 0.0): Input jitter noise
-    lm_head_bias (`bool`, *optional*, defaults to `False`): LM head bias
+    input_jitter_noise (`float`, *optional*, defaults to 0.0):
+        Input jitter noise
+    lm_head_bias (`bool`, *optional*, defaults to `False`):
+        LM head bias
 
     Example:
 
@@ -60,7 +62,7 @@ class PhimoeConfig(PreTrainedConfig):
     pad_token_id: int | None = None
     bos_token_id: int | None = 1
     eos_token_id: int | list[int] | None = 2
-    tie_word_embeddings: int = False
+    tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
     sliding_window: int | None = None
     attention_dropout: float | int = 0.0

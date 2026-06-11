@@ -216,12 +216,12 @@ class ColQwen2PreTrainedModel(ColPaliPreTrainedModel):
     pass
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for ColQwen2 embeddings output.
     """
 )
+@dataclass
 class ColQwen2ForRetrievalOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -303,14 +303,14 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
             inputs_embeds = self.vlm.get_input_embeddings()(input_ids)
 
             if pixel_values is not None:
-                image_embeds = self.vlm.model.visual(
-                    pixel_values, grid_thw=image_grid_thw, return_dict=True
-                ).pooler_output
-                image_mask = (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1)
+                image_embeds = self.vlm.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True).pooler_output
+                image_mask = (
+                    (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1)
+                )
                 image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        vlm_output = self.vlm.model(
+        vlm_output = self.vlm(
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,

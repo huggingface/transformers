@@ -14,12 +14,18 @@
 """Testing suite for the PyTorch Qwen3.5 model."""
 
 import copy
+import tempfile
 import unittest
 
-from transformers import AutoProcessor, AutoTokenizer, is_torch_available
+from parameterized import parameterized
+
+from transformers import AutoProcessor, AutoTokenizer, DataCollatorWithFlattening, is_torch_available
 from transformers.testing_utils import (
     cleanup,
+    require_causal_conv1d,
+    require_flash_linear_attention,
     require_torch,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -38,25 +44,29 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoModelForCausalLM,
+        DynamicCache,
         Qwen3_5Config,
         Qwen3_5ForCausalLM,
         Qwen3_5ForConditionalGeneration,
         Qwen3_5ForSequenceClassification,
+        Qwen3_5ForTokenClassification,
         Qwen3_5Model,
         Qwen3_5TextConfig,
+        Qwen3_5TextForSequenceClassification,
         Qwen3_5TextModel,
     )
-    from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5DynamicCache
 
 
 class Qwen3_5TextModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Qwen3_5TextModel
         causal_lm_class = Qwen3_5ForCausalLM
-        sequence_classification_class = Qwen3_5ForSequenceClassification
+        sequence_classification_class = Qwen3_5TextForSequenceClassification
 
     def __init__(self, parent):
         super().__init__(parent=parent)
+        self.hidden_act = "silu"
         self.layer_types = ["full_attention", "linear_attention"]
         self.linear_conv_kernel_dim = 2
         self.linear_key_head_dim = 16
@@ -71,35 +81,21 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
     config_class = Qwen3_5TextConfig
     model_split_percents = [0.5, 0.8, 0.9]
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        "Qwen3.5 has a special Cache as it alternates with gated deltanet layers"
-        self.assertIsInstance(past_key_values, Qwen3_5DynamicCache)
+    def _get_conv_state_shape(self, batch_size: int, config):
+        num_v_heads = config.linear_num_value_heads
+        num_k_heads = config.linear_num_key_heads
+        head_k_dim = config.linear_key_head_dim
+        head_v_dim = config.linear_value_head_dim
+        intermediate_size = 2 * num_k_heads * head_k_dim + num_v_heads * head_v_dim
 
-        # (batch, kv heads, seq_length, head_dim)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        expected_shape = (batch_size, num_heads, seq_length, head_dim)
+        return (batch_size, intermediate_size, config.linear_conv_kernel_dim)
 
-        attention_layer_indices = past_key_values.transformer_layers
-        self.assertListEqual(
-            [past_key_values.key_cache[idx].shape for idx in attention_layer_indices],
-            [expected_shape] * len(attention_layer_indices),
-        )
-        self.assertListEqual(
-            [past_key_values.value_cache[idx].shape for idx in attention_layer_indices],
-            [expected_shape] * len(attention_layer_indices),
-        )
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        num_v_heads = config.linear_num_value_heads
+        head_k_dim = config.linear_key_head_dim
+        head_v_dim = config.linear_value_head_dim
 
-    def _check_caches_are_equal(self, cache1, cache2):
-        "Qwen3.5 has a special Cache as it alternates with gated deltanet layers"
-        if not len(cache1) == len(cache2):
-            raise ValueError("Both caches do not have the same number of layers.")
-
-        num_layers = len(cache1)
-        for idx in range(num_layers):
-            if cache1.key_cache[idx] is not None:
-                torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
-                torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
+        return (batch_size, num_v_heads, head_k_dim, head_v_dim)
 
     def test_attention_outputs(self):
         "Needs to be overwritten as Qwen3.5 alternates between attention layers and gated deltanet layers."
@@ -157,6 +153,92 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
+    @require_causal_conv1d
+    @require_flash_linear_attention
+    @require_torch_gpu
+    def test_padding_free_matches_padded_fast_path_regression(self):
+        torch.manual_seed(0)
+        config = self.model_tester.get_config()
+        model = Qwen3_5ForCausalLM(config).to(torch_device).eval()
+
+        data_collator = DataCollatorWithFlattening(
+            return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True
+        )
+        test_cases = [
+            (
+                torch.tensor([[0, 0, 0, 1, 2, 3], [0, 0, 0, 0, 4, 5]], device=torch_device),
+                torch.tensor([[0, 0, 0, 1, 1, 1], [0, 0, 0, 0, 1, 1]], dtype=torch.long, device=torch_device),
+                [{"input_ids": [1, 2, 3]}, {"input_ids": [4, 5]}],
+            ),
+            (
+                torch.tensor([[0, 1, 2, 3, 4, 5], [0, 0, 0, 0, 0, 6]], device=torch_device),
+                torch.tensor([[0, 1, 1, 1, 1, 1], [0, 0, 0, 0, 0, 1]], dtype=torch.long, device=torch_device),
+                [{"input_ids": [1, 2, 3, 4, 5]}, {"input_ids": [6]}],
+            ),
+        ]
+
+        for padded_input_ids, attention_mask, features in test_cases:
+            position_ids = ((attention_mask == 1).long().cumsum(dim=1) - 1) * (attention_mask == 1).long()
+            padding_free_batch = data_collator(features)
+            padding_free_batch = {
+                key: value.to(torch_device) if torch.is_tensor(value) else value
+                for key, value in padding_free_batch.items()
+            }
+
+            with torch.no_grad():
+                res_padded = model(
+                    input_ids=padded_input_ids,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    use_cache=False,
+                )
+                res_padfree = model(**padding_free_batch, use_cache=False)
+
+            logits_padded = res_padded.logits[attention_mask.bool()]
+            logits_padfree = res_padfree.logits[0]
+
+            torch.testing.assert_close(logits_padded, logits_padfree, atol=1e-5, rtol=1e-5)
+
+    def test_linear_attention_multi_token_cached_forward_matches_single_token(self):
+        """
+        Qwen3.5's gated-delta-net layers must produce the same output for a token regardless of
+        whether it's fed as a single-token cached forward or as the first token of a multi-token
+        chunk after the cache has been populated (chunked prefill continuation / speculative
+        verification pattern). A causal LM can never have its logits at position `i` depend on
+        tokens at positions > `i`, even across separate forward calls with a shared cache.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config._attn_implementation = "eager"
+        # GatedDeltaNet's fused norm-gate kernel only supports silu/swish/sigmoid; the shared
+        # tester's default `gelu` would raise before we get to exercise the cache path.
+        config.hidden_act = "silu"
+        model = Qwen3_5TextModel._from_config(config)
+        model.to(torch_device)
+        model.eval()
+
+        prefill_len = 8
+        prompt = ids_tensor((1, prefill_len), config.vocab_size).to(torch_device)
+        next_token = ids_tensor((1, 1), config.vocab_size).to(torch_device)
+
+        # Reference: prefill, then forward the next token alone with the populated cache.
+        cache_single = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+        ref_first = single_out.last_hidden_state[:, 0, :]
+
+        # Under test: prefill, then forward [next_token, *distractors] in one call. The first
+        # position must match the single-token forward exactly (causal attention property).
+        distractors = ids_tensor((1, 7), config.vocab_size).to(torch_device)
+        multi_input = torch.cat([next_token, distractors], dim=1)
+        cache_multi = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+        under_test_first = multi_out.last_hidden_state[:, 0, :]
+
+        torch.testing.assert_close(under_test_first, ref_first, rtol=1e-4, atol=1e-4)
+
 
 class Qwen3_5VisionText2TextModelTester:
     def __init__(
@@ -177,7 +259,7 @@ class Qwen3_5VisionText2TextModelTester:
             "vocab_size": 99,
             "intermediate_size": 37,
             "max_position_embeddings": 512,
-            "model_type": "qwen3_vl",
+            "model_type": "qwen3_5_text",
             "num_attention_heads": 4,
             "num_hidden_layers": 2,
             "layer_types": ["full_attention", "linear_attention"],
@@ -306,6 +388,8 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         (
             Qwen3_5Model,
             Qwen3_5ForConditionalGeneration,
+            Qwen3_5ForSequenceClassification,
+            Qwen3_5ForTokenClassification,
         )
         if is_torch_available()
         else ()
@@ -319,35 +403,49 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        "Qwen3.5 has a special Cache as it alternates with gated deltanet layers"
-        self.assertIsInstance(past_key_values, Qwen3_5DynamicCache)
+    @parameterized.expand([("from_pretrained",), ("from_config",)])
+    def test_automodelforcausallm(self, loader: str) -> None:
+        """`AutoModelForCausalLM` must unwrap the text sub-config for composite-to-text-only mappings."""
+        config = self.model_tester.get_config()
+        self.assertIsInstance(config, Qwen3_5Config, msg="Test setup expects the composite Qwen3_5Config.")
 
-        # (batch, kv heads, seq_length, head_dim)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        expected_shape = (batch_size, num_heads, seq_length, head_dim)
+        if loader == "from_config":
+            with torch.device("meta"):
+                model = AutoModelForCausalLM.from_config(config)
+        else:
+            full_model = Qwen3_5ForConditionalGeneration(config)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                full_model.save_pretrained(tmp_dir)
+                model = AutoModelForCausalLM.from_pretrained(tmp_dir)
 
-        attention_layer_indices = past_key_values.transformer_layers
-        self.assertListEqual(
-            [past_key_values.key_cache[idx].shape for idx in attention_layer_indices],
-            [expected_shape] * len(attention_layer_indices),
-        )
-        self.assertListEqual(
-            [past_key_values.value_cache[idx].shape for idx in attention_layer_indices],
-            [expected_shape] * len(attention_layer_indices),
-        )
+        self.assertIsInstance(model, Qwen3_5ForCausalLM)
+        self.assertIsInstance(model.config, Qwen3_5TextConfig)
 
-    def _check_caches_are_equal(self, cache1, cache2):
-        "Qwen3.5 has a special Cache as it alternates with gated deltanet layers"
-        if not len(cache1) == len(cache2):
-            raise ValueError("Both caches do not have the same number of layers.")
+    @unittest.skip(
+        "Conversion only for the `CausalLM` loading from saved `ConditionalLM`, doesn't apply to simple VLM"
+    )
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
 
-        num_layers = len(cache1)
-        for idx in range(num_layers):
-            if cache1.key_cache[idx] is not None:
-                torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
-                torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
+    @unittest.skip("Qwen3.5 hybrid linear-attention cache is not compatible with quantized cache yet.")
+    def test_generate_with_quant_cache(self):
+        pass
+
+    def _get_conv_state_shape(self, batch_size: int, config):
+        num_v_heads = config.linear_num_value_heads
+        num_k_heads = config.linear_num_key_heads
+        head_k_dim = config.linear_key_head_dim
+        head_v_dim = config.linear_value_head_dim
+        intermediate_size = 2 * num_k_heads * head_k_dim + num_v_heads * head_v_dim
+
+        return (batch_size, intermediate_size, config.linear_conv_kernel_dim)
+
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        num_v_heads = config.linear_num_value_heads
+        head_k_dim = config.linear_key_head_dim
+        head_v_dim = config.linear_value_head_dim
+
+        return (batch_size, num_v_heads, head_k_dim, head_v_dim)
 
     def test_attention_outputs(self):
         "Needs to be overwritten as Qwen3.5 alternates between attention layers and gated deltanet layers."
@@ -479,7 +577,7 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 channels * temporal_patch * (patch_size**2),
             ]
         )
-        image_grid_thw = torch.tensor([[1, 1, 1]] * (bsz * num_images))
+        image_grid_thw = torch.tensor([[1, 1, 1]] * (bsz * num_images), device=torch_device)
         self.assertEqual(pixel_values.shape[0], image_grid_thw.prod(dim=1).sum().item())
 
         insertion_point = 0
@@ -532,7 +630,7 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             ]
         )
 
-        video_grid_thw = torch.tensor([[patch_t, patch_h, patch_w]] * (bsz * num_video))
+        video_grid_thw = torch.tensor([[patch_t, patch_h, patch_w]] * (bsz * num_video), device=torch_device)
         self.assertEqual(pixel_values_videos.shape[0], video_grid_thw.prod(dim=1).sum().item())
 
         input_ids[:, -1] = self.model_tester.pad_token_id

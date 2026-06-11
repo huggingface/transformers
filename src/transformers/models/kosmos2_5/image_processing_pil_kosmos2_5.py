@@ -16,17 +16,61 @@
 import math
 
 import numpy as np
-import torch
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_utils import ChannelDimension, ImageInput, SizeDict, get_image_size
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, requires_backends
-from .image_processing_kosmos2_5 import Kosmos2_5ImageProcessorKwargs, torch_extract_patches
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
+from ...utils.import_utils import requires
+
+
+if is_torch_available():
+    import torch
+
+
+# Adapted from transformers.models.kosmos2_5.image_processing_kosmos2_5.Kosmos2_5ImageProcessorKwargs
+class Kosmos2_5ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
+        The patch size to use for the image. According to Kosmos2_5 paper and code, the patch size is 16x16.
+    max_patches (`int`, *optional*, defaults to 4096):
+        The maximum number of patches to extract from the image as per the
+        [KOSMOS 2.5 paper](https://huggingface.co/papers/2309.11419).
+    """
+
+    patch_size: SizeDict | None
+    max_patches: int
+
+
+# Adapted from transformers.models.kosmos2_5.image_processing_kosmos2_5.torch_extract_patches
+# Similar to transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches but dealing with a batch of images directly.
+def torch_extract_patches(image_tensor, patch_height, patch_width):
+    """
+    Utility function to extract patches from a given tensor representing a batch of images. Returns a tensor of shape
+    (batch_size, `rows`, `columns`, `num_channels` x `patch_height` x `patch_width`).
+
+    Args:
+        image_tensor (torch.Tensor):
+            The image tensor to extract patches from.
+        patch_height (int):
+            The height of the patches to extract.
+        patch_width (int):
+            The width of the patches to extract.
+    """
+    patches = torch.nn.functional.unfold(image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width))
+    patches = patches.reshape(image_tensor.size(0), image_tensor.size(1), patch_height, patch_width, -1)
+    patches = patches.permute(0, 4, 2, 3, 1).reshape(
+        image_tensor.size(0),
+        image_tensor.size(2) // patch_height,
+        image_tensor.size(3) // patch_width,
+        image_tensor.size(1) * patch_height * patch_width,
+    )
+    return patches
 
 
 @auto_docstring
+@requires(backends=("torch",))
 class Kosmos2_5ImageProcessorPil(PilBackend):
     do_normalize = True
     do_convert_rgb = True
@@ -42,11 +86,7 @@ class Kosmos2_5ImageProcessorPil(PilBackend):
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Kosmos2_5ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
-    def normalize(
-        self,
-        image: np.ndarray,
-        **kwargs,
-    ) -> np.ndarray:
+    def normalize(self, image: np.ndarray, **kwargs) -> np.ndarray:
         """
         Normalize an image using per-image mean and standard deviation.
 
@@ -68,10 +108,7 @@ class Kosmos2_5ImageProcessorPil(PilBackend):
         return (image - mean) / adjusted_stddev
 
     def extract_flattened_patches(
-        self,
-        image: np.ndarray,
-        max_patches: int,
-        patch_size: SizeDict,
+        self, image: np.ndarray, max_patches: int, patch_size: SizeDict
     ) -> tuple[np.ndarray, int, int, int, int]:
         """
         Extract flattened patches from an image. Uses torch for patch extraction.
@@ -108,11 +145,7 @@ class Kosmos2_5ImageProcessorPil(PilBackend):
         resized_width = max(num_feasible_cols * patch_width, 1)
 
         image_tensor = torch.nn.functional.interpolate(
-            image_tensor,
-            size=(resized_height, resized_width),
-            mode="bilinear",
-            align_corners=False,
-            antialias=True,
+            image_tensor, size=(resized_height, resized_width), mode="bilinear", align_corners=False, antialias=True
         )
 
         # [1, rows, columns, patch_height * patch_width * image_channels]
@@ -179,9 +212,7 @@ class Kosmos2_5ImageProcessorPil(PilBackend):
                 image = self.normalize(image, **kwargs)
 
             patches, resized_width, resized_height, n_rows, n_columns = self.extract_flattened_patches(
-                image=image,
-                max_patches=max_patches,
-                patch_size=patch_size,
+                image=image, max_patches=max_patches, patch_size=patch_size
             )
             flattened_patches.append(patches)
             width.append(resized_width)
@@ -211,11 +242,7 @@ class Kosmos2_5ImageProcessorPil(PilBackend):
         """
         pass
 
-    def _standardize_kwargs(
-        self,
-        patch_size: dict[str, int] | SizeDict | None = None,
-        **kwargs,
-    ) -> dict:
+    def _standardize_kwargs(self, patch_size: dict[str, int] | SizeDict | None = None, **kwargs) -> dict:
         """
         Process Kosmos2_5-specific kwargs before validation.
         """

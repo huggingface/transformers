@@ -13,6 +13,9 @@
 # limitations under the License.
 """Image processor class for LeViT."""
 
+import torch
+from torchvision.transforms.v2 import functional as tvF
+
 from ...image_processing_backends import TorchvisionBackend
 from ...image_transforms import get_resize_output_image_size
 from ...image_utils import (
@@ -23,15 +26,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import auto_docstring, is_torch_available, is_torchvision_available
-
-
-if is_torch_available():
-    import torch
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+from ...utils import auto_docstring
 
 
 @auto_docstring

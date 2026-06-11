@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="kakaobrain/align-base")
-@strict(accept_kwargs=True)
+@strict
 class AlignTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -50,8 +50,8 @@ class AlignTextConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 512
     type_vocab_size: int = 2
     initializer_range: float = 0.02
@@ -62,7 +62,7 @@ class AlignTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="kakaobrain/align-base")
-@strict(accept_kwargs=True)
+@strict
 class AlignVisionConfig(PreTrainedConfig):
     r"""
     width_coefficient (`float`, *optional*, defaults to 2.0):
@@ -87,17 +87,15 @@ class AlignVisionConfig(PreTrainedConfig):
         List of scaling coefficient of each block.
     squeeze_expansion_ratio (`float`, *optional*, defaults to 0.25):
         Squeeze expansion ratio.
+    hidden_dim (`int`, *optional*, defaults to 1280):
+        The hidden dimension of the layer before the classification head.
     pooling_type (`str` or `function`, *optional*, defaults to `"mean"`):
         Type of final pooling to be applied before the dense classification head. Available options are [`"mean"`,
         `"max"`]
-    batch_norm_eps (`float`, *optional*, defaults to 1e-3):
-        The epsilon used by the batch normalization layers.
     batch_norm_momentum (`float`, *optional*, defaults to 0.99):
         The momentum used by the batch normalization layers.
     drop_connect_rate (`float`, *optional*, defaults to 0.2):
         The drop rate for skip connections.
-    hidden_dim (`int`, *optional*, defaults to 1280):
-        The hidden dimension of the layer before the classification head.
 
     Example:
 
@@ -136,7 +134,7 @@ class AlignVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     batch_norm_eps: float = 0.001
     batch_norm_momentum: float = 0.99
-    drop_connect_rate: float = 0.2
+    drop_connect_rate: float | int = 0.2
 
     def __post_init__(self, **kwargs):
         self.num_hidden_layers = sum(self.num_block_repeats) * 4
@@ -155,7 +153,7 @@ class AlignVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="kakaobrain/align-base")
-@strict(accept_kwargs=True)
+@strict
 class AlignConfig(PreTrainedConfig):
     r"""
     temperature_init_value (`float`, *optional*, defaults to 1.0):

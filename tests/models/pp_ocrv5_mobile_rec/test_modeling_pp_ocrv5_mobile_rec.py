@@ -17,7 +17,6 @@
 import inspect
 import unittest
 
-import requests
 from parameterized import parameterized
 
 from transformers import (
@@ -28,6 +27,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -39,18 +39,17 @@ from transformers.testing_utils import (
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    from PIL import Image
-
 
 class PPOCRV5MobileRecModelTester:
     def __init__(
         self,
+        parent,
         batch_size=3,
         image_size=[48, 320],
         num_channels=3,
@@ -66,6 +65,7 @@ class PPOCRV5MobileRecModelTester:
         num_stages=5,
         attention_dropout=0.0,
     ):
+        self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
@@ -142,8 +142,7 @@ class PPOCRV5MobileRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
     model_split_percents = [0.5, 0.8]
 
     def setUp(self):
-        self.model_tester = PPOCRV5MobileRecModelTester()
-        self.model_tester.parent = self
+        self.model_tester = PPOCRV5MobileRecModelTester(self)
         self.config_tester = ConfigTester(
             self,
             config_class=PPOCRV5MobileRecConfig,
@@ -244,8 +243,10 @@ class PPOCRV5MobileRecModelIntegrationTest(unittest.TestCase):
         self.image_processor = (
             AutoImageProcessor.from_pretrained(model_path, return_tensors="pt") if is_vision_available() else None
         )
-        url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png"
-        self.image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        img_url = url_to_local_path(
+            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png"
+        )
+        self.image = load_image(img_url)
 
     def test_inference_text_recognition_head(self):
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)

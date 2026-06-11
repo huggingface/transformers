@@ -102,7 +102,7 @@ class GotOcr2VisionAttention(nn.Module):
         max_rel_dist = int(2 * max(q_size, k_size) - 1)
         # Interpolate rel pos.
         rel_pos_resized = F.interpolate(
-            rel_pos.reshape(1, rel_pos.shape[0], -1).permute(0, 2, 1),
+            rel_pos.reshape(1, rel_pos.shape[0], -1).transpose(1, 2),
             size=max_rel_dist,
             mode="linear",
         )
@@ -278,7 +278,7 @@ class GotOcr2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False
     _supports_sdpa = False
 
@@ -298,13 +298,13 @@ class GotOcr2PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.pos_embed)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for got_ocr2 vision model's outputs that also contains image embeddings obtained by applying the projection
     layer to the pooler_output.
     """
 )
+@dataclass
 class GotOcr2VisionEncoderOutput(ModelOutput):
     r"""
     image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
@@ -476,12 +476,12 @@ class GotOcr2MultiModalProjector(nn.Module):
         return hidden_state
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for GotOcr2 causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class GotOcr2CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -506,12 +506,12 @@ class GotOcr2CausalLMOutputWithPast(ModelOutput):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for GotOcr2 outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class GotOcr2ModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -540,12 +540,6 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
         self.multi_modal_projector = GotOcr2MultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring(
@@ -647,12 +641,6 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
         self.model = GotOcr2Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head

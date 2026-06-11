@@ -14,10 +14,7 @@
 import argparse
 import contextlib
 import json
-import logging
 import os
-import time
-from copy import deepcopy
 from itertools import cycle
 
 import datasets
@@ -28,6 +25,9 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, ContinuousBatchingConfig
 from transformers.generation import GenerationConfig
 from transformers.generation.continuous_batching.requests import logger
+
+
+# TODO: this file is now mostly used for benchmarking, remodel it in consequence.
 
 
 def generate_without_cb(
@@ -51,38 +51,6 @@ def generate_without_cb(
     return decoded_outputs
 
 
-def maybe_setup_metrics(use_metrics: bool) -> None:
-    if not use_metrics:
-        return
-    try:
-        from opentelemetry import metrics, trace
-        from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-        from opentelemetry.sdk.metrics import MeterProvider
-        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-        from opentelemetry.sdk.resources import Resource
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
-
-        resource = Resource.create({"service.name": "transformers"})
-        metrics_exporter = PeriodicExportingMetricReader(
-            OTLPMetricExporter(
-                endpoint="http://localhost:9090/api/v1/otlp/v1/metrics"
-            ),  # Uses OTEL_EXPORTER_OTLP_METRICS_ENDPOINT env var
-            export_interval_millis=1000,
-        )
-        meter_provider = MeterProvider(resource=resource, metric_readers=[metrics_exporter])
-        metrics.set_meter_provider(meter_provider)
-        trace_exporter = OTLPSpanExporter(
-            endpoint="http://localhost:4318/v1/traces"
-        )  # Uses OTEL_EXPORTER_OTLP_TRACES_ENDPOINT env var
-        tracer_provider = TracerProvider(resource=resource)
-        tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
-        trace.set_tracer_provider(tracer_provider)
-    except Exception as e:
-        print(f"Error setting up metrics: {e}")
-
-
 def batch_generate(
     model: AutoModelForCausalLM,
     simple_batch_inputs: list,
@@ -94,15 +62,14 @@ def batch_generate(
     expected_outputs: list[str] | None = None,
 ) -> tuple[float, float]:
     # Actual batch generation
-    if displayed_samples >= 0:
-        print("--- Running CB Generation Example ---")
-    start_time_simple = time.time()
     batch_outputs = model.generate_batch(
         inputs=simple_batch_inputs,
         generation_config=generation_config,
         continuous_batching_config=cb_config,
     )
-    end_time_simple = time.time()
+    generation_start = min(out.created_time for out in batch_outputs.values())
+    generation_end = max(out.lifespan[1] for out in batch_outputs.values())
+
     if displayed_samples >= 0:
         print("Done with batch generation.")
 
@@ -139,7 +106,7 @@ def batch_generate(
             print(f"Request {i} matches" if matches else f"Request {i} does NOT match!")
 
     # Compute stats and maybe print them
-    gen_time = end_time_simple - start_time_simple
+    gen_time = generation_end - generation_start
     tok_per_sec = token_count / gen_time
     if displayed_samples >= 0:
         print("-" * 20)
@@ -203,7 +170,6 @@ if __name__ == "__main__":
     parser.add_argument("--add-prefix", action="store_true", help="Add a prefix to the samples")
     parser.add_argument("--compare", action="store_true", help="Compare CB generation with classic generate")
     parser.add_argument("--profile", type=str, default=None)
-    parser.add_argument("--metrics", action="store_true")
     parser.add_argument("--seed", type=int, default=None, help="Random seed")
 
     # Display parameters
@@ -215,15 +181,7 @@ if __name__ == "__main__":
 
     # Choose attention implementation
     if args.attn is None:
-        if args.compile:
-            args.attn = "kernels-community/flash-attn3@fake-ops-return-probs"
-            logger.warning(
-                "No attention implementation was provided and compile is enabled. Using experimental kernel: "
-                "kernels-community/flash-attn3@fake-ops-return-probs because compile is not supported on main. Change "
-                "this when main supports it."  # TODO: cf comment
-            )
-        else:
-            args.attn = "kernels-community/flash-attn3"
+        args.attn = "kernels-community/flash-attn3"
 
     # Set seed
     if args.seed is not None:
@@ -242,7 +200,6 @@ if __name__ == "__main__":
 
     # Set up diagnostics
     logger.setLevel(args.log_level.upper())
-    maybe_setup_metrics(args.metrics)
 
     # Set up performance
     if args.matmul_precision != "none":
@@ -334,19 +291,6 @@ if __name__ == "__main__":
         os.makedirs("runs/cb", exist_ok=True)
         attn = args.attn.replace("|", "_").replace("/", "_")
         args.output_file = f"runs/cb/{attn}_{args.samples}_{args.cuda_graph}.json"
-
-    # Run warmup batch generation if log level is above DEBUG # TODO: understand why warmup incurs a large overhead during cache creation
-    if logger.level > logging.DEBUG:
-        gen_cfg = deepcopy(generation_cfg)
-        gen_cfg.max_new_tokens = min(gen_cfg.max_new_tokens, args.block_size + 1)
-        batch_generate(
-            model,
-            batched_inputs,
-            gen_cfg,
-            cb_config,
-            tokenizer,
-            displayed_samples=-1,
-        )
 
     if args.profile is not None:
         cm = profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True)

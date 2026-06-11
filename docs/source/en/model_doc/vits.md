@@ -8,13 +8,8 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.-->
-*This model was released on 2021-06-11 and added to Hugging Face Transformers on 2023-09-01.*
+*This model was published in HF papers on 2021-06-11 and contributed to Hugging Face Transformers on 2023-09-01.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # VITS
 
@@ -31,16 +26,16 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoption id="Pipeline">
 
 ```python
-import torch
-from transformers import pipeline, set_seed
 from scipy.io.wavfile import write
+
+from transformers import pipeline, set_seed
+
 
 set_seed(555)
 
 pipe = pipeline(
     task="text-to-speech",
     model="facebook/mms-tts-eng",
-    dtype=torch.float16,
     device=0
 )
 
@@ -58,13 +53,15 @@ write("hello.wav", sampling_rate, audio_data.squeeze())
 <hfoption id="AutoModel">
 
 ```python
-import torch
 import scipy
+import torch
 from IPython.display import Audio
+
 from transformers import AutoTokenizer, VitsModel, set_seed
 
+
 tokenizer = AutoTokenizer.from_pretrained("facebook/mms-tts-eng")
-model = VitsModel.from_pretrained("facebook/mms-tts-eng", device_map="auto", dtype=torch.float16)
+model = VitsModel.from_pretrained("facebook/mms-tts-eng", device_map="auto")
 inputs = tokenizer("Hello, my dog is cute", return_tensors="pt").to(model.device)
 
 set_seed(555)
@@ -112,7 +109,7 @@ Audio(waveform, rate=model.config.sampling_rate)
    import subprocess
 
    tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-kor")
-   model = VitsModel.from_pretrained("facebook/mms-tts-kor")
+   model = VitsModel.from_pretrained("facebook/mms-tts-kor", device_map="auto")
 
    def uromanize(input_string, uroman_path):
        """Convert non-Roman strings to Roman using the `uroman` perl package."""
@@ -133,7 +130,7 @@ Audio(waveform, rate=model.config.sampling_rate)
    text = "이봐 무슨 일이야"
    uromanized_text = uromanize(text, uroman_path=os.environ["UROMAN"])
 
-   inputs = tokenizer(text=uromanized_text, return_tensors="pt")
+   inputs = tokenizer(text=uromanized_text, return_tensors="pt").to(model.device)
 
    set_seed(555)  # make deterministic
    with torch.no_grad():

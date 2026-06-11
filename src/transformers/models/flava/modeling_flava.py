@@ -24,6 +24,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -48,7 +49,6 @@ LOGIT_SCALE_CLAMP_MAX = 4.6052
 FlavaPossibleConfigs = FlavaTextConfig | FlavaImageConfig | FlavaMultimodalConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output from FlavaModel containing embeddings and outputs from individual encoders.
@@ -58,6 +58,7 @@ FlavaPossibleConfigs = FlavaTextConfig | FlavaImageConfig | FlavaMultimodalConfi
     `text_projection` layers on `image_embeddings` and `text_embeddings` respectively.
     """
 )
+@dataclass
 class FlavaModelOutput(ModelOutput):
     r"""
     image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `pixel_values` are present):
@@ -88,12 +89,12 @@ class FlavaModelOutput(ModelOutput):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class representing pretraining losses from FLAVA model
     """
 )
+@dataclass
 class FlavaLosses(ModelOutput):
     r"""
     mim (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `mim_labels` and `pixel_values` are present, `input_ids_masked` is absent and `mim_weight` > 0.):
@@ -128,7 +129,6 @@ class FlavaLosses(ModelOutput):
         return all_none
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output from FlavaForPreTraining containing embeddings, and outputs from individual encoders.
@@ -138,6 +138,7 @@ class FlavaLosses(ModelOutput):
     `text_projection` layers on `image_embeddings` and `text_embeddings` respectively.
     """
 )
+@dataclass
 class FlavaForPreTrainingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor`, *optional*, returned when `return_loss` is True):
@@ -445,22 +446,11 @@ class FlavaSelfAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
-        batch_size, seq_length, _ = hidden_states.shape
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        key_layer = (
-            self.key(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        value_layer = (
-            self.value(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
+        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_layer = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -537,7 +527,7 @@ class FlavaIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    # Copied from transformers.models.vit.modeling_vit.ViTIntermediate.forward
+    # Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTMLP.forward
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
@@ -551,7 +541,7 @@ class FlavaOutput(nn.Module):
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    # Copied from transformers.models.vit.modeling_vit.ViTOutput.forward
+    # Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTMLP.forward
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -831,25 +821,21 @@ class FlavaTextModel(FlavaPreTrainedModel):
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
 
-        input_shape = input_ids.size()
-
-        if attention_mask is None:
-            attention_mask = torch.ones(input_shape, device=input_ids.device)
-
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            attention_mask,
-            input_shape,
-        )
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
         )
 
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
+
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -921,17 +907,15 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
             hidden_states = torch.cat((cls_tokens, hidden_states), dim=1)
             seq_length += 1
 
-        if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_length), device=hidden_states.device)
-
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            attention_mask,
-            (batch_size, seq_length),
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
         )
 
         encoder_outputs = self.encoder(
             hidden_states,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

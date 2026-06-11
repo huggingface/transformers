@@ -15,6 +15,7 @@
 Import utilities: Utilities related to imports and our lazy inits.
 """
 
+import functools
 import importlib.machinery
 import importlib.metadata
 import importlib.util
@@ -25,6 +26,7 @@ import re
 import shutil
 import subprocess
 import sys
+import warnings
 from collections import OrderedDict
 from collections.abc import Callable
 from enum import Enum
@@ -70,6 +72,9 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
             # Note that this branch will almost never be run, so we do not import packages for nothing here
             package = importlib.import_module(pkg_name)
             package_version = getattr(package, "__version__", "N/A")
+            # No version + no __file__ means a namespace package (PEP 420) shadowing on sys.path, not a real install.
+            if package_version == "N/A" and getattr(package, "__file__", None) is None:
+                package_exists = False
         logger.debug(f"Detected {pkg_name} version: {package_version}")
 
     if return_version:
@@ -133,6 +138,7 @@ XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.15.0"
+COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
 KERNELS_MIN_VERSION = "0.10.2"
@@ -214,6 +220,36 @@ def is_cuda_platform() -> bool:
 
         return getattr(torch, "version").cuda is not None
     return False
+
+
+@lru_cache
+def get_cuda_runtime_version() -> tuple[int, int]:
+    """Return the CUDA runtime version as (major, minor).
+
+    Prefers a direct query of ``cudaRuntimeGetVersion`` via ``libcudart.so``. If that's
+    not on the system loader path (common with pip-installed torch that bundles its own
+    CUDA runtime), falls back to ``torch.version.cuda`` — which equals the bundled
+    runtime's version for pip wheels. Returns ``(0, 0)`` for CPU-only torch.
+    """
+    import ctypes
+
+    try:
+        cudart = ctypes.CDLL("libcudart.so")
+    except OSError:
+        if not is_torch_available():
+            return 0, 0
+        import torch
+
+        cuda_version = getattr(torch.version, "cuda", None)
+        if cuda_version is None:
+            return 0, 0
+
+        major, minor, *_ = cuda_version.split(".")
+        return int(major), int(minor)
+
+    version = ctypes.c_int()
+    cudart.cudaRuntimeGetVersion(ctypes.byref(version))
+    return version.value // 1000, (version.value % 1000) // 10
 
 
 @lru_cache
@@ -487,6 +523,26 @@ def is_torch_neuron_available(check_device: bool = False) -> bool:
 
 
 @lru_cache
+def is_torch_tpu_available(check_device: bool = False) -> bool:
+    import torch
+
+    if importlib.util.find_spec("torch_tpu") is None:
+        return False
+
+    if check_device:
+        try:
+            import torch_tpu  # noqa: F401
+
+            if hasattr(torch, "tpu") and torch.tpu.is_available():
+                return torch.tpu.device_count() >= 1
+            return False
+        except RuntimeError:
+            return False
+
+    return hasattr(torch, "tpu") and torch.tpu.is_available()
+
+
+@lru_cache
 def is_torch_bf16_gpu_available() -> bool:
     if not is_torch_available():
         return False
@@ -510,6 +566,9 @@ def is_torch_bf16_gpu_available() -> bool:
         return torch.mlu.is_bf16_supported()
     if is_torch_neuron_available() and hasattr(torch, "neuron"):
         return torch.neuron.is_bf16_supported()
+    if is_torch_tpu_available():
+        # bfloat16 is always supported on TPUs; torch.tpu has no is_bf16_supported()
+        return True
     return False
 
 
@@ -644,6 +703,8 @@ def is_libcst_available() -> bool:
 
 @lru_cache
 def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION) -> bool:
+    if not is_torch_available():
+        return False
     is_available, accelerate_version = _is_package_available("accelerate", return_version=True)
     return is_available and version.parse(accelerate_version) >= version.parse(min_version)
 
@@ -672,12 +733,20 @@ def is_pygments_available() -> bool:
 
 @lru_cache
 def is_torchvision_available() -> bool:
-    return _is_package_available("torchvision")[0]
+    return is_vision_available() and is_torch_available() and _is_package_available("torchvision")[0]
 
 
 @lru_cache
 def is_torchvision_v2_available() -> bool:
     return is_torchvision_available()
+
+
+@lru_cache
+def is_torchvision_greater_or_equal(library_version: str) -> bool:
+    if not is_torchvision_available():
+        return False
+    _, torchvision_version = _is_package_available("torchvision", return_version=True)
+    return version.parse(torchvision_version) >= version.parse(library_version)
 
 
 @lru_cache
@@ -722,6 +791,11 @@ def is_librosa_available() -> bool:
 
 
 @lru_cache
+def is_multipart_available() -> bool:
+    return _is_package_available("multipart")[0]
+
+
+@lru_cache
 def is_essentia_available() -> bool:
     return _is_package_available("essentia")[0]
 
@@ -744,6 +818,11 @@ def is_uvicorn_available() -> bool:
 @lru_cache
 def is_openai_available() -> bool:
     return _is_package_available("openai")[0]
+
+
+@lru_cache
+def is_serve_available() -> bool:
+    return is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available()
 
 
 @lru_cache
@@ -918,7 +997,7 @@ def is_flash_attn_2_available() -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
     # FA4 is also distributed under "flash_attn", hence we need to check the naming here
     is_available = is_available and "flash-attn" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])
     ]
 
     if not is_available or not (is_torch_cuda_available() or is_torch_mlu_available()):
@@ -937,7 +1016,7 @@ def is_flash_attn_3_available() -> bool:
     is_available = _is_package_available("flash_attn_interface")[0]
     # Resolving and ensuring the proper name of FA3 being associated
     is_available = is_available and "flash-attn-3" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn_interface"]
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn_interface", [])
     ]
     return is_available and is_torch_cuda_available()
 
@@ -949,7 +1028,7 @@ def is_flash_attn_4_available() -> bool:
     # NOTE: FA2 seems to distribute the `cute` subdirectory even if only FA2 has been installed
     #       -> check for the proper (normalized) distribution name
     is_available = is_available and "flash-attn-4" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])
     ]
 
     return is_available and is_torch_cuda_available()
@@ -960,7 +1039,7 @@ def is_flash_attn_greater_or_equal(library_version: str) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
     # FA4 is also distributed under "flash_attn", hence we need to check the naming here
     is_available = is_available and "flash-attn" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])
     ]
 
     if not is_available:
@@ -969,6 +1048,16 @@ def is_flash_attn_greater_or_equal(library_version: str) -> bool:
         return version.parse(flash_attn_version) >= version.parse(library_version)
     except packaging.version.InvalidVersion:
         return False
+
+
+@lru_cache
+def is_flash_attn_greater_or_equal_2_10() -> bool:
+    warnings.warn(
+        "`is_flash_attn_greater_or_equal_2_10` is deprecated and will be removed in v5.8. "
+        "Please use `is_flash_attn_greater_or_equal(library_version='2.1.0')` instead if needed.",
+        FutureWarning,
+    )
+    return is_flash_attn_greater_or_equal("2.1.0")
 
 
 @lru_cache
@@ -1090,8 +1179,9 @@ def is_qutlass_available():
 
 
 @lru_cache
-def is_compressed_tensors_available() -> bool:
-    return _is_package_available("compressed_tensors")[0]
+def is_compressed_tensors_available(min_version: str = COMPRESSED_TENSORS_MIN_VERSION) -> bool:
+    is_available, compressed_tensors_version = _is_package_available("compressed_tensors", return_version=True)
+    return is_available and version.parse(compressed_tensors_version) >= version.parse(min_version)
 
 
 @lru_cache
@@ -1126,12 +1216,17 @@ def is_tokenizers_available() -> bool:
 
 @lru_cache
 def is_vision_available() -> bool:
-    return _is_package_available("PIL")[0]
+    try:
+        import PIL.Image  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
 
 
 @lru_cache
 def is_pytesseract_available() -> bool:
-    return _is_package_available("pytesseract")[0]
+    return _is_package_available("pytesseract")[0] and is_vision_available()
 
 
 @lru_cache
@@ -1166,7 +1261,7 @@ def is_soundfile_available() -> bool:
 
 @lru_cache
 def is_timm_available() -> bool:
-    return _is_package_available("timm")[0]
+    return is_vision_available() and is_torch_available() and _is_package_available("timm")[0]
 
 
 @lru_cache
@@ -1191,11 +1286,13 @@ def is_numba_available() -> bool:
 
 @lru_cache
 def is_torchaudio_available() -> bool:
-    return _is_package_available("torchaudio")[0]
+    return is_torch_available() and _is_package_available("torchaudio")[0]
 
 
 @lru_cache
 def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION) -> bool:
+    if not is_torch_available():
+        return False
     is_available, torchao_version = _is_package_available("torchao", return_version=True)
     return is_available and version.parse(torchao_version) >= version.parse(min_version)
 
@@ -1287,17 +1384,7 @@ def is_matplotlib_available() -> bool:
 
 @lru_cache
 def is_mistral_common_available() -> bool:
-    return _is_package_available("mistral_common")[0]
-
-
-@lru_cache
-def is_opentelemetry_available() -> bool:
-    try:
-        return _is_package_available("opentelemetry")[0] and version.parse(
-            importlib.metadata.version("opentelemetry-api")
-        ) >= version.parse("1.30.0")
-    except Exception as _:
-        return False
+    return is_vision_available() and _is_package_available("mistral_common")[0]
 
 
 @lru_cache
@@ -1475,6 +1562,16 @@ def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: 
 
     import torch
 
+    # When tracing, msg may be an f-string with tensor values that dynamo can't trace
+    # (callable/isinstance on it breaks). Check compilation first and use torch._check
+    # without msg (it only serves as a compiler hint in that case).
+    if is_tracing():
+        if isinstance(cond, torch.Tensor):
+            torch._check_tensor_all(cond)
+        else:
+            torch._check(cond)
+        return
+
     if not callable(msg):
         # torch._check requires msg to be a callable but we want to keep the API simple for users
         def msg_callable():
@@ -1491,6 +1588,11 @@ def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: 
         torch._check_tensor_all_with(error_type, cond, msg_callable)
     else:
         torch._check_with(error_type, cond, msg_callable)
+
+
+@lru_cache
+def is_ipython_available() -> bool:
+    return importlib.util.find_spec("IPython") is not None
 
 
 @lru_cache
@@ -2495,8 +2597,9 @@ def requires(*, backends=()):
     - The '@requires' string is used to dynamically import objects
     """
 
-    if not isinstance(backends, tuple):
-        raise TypeError("Backends should be a tuple.")
+    if not isinstance(backends, (tuple, list)):
+        raise TypeError("Backends should be a tuple or list.")
+    backends = tuple(backends)
 
     applied_backends = []
     for backend in backends:
@@ -2509,27 +2612,35 @@ def requires(*, backends=()):
                 raise ValueError(f"Backend should be defined in the BACKENDS_MAPPING. Offending backend: {backend}")
 
     def inner_fn(fun):
-        fun.__backends = applied_backends
-        return fun
+        if isinstance(fun, type):
+            # For classes, just attach the metadata — don't wrap, as that would
+            # turn the class into a plain function and break isinstance checks.
+            fun.__backends = applied_backends
+            return fun
+
+        @functools.wraps(fun)
+        def wrapper(*args, **kwargs):
+            requires_backends(fun, applied_backends)
+            return fun(*args, **kwargs)
+
+        wrapper.__backends = applied_backends  # type: ignore [unresolved-attribute]
+        return wrapper
 
     return inner_fn
 
 
 BASE_FILE_REQUIREMENTS = {
     lambda name, content: "modeling_" in name: ("torch",),
-    lambda name, content: name.startswith("tokenization_") and name.endswith("_fast"): ("tokenizers",),
-    lambda name, content: name.startswith("image_processing_") and name.endswith("_fast"): (
+    lambda name, content: "tokenization_" in name and name.endswith("_fast"): ("tokenizers",),
+    lambda name, content: "image_processing_" in name and "TorchvisionBackend" in content: (
         "vision",
         "torch",
         "torchvision",
     ),
-    lambda name, content: name.startswith("image_processing_") and "TorchvisionBackend" in content: (
-        "vision",
-        "torch",
-        "torchvision",
-    ),
-    lambda name, content: name.startswith("image_processing_"): ("vision",),
-    lambda name, content: name.startswith("video_processing_"): ("vision", "torch", "torchvision"),
+    lambda name, content: "image_processing_" in name: ("vision",),
+    lambda name, content: "video_processing_" in name: ("vision", "torch", "torchvision"),
+    # Some models have specific generation and it always depends on torch (guard if importable via main module)
+    lambda name, content: "generation_" in name: ("torch",),
 }
 
 
@@ -2686,20 +2797,25 @@ def create_import_structure_from_path(module_path):
                     continue
 
                 # Skipping line enables putting whatever we want between the
-                # export() call and the actual class/method definition.
+                # requires() call and the actual class/method definition.
                 # This is what enables having # Copied from statements, docs, etc.
                 skip_line = False
 
                 if "@requires" in previous_line:
                     skip_line = False
 
-                    # Backends are defined on the same line as export
+                    # Backends are defined on the same line as requires
                     if "backends" in previous_line:
-                        backends_string = previous_line.split("backends=")[1].split("(")[1].split(")")[0]
+                        try:
+                            backends_string = previous_line.split("backends=")[1].split("(")[1].split(")")[0]
+                        except IndexError:
+                            raise ValueError(
+                                f"Couldn't parse backends for @requires decorator in file {module_name}:{previous_line}"
+                            )
                         backends = tuple(sorted([b.strip("'\",") for b in backends_string.split(", ") if b]))
 
-                    # Backends are defined in the lines following export, for example such as:
-                    # @export(
+                    # Backends are defined in the lines following requires, for example such as:
+                    # @requires(
                     #     backends=(
                     #             "sentencepiece",
                     #             "torch",
@@ -2708,7 +2824,7 @@ def create_import_structure_from_path(module_path):
                     #
                     # or
                     #
-                    # @export(
+                    # @requires(
                     #     backends=(
                     #             "sentencepiece",
                     #     )
@@ -2729,7 +2845,7 @@ def create_import_structure_from_path(module_path):
                                 break
                         backends = tuple(backends)
 
-                    # No backends are registered for export
+                    # No backends are registered for requires
                     else:
                         backends = ()
 
