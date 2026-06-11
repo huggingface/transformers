@@ -454,9 +454,6 @@ class TimesformerPreTrainedModel(PreTrainedModel):
             init.trunc_normal_(module.weight, std=self.config.initializer_range)
             if module.bias is not None:
                 init.constant_(module.bias, 0)
-        elif isinstance(module, nn.LayerNorm):
-            init.constant_(module.bias, 0)
-            init.constant_(module.weight, 1.0)
         elif isinstance(module, TimesformerEmbeddings):
             init.trunc_normal_(module.cls_token, std=self.config.initializer_range)
             init.trunc_normal_(module.position_embeddings, std=self.config.initializer_range)

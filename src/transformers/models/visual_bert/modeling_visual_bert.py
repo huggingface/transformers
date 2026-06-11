@@ -453,14 +453,7 @@ class VisualBertPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
-        if isinstance(module, (nn.Linear, nn.Embedding)):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if hasattr(module, "bias") and module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, VisualBertLMPredictionHead):
+        if isinstance(module, VisualBertLMPredictionHead):
             init.zeros_(module.bias)
         elif isinstance(module, VisualBertEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))

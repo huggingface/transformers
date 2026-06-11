@@ -423,9 +423,6 @@ class PvtPreTrainedModel(PreTrainedModel):
             init.trunc_normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, PvtPatchEmbeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=std)
             if module.cls_token is not None:

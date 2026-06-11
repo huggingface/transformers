@@ -453,12 +453,6 @@ class CLIPPreTrainedModel(PreTrainedModel):
                 std=self.config.vision_config.hidden_size**-0.5 * factor,
             )
 
-        if isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            init.zeros_(module.bias)
-
 
 class CLIPEncoder(nn.Module):
     """

@@ -228,61 +228,6 @@ When a PreTrainedModel subclass defines _tied_weights_keys as a non-empty collec
 +    tie_word_embeddings: bool = True
 ```
 
-### TRF016
-
-When an image_processing_*.py or video_processing_*.py class declares boolean do_* attributes (e.g. do_resize, do_rescale, do_normalize, do_convert_rgb) and overrides preprocess() or _preprocess(), checks that each declared flag is still consumed along the override path. That can be a direct reference in the override body, delegating back to the base implementation via super().preprocess(..., **kwargs) or super()._preprocess(..., **kwargs), or, for image processors, forwarding do_convert_rgb into the shared image-preparation path via _preprocess_image_like_inputs(...) or _prepare_image_like_inputs(...). The allowlist of base-handled flags (do_sample_frames) is exempted because the base preprocess() consumes them before _preprocess() runs. A do_X attribute that is not referenced by the override is a dead flag: setting do_X=False at construction or call time has no effect, and the underlying operation runs unconditionally. This silently breaks user expectations and makes per-call overrides ineffective.
-
-```diff
-class AcmeVideoProcessor(BaseVideoProcessor):
-     do_resize = True
-     do_normalize = True
-
-     def _preprocess(
-         self,
-         videos,
-+        do_resize: bool,
-+        do_normalize: bool,
-         size,
-         image_mean,
-         image_std,
-         **kwargs,
-     ):
-         for video in videos:
--            video = self.resize(video, size=size)
--            video = self.normalize(video, image_mean, image_std)
-+            if do_resize:
-+                video = self.resize(video, size=size)
-+            if do_normalize:
-+                video = self.normalize(video, image_mean, image_std)
-```
-
-### TRF017
-
-Checks classes decorated with both @auto_docstring and @dataclass for source ordering: @auto_docstring must appear above @dataclass. Decorators are applied bottom-up. When @dataclass is listed above @auto_docstring, @auto_docstring runs first on a class that has no synthesized __init__ yet and ends up modifying the parent class's __init__.__doc__ instead of the subclass's.
-
-```diff
--@dataclass
- @auto_docstring(
-     custom_intro="""
-     Output type of [`AcmeForPreTraining`].
-     """
- )
-+@dataclass
- class AcmeForPreTrainingOutput(ModelOutput):
-     ...
-```
-
-### TRF018
-
-Checks that every PreTrainedModel subclass that overrides `_init_weights(self, module, ...)` chains the call up via `super()._init_weights(...)`. If a model intentionally fully overrides initialization, suppress with `# trf-ignore: TRF018` on the line above the method. The base `_init_weights` covers standard module types (Linear, Embedding, LayerNorm, RotaryEmbedding, ...). Skipping `super()._init_weights(...)` silently leaves submodules unhandled by the override uninitialized, which can pass tests and surface much later as subtle weight-init bugs (cf. https://github.com/huggingface/transformers/pull/45597).
-
-```diff
-def _init_weights(self, module):
-+    super()._init_weights(module)
-     if isinstance(module, AcmeCustomLayer):
-         module.gate.data.zero_()
-```
-
 <!-- END RULES REFERENCE -->
 
 ## Suppressing violations

@@ -578,9 +578,6 @@ class Owlv2PreTrainedModel(PreTrainedModel):
             init.constant_(module.logit_scale, self.config.logit_scale_init_value)
         elif isinstance(module, Owlv2ForObjectDetection):
             init.copy_(module.box_bias, module.compute_box_bias(module.num_patches_height, module.num_patches_width))
-        if isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         if isinstance(module, nn.Linear):
             init.normal_(module.weight, mean=0.0, std=factor)
             if module.bias is not None:

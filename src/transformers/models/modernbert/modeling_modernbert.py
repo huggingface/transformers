@@ -405,10 +405,6 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             ),
         ):
             init_weight(module.classifier, stds["final_out"])
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            if module.bias is not None:
-                init.zeros_(module.bias)
         elif isinstance(module, ModernBertRotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters

@@ -586,7 +586,7 @@ class IBertPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
-        if isinstance(module, (QuantLinear, nn.Linear)):
+        if isinstance(module, QuantLinear):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -595,7 +595,7 @@ class IBertPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.fc_scaling_factor)
             if getattr(module, "bias_integer", None) is not None:
                 init.zeros_(module.bias_integer)
-        elif isinstance(module, (QuantEmbedding, nn.Embedding)):
+        elif isinstance(module, QuantEmbedding):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
@@ -603,9 +603,7 @@ class IBertPreTrainedModel(PreTrainedModel):
             if getattr(module, "weight_scaling_factor", None) is not None:
                 init.zeros_(module.weight_scaling_factor)
                 init.zeros_(module.weight_integer)
-        elif isinstance(module, (IntLayerNorm, nn.LayerNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
+        elif isinstance(module, IntLayerNorm):
             if getattr(module, "shift", None) is not None:
                 init.zeros_(module.shift)
         elif isinstance(module, IBertLMHead):

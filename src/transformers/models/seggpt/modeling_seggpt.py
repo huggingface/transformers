@@ -597,9 +597,6 @@ class SegGptPreTrainedModel(PreTrainedModel):
             init.trunc_normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, SegGptLayerNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, SegGptAttention):
             init.trunc_normal_(module.rel_pos_h, mean=0.0, std=std)
             init.trunc_normal_(module.rel_pos_w, mean=0.0, std=std)
