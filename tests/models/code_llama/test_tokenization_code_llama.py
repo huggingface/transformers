@@ -169,8 +169,7 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         #
         # A single leading space is genuinely ambiguous (" hello" and "hello"
         # both encode to the same IDs) and is therefore not asserted here.
-        pyth_tokenizer, rust_tokenizer = self.get_tokenizers()
-        for tok in (pyth_tokenizer, rust_tokenizer):
+        for tok in self.get_tokenizers():
             for s in ["  hello", "   leading spaces", "    indented_line"]:
                 ids = tok.encode(s, add_special_tokens=False)
                 decoded = tok.decode(ids, skip_special_tokens=True)
