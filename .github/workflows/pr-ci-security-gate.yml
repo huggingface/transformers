@@ -20,6 +20,7 @@ jobs:
         id: check
         run: |
           # TODO: add real checks (e.g. no workflow file changes, no CI infra changes)
+          sleep 60
           echo "result=pass" >> "$GITHUB_OUTPUT"
 
   approve-pr-ci:
