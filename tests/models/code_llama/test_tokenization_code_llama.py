@@ -170,10 +170,18 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # A single leading space is genuinely ambiguous (" hello" and "hello"
         # both encode to the same IDs) and is therefore not asserted here.
         for tok in self.get_tokenizers():
+            # Preserve direction: real leading spaces must survive the round-trip.
             for s in ["  hello", "   leading spaces", "    indented_line"]:
                 ids = tok.encode(s, add_special_tokens=False)
                 decoded = tok.decode(ids, skip_special_tokens=True)
                 self.assertEqual(decoded, s, msg=f"Round-trip failed for {s!r}: got {decoded!r}")
+
+            # Strip direction: the synthetic Metaspace prefix must still be removed
+            # so that decode(encode("hello")) == "hello", not " hello".
+            for s in ["hello world", "no leading space"]:
+                ids = tok.encode(s, add_special_tokens=False)
+                decoded = tok.decode(ids, skip_special_tokens=True)
+                self.assertEqual(decoded, s, msg=f"Synthetic prefix not stripped for {s!r}: got {decoded!r}")
 
 
 @require_tokenizers
