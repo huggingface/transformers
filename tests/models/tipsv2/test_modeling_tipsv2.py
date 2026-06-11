@@ -51,8 +51,6 @@ if is_torch_available():
 
     from transformers import (
         AutoModel,
-        AutoModelForTextEncoding,
-        AutoModelForZeroShotImageClassification,
         Tipsv2ImageProcessor,
         Tipsv2Model,
         Tipsv2Processor,
@@ -182,14 +180,6 @@ class Tipsv2VisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             arg_names = [*signature.parameters.keys()]
             self.assertListEqual(arg_names[:1], ["pixel_values"])
 
-    @unittest.skip(reason="TIPSv2VisionModel does not use text token inputs_embeds.")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="TIPSv2VisionModel does not use text token inputs_embeds.")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, *args):
@@ -281,7 +271,7 @@ class Tipsv2TextModelTester:
 
 
 @require_torch
-class Tipsv2TextModelTest(Tipsv2ModelTesterMixin, unittest.TestCase):
+class Tipsv2TextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Tipsv2TextModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -297,22 +287,6 @@ class Tipsv2TextModelTest(Tipsv2ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @unittest.skip(reason="TIPSv2TextModel is a bare encoder and does not return a training loss.")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="TIPSv2TextModel is a bare encoder and does not return a training loss.")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="TIPSv2TextModel is a bare encoder and does not return a training loss.")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="TIPSv2TextModel is a bare encoder and does not return a training loss.")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
 
 
 class Tipsv2ModelTester:
@@ -369,36 +343,8 @@ class Tipsv2ModelTester:
         return config, inputs_dict
 
 
-def get_b14_tipsv2_config(temperature_init_value=0.005065968260169029):
-    hidden_size = 768
-    return Tipsv2Config(
-        text_config=Tipsv2TextConfig(
-            vocab_size=32000,
-            hidden_size=hidden_size,
-            intermediate_size=3072,
-            num_hidden_layers=12,
-            num_attention_heads=12,
-            max_position_embeddings=64,
-        ),
-        vision_config=Tipsv2VisionConfig(
-            image_size=448,
-            patch_size=14,
-            hidden_size=hidden_size,
-            num_hidden_layers=12,
-            num_attention_heads=12,
-            mlp_ratio=4.0,
-            use_swiglu_ffn=False,
-        ),
-        temperature_init_value=temperature_init_value,
-    )
-
-
-def max_abs_diff(left, right):
-    return (left.detach().cpu() - right.detach().cpu()).abs().max().item()
-
-
 @require_torch
-class Tipsv2ModelTest(Tipsv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Tipsv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Tipsv2Model,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": Tipsv2Model} if is_torch_available() else {}
     additional_model_inputs = ["pixel_values", "attention_mask", "return_loss"]
@@ -454,58 +400,6 @@ class Tipsv2ModelTest(Tipsv2ModelTesterMixin, PipelineTesterMixin, unittest.Test
             config.save_pretrained(tmp_dir_name)
             text_config = Tipsv2TextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
-    def test_model_forward_shapes_and_logits(self):
-        config, input_ids, attention_mask, pixel_values = self.model_tester.prepare_config_and_inputs()
-        model = Tipsv2Model(config).to(torch_device)
-        model.eval()
-
-        with torch.no_grad():
-            outputs = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                pixel_values=pixel_values,
-                return_loss=True,
-            )
-
-        self.assertEqual(outputs.logits_per_image.shape, (pixel_values.shape[0], input_ids.shape[0]))
-        self.assertEqual(outputs.logits_per_text.shape, (input_ids.shape[0], pixel_values.shape[0]))
-        self.assertEqual(outputs.image_embeds.shape, (pixel_values.shape[0], config.vision_config.hidden_size))
-        self.assertEqual(outputs.text_embeds.shape, (input_ids.shape[0], config.text_config.hidden_size))
-        self.assertEqual(outputs.loss.dim(), 0)
-
-        torch.testing.assert_close(
-            outputs.image_embeds.norm(dim=-1),
-            torch.ones(pixel_values.shape[0], device=torch_device),
-            atol=1e-5,
-            rtol=1e-5,
-        )
-        torch.testing.assert_close(
-            outputs.text_embeds.norm(dim=-1),
-            torch.ones(input_ids.shape[0], device=torch_device),
-            atol=1e-5,
-            rtol=1e-5,
-        )
-        expected_logits = torch.matmul(outputs.text_embeds, outputs.image_embeds.t()) / config.temperature_init_value
-        torch.testing.assert_close(outputs.logits_per_text, expected_logits, atol=1e-5, rtol=1e-5)
-
-    def test_auto_model_mappings(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        self.assertIsInstance(AutoModel.from_config(config), Tipsv2Model)
-        self.assertIsInstance(AutoModel.from_config(config.text_config), Tipsv2TextModel)
-        self.assertIsInstance(AutoModel.from_config(config.vision_config), Tipsv2VisionModel)
-        self.assertIsInstance(AutoModelForTextEncoding.from_config(config.text_config), Tipsv2TextModel)
-        self.assertIsInstance(AutoModelForZeroShotImageClassification.from_config(config), Tipsv2Model)
-
-    @unittest.skip(
-        reason=(
-            "TIPSv2 conversion uses packed qkv/in_proj split converters; the generic reverse-loading test does not "
-            "cover this load-only alignment path reliably."
-        )
-    )
-    def test_reverse_loading_mapping(self):
-        pass
 
 
 def prepare_img():
