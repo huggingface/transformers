@@ -52,7 +52,19 @@ jobs:
         if: steps.py-check.outputs.has_py == 'true'
         run: |
           pip install bandit --quiet
-          xargs bandit --severity-level high --confidence-level medium -q < /tmp/py_files.txt
+          # Run full report in JSON, capturing all severity levels; || true so we can inspect output even on findings
+          xargs bandit --format json -l -o /tmp/bandit_report.json < /tmp/py_files.txt || true
+          # Catch all shell/process execution issues regardless of severity level:
+          # B601: paramiko (SSH)  B602: subprocess(shell=True)  B603: subprocess without shell
+          # B604: any call with shell=True  B605: os.system/os.popen  B606: process without shell
+          # B607: partial path process  B609: wildcard injection
+          issues=$(jq '[.results[] | select(.test_id | test("^B60[1-79]$"))] | length' /tmp/bandit_report.json)
+          if [ "$issues" -gt 0 ]; then
+            echo "::error::Bandit found $issues shell/process execution issue(s):"
+            jq -r '.results[] | select(.test_id | test("^B60[1-79]$")) | "\(.filename):\(.line_number) [\(.test_id)] \(.issue_text)"' /tmp/bandit_report.json
+            exit 1
+          fi
+          echo "No shell execution issues found"
 
   approve-pr-ci:
     needs: security-check
