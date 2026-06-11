@@ -681,6 +681,8 @@ class Tipsv2PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Tipsv2Model(Tipsv2PreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["temperature"]  # learnable but not in published checkpoints
+
     def __init__(self, config: Tipsv2Config):
         super().__init__(config)
         self.text_model = Tipsv2TextModel._from_config(config.text_config)
