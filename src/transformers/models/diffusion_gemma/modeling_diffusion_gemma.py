@@ -19,6 +19,7 @@
 # limitations under the License.
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Optional
 
 import torch
@@ -1215,6 +1216,7 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
         decoder_input_ids: torch.LongTensor,
         past_key_values: Cache | None = None,
         self_conditioning_logits: torch.FloatTensor | None = None,
+        self_conditioning_mask: torch.BoolTensor | None = None,
         decoder_attention_mask: torch.Tensor | dict | None = None,
         decoder_position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1225,6 +1227,10 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
         self_conditioning_logits (`torch.FloatTensor` of shape `(batch_size, canvas_length, vocab_size)`, *optional*):
             Self-conditioning logits from the previous denoising step, used to compute the
             self-conditioning embeddings.
+        self_conditioning_mask (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
+            Per-example mask over `self_conditioning_logits`: examples set to `False` get a zeroed self-conditioning
+            signal, as if no logits were passed for them. Useful for training, where self-conditioning is enabled per
+            example with some probability.
         decoder_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length+canvas_length)` or `dict`, *optional*):
             Attention mask for the decoder KV cache. Used to specify padded/unpopulated encoder KV cached entries.
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, canvas_length)`, *optional*):
@@ -1244,6 +1250,8 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
                 self_conditioning_logits.softmax(dim=-1, dtype=torch.float32).to(self.embed_tokens.weight.dtype),
                 self.embed_tokens.weight,
             ) * self.embed_tokens.embed_scale.to(inputs_embeds.dtype)
+            if self_conditioning_mask is not None:
+                soft_embeddings = soft_embeddings * self_conditioning_mask.to(soft_embeddings.dtype)[:, None, None]
         else:
             soft_embeddings = torch.zeros_like(inputs_embeds)
         inputs_embeds = self.self_conditioning(inputs_embeds, soft_embeddings)
@@ -1432,6 +1440,34 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
 
 
 @auto_docstring
+@dataclass
+class DiffusionGemmaModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Sequence of hidden states at the output of the last layer of the encoder. Only set when `input_ids` is
+        provided, e.g. to compute an autoregressive loss on the encoder during training.
+    """
+
+    encoder_last_hidden_state: torch.FloatTensor | None = None
+
+
+@auto_docstring
+@dataclass
+class DiffusionGemmaBlockDiffusionOutputWithPast(CausalLMOutputWithPast):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+        Language modeling loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, canvas_length, config.text_config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Sequence of hidden states at the output of the last layer of the encoder. Only set when `input_ids` is
+        provided, e.g. to compute an autoregressive loss on the encoder during training.
+    """
+
+    encoder_last_hidden_state: torch.FloatTensor | None = None
+
+
+@auto_docstring
 class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
     """
     DiffusionGemma model consisting of an auto-regressive encoder (DiffusionGemmaEncoderModel, very similar to a
@@ -1485,10 +1521,11 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         self_conditioning_logits: torch.FloatTensor | None = None,
+        self_conditioning_mask: torch.BoolTensor | None = None,
         decoder_attention_mask: torch.Tensor | dict | None = None,
         decoder_position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> DiffusionGemmaModelOutputWithPast:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Uncached token IDs for the prompt to be encoded as context for the canvas.
@@ -1499,6 +1536,10 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
         self_conditioning_logits (`torch.FloatTensor` of shape `(batch_size, canvas_length, vocab_size)`, *optional*):
             Self-conditioning logits from the previous denoising step, used to compute the
             self-conditioning embeddings.
+        self_conditioning_mask (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
+            Per-example mask over `self_conditioning_logits`: examples set to `False` get a zeroed self-conditioning
+            signal, as if no logits were passed for them. Useful for training, where self-conditioning is enabled per
+            example with some probability.
         decoder_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length+canvas_length)` or `dict`, *optional*):
             Attention mask for the decoder KV cache. Used to specify padded/unpopulated encoder KV cached entries.
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, canvas_length)`, *optional*):
@@ -1506,6 +1547,7 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
         """
 
         # 1: Encode new prompt tokens into the KV cache
+        encoder_last_hidden_state = None
         if input_ids is not None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -1515,6 +1557,7 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
                 **kwargs,
             )
             past_key_values = encoder_outputs.past_key_values
+            encoder_last_hidden_state = encoder_outputs.last_hidden_state
         elif past_key_values is None:
             raise ValueError("Either `input_ids` or `past_key_values` must be provided.")
 
@@ -1536,16 +1579,18 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
             decoder_input_ids=decoder_input_ids,
             past_key_values=past_key_values,
             self_conditioning_logits=self_conditioning_logits,
+            self_conditioning_mask=self_conditioning_mask,
             decoder_attention_mask=decoder_attention_mask,
             decoder_position_ids=decoder_position_ids,
             **kwargs,
         )
 
-        return BaseModelOutputWithPast(
+        return DiffusionGemmaModelOutputWithPast(
             last_hidden_state=decoder_outputs.last_hidden_state,
             hidden_states=decoder_outputs.hidden_states,
             attentions=decoder_outputs.attentions,
             past_key_values=past_key_values,
+            encoder_last_hidden_state=encoder_last_hidden_state,
         )
 
 
@@ -1587,10 +1632,11 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
         position_ids: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         self_conditioning_logits: torch.FloatTensor | None = None,
+        self_conditioning_mask: torch.BoolTensor | None = None,
         decoder_attention_mask: torch.Tensor | dict | None = None,
         decoder_position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> DiffusionGemmaBlockDiffusionOutputWithPast:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Uncached token IDs for the prompt to be encoded as context for the canvas.
@@ -1601,6 +1647,10 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
         self_conditioning_logits (`torch.FloatTensor` of shape `(batch_size, canvas_length, vocab_size)`, *optional*):
             Self-conditioning logits from the previous denoising step, used to compute the self-conditioning
             embeddings.
+        self_conditioning_mask (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
+            Per-example mask over `self_conditioning_logits`: examples set to `False` get a zeroed self-conditioning
+            signal, as if no logits were passed for them. Useful for training, where self-conditioning is enabled per
+            example with some probability.
         decoder_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length+canvas_length)` or `dict`, *optional*):
             Attention mask for the decoder KV cache. Used to specify padded/unpopulated encoder KV cached entries.
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, canvas_length)`, *optional*):
@@ -1615,6 +1665,7 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
             position_ids=position_ids,
             decoder_input_ids=decoder_input_ids,
             self_conditioning_logits=self_conditioning_logits,
+            self_conditioning_mask=self_conditioning_mask,
             decoder_attention_mask=decoder_attention_mask,
             decoder_position_ids=decoder_position_ids,
             **kwargs,
@@ -1627,11 +1678,12 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
         logits = torch.tanh(logits)
         logits = logits * self.final_logit_softcapping
 
-        return CausalLMOutputWithPast(
+        return DiffusionGemmaBlockDiffusionOutputWithPast(
             logits=logits,
             hidden_states=model_outputs.hidden_states,
             attentions=model_outputs.attentions,
             past_key_values=model_outputs.past_key_values,
+            encoder_last_hidden_state=model_outputs.encoder_last_hidden_state,
         )
 
 
