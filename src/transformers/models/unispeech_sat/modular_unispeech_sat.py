@@ -22,7 +22,10 @@ import torch.nn as nn
 from ... import initialization as init
 from ...modeling_outputs import ModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Encoder,
     Wav2Vec2EncoderStableLayerNorm,
@@ -156,6 +159,10 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+    _can_record_outputs = {
+        "hidden_states": [UniSpeechSatEncoderLayer, UniSpeechSatEncoderLayerStableLayerNorm],
+        "attentions": OutputRecorder(UniSpeechSatAttention, index=1, layer_name="encoder"),
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -245,27 +252,21 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel, Wav2Vec2Model):
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for UniSpeechSat")
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
         mask_time_indices: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | UniSpeechSatBaseModelOutput:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
             masked extracted features in *config.proj_codevector_dim* space.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)
 
@@ -281,21 +282,14 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel, Wav2Vec2Model):
         encoder_outputs = self.encoder(
             hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        hidden_states = encoder_outputs[0]
-
-        if not return_dict:
-            return (hidden_states, extract_features) + encoder_outputs[1:]
+        hidden_states = encoder_outputs.last_hidden_state
 
         return UniSpeechSatBaseModelOutput(
             last_hidden_state=hidden_states,
             extract_features=extract_features,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -360,15 +354,13 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         logits = logits / temperature
         return logits
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | UniSpeechSatForPreTrainingOutput:
         r"""
         Example:
@@ -382,29 +374,19 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         >>> model = UniSpeechSatForPreTraining.from_pretrained("microsoft/unispeech-sat-base")
         >>> # TODO: Add full pretraining example
         ```"""
-
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         outputs = self.unispeech_sat(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
-        transformer_features = outputs[0]
+        transformer_features = outputs.last_hidden_state
 
         # quantize all (unmasked) extracted features and project to final vq dim
-        extract_features = self.dropout_features(outputs[1])
+        extract_features = self.dropout_features(outputs.extract_features)
 
         # TODO(PVP) - add pretraining logic and add to tests
         logits = extract_features
         loss = quantized_features = codevector_perplexity = None
-
-        if not return_dict:
-            if loss is not None:
-                return (loss, logits, transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
-            return (logits, transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
 
         return UniSpeechSatForPreTrainingOutput(
             loss=loss,

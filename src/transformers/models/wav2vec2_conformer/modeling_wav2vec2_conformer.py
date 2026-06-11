@@ -30,7 +30,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, is_peft_available
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_wav2vec2_conformer import Wav2Vec2ConformerConfig
 
@@ -543,12 +543,11 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         key_states = self.linear_k(query_key_states).view(hidden_shape).transpose(1, 2)
         value_states = self.linear_v(value_states).view(hidden_shape).transpose(1, 2)
 
-        query_states, attention_mask = self._apply_relative_embedding(
-            query=query_states,
-            key=key_states,
-            attention_mask=attention_mask,
-            relative_position_embeddings=relative_position_embeddings,
-        )
+        # apply relative position embeddings (matrix b+d) and bias the query (matrix a+c) if needed
+        if self.position_embeddings_type == "relative":
+            query_states, attention_mask = _apply_relative_position_encoding(
+                self, query_states, key_states, attention_mask, relative_position_embeddings
+            )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -588,16 +587,6 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         hidden_states = hidden_states.view(batch_size, sequence_length, self.num_heads * self.head_size)
 
         return hidden_states
-
-    def _apply_relative_embedding(self, query, key, attention_mask, relative_position_embeddings):
-        """Compute relative position bias (matrix b+d) as described in
-        https://huggingface.co/papers/1901.02860, and modify query
-        with pos_bias_u for content-based attention (matrix a+c).
-        """
-        if self.position_embeddings_type != "relative":
-            return query, attention_mask
-
-        return _apply_relative_position_encoding(self, query, key, attention_mask, relative_position_embeddings)
 
 
 class Wav2Vec2ConformerEncoderLayer(GradientCheckpointingLayer):
@@ -1160,17 +1149,13 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
         return hidden_states
 
     @merge_with_config_defaults
-    @capture_outputs(
-        tie_last_hidden_states=False
-    )  # Keep encoder hidden states distinct from the adapter-processed final model output.
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
         mask_time_indices: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Wav2Vec2ConformerBaseModelOutput:
         r"""
@@ -1182,6 +1167,7 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
         extract_features = extract_features.transpose(1, 2)
 
         if attention_mask is not None:
+            # compute reduced attention_mask corresponding to feature vectors
             attention_mask = self._get_feature_vector_attention_mask(
                 extract_features.shape[1], attention_mask, add_adapter=False
             )
@@ -1261,6 +1247,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         logits = logits / temperature
         return logits
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1268,10 +1255,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         mask_time_indices: torch.BoolTensor | None = None,
         sampled_negative_indices: torch.BoolTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Wav2Vec2ConformerForPreTrainingOutput:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1327,12 +1311,6 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         ...     input_values, mask_time_indices=mask_time_indices, sampled_negative_indices=sampled_negative_indices
         ... ).loss
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if mask_time_indices is not None:
             mask_time_indices = mask_time_indices.to(torch.bool)
@@ -1340,17 +1318,15 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         outputs = self.wav2vec2_conformer(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             mask_time_indices=mask_time_indices,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         # 1. project all transformed features (including masked) to final vq dim
-        transformer_features = self.project_hid(outputs[0])
+        transformer_features = self.project_hid(outputs.last_hidden_state)
 
         # 2. quantize all (unmasked) extracted features and project to final vq dim
-        extract_features = self.dropout_features(outputs[1])
+        extract_features = self.dropout_features(outputs.extract_features)
 
         if attention_mask is not None:
             # compute reduced attention_mask corresponding to feature vectors
@@ -1409,11 +1385,6 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
             # 8. \mathbf{L} = \mathbf{L}_m + \alpha * \mathbf{L}_d
             loss = contrastive_loss + self.config.diversity_loss_weight * diversity_loss
 
-        if not return_dict:
-            if loss is not None:
-                return (loss, transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
-            return (transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
-
         return Wav2Vec2ConformerForPreTrainingOutput(
             loss=loss,
             projected_states=transformer_features,
@@ -1424,9 +1395,6 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
             contrastive_loss=contrastive_loss,
             diversity_loss=diversity_loss,
         )
-
-
-_HIDDEN_STATES_START_POSITION = 2
 
 
 @auto_docstring(
@@ -1471,16 +1439,14 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
         """
         self.wav2vec2_conformer.feature_extractor._freeze_parameters()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
@@ -1489,24 +1455,16 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
             All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size - 1]`.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         if labels is not None and labels.max() >= self.config.vocab_size:
             raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
         outputs = self.wav2vec2_conformer(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         hidden_states = self.dropout(hidden_states)
 
         logits = self.lm_head(hidden_states)
@@ -1538,10 +1496,6 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
                     reduction=self.config.ctc_loss_reduction,
                     zero_infinity=self.config.ctc_zero_infinity,
                 )
-
-        if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
@@ -1587,16 +1541,14 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
         for param in self.wav2vec2_conformer.parameters():
             param.requires_grad = False
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -1610,30 +1562,22 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+        if self.config.use_weighted_layer_sum:
+            kwargs["output_hidden_states"] = True
 
         outputs = self.wav2vec2_conformer(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         if self.config.use_weighted_layer_sum:
-            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = outputs.hidden_states
             hidden_states = torch.stack(hidden_states, dim=1)
             norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
             hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
         else:
-            hidden_states = outputs[0]
+            hidden_states = outputs.last_hidden_state
 
         hidden_states = self.projector(hidden_states)
         if attention_mask is None:
@@ -1650,10 +1594,6 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
@@ -1696,16 +1636,14 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
         for param in self.wav2vec2_conformer.parameters():
             param.requires_grad = False
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | TokenClassifierOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -1719,30 +1657,22 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+        if self.config.use_weighted_layer_sum:
+            kwargs["output_hidden_states"] = True
 
         outputs = self.wav2vec2_conformer(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         if self.config.use_weighted_layer_sum:
-            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = outputs.hidden_states
             hidden_states = torch.stack(hidden_states, dim=1)
             norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
             hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
         else:
-            hidden_states = outputs[0]
+            hidden_states = outputs.last_hidden_state
 
         logits = self.classifier(hidden_states)
 
@@ -1750,10 +1680,6 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), torch.argmax(labels.view(-1, self.num_labels), axis=1))
-
-        if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -1873,16 +1799,14 @@ class Wav2Vec2ConformerForXVector(Wav2Vec2ConformerPreTrainedModel):
 
         return input_lengths
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | XVectorOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -1896,30 +1820,22 @@ class Wav2Vec2ConformerForXVector(Wav2Vec2ConformerPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+        if self.config.use_weighted_layer_sum:
+            kwargs["output_hidden_states"] = True
 
         outputs = self.wav2vec2_conformer(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         if self.config.use_weighted_layer_sum:
-            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = outputs.hidden_states
             hidden_states = torch.stack(hidden_states, dim=1)
             norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
             hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
         else:
-            hidden_states = outputs[0]
+            hidden_states = outputs.last_hidden_state
 
         hidden_states = self.projector(hidden_states)
 
@@ -1948,10 +1864,6 @@ class Wav2Vec2ConformerForXVector(Wav2Vec2ConformerPreTrainedModel):
         loss = None
         if labels is not None:
             loss = self.objective(logits, labels)
-
-        if not return_dict:
-            output = (logits, output_embeddings) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
 
         return XVectorOutput(
             loss=loss,

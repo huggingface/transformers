@@ -36,7 +36,8 @@ from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassif
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, get_torch_context_manager_or_global_device
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import is_flash_attention_requested
+from ...utils.generic import can_return_tuple, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_sew import SEWConfig
 
 
@@ -382,11 +383,14 @@ class SEWEncoderLayer(GradientCheckpointingLayer):
         self.feed_forward = SEWFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
         attn_residual = hidden_states
-        hidden_states, attn_weights, _ = self.attention(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-        )
+        hidden_states, _, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
 
@@ -394,12 +398,7 @@ class SEWEncoderLayer(GradientCheckpointingLayer):
         hidden_states = hidden_states + self.feed_forward(hidden_states)
         hidden_states = self.final_layer_norm(hidden_states)
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 class SEWEncoder(nn.Module):
@@ -418,13 +417,8 @@ class SEWEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
         if attention_mask is not None:
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             if is_flash_attention_requested(self.config):
@@ -468,40 +462,19 @@ class SEWEncoder(nn.Module):
         synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = self.training and dropout_probability < self.config.layerdrop
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                layer_outputs = layer(
-                    hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-                )
-                hidden_states = layer_outputs[0]
-
-            if skip_the_layer:
-                layer_outputs = (None, None)
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+                hidden_states = layer(hidden_states, attention_mask=attention_mask, **kwargs)
 
         hidden_states = self.upsample(hidden_states)
         if hidden_states.shape[1] < n_input_timesteps:
             hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, n_input_timesteps - hidden_states.shape[1]))
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -514,6 +487,10 @@ class SEWPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = False  # needs a proper look into the mask creation
+    _can_record_outputs = {
+        "hidden_states": SEWEncoderLayer,
+        "attentions": OutputRecorder(SEWAttention, index=1, layer_name="encoder"),
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -761,28 +738,21 @@ class SEWModel(SEWPreTrainedModel):
 
         return hidden_states
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
         mask_time_indices: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
             masked extracted features in *config.proj_codevector_dim* space.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)
         extract_features = self.layer_norm(extract_features)
@@ -800,24 +770,12 @@ class SEWModel(SEWPreTrainedModel):
         encoder_outputs = self.encoder(
             hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        hidden_states = encoder_outputs[0]
+        hidden_states = encoder_outputs.last_hidden_state
 
-        if not return_dict:
-            return (hidden_states,) + encoder_outputs[1:]
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
-
-
-_HIDDEN_STATES_START_POSITION = 1
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring(
@@ -894,16 +852,14 @@ class SEWForCTC(SEWPreTrainedModel):
         for param in self.sew.parameters():
             param.requires_grad = False
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
@@ -912,20 +868,16 @@ class SEWForCTC(SEWPreTrainedModel):
             All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         if labels is not None and labels.max() >= self.config.vocab_size:
             raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
         outputs = self.sew(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         hidden_states = self.dropout(hidden_states)
 
         logits = self.lm_head(hidden_states)
@@ -957,10 +909,6 @@ class SEWForCTC(SEWPreTrainedModel):
                     reduction=self.config.ctc_loss_reduction,
                     zero_infinity=self.config.ctc_zero_infinity,
                 )
-
-        if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
@@ -1006,16 +954,14 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
         for param in self.sew.parameters():
             param.requires_grad = False
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -1029,25 +975,22 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+        if self.config.use_weighted_layer_sum:
+            kwargs["output_hidden_states"] = True
 
         outputs = self.sew(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         if self.config.use_weighted_layer_sum:
-            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = outputs.hidden_states
             hidden_states = torch.stack(hidden_states, dim=1)
             norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
             hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
         else:
-            hidden_states = outputs[0]
+            hidden_states = outputs.last_hidden_state
 
         hidden_states = self.projector(hidden_states)
         if attention_mask is None:
@@ -1064,10 +1007,6 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,

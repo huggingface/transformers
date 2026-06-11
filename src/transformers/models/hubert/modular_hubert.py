@@ -22,6 +22,7 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
+from ...utils.output_capturing import OutputRecorder
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Encoder,
     Wav2Vec2EncoderStableLayerNorm,
@@ -132,6 +133,10 @@ class HubertPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+    _can_record_outputs = {
+        "hidden_states": [HubertEncoderLayer, HubertEncoderLayerStableLayerNorm],
+        "attentions": OutputRecorder(HubertAttention, index=1, layer_name="encoder"),
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):

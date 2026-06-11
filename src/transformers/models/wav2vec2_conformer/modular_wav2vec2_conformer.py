@@ -14,8 +14,7 @@ from ...modeling_outputs import BaseModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
-from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder
 from ..bert.modeling_bert import eager_attention_forward
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Adapter,
@@ -328,12 +327,11 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         key_states = self.linear_k(query_key_states).view(hidden_shape).transpose(1, 2)
         value_states = self.linear_v(value_states).view(hidden_shape).transpose(1, 2)
 
-        query_states, attention_mask = self._apply_relative_embedding(
-            query=query_states,
-            key=key_states,
-            attention_mask=attention_mask,
-            relative_position_embeddings=relative_position_embeddings,
-        )
+        # apply relative position embeddings (matrix b+d) and bias the query (matrix a+c) if needed
+        if self.position_embeddings_type == "relative":
+            query_states, attention_mask = _apply_relative_position_encoding(
+                self, query_states, key_states, attention_mask, relative_position_embeddings
+            )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -373,16 +371,6 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         hidden_states = hidden_states.view(batch_size, sequence_length, self.num_heads * self.head_size)
 
         return hidden_states
-
-    def _apply_relative_embedding(self, query, key, attention_mask, relative_position_embeddings):
-        """Compute relative position bias (matrix b+d) as described in
-        https://huggingface.co/papers/1901.02860, and modify query
-        with pos_bias_u for content-based attention (matrix a+c).
-        """
-        if self.position_embeddings_type != "relative":
-            return query, attention_mask
-
-        return _apply_relative_position_encoding(self, query, key, attention_mask, relative_position_embeddings)
 
 
 class Wav2Vec2ConformerEncoderLayer(GradientCheckpointingLayer):
@@ -661,84 +649,10 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel, Wav2Vec2Model):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @merge_with_config_defaults
-    @capture_outputs(
-        tie_last_hidden_states=False
-    )  # Keep encoder hidden states distinct from the adapter-processed final model output.
-    @auto_docstring
-    def forward(
-        self,
-        input_values: torch.Tensor | None,
-        attention_mask: torch.Tensor | None = None,
-        mask_time_indices: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Wav2Vec2ConformerBaseModelOutput:
-        r"""
-        mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
-            masked extracted features in *config.proj_codevector_dim* space.
-        """
-        extract_features = self.feature_extractor(input_values)
-        extract_features = extract_features.transpose(1, 2)
-
-        if attention_mask is not None:
-            attention_mask = self._get_feature_vector_attention_mask(
-                extract_features.shape[1], attention_mask, add_adapter=False
-            )
-
-        hidden_states, extract_features = self.feature_projection(extract_features)
-        hidden_states = self._mask_hidden_states(
-            hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
-        )
-
-        encoder_outputs = self.encoder(
-            hidden_states,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-
-        hidden_states = encoder_outputs.last_hidden_state
-
-        if self.adapter is not None:
-            hidden_states = self.adapter(hidden_states)
-
-        return Wav2Vec2ConformerBaseModelOutput(
-            last_hidden_state=hidden_states,
-            extract_features=extract_features,
-        )
-
 
 class Wav2Vec2ConformerForPreTraining(Wav2Vec2ForPreTraining):
     def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
-
-    def forward(
-        self,
-        input_values: torch.Tensor | None,
-        attention_mask: torch.Tensor | None = None,
-        mask_time_indices: torch.BoolTensor | None = None,
-        sampled_negative_indices: torch.BoolTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return super().forward(
-            input_values=input_values,
-            attention_mask=attention_mask,
-            mask_time_indices=mask_time_indices,
-            sampled_negative_indices=sampled_negative_indices,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            **kwargs,
-        )
 
 
 class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
@@ -757,119 +671,20 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
     def freeze_base_model(self):
         raise AttributeError("Not needed for Wav2Vec2Conformer")
 
-    def forward(
-        self,
-        input_values: torch.Tensor | None,
-        attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        labels: torch.Tensor | None = None,
-        **kwargs,
-    ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return super().forward(
-            input_values=input_values,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            labels=labels,
-            **kwargs,
-        )
-
 
 class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ForSequenceClassification):
     def __init__(self, config):
         super().__init__(config)
-
-    def forward(
-        self,
-        input_values: torch.Tensor | None,
-        attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        labels: torch.Tensor | None = None,
-        **kwargs,
-    ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return super().forward(
-            input_values=input_values,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            labels=labels,
-            **kwargs,
-        )
 
 
 class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
     def __init__(self, config):
         super().__init__(config)
 
-    def forward(
-        self,
-        input_values: torch.Tensor | None,
-        attention_mask: torch.Tensor | None = None,
-        labels: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return super().forward(
-            input_values=input_values,
-            attention_mask=attention_mask,
-            labels=labels,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            **kwargs,
-        )
-
 
 class Wav2Vec2ConformerForXVector(Wav2Vec2ForXVector):
     def __init__(self, config):
         super().__init__(config)
-
-    def forward(
-        self,
-        input_values: torch.Tensor | None,
-        attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        labels: torch.Tensor | None = None,
-        **kwargs,
-    ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return super().forward(
-            input_values=input_values,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            labels=labels,
-            **kwargs,
-        )
 
 
 __all__ = [

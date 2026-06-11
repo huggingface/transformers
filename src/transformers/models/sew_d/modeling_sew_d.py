@@ -27,7 +27,9 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, get_torch_context_manager_or_global_device
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple
 from .configuration_sew_d import SEWDConfig
 
 
@@ -1434,16 +1436,14 @@ class SEWDForCTC(SEWDPreTrainedModel):
         for param in self.sew_d.parameters():
             param.requires_grad = False
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
@@ -1452,20 +1452,16 @@ class SEWDForCTC(SEWDPreTrainedModel):
             All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         if labels is not None and labels.max() >= self.config.vocab_size:
             raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
         outputs = self.sew_d(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         hidden_states = self.dropout(hidden_states)
 
         logits = self.lm_head(hidden_states)
@@ -1497,10 +1493,6 @@ class SEWDForCTC(SEWDPreTrainedModel):
                     reduction=self.config.ctc_loss_reduction,
                     zero_infinity=self.config.ctc_zero_infinity,
                 )
-
-        if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
@@ -1547,16 +1539,14 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
         for param in self.sew_d.parameters():
             param.requires_grad = False
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -1570,25 +1560,22 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+        if self.config.use_weighted_layer_sum:
+            kwargs["output_hidden_states"] = True
 
         outputs = self.sew_d(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         if self.config.use_weighted_layer_sum:
-            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = outputs.hidden_states
             hidden_states = torch.stack(hidden_states, dim=1)
             norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
             hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
         else:
-            hidden_states = outputs[0]
+            hidden_states = outputs.last_hidden_state
 
         hidden_states = self.projector(hidden_states)
         if attention_mask is None:
@@ -1605,10 +1592,6 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,

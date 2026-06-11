@@ -45,6 +45,8 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_peft_available
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_data2vec_audio import Data2VecAudioConfig
 
 
@@ -325,11 +327,14 @@ class Data2VecAudioEncoderLayer(GradientCheckpointingLayer):
         self.feed_forward = Data2VecAudioFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
         attn_residual = hidden_states
-        hidden_states, attn_weights, _ = self.attention(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-        )
+        hidden_states, _, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
 
@@ -337,12 +342,7 @@ class Data2VecAudioEncoderLayer(GradientCheckpointingLayer):
         hidden_states = hidden_states + self.feed_forward(hidden_states)
         hidden_states = self.final_layer_norm(hidden_states)
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 class Data2VecAudioEncoder(nn.Module):
@@ -359,13 +359,8 @@ class Data2VecAudioEncoder(nn.Module):
         self,
         hidden_states: torch.tensor,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
         if attention_mask is not None:
             # make sure padded tokens output 0
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
@@ -385,36 +380,15 @@ class Data2VecAudioEncoder(nn.Module):
         synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = self.training and dropout_probability < self.config.layerdrop
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                layer_outputs = layer(
-                    hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-                )
-                hidden_states = layer_outputs[0]
+                hidden_states = layer(hidden_states, attention_mask=attention_mask, **kwargs)
 
-            if skip_the_layer:
-                layer_outputs = (None, None)
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class Data2VecAudioAdapterLayer(nn.Module):
@@ -466,6 +440,70 @@ class Data2VecAudioAdapter(nn.Module):
         return hidden_states
 
 
+class Data2VecAudioAttnAdapterLayer(nn.Module):
+    def __init__(self, config):
+        """
+        Implements adapter modules directly with 3D tensor weight as parameters and without using ModuleList to speed
+        up training throughput.
+        """
+        super().__init__()
+        self.input_dim = config.adapter_attn_dim
+        self.hidden_dim = config.hidden_size
+
+        self.norm = nn.LayerNorm(self.hidden_dim)
+        self.linear_1 = nn.Linear(self.hidden_dim, self.input_dim)
+        self.act_fn = nn.ReLU()
+        self.linear_2 = nn.Linear(self.input_dim, self.hidden_dim)
+
+    def forward(self, hidden_states: torch.FloatTensor):
+        hidden_states = self.norm(hidden_states)
+
+        hidden_states = self.linear_1(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+
+        return hidden_states
+
+
+class Data2VecAudioEncoderLayerStableLayerNorm(GradientCheckpointingLayer):
+    def __init__(self, config):
+        super().__init__()
+        self.attention = Data2VecAudioAttention(
+            embed_dim=config.hidden_size,
+            num_heads=config.num_attention_heads,
+            dropout=config.attention_dropout,
+            is_decoder=False,
+            config=config,
+        )
+        self.dropout = nn.Dropout(config.hidden_dropout)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.feed_forward = Data2VecAudioFeedForward(config)
+        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        if getattr(config, "adapter_attn_dim", None) is not None:
+            self.adapter_layer = Data2VecAudioAttnAdapterLayer(config)
+        else:
+            self.adapter_layer = None
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        attn_residual = hidden_states
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states, _, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = attn_residual + hidden_states
+        hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
+
+        if self.adapter_layer is not None:
+            hidden_states = hidden_states + self.adapter_layer(hidden_states)
+
+        return hidden_states
+
+
 @auto_docstring
 class Data2VecAudioPreTrainedModel(PreTrainedModel):
     config: Data2VecAudioConfig
@@ -476,6 +514,10 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+    _can_record_outputs = {
+        "hidden_states": [Data2VecAudioEncoderLayer, Data2VecAudioEncoderLayerStableLayerNorm],
+        "attentions": OutputRecorder(Data2VecAudioAttention, index=1, layer_name="encoder"),
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -739,28 +781,21 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
 
         return hidden_states
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
         mask_time_indices: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Data2VecAudioBaseModelOutput:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
             masked extracted features in *config.proj_codevector_dim* space.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)
 
@@ -778,28 +813,18 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
         encoder_outputs = self.encoder(
             hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        hidden_states = encoder_outputs[0]
+        hidden_states = encoder_outputs.last_hidden_state
 
         if self.adapter is not None:
             hidden_states = self.adapter(hidden_states)
 
-        if not return_dict:
-            return (hidden_states, extract_features) + encoder_outputs[1:]
-
         return Data2VecAudioBaseModelOutput(
             last_hidden_state=hidden_states,
             extract_features=extract_features,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
-
-
-_HIDDEN_STATES_START_POSITION = 2
 
 
 @auto_docstring(
@@ -842,16 +867,14 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
         """
         self.data2vec_audio.feature_extractor._freeze_parameters()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
@@ -860,20 +883,16 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
             All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         if labels is not None and labels.max() >= self.config.vocab_size:
             raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
         outputs = self.data2vec_audio(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         hidden_states = self.dropout(hidden_states)
 
         logits = self.lm_head(hidden_states)
@@ -905,10 +924,6 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
                     reduction=self.config.ctc_loss_reduction,
                     zero_infinity=self.config.ctc_zero_infinity,
                 )
-
-        if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
@@ -954,16 +969,14 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
         for param in self.data2vec_audio.parameters():
             param.requires_grad = False
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -977,25 +990,22 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+        if self.config.use_weighted_layer_sum:
+            kwargs["output_hidden_states"] = True
 
         outputs = self.data2vec_audio(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         if self.config.use_weighted_layer_sum:
-            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = outputs.hidden_states
             hidden_states = torch.stack(hidden_states, dim=1)
             norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
             hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
         else:
-            hidden_states = outputs[0]
+            hidden_states = outputs.last_hidden_state
 
         hidden_states = self.projector(hidden_states)
         if attention_mask is None:
@@ -1012,10 +1022,6 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
@@ -1058,16 +1064,14 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
         for param in self.data2vec_audio.parameters():
             param.requires_grad = False
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | TokenClassifierOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -1081,25 +1085,22 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+        if self.config.use_weighted_layer_sum:
+            kwargs["output_hidden_states"] = True
 
         outputs = self.data2vec_audio(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         if self.config.use_weighted_layer_sum:
-            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = outputs.hidden_states
             hidden_states = torch.stack(hidden_states, dim=1)
             norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
             hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
         else:
-            hidden_states = outputs[0]
+            hidden_states = outputs.last_hidden_state
 
         logits = self.classifier(hidden_states)
 
@@ -1107,10 +1108,6 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), torch.argmax(labels.view(-1, self.num_labels), axis=1))
-
-        if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -1230,16 +1227,14 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
 
         return input_lengths
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | XVectorOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -1253,25 +1248,22 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+        if self.config.use_weighted_layer_sum:
+            kwargs["output_hidden_states"] = True
 
         outputs = self.data2vec_audio(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         if self.config.use_weighted_layer_sum:
-            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = outputs.hidden_states
             hidden_states = torch.stack(hidden_states, dim=1)
             norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
             hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
         else:
-            hidden_states = outputs[0]
+            hidden_states = outputs.last_hidden_state
 
         hidden_states = self.projector(hidden_states)
 
@@ -1300,10 +1292,6 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
         loss = None
         if labels is not None:
             loss = self.objective(logits, labels)
-
-        if not return_dict:
-            output = (logits, output_embeddings) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
 
         return XVectorOutput(
             loss=loss,

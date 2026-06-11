@@ -27,7 +27,10 @@ from ...modeling_outputs import (
     XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel, get_torch_context_manager_or_global_device
-from ...utils import auto_docstring, is_peft_available, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, is_peft_available, logging
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_wavlm import WavLMConfig
 
 
@@ -149,8 +152,8 @@ class WavLMAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_bias: torch.Tensor | None = None,
-        output_attentions: bool = False,
         index=0,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Attention layer with relative attention"""
         bsz, tgt_len, _ = hidden_states.size()
@@ -180,7 +183,7 @@ class WavLMAttention(nn.Module):
         gated_position_bias = gated_position_bias.view((-1, tgt_len, tgt_len))
 
         attn_output, attn_weights = self.torch_multi_head_self_attention(
-            hidden_states, attention_mask, gated_position_bias, output_attentions
+            hidden_states, attention_mask, gated_position_bias
         )
 
         return attn_output, attn_weights, position_bias
@@ -190,7 +193,6 @@ class WavLMAttention(nn.Module):
         hidden_states: torch.FloatTensor,
         attention_mask: torch.LongTensor | torch.BoolTensor,
         gated_position_bias: torch.FloatTensor,
-        output_attentions: bool,
     ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         """simple wrapper around torch's multi_head_attention_forward function"""
         # self-attention assumes q = k = v
@@ -219,8 +221,8 @@ class WavLMAttention(nn.Module):
             self.out_proj.bias,
             self.training,
             key_padding_mask,
-            output_attentions,
-            gated_position_bias,
+            need_weights=True,  # eager attention always returns the attention weights
+            attn_mask=gated_position_bias,
             use_separate_proj_weight=True,
             q_proj_weight=self.q_proj.weight,
             k_proj_weight=self.k_proj.weight,
@@ -311,14 +313,14 @@ class WavLMEncoderLayer(GradientCheckpointingLayer):
         self.feed_forward = WavLMFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, position_bias=None, output_attentions=False, index=0):
+    def forward(self, hidden_states, attention_mask=None, position_bias=None, index=0, **kwargs):
         attn_residual = hidden_states
         hidden_states, attn_weights, position_bias = self.attention(
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
-            output_attentions=output_attentions,
             index=index,
+            **kwargs,
         )
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
@@ -328,12 +330,7 @@ class WavLMEncoderLayer(GradientCheckpointingLayer):
         hidden_states = hidden_states + self.feed_forward(hidden_states)
         hidden_states = self.final_layer_norm(hidden_states)
 
-        outputs = (hidden_states, position_bias)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states, position_bias
 
 
 class WavLMEncoderLayerStableLayerNorm(GradientCheckpointingLayer):
@@ -352,25 +349,20 @@ class WavLMEncoderLayerStableLayerNorm(GradientCheckpointingLayer):
         self.feed_forward = WavLMFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, position_bias=None, output_attentions=False):
+    def forward(self, hidden_states, attention_mask=None, position_bias=None, **kwargs):
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
         hidden_states, attn_weights, position_bias = self.attention(
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
-            output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
         hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
 
-        outputs = (hidden_states, position_bias)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states, position_bias
 
 
 class WavLMEncoder(nn.Module):
@@ -389,13 +381,8 @@ class WavLMEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        **kwargs,
     ):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
         if attention_mask is not None:
             # make sure padded tokens output 0
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
@@ -410,41 +397,21 @@ class WavLMEncoder(nn.Module):
         position_bias = None
 
         for i, layer in enumerate(self.layers):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = self.training and i > 0 and (dropout_probability < self.config.layerdrop)
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                layer_outputs = layer(
+                hidden_states, position_bias = layer(
                     hidden_states,
                     attention_mask=attention_mask,
                     position_bias=position_bias,
-                    output_attentions=output_attentions,
                     index=i,
+                    **kwargs,
                 )
 
-                hidden_states, position_bias = layer_outputs[:2]
-
-            if skip_the_layer:
-                layer_outputs = (None, None, None)
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[2],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class WavLMEncoderStableLayerNorm(nn.Module):
@@ -466,13 +433,8 @@ class WavLMEncoderStableLayerNorm(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        **kwargs,
     ):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
         if attention_mask is not None:
             # make sure padded tokens are not attended to
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
@@ -486,9 +448,6 @@ class WavLMEncoderStableLayerNorm(nn.Module):
         position_bias = None
 
         for i, layer in enumerate(self.layers):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
@@ -496,30 +455,16 @@ class WavLMEncoderStableLayerNorm(nn.Module):
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
-                layer_outputs = layer(
+                hidden_states, position_bias = layer(
                     hidden_states,
                     attention_mask=attention_mask,
-                    output_attentions=output_attentions,
                     position_bias=position_bias,
+                    **kwargs,
                 )
-                hidden_states, position_bias = layer_outputs[:2]
-
-            if skip_the_layer:
-                layer_outputs = (None, None, None)
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[2],)
 
         hidden_states = self.layer_norm(hidden_states)
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class WavLMGumbelVectorQuantizer(nn.Module):
@@ -602,6 +547,10 @@ class WavLMPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
+    _can_record_outputs = {
+        "hidden_states": [WavLMEncoderLayer, WavLMEncoderLayerStableLayerNorm],
+        "attentions": OutputRecorder(WavLMAttention, index=1, layer_name="encoder"),
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1035,28 +984,21 @@ class WavLMModel(WavLMPreTrainedModel):
 
         return hidden_states
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
         mask_time_indices: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | WavLMBaseModelOutput:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
             masked extracted features in *config.proj_codevector_dim* space.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)
 
@@ -1074,28 +1016,18 @@ class WavLMModel(WavLMPreTrainedModel):
         encoder_outputs = self.encoder(
             hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        hidden_states = encoder_outputs[0]
+        hidden_states = encoder_outputs.last_hidden_state
 
         if self.adapter is not None:
             hidden_states = self.adapter(hidden_states)
 
-        if not return_dict:
-            return (hidden_states, extract_features) + encoder_outputs[1:]
-
         return WavLMBaseModelOutput(
             last_hidden_state=hidden_states,
             extract_features=extract_features,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
-
-
-_HIDDEN_STATES_START_POSITION = 2
 
 
 @auto_docstring(
@@ -1172,16 +1104,14 @@ class WavLMForCTC(WavLMPreTrainedModel):
         for param in self.wavlm.parameters():
             param.requires_grad = False
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
@@ -1190,20 +1120,16 @@ class WavLMForCTC(WavLMPreTrainedModel):
             All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         if labels is not None and labels.max() >= self.config.vocab_size:
             raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
         outputs = self.wavlm(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         hidden_states = self.dropout(hidden_states)
 
         logits = self.lm_head(hidden_states)
@@ -1235,10 +1161,6 @@ class WavLMForCTC(WavLMPreTrainedModel):
                     reduction=self.config.ctc_loss_reduction,
                     zero_infinity=self.config.ctc_zero_infinity,
                 )
-
-        if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
@@ -1284,16 +1206,14 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
         for param in self.wavlm.parameters():
             param.requires_grad = False
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -1307,25 +1227,22 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+        if self.config.use_weighted_layer_sum:
+            kwargs["output_hidden_states"] = True
 
         outputs = self.wavlm(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         if self.config.use_weighted_layer_sum:
-            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = outputs.hidden_states
             hidden_states = torch.stack(hidden_states, dim=1)
             norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
             hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
         else:
-            hidden_states = outputs[0]
+            hidden_states = outputs.last_hidden_state
 
         hidden_states = self.projector(hidden_states)
         if attention_mask is None:
@@ -1342,10 +1259,6 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
@@ -1388,16 +1301,14 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
         for param in self.wavlm.parameters():
             param.requires_grad = False
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | TokenClassifierOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -1411,25 +1322,22 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+        if self.config.use_weighted_layer_sum:
+            kwargs["output_hidden_states"] = True
 
         outputs = self.wavlm(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         if self.config.use_weighted_layer_sum:
-            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = outputs.hidden_states
             hidden_states = torch.stack(hidden_states, dim=1)
             norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
             hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
         else:
-            hidden_states = outputs[0]
+            hidden_states = outputs.last_hidden_state
 
         logits = self.classifier(hidden_states)
 
@@ -1437,10 +1345,6 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), torch.argmax(labels.view(-1, self.num_labels), axis=1))
-
-        if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -1560,16 +1464,14 @@ class WavLMForXVector(WavLMPreTrainedModel):
 
         return input_lengths
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | XVectorOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -1583,25 +1485,22 @@ class WavLMForXVector(WavLMPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+        if self.config.use_weighted_layer_sum:
+            kwargs["output_hidden_states"] = True
 
         outputs = self.wavlm(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         if self.config.use_weighted_layer_sum:
-            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = outputs.hidden_states
             hidden_states = torch.stack(hidden_states, dim=1)
             norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
             hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
         else:
-            hidden_states = outputs[0]
+            hidden_states = outputs.last_hidden_state
 
         hidden_states = self.projector(hidden_states)
 
@@ -1630,10 +1529,6 @@ class WavLMForXVector(WavLMPreTrainedModel):
         loss = None
         if labels is not None:
             loss = self.objective(logits, labels)
-
-        if not return_dict:
-            output = (logits, output_embeddings) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
 
         return XVectorOutput(
             loss=loss,
