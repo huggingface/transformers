@@ -55,6 +55,7 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fa.md">فارسی</a> |
          <b>Română</b> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_tr.md">Türkçe</a> |
     </p>
 </h4>
 
