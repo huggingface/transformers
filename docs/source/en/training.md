@@ -68,7 +68,7 @@ A data collator assembles dataset samples into batches for the model to process.
 - Set `mlm=False` to avoid randomly masking tokens.
 
 ```py
-data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False),
+data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
 ```
 
 ## Loading a model
