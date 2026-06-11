@@ -595,13 +595,15 @@ class MaskFormerImageProcessor(TorchvisionBackend):
                 semantic_map = resized_logits[0].argmax(dim=0)
                 semantic_segmentation.append(
                     SemanticSegmentationPostProcessorOutput(
-                        segmentation=semantic_map, segmentation_scores=resized_logits[0]
+                        data={"segmentation": semantic_map, "segmentation_scores": resized_logits[0]}
                     )
                 )
         else:
             seg_maps = segmentation.argmax(dim=1)
             semantic_segmentation = [
-                SemanticSegmentationPostProcessorOutput(segmentation=seg_maps[i], segmentation_scores=segmentation[i])
+                SemanticSegmentationPostProcessorOutput(
+                    data={"segmentation": seg_maps[i], "segmentation_scores": segmentation[i]}
+                )
                 for i in range(batch_size)
             ]
 

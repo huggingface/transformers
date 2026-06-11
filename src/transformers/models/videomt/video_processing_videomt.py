@@ -219,7 +219,9 @@ class VideomtVideoProcessor(BaseVideoProcessor):
         output_logits = self._resize_mask_logits(segmentation_logits, target_sizes)
 
         semantic_segmentation = [
-            SemanticSegmentationPostProcessorOutput(segmentation=logit.argmax(dim=0), segmentation_scores=logit)
+            SemanticSegmentationPostProcessorOutput(
+                data={"segmentation": logit.argmax(dim=0), "segmentation_scores": logit}
+            )
             for logit in output_logits
         ]
 

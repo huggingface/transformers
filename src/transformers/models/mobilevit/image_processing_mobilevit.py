@@ -249,13 +249,16 @@ class MobileViTImageProcessor(TorchvisionBackend):
                 )
                 semantic_segmentation.append(
                     SemanticSegmentationPostProcessorOutput(
-                        segmentation=resized_logits[0].argmax(dim=0), segmentation_scores=resized_logits[0]
+                        data={
+                            "segmentation": resized_logits[0].argmax(dim=0),
+                            "segmentation_scores": resized_logits[0],
+                        }
                     )
                 )
         else:
             semantic_segmentation = [
                 SemanticSegmentationPostProcessorOutput(
-                    segmentation=logits[i].argmax(dim=0), segmentation_scores=logits[i]
+                    data={"segmentation": logits[i].argmax(dim=0), "segmentation_scores": logits[i]}
                 )
                 for i in range(batch_size)
             ]

@@ -609,9 +609,6 @@ if TYPE_CHECKING:
     from .image_processing_backends import PilBackend as PilBackend
     from .image_processing_backends import TorchvisionBackend as TorchvisionBackend
     from .image_processing_base import ImageProcessingMixin as ImageProcessingMixin
-    from .image_processing_outputs import (
-        SemanticSegmentationPostProcessorOutput as SemanticSegmentationPostProcessorOutput,
-    )
     from .image_processing_utils import BaseImageProcessor as BaseImageProcessor
     from .image_utils import ImageFeatureExtractionMixin as ImageFeatureExtractionMixin
 

@@ -778,15 +778,19 @@ class Sam3ImageProcessor(TorchvisionBackend):
                 )
                 semantic_segmentation.append(
                     SemanticSegmentationPostProcessorOutput(
-                        segmentation=(resized_probs[0, 0] > threshold).to(torch.long),
-                        segmentation_scores=resized_probs[0],
+                        data={
+                            "segmentation": (resized_probs[0, 0] > threshold).to(torch.long),
+                            "segmentation_scores": resized_probs[0],
+                        }
                     )
                 )
         else:
             semantic_segmentation = [
                 SemanticSegmentationPostProcessorOutput(
-                    segmentation=(semantic_probs[i, 0] > threshold).to(torch.long),
-                    segmentation_scores=semantic_probs[i],
+                    data={
+                        "segmentation": (semantic_probs[i, 0] > threshold).to(torch.long),
+                        "segmentation_scores": semantic_probs[i],
+                    }
                 )
                 for i in range(batch_size)
             ]

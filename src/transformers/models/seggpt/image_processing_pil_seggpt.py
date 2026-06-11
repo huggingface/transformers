@@ -309,7 +309,9 @@ class SegGptImageProcessorPil(PilBackend):
                 segmentation_scores = None
 
             semantic_segmentation.append(
-                SemanticSegmentationPostProcessorOutput(segmentation=pred, segmentation_scores=segmentation_scores)
+                SemanticSegmentationPostProcessorOutput(
+                    data={"segmentation": pred, "segmentation_scores": segmentation_scores}
+                )
             )
 
         if not return_segmentation_scores:

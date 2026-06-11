@@ -553,7 +553,9 @@ class EomtImageProcessorPil(PilBackend):
                 output_logits.append(resized_logits[0])
 
         semantic_segmentation = [
-            SemanticSegmentationPostProcessorOutput(segmentation=logit.argmax(dim=0), segmentation_scores=logit)
+            SemanticSegmentationPostProcessorOutput(
+                data={"segmentation": logit.argmax(dim=0), "segmentation_scores": logit}
+            )
             for logit in output_logits
         ]
 

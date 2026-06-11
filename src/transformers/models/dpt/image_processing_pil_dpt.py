@@ -312,13 +312,13 @@ class DPTImageProcessorPil(PilBackend):
                 semantic_map = resized_logits[0].argmax(dim=0)
                 semantic_segmentation.append(
                     SemanticSegmentationPostProcessorOutput(
-                        segmentation=semantic_map, segmentation_scores=resized_logits[0]
+                        data={"segmentation": semantic_map, "segmentation_scores": resized_logits[0]}
                     )
                 )
         else:
             semantic_segmentation = [
                 SemanticSegmentationPostProcessorOutput(
-                    segmentation=logits[i].argmax(dim=0), segmentation_scores=logits[i]
+                    data={"segmentation": logits[i].argmax(dim=0), "segmentation_scores": logits[i]}
                 )
                 for i in range(logits.shape[0])
             ]

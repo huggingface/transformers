@@ -743,14 +743,17 @@ class OneFormerImageProcessor(TorchvisionBackend):
                 )
                 semantic_segmentation.append(
                     SemanticSegmentationPostProcessorOutput(
-                        segmentation=resized_logits[0].argmax(dim=0), segmentation_scores=resized_logits[0]
+                        data={
+                            "segmentation": resized_logits[0].argmax(dim=0),
+                            "segmentation_scores": resized_logits[0],
+                        }
                     )
                 )
         else:
             semantic_map = segmentation.argmax(dim=1)
             semantic_segmentation = [
                 SemanticSegmentationPostProcessorOutput(
-                    segmentation=semantic_map[i], segmentation_scores=segmentation[i]
+                    data={"segmentation": semantic_map[i], "segmentation_scores": segmentation[i]}
                 )
                 for i in range(batch_size)
             ]
