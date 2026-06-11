@@ -42,6 +42,7 @@ if is_torch_available():
         ParakeetRNNTConfig,
         ParakeetTDTConfig,
     )
+    from transformers.loss.loss_rnnt import rnnt_loss
     from transformers.loss.loss_tdt import tdt_loss
 
 
@@ -123,6 +124,88 @@ class TDTLossTest(unittest.TestCase):
         self.assertIsNotNone(inputs["duration_logits"].grad)
         self.assertFalse(torch.all(inputs["token_logits"].grad == 0))
         self.assertFalse(torch.all(inputs["duration_logits"].grad == 0))
+
+
+@require_torch
+@require_torchaudio
+class RNNTLossTest(unittest.TestCase):
+    """Test rnnt_loss against reference values generated from HF's own rnnt_loss on synthetic logits.
+
+    rnnt_loss is a thin wrapper around `torchaudio.functional.rnnt_loss`; the part this pins down is the
+    NeMo-style reduction logic (`mean_volume`, `mean_batch`, `mean`, `sum`, `none`) layered on top. On random
+    inputs there is no ground truth (NeMo, torchaudio and HF all implement the same RNN-T NLL), so the fixture
+    snapshots HF's reductions directly.
+    reproducer: https://gist.github.com/eustlb/2b9a9a85ec447b176d14b23fc1484496#file-generate_rnnt_loss_fixtures-py
+    """
+
+    FIXTURE_PATH = FIXTURES_DIR / "expected_rnnt_loss.json"
+
+    @classmethod
+    def setUpClass(cls):
+        with open(cls.FIXTURE_PATH) as f:
+            cls.fixture = json.load(f)
+
+    def _make_inputs(self):
+        torch.manual_seed(self.fixture["seed"])
+        batch_size = self.fixture["batch_size"]
+        max_t = self.fixture["max_t"]
+        max_u = self.fixture["max_u"]
+        vocab_size = self.fixture["vocab_size"]
+        blank_token_id = self.fixture["blank_token_id"]
+
+        logits = torch.randn(batch_size, max_t, max_u + 1, vocab_size)
+        targets = torch.randint(0, blank_token_id, (batch_size, max_u))
+
+        return {
+            "logits": logits,
+            "targets": targets,
+            "logit_lengths": torch.tensor(self.fixture["logit_lengths"]),
+            "target_lengths": torch.tensor(self.fixture["target_lengths"]),
+            "blank_token_id": blank_token_id,
+        }
+
+    def test_rnnt_loss_none(self):
+        inputs = self._make_inputs()
+        losses = rnnt_loss(**inputs, reduction="none")
+        expected = torch.tensor(self.fixture["expected_loss_none"])
+        torch.testing.assert_close(losses, expected)
+
+    def test_rnnt_loss_sum(self):
+        inputs = self._make_inputs()
+        loss = rnnt_loss(**inputs, reduction="sum")
+        expected = torch.tensor(self.fixture["expected_loss_sum"])
+        torch.testing.assert_close(loss, expected)
+
+    def test_rnnt_loss_mean_batch(self):
+        inputs = self._make_inputs()
+        loss = rnnt_loss(**inputs, reduction="mean_batch")
+        expected = torch.tensor(self.fixture["expected_loss_mean_batch"])
+        torch.testing.assert_close(loss, expected)
+
+    def test_rnnt_loss_mean(self):
+        inputs = self._make_inputs()
+        loss = rnnt_loss(**inputs, reduction="mean")
+        expected = torch.tensor(self.fixture["expected_loss_mean"])
+        torch.testing.assert_close(loss, expected)
+
+    def test_rnnt_loss_mean_volume(self):
+        inputs = self._make_inputs()
+        loss = rnnt_loss(**inputs, reduction="mean_volume")
+        expected = torch.tensor(self.fixture["expected_loss_mean_volume"])
+        torch.testing.assert_close(loss, expected)
+
+    def test_rnnt_loss_invalid_reduction(self):
+        inputs = self._make_inputs()
+        with self.assertRaises(ValueError):
+            rnnt_loss(**inputs, reduction="not_a_reduction")
+
+    def test_rnnt_loss_gradient_flows(self):
+        inputs = self._make_inputs()
+        inputs["logits"] = inputs["logits"].requires_grad_(True)
+        loss = rnnt_loss(**inputs, reduction="mean_volume")
+        loss.backward()
+        self.assertIsNotNone(inputs["logits"].grad)
+        self.assertFalse(torch.all(inputs["logits"].grad == 0))
 
 
 class ParakeetEncoderModelTester:
@@ -749,11 +832,6 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
 
         # Use float32 for loss precision
         model = ParakeetForTDT.from_pretrained(self.checkpoint_name, dtype=torch.float32, device_map="auto")
-        # This fixture was generated with an HF-style "mean" reduction (per-sample / target_length, then
-        # averaged), not NeMo's native reduction, so pin "mean" to match it. The model's default is
-        # "mean_volume" (parakeet-tdt-0.6b-v3's NeMo rnnt_reduction). TODO: regenerate this fixture from NeMo's
-        # native `model.loss` (mean_volume), like reproducer_rnnt_loss.py does, and drop this override.
-        model.config.loss_reduction = "mean"
 
         inputs = self.processor(
             audio=samples,
@@ -762,10 +840,13 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         )
         inputs.to(model.device)
 
-        # Forward in eval mode — check loss matches NeMo
+        # Forward in eval mode — check loss matches NeMo. This fixture was generated with an HF-style "mean"
+        # reduction (per-sample / target_length, then averaged), not NeMo's native reduction, so pass
+        # `reduction="mean"` to match it (the loss default is "mean_volume"). TODO: regenerate this fixture from
+        # NeMo's native `model.loss` (mean_volume), like reproducer_rnnt_loss.py does, and drop this override.
         model.eval()
         with torch.no_grad():
-            outputs = model(**inputs)
+            outputs = model(**inputs, reduction="mean")
         self.assertIsNotNone(outputs.loss, "Loss must be computed when labels are provided")
         self.assertEqual(outputs.logits.dim(), 4, "Training logits must be 4D (B, T, U+1, V+D)")
         torch.testing.assert_close(outputs.loss.cpu(), EXPECTED_MEAN_LOSS, rtol=1e-3, atol=1e-3)
