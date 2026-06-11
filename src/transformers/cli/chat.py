@@ -410,13 +410,7 @@ class Chat:
         elif user_input == "!help":
             interface.print_help()
 
-        elif user_input.startswith("!save") and len(user_input.split()) < 2:
-            split_input = user_input.split()
-            filename = (
-                split_input[1]
-                if len(split_input) == 2
-                else os.path.join(self.save_folder, self.model_id, f"chat_{time.strftime('%Y-%m-%d_%H-%M-%S')}.json")
-            )
+        elif (filename := get_chat_save_filename(user_input, self.save_folder, self.model_id)) is not None:
             save_chat(filename=filename, chat=chat, settings=self.settings)
             interface.print_color(text=f"Chat saved to {filename}!", color="green")
 
@@ -498,15 +492,7 @@ class Chat:
                         interface.print_help()
                         continue
 
-                    elif user_input.startswith("!save") and len(user_input.split()) < 2:
-                        split_input = user_input.split()
-                        filename = (
-                            split_input[1]
-                            if len(split_input) == 2
-                            else os.path.join(
-                                self.save_folder, self.model_id, f"chat_{time.strftime('%Y-%m-%d_%H-%M-%S')}.json"
-                            )
-                        )
+                    elif (filename := get_chat_save_filename(user_input, self.save_folder, self.model_id)) is not None:
                         save_chat(filename=filename, chat=chat, settings=self.settings)
                         interface.print_color(text=f"Chat saved to {filename}!", color="green")
                         continue
@@ -653,9 +639,23 @@ def new_chat_history(system_prompt: str | None = None) -> list[dict]:
     return [{"role": "system", "content": system_prompt}] if system_prompt else []
 
 
+def get_chat_save_filename(user_input: str, save_folder: str, model_id: str) -> str | None:
+    """Returns the filename for a valid !save command, or None if the command is invalid."""
+    split_input = user_input.split()
+    if not split_input or split_input[0] != "!save" or len(split_input) > 2:
+        return None
+
+    if len(split_input) == 2:
+        return split_input[1]
+
+    return os.path.join(save_folder, model_id, f"chat_{time.strftime('%Y-%m-%d_%H-%M-%S')}.json")
+
+
 def save_chat(filename: str, chat: list[dict], settings: dict) -> str:
     """Saves the chat history to a file."""
-    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    dirname = os.path.dirname(filename)
+    if dirname:
+        os.makedirs(dirname, exist_ok=True)
     with open(filename, "w") as f:
         json.dump({"settings": settings, "chat_history": chat}, f, indent=4)
     return os.path.abspath(filename)
