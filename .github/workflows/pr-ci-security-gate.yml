@@ -9,40 +9,8 @@ permissions:
   contents: read
 
 jobs:
-  security-check:
+  security-gate:
     # Members/collaborators/owners trigger PR CI directly — gate only needed for forks
     if: "!contains(fromJSON('[\"MEMBER\",\"OWNER\",\"COLLABORATOR\"]'), github.event.pull_request.author_association)"
-    runs-on: ubuntu-22.04
-    outputs:
-      result: ${{ steps.check.outputs.result }}
-    steps:
-      - name: Security check
-        id: check
-        run: |
-          # TODO: add real checks (e.g. no workflow file changes, no CI infra changes)
-          sleep 60
-          echo "result=pass" >> "$GITHUB_OUTPUT"
-
-  approve-pr-ci:
-    needs: security-check
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Find and approve the pending PR CI workflow run
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          REPO: ${{ github.repository }}
-        run: |
-          for i in $(seq 1 12); do
-            run_id=$(gh api \
-              "repos/$REPO/actions/runs?event=pull_request&head_sha=$HEAD_SHA&status=action_required" \
-              --jq '.workflow_runs[] | select(.name == "PR CI") | .id' | head -1)
-            if [ -n "$run_id" ]; then
-              gh api --method POST "repos/$REPO/actions/runs/$run_id/approve"
-              echo "Approved run $run_id"
-              exit 0
-            fi
-            echo "Attempt $i: run not yet pending, retrying in 5s..."
-            sleep 5
-          done
-          echo "No pending PR CI run found after retries — skipping"
+    uses: huggingface/transformers-test-ci/.github/workflows/pr-ci-security-gate.yml@main
+    secrets: inherit
