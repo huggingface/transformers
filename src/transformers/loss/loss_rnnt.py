@@ -32,7 +32,7 @@ def rnnt_loss(
     reduction: str = "mean_volume",
 ) -> torch.Tensor:
     """
-    Compute standard RNN-T (RNN Transducer) loss (https://arxiv.org/abs/1211.3711).
+    Compute standard RNN-T (RNN Transducer) loss (https://huggingface.co/papers/1211.3711).
 
     Thin wrapper around [`torchaudio.functional.rnnt_loss`]. torchaudio is queried with `reduction="none"` to get
     the per-sample negative log-likelihoods, and the requested reduction is applied here. The reduction names and
