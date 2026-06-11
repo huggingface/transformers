@@ -13,6 +13,7 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 from torch import nn
@@ -125,11 +126,8 @@ class VJEPA2WithMaskedInputModelOutput(ModelOutput):
     predictor_output: VJEPA2WithMaskedInputPredictorOutput | None = None
     hierarchical_hidden_state: torch.FloatTensor | None = None
 
-    def to_tuple(self):
-        output = list(super().to_tuple())
-        if isinstance(output[-1], VJEPA2WithMaskedInputPredictorOutput):
-            output[-1] = output[-1].to_tuple()
-        return tuple(output)
+    def to_tuple(self) -> tuple[Any]:
+        return tuple(v.to_tuple() if isinstance(v, ModelOutput) else v for v in self.values())
 
 
 class VJEPA2PatchEmbeddings3D(nn.Module):
@@ -733,13 +731,13 @@ class VJEPA2Predictor(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> VJEPA2PredictorOutput:
         encoder_hidden_states = apply_masks(encoder_hidden_states, context_mask)
-        _, N_ctxt, D = encoder_hidden_states.shape
+        _, num_context_tokens, _ = encoder_hidden_states.shape
         hidden_states, position_masks = self.embeddings(encoder_hidden_states, context_mask, target_mask)
 
         argsort = torch.argsort(position_masks, dim=1)  # [B, N]
         hidden_states, position_masks = self.sort_tokens(hidden_states, position_masks, argsort)
 
-        if self.config.use_modality_embeddings and hasattr(self.embeddings, "video_mod_embed"):
+        if self.config.use_modality_embeddings:
             if is_image:
                 hidden_states = hidden_states + self.embeddings.img_mod_embed
             else:
@@ -752,8 +750,10 @@ class VJEPA2Predictor(nn.Module):
         hidden_states = self.layernorm(hidden_states)
         hidden_states = self.unsort_tokens(hidden_states, argsort)
 
-        target_predictions = self.proj(hidden_states[:, N_ctxt:])
-        context_predictions = self.proj_context(hidden_states[:, :N_ctxt]) if self.proj_context is not None else None
+        target_predictions = self.proj(hidden_states[:, num_context_tokens:])
+        context_predictions = (
+            self.proj_context(hidden_states[:, :num_context_tokens]) if self.proj_context is not None else None
+        )
 
         return VJEPA2PredictorOutput(
             last_hidden_state=target_predictions,
@@ -1070,7 +1070,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
 
         if context_mask is None and target_mask is None:
             B = pixel_values_videos.size(0)
-            N = sequence_output.size(1)
+            N = sequence_output.size(1)  # ensure we are using dynamic patch size
             context_mask = [torch.arange(N, device=pixel_values_videos.device).unsqueeze(0).repeat((B, 1))]
             target_mask = [torch.arange(N, device=pixel_values_videos.device).unsqueeze(0).repeat((B, 1))]
 
