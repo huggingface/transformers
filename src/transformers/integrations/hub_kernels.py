@@ -310,6 +310,7 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 2},
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
+    "tdt-loss": {"repo_id": "eustlb/tdt-loss", "revision": "v1"},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}

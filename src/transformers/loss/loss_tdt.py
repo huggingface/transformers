@@ -20,6 +20,17 @@ from ..utils import logging
 logger = logging.get_logger(__name__)
 
 
+def _load_tdt_kernel():
+    """Try to load the TDT loss CUDA kernel from the Hub. Returns None on failure."""
+    from ..integrations.hub_kernels import lazy_load_kernel
+
+    kernel = lazy_load_kernel("tdt-loss")
+    if kernel is None or not hasattr(kernel, "tdt_loss"):
+        logger.warning_once("Falling back to pure PyTorch implementation.")
+        return None
+    return kernel
+
+
 def tdt_loss(
     token_logits: torch.Tensor,
     duration_logits: torch.Tensor,
@@ -38,6 +49,9 @@ def tdt_loss(
     the token prediction head and the duration prediction head. It uses vectorized anti-diagonal processing for
     efficiency: all (t, u) pairs on each anti-diagonal t+u=n are computed in parallel as batched tensor operations.
 
+    When the ``kernels-community/tdt-loss`` CUDA kernel is installed, it is used automatically for GPU tensors,
+    Falls back to the pure PyTorch implementation otherwise.
+
     Args:
         token_logits: Token logits of shape `(batch, T, U+1, vocab_size+1)`.
         duration_logits: Duration logits of shape `(batch, T, U+1, num_durations)`.
@@ -53,6 +67,20 @@ def tdt_loss(
         Scalar loss tensor (or per-example losses if `reduction="none"`).
 
     """
+    kernel = _load_tdt_kernel() if token_logits.is_cuda else None
+    if kernel is not None and hasattr(kernel, "tdt_loss"):
+        durations_t = torch.tensor(durations, dtype=torch.int32, device=token_logits.device)
+        return kernel.tdt_loss(
+            token_logits,
+            duration_logits,
+            targets,
+            logit_lengths,
+            target_lengths,
+            durations_t,
+            blank_token_id,
+            sigma,
+            reduction,
+        )
 
     if reduction not in ("mean", "sum", "none"):
         raise ValueError(f'Invalid reduction mode "{reduction}". Expected one of "mean", "sum", or "none".')
