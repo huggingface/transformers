@@ -105,12 +105,14 @@ try:
             "cuda": LayerRepository(
                 repo_id="kernels-community/deformable-detr",
                 layer_name="MultiScaleDeformableAttention",
+                version=1,
             )
         },
         "Llama4TextMoe": {
             "cuda": LayerRepository(
                 repo_id="kernels-community/moe",
                 layer_name="Llama4TextMoe",
+                version=1,
             )
         },
         "RMSNorm": {
@@ -119,30 +121,35 @@ try:
                     repo_id="kernels-community/liger_kernels",
                     layer_name="LigerRMSNorm",
                     # revision="pure-layer-test",
+                    version=1,
                 ),
             },
             "rocm": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger_kernels",
                     layer_name="LigerRMSNorm",
+                    version=1,
                 )
             },
             "xpu": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/rmsnorm",
                     layer_name="RMSNorm",
+                    version=1,
                 )
             },
             "mps": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/mlx_rmsnorm",
                     layer_name="RMSNorm",
+                    version=1,
                 )
             },
             "npu": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger_kernels",
                     layer_name="LigerRMSNorm",
+                    version=1,
                 )
             },
         },
@@ -150,6 +157,7 @@ try:
             "cuda": LayerRepository(
                 repo_id="medmekk/triton-llama-mlp",
                 layer_name="TritonLlamaMLP",
+                version=1,
             )
         },
         "MegaBlocksMoeMLP": {
@@ -157,28 +165,33 @@ try:
                 Mode.TRAINING: LayerRepository(
                     repo_id="kernels-community/megablocks",
                     layer_name="MegaBlocksMoeMLP",
+                    version=1,
                 ),
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/megablocks",
                     layer_name="MegaBlocksMoeMLP",
+                    version=1,
                 ),
             },
             "rocm": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="ahadnagy/megablocks",
                     layer_name="MegaBlocksMoeMLP",
+                    version=1,
                 )
             },
             "xpu": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/megablocks",
                     layer_name="MegaBlocksMoeMLP",
+                    version=1,
                 )
             },
             "cpu": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/megablocks",
                     layer_name="CPUMegaBlocksMoeMLP",
+                    version=1,
                 )
             },
         },
@@ -237,15 +250,15 @@ try:
         _KERNEL_MAPPING["rotary_pos_emb"] = {
             "xpu": {
                 Mode.INFERENCE: FuncRepository(
-                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers", version=1,
                 )
             },
             "cuda": {
                 Mode.TRAINING: FuncRepository(
-                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers", version=1,
                 ),
                 Mode.INFERENCE: FuncRepository(
-                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers", version=1,
                 ),
             },
         }
