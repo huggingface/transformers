@@ -16,8 +16,13 @@ Processor class for InstructBLIP. Largely copy of Blip2Processor with addition o
 """
 
 from ...image_processing_utils import BatchFeature
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
-from ...tokenization_utils_base import AddedToken
+from ...image_utils import ImageInput
+from ...processing_utils import (
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
+)
+from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 
 
@@ -65,9 +70,6 @@ class InstructBlipProcessor(ProcessorMixin):
 
     @auto_docstring
     def __call__(self, images=None, text=None, **kwargs) -> BatchFeature:
-        if images is None and text is None:
-            raise ValueError("You have to specify at least images or text.")
-
         output_kwargs = self._merge_kwargs(
             InstructBlipProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -88,19 +90,27 @@ class InstructBlipProcessor(ProcessorMixin):
         model_inputs.update(qformer_encoding)
         return model_inputs
 
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(images=images, text=text)
+
+        if images is None and text is None:
+            raise ValueError("You have to specify at least images or text.")
+
     def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
         images, text, videos, audio = super().prepare_inputs_layout(
             images=images, text=text, videos=videos, audio=audio, **kwargs
         )
-        if text is not None:
-            if images is not None and self.num_query_tokens is not None:
-                text = [self.image_token + sample for sample in text]
-            else:
-                text = [self.tokenizer.bos_token + sample for sample in text]
+        if text is not None and images is not None and self.num_query_tokens is not None:
+            text = [self.image_token + sample for sample in text]
         return images, text, videos, audio
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
-        return self.image_token * self.num_query_tokens + self.tokenizer.bos_token
+        return self.image_token * self.num_query_tokens
 
     @property
     def model_input_names(self):

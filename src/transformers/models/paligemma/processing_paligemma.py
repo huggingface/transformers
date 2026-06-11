@@ -128,6 +128,9 @@ class PaliGemmaProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
+        if text is None:
+            text = ""
+
         images, text, videos, audio = super().prepare_inputs_layout(
             images=images, text=text, videos=videos, audio=audio, **kwargs
         )
@@ -181,6 +184,22 @@ class PaliGemmaProcessor(ProcessorMixin):
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         return self.image_token * self.image_seq_length
 
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(images=images, text=text)
+
+        if images is None:
+            raise ValueError("`images` are expected as arguments to a `PaliGemmaProcessor` instance.")
+
+        if text is None:
+            logger.warning_once(
+                "You are using PaliGemma without a text prefix. It will perform as a picture-captioning model."
+            )
+
     @auto_docstring
     def __call__(
         self,
@@ -200,13 +219,6 @@ class PaliGemmaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **labels** -- Labels compatible with training if `suffix` is not None
         """
-        if images is None:
-            raise ValueError("`images` are expected as arguments to a `PaliGemmaProcessor` instance.")
-        if text is None:
-            logger.warning_once(
-                "You are using PaliGemma without a text prefix. It will perform as a picture-captioning model."
-            )
-            text = ""
 
         suffix = kwargs.pop("suffix", None)
         if suffix is not None:
@@ -216,6 +228,12 @@ class PaliGemmaProcessor(ProcessorMixin):
             kwargs["text_pair"] = suffix
 
         kwargs["return_token_type_ids"] = True
+        kwargs = self._merge_kwargs(
+            PaliGemmaProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        return_tensors = kwargs["text_kwargs"].get("return_tensors")
 
         result = super().__call__(images=images, text=text, **kwargs)
 
@@ -225,7 +243,7 @@ class PaliGemmaProcessor(ProcessorMixin):
             labels[np.array(result["token_type_ids"]) == 0] = -100
             result["labels"] = labels
 
-        return result
+        return BatchFeature(data=result, tensor_type=return_tensors)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """

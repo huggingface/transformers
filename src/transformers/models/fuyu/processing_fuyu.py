@@ -16,6 +16,7 @@ Image/Text processor class for GIT
 """
 
 import re
+from typing import Union
 
 import numpy as np
 
@@ -100,7 +101,7 @@ def full_unpacked_stream_to_tensor(
 
 
 def construct_full_unpacked_stream(
-    num_real_text_tokens: list[list[int]] | "torch.Tensor",
+    num_real_text_tokens: Union[list[list[int]], "torch.Tensor"],
     input_stream: "torch.Tensor",
     image_tokens: list[list["torch.Tensor"]],
     batch_size: int,

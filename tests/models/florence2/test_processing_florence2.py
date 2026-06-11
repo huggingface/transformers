@@ -66,6 +66,10 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             }
         }
 
+    @unittest.skip("Florence doesn't support mixed inputs, all samples have to have an image associated!")
+    def test_processor_text_has_no_visual(self):
+        pass
+
     def test_construct_prompts(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)
 

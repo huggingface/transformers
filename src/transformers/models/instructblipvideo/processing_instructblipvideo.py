@@ -16,9 +16,14 @@ Processor class for InstructBLIP. Largely copy of Blip2Processor with addition o
 """
 
 from ...image_processing_utils import BatchFeature
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
-from ...tokenization_utils_base import AddedToken
+from ...processing_utils import (
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
+)
+from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
@@ -63,10 +68,12 @@ class InstructBlipVideoProcessor(ProcessorMixin):
         super().__init__(video_processor, tokenizer, qformer_tokenizer)
 
     @auto_docstring
-    def __call__(self, images=None, text=None, **kwargs) -> BatchFeature:
-        if images is None and text is None:
-            raise ValueError("You have to specify at least one of images or text.")
-
+    def __call__(
+        self,
+        videos: VideoInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[InstructBlipVideoProcessorKwargs],
+    ) -> BatchFeature:
         output_kwargs = self._merge_kwargs(
             InstructBlipVideoProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -83,24 +90,32 @@ class InstructBlipVideoProcessor(ProcessorMixin):
             qformer_encoding["qformer_input_ids"] = qformer_text_encoding.pop("input_ids")
             qformer_encoding["qformer_attention_mask"] = qformer_text_encoding.pop("attention_mask")
 
-        model_inputs = super().__call__(images=images, text=text, **output_kwargs)
+        model_inputs = super().__call__(videos=videos, text=text, **output_kwargs)
         model_inputs.update(qformer_encoding)
         return model_inputs
+
+    def validate_inputs(
+        self,
+        videos: VideoInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(videos=videos, text=text, **kwargs)
+
+        if videos is None and text is None:
+            raise ValueError("You have to specify at least videos or text.")
 
     def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
         images, text, videos, audio = super().prepare_inputs_layout(
             images=images, text=text, videos=videos, audio=audio, **kwargs
         )
-        if text is not None:
-            if images is not None and self.num_query_tokens is not None:
-                text = [self.video_token + sample for sample in text]
-            else:
-                text = [self.tokenizer.bos_token + sample for sample in text]
+        if text is not None and videos is not None and self.num_query_tokens is not None:
+            text = [self.video_token + sample for sample in text]
         return images, text, videos, audio
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
         # InstructBLIP video uses 4 frames, each with num_query_tokens video tokens
-        return self.video_token * self.num_query_tokens * 4 + self.tokenizer.bos_token
+        return self.video_token * self.num_query_tokens * 4
 
     @property
     def model_input_names(self):

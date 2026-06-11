@@ -20,7 +20,9 @@
 import re
 from typing import Any
 
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...image_utils import ImageInput
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging
 
 
@@ -138,16 +140,32 @@ class Florence2Processor(ProcessorMixin):
         images, text, videos, audio = super().prepare_inputs_layout(
             images=images, text=text, videos=videos, audio=audio, **kwargs
         )
+
         if text is None and images is not None:
             logger.warning_once("You are using Florence-2 without a text prefix.")
-            text = [""] * len(images)
+            text = [""] * (1 if not isinstance(images, list) else len(images))
+
         if text is not None:
             text = self._construct_prompts(text)
+
         if images is not None and text is not None:
-            if len(images) != len(text):
-                raise ValueError(f"Number of images ({len(images)}) must match number of texts ({len(text)}).")
             text = [self.image_token + self.tokenizer.bos_token + t + self.tokenizer.eos_token for t in text]
+
         return images, text, videos, audio
+
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(images=images, text=text)
+
+        if not isinstance(text, list) or not all(isinstance(token, str) for token in text):
+            raise ValueError("`text` must be a string or list of strings.")
+
+        if isinstance(images, list) and len(images) != len(text):
+            raise ValueError(f"Number of images ({len(images)}) must match number of texts ({len(text)}).")
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         return self.image_token * self.num_image_tokens

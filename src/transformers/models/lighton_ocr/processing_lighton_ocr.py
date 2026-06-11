@@ -100,7 +100,6 @@ def get_resize_output_image_size(
 
 class LightOnOcrProcessor(ProcessorMixin):
     valid_processor_kwargs = LightOnOcrProcessorKwargs
-    unused_input_names = ["image_sizes"]
 
     def __init__(
         self,

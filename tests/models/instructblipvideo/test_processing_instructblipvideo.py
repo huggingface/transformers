@@ -32,6 +32,7 @@ if is_vision_available():
 @require_torch
 class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = InstructBlipVideoProcessor
+    videos_input_name = "pixel_values"
 
     @classmethod
     def _setup_tokenizer(cls):

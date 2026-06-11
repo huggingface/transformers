@@ -17,7 +17,6 @@ Processor class for Pixtral.
 
 import numpy as np
 
-from ...image_utils import is_valid_image
 from ...processing_utils import (
     MultiModalData,
     ProcessingKwargs,
@@ -44,16 +43,6 @@ class PixtralProcessorKwargs(ProcessingKwargs, total=False):
             "return_tensors": "pt",
         },
     }
-
-
-# Copied from transformers.models.idefics2.processing_idefics2.is_url
-def is_url(val) -> bool:
-    return isinstance(val, str) and val.startswith("http")
-
-
-# Copied from transformers.models.idefics2.processing_idefics2.is_image_or_image_url
-def is_image_or_image_url(elem):
-    return is_url(elem) or is_valid_image(elem)
 
 
 @auto_docstring
@@ -102,7 +91,7 @@ class PixtralProcessor(ProcessorMixin):
         return [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
 
     def _process_images(self, images, **images_kwargs):
-        images_kwargs.setdefault("patch_size", self.patch_size * self.spatial_merge_size)
+        images_kwargs["patch_size"] = self.patch_size * self.spatial_merge_size
         return super()._process_images(images, **images_kwargs)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:

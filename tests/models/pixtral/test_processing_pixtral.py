@@ -43,6 +43,12 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.image_2 = np.random.randint(255, size=(3, 1024, 1024), dtype=np.uint8)
         cls.image_token = processor.image_token
 
+    @classmethod
+    def _setup_from_pretrained(cls, model_id, **kwargs):
+        processor = super()._setup_from_pretrained(model_id, **kwargs)
+        processor.tokenizer.pad_token_id = 0  # loaded tokenizer has no PAD defined
+        return processor
+
     @parameterized.expand([(1, "pt"), (2, "pt")])
     @unittest.skip("Not tested before, to investigate")
     def test_apply_chat_template_image(self, batch_size, return_tensors):
