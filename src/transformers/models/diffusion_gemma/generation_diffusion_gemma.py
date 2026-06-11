@@ -104,6 +104,8 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
 
         > Special tokens that can be used at generation time
 
+        bos_token_id (`int`, *optional*):
+            The id of the *beginning-of-sequence* token.
         pad_token_id (`int`, *optional*):
             The id of the *padding* token.
         eos_token_id (`Union[int, list[int]]`, *optional*):
@@ -133,6 +135,7 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
         self.cache_config: dict[str, Any] | None = kwargs.pop("cache_config", None)
 
         # Special tokens that can be used at generation time
+        self.bos_token_id: int | None = kwargs.pop("bos_token_id", None)
         self.pad_token_id: int | None = kwargs.pop("pad_token_id", None)
         self.eos_token_id: list[int] | int | None = kwargs.pop("eos_token_id", None)
 
