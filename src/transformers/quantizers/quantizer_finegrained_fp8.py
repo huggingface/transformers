@@ -202,10 +202,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         return quant_method == "mxfp8"
 
     def _update_weight_conversions_mxfp8(self, weight_conversions):
-        """Native MXFP8 path: prepend an :class:`Fp8DecodeScale` op so the uint8 E8M0
-        scales are decoded to float32 ``2 ** (byte - 127)`` *before* any merge/concat op
-        collapses the per-expert structure, and add a generic fallback converter that
-        decodes the scales of plain ``FP8Linear`` weights (attention / dense projections)
+        """
+        Native MXFP8 path: prepend a `Fp8DecodeScale` op so the uint8 E8M0
+        scales are decoded to float32 `2 ** (byte - 127)` *before* any merge/concat op
+        and add a generic fallback converter that decodes the scales of plain `FP8Linear` weights (attention / dense projections)
         which have no model-specific converter.
         """
         from ..core_model_loading import WeightConverter
@@ -250,14 +250,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         :meth:`get_weight_conversions` is still appended at the end as a fallback for
         plain ``nn.Linear`` weights with no model-specific converter.
         """
-        # Native (``dequantize=False``) path: the weights stay in ``float8_e4m3fn`` and
-        # the model's own converters route the sibling ``*.weight_scale_inv`` keys through
-        # the same substring match + suffix-preserving rename as ``*.weight`` (see
-        # huggingface/transformers#45634). MXFP8 checkpoints ship those per-block scales as
-        # ``uint8`` E8M0 exponents (real scale = ``2 ** (byte - 127)``), but the FP8 compute
-        # path expects float32 multiplicative scales — so decode them at conversion time.
         if not (self.pre_quantized and self.quantization_config.dequantize):
             if self.pre_quantized and self._is_mxfp8():
+                # mxfp8 needs a pre-processing on the scales when not dequantizing
                 return self._update_weight_conversions_mxfp8(weight_conversions)
             return weight_conversions + self.get_weight_conversions()
 

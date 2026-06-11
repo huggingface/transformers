@@ -1018,7 +1018,7 @@ class Fp8Dequantize(ConversionOps):
         # the math; emit in the scales' dtype when it's a real float, otherwise bf16.
         out_dtype = scales.dtype if scales.dtype.is_floating_point and scales.element_size() >= 2 else torch.bfloat16
         # MXFP8 checkpoints ship E8M0 exponents stored as ``torch.uint8`` (one byte per
-        # block) — the actual scale is ``2 ** (byte - 127)``. Interpreting the raw bytes
+        # block) — the actual scale is `2 ** (byte - 127)`. Interpreting the raw bytes
         # as scalar multipliers would be silently wrong, so unpack to fp32 here.
         if scales.dtype == torch.uint8:
             s_fp32 = (scales.to(torch.float32) - 127.0).exp2()
