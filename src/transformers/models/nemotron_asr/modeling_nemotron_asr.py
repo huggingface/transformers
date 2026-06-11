@@ -1031,17 +1031,6 @@ class NemotronAsrEncoder(NemotronAsrPreTrainedModel):
         )
 
     def _resolve_attn_context(self, num_lookahead_tokens: int | None = None) -> tuple[int, int]:
-        """
-        Resolve the effective `(left, right)` attention context for this forward pass.
-
-        - If `num_lookahead_tokens` is provided by the caller → uses it (and warns once if it is outside
-          the model's trained set `config.supported_num_lookahead_tokens`).
-        - Otherwise → uses `config.default_num_lookahead_tokens`.
-
-        The left context is `config.sliding_window - 1` (the window spans the left context plus the
-        current frame).
-        """
-        left = self.config.sliding_window - 1
         supported = self.config.supported_num_lookahead_tokens
         if num_lookahead_tokens is None:
             num_lookahead_tokens = self.config.default_num_lookahead_tokens
@@ -1051,7 +1040,9 @@ class NemotronAsrEncoder(NemotronAsrPreTrainedModel):
                 f"(trained right contexts: {supported}). The model may still produce reasonable "
                 f"output, but quality is not guaranteed."
             )
-        return left, num_lookahead_tokens
+
+        left_context = self.config.sliding_window - 1
+        return left_context, num_lookahead_tokens
 
 
 @dataclass

@@ -24,14 +24,13 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ...audio_utils import AudioInput, make_list_of_audio
+from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...cache_utils import Cache, DynamicCache
-from ...generation import GenerationMode
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
@@ -39,12 +38,11 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    logging,
     is_torchdynamo_compiling,
+    logging,
 )
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..auto import AutoModel
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import eager_attention_forward
 from ..parakeet.configuration_parakeet import ParakeetEncoderConfig, ParakeetRNNTConfig
@@ -53,13 +51,9 @@ from ..parakeet.modeling_parakeet import (
     ParakeetEncoder,
     ParakeetEncoderAttention,
     ParakeetEncoderBlock,
-    ParakeetEncoderFeedForward,
-    ParakeetEncoderModelOutput,
     ParakeetEncoderRelPositionalEncoding,
     ParakeetForRNNT,
     ParakeetPreTrainedModel,
-    ParakeetRNNTDecoder,
-    ParakeetRNNTJointNetwork,
     ParakeetRNNTOutput,
 )
 from ..parakeet.processing_parakeet import ParakeetProcessor
@@ -301,9 +295,15 @@ class NemotronAsrProcessor(ParakeetProcessor):
             The right context used when `streaming_latency_ms` is not provided. Defaults to the first entry
             of `supported_num_lookahead_tokens`.
         """
-        self.supported_num_lookahead_tokens = supported_num_lookahead_tokens if supported_num_lookahead_tokens is not None else DEFAULT_NUM_LOOKAHEAD_TOKENS
+        self.supported_num_lookahead_tokens = (
+            supported_num_lookahead_tokens
+            if supported_num_lookahead_tokens is not None
+            else DEFAULT_NUM_LOOKAHEAD_TOKENS
+        )
         self.default_num_lookahead_tokens = (
-            default_num_lookahead_tokens if default_num_lookahead_tokens is not None else self.supported_num_lookahead_tokens[0]
+            default_num_lookahead_tokens
+            if default_num_lookahead_tokens is not None
+            else self.supported_num_lookahead_tokens[0]
         )
         super().__init__(feature_extractor, tokenizer, blank_token=blank_token, decoder_type=decoder_type)
 
@@ -660,7 +660,7 @@ class NemotronAsrEncoderCausalConvPaddingCache:
         return torch.cat([padding_states, hidden_states], dim=2)
 
 
-class NemotronAsrEncoderCausalConv1d(VoxtralRealtimeCausalConv1d): ... 
+class NemotronAsrEncoderCausalConv1d(VoxtralRealtimeCausalConv1d): ...
 
 
 class NemotronAsrEncoderCausalConv2D(nn.Conv2d):
@@ -734,7 +734,6 @@ class NemotronAsrEncoderModelOutput(BaseModelOutputWithPooling):
     attention_mask: torch.Tensor | None = None
     past_key_values: Cache | None = None
     padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None
-
 
 
 class NemotronAsrEncoderRelPositionalEncoding(ParakeetEncoderRelPositionalEncoding):
@@ -1185,17 +1184,6 @@ class NemotronAsrEncoder(ParakeetEncoder):
         )
 
     def _resolve_attn_context(self, num_lookahead_tokens: int | None = None) -> tuple[int, int]:
-        """
-        Resolve the effective `(left, right)` attention context for this forward pass.
-
-        - If `num_lookahead_tokens` is provided by the caller → uses it (and warns once if it is outside
-          the model's trained set `config.supported_num_lookahead_tokens`).
-        - Otherwise → uses `config.default_num_lookahead_tokens`.
-
-        The left context is `config.sliding_window - 1` (the window spans the left context plus the
-        current frame).
-        """
-        left = self.config.sliding_window - 1
         supported = self.config.supported_num_lookahead_tokens
         if num_lookahead_tokens is None:
             num_lookahead_tokens = self.config.default_num_lookahead_tokens
@@ -1205,7 +1193,9 @@ class NemotronAsrEncoder(ParakeetEncoder):
                 f"(trained right contexts: {supported}). The model may still produce reasonable "
                 f"output, but quality is not guaranteed."
             )
-        return left, num_lookahead_tokens
+
+        left_context = self.config.sliding_window - 1
+        return left_context, num_lookahead_tokens
 
 
 @dataclass
