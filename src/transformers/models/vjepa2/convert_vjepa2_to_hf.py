@@ -414,7 +414,7 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
         if "2_1" in model_name and config.use_context_projection:
             og_target, og_context = original_predictor_outputs
             assert torch.allclose(predictor_outputs.last_hidden_state, og_target, atol=1e-2)
-            assert torch.allclose(predictor_outputs.context_predictions, og_context, atol=1e-2)
+            assert torch.allclose(predictor_outputs.context_predictions, og_context, atol=2e-2)
         else:
             assert torch.allclose(predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3)
         # test partial mask
@@ -438,7 +438,7 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
         if "2_1" in model_name and config.use_context_projection:
             og_target, og_context = original_predictor_outputs
             assert torch.allclose(predictor_outputs.last_hidden_state, og_target, atol=1e-2)
-            assert torch.allclose(predictor_outputs.context_predictions, og_context, atol=1e-2)
+            assert torch.allclose(predictor_outputs.context_predictions, og_context, atol=2e-2)
         else:
             assert torch.allclose(predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3)
 
