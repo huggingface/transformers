@@ -440,70 +440,6 @@ class Data2VecAudioAdapter(nn.Module):
         return hidden_states
 
 
-class Data2VecAudioAttnAdapterLayer(nn.Module):
-    def __init__(self, config):
-        """
-        Implements adapter modules directly with 3D tensor weight as parameters and without using ModuleList to speed
-        up training throughput.
-        """
-        super().__init__()
-        self.input_dim = config.adapter_attn_dim
-        self.hidden_dim = config.hidden_size
-
-        self.norm = nn.LayerNorm(self.hidden_dim)
-        self.linear_1 = nn.Linear(self.hidden_dim, self.input_dim)
-        self.act_fn = nn.ReLU()
-        self.linear_2 = nn.Linear(self.input_dim, self.hidden_dim)
-
-    def forward(self, hidden_states: torch.FloatTensor):
-        hidden_states = self.norm(hidden_states)
-
-        hidden_states = self.linear_1(hidden_states)
-        hidden_states = self.act_fn(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-
-        return hidden_states
-
-
-class Data2VecAudioEncoderLayerStableLayerNorm(GradientCheckpointingLayer):
-    def __init__(self, config):
-        super().__init__()
-        self.attention = Data2VecAudioAttention(
-            embed_dim=config.hidden_size,
-            num_heads=config.num_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=False,
-            config=config,
-        )
-        self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.feed_forward = Data2VecAudioFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        if getattr(config, "adapter_attn_dim", None) is not None:
-            self.adapter_layer = Data2VecAudioAttnAdapterLayer(config)
-        else:
-            self.adapter_layer = None
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        attn_residual = hidden_states
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states, _, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = attn_residual + hidden_states
-        hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
-
-        if self.adapter_layer is not None:
-            hidden_states = hidden_states + self.adapter_layer(hidden_states)
-
-        return hidden_states
-
-
 @auto_docstring
 class Data2VecAudioPreTrainedModel(PreTrainedModel):
     config: Data2VecAudioConfig
@@ -515,8 +451,8 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _can_record_outputs = {
-        "hidden_states": [Data2VecAudioEncoderLayer, Data2VecAudioEncoderLayerStableLayerNorm],
-        "attentions": OutputRecorder(Data2VecAudioAttention, index=1, layer_name="encoder"),
+        "hidden_states": Data2VecAudioEncoderLayer,  # noqa: F821
+        "attentions": OutputRecorder(Data2VecAudioAttention, index=1, layer_name="encoder"),  # noqa: F821
     }
 
     @torch.no_grad()
