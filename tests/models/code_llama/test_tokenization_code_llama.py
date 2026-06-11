@@ -159,6 +159,23 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 self.assertTrue(special_token_id in r_output)
 
+    def test_leading_space_roundtrip(self):
+        # Regression test for issue #46491: decode must preserve leading spaces.
+        #
+        # The Metaspace normalizer prepends a synthetic ▁ that merges into the
+        # first content token (e.g. ▁hello). A real leading space produces a
+        # pure-▁ token (▁=29871, ▁▁=259, ▁▁▁=1678, …) ahead of the first
+        # content token and is distinguishable from the synthetic prefix.
+        #
+        # A single leading space is genuinely ambiguous (" hello" and "hello"
+        # both encode to the same IDs) and is therefore not asserted here.
+        pyth_tokenizer, rust_tokenizer = self.get_tokenizers()
+        for tok in (pyth_tokenizer, rust_tokenizer):
+            for s in ["  hello", "   leading spaces", "    indented_line"]:
+                ids = tok.encode(s, add_special_tokens=False)
+                decoded = tok.decode(ids, skip_special_tokens=True)
+                self.assertEqual(decoded, s, msg=f"Round-trip failed for {s!r}: got {decoded!r}")
+
 
 @require_tokenizers
 class LlamaIntegrationTest(unittest.TestCase):
@@ -360,23 +377,6 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(
             inputs_ids, [1, 518, 25580, 29962, 1128, 526, 366, 2599, 29973, 1, 29961, 29914, 25580, 29962]
         )
-
-    def test_leading_space_roundtrip(self):
-        # Regression test for issue #46491: decode must preserve leading spaces.
-        #
-        # The Metaspace normalizer prepends a synthetic ▁ that merges into the
-        # first content token (e.g. ▁hello). A real leading space produces a
-        # standalone ▁ token (29871) *ahead of* the first content token and is
-        # distinguishable from the synthetic prefix — decode must not strip it.
-        #
-        # A single leading space is genuinely ambiguous (" hello" and "hello"
-        # both encode to the same IDs) and is therefore not asserted here.
-        pyth_tokenizer, rust_tokenizer = self.get_tokenizers()
-        for tok in (pyth_tokenizer, rust_tokenizer):
-            for s in ["  hello", "   leading spaces", "    indented_line"]:
-                ids = tok.encode(s, add_special_tokens=False)
-                decoded = tok.decode(ids, skip_special_tokens=True)
-                self.assertEqual(decoded, s, msg=f"Round-trip failed for {s!r}: got {decoded!r}")
 
     def test_infilling_tokenization(self):
         PROMPTS = [
