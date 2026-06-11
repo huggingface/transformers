@@ -246,6 +246,43 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         common(is_instance_map=False, segmentation_type="pil")
         common(is_instance_map=True, segmentation_type="pil")
 
+    def test_call_with_void_segmentation_maps(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/30064
+        # Segmentation maps where every pixel is `ignore_index` (void), or every pixel is background
+        # when `do_reduce_labels=True`, should produce empty mask and class labels instead of raising.
+        image = np.random.randint(0, 256, size=(30, 40, 3), dtype=np.uint8)
+        ignore_index = self.image_processor_tester.ignore_index
+        void_map = np.full(image.shape[:2], ignore_index, dtype=np.uint8)
+        image_processor_dict = {**self.image_processor_dict, "do_resize": False, "do_reduce_labels": False}
+
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**image_processor_dict)
+
+            # single all-void segmentation map
+            inputs = image_processing(image, segmentation_maps=void_map, return_tensors="pt")
+            self.assertEqual(inputs["mask_labels"][0].shape, (0, *image.shape[:2]))
+            self.assertEqual(inputs["class_labels"][0].shape, (0,))
+
+            # batch mixing a void and a non-void map: the void sample yields no masks, the other is unaffected
+            non_void_map = np.zeros(image.shape[:2], dtype=np.uint8)
+            non_void_map[:10, :10] = 1
+            inputs = image_processing([image, image], segmentation_maps=[void_map, non_void_map], return_tensors="pt")
+            self.assertEqual(inputs["mask_labels"][0].shape[0], 0)
+            self.assertEqual(inputs["class_labels"][0].shape[0], 0)
+            self.assertEqual(inputs["mask_labels"][1].shape[0], 2)
+            self.assertEqual(inputs["class_labels"][1].shape[0], 2)
+            # padding is still applied to the empty masks
+            for mask_label in inputs["mask_labels"]:
+                self.assertEqual(mask_label.shape[1:], inputs["pixel_values"].shape[2:])
+
+            # all-background map with do_reduce_labels=True: background is mapped to `ignore_index`,
+            # so the resulting map is void as well
+            image_processing = image_processing_class(**{**image_processor_dict, "do_reduce_labels": True})
+            background_map = np.zeros(image.shape[:2], dtype=np.uint8)
+            inputs = image_processing(image, segmentation_maps=background_map, return_tensors="pt")
+            self.assertEqual(inputs["mask_labels"][0].shape, (0, *image.shape[:2]))
+            self.assertEqual(inputs["class_labels"][0].shape, (0,))
+
     def test_integration_instance_segmentation(self):
         # load 2 images and corresponding annotations from the hub
         repo_id = "nielsr/image-segmentation-toy-data"
