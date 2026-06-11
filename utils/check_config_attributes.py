@@ -67,6 +67,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "JambaConfig": ["attn_layer_offset", "attn_layer_period", "expert_layer_offset", "expert_layer_period"],
     "JetMoeConfig": ["output_router_logits"],
     "Phi3Config": ["embd_pdrop"],
+    "Param2MoEConfig": ["scoring_func"],
     "EncodecConfig": ["overlap"],
     "XcodecConfig": ["sample_rate", "audio_channels"],
     "RecurrentGemmaConfig": ["block_types", "attention_window_size"],

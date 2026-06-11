@@ -132,7 +132,7 @@ class Param2MoESparseMoeBlock(nn.Module):
         self.topk_group = config.topk_group
         self.shared_experts = Param2MoEMLP(
             config,
-            intermediate_size=config.moe_intermediate_size * config.num_shared_experts,
+            intermediate_size=config.moe_intermediate_size * config.n_shared_experts,
         )
 
     def route_tokens_to_experts(self, router_logits):

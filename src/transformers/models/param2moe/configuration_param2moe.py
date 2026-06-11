@@ -39,14 +39,10 @@ class Param2MoEConfig(PreTrainedConfig):
     partial_rotary_factor (`float`, *optional*, defaults to 1.0):
         Fraction of each attention head's dimension to apply rotary position embeddings
         to. A value of 1.0 applies RoPE to the full head dimension.
-    moe_router_enable_expert_bias (`bool`, *optional*, defaults to `True`):
-        Whether to add a per-expert learnable scalar bias to routing scores before
-        top-k selection. The bias affects routing decisions only; output weights
-        use unbiased scores to avoid distorting gradients.
     rope_theta (`float`, *optional*, defaults to 1000000.0):
         Base period (theta) for rotary position embeddings. Larger values extend
         the effective context length.
-    score_function (`str`, *optional*, defaults to `"sigmoid"`):
+    scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
         Activation function used to convert router logits to routing scores.
         `"sigmoid"` gives independent per-expert probabilities; `"softmax"` applies
         competitive normalization across all experts.
@@ -111,7 +107,7 @@ class Param2MoEConfig(PreTrainedConfig):
     first_k_dense_replace: int = 1
     n_group: int | None = 1
     num_experts: int = 64
-    num_shared_experts: int = 2
+    n_shared_experts: int = 2
     routed_scaling_factor: float = 2.5
     topk_group: int | None = 1
     norm_topk_prob: bool | None = True
@@ -122,11 +118,10 @@ class Param2MoEConfig(PreTrainedConfig):
     router_dtype: str = "fp32"
     partial_rotary_factor: float = 1.0
     max_window_layers: int = 20
-    moe_router_enable_expert_bias: bool = True
     output_router_logits: bool = False
     sliding_window: int | None = None
     rope_theta: float = 1000000.0
-    score_function: str = "sigmoid"
+    scoring_func: str = "sigmoid"
     torch_dtype: str = "bfloat16"
 
     def validate_architecture(self):
