@@ -16,14 +16,30 @@ jobs:
     outputs:
       result: ${{ steps.check.outputs.result }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
       - name: Security check
         id: check
         run: |
-          # TODO: add real checks (e.g. no workflow file changes, no CI infra changes)
+          # Check for workflow file changes
+          if git diff --name-only origin/${{ github.event.pull_request.base.ref }}...HEAD | grep -q '^\.github/workflows/'; then
+            echo "::error::PR modifies workflow files - manual review required"
+            echo "result=fail" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          # Check for CI infrastructure changes
+          if git diff --name-only origin/${{ github.event.pull_request.base.ref }}...HEAD | grep -qE '^(scripts/|.github/|Makefile|.*\.ya?ml$)'; then
+            echo "::error::PR modifies CI infrastructure - manual review required"
+            echo "result=fail" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
           echo "result=pass" >> "$GITHUB_OUTPUT"
 
   approve-pr-ci:
     needs: security-check
+    if: needs.security-check.result == 'success' && needs.security-check.outputs.result == 'pass'
     runs-on: ubuntu-22.04
     steps:
       - name: Find and approve the pending PR CI workflow run
