@@ -559,6 +559,20 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
             f"Encoder output slice mismatch. Got:\n{hf_encoder[:, :4, :4]}",
         )
 
+        expected_predictor_slice = torch.tensor(
+            [
+                [0.001277238130569458, 0.2505880296230316, 0.06844618916511536, -0.1792779117822647],
+                [0.00841611623764038, 0.10896551609039307, -0.008314952254295349, -0.21254171431064606],
+                [0.22983714938163757, 0.617747962474823, -0.3871285319328308, -0.2716492712497711],
+                [0.1592579483985901, 0.4939582943916321, -0.32962897419929504, -0.24818222224712372],
+            ],
+            device=torch_device,
+        )
+        self.assertTrue(
+            torch.allclose(outputs.predictor_output.last_hidden_state[:, :4, :4], expected_predictor_slice, atol=1e-2),
+            f"Predictor output mismatch. Got: {outputs.predictor_output.last_hidden_state[:, :4, :4]}",
+        )
+
     @slow
     def test_video_classification(self):
         checkpoint = "facebook/vjepa2-vitl-fpc16-256-ssv2"
