@@ -90,6 +90,27 @@ class MyModelImageProcessorPil(PilBackend):
 > [!TIP]
 > See [`LlavaOnevisionImageProcessorPil`] for reference.
 
+### Post-processing
+
+Add post-processing methods directly to the processor class. Post-processing methods are called with the model outputs (`outputs`) and any additional arguments required for the specific post-processing method.
+
+```py
+class MyModelImageProcessor(TorchvisionBackend):
+    ...
+
+    def post_process_my_task(self, outputs, ...):
+        ...
+```
+
+Post-processors either return a list of simple objects (e.g. `list[str]` or `list[torch.Tensor]`) or a list of complex objects (`list[MyTaskPostProcessorOutput]` or `list[dict]`). Post-processor outputs are defined in `src/transformers/image_processing_outputs.py` and inherit from [`BatchFeature`].
+
+```py
+class MyTaskPostProcessorOutput(BatchFeature):
+    predictions: torch.Tensor
+    scores: torch.Tensor
+```
+
+
 ## Video processor
 
 Add a video processor when the model consumes videos or sampled video frames.
@@ -144,6 +165,7 @@ Save the video processor with the checkpoint by instantiating it in the conversi
 > [!TIP]
 > See [`Qwen3VLVideoProcessor`] for reference.
 
+
 ## Register the classes
 
 Expose the processing classes from the model package `__init__.py`. Follow the lazy import pattern used by nearby models and guard imports with the same optional dependencies required by each backend.
@@ -182,6 +204,15 @@ class MyModelImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 ```
 
 Add focused tests for behavior the mixin can't infer, such as custom resizing rules or model-specific kwargs.
+
+Post-processing test mixins are available in `tests/test_image_processing_common.py` and are added on top of [`ImageProcessingTestMixin`].
+
+```py
+class MyModelImageProcessingTest(ImageProcessingTestMixin, MyTaskPostProcessTestMixin, unittest.TestCase):
+```
+
+The tests automatically verify that the correct mixins are used for your model. Mixins for new tasks must be added to `tests/test_image_processing_common.py`.
+
 
 ### Video processor tests
 
