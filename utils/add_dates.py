@@ -93,6 +93,8 @@ def check_file_exists_on_github(file_path: str) -> bool:
 def get_modified_cards() -> list[str]:
     """Get the list of model names from modified files in docs/source/en/model_doc/"""
 
+    a = 1
+
     current_branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
     if current_branch == "main":
         # On main branch, only uncommitted changes detected
