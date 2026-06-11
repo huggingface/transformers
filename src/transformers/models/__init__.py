@@ -78,6 +78,7 @@ if TYPE_CHECKING:
     from .convbert import *
     from .convnext import *
     from .convnextv2 import *
+    from .cosmos3_reasoner import *
     from .cpm import *
     from .cpmant import *
     from .csm import *
@@ -92,9 +93,11 @@ if TYPE_CHECKING:
     from .deberta import *
     from .deberta_v2 import *
     from .decision_transformer import *
+    from .deepseek_ocr2 import *
     from .deepseek_v2 import *
     from .deepseek_v3 import *
     from .deepseek_v4 import *
+    from .deepseek_v32 import *
     from .deepseek_vl import *
     from .deepseek_vl_hybrid import *
     from .deformable_detr import *
@@ -158,6 +161,8 @@ if TYPE_CHECKING:
     from .gemma3n import *
     from .gemma4 import *
     from .gemma4_assistant import *
+    from .gemma4_unified import *
+    from .gemma4_unified_assistant import *
     from .git import *
     from .glm import *
     from .glm4 import *
@@ -170,6 +175,7 @@ if TYPE_CHECKING:
     from .glm_moe_dsa import *
     from .glm_ocr import *
     from .glmasr import *
+    from .glmga import *
     from .glpn import *
     from .got_ocr2 import *
     from .gpt2 import *
@@ -254,6 +260,7 @@ if TYPE_CHECKING:
     from .mbart50 import *
     from .megatron_bert import *
     from .megatron_gpt2 import *
+    from .mellum import *
     from .metaclip_2 import *
     from .mgp_str import *
     from .mimi import *
@@ -391,6 +398,7 @@ if TYPE_CHECKING:
     from .sam3_tracker_video import *
     from .sam3_video import *
     from .sam_hq import *
+    from .sapiens2 import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
     from .seed_oss import *

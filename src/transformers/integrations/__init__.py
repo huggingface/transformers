@@ -50,6 +50,13 @@ _import_structure = {
     "eetq": ["replace_with_eetq_linear"],
     "fbgemm_fp8": ["FbgemmFp8Linear", "FbgemmFp8Llama4TextExperts", "replace_with_fbgemm_fp8_linear"],
     "finegrained_fp8": ["FP8Linear", "replace_with_fp8_linear"],
+    "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module"],
+    "gemma_quant": [
+        "QuantizedEmbedding",
+        "QuantizedLinear",
+        "apply_srq",
+        "replace_with_quant_layers",
+    ],
     "ggml": [
         "GGUF_CONFIG_DEFAULTS_MAPPING",
         "GGUF_CONFIG_MAPPING",
@@ -164,6 +171,11 @@ else:
         "convert_and_export_with_cache",
     ]
 
+_import_structure["tensor_parallel"] = [
+    "shard_and_distribute_module",
+    "ALL_PARALLEL_STYLES",
+    "translate_to_torch_parallel_style",
+]
 try:
     if not is_torch_greater_or_equal("2.5"):
         raise OptionalDependencyNotAvailable()
@@ -208,6 +220,13 @@ if TYPE_CHECKING:
     from .eetq import replace_with_eetq_linear
     from .fbgemm_fp8 import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts, replace_with_fbgemm_fp8_linear
     from .finegrained_fp8 import FP8Linear, replace_with_fp8_linear
+    from .fsdp import is_fsdp_enabled, is_fsdp_managed_module
+    from .gemma_quant import (
+        QuantizedEmbedding,
+        QuantizedLinear,
+        apply_srq,
+        replace_with_quant_layers,
+    )
     from .ggml import (
         GGUF_CONFIG_DEFAULTS_MAPPING,
         GGUF_CONFIG_MAPPING,
@@ -303,6 +322,12 @@ if TYPE_CHECKING:
         pass
     else:
         from .executorch import TorchExportableModuleWithStaticCache, convert_and_export_with_cache
+
+    from .tensor_parallel import (
+        ALL_PARALLEL_STYLES,
+        shard_and_distribute_module,
+        translate_to_torch_parallel_style,
+    )
 
     try:
         if not is_torch_greater_or_equal("2.5"):

@@ -21,8 +21,6 @@ from collections import OrderedDict
 from collections.abc import Iterator
 from typing import Any, TypeVar
 
-from huggingface_hub import repo_exists
-
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import (
@@ -31,6 +29,7 @@ from ...utils import (
     copy_func,
     extract_commit_hash,
     find_adapter_config_file,
+    hf_api,
     is_peft_available,
     is_torch_available,
     logging,
@@ -345,11 +344,13 @@ class _BaseAutoModelClass:
                 **kwargs,
             )
 
-            # if torch_dtype=auto was passed here, ensure to pass it on
-            if kwargs_orig.get("torch_dtype", None) == "auto":
-                kwargs["torch_dtype"] = "auto"
-            if kwargs_orig.get("dtype", None) == "auto":
-                kwargs["dtype"] = "auto"
+            # A concrete dtype is absorbed into the config above and then dropped at the composite
+            # `get_text_config()` swap, so re-inject the user's value as an explicit kwarg to force the model's
+            # `from_pretrained` to honor it over the config's saved dtype (#46459).
+            if kwargs_orig.get("torch_dtype", None) is not None:
+                kwargs["torch_dtype"] = kwargs_orig["torch_dtype"]
+            if kwargs_orig.get("dtype", None) is not None:
+                kwargs["dtype"] = kwargs_orig["dtype"]
             if kwargs_orig.get("quantization_config", None) is not None:
                 kwargs["quantization_config"] = kwargs_orig["quantization_config"]
 
@@ -463,7 +464,7 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         kwargs.pop("use_timm_backbone", None)
-        if not repo_exists(pretrained_model_name_or_path):
+        if not hf_api().repo_exists(pretrained_model_name_or_path):
             return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
