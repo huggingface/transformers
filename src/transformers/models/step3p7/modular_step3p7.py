@@ -32,11 +32,31 @@ from transformers.modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.processing_utils import Unpack
-from transformers.utils import TransformersKwargs, can_return_tuple, logging
+from transformers.utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 
 
 @strict
+@auto_docstring
 class StepRoboticsVisionEncoderConfig(PreTrainedConfig):
+    r"""
+    width (`int`, *optional*, defaults to 1536):
+        Hidden size of the vision encoder.
+    heads (`int`, *optional*, defaults to 16):
+        Number of attention heads in the vision encoder.
+    use_cls_token (`bool`, *optional*, defaults to `False`):
+        Whether to prepend a class token to the vision patch sequence.
+    use_ln_pre (`bool`, *optional*, defaults to `True`):
+        Whether to apply layer normalization before the vision transformer.
+    use_ln_post (`bool`, *optional*, defaults to `False`):
+        Whether to apply layer normalization after the vision transformer.
+    use_abs_posemb (`bool`, *optional*, defaults to `True`):
+        Whether to add absolute position embeddings in the vision encoder.
+    use_rope2d (`bool`, *optional*, defaults to `True`):
+        Whether to use 2D rotary position embeddings in the vision encoder.
+    ls_init_value (`float`, *optional*, defaults to 0.1):
+        Initial value for layer scale parameters in the vision encoder.
+    """
+
     model_type = "perception_encoder"
 
     def __init__(
@@ -77,6 +97,7 @@ class StepRoboticsVisionEncoderConfig(PreTrainedConfig):
 
 
 @strict
+@auto_docstring
 class Step3p7TextConfig(PreTrainedConfig):
     model_type = "step3p5"
     architectures = ["Step3p5ForCausalLM"]
@@ -219,6 +240,7 @@ def _normalize_per_layer_values(
 
 
 @strict
+@auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
 class Step3p7Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
     # This loader is a compatibility shim for original Step VL checkpoints
@@ -805,10 +827,17 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@auto_docstring(
+    custom_intro="""
+    Base class for Step3p7 model outputs.
+    """
+)
 @dataclass
 class Step3p7ModelOutputWithPast(ModelOutput):
-    """Output of `Step3p7Model.forward`. Contains the language model's last hidden state plus
-    the projected image features (when `pixel_values` or `image_embeds` were supplied)."""
+    r"""
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        Hidden states produced by the vision path when image inputs are provided.
+    """
 
     last_hidden_state: torch.FloatTensor | None = None
     past_key_values: list[torch.FloatTensor] | None = None
@@ -817,9 +846,21 @@ class Step3p7ModelOutputWithPast(ModelOutput):
     image_hidden_states: torch.FloatTensor | None = None
 
 
+@auto_docstring(
+    custom_intro="""
+    Base class for Step3p7 causal language model outputs.
+    """
+)
 @dataclass
 class Step3p7CausalLMOutputWithPast(ModelOutput):
-    """Output of `Step3p7ForConditionalGeneration.forward`."""
+    r"""
+    loss (`torch.FloatTensor`, *optional*):
+        Language modeling loss when `labels` are provided.
+    logits (`torch.FloatTensor`, *optional*):
+        Prediction scores of the language modeling head.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        Hidden states produced by the vision path when image inputs are provided.
+    """
 
     loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor = None
@@ -1204,6 +1245,7 @@ class Step3p7TextPreTrainedModel(Step3p7PreTrainedModel):
     config_class = Step3p7TextConfig
 
 
+@auto_docstring
 class Step3p7TextModel(Step3p7TextPreTrainedModel):
     _no_split_modules = ["Step3p7DecoderLayer"]
     base_model_prefix = "model"
@@ -1330,6 +1372,11 @@ class Step3p7TextModel(Step3p7TextPreTrainedModel):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    The bare Step3p7 vision-language model outputting raw hidden states without any specific head on top.
+    """
+)
 class Step3p7Model(Step3p7PreTrainedModel):
     config: Step3p7Config
     _tied_weights_keys = ["lm_head.weight"]
@@ -1410,6 +1457,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
         return mask.unsqueeze(-1).expand_as(inputs_embeds)
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1425,6 +1473,16 @@ class Step3p7Model(Step3p7PreTrainedModel):
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Step3p7ModelOutputWithPast:
+        r"""
+        patch_pixel_values (`torch.FloatTensor`, *optional*):
+            Pixel values for cropped high-resolution image patches.
+        num_patches (`torch.Tensor`, *optional*):
+            Number of cropped image patches associated with each input image.
+        image_embeds (`torch.FloatTensor`, *optional*):
+            Precomputed image embeddings to use instead of running the vision encoder.
+        cache_position (`torch.LongTensor`, *optional*):
+            Positions of the input sequence tokens in the cache.
+        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1461,6 +1519,11 @@ class Step3p7Model(Step3p7PreTrainedModel):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    Step3p7 model for conditional generation from text and image inputs.
+    """
+)
 class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     config: Step3p7Config
@@ -1487,6 +1550,7 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
     def language_model(self):
         return self.model.language_model
 
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1503,6 +1567,16 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Step3p7CausalLMOutputWithPast:
+        r"""
+        patch_pixel_values (`torch.FloatTensor`, *optional*):
+            Pixel values for cropped high-resolution image patches.
+        num_patches (`torch.Tensor`, *optional*):
+            Number of cropped image patches associated with each input image.
+        image_embeds (`torch.FloatTensor`, *optional*):
+            Precomputed image embeddings to use instead of running the vision encoder.
+        cache_position (`torch.LongTensor`, *optional*):
+            Positions of the input sequence tokens in the cache.
+        """
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,

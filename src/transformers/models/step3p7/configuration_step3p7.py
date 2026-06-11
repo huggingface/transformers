@@ -23,10 +23,31 @@ from typing import Any
 from huggingface_hub.dataclasses import strict
 
 from transformers.configuration_utils import PreTrainedConfig
+from transformers.utils import auto_docstring
 
 
 @strict
+@auto_docstring
 class StepRoboticsVisionEncoderConfig(PreTrainedConfig):
+    r"""
+    width (`int`, *optional*, defaults to 1536):
+        Hidden size of the vision encoder.
+    heads (`int`, *optional*, defaults to 16):
+        Number of attention heads in the vision encoder.
+    use_cls_token (`bool`, *optional*, defaults to `False`):
+        Whether to prepend a class token to the vision patch sequence.
+    use_ln_pre (`bool`, *optional*, defaults to `True`):
+        Whether to apply layer normalization before the vision transformer.
+    use_ln_post (`bool`, *optional*, defaults to `False`):
+        Whether to apply layer normalization after the vision transformer.
+    use_abs_posemb (`bool`, *optional*, defaults to `True`):
+        Whether to add absolute position embeddings in the vision encoder.
+    use_rope2d (`bool`, *optional*, defaults to `True`):
+        Whether to use 2D rotary position embeddings in the vision encoder.
+    ls_init_value (`float`, *optional*, defaults to 0.1):
+        Initial value for layer scale parameters in the vision encoder.
+    """
+
     model_type = "perception_encoder"
 
     def __init__(
@@ -84,6 +105,7 @@ def _normalize_per_layer_values(
 
 
 @strict
+@auto_docstring
 class Step3p7TextConfig(PreTrainedConfig):
     model_type = "step3p5"
     architectures = ["Step3p5ForCausalLM"]
@@ -209,6 +231,7 @@ class Step3p7TextConfig(PreTrainedConfig):
 
 
 @strict
+@auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
 class Step3p7Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
     # This loader is a compatibility shim for original Step VL checkpoints
