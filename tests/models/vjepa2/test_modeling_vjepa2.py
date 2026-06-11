@@ -479,7 +479,6 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, num_masks, 1024))
         self.assertEqual(outputs.predictor_output.last_hidden_state.shape, expected_shape)
 
-    @slow
     def test_inference_vjepa2_1_base(self):
         """Smoke test: instantiate a 2.1-like config and run forward pass."""
         config = VJEPA2Config(
