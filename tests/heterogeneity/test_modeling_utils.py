@@ -133,19 +133,11 @@ def _tiny_nemotron_h_config(per_layer_config=None, **overrides):
 
 @contextmanager
 def _hetero_context(model_key):
-    """Temporarily set the heterogeneous modeling spec on a model class.
-
-    Always sets both — unused skip descriptors are harmless (only validated against requested types).
-    """
+    """Temporarily set the production heterogeneous modeling spec on a model class."""
     fixture = MODEL_FIXTURES[model_key]
-    modeling_spec = HeterogeneousModelingSpec(
-        layer_cls=fixture.layer_cls,
-        layer_idx_variable_name=fixture.layer_idx_variable_name,
-        skip_descriptors=fixture.skip_descriptors,
-    )
     with ExitStack() as stack:
         stack.enter_context(
-            patch.object(fixture.pretrained_cls, "_heterogeneous_modeling_spec", modeling_spec, create=True)
+            patch.object(fixture.pretrained_cls, "_heterogeneous_modeling_spec", fixture.spec_factory(), create=True)
         )
         yield
 
@@ -635,9 +627,10 @@ class TestHeterogeneousModeling(unittest.TestCase):
         """Requesting a skip type without a matching descriptor should raise ValueError."""
         config = _tiny_llama_config(per_layer_config={1: {"skip": ["attention"]}})
         fixture = MODEL_FIXTURES["llama"]
+        modeling_spec = fixture.spec_factory()
         modeling_spec = HeterogeneousModelingSpec(
-            layer_cls=fixture.layer_cls,
-            layer_idx_variable_name=fixture.layer_idx_variable_name,
+            layer_cls=modeling_spec.layer_cls,
+            layer_idx_variable_name=modeling_spec.layer_idx_variable_name,
             skip_descriptors={},
         )
         with patch.object(fixture.pretrained_cls, "_heterogeneous_modeling_spec", modeling_spec, create=True):

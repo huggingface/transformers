@@ -1,47 +1,37 @@
-"""Model-specific definitions for heterogeneity tests.
+"""Model-specific fixtures for heterogeneity tests.
 
-Contains all architecture-dependent knowledge in one place:
+Contains architecture-dependent test metadata:
 - Skip-aware reference layer classes (for building ground-truth models)
-- Model/layer class mappings (for _hetero_context setup)
-- Skip descriptors (for configuring the heterogeneity mechanism)
+- Model class mappings (for _hetero_context setup)
+- References to production heterogeneous modeling spec factories
 
-When adding a new architecture, all updates go here.
+When adding a new architecture, update the production spec in
+transformers.heterogeneity.supported_models and add only the test-only
+reference layer mapping here.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
 
-from transformers.heterogeneity import ReturnEntry, SkipDescriptor, get_skip_replacement
+from transformers.heterogeneity import HeterogeneousModelingSpec
+from transformers.heterogeneity.supported_models import MODEL_TO_SPEC_FACTORY
 from transformers.models.gpt_oss.modeling_gpt_oss import (
-    GptOssAttention,
     GptOssDecoderLayer,
-    GptOssMLP,
     GptOssPreTrainedModel,
-    GptOssRMSNorm,
 )
 from transformers.models.llama.modeling_llama import (
-    LlamaAttention,
     LlamaDecoderLayer,
-    LlamaMLP,
     LlamaPreTrainedModel,
-    LlamaRMSNorm,
 )
 from transformers.models.llama4.modeling_llama4 import (
     Llama4PreTrainedModel,
-    Llama4TextAttention,
     Llama4TextDecoderLayer,
-    Llama4TextMLP,
-    Llama4TextMoe,
-    Llama4TextRMSNorm,
 )
 from transformers.models.nemotron_h.modeling_nemotron_h import (
-    NemotronHAttention,
     NemotronHBlock,
-    NemotronHMamba2Mixer,
-    NemotronHMoE,
     NemotronHPreTrainedModel,
-    NemotronHRMSNorm,
 )
 
 
@@ -263,107 +253,30 @@ class SkipAwareNemotronHBlock(NemotronHBlock):
 
 @dataclass(frozen=True)
 class ModelFixture:
-    pretrained_cls: type  # PreTrainedModel subclass — patched with _layer_cls / _skip_descriptors
-    layer_cls: type  # layer class set as _layer_cls on the model
+    pretrained_cls: type  # PreTrainedModel subclass patched with the production heterogeneous modeling spec
     ref_layer_cls: type  # skip-aware reference layer for building ground-truth models
-    layer_idx_variable_name: str  # layer index argument/variable name
-    skip_descriptors: dict[str, SkipDescriptor]  # skip type → {attr: replacement_cls}
+    spec_factory: Callable[[], HeterogeneousModelingSpec]
 
 
 MODEL_FIXTURES = {
     "llama": ModelFixture(
         pretrained_cls=LlamaPreTrainedModel,
-        layer_cls=LlamaDecoderLayer,
         ref_layer_cls=SkipAwareLlamaDecoderLayer,
-        layer_idx_variable_name="layer_idx",
-        skip_descriptors={
-            "attention": {
-                "input_layernorm": get_skip_replacement(
-                    LlamaRMSNorm, ReturnEntry(arg_name="hidden_states", transform=lambda x: x)
-                ),
-                "self_attn": get_skip_replacement(
-                    LlamaAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
-                ),
-            },
-            "mlp": {
-                "post_attention_layernorm": get_skip_replacement(
-                    LlamaRMSNorm, ReturnEntry(arg_name="hidden_states", transform=lambda x: x)
-                ),
-                "mlp": get_skip_replacement(LlamaMLP, ReturnEntry(arg_name="x", transform=torch.zeros_like)),
-            },
-        },
+        spec_factory=MODEL_TO_SPEC_FACTORY["llama"],
     ),
     "gpt_oss": ModelFixture(
         pretrained_cls=GptOssPreTrainedModel,
-        layer_cls=GptOssDecoderLayer,
         ref_layer_cls=SkipAwareGptOssDecoderLayer,
-        layer_idx_variable_name="layer_idx",
-        skip_descriptors={
-            "attention": {
-                "input_layernorm": get_skip_replacement(
-                    GptOssRMSNorm, ReturnEntry(arg_name="hidden_states", transform=lambda x: x)
-                ),
-                "self_attn": get_skip_replacement(
-                    GptOssAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
-                ),
-            },
-            "mlp": {
-                "post_attention_layernorm": get_skip_replacement(
-                    GptOssRMSNorm, ReturnEntry(arg_name="hidden_states", transform=lambda x: x)
-                ),
-                "mlp": get_skip_replacement(
-                    GptOssMLP, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
-                ),
-            },
-        },
+        spec_factory=MODEL_TO_SPEC_FACTORY["gpt_oss"],
     ),
     "llama4": ModelFixture(
         pretrained_cls=Llama4PreTrainedModel,
-        layer_cls=Llama4TextDecoderLayer,
         ref_layer_cls=SkipAwareLlama4TextDecoderLayer,
-        layer_idx_variable_name="layer_idx",
-        skip_descriptors={
-            "attention": {
-                "input_layernorm": get_skip_replacement(
-                    Llama4TextRMSNorm, ReturnEntry(arg_name="x", transform=lambda x: x)
-                ),
-                "self_attn": get_skip_replacement(
-                    Llama4TextAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
-                ),
-            },
-            "mlp": {
-                "post_attention_layernorm": get_skip_replacement(
-                    Llama4TextRMSNorm, ReturnEntry(arg_name="x", transform=lambda x: x)
-                ),
-                "feed_forward": get_skip_replacement(
-                    Llama4TextMLP, ReturnEntry(arg_name="x", transform=torch.zeros_like)
-                ),
-                ("feed_forward", Llama4TextMoe): get_skip_replacement(
-                    Llama4TextMoe, ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
-                ),
-            },
-        },
+        spec_factory=MODEL_TO_SPEC_FACTORY["llama4"],
     ),
     "nemotron_h": ModelFixture(
         pretrained_cls=NemotronHPreTrainedModel,
-        layer_cls=NemotronHBlock,
         ref_layer_cls=SkipAwareNemotronHBlock,
-        layer_idx_variable_name="layer_idx",
-        skip_descriptors={
-            "mixer": {
-                "norm": get_skip_replacement(
-                    NemotronHRMSNorm, ReturnEntry(arg_name="hidden_states", transform=lambda x: x)
-                ),
-                ("mixer", NemotronHAttention): get_skip_replacement(
-                    NemotronHAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
-                ),
-                ("mixer", NemotronHMoE): get_skip_replacement(
-                    NemotronHMoE, ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
-                ),
-                ("mixer", NemotronHMamba2Mixer): get_skip_replacement(
-                    NemotronHMamba2Mixer, ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
-                ),
-            },
-        },
+        spec_factory=MODEL_TO_SPEC_FACTORY["nemotron_h"],
     ),
 }
