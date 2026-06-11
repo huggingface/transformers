@@ -248,35 +248,6 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
     def test_disk_offload_safetensors(self):
         pass
 
-    def test_retain_grad_hidden_states_attentions(self):
-        # The base test keys the output fields on `config.is_encoder_decoder`. This model returns `Seq2SeqModelOutput`
-        # with `is_encoder_decoder=False`, and only the decoder's hidden states and attentions are populated (the
-        # encoder feeds the decoder through its KV cache).
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        config.output_attentions = self.has_attentions
-        config._attn_implementation = "eager"
-
-        model_class = self.all_model_classes[0]
-        model = model_class._from_config(config, attn_implementation="eager")
-        model.to(torch_device)
-
-        inputs = self._prepare_for_class(inputs_dict, model_class)
-        outputs = model(**inputs)
-        output = outputs[0]
-
-        decoder_hidden_states = outputs.decoder_hidden_states[0]
-        decoder_hidden_states.retain_grad()
-        if self.has_attentions:
-            decoder_attentions = outputs.decoder_attentions[0]
-            decoder_attentions.retain_grad()
-
-        output.flatten()[0].backward(retain_graph=True)
-
-        self.assertIsNotNone(decoder_hidden_states.grad)
-        if self.has_attentions:
-            self.assertIsNotNone(decoder_attentions.grad)
-
     # Tests designed specifically for `DiffusionGemma`, excluding generation tests.
     def test_tied_weights(self):
         """

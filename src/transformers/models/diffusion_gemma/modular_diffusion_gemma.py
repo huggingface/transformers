@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import torch
@@ -30,7 +31,7 @@ from ...masking_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Seq2SeqLMOutput, Seq2SeqModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -1246,6 +1247,34 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
         return {"full_attention": full_mask, "sliding_attention": sliding_mask}
 
 
+@auto_docstring
+@dataclass
+class DiffusionGemmaModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Sequence of hidden states at the output of the last layer of the encoder. Only set when `input_ids` is
+        provided, e.g. to compute an autoregressive loss on the encoder during training.
+    """
+
+    encoder_last_hidden_state: torch.FloatTensor | None = None
+
+
+@auto_docstring
+@dataclass
+class DiffusionGemmaBlockDiffusionOutputWithPast(CausalLMOutputWithPast):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+        Language modeling loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, canvas_length, config.text_config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Sequence of hidden states at the output of the last layer of the encoder. Only set when `input_ids` is
+        provided, e.g. to compute an autoregressive loss on the encoder during training.
+    """
+
+    encoder_last_hidden_state: torch.FloatTensor | None = None
+
+
 class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel, T5Gemma2Model):
     """
     DiffusionGemma model consisting of an auto-regressive encoder (DiffusionGemmaEncoderModel, very similar to a
@@ -1291,7 +1320,7 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel, T5Gemma2Model):
         decoder_attention_mask: torch.Tensor | dict | None = None,
         decoder_position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Seq2SeqModelOutput:
+    ) -> DiffusionGemmaModelOutputWithPast:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Uncached token IDs for the prompt to be encoded as context for the canvas.
@@ -1351,10 +1380,10 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel, T5Gemma2Model):
             **kwargs,
         )
 
-        return Seq2SeqModelOutput(
+        return DiffusionGemmaModelOutputWithPast(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
+            hidden_states=decoder_outputs.hidden_states,
+            attentions=decoder_outputs.attentions,
             past_key_values=past_key_values,
             encoder_last_hidden_state=encoder_last_hidden_state,
         )
@@ -1402,7 +1431,7 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
         decoder_attention_mask: torch.Tensor | dict | None = None,
         decoder_position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Seq2SeqLMOutput:
+    ) -> DiffusionGemmaBlockDiffusionOutputWithPast:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Uncached token IDs for the prompt to be encoded as context for the canvas.
@@ -1444,10 +1473,10 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
         logits = torch.tanh(logits)
         logits = logits * self.final_logit_softcapping
 
-        return Seq2SeqLMOutput(
+        return DiffusionGemmaBlockDiffusionOutputWithPast(
             logits=logits,
-            decoder_hidden_states=model_outputs.decoder_hidden_states,
-            decoder_attentions=model_outputs.decoder_attentions,
+            hidden_states=model_outputs.hidden_states,
+            attentions=model_outputs.attentions,
             past_key_values=model_outputs.past_key_values,
             encoder_last_hidden_state=model_outputs.encoder_last_hidden_state,
         )
