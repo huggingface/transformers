@@ -55,6 +55,7 @@ def ForCausalLMLoss(
     shift_labels: torch.Tensor | None = None,
     hidden_states: torch.Tensor | None = None,
     lm_head_weight: torch.Tensor | None = None,
+    lm_head_bias: torch.Tensor | None = None,
     **kwargs,
 ) -> torch.Tensor:
     if shift_labels is None:
@@ -63,7 +64,7 @@ def ForCausalLMLoss(
         shift_labels = labels[..., 1:].contiguous()
 
     if logits is None and hidden_states is not None and lm_head_weight is not None:
-        logits = torch.nn.functional.linear(hidden_states, lm_head_weight)
+        logits = nn.functional.linear(hidden_states, lm_head_weight, lm_head_bias)
 
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.float()

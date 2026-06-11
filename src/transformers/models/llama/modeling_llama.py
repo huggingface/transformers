@@ -497,6 +497,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
             loss = self.loss_function(
                 hidden_states=hidden_states,
                 lm_head_weight=self.lm_head.weight,
+                lm_head_bias=self.lm_head.bias,
                 logits=logits,
                 labels=labels,
                 vocab_size=self.config.vocab_size,

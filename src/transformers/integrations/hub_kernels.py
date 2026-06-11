@@ -100,14 +100,44 @@ try:
         #        version=1,
         #    )
         # },
-        "SwiGLUMLP": {
-            "cuda": LayerRepository(
-                repo_id="kernels-community/liger-kernels",
-                layer_name="LigerSwiGLUMLP",
-                version=1,
-            ),
-        },
         # TODO: liger version will change
+        "SwiGLUMLP": {
+            "cuda": {
+                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                    repo_id="kernels-community/liger-kernels",
+                    layer_name="LigerSwiGLUMLP",
+                    version=1,
+                ),
+                Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                    repo_id="kernels-community/liger-kernels",
+                    layer_name="LigerTiledSwiGLUMLP",
+                    version=1,
+                ),
+            },
+        },
+        "GeGLUMLP": {
+            "cuda": {
+                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                    repo_id="kernels-community/liger-kernels",
+                    layer_name="LigerGEGLUMLP",
+                    version=1,
+                ),
+                Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                    repo_id="kernels-community/liger-kernels",
+                    layer_name="LigerTiledGEGLUMLP",
+                    version=1,
+                ),
+            },
+        },
+        "Linear": {
+            "cuda": {
+                Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                    repo_id="kernels-community/liger-kernels",
+                    layer_name="LigerLinear",
+                    version=1,
+                ),
+            },
+        },
         "RMSNorm": {
             # NOTE: Not torch.compile friendly for unknown reasons
             "cuda": {
