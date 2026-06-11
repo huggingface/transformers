@@ -19,7 +19,6 @@ import threading
 from abc import abstractmethod
 from collections.abc import Callable, Generator
 from contextlib import contextmanager, nullcontext
-from math import ceil
 from time import perf_counter
 from typing import Any
 
@@ -35,7 +34,7 @@ from ..logits_process import LogitsProcessorList
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .distributed import DistributedHelper
-from .initialization import resolve_continuous_batching_config
+from .initialization import resolve_continuous_batching_config, update_cb_config_after_cache_creation
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
@@ -250,24 +249,19 @@ class ContinuousBatchProcessor:
         self.max_batch_tokens = cache.max_batch_tokens
 
         # Setup inputs and outputs
-        use_cuda_graph_varlen, _ = self.cb_config.cuda_graph_booleans
         io_kwargs = {
             "cache": cache,
             "config": config,
+            "continuous_batching_config": continuous_batching_config,
             "device": model_device,
             "model_dtype": model_dtype,
-            "return_logprobs": self.return_logprobs,
             "logit_processor": self.logit_processor,
-            "use_cuda_graph_varlen": use_cuda_graph_varlen,
         }
         self.use_async_batching = self.cb_config.use_async_batching
 
         if self.use_async_batching:
-            # Since in async there are 2 IO pairs, there are also 2 graph buffers: we divide the max_cached_graphs by 2
-            io_kwargs["max_graphs"] = ceil(self.cb_config.max_cached_graphs / 2)
             self.inputs_and_outputs = ContinuousBatchingAsyncIOs(**io_kwargs)
         else:
-            io_kwargs["max_graphs"] = self.cb_config.max_cached_graphs
             self.inputs_and_outputs = ContinuousBatchingIOs(**io_kwargs)
 
         # Offloading manager: handles CPU offloading, soft reset, and restoration
@@ -967,18 +961,32 @@ class ContinuousBatchingManager:
             tp_plan=getattr(self.model, "tp_plan", {}),
             dtype=self.model.dtype,
         )
-        self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing  # update the approximation
+        # Update the approximation now that we know if there is prefix sharing
+        self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing
+        # And update continuous batching config now that we have concrete values
+        update_cb_config_after_cache_creation(
+            cb_config=self.continuous_batching_config,
+            num_blocks=paged_attention_cache.num_blocks,
+            max_batch_tokens=paged_attention_cache.max_batch_tokens,
+            use_prefix_sharing=self._use_prefix_sharing,
+        )
 
         # Disable the decode path if the model has sliding window attention (TODO)
         if paged_attention_cache.num_sliding_attention_groups > 0:
             self.continuous_batching_config.max_blocks_per_request = 0
 
-        # Create the scheduler
+        # Retrieve the scheduler class
         scheduler_type = self.continuous_batching_config.scheduler_type
-        scheduler = SCHEDULER_MAPPING.get(scheduler_type, None)
-        if scheduler is None:
+        scheduler_cls = SCHEDULER_MAPPING.get(scheduler_type, None)
+        if scheduler_cls is None:
             logger.warning(f"Scheduler '{scheduler_type}' not found. Defaulting to FIFO.")
-            scheduler = FIFOScheduler
+            scheduler_cls = FIFOScheduler
+        # Instantiate the actual scheduler
+        scheduler = scheduler_cls(
+            cache=paged_attention_cache,
+            safety_margin=self.continuous_batching_config.safety_margin,
+            max_requests_per_batch=self.continuous_batching_config.max_requests_per_batch,
+        )
 
         # Create the batch processor
         batch_processor = ContinuousBatchProcessor(
@@ -993,7 +1001,7 @@ class ContinuousBatchingManager:
             background_thread_status=self.background_thread_status,
             model_device=self.model.device,
             model_dtype=self.model.dtype,
-            scheduler=scheduler(paged_attention_cache),
+            scheduler=scheduler,
             distributed_helper=self.distributed_helper,
         )
         return batch_processor
@@ -1188,7 +1196,14 @@ class ContinuousMixin:
         workload_hints = WorkloadHints(
             max_prompt_length=max(len(input_ids) for input_ids in inputs),
             max_generated_length=max_new_tokens if max_new_tokens is not None else 0,
+            num_requests=num_requests,
         )
+        if persistent_manager:
+            logger.warning(
+                "Since you passed `persistent_manager=True`, the manager will be kept alive after the generation is "
+                "finished. However, it was sized specifically for the requests passed in `generate_batch`. If you plan "
+                "to reuse the manager for a very different workload, you might want to create a new manager instead."
+            )
 
         # Prepare context managers for the main loop
         manager_cm = self.continuous_batching_context_manager(
