@@ -644,7 +644,7 @@ class DiffusionGemmaSelfConditioning(nn.Module):
 class DiffusionGemmaPreTrainedModel(PreTrainedModel):
     config: DiffusionGemmaConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
     _no_split_modules = [
         "DiffusionGemmaDecoderTextLayer",
         "DiffusionGemmaEncoderTextLayer",
