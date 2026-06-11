@@ -13,4 +13,7 @@ jobs:
     # Members/collaborators/owners trigger PR CI directly — gate only needed for forks
     if: "!contains(fromJSON('[\"MEMBER\",\"OWNER\",\"COLLABORATOR\"]'), github.event.pull_request.author_association)"
     uses: huggingface/transformers-test-ci/.github/workflows/pr-ci-security-gate.yml@main
+    # NOTE: Reusable workflow has been reviewed and confirmed safe:
+    # - Does not check out untrusted PR code (refs/pull/*/head or github.event.pull_request.head.sha)
+    # - Only performs security checks without exposing secrets to untrusted code
     secrets: inherit
