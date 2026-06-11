@@ -160,8 +160,10 @@ class CodeLlamaTokenizer(TokenizersBackend):
             replacement="▁", prepend_scheme=prepend_scheme, split=False
         )
 
+        # Strip is intentionally omitted: conditional stripping is handled in
+        # _decode to avoid eating real user-provided leading spaces.
         self._tokenizer.decoder = decoders.Sequence(
-            [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse(), decoders.Strip(content=" ", left=1)]
+            [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()]
         )
 
         super().__init__(
@@ -225,6 +227,28 @@ class CodeLlamaTokenizer(TokenizersBackend):
     @property
     def eot_token(self):
         return self._eot_token
+
+    def _decode(self, token_ids, skip_special_tokens=False, **kwargs):
+        text = super()._decode(token_ids, skip_special_tokens=skip_special_tokens, **kwargs)
+
+        if not self.add_prefix_space or not text.startswith(" "):
+            return text
+
+        # The Metaspace prepend gives a synthetic ▁ that merges INTO the first
+        # content token (▁hello = 22172), so its space is not distinguishable
+        # and must be stripped. Real leading spaces produce one or more pure-▁
+        # tokens (▁=29871, ▁▁=259, ▁▁▁=1678, …) ahead of the first content
+        # token. A pure-▁ token is one whose text is entirely ▁ characters.
+        # Skip any leading BOS/special tokens before inspecting the first real
+        # token.
+        all_special_ids = set(self.all_special_ids)
+        first_real_id = next((t for t in token_ids if t not in all_special_ids), None)
+        if first_real_id is not None:
+            first_real_token = self.convert_ids_to_tokens(first_real_id) or ""
+            if all(c == SPIECE_UNDERLINE for c in first_real_token):
+                return text  # real leading space(s) — preserve them
+
+        return text[1:]  # synthetic prefix — strip it
 
     def set_infilling_processor(self, reset, suffix_first=False, add_special_tokens=True):
         """
