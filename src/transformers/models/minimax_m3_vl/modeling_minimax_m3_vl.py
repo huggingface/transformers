@@ -468,13 +468,9 @@ class MiniMaxM3VLAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
+        block_indices = None
         if self.indexer is not None:
-            attention_mask = self.indexer(
-                hidden_states,
-                position_embeddings,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-            )
+            block_indices = self.indexer(hidden_states, position_embeddings, past_key_values)
 
         query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
@@ -485,6 +481,11 @@ class MiniMaxM3VLAttention(nn.Module):
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
+        if block_indices is not None:
+            attention_mask = self.indexer.build_block_mask(
+                block_indices, attention_mask, key_states.shape[2], query_states.dtype, query_states.device
+            )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -513,9 +514,21 @@ class MiniMaxM3VLIndexer(nn.Module):
     query (always visible). Selection therefore happens at the granularity of a
     *block of keys* rather than individual keys: the expensive main attention
     only has to attend the handful of selected key blocks, which is what makes
-    it block-sparse (and cheaper) on long sequences. It returns a
-    `[B, 1, S_q, S_k]` attention mask that is `0` at every allowed
-    (query, key) pair and `-inf` elsewhere.
+    it block-sparse (and cheaper) on long sequences.
+
+    The `index_local_blocks` blocks are not a separate budget: they are folded
+    into the single top-k by boosting their score so they always win slots, the
+    same way the deployment block-sparse kernel (MiniMax `topk_sparse`) does it.
+
+    `forward` returns the per-query selected key-block indices
+    `[B, S_q, index_topk_blocks]`. Valid indices are left-packed and `-1`
+    right-pads the unused slots (future/empty blocks), and the local boost makes
+    selections deduplicated -- the exact contract the block-sparse attention
+    kernel consumes (it counts the valid entries, then reads them sequentially
+    and would double-count a repeated block). The eager/SDPA path instead calls
+    `build_block_mask`, which expands the indices into the dense
+    `[B, 1, S_q, S_k]` additive mask the standard attention interface expects
+    (`0` at every allowed (query, key) pair, `-inf` elsewhere).
 
     Like DeepSeek-V4's indexer this is purely a *selection* branch: it has no
     value projection and produces no residual output of its own (the upstream
@@ -554,7 +567,6 @@ class MiniMaxM3VLIndexer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
         past_key_values: Cache | None,
     ) -> torch.Tensor:
         batch, q_len, _ = hidden_states.shape
@@ -585,27 +597,62 @@ class MiniMaxM3VLIndexer(nn.Module):
         future = torch.arange(num_key_blocks, device=idx_q.device).view(1, 1, -1) > q_block.view(1, -1, 1)
         block_scores = block_scores.masked_fill(future, float("-inf"))
 
-        bias = block_scores.new_full((batch, q_len, num_key_blocks), float("-inf"))
-        bias.scatter_(-1, block_scores.topk(min(self.topk_blocks, num_key_blocks), dim=-1).indices, 0.0)
+        # Force the `local_blocks` blocks ending at the query's own block into the budget by boosting
+        # their score above any real score, so they win top-k slots instead of enlarging the budget
+        # (the block-sparse kernel takes a single fixed-width top-k, not a union). They are `<= q_block`
+        # so never future; `clamp(min=0)` just repeats block 0 for the earliest queries and the top-k
+        # dedups it for free.
         if self.local_blocks > 0:
             local = torch.arange(self.local_blocks, device=idx_q.device)
-            local = (q_block.view(-1, 1) - local.view(1, -1)).clamp(min=0)  # [S_q, local]
-            bias.scatter_(-1, local.unsqueeze(0).expand(batch, -1, -1), 0.0)
-        bias = bias.masked_fill(future, float("-inf"))
+            local_idx = (q_block.view(-1, 1) - local.view(1, -1)).clamp(min=0)  # [S_q, local]
+            block_scores.scatter_(-1, local_idx.unsqueeze(0).expand(batch, -1, -1), float("inf"))
+
+        # Single top-`topk_blocks` budget. Slots that fall on a future/empty block keep their `-inf`
+        # score, which top-k sorts to the end, so tagging them `-1` yields left-packed block indices
+        # with `-1` right-padding -- the exact contract the block-sparse attention kernel consumes.
+        topk = min(self.topk_blocks, num_key_blocks)
+        topk_scores, topk_indices = block_scores.topk(topk, dim=-1)  # [B, S_q, topk]
+        return topk_indices.masked_fill(topk_scores == float("-inf"), -1)
+
+    def build_block_mask(
+        self,
+        block_indices: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        key_length: int,
+        dtype: torch.dtype,
+        device: torch.device,
+    ) -> torch.Tensor:
+        """
+        TODO: add the args and the shapes for help :)
+        Expand per-query selected key-block indices into the dense `[B, 1, S_q, S_k]` additive
+        mask the eager/SDPA attention interface consumes. When an `attention_mask` tensor already
+        exists (eager/SDPA) we restrict it to the selected blocks; that mask already carries
+        token-level causality, so within a selected block the run stays causal. When it is `None`
+        (e.g. when there is not padding the mask creation won't return one) we materialize
+        the block-sparse causal mask from scratch.
+
+        """
+        batch, q_len, _ = block_indices.shape
+        num_key_blocks = -(-key_length // self.block_size)
+
+        # Scatter the kept blocks to `0.0`; `-1` slots land in a throwaway column we drop afterwards.
+        safe = block_indices.masked_fill(block_indices < 0, num_key_blocks)
+        bias = block_indices.new_full((batch, q_len, num_key_blocks + 1), float("-inf"), dtype=dtype)
+        bias.scatter_(-1, safe, 0.0)
+        bias = bias[..., :num_key_blocks]
 
         # Broadcast the per-block keep/drop verdict back onto every key (block granularity), add head axis.
-        block_keep = (bias == 0.0).repeat_interleave(self.block_size, dim=-1)[..., :k_len].unsqueeze(1)
+        block_keep = (bias == 0.0).repeat_interleave(self.block_size, dim=-1)[..., :key_length].unsqueeze(1)
 
-        # even if a block is selected, we need to make sure that inside the mask is causal.
-        min_dtype = torch.finfo(idx_q.dtype).min
+        min_dtype = torch.finfo(dtype).min
         if attention_mask is not None:
             return attention_mask.masked_fill(~block_keep, min_dtype)
 
-        # if no attention mask is provided we build it
-        k_positions = torch.arange(k_len, device=idx_q.device)
+        q_positions = torch.arange(key_length - q_len, key_length, device=device)
+        k_positions = torch.arange(key_length, device=device)
         token_future = k_positions.view(1, 1, 1, -1) > q_positions.view(1, 1, -1, 1)
         keep = block_keep & ~token_future
-        return keep.new_zeros(keep.shape, dtype=idx_q.dtype).masked_fill(~keep, min_dtype)
+        return torch.zeros(keep.shape, dtype=dtype, device=device).masked_fill(~keep, min_dtype)
 
 
 class MiniMaxM3VLDecoderLayer(GradientCheckpointingLayer):
@@ -681,6 +728,14 @@ class MiniMaxM3VLPreTrainedModel(PreTrainedModel):
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, MiniMaxM3VLRMSNorm):
             init.zeros_(module.weight)
+        elif isinstance(module, MiniMaxM3VL3DRotaryEmbedding):
+            # ``inv_freq`` is a non-persistent buffer absent from the checkpoint, so under
+            # meta-device loading (``device_map``) it must be re-materialized here — the base
+            # rotary re-init only covers text RoPE modules carrying ``original_inv_freq``.
+            inv_freq = 1.0 / (
+                module.theta ** (torch.arange(0, module.axis_dim, 2, dtype=torch.float32) / module.axis_dim)
+            )
+            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring
@@ -982,67 +1037,69 @@ class MiniMaxM3VLVisionEmbeddings(nn.Module):
 class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
     r"""3D RoPE for the vision tower: each patch is rotated by its ``(T, H, W)`` grid position.
 
-    ``head_dim`` is split into three contiguous bands, one per axis. A band only sees
-    its own coordinate, so the patch embedding carries independent temporal, row and
-    column phases::
+    ``2 * (head_dim // 2)`` rotary dims are split evenly across the three axes (each rounded
+    down to a multiple of 2), giving ``axis_dim`` dims per axis and ``axis_dim // 2`` frequencies::
 
-        |<------------------------- head_dim ------------------------>|
-        +--------------------+--------------------+--------------------+
-        |     T  (frames)    |      H  (rows)     |      W  (cols)     |
-        |        band        |        band        |  head_dim - 2*band |
-        +--------------------+--------------------+--------------------+
+        |<------------------ rotated (3 * axis_dim) ------------------>|<- pass ->|
+        +--------------------+--------------------+--------------------+----------+
+        |     T  (frames)    |      H  (rows)     |      W  (cols)     |          |
+        |      axis_dim      |      axis_dim      |      axis_dim      |          |
+        +--------------------+--------------------+--------------------+----------+
 
-    ``band = head_dim // 3`` rounded down to an even number, so each band holds
-    ``band // 2`` frequencies. ``inv_freq`` lays those frequencies out as ``T|H|W``;
-    ``axis_of_freq`` tags each one with the grid axis (``0=T, 1=H, 2=W``) whose
-    coordinate rotates it. ``forward`` scales every frequency by its axis' coordinate,
-    then ``repeat_interleave(2)`` duplicates each side by side into the interleaved
-    ``[f0, f0, f1, f1, ...]`` layout that pairs with ``rotate_half_llm``, returning
-    ``(cos, sin)`` of shape ``[num_patches, head_dim]``.
+    Each axis' coordinate scales its own band of frequencies; the bands are concatenated as
+    ``T|H|W`` and duplicated via ``cat([f, f])`` to pair with the half-rotation in
+    ``apply_rotary_pos_emb_vision``. Any head dims past ``3 * axis_dim`` are left unrotated.
     """
 
-    def __init__(self, head_dim: int, theta: float = 10000.0):
+    def __init__(self, head_dim: int, theta: float = 10000.0, spatial_merge_size: int = 1):
         super().__init__()
-        band = (head_dim // 3) // 2 * 2
-        self.dims = (band, band, head_dim - 2 * band)
+        # ``2 * (head_dim // 2)`` rotary dims are split evenly across T/H/W, each axis rounded
+        # down to a multiple of 2. With head_dim=80 that is 26 dims/axis (39 freqs total); the
+        # remaining ``head_dim - 3 * axis_dim`` dims are never rotated (they pass through).
+        rope_dims = 2 * (head_dim // 2)
+        self.axis_dim = 2 * ((rope_dims // 3) // 2)
+        self.spatial_merge_size = spatial_merge_size
         self.theta = theta
+        inv_freq = 1.0 / (theta ** (torch.arange(0, self.axis_dim, 2, dtype=torch.float32) / self.axis_dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(
         self, grid_thw: torch.Tensor, device: torch.device, dtype: torch.dtype
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        # Patches arrive grouped into ``spatial_merge_size`` x ``spatial_merge_size`` blocks
+        # (see the image processor's ``permute(0, 1, 4, 7, 5, 8, ...)``), so the H/W coordinates
+        # must follow that same block order — a plain raster scan would desync every patch's
+        # position from its embedding and the tower could no longer localize anything.
+        m = self.spatial_merge_size
         coords = []
         for t, h, w in grid_thw.tolist():
+            hi = torch.arange(h).unsqueeze(1).expand(-1, w)
+            hi = hi.reshape(h // m, m, w // m, m).permute(0, 2, 1, 3).flatten()
+            wi = torch.arange(w).unsqueeze(0).expand(h, -1)
+            wi = wi.reshape(h // m, m, w // m, m).permute(0, 2, 1, 3).flatten()
             ti = torch.arange(t).repeat_interleave(h * w)
-            hi = torch.arange(h).repeat_interleave(w).repeat(t)
-            wi = torch.arange(w).repeat(t * h)
-            coords.append(torch.stack([ti, hi, wi], dim=-1))
+            coords.append(torch.stack([ti, hi.repeat(t), wi.repeat(t)], dim=-1))
         coords = torch.cat(coords).to(device=device, dtype=torch.float32)
 
-        # Per-axis inverse frequencies laid out as T|H|W, then broadcast each patch's
-        # T/H/W coordinate across its own band so every frequency rotates by its axis.
-        inv_freq = torch.cat(
-            [1.0 / (self.theta ** (torch.arange(0, d, 2, device=device, dtype=torch.float32) / d)) for d in self.dims]
-        )
-        band_freqs = torch.tensor([d // 2 for d in self.dims], device=device)
-        freqs = coords.repeat_interleave(band_freqs, dim=1) * inv_freq
-        emb = freqs.repeat_interleave(2, dim=-1)
+        # Per-axis freqs (T|H|W) concatenated, then duplicated as ``cat([f, f])`` so they pair
+        # with the half-rotation in ``apply_rotary_pos_emb_vision``.
+        inv_freq = self.inv_freq.to(device)
+        freqs = torch.cat([coords[:, i : i + 1] * inv_freq for i in range(3)], dim=-1)
+        emb = torch.cat([freqs, freqs], dim=-1)
         return emb.cos().to(dtype), emb.sin().to(dtype)
-
-
-def rotate_half_llm(x):
-    """Rotates half the hidden dims of the input (interleaved layout)."""
-    x1 = x[..., 0::2]
-    x2 = x[..., 1::2]
-    return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
 def apply_rotary_pos_emb_vision(
     q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    # Only the first ``rot_dim`` head dims carry 3D RoPE; the tail passes through untouched.
+    rot_dim = cos.shape[-1]
     cos, sin = cos[None, :, None, :], sin[None, :, None, :]
-    q_embed = q * cos + rotate_half_llm(q) * sin
-    k_embed = k * cos + rotate_half_llm(k) * sin
-    return q_embed, k_embed
+    q_rot, q_pass = q[..., :rot_dim], q[..., rot_dim:]
+    k_rot, k_pass = k[..., :rot_dim], k[..., rot_dim:]
+    q_rot = q_rot * cos + rotate_half(q_rot) * sin
+    k_rot = k_rot * cos + rotate_half(k_rot) * sin
+    return torch.cat([q_rot, q_pass], dim=-1), torch.cat([k_rot, k_pass], dim=-1)
 
 
 class MiniMaxM3VLVisionAttention(nn.Module):
@@ -1157,12 +1214,16 @@ class MiniMaxM3VLVisionTransformer(nn.Module):
         self.pre_layrnorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layers = nn.ModuleList([MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         head_dim = config.hidden_size // config.num_attention_heads
-        self.rotary_emb = MiniMaxM3VL3DRotaryEmbedding(head_dim, theta=config.rope_theta)
+        self.rotary_emb = MiniMaxM3VL3DRotaryEmbedding(
+            head_dim, theta=config.rope_theta, spatial_merge_size=config.spatial_merge_size
+        )
 
     def forward(
         self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithPooling:
-        embeds = self.embeddings(pixel_values)
+        # The checkpoint stores the patch-embedding conv in fp32 while the rest of the tower is
+        # bf16, so its output must be cast back to the tower's dtype before the (bf16) layernorm.
+        embeds = self.embeddings(pixel_values).to(self.pre_layrnorm.weight.dtype)
         cos, sin = self.rotary_emb(image_grid_thw, device=embeds.device, dtype=embeds.dtype)
         hidden_states = self.pre_layrnorm(embeds).unsqueeze(0)
         for layer in self.layers:
@@ -1467,7 +1528,7 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL full model with LM head (text + vision).")
-class MiniMaxM3VLForConditionalGeneration(MiniMaxM3VLPreTrainedModel, GenerationMixin):
+class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     config: MiniMaxM3VLConfig
 
@@ -1595,7 +1656,7 @@ class MiniMaxM3VLForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Generation
 
 __all__ = [
     "MiniMaxM3VLForCausalLM",
-    "MiniMaxM3VLForConditionalGeneration",
+    "MiniMaxM3SparseForConditionalGeneration",
     "MiniMaxM3VLModel",
     "MiniMaxM3VLPreTrainedModel",
     "MiniMaxM3VLTextModel",
