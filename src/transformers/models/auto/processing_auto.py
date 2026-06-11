@@ -64,6 +64,7 @@ else:
             ("moonshine", "Wav2Vec2Processor"),
             ("moonshine_streaming", "MoonshineStreamingProcessor"),
             ("musicflamingo", "MusicFlamingoProcessor"),
+            ("nemotron3_5_asr", "Nemotron3_5AsrProcessor"),
             ("nemotron_asr", "NemotronAsrProcessor"),
             ("omdet-turbo", "OmDetTurboProcessor"),
             ("oneformer", "OneFormerProcessor"),

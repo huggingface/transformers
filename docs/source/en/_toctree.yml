@@ -1111,6 +1111,8 @@
         title: MusicGen
       - local: model_doc/musicgen_melody
         title: MusicGen Melody
+      - local: model_doc/nemotron3_5_asr
+        title: Nemotron3_5Asr
       - local: model_doc/nemotron_asr
         title: NemotronAsr
       - local: model_doc/parakeet

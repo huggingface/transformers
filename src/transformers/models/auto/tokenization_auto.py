@@ -229,6 +229,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("musicgen_melody", "T5Tokenizer" if is_tokenizers_available() else None),
         ("mvp", "MvpTokenizer" if is_tokenizers_available() else None),
         ("myt5", "MyT5Tokenizer"),
+        ("nemotron3_5_asr", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("nemotron_asr", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("nezha", "BertTokenizer" if is_tokenizers_available() else None),
         ("nllb", "NllbTokenizer" if is_tokenizers_available() else None),
