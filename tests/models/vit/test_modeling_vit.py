@@ -203,6 +203,9 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
+    import os
+    os.system("ls")
+
     test_resize_embeddings = False
 
     def setUp(self):
