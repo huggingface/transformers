@@ -595,6 +595,7 @@ class HiggsAudioV2TokenizerModel(HiggsAudioV2TokenizerPreTrainedModel):
         audio_codes: torch.Tensor | None = None,
         bandwidth: float | None = None,
         return_dict: bool | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor] | HiggsAudioV2TokenizerOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
