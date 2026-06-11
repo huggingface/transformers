@@ -569,6 +569,8 @@
         title: DeepSeek-V2
       - local: model_doc/deepseek_v3
         title: DeepSeek-V3
+      - local: model_doc/deepseek_v32
+        title: DeepSeek-V3.2
       - local: model_doc/deepseek_v4
         title: DeepSeek-V4
       - local: model_doc/dialogpt
@@ -1225,6 +1227,8 @@
         title: DeepseekVLHybrid
       - local: model_doc/deplot
         title: DePlot
+      - local: model_doc/diffusion_gemma
+        title: DiffusionGemma
       - local: model_doc/donut
         title: Donut
       - local: model_doc/edgetam
