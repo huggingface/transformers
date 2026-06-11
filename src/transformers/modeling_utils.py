@@ -1575,8 +1575,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if isinstance(dtype, str):
             dtype = getattr(torch, dtype)
 
-        # Set the same `dtype` on all subconfigs to avoid dtype mismatch. When "auto" dtype
-        # with nested models, we can't dispatch different dtype per backbone module
+        # Keep the resolved `dtype` on the config so it matches the actual weights, the same way
+        # `from_pretrained` does. Also set it on all subconfigs to avoid dtype mismatch. When "auto"
+        # dtype with nested models, we can't dispatch different dtype per backbone module
+        config.dtype = dtype
         for sub_config_key in config.sub_configs:
             if (sub_config := getattr(config, sub_config_key)) is not None:
                 sub_config.dtype = dtype

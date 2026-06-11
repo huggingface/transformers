@@ -43,6 +43,7 @@ if is_torch_available():
 
     from transformers import (
         AutoModelForCausalLM,
+        AutoModelForImageTextToText,
         Qwen3_5MoeConfig,
         Qwen3_5MoeForCausalLM,
         Qwen3_5MoeForConditionalGeneration,
@@ -371,6 +372,39 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 
         self.assertIsInstance(model, Qwen3_5MoeForCausalLM)
         self.assertIsInstance(model.config, Qwen3_5MoeTextConfig)
+
+    def test_automodelforcausallm_dtype(self) -> None:
+        """`AutoModelForCausalLM` must honor a concrete `dtype`, overriding the saved composite dtype (#46459)."""
+        config = self.model_tester.get_config()
+        # The saved dtype (bf16) must differ from the requested one (fp32) to exercise the bug.
+        full_model = Qwen3_5MoeForConditionalGeneration(config).to(torch.bfloat16)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            full_model.save_pretrained(tmp_dir)
+
+            # #46459 regression: a concrete `dtype` must win over the saved bf16 composite dtype.
+            model = AutoModelForCausalLM.from_pretrained(tmp_dir, dtype=torch.float32)
+            self.assertIsInstance(model, Qwen3_5MoeForCausalLM)
+            self.assertEqual(next(model.parameters()).dtype, torch.float32)
+
+            # Default behavior is unchanged: `auto` and no dtype still load in the checkpoint's saved bf16.
+            model_auto = AutoModelForCausalLM.from_pretrained(tmp_dir, dtype="auto")
+            self.assertEqual(next(model_auto.parameters()).dtype, torch.bfloat16)
+            model_default = AutoModelForCausalLM.from_pretrained(tmp_dir)
+            self.assertEqual(next(model_default.parameters()).dtype, torch.bfloat16)
+
+            # The legacy `torch_dtype` alias is honored the same way.
+            model_legacy = AutoModelForCausalLM.from_pretrained(tmp_dir, torch_dtype=torch.float32)
+            self.assertEqual(next(model_legacy.parameters()).dtype, torch.float32)
+
+            # Non-regression guard: loading the whole VLM already honored `dtype` (this path does not
+            # hit the text-config swap), and must keep doing so before and after the fix.
+            vlm = AutoModelForImageTextToText.from_pretrained(tmp_dir, dtype=torch.float32)
+            self.assertEqual(vlm.config.dtype, torch.float32)
+            self.assertEqual(vlm.config.text_config.dtype, torch.float32)
+            self.assertEqual(vlm.config.vision_config.dtype, torch.float32)
+            # Check the actual weights load in fp32, not just the config metadata.
+            self.assertTrue(all(param.dtype == torch.float32 for param in vlm.parameters()))
 
     @unittest.skip(
         "Conversion only for the `CausalLM` loading from saved `ConditionalLM`, doesn't apply to simple VLM"

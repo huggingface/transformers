@@ -344,11 +344,13 @@ class _BaseAutoModelClass:
                 **kwargs,
             )
 
-            # if torch_dtype=auto was passed here, ensure to pass it on
-            if kwargs_orig.get("torch_dtype", None) == "auto":
-                kwargs["torch_dtype"] = "auto"
-            if kwargs_orig.get("dtype", None) == "auto":
-                kwargs["dtype"] = "auto"
+            # A concrete dtype is absorbed into the config above and then dropped at the composite
+            # `get_text_config()` swap, so re-inject the user's value as an explicit kwarg to force the model's
+            # `from_pretrained` to honor it over the config's saved dtype (#46459).
+            if kwargs_orig.get("torch_dtype", None) is not None:
+                kwargs["torch_dtype"] = kwargs_orig["torch_dtype"]
+            if kwargs_orig.get("dtype", None) is not None:
+                kwargs["dtype"] = kwargs_orig["dtype"]
             if kwargs_orig.get("quantization_config", None) is not None:
                 kwargs["quantization_config"] = kwargs_orig["quantization_config"]
 
