@@ -869,7 +869,15 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, encoder_outputs=encoder_outputs)
+            logit_lengths = encoder_outputs.attention_mask.sum(-1)
+            loss = self.loss_function(
+                logits=logits[:, : int(logit_lengths.max())],
+                labels=labels,
+                logit_lengths=logit_lengths,
+                label_lengths=(labels != self.config.blank_token_id).sum(-1),
+                blank_token_id=self.config.blank_token_id,
+                reduction=self.config.loss_reduction,
+            )
 
         return ParakeetRNNTOutput(
             loss=loss,
@@ -879,18 +887,6 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             decoder_cache=decoder_cache,
-        )
-
-    def loss_function(self, logits, labels, encoder_outputs, **kwargs):
-        logit_lengths = encoder_outputs.attention_mask.sum(-1)
-        logits = logits[:, : int(logit_lengths.max())]
-        return super().loss_function(
-            logits=logits,
-            labels=labels,
-            logit_lengths=logit_lengths,
-            label_lengths=(labels != self.config.blank_token_id).sum(-1),
-            blank_token_id=self.config.blank_token_id,
-            reduction=self.config.loss_reduction,
         )
 
 
@@ -914,21 +910,97 @@ class ParakeetTDTJointNetwork(ParakeetRNNTJointNetwork):
 class ParakeetForTDT(ParakeetTDTGenerationMixin, ParakeetForRNNT):
     config: ParakeetTDTConfig
 
-    def __init__(self, config: ParakeetTDTConfig):
+    def __init__(self, config: ParakeetRNNTConfig):
         super().__init__(config)
+        self.encoder = AutoModel.from_config(config.encoder_config)
+        self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.decoder_hidden_size)
+        self.decoder = ParakeetRNNTDecoder(config)
         self.joint = ParakeetTDTJointNetwork(config)
-        self.post_init()
+        self.max_symbols_per_step = config.max_symbols_per_step  # used in generation
 
-    def loss_function(self, logits, labels, encoder_outputs, **kwargs):
-        return super(ParakeetForRNNT, self).loss_function(
-            token_logits=logits[..., : self.config.vocab_size],
-            duration_logits=logits[..., self.config.vocab_size :],
-            labels=labels,
-            logit_lengths=encoder_outputs.attention_mask.sum(-1),
-            label_lengths=(labels != self.config.pad_token_id).sum(-1),
-            blank_token_id=self.config.blank_token_id,
-            durations=self.config.durations,
-            reduction=self.config.loss_reduction,
+        self.post_init() 
+
+    @auto_docstring
+    @can_return_tuple
+    def forward(
+        self,
+        input_features: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_cache: ParakeetRNNTDecoderCache | None = None,
+        use_decoder_cache: bool | None = None,
+        encoder_outputs: ParakeetEncoderModelOutput | tuple[torch.FloatTensor] | None = None,
+        labels: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ParakeetRNNTOutput:
+        r"""
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
+            Decoder input token ids for single-step inference.
+        decoder_cache (`ParakeetRNNTDecoderCache`, *optional*):
+            Decoder LSTM cache. When provided and initialized, the cached `decoder_output` is reused
+            (e.g. during blank-skipping) instead of running the decoder. When `input_ids` is provided,
+            the decoder runs and the cache is updated in-place.
+        use_decoder_cache (`bool`, *optional*):
+            Whether to use a decoder cache. When `True` and `decoder_cache` is `None`, a new cache
+            is created automatically during the forward pass.
+        encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
+            Pre-computed encoder outputs (last_hidden_state, pooler_output, hidden_states, attentions, attention_mask).
+            Can be a tuple or `ParakeetEncoderModelOutput`.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, ParakeetForTDT
+        >>> from datasets import load_dataset, Audio
+
+        >>> model_id = "nvidia/parakeet-tdt-0.6b-v3"
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = ParakeetForTDT.from_pretrained(model_id)
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+
+        >>> inputs = processor(ds[0]["audio"]["array"])
+        >>> outputs = model(**inputs)
+        ```
+        """
+        if encoder_outputs is None:
+            encoder_outputs = self.get_audio_features(
+                input_features=input_features,
+                attention_mask=attention_mask,
+                **kwargs,
+            )
+
+        if use_decoder_cache and decoder_cache is None:
+            decoder_cache = ParakeetRNNTDecoderCache(self.config)
+
+        decoder_hidden_states = self.decoder(decoder_input_ids, cache=decoder_cache)
+        logits = self.joint(
+            encoder_hidden_states=encoder_outputs.pooler_output[:, :, None, :],
+            decoder_hidden_states=decoder_hidden_states[:, None, :, :],
+        ).squeeze(2)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                token_logits=logits[..., : self.config.vocab_size],
+                duration_logits=logits[..., self.config.vocab_size :],
+                labels=labels,
+                logit_lengths=encoder_outputs.attention_mask.sum(-1),
+                label_lengths=(labels != self.config.pad_token_id).sum(-1),
+                blank_token_id=self.config.blank_token_id,
+                durations=self.config.durations,
+                reduction=self.config.loss_reduction,
+            )
+
+        return ParakeetRNNTOutput(
+            loss=loss,
+            logits=logits,
+            last_hidden_state=encoder_outputs.last_hidden_state,
+            pooler_output=encoder_outputs.pooler_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+            decoder_cache=decoder_cache,
         )
 
 
