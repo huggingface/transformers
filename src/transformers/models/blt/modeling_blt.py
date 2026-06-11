@@ -38,7 +38,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_blt import (
@@ -806,7 +805,6 @@ class BltGlobalTransformer(BltPreTrainedModel):
 
         self.post_init()
 
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     def forward(
         self,
         inputs_embeds: torch.Tensor,
@@ -1228,7 +1226,7 @@ class BltModel(BltPreTrainedModel):
         else:
             batch_size, sequence_length = input_ids.shape
             encoder_embeds = compute_hash_embeddings(
-                input_ids.to(self.local_encoder.embed_tokens.weight.device),
+                input_ids,
                 self.local_encoder,
                 self.encoder_hash_tok_embedding,
                 self.config.encoder_hash_byte_group_nb_functions,
@@ -1241,7 +1239,7 @@ class BltModel(BltPreTrainedModel):
                 if input_ids is None:
                     raise ValueError("input_ids is required for entropy-based patching")
                 _, patch_lengths, _ = self.patcher(
-                    input_ids.to(self.patcher.embed_tokens.weight.device),
+                    input_ids,
                     patch_size=self.config.patch_size,
                     threshold=self.config.patching_threshold,
                     max_patch_length=self.config.max_patch_length,

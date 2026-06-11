@@ -14,6 +14,7 @@
 
 import argparse
 import ast
+import difflib
 import glob
 import os
 import subprocess
@@ -24,14 +25,16 @@ from typing import Any
 from sort_auto_mappings import sort_auto_mapping
 
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES as COMPLETE_CONFIG_MAPPING_NAMES
+from transformers.models.auto.feature_extraction_auto import MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES
 from transformers.models.auto.image_processing_auto import MISSING_IMAGE_PROCESSOR_MAPPING_NAMES
+from transformers.models.auto.processing_auto import MISSING_PROCESSOR_MAPPING_NAMES
 from transformers.models.auto.video_processing_auto import MISSING_VIDEO_PROCESSOR_MAPPING_NAMES
 
 
 CHECKER_CONFIG = {
     "name": "auto_mappings",
     "label": "Generate auto mappings",
-    "file_globs": [],
+    "cache_globs": [],
     "check_args": [],
     "fix_args": ["--fix_and_overwrite"],
 }
@@ -60,13 +63,19 @@ AUTO_GENERATED_HADER = """#                🚨🚨🚨🚨🚨🚨🚨🚨🚨�
 # Some keys are duplicated due to incorrect naming at model shipping and BC
 IGNORE_DUPLICATE_CONFIG = ["GPT2Config", "EvollaConfig", "MLCDVisionConfig"]
 
+AUTO_FILENAME = "src/transformers/models/auto/auto_mappings.py"
+
 
 def build_config_mapping_names() -> tuple[dict, dict]:
     model_type_map = OrderedDict()
     special_mappings = OrderedDict()
+    # Track which model_types were resolved by a "natural" match (model_type == module_name)
+    # so a later non-natural match (e.g. MaskFormerDetrConfig with model_type="detr" inside
+    # models/maskformer/) does not silently overwrite the canonical class.
+    natural_types: set[str] = set()
 
-    # root_path = Path(__file__).resolve().parents[2]
-    all_files = glob.glob("src/transformers/models/**/configuration_*.py", recursive=True)
+    # `glob.glob` is filesystem-order dependent — sort to make the output deterministic.
+    all_files = sorted(glob.glob("src/transformers/models/**/configuration_*.py", recursive=True))
     for config_path in all_files:
         module_name = config_path.split("/")[-2]
         with open(config_path, "r") as f:
@@ -96,74 +105,130 @@ def build_config_mapping_names() -> tuple[dict, dict]:
                 if not model_type:
                     continue
 
-                if model_type != module_name:
-                    special_mappings[model_type] = module_name
+                is_natural = model_type == module_name
+                # If we already recorded a natural match for this model_type, don't let a
+                # non-natural one overwrite it — the natural class is the canonical owner.
+                if model_type in natural_types and not is_natural:
+                    continue
+
                 model_type_map[model_type] = config_cls_name
+                if is_natural:
+                    natural_types.add(model_type)
+                    special_mappings.pop(model_type, None)
+                else:
+                    special_mappings[model_type] = module_name
 
     return model_type_map, special_mappings
 
 
-def build_image_processor_mapping(
+def build_processor_mapping(
     config_mapping: dict[str, str],
+    processor_filename: str,
+    parent_class_name: str,
 ) -> OrderedDict[str, dict[str, str | None]]:
     processor_mapping = OrderedDict()
     for model_type in config_mapping:
         module = model_type.replace("-", "_")
-        fast_processor_name = slow_processor_name = None
-        if os.path.exists(f"src/transformers/models/{module}/image_processing_pil_{module}.py"):
-            with open(f"src/transformers/models/{module}/image_processing_pil_{module}.py", "r") as f:
+        processor_name = None
+
+        if os.path.exists(f"src/transformers/models/{module}/{processor_filename}_{module}.py"):
+            with open(f"src/transformers/models/{module}/{processor_filename}_{module}.py", "r") as f:
                 content = f.read()
 
             tree = ast.parse(content)
             for node in tree.body:
                 if isinstance(node, ast.ClassDef) and any(
-                    base.id == "PilBackend" for base in node.bases if isinstance(base, ast.Name)
+                    base.id == parent_class_name for base in node.bases if isinstance(base, ast.Name)
                 ):
-                    slow_processor_name = node.name
+                    processor_name = node.name
 
-        if os.path.exists(f"src/transformers/models/{module}/image_processing_{module}.py"):
-            with open(f"src/transformers/models/{module}/image_processing_{module}.py", "r") as f:
-                content = f.read()
+        if processor_name is not None:
+            processor_mapping[model_type] = processor_name
 
-            tree = ast.parse(content)
-            for node in tree.body:
-                if isinstance(node, ast.ClassDef) and any(
-                    base.id == "TorchvisionBackend" for base in node.bases if isinstance(base, ast.Name)
-                ):
-                    fast_processor_name = node.name
+    return processor_mapping
 
-        if slow_processor_name is not None or fast_processor_name is not None:
-            processor_mapping[model_type] = {
-                **({"pil": slow_processor_name} if slow_processor_name else {}),
-                **({"torchvision": fast_processor_name} if fast_processor_name else {}),
+
+def get_all_config_mappings():
+    # Generate new config mapping dicts by parsing all model-config classes
+    config_mapping, special_mapping = build_config_mapping_names()
+
+    # The config mapping has to be one-to-one for correct `AutoConfig.from_pretrained()` because `LazyMapping`
+    # reverts keys/values and creates a dict from it. Duplicate values will be overwritten by whatever comes at last
+    duplicate_keys = [n for n, c in Counter(COMPLETE_CONFIG_MAPPING_NAMES.keys()).items() if c > 1]
+    if duplicate_keys:
+        raise ValueError(
+            f"Keys in `CONFIG_MAPPING_NAMES` contain duplicates = {duplicate_keys}. "
+            "The mapping has to be one-to-one to ensure correct `AutoConfig` functionality!"
+        )
+
+    duplicate_values = [
+        n
+        for n, c in Counter(COMPLETE_CONFIG_MAPPING_NAMES.values()).items()
+        if c > 1 and n not in IGNORE_DUPLICATE_CONFIG
+    ]
+    if duplicate_values:
+        raise ValueError(
+            f"Values in `CONFIG_MAPPING_NAMES` contain duplicates = {duplicate_values}. "
+            "The mapping has to be one-to-one to ensure correct `AutoConfig` functionality!"
+        )
+    return config_mapping, special_mapping
+
+
+def get_all_processor_mappings(config_mapping: dict[str, str]):
+    files_to_names = {
+        "image_processing_pil": (
+            "PilBackend",
+            "IMAGE_PROCESSOR_MAPPING_NAMES_PIL",
+            MISSING_IMAGE_PROCESSOR_MAPPING_NAMES,
+        ),
+        "image_processing": (
+            "TorchvisionBackend",
+            "IMAGE_PROCESSOR_MAPPING_NAMES_TV",
+            MISSING_IMAGE_PROCESSOR_MAPPING_NAMES,
+        ),
+        "video_processing": (
+            "BaseVideoProcessor",
+            "VIDEO_PROCESSOR_MAPPING_NAMES",
+            MISSING_VIDEO_PROCESSOR_MAPPING_NAMES,
+        ),
+        "feature_extraction": (
+            "SequenceFeatureExtractor",
+            "FEATURE_EXTRACTOR_MAPPING_NAMES",
+            MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES,
+        ),
+        "processing": ("ProcessorMixin", "PROCESSOR_MAPPING_NAMES", MISSING_PROCESSOR_MAPPING_NAMES),
+    }
+
+    all_mappings = {}
+    for processor_filename, (parent_class_name, mapping_name, missing_mapping_names) in files_to_names.items():
+        all_mappings[mapping_name] = build_processor_mapping(
+            config_mapping=config_mapping,
+            processor_filename=processor_filename,
+            parent_class_name=parent_class_name,
+        )
+
+        # Make sure users aren't duplicating the same keys manually
+        # Skip image processor until pil <-> tv backend are merged into one mapping
+        if "image_processing" not in processor_filename:
+            check_duplicates(all_mappings[mapping_name], missing_mapping_names)
+
+    merged_image_processor_mapping = {}
+    for model_type in config_mapping:
+        pil_processor_name = all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES_PIL"].get(model_type)
+        tv_processor_name = all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES_TV"].get(model_type)
+
+        if pil_processor_name is not None or tv_processor_name is not None:
+            merged_image_processor_mapping[model_type] = {
+                **({"pil": pil_processor_name} if pil_processor_name else {}),
+                **({"torchvision": tv_processor_name} if tv_processor_name else {}),
             }
 
-    return processor_mapping
+    all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES"] = merged_image_processor_mapping
+    del all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES_PIL"]
+    del all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES_TV"]
+    check_duplicates(MISSING_IMAGE_PROCESSOR_MAPPING_NAMES, merged_image_processor_mapping)
 
-
-def build_video_processor_mapping(
-    config_mapping: dict[str, str],
-) -> OrderedDict[str, dict[str, str | None]]:
-    processor_mapping = OrderedDict()
-    for model_type in config_mapping:
-        module = model_type.replace("-", "_")
-        video_processor_name = None
-
-        if os.path.exists(f"src/transformers/models/{module}/video_processing_{module}.py"):
-            with open(f"src/transformers/models/{module}/video_processing_{module}.py", "r") as f:
-                content = f.read()
-
-            tree = ast.parse(content)
-            for node in tree.body:
-                if isinstance(node, ast.ClassDef) and any(
-                    base.id == "BaseVideoProcessor" for base in node.bases if isinstance(base, ast.Name)
-                ):
-                    video_processor_name = node.name
-
-        if video_processor_name is not None:
-            processor_mapping[model_type] = video_processor_name
-
-    return processor_mapping
+    return all_mappings
 
 
 def run_ruff_and_sort(file: str):
@@ -211,69 +276,51 @@ def check_duplicates(mapping_for_special_models: dict[str, Any], auto_mapping: d
 
 
 def main(overwrite: bool):
-    filename = "src/transformers/models/auto/auto_mappings.py"
-
-    # 1. Read existing file content if available
+    # Read existing file content if available
     old_content = ""
-    if os.path.exists(filename):
-        old_content = open(filename, "r").read()
+    if os.path.exists(AUTO_FILENAME):
+        old_content = open(AUTO_FILENAME, "r").read()
 
-    # 2. Generate new config mapping dicts by parsing all model-config classes
-    config_mapping, special_mapping = build_config_mapping_names()
-    image_processor_mapping = build_image_processor_mapping(config_mapping=config_mapping)
-    video_processor_mapping = build_video_processor_mapping(config_mapping=config_mapping)
-
-    # Make sure users aren't duplicating the same keys manually
-    check_duplicates(MISSING_IMAGE_PROCESSOR_MAPPING_NAMES, image_processor_mapping)
-    check_duplicates(MISSING_VIDEO_PROCESSOR_MAPPING_NAMES, video_processor_mapping)
-
-    # The config mapping has to be one-to-one for correct `AutoConfig.from_pretrained()` because `LazyMapping`
-    # reverts keys/values and creates a dict from it. Duplicate values will be overwritten by whatever comes at last
-    duplicate_keys = [n for n, c in Counter(COMPLETE_CONFIG_MAPPING_NAMES.keys()).items() if c > 1]
-    if duplicate_keys:
-        raise ValueError(
-            f"Keys in `CONFIG_MAPPING_NAMES` contain duplicates = {duplicate_keys}. "
-            "The mapping has to be one-to-one to ensure correct `AutoConfig` functionality!"
-        )
-
-    duplicate_values = [
-        n
-        for n, c in Counter(COMPLETE_CONFIG_MAPPING_NAMES.values()).items()
-        if c > 1 and n not in IGNORE_DUPLICATE_CONFIG
-    ]
-    if duplicate_values:
-        raise ValueError(
-            f"Values in `CONFIG_MAPPING_NAMES` contain duplicates = {duplicate_values}. "
-            "The mapping has to be one-to-one to ensure correct `AutoConfig` functionality!"
-        )
+    config_mapping, special_mapping = get_all_config_mappings()
+    all_processor_mappings = get_all_processor_mappings(config_mapping=config_mapping)
 
     new_mappings = {
         "CONFIG_MAPPING_NAMES": config_mapping,
         "SPECIAL_MODEL_TYPE_TO_MODULE_NAME": special_mapping,
-        "IMAGE_PROCESSOR_MAPPING_NAMES": image_processor_mapping,
-        "VIDEO_PROCESSOR_MAPPING_NAMES": video_processor_mapping,
+        **all_processor_mappings,
     }
     new_content = AUTO_GENERATED_HADER + "\nfrom collections import OrderedDict\n\n"
     for k, v in new_mappings.items():
         new_content += format_ordered_dict(name=k, data=v)
 
-    # 3. If the new auto-generate content is different, overwrite it
+    # If the new auto-generate content is different, overwrite it
     # Dirty hack to sort and apply ruff to the file content, for easier matching
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as tmpfile:
-        tmpfile.write(new_content)
-        tmpfile_path = tmpfile.name
+    with tempfile.TemporaryDirectory() as temp_folder:
+        temp_filename = os.path.join(temp_folder, "temp.py")
+        with open(temp_filename, "w") as temp_file:
+            temp_file.write(new_content)
 
-        run_ruff_and_sort(tmpfile_path)
-        new_content = open(tmpfile_path, "r").read()
+        run_ruff_and_sort(temp_filename)
+        new_content = open(temp_filename, "r").read()
 
     if old_content != new_content:
         if not overwrite:
+            diff = "".join(
+                difflib.unified_diff(
+                    old_content.splitlines(keepends=True),
+                    new_content.splitlines(keepends=True),
+                    fromfile=f"{AUTO_FILENAME} (on disk)",
+                    tofile=f"{AUTO_FILENAME} (regenerated)",
+                    n=3,
+                )
+            )
             raise Exception(
-                "Generated auto-mapping is not consistent with the contents of `models/auto/auto_mappings.py`:\n"
-                + "\nRun `make fix-repo` or `python utils/check_auto.py --fix_and_overwrite` to fix them."
+                "Generated auto-mapping is not consistent with the contents of `models/auto/auto_mappings.py`.\n"
+                "Run `make fix-repo` or `python utils/check_auto.py --fix_and_overwrite` to fix them.\n\n"
+                f"Diff (on disk → regenerated):\n{diff}"
             )
         else:
-            with open(filename, "w") as f:
+            with open(AUTO_FILENAME, "w") as f:
                 f.write(new_content)
 
 

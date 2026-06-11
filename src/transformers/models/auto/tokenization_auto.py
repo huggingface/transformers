@@ -99,6 +99,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("cohere2", "CohereTokenizer" if is_tokenizers_available() else None),
         ("colqwen2", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("convbert", "BertTokenizer" if is_tokenizers_available() else None),
+        ("cosmos3_omni", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("cpm", "CpmTokenizer" if is_tokenizers_available() else None),
         ("cpmant", "CpmAntTokenizer"),
         ("ctrl", "CTRLTokenizer"),
@@ -108,6 +109,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("deberta", "DebertaTokenizer" if is_tokenizers_available() else None),
         ("deberta-v2", "DebertaV2Tokenizer" if is_tokenizers_available() else None),
         ("dia", "DiaTokenizer"),
+        ("diffusion_gemma", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("distilbert", "BertTokenizer" if is_tokenizers_available() else None),
         ("dpr", "DPRQuestionEncoderTokenizer" if is_tokenizers_available() else None),
         ("electra", "BertTokenizer" if is_tokenizers_available() else None),
@@ -146,10 +148,10 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("gpt_neox", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("gpt_neox_japanese", "GPTNeoXJapaneseTokenizer"),
         ("gptj", "GPT2Tokenizer" if is_tokenizers_available() else None),
-        ("granite", "GPT2Tokenizer"),
-        ("granitemoe", "GPT2Tokenizer"),
-        ("granitemoehybrid", "GPT2Tokenizer"),
-        ("granitemoeshared", "GPT2Tokenizer"),
+        ("granite", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("granitemoe", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("granitemoehybrid", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("granitemoeshared", "TokenizersBackend" if is_tokenizers_available() else None),
         ("grounding-dino", "BertTokenizer" if is_tokenizers_available() else None),
         ("groupvit", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("herbert", "HerbertTokenizer" if is_tokenizers_available() else None),
@@ -247,6 +249,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("ovis2", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("owlv2", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("owlvit", "CLIPTokenizer" if is_tokenizers_available() else None),
+        ("parakeet_ctc", "ParakeetTokenizer" if is_tokenizers_available() else None),
+        ("parakeet_tdt", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("pegasus", "PegasusTokenizer" if is_tokenizers_available() else None),
         ("pegasus_x", "PegasusTokenizer" if is_tokenizers_available() else None),
         ("perceiver", "PerceiverTokenizer"),
@@ -352,15 +356,17 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "chatlm",
     "deepseek_v2",
     "deepseek_v3",
+    "deepseek_v32",
     "deepseek_v4",
     "deepseek_vl",
     "deepseek_vl_hybrid",
     "deepseek_vl_v2",
+    "deepseek_ocr",
+    "deepseek_ocr2",
     "fuyu",
     "h2ovl_chat",
     "hyperclovax_vlm",
     "internlm2",
-    "internvl_chat",
     "jamba",
     "janus",
     "llava",
@@ -377,6 +383,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "phi3",
     "phi3_v",
     "phimoe",
+    "qwen2",
     "step3p5",
     "step3_vl",
     "vipllava",
@@ -721,8 +728,13 @@ class AutoTokenizer:
         ):
             registered_class_name = TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast")
             if registered_class_name not in ("TokenizersBackend", "PythonBackend", "PreTrainedTokenizerFast"):
-                # The auto-mapping has a real class but the Hub specifies a different specialized class so trust the Hub's class.
-                tokenizer_class = tokenizer_class_from_name(tokenizer_config_class)
+                # If the hub class is known incorrect for this model type, use the registered class; otherwise trust the hub.
+                class_name = (
+                    registered_class_name
+                    if config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
+                    else tokenizer_config_class
+                )
+                tokenizer_class = tokenizer_class_from_name(class_name)
                 if tokenizer_class is not None and tokenizer_class.__name__ not in (
                     "TokenizersBackend",
                     "PythonBackend",

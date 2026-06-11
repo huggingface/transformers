@@ -3,6 +3,8 @@ name: Self-hosted runner scale set (AMD mi325 scheduled CI caller)
 # Note: For every job in this workflow, the name of the runner scale set is finalized in the runner yaml i.e. huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml
 # For example, 1gpu scale set: amd-mi325-ci-1gpu
 #              2gpu scale set: amd-mi325-ci-2gpu
+# Important: Do not pin the reusable workflow ref to a SHA. AMD runner groups only route jobs for
+# workflows referenced at @main; a pinned SHA causes jobs to wait for a runner until the 24h timeout.
 
 on:
   workflow_run:
@@ -12,6 +14,9 @@ on:
   push:
     branches:
       - run_amd_scheduled_ci_caller*
+
+permissions:
+  contents: read
 
 jobs:
   model-ci:

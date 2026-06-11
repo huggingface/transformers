@@ -227,6 +227,8 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         ]
         result = get_processor_inputs_from_messages(messages, Modality.LLM)
         self.assertEqual(len(result), 3)
+        # The preprocessor parses function.arguments from JSON string to dict.
+        tool_calls[0]["function"]["arguments"] = json.loads(tool_calls[0]["function"]["arguments"])
         self.assertEqual(result[1]["tool_calls"], tool_calls)
         self.assertNotIn("tool_calls", result[0])
         self.assertEqual(result[2]["tool_call_id"], "call_1")
@@ -245,6 +247,7 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         ]
         result = get_processor_inputs_from_messages(messages, Modality.VLM)
         self.assertEqual(len(result), 3)
+        tool_calls[0]["function"]["arguments"] = json.loads(tool_calls[0]["function"]["arguments"])
         self.assertEqual(result[1]["tool_calls"], tool_calls)
         self.assertEqual(result[2]["tool_call_id"], "call_1")
 
@@ -565,26 +568,24 @@ class TestAppRoutes(unittest.TestCase):
             return await c.request(method, path, **kwargs)
 
     def test_health(self):
-        resp = asyncio.get_event_loop().run_until_complete(self._request("GET", "/health"))
+        resp = asyncio.run(self._request("GET", "/health"))
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json(), {"status": "ok"})
 
     def test_models_list(self):
-        resp = asyncio.get_event_loop().run_until_complete(self._request("GET", "/v1/models"))
+        resp = asyncio.run(self._request("GET", "/v1/models"))
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data["object"], "list")
         self.assertEqual(len(data["data"]), 1)
 
     def test_request_id_generated(self):
-        resp = asyncio.get_event_loop().run_until_complete(self._request("GET", "/health"))
+        resp = asyncio.run(self._request("GET", "/health"))
         self.assertIn("x-request-id", resp.headers)
         self.assertEqual(len(resp.headers["x-request-id"]), 36)  # UUID length
 
     def test_request_id_passthrough(self):
-        resp = asyncio.get_event_loop().run_until_complete(
-            self._request("GET", "/health", headers={"x-request-id": "my-id"})
-        )
+        resp = asyncio.run(self._request("GET", "/health", headers={"x-request-id": "my-id"}))
         self.assertEqual(resp.headers["x-request-id"], "my-id")
 
 
@@ -1809,7 +1810,8 @@ class TestToolCallUnit(unittest.TestCase):
         text = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>'
         processor = MagicMock()
         processor.parse_response = lambda t, s: recursive_parse(t, s)
-        calls = parse_tool_calls(processor, text, _TOOL_CALL_FALLBACKS["qwen"]["schema"])
+        schema = next(v["schema"] for k, v in _TOOL_CALL_FALLBACKS.items() if "qwen2" in k)
+        calls = parse_tool_calls(processor, text, schema)
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]["name"], "get_weather")
 
@@ -1820,7 +1822,8 @@ class TestToolCallUnit(unittest.TestCase):
         )
         processor = MagicMock()
         processor.parse_response = lambda t, s: recursive_parse(t, s)
-        calls = parse_tool_calls(processor, text, _TOOL_CALL_FALLBACKS["qwen"]["schema"])
+        schema = next(v["schema"] for k, v in _TOOL_CALL_FALLBACKS.items() if "qwen2" in k)
+        calls = parse_tool_calls(processor, text, schema)
         self.assertEqual(len(calls), 2)
 
 
@@ -2197,6 +2200,44 @@ class _TestToolCallBase:
             f"Expected model to reference tool result, got: {content}",
         )
 
+    # ----- parser equivalence -----
+
+    def test_chat_streaming_matches_non_streaming(self):
+        """Streaming and non-streaming chat completions yield the same tool call at T=0."""
+        msgs = [{"role": "user", "content": "What is the weather in Paris?"}]
+        kwargs = {"model": self.MODEL, "max_tokens": 50, "temperature": 0.0, "tools": [self._get_tool_def()]}
+
+        ns = self.client.chat.completions.create(messages=msgs, stream=False, **kwargs)
+        ns_tc = ns.choices[0].message.tool_calls[0]
+
+        chunks = list(self.client.chat.completions.create(messages=msgs, stream=True, **kwargs))
+        tool_chunks = [c for c in chunks if c.choices[0].delta.tool_calls]
+        # Arguments may be split across deltas, accumulate then compare parsed dicts.
+        s_name = tool_chunks[0].choices[0].delta.tool_calls[0].function.name
+        s_args = "".join(c.choices[0].delta.tool_calls[0].function.arguments or "" for c in tool_chunks)
+
+        self.assertEqual(s_name, ns_tc.function.name)
+        self.assertEqual(json.loads(s_args), json.loads(ns_tc.function.arguments))
+
+    def test_responses_streaming_matches_non_streaming(self):
+        """Streaming and non-streaming Responses API yield the same tool call at T=0."""
+        kwargs = {
+            "model": self.MODEL,
+            "input": "What is the weather in Paris?",
+            "max_output_tokens": 50,
+            "tools": [self._get_tool_def()],
+        }
+
+        ns = self.client.responses.create(stream=False, **kwargs)
+        ns_tc = next(i for i in ns.output if i.type == "function_call")
+
+        events = list(self.client.responses.create(stream=True, **kwargs))
+        completed = next(e for e in events if e.type == "response.completed")
+        s_tc = next(i for i in completed.response.output if i.type == "function_call")
+
+        self.assertEqual(s_tc.name, ns_tc.name)
+        self.assertEqual(json.loads(s_tc.arguments), json.loads(ns_tc.arguments))
+
 
 @slow
 @require_serve
@@ -2214,6 +2255,237 @@ class TestToolCallGemma(_TestToolCallBase, unittest.TestCase):
     """Tool call tests with Gemma 4 (response_schema + stc/etc special tokens)."""
 
     MODEL = "google/gemma-4-E2B-it"
+
+
+class _TestReasoningBase:
+    """Base class for reasoning integration tests. Subclasses set MODEL.
+
+    A single server is shared across all tests in a subclass via setUpClass.
+    """
+
+    MODEL: str
+    USER_PROMPT = "What is 17 * 23? Think briefly, then answer in one sentence."
+    EXPECTED_ANSWER = "391"
+    MAX_TOKENS = 512
+
+    @classmethod
+    def setUpClass(cls):
+        cls.serve, port = _start_serve()
+        cls.base_url = f"http://localhost:{port}"
+        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.serve.kill_server()
+
+    @staticmethod
+    def _reasoning_field(obj):
+        """Return ``reasoning_content`` from a chat message or delta (handles model_extra)."""
+        return getattr(obj, "reasoning_content", None) or (obj.model_extra or {}).get("reasoning_content")
+
+    # ----- chat completions -----
+
+    def test_chat_non_streaming(self):
+        """Chat completions: non-streaming surfaces ``reasoning_content`` and strips delimiters."""
+        msg = (
+            self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[{"role": "user", "content": self.USER_PROMPT}],
+                stream=False,
+                max_tokens=self.MAX_TOKENS,
+                temperature=0.0,
+            )
+            .choices[0]
+            .message
+        )
+        reasoning = self._reasoning_field(msg)
+        self.assertIn(self.EXPECTED_ANSWER, reasoning or "", f"answer missing from reasoning: {reasoning!r}")
+        self.assertIn(self.EXPECTED_ANSWER, msg.content or "", f"answer missing from content: {msg.content!r}")
+        self.assertNotIn("<think>", msg.content or "")
+        self.assertNotIn("<|channel>", msg.content or "")
+        self.assertNotIn(reasoning.strip()[:30], msg.content or "")
+
+    def test_chat_streaming(self):
+        """Chat completions: streaming emits ``reasoning_content`` deltas; content stays clean."""
+        chunks = list(
+            self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[{"role": "user", "content": self.USER_PROMPT}],
+                stream=True,
+                max_tokens=self.MAX_TOKENS,
+                temperature=0.0,
+            )
+        )
+        reasoning_text = "".join(self._reasoning_field(c.choices[0].delta) or "" for c in chunks)
+        self.assertIn(self.EXPECTED_ANSWER, reasoning_text, f"answer missing from reasoning: {reasoning_text!r}")
+        content = "".join(c.choices[0].delta.content or "" for c in chunks)
+        self.assertIn(self.EXPECTED_ANSWER, content, f"answer missing from content: {content!r}")
+        self.assertNotIn("<think>", content)
+        self.assertNotIn("<|channel>", content)
+
+    def test_chat_multi_turn_round_trips_reasoning(self):
+        """Chat completions: reasoning_content from a prior turn round-trips through input."""
+        first = (
+            self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[{"role": "user", "content": self.USER_PROMPT}],
+                stream=False,
+                max_tokens=self.MAX_TOKENS,
+                temperature=0.0,
+            )
+            .choices[0]
+            .message
+        )
+        reasoning = self._reasoning_field(first)
+        self.assertTrue(reasoning)
+        second = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[
+                {"role": "user", "content": self.USER_PROMPT},
+                {"role": "assistant", "content": first.content or "", "reasoning_content": reasoning},
+                {"role": "user", "content": "Now multiply that result by 2."},
+            ],
+            stream=False,
+            max_tokens=self.MAX_TOKENS,
+            temperature=0.0,
+        )
+        self.assertIsNotNone(second.choices[0].message.content)
+
+    # ----- responses -----
+
+    def test_response_non_streaming(self):
+        """Responses API: non-streaming includes a reasoning item before the message item."""
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input=self.USER_PROMPT,
+            stream=False,
+            max_output_tokens=self.MAX_TOKENS,
+            temperature=0.0,
+        )
+        types = [item.type for item in resp.output]
+        self.assertIn("reasoning", types, f"expected reasoning item, got types: {types}")
+        self.assertIn("message", types)
+        self.assertLess(types.index("reasoning"), types.index("message"))
+        reasoning_text = next(item for item in resp.output if item.type == "reasoning").content[0].text
+        self.assertIn(self.EXPECTED_ANSWER, reasoning_text, f"answer missing from reasoning: {reasoning_text!r}")
+        message_text = next(item for item in resp.output if item.type == "message").content[0].text
+        self.assertIn(self.EXPECTED_ANSWER, message_text, f"answer missing from message: {message_text!r}")
+        self.assertNotIn("<think>", message_text)
+        self.assertNotIn("<|channel>", message_text)
+
+    def test_response_streaming(self):
+        """Responses API: streaming emits reasoning_text events and a separate reasoning item."""
+        events = list(
+            self.client.responses.create(
+                model=self.MODEL,
+                input=self.USER_PROMPT,
+                stream=True,
+                max_output_tokens=self.MAX_TOKENS,
+                temperature=0.0,
+            )
+        )
+        added = [e for e in events if e.type == "response.output_item.added"]
+        self.assertGreaterEqual(len(added), 2)
+        self.assertEqual(added[0].item.type, "reasoning")
+        self.assertEqual(added[1].item.type, "message")
+        # Coherence: concat of reasoning_text.delta events == reasoning_text.done.text, and contains the answer.
+        reasoning_text = "".join(e.delta for e in events if e.type == "response.reasoning_text.delta")
+        done = next(e for e in events if e.type == "response.reasoning_text.done")
+        self.assertEqual(reasoning_text, done.text)
+        self.assertIn(self.EXPECTED_ANSWER, reasoning_text, f"answer missing from reasoning: {reasoning_text!r}")
+        content = "".join(e.delta for e in events if e.type == "response.output_text.delta")
+        self.assertIn(self.EXPECTED_ANSWER, content, f"answer missing from content: {content!r}")
+        self.assertNotIn("<think>", content)
+        self.assertNotIn("<|channel>", content)
+
+    def test_response_multi_turn_round_trips_reasoning(self):
+        """Responses API: ``reasoning`` items echoed back as input are accepted."""
+        first = self.client.responses.create(
+            model=self.MODEL,
+            input=self.USER_PROMPT,
+            stream=False,
+            max_output_tokens=self.MAX_TOKENS,
+            temperature=0.0,
+        )
+        reasoning_item = next((i for i in first.output if i.type == "reasoning"), None)
+        message_item = next((i for i in first.output if i.type == "message"), None)
+        self.assertIsNotNone(reasoning_item)
+        self.assertIsNotNone(message_item)
+        second = self.client.responses.create(
+            model=self.MODEL,
+            input=[
+                {"role": "user", "content": self.USER_PROMPT},
+                reasoning_item.model_dump(exclude_none=True),
+                {"role": "assistant", "content": message_item.content[0].text},
+                {"role": "user", "content": "Now multiply that result by 2."},
+            ],
+            stream=False,
+            max_output_tokens=self.MAX_TOKENS,
+            temperature=0.0,
+        )
+        self.assertEqual(second.status, "completed")
+
+    # ----- parser equivalence -----
+
+    def test_chat_streaming_matches_non_streaming(self):
+        """Streaming and non-streaming chat completions yield the same content + reasoning at T=0."""
+        msgs = [{"role": "user", "content": self.USER_PROMPT}]
+        kwargs = {"model": self.MODEL, "max_tokens": self.MAX_TOKENS, "temperature": 0.0}
+
+        ns_msg = self.client.chat.completions.create(messages=msgs, stream=False, **kwargs).choices[0].message
+        chunks = list(self.client.chat.completions.create(messages=msgs, stream=True, **kwargs))
+        stream_content = "".join(c.choices[0].delta.content or "" for c in chunks)
+        stream_reasoning = "".join(self._reasoning_field(c.choices[0].delta) or "" for c in chunks)
+
+        self.assertEqual(stream_content, ns_msg.content or "")
+        self.assertEqual(stream_reasoning, self._reasoning_field(ns_msg) or "")
+
+    def test_response_streaming_matches_non_streaming(self):
+        """Streaming and non-streaming Responses API yield the same content + reasoning at T=0."""
+        kwargs = {
+            "model": self.MODEL,
+            "input": self.USER_PROMPT,
+            "max_output_tokens": self.MAX_TOKENS,
+            "temperature": 0.0,
+        }
+
+        ns = self.client.responses.create(stream=False, **kwargs)
+        ns_message = next(i for i in ns.output if i.type == "message")
+        ns_reasoning_item = next((i for i in ns.output if i.type == "reasoning"), None)
+        ns_content = ns_message.content[0].text
+        ns_reasoning = ns_reasoning_item.content[0].text if ns_reasoning_item else ""
+
+        events = list(self.client.responses.create(stream=True, **kwargs))
+        stream_content = "".join(e.delta for e in events if e.type == "response.output_text.delta")
+        stream_reasoning = "".join(e.delta for e in events if e.type == "response.reasoning_text.delta")
+
+        self.assertEqual(stream_content, ns_content)
+        self.assertEqual(stream_reasoning, ns_reasoning)
+
+
+@slow
+@require_serve
+@require_torch_accelerator
+class TestReasoningQwen(_TestReasoningBase, unittest.TestCase):
+    """Reasoning tests with Qwen3 (inline <think>...</think> tags)."""
+
+    MODEL = "Qwen/Qwen3-1.7B"
+
+
+@slow
+@require_serve
+@require_torch_accelerator
+class TestReasoningGemma(_TestReasoningBase, unittest.TestCase):
+    """Reasoning tests with Gemma 4 (response_schema-based thinking channel)."""
+
+    MODEL = "google/gemma-4-E2B-it"
+
+    @classmethod
+    def setUpClass(cls):
+        # Gemma 4's chat template gates thinking on `enable_thinking`; default is "false".
+        cls.serve, port = _start_serve(reasoning="on")
+        cls.base_url = f"http://localhost:{port}"
+        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
 
 
 @slow

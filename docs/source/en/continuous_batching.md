@@ -98,11 +98,31 @@ manager.start()
 # submit and retrieve requests...
 ```
 
-Call [`ContinuousBatchingManager.stop`] to terminate the manager.
+### Shutting down the manager
+
+The manager runs a background thread and holds distributed resources. Shutdown happens in two stages so you can choose what to do with in-flight work.
+
+Call [`~ContinuousBatchingManager.stop`] to halt the background thread. By default, the manager stops accepting new submissions and waits for queued and active requests to finish before the thread exits.
 
 ```py
 manager.stop()
 ```
+
+Pass `hard_stop=True` to abandon pending work immediately. Queued and active requests are failed with a `RuntimeError` instead of finishing.
+
+```py
+manager.stop(hard_stop=True)
+```
+
+Once `stop` is called, [`~ContinuousBatchingManager.add_request`] and [`~ContinuousBatchingManager.add_requests`] drop new submissions and log a warning. You can still call `start` again to run another generation session with the same manager.
+
+Call [`~ContinuousBatchingManager.destroy`] to release distributed resources. `destroy` stops the manager first if it's still running, and the manager cannot be restarted afterwards. Use it when you're done with continuous batching for the lifetime of the process.
+
+```py
+manager.destroy()
+```
+
+[`~ContinuousMixin.continuous_batching_context_manager`] handles this process. It calls `stop` on exit and `destroy` unless you pass `persistent_manager=True` to cache the manager on the model for the next session.
 
 ### Adding requests
 
@@ -185,6 +205,7 @@ By default, `num_blocks` and `max_batch_tokens` are inferred automatically from 
 | `scheduler` | | ✓ scheduling policy | ✓ TTFT |
 | CUDA graphs | ↑ graph storage | ✓ less dispatch overhead | ✓ |
 | Async batching | ↑ ~2× I/O buffers | ✓ overlaps CPU/GPU | |
+| Decode fast path | ↑ block table per request | ✓ faster decode-only steps | ✓ |
 | CPU offloading | ↑ pinned CPU memory | ✓ skips some re-prefills | |
 | Prefix caching | ↓ shared KV blocks | ✓ skips redundant prefill | ✓ TTFT |
 | Paged attention | ↓ no fragmentation | ✓ dynamic batch membership | |
@@ -252,6 +273,33 @@ cb_config = ContinuousBatchingConfig(
 )
 ```
 
+### Decode fast path
+
+When a batch contains only decode requests (one query token per sequence), the manager can dispatch to the `flash_attn_with_kvcache` kernel instead of the variable-length kernel. This is faster than the varlen path because the kernel reads and writes the paged KV cache in-place through a block table rather than going through a manual update. See [Paged attention](./paged_attention) for kernel-level details.
+
+The fast path is sized by `max_blocks_per_request`, which dimensions the per-request block table. By default this is auto-inferred. If `max_prompt_length` and `max_generated_length` are set on the manager, the block table is sized to fit the maximum sequence length. Otherwise, a fallback default (32 blocks per request) is used.
+
+Set `max_blocks_per_request` to a specific value to size the block table explicitly. This is useful when you know the maximum sequence length per request and want to bound the block table memory cost.
+
+```py
+cb_config = ContinuousBatchingConfig(max_blocks_per_request=64)
+```
+
+Set `max_blocks_per_request=0` to disable the fast path and force every batch through the varlen kernel. This recovers the pre-default behavior and is useful when the fast path is unavailable for your attention implementation (the manager also disables it automatically when the underlying kernel can't be used).
+
+```py
+cb_config = ContinuousBatchingConfig(max_blocks_per_request=0)
+```
+
+The fast path relies on the `flash_attn_with_kvcache` kernel, which is available for two device and attention implementation combinations.
+
+| Device | `attn_implementation` |
+|---|---|
+| CUDA | `flash_attention_3` |
+| XPU | [flash_attention_2](https://huggingface.co/kernels-community/flash-attn2) |
+
+For any other combination, or when the kernel can't be imported, the manager falls back to the varlen path. It logs a warning only when you set `max_blocks_per_request` explicitly.
+
 ### CPU offloading
 
 CPU offloading copies evicted KV cache blocks to a pre-allocated pinned CPU buffer when the GPU KV cache is full. After cache space becomes available, the manager copies the blocks back to the GPU and resumes the request without recomputing its prompt and generated tokens.
@@ -263,6 +311,16 @@ cb_config = ContinuousBatchingConfig(cpu_offload_space=8.0)
 ```
 
 By default, `cpu_offload_space_safety_threshold=0.8` limits the requested space to 80% of available system RAM when `psutil` is installed. Set `cpu_offload_space=None` to size the swap pool from the safety threshold.
+
+### Tensor parallel timeout
+
+Under tensor parallelism, the manager creates a CPU communication group to coordinate request submissions, cancellations, and shutdown across ranks. `cpu_group_timeout` limits how long a collective on this group can block before the process crashes. If one rank stalls, the timeout prevents the others from waiting forever.
+
+Set a longer timeout for workloads that issue infrequent collectives, or pass `None` to disable it.
+
+```py
+cb_config = ContinuousBatchingConfig(cpu_group_timeout=600.0)
+```
 
 ### Prefix caching
 
@@ -292,6 +350,39 @@ model = AutoModelForCausalLM.from_pretrained(
     dtype=torch.bfloat16,
 )
 ```
+
+## Tensor parallelism
+
+For models too large to fit on a single GPU, shard the weights across devices with tensor parallelism. Load the model with `tp_plan="auto"` and continuous batching reads the tensor parallel size from the model to size the paged KV cache per shard. See [Tensor parallelism](./tensor_parallelism) for the list of supported architectures and how sharding works.
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.generation import ContinuousBatchingConfig, GenerationConfig
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-32B",
+    attn_implementation="paged|flash_attention_2",
+    tp_plan="auto",
+)
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-32B")
+
+inputs = [tokenizer.encode(p) for p in ["Whats up?", "Name a cat breed."]]
+generation_config = GenerationConfig(max_new_tokens=64, eos_token_id=tokenizer.eos_token_id)
+
+outputs = model.generate_batch(inputs=inputs, generation_config=generation_config)
+```
+
+Launch the script with `torchrun`, setting `--nproc-per-node` to the number of GPUs you want to shard across.
+
+```shell
+torchrun --nproc-per-node 4 cb_tp.py
+```
+
+The tensor parallel size must divide the model's `num_key_value_heads` (check the model config). The paged cache raises an error at startup otherwise, so choose an appropriate `--nproc-per-node`.
+
+> [!WARNING]
+> Don't set `device_map` with `tp_plan`. The two conflict because `device_map` places whole modules on specific GPUs, while `tp_plan` shards those same parameters across all GPUs.
 
 ## Sliding window attention
 

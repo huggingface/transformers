@@ -35,10 +35,14 @@ on:
 env:
   TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
 
+permissions:
+  contents: read
+
 jobs:
   send_results:
     name: Send results to webhook
-    runs-on: ubuntu-22.04
+    runs-on:
+      group: aws-general-8-plus
     if: always() && !cancelled()
     steps:
       - name: Preliminary job status
@@ -49,15 +53,23 @@ jobs:
         run: |
           echo "Setup status: $setup_status"
 
-      - uses: actions/checkout@v4
+      - name: Set up Python 3.10
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.10'
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 2
           # Security: checkout to the `main` branch for untrusted triggers (issue_comment, pull_request_target), otherwise use the specified ref
           ref: ${{ (github.event_name == 'issue_comment' || github.event_name == 'pull_request_target') && 'main' || (inputs.commit_sha || github.sha) }}
+          persist-credentials: false
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         env:
           ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare some setup values
         run: |
@@ -82,6 +94,7 @@ jobs:
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
           SLACK_REPORT_CHANNEL: ${{ inputs.slack_report_channel }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CI_EVENT: ${{ inputs.ci_event }}
           # This `CI_TITLE` would be empty for `schedule` or `workflow_run` events.
           CI_TITLE: ${{ github.event.head_commit.message }}
@@ -91,6 +104,7 @@ jobs:
           REPORT_REPO_ID: ${{ inputs.report_repo_id }}
           quantization_matrix: ${{ inputs.quantization_matrix }}
           folder_slices: ${{ inputs.folder_slices }}
+          PYTHONUNBUFFERED: "1"
         # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         # For a job that doesn't depend on (i.e. `needs`) `setup`, the value for `inputs.folder_slices` would be an
@@ -99,6 +113,7 @@ jobs:
           pip install huggingface_hub
           pip install slack_sdk
           pip show slack_sdk
+          pip install requests
           pip install .
           if [ "$quantization_matrix" != "" ]; then
             python utils/notification_service.py "$quantization_matrix"
@@ -108,7 +123,7 @@ jobs:
 
       # Upload the directory containing CI reports prepared in `notification_service.py`
       - name: Failure table artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ci_results_${{ inputs.job }}
           path: ci_results_${{ inputs.job }}

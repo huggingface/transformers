@@ -21,8 +21,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-from huggingface_hub import create_repo
-
 from .. import __version__
 from ..utils import (
     GENERATION_CONFIG_NAME,
@@ -30,6 +28,7 @@ from ..utils import (
     PushToHubMixin,
     cached_file,
     extract_commit_hash,
+    hf_api,
     is_torch_available,
     logging,
 )
@@ -146,7 +145,7 @@ class GenerationConfig(PushToHubMixin):
         max_time (`float`, *optional*):
             The maximum amount of time you allow the computation to run for in seconds. generation will still finish
             the current pass after allocated time has been passed.
-        stop_strings (`str or list[str]`, *optional*):
+        stop_strings (`str` or `list[str]`, *optional*):
             A string or a list of strings that should terminate generation if the model outputs them.
 
         > Parameters that control the generation strategy used
@@ -571,6 +570,13 @@ class GenerationConfig(PushToHubMixin):
 
     @staticmethod
     def _get_default_generation_params() -> dict[str, Any]:
+        """
+        Defaults to be applied when unset by the model OR by the user, such that `model.generate()` works with minimal
+        paremeterization.
+
+        Pretrained checkpoints should set these as appropriate in their `generation_config.json`, to establish
+        a better default baseline. Be mindful that tests will often use these values.
+        """
         return {
             "max_length": 20,
             "min_length": 0,
@@ -866,7 +872,7 @@ class GenerationConfig(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         output_config_file = os.path.join(save_directory, config_file_name)
@@ -1188,7 +1194,9 @@ class GenerationConfig(PushToHubMixin):
             if isinstance(obj, dict):
                 return {key: convert_dataclass_to_dict(value) for key, value in obj.items()}
             elif is_dataclass(obj):
-                return obj.to_dict()
+                # Some of our dataclasses have a custom `to_dict()` method, and we prefer it
+                if hasattr(obj, "to_dict"):
+                    return obj.to_dict()
             else:
                 return obj
 
@@ -1620,6 +1628,8 @@ class ContinuousBatchingConfig:
             Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache. When `None`,
             resolved at runtime to 0.9 if there is no logit processing and 0.8 if there is, to leave headroom for
             vocabulary-sized temporary tensors.
+        max_requests_per_batch (`int`, *optional*):
+            Maximum number of requests per batch. Auto-inferred from workload hints when `None`, with fallback of 1024.
         max_blocks_per_request (`int`, *optional*):
             Maximum blocks per request, used in the `flash_attn_with_kvcache` fast decode path to dimension
             the block table. Setting this to 0 disables the fast decode path. Default is None (auto-inferred).
@@ -1651,8 +1661,12 @@ class ContinuousBatchingConfig:
             If True, a default compile config will be used for paths that are not explicitly set.
         scheduler_type (`str`, *optional*, defaults to `"fifo"`):
             Scheduler type to use.
+        safety_margin (`float`, *optional*):
+            Safety margin used to limit the amount of offloading. Defaults to None (use class default).
         return_logprobs (`bool`, *optional*, defaults to `False`):
             Whether to return log probabilities along with the generated tokens.
+        seed (`int | None`, *optional*):
+            An optional seed for generation. If not specified, the internal seed will be set to a random value.
         cpu_offload_space (`float`, *optional*, defaults to 0.0):
             CPU swap space in GiB for KV cache offloading. A pre-allocated pinned CPU buffer of this size is
             created at initialization. When the GPU cache is full, evicted requests' KV caches are copied here
@@ -1666,6 +1680,11 @@ class ContinuousBatchingConfig:
             Enable per-request logits processor parameters. Default is False.
         drop_unsupported_processors (`bool`, *optional*, defaults to `True`):
             Remove unsupported logits processors instead of erroring. Default is True.
+        disable_nccl_graph_mixing (`bool`, *optional*, defaults to `True`):
+            Disable NCCL's safety net for parallel graph-captured comms. Never happens in CB and gives TP a perf boost.
+        cpu_group_timeout (`float`, *optional*, defaults to 300.0):
+            The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None
+            for no timeout. Default is 300 seconds.
     """
 
     # Size of each KV cache block
@@ -1679,6 +1698,10 @@ class ContinuousBatchingConfig:
     # The max percentage of free GPU memory (after the model is loaded) to use for the KV cache. If None, auto resolved
     # to 0.9 (no logit processing) or 0.8 (logit processing) to leave headroom for temporary tensors.
     max_memory_percent: float | None = None
+
+    # The maximum number of requests in a batch. Helps limiting the memory footprint of the logits, which scale with the
+    # vocabulary size.
+    max_requests_per_batch: int | None = None
 
     # This is only used in the flash_attn_with_kvcache fast decode path to dimension the block table. If it is set to 0,
     # the fast decode path will not be used. Auto-inferred from GPU memory when `None` (default).
@@ -1714,10 +1737,16 @@ class ContinuousBatchingConfig:
 
     # Scheduler type. FIFO by default. For all types available, checks SCHEDULER_MAPPING in scheduler.py
     scheduler_type: str = "fifo"
+    # Safety margin: if the number of free blocks falls below (safety_margin * num_blocks), then new prefill requests
+    # will not be scheduled to prioritize decoding active requests. Defaults to None (use class default).
+    safety_margin: float | None = None
 
     # Whether to generate log probabilities, which is the log of the softmax of the processed logits. If True, the log
     # probabilities will be returned along with the generated tokens in the generation output.
     return_logprobs: bool = False
+
+    # An optional seed for generation. If not specified, the internal seed will be set to a random value.
+    seed: int | None = None
 
     # CPU swap space in GiB for KV cache offloading. When the GPU cache is full and a request must be evicted, its KV
     # cache is copied to this pre-allocated pinned CPU buffer instead of being discarded. Default to 0.0 GiB. You can
@@ -1739,188 +1768,36 @@ class ContinuousBatchingConfig:
     # are kept but warnings are logged for unsupported/unknown ones.
     drop_unsupported_processors: bool = True
 
+    # Disable NCCL's safety net for parallel graph-captured communications. This means it is no longer safe to replay a
+    # CUDA graph with NCCL communication at the same time as 1. another CUDA graph with captured comms 2. an eager comm.
+    # This is turned on by default because the above never happens in CB and this gives a nice perf boost.
+    disable_nccl_graph_mixing: bool = True
+
+    # The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None for
+    # no timeout. Default is 300 seconds. This exists because dist has a gloo timeout of 30 minutes, which is way too
+    # long for almost all use cases.
+    cpu_group_timeout: float | None = 300.0
+
+    def __post_init__(self):
+        # Only turn off graph mixing support if TP is on
+        graph_mixing_supported = os.environ.get("NCCL_GRAPH_MIXING_SUPPORT", "1") == "1"
+        distributed = int(os.environ.get("WORLD_SIZE", "1")) > 1
+        if self.disable_nccl_graph_mixing and graph_mixing_supported and distributed:
+            logger.warning(
+                "Setting NCCL_GRAPH_MIXING_SUPPORT = 0 because disable_nccl_graph_mixing is True and WORLD_SIZE > 1."
+            )
+            os.environ.setdefault("NCCL_GRAPH_MIXING_SUPPORT", "0")
+
     @property
-    def fallback_max_blocks_per_request(self) -> int:
-        """A good default for the size of the block table for the decode path"""
-        return 32
-
-    def account_for_cb_deprecated_arguments(
-        self,
-        max_queue_size: int = 0,
-        q_padding_interval_size: int = 0,
-        kv_padding_interval_size: int = 0,
-        allow_block_sharing: bool = True,
-        use_async_batching: bool | None = None,
-        max_cached_graphs: int = 0,
-    ) -> None:
-        """Some arguments given to `generate_batch`, `init_continuous_batching` or `continuous_batching_context_manager`
-        are now deprecated and are expected inside the continuous batching config. This method checks if any were
-        passed and accounts for them in the continuous batching config. It raises a deprecation warning if any were
-        passed.
-        """
-        kwargs_to_warn = []
-        if max_queue_size > 0:
-            kwargs_to_warn.append("max_queue_size")
-            self.max_queue_size = max_queue_size
-        if q_padding_interval_size > 0:
-            kwargs_to_warn.append("q_padding_interval_size")
-            self.q_padding_interval_size = q_padding_interval_size
-        if kv_padding_interval_size > 0:
-            kwargs_to_warn.append("kv_padding_interval_size")
-            self.kv_padding_interval_size = kv_padding_interval_size
-        if not allow_block_sharing:  # config default is True, so False means the user explicitly set it to False
-            kwargs_to_warn.append("allow_block_sharing")
-            self.allow_block_sharing = allow_block_sharing
-        if use_async_batching is not None:
-            kwargs_to_warn.append("use_async_batching")
-            self.use_async_batching = use_async_batching
-        if max_cached_graphs > 0:
-            kwargs_to_warn.append("max_cached_graphs")
-            self.max_cached_graphs = max_cached_graphs
-        if kwargs_to_warn:
-            logger.warning(
-                "The following arguments were provided to a continuous batching entry point instead of being passed "
-                "through the continuous_batching_config: " + ", ".join(kwargs_to_warn)
-            )
-
-    def decide_use_cuda_graphs(self, compile_config: CompileConfig | None, is_attn_mask_needed: bool) -> None:
-        """Decides whether or not to use cuda graphs for continuous batching. If the user specified this in the config
-        or if they specified a parameter related to cuda graphs, they are turned on. Otherwise, we use a heuristic
-        based on the attention implementation: we turn on cuda graphs if and only if no attention mask is needed.
-
-        This function modifies the `use_cuda_graph` attribute of the config in place, to a tuple of booleans.
-        """
-        # If cuda is not available, we cannot use cuda graphs
-        import torch
-
-        if not torch.cuda.is_available():
-            intended_use_cuda_graph = any(self.get_cuda_graph_booleans())
-            if intended_use_cuda_graph:  # throw a warning only if the user intended to use cuda graphs
-                logger.warning(f"{self.use_cuda_graph = } but {torch.cuda.is_available() = }: turning off cuda graphs")
-            self.use_cuda_graph = (False, False)
-
-        # Else if use_cuda_graph is specified, we follow the user's choice and make sure it is a tuple of booleans
-        elif self.use_cuda_graph is not None:
-            if isinstance(self.use_cuda_graph, bool):
-                self.use_cuda_graph = (self.use_cuda_graph, self.use_cuda_graph)
-
-        # Else if the user specified a parameter related to cuda graphs, we activate cuda graphs
-        elif self.q_padding_interval_size or self.kv_padding_interval_size or self.max_cached_graphs:
-            self.use_cuda_graph = (True, True)
-
-        # Else if a compile config was found, turn off cuda graphs if the compile config already uses them
-        elif compile_config is not None:
-            options = torch._inductor.list_mode_options().get(compile_config.mode, compile_config.options)
-            compile_uses_cudagraphs = options.get("triton.cudagraphs", False)
-            if compile_uses_cudagraphs:
-                logger.warning(
-                    f"Compile config {compile_config.mode = } uses cudagraphs, which usually does not work well with "
-                    "continuous batching. We recommend using mode 'default' or 'max-autotune-no-cudagraphs' instead."
-                )
-            use_cuda_graph = not compile_uses_cudagraphs  # TODO: should this also match the dynamic shapes?
-            self.use_cuda_graph = (use_cuda_graph, use_cuda_graph)
-
-        # Otherwise we have a default heuristic based on the attention implementation:
-        # attention implementations where an attention mask is needed suffer a lot more from the padding associated
-        # with cuda graphs, so default is to turn cuda graphs off for those implementations
-        else:
-            use_cuda_graph = not is_attn_mask_needed
-            self.use_cuda_graph = (use_cuda_graph, use_cuda_graph)
-            logger.warning(
-                f"No behavior specified for use_cuda_graph, defaulting to {self.use_cuda_graph = } because "
-                f"{is_attn_mask_needed = }. If you want to save memory, turn off cuda graphs, but they tend to improve "
-                "performances by a lot."
-            )
-
-    def get_cuda_graph_booleans(self) -> tuple[bool, bool]:
-        """Returns the cuda graph booleans for the varlen and decode paths."""
+    def cuda_graph_booleans(self) -> tuple[bool, bool]:
+        """The cuda graph booleans for the varlen and decode paths."""
         if self.use_cuda_graph is None:
             return False, False
         if isinstance(self.use_cuda_graph, bool):
             return self.use_cuda_graph, self.use_cuda_graph
         return self.use_cuda_graph
 
-    def decide_use_async_batching(self, is_attn_mask_needed: bool) -> bool:
-        """Returns whether or not to use asynchronous batching for continuous batching. If the user specified this in
-        the config, we follow their choice. Otherwise, we turn on asynchronous batching if and only if CUDA graphs are
-        turned on and no attention mask is needed.
-
-        This function modifies the `use_async_batching` attribute of the config in place.
-        """
-        # If the user specifies to use async or not, no need to decide ourselves
-        if self.use_async_batching is None:
-            use_cuda_graphs = any(self.get_cuda_graph_booleans())
-            self.use_async_batching = use_cuda_graphs and not is_attn_mask_needed
-            logger.info(
-                f"No behavior specified for use_async_batching, choosing {self.use_async_batching = } because "
-                f"{use_cuda_graphs = } and {not is_attn_mask_needed = }. If you want to save memory, you can "
-                "disable asynchronous batching but it will degrade performance."
-            )
-        return self.use_async_batching
-
-    def resolve_max_memory_percent(self, has_logit_processors: bool) -> None:
-        """Resolves `max_memory_percent` when unset: 0.9 without logit processors, 0.8 with them. Active processors
-        materialize `[N, V]` intermediates (e.g. top-p sort, softmax) that get captured into the CUDA graph pool, so
-        the cache has to cede some budget to that pool."""
-        if self.max_memory_percent is None:
-            self.max_memory_percent = 0.8 if has_logit_processors else 0.9
-
-    def resolve_sentinel_values(self) -> None:
-        """For some parameters (padding intervals and max cached graphs), the default is a sentinel value of 0: that
-        way, if the user specifies a value for those parameters, we know they want it used, ie. we turn on cuda graphs.
-        But in the case the user does not specify those values, we still need them to resolve to a non-zero value.
-        This function takes care of that."""
-        # Interval sizes are in tokens for both Q and KV
-        if self.q_padding_interval_size == 0:
-            self.q_padding_interval_size = 64
-        if self.kv_padding_interval_size == 0:
-            self.kv_padding_interval_size = 64 * 256  # 64 blocks of 256 tokens ie. 16384 tokens
-        if self.max_cached_graphs == 0:
-            self.max_cached_graphs = 32
-
-    def resolve_compile_configs(
-        self, fallback_compile_config: CompileConfig | None, is_flash_attn: bool, decode_fast_path_available: bool
-    ) -> None:
-        """Resolve if the compile configs for varlen and decode paths, modifying these attributes in place if needed.
-        Default config use full compile over regional compile, because the throughput is significantly higher (~15%)"""
-        logger_ = logging.get_logger("ContinuousBatchingLogger")
-
-        # For each config, priority is: explicit config, default config, fallback config, None
-        if self.varlen_compile_config is None:
-            if self.use_default_compile_configs:
-                # We don't use compile with flash varlen, because max_seqlen_k is volatile and introduces recompilations
-                if is_flash_attn:
-                    varlen_config = None
-                else:
-                    varlen_config = CompileConfig(mode="max-autotune-no-cudagraphs", fullgraph=True, dynamic=True)
-            elif fallback_compile_config is not None:
-                varlen_config = fallback_compile_config
-            else:
-                varlen_config = None
-        else:
-            varlen_config = self.varlen_compile_config
-
-        if self.decode_compile_config is None:
-            if self.use_default_compile_configs:
-                # Paged attention is wrapped in @torch.compiler.disable so we can't use fullgraph
-                decode_config = CompileConfig(mode="max-autotune-no-cudagraphs", fullgraph=False, dynamic=False)
-            elif fallback_compile_config is not None:
-                decode_config = fallback_compile_config
-            else:
-                decode_config = None
-        else:
-            decode_config = self.decode_compile_config
-
-        # For decode, we throw a warning if the fast decode path is not available and a compile config was found
-        if not decode_fast_path_available and self.decode_compile_config is not None:
-            decode_config = None
-            logger_.warning("A decode_compile_config was set but fast decode path is not available. Ignoring it.")
-
-        # Log what will be compiled
-        if varlen_config is not None:
-            logger_.info(f"Varlen path will be compiled with {varlen_config.to_dict()}")
-        if decode_config is not None:
-            logger_.info(f"Decode path will be compiled with {decode_config.to_dict()}")
-        # Modify in place
-        self.varlen_compile_config = varlen_config
-        self.decode_compile_config = decode_config
+    @property
+    def fallback_max_blocks_per_request(self) -> int:
+        """Fallback if no user-hint is given and decode path is available."""
+        return 32

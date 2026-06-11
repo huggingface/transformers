@@ -277,7 +277,10 @@ class NemotronHMamba2Mixer(nn.Module):
             )
             hidden_states = hidden_states.view(batch_size, self.num_heads * self.head_dim)
             hidden_states = self.norm(hidden_states, gate)
-            out = self.out_proj(hidden_states)[:, None, ...]
+            # The SSM kernels return fp32 regardless of the module dtype; cast back to the
+            # projection weight dtype so the matmul does not fail when out_proj.weight is a
+            # narrower dtype than the activations (e.g. fp32 activations with a bf16 out_proj).
+            out = self.out_proj(hidden_states.to(self.out_proj.weight.dtype))[:, None, ...]
         # if no cache is found, calling the kernel
         else:
             if attention_mask is not None and not torch.all(attention_mask == 1):
@@ -369,7 +372,10 @@ class NemotronHMamba2Mixer(nn.Module):
                 scan_output = scan_output.view(batch_size, seq_len, -1)
                 # Multiply "gate" branch and apply extra normalization layer
                 scan_output = self.norm(scan_output, gate)
-                out = self.out_proj(scan_output)
+                # The SSM kernels return fp32 regardless of the module dtype; cast back to the
+                # projection weight dtype so the matmul does not fail when out_proj.weight is a
+                # narrower dtype than the activations (e.g. fp32 activations with a bf16 out_proj).
+                out = self.out_proj(scan_output.to(self.out_proj.weight.dtype))
         return out
 
     # fmt: off
@@ -938,7 +944,7 @@ class NemotronHBlock(GradientCheckpointingLayer):
                 past_key_values=past_key_values,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                user_cache=use_cache,
+                use_cache=use_cache,
                 **kwargs,
             )
         else:
@@ -1078,7 +1084,7 @@ class NemotronHModel(NemotronHPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             position_ids=position_ids,

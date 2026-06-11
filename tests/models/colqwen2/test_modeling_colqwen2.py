@@ -150,7 +150,7 @@ class ColQwen2ForRetrievalModelTester:
         )
 
         # Hardcoded image grid size: do not change unless you modified image size or patch size!
-        image_grid_thw = torch.tensor([1, 4, 4]).repeat(self.batch_size, 1)
+        image_grid_thw = torch.tensor([1, 4, 4], device=torch_device).repeat(self.batch_size, 1)
 
         # NOTE: The following adjustment ensures correct behavior with DDP on multiple GPUs.
         # Line is copied from `src/transformers/models/colqwen2/processing_colqwen2.py`
@@ -282,10 +282,6 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="This architecture doesn't support weight tying/untying.")
     def test_load_save_without_tied_weights(self):
-        pass
-
-    @unittest.skip(reason="One weight renaming from qwen2 is unreachable here as it uses a `^` pattern")
-    def test_reverse_loading_mapping(self):
         pass
 
 

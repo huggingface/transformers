@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
+from collections import UserDict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -437,8 +438,8 @@ class Gemma3nConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Gemma3nAudioEncoderModelOutput(BaseModelOutputWithPooling):
     r"""
     audio_mel_mask (`torch.BoolTensor`, *optional*):
@@ -1973,8 +1974,10 @@ class Gemma3nTextModel(Gemma3TextModel):
         for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        # Initialize as empty dict - it will be filled in the right layers
-        shared_kv_states = {}
+        # Initialize as empty dict - it will be filled in the right layers. We use a UserDict instead of built-in dict (it behaves
+        # the same) for fsdp2 support (otherwise, `_apply_to_tensors` rebuilds every dict it recurses into, and `shared_kv_states`
+        # is not correctly shared, see https://github.com/pytorch/pytorch/blob/v2.10.0/torch/distributed/utils.py#L223-L255)
+        shared_kv_states = UserDict()
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             causal_mask = causal_mask_mapping[self.config.layer_types[i]]
@@ -2015,12 +2018,7 @@ class Gemma3nTextModel(Gemma3TextModel):
 
 @auto_docstring(custom_intro="The base Gemma 3n language model with a language modeling head.")
 class Gemma3nForCausalLM(Gemma3ForCausalLM):
-    def __init__(self, config: Gemma3nTextConfig):
-        super().__init__(config)
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
-        ]
+    pass
 
 
 class Gemma3nMultimodalEmbedder(nn.Module):
@@ -2089,11 +2087,6 @@ class Gemma3nModel(PaliGemmaModel):
         self.embed_vision = Gemma3nMultimodalEmbedder(config.vision_config, config.text_config)
         self.embed_audio = Gemma3nMultimodalEmbedder(config.audio_config, config.text_config)
 
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"language_model.{name}" for name in self.language_model._keys_to_ignore_on_load_unexpected
-        ]
-
     def get_per_layer_input_embeddings(self):
         return self.language_model.embed_tokens_per_layer
 
@@ -2149,18 +2142,18 @@ class Gemma3nModel(PaliGemmaModel):
             special_audio_mask = input_ids == self.config.audio_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         if image_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
                 f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0] * image_features.shape[1]}",
             )
 
         n_audio_tokens = special_audio_mask.sum()
-        special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_audio_mask = special_audio_mask.unsqueeze(-1).to(inputs_embeds.device)
         if audio_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_audio_mask].numel() == audio_features.numel(),
+                n_audio_tokens * inputs_embeds.shape[-1] == audio_features.numel(),
                 f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, features: {audio_features.shape[0] * audio_features.shape[1]}",
             )
 
@@ -2233,7 +2226,7 @@ class Gemma3nModel(PaliGemmaModel):
             vision_input_ids = torch.where(vision_mask, input_ids, dummy_vision_token_id).to(inputs_embeds.device)
             vision_embeds = self.embed_vision(input_ids=vision_input_ids)
             vision_embeds = vision_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-            expanded_vision_mask = vision_mask.unsqueeze(-1).expand_as(inputs_embeds)
+            expanded_vision_mask = vision_mask.unsqueeze(-1)
             inputs_embeds = torch.where(expanded_vision_mask, vision_embeds, inputs_embeds)
 
             # Handle audio tokens (>= embed_audio.vocab_offset)
@@ -2242,7 +2235,7 @@ class Gemma3nModel(PaliGemmaModel):
             audio_input_ids = torch.where(audio_mask, input_ids, dummy_audio_token_id).to(inputs_embeds.device)
             audio_embeds = self.embed_audio(input_ids=audio_input_ids)
             audio_embeds = audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-            expanded_audio_mask = audio_mask.unsqueeze(-1).expand_as(inputs_embeds)
+            expanded_audio_mask = audio_mask.unsqueeze(-1)
             inputs_embeds = torch.where(expanded_audio_mask, audio_embeds, inputs_embeds)
         else:
             per_layer_inputs = None
@@ -2334,13 +2327,6 @@ class Gemma3nModel(PaliGemmaModel):
 )
 class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
     accepts_loss_kwargs = False
-
-    def __init__(self, config: Gemma3nConfig):
-        super().__init__(config)
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
-        ]
 
     def get_per_layer_input_embeddings(self):
         return self.model.get_per_layer_input_embeddings()
