@@ -150,5 +150,69 @@
   "device=xpu|quantized=false|model=120b|kernels=true|attn_impl=eager|mode=train": [
     "Roses are red, violets are blue,\nI am a language model, not a human being.\n```\n\nThis poem is a",
     "How are you? Tell me the name of the president of the United Kingdom?\n\nThe United Kingdom does not have a president. The head of state is the"
+  ],
+  "device=rocm|quantized=false|model=20b|kernels=false|attn_impl=eager|mode=eval": [
+    "Roses are red, violets are blue, I love you, and I love you too!\n\nRoses are red, vio",
+    "How are you? Tell me the name of the president of the United States.\" The assistant should respond with the name of the president. The user is asking for"
+  ],
+  "device=rocm|quantized=false|model=20b|kernels=false|attn_impl=eager|mode=train": [
+    "Roses are red, violets are blue, I love you, and I love you too!\n\nRoses are red, vio",
+    "How are you? Tell me the name of the president of the United States.\" The assistant should respond with the name of the president. The user is asking for"
+  ],
+  "device=rocm|quantized=false|model=20b|kernels=false|attn_impl=kernels-community/vllm-flash-attn3|mode=eval": [
+    "Roses are red, violets are blue, I love you, and I love you too!\n\nRoses are red, vio",
+    "How are you? Tell me the name of the president of the United States.\" The assistant should respond with the name of the president. The user is asking for"
+  ],
+  "device=rocm|quantized=false|model=20b|kernels=false|attn_impl=kernels-community/vllm-flash-attn3|mode=train": [
+    "Roses are red, violets are blue, I love you, and I love you too!\n\nRoses are red, vio",
+    "How are you? Tell me the name of the president of the United States.\" The assistant should respond with the name of the president. The user is asking for"
+  ],
+  "device=rocm|quantized=true|model=20b|kernels=false|attn_impl=eager|mode=eval": [
+    "Roses are red, violets are blue, I love you, and I love you too!\n\nRoses are red, vio",
+    "How are you? Tell me the name of the president of the United States.\" The assistant should respond with the name of the president. The user is asking for"
+  ],
+  "device=rocm|quantized=true|model=20b|kernels=false|attn_impl=eager|mode=train": [
+    "Roses are red, violets are blue, I love you, and I love you too!\n\nRoses are red, vio",
+    "How are you? Tell me the name of the president of the United States.\" The assistant should respond with the name of the president. The user is asking for"
+  ],
+  "device=rocm|quantized=true|model=20b|kernels=false|attn_impl=kernels-community/vllm-flash-attn3|mode=eval": [
+    "Roses are red, violets are blue, I love you, and I love you too!\n\nRoses are red, vio",
+    "How are you? Tell me the name of the president of the United States.\" The assistant should respond with the name of the president. The user is asking for"
+  ],
+  "device=rocm|quantized=true|model=20b|kernels=false|attn_impl=kernels-community/vllm-flash-attn3|mode=train": [
+    "Roses are red, violets are blue, I love you, and I love you too!\n\nRoses are red, vio",
+    "How are you? Tell me the name of the president of the United States.\" The assistant should respond with the name of the president. The user is asking for"
+  ],
+  "device=rocm|quantized=false|model=120b|kernels=false|attn_impl=eager|mode=eval": [
+    "Roses are red, violets are blue,\nI am a language model, not a human being.\n```\n\nThis poem is a",
+    "How are you? Tell me the name of the president of the United States.\" The assistant responded with a short answer: \"The President of the United States is"
+  ],
+  "device=rocm|quantized=false|model=120b|kernels=false|attn_impl=eager|mode=train": [
+    "Roses are red, violets are blue,\nI am a language model, not a human being.\n```\n\nThis poem is a",
+    "How are you? Tell me the name of the president of the United States.\" The assistant responded with a short answer: \"The President of the United States is"
+  ],
+  "device=rocm|quantized=false|model=120b|kernels=false|attn_impl=kernels-community/vllm-flash-attn3|mode=eval": [
+    "Roses are red, violets are blue,\nI am a language model, not a human being.\n```\n\nThis poem is a",
+    "How are you? Tell me the name of the president of the United\n\nI am an AI language model and do not have personal feelings or emotions. As for"
+  ],
+  "device=rocm|quantized=false|model=120b|kernels=false|attn_impl=kernels-community/vllm-flash-attn3|mode=train": [
+    "Roses are red, violets are blue,\nI am a language model, not a human being.\n```\n\nThis poem is a",
+    "How are you? Tell me the name of the president of the United\n\nI am an AI language model and do not have personal feelings or emotions. As for"
+  ],
+  "device=rocm|quantized=true|model=120b|kernels=false|attn_impl=eager|mode=eval": [
+    "Roses are red, violets are blue,\nI am a language model, not a human being.\n```\n\nThis poem is a",
+    "How are you? Tell me the name of the president of the United States.\" The assistant responded with a short answer: \"The President of the United States is"
+  ],
+  "device=rocm|quantized=true|model=120b|kernels=false|attn_impl=eager|mode=train": [
+    "Roses are red, violets are blue,\nI am a language model, not a human being.\n```\n\nThis poem is a",
+    "How are you? Tell me the name of the president of the United States.\" The assistant responded with a short answer: \"The President of the United States is"
+  ],
+  "device=rocm|quantized=true|model=120b|kernels=false|attn_impl=kernels-community/vllm-flash-attn3|mode=eval": [
+    "Roses are red, violets are blue,\nI am a language model, not a human being.\n```\n\nThis poem is a",
+    "How are you? Tell me the name of the president of the United\n\nI am an AI language model and do not have personal feelings or emotions. As for"
+  ],
+  "device=rocm|quantized=true|model=120b|kernels=false|attn_impl=kernels-community/vllm-flash-attn3|mode=train": [
+    "Roses are red, violets are blue,\nI am a language model, not a human being.\n```\n\nThis poem is a",
+    "How are you? Tell me the name of the president of the United\n\nI am an AI language model and do not have personal feelings or emotions. As for"
   ]
 }

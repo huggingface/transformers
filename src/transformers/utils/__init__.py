@@ -112,6 +112,7 @@ from .import_utils import (
     enable_tf32,
     get_torch_version,
     is_accelerate_available,
+    is_aiter_available,
     is_apex_available,
     is_apollo_torch_available,
     is_aqlm_available,

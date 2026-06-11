@@ -87,11 +87,16 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
         """
         from kernels import get_kernel
 
+        from transformers.utils import is_aiter_available, is_rocm_platform
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         expected_kernel = "kernels-community/vllm-flash-attn3"
-        flash = get_kernel(expected_kernel)
-        if flash is None:
-            self.skipTest(f"{expected_kernel} is not available, skipping auto-correction test.")
+
+        # On ROCm, AITER provides the backend — the hub kernel is never fetched.
+        if not (is_rocm_platform() and is_aiter_available()):
+            flash = get_kernel(expected_kernel)
+            if flash is None:
+                self.skipTest(f"{expected_kernel} is not available, skipping auto-correction test.")
 
         # Option 1: Auto correction on setting config on init
         config._attn_implementation = "flash_attention_2"
@@ -153,14 +158,18 @@ RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/gpt_oss/integrati
 # ------------------------
 def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     """This is the function that will be executed by torchrun workers."""
+    import difflib
     import os
 
     from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers.distributed import DistributedConfig
     from transformers.testing_utils import torch_device
+    from transformers.utils import is_rocm_platform
 
     def generate_config_key(quantized, model, kernels, attn_impl, mode):
         """Generate a key for the restructured integration test results."""
-        return f"device={torch_device}|quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
+        device = "rocm" if is_rocm_platform() else torch_device
+        return f"device={device}|quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
 
     input_text = [
         "Roses are red, violets",
@@ -173,19 +182,20 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
 
     # Distributed model loading
     model_id = f"openai/gpt-oss-{model_size}"
+    world_size = int(os.environ.get("WORLD_SIZE", 1))
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
         dtype="auto",
-        tp_plan="auto",  # distributed inference
+        distributed_config=DistributedConfig(tp_size=world_size),
         use_kernels=kernels,
-    ).to(torch_device)
+    )
     model.set_attn_implementation(attn_impl)
     tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
     # Inference
     inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(torch_device)
     output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-    output_texts = tokenizer.batch_decode(output, skip_special_tokens=False)
+    output_texts = tokenizer.batch_decode(output, skip_special_tokens=True)
 
     # Only rank 0 writes results and validates against expected outputs
     if int(os.environ.get("RANK", "0")) == 0:
@@ -247,7 +257,10 @@ class GptOssIntegrationTest(unittest.TestCase):
     @staticmethod
     def generate_config_key(quantized, model, kernels, attn_impl, mode):
         """Generate a key for the restructured integration test results."""
-        return f"device={torch_device}|quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
+        from transformers.utils import is_rocm_platform
+
+        device = "rocm" if is_rocm_platform() else torch_device
+        return f"device={device}|quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
@@ -381,6 +394,11 @@ if __name__ == "__main__":
         if torch_device == "xpu" and attn_impl == "kernels-community/vllm-flash-attn3":
             self.skipTest("flash attention 3 is not supported on XPU yet.")
 
+        from transformers.utils import is_rocm_platform
+
+        if is_rocm_platform() and kernels:
+            self.skipTest("kernels-community/rotary has no ROCm build; kernels=True skipped on ROCm.")
+
         model_id = f"openai/gpt-oss-{model}"
         output_texts = self.load_and_forward(
             model_id,
@@ -449,6 +467,11 @@ if __name__ == "__main__":
         if torch_device == "xpu" and attn_impl == "kernels-community/vllm-flash-attn3":
             self.skipTest("flash attention 3 is not supported on XPU yet.")
 
+        from transformers.utils import is_rocm_platform
+
+        if is_rocm_platform() and kernels:
+            self.skipTest("kernels-community/rotary has no ROCm build; kernels=True skipped on ROCm.")
+
         self.run_distributed_test(quantized, model, kernels, attn_impl, mode)
 
     # ------------------------
@@ -461,6 +484,11 @@ if __name__ == "__main__":
                 self.skipTest("vllm-flash-attn3 is not supported on CPU.")
             if kernels and mode == "train":
                 self.skipTest("CPU kernels only support inference.")
+
+        from transformers.utils import is_rocm_platform
+
+        if is_rocm_platform() and kernels:
+            self.skipTest("kernels-community/rotary has no ROCm build; kernels=True skipped on ROCm.")
 
         if mode != "train":
             self.skipTest("This test is only for training mode.")
