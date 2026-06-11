@@ -337,10 +337,6 @@ def upload_original_ckpts(model_name):
         print("Uploading complete")
 
 
-def _is_2_1_model(model_name):
-    return "2_1" in model_name
-
-
 @torch.no_grad()
 def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
     """
@@ -348,7 +344,7 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
     """
     config = get_vjepa2_config(model_name)
 
-    if _is_2_1_model(model_name):
+    if "2_1" in model_name:
         hub_name = "vjepa2_1_" + model_name.replace("_2_1", "")
     else:
         hub_name = "vjepa2_" + model_name
@@ -399,8 +395,7 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
         original_predictor = original_predictor.to(device="cuda", dtype=torch.float32)
         model = model.to(device="cuda", dtype=torch.float32)
         # forward
-        is_2_1 = _is_2_1_model(model_name)
-        if is_2_1 and config.num_distillation_outputs > 1:
+        if "2_1" in model_name and config.num_distillation_outputs > 1:
             original_encoder.return_hierarchical = True
         original_encoder_outputs = original_encoder(pixel_values_videos.permute(0, 2, 1, 3, 4))
         B, N, _ = original_encoder_outputs.shape
@@ -416,7 +411,7 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
         )
         assert torch.allclose(hf_encoder, original_encoder_outputs, atol=1e-3)
         predictor_outputs = outputs.predictor_output
-        if is_2_1 and config.use_context_projection:
+        if "2_1" in model_name and config.use_context_projection:
             og_target, og_context = original_predictor_outputs
             assert torch.allclose(predictor_outputs.last_hidden_state, og_target, atol=1e-2)
             assert torch.allclose(predictor_outputs.context_predictions, og_context, atol=1e-2)
@@ -440,7 +435,7 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
         )
         assert torch.allclose(hf_encoder, original_encoder_outputs, atol=1e-3)
         predictor_outputs = outputs.predictor_output
-        if is_2_1 and config.use_context_projection:
+        if "2_1" in model_name and config.use_context_projection:
             og_target, og_context = original_predictor_outputs
             assert torch.allclose(predictor_outputs.last_hidden_state, og_target, atol=1e-2)
             assert torch.allclose(predictor_outputs.context_predictions, og_context, atol=1e-2)
