@@ -25,6 +25,7 @@ from transformers.testing_utils import (
     require_av,
     require_librosa,
     require_torch,
+    require_torchaudio,
     require_torchvision,
     require_vision,
 )
@@ -39,7 +40,7 @@ if is_torch_available():
 
 @require_vision
 @require_torch
-# @require_torchaudio
+@require_torchaudio
 @require_torchvision
 class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen2_5OmniProcessor
