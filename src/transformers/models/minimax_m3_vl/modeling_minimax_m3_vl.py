@@ -468,10 +468,6 @@ class MiniMaxM3VLAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        block_indices = None
-        if self.indexer is not None:
-            block_indices = self.indexer(hidden_states, position_embeddings, past_key_values)
-
         query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
@@ -482,14 +478,17 @@ class MiniMaxM3VLAttention(nn.Module):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        if block_indices is not None:
-            attention_mask = self.indexer.build_block_mask(
-                block_indices, attention_mask, key_states.shape[2], query_states.dtype, query_states.device
-            )
-
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
+        block_indices = None
+        if self.indexer is not None:
+            block_indices = self.indexer(hidden_states, position_embeddings, past_key_values)
+            if self.config._attn_implementation in ("eager", "sdpa"):
+                attention_mask = self.indexer.build_block_mask(
+                    block_indices, attention_mask, key_states.shape[2], query_states.dtype, query_states.device
+                )
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -498,6 +497,7 @@ class MiniMaxM3VLAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            block_indices=block_indices,
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
@@ -516,8 +516,7 @@ class MiniMaxM3VLIndexer(nn.Module):
     only has to attend the handful of selected key blocks, which is what makes
     it block-sparse (and cheaper) on long sequences.
 
-    The `index_local_blocks` blocks are not a separate budget: they are folded
-    into the single top-k by boosting their score so they always win slots, the
+    The `index_local_blocks` boosting their score so they always win key slots, the
     same way the deployment block-sparse kernel (MiniMax `topk_sparse`) does it.
 
     `forward` returns the per-query selected key-block indices
@@ -597,11 +596,6 @@ class MiniMaxM3VLIndexer(nn.Module):
         future = torch.arange(num_key_blocks, device=idx_q.device).view(1, 1, -1) > q_block.view(1, -1, 1)
         block_scores = block_scores.masked_fill(future, float("-inf"))
 
-        # Force the `local_blocks` blocks ending at the query's own block into the budget by boosting
-        # their score above any real score, so they win top-k slots instead of enlarging the budget
-        # (the block-sparse kernel takes a single fixed-width top-k, not a union). They are `<= q_block`
-        # so never future; `clamp(min=0)` just repeats block 0 for the earliest queries and the top-k
-        # dedups it for free.
         if self.local_blocks > 0:
             local = torch.arange(self.local_blocks, device=idx_q.device)
             local_idx = (q_block.view(-1, 1) - local.view(1, -1)).clamp(min=0)  # [S_q, local]
@@ -715,6 +709,9 @@ class MiniMaxM3VLPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video", "text")
     # MTP modules ship in the upstream checkpoint but aren't part of this port.
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
+    # The MSA block-sparse kernel build currently lives on the repo's ``v0`` branch, so the
+    # revision is pinned here; listing it also authorizes loading it from outside ``kernels-community``.
+    _compatible_flash_implementations = ["kernels-staging/msa@v0"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -730,8 +727,8 @@ class MiniMaxM3VLPreTrainedModel(PreTrainedModel):
             init.zeros_(module.weight)
         elif isinstance(module, MiniMaxM3VL3DRotaryEmbedding):
             # ``inv_freq`` is a non-persistent buffer absent from the checkpoint, so under
-            # meta-device loading (``device_map``) it must be re-materialized here — the base
-            # rotary re-init only covers text RoPE modules carrying ``original_inv_freq``.
+            # meta-device loading (`device_map`) it must be re-materialized here — the base
+            # rotary re-init only covers text RoPE modules carrying `original_inv_freq`.
             inv_freq = 1.0 / (
                 module.theta ** (torch.arange(0, module.axis_dim, 2, dtype=torch.float32) / module.axis_dim)
             )
@@ -1066,10 +1063,6 @@ class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
     def forward(
         self, grid_thw: torch.Tensor, device: torch.device, dtype: torch.dtype
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        # Patches arrive grouped into ``spatial_merge_size`` x ``spatial_merge_size`` blocks
-        # (see the image processor's ``permute(0, 1, 4, 7, 5, 8, ...)``), so the H/W coordinates
-        # must follow that same block order — a plain raster scan would desync every patch's
-        # position from its embedding and the tower could no longer localize anything.
         m = self.spatial_merge_size
         coords = []
         for t, h, w in grid_thw.tolist():
@@ -1221,8 +1214,6 @@ class MiniMaxM3VLVisionTransformer(nn.Module):
     def forward(
         self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithPooling:
-        # The checkpoint stores the patch-embedding conv in fp32 while the rest of the tower is
-        # bf16, so its output must be cast back to the tower's dtype before the (bf16) layernorm.
         embeds = self.embeddings(pixel_values).to(self.pre_layrnorm.weight.dtype)
         cos, sin = self.rotary_emb(image_grid_thw, device=embeds.device, dtype=embeds.dtype)
         hidden_states = self.pre_layrnorm(embeds).unsqueeze(0)

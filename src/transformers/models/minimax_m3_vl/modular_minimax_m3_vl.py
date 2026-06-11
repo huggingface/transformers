@@ -436,10 +436,6 @@ class MiniMaxM3VLAttention(MiniMaxM2Attention):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        block_indices = None
-        if self.indexer is not None:
-            block_indices = self.indexer(hidden_states, position_embeddings, past_key_values)
-
         query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
@@ -450,14 +446,17 @@ class MiniMaxM3VLAttention(MiniMaxM2Attention):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        if block_indices is not None:
-            attention_mask = self.indexer.build_block_mask(
-                block_indices, attention_mask, key_states.shape[2], query_states.dtype, query_states.device
-            )
-
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
+        block_indices = None
+        if self.indexer is not None:
+            block_indices = self.indexer(hidden_states, position_embeddings, past_key_values)
+            if self.config._attn_implementation in ("eager", "sdpa"):
+                attention_mask = self.indexer.build_block_mask(
+                    block_indices, attention_mask, key_states.shape[2], query_states.dtype, query_states.device
+                )
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -466,6 +465,7 @@ class MiniMaxM3VLAttention(MiniMaxM2Attention):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            block_indices=block_indices,
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
@@ -644,6 +644,7 @@ class MiniMaxM3VLPreTrainedModel(MiniMaxM2PreTrainedModel):
     _supports_flex_attn = False
     _can_compile_fullgraph = False
     _supports_attention_backend = True
+    _compatible_flash_implementations = ["kernels-staging/msa@v0"]
 
     @torch.no_grad()
     def _init_weights(self, module):

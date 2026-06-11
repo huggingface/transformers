@@ -18,8 +18,8 @@ import unittest
 
 from transformers import (
     AutoTokenizer,
-    MiniMaxM3VLConfig,
     MiniMaxM3SparseForConditionalGeneration,
+    MiniMaxM3VLConfig,
     MiniMaxM3VLImageProcessorFast,
     MiniMaxM3VLModel,
     MiniMaxM3VLProcessor,

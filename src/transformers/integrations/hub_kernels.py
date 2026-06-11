@@ -354,6 +354,14 @@ def load_and_register_attn_kernel(
         if attention_wrapper is None:
             attention_wrapper = flash_attention_forward
         kernel_function = attention_wrapper
+    elif hasattr(kernel, "sparse_atten_func"):
+        # Block-sparse kernels (e.g. `kernels-staging/msa`) expose `sparse_atten_func` instead of
+        # `flash_attn_varlen_func`; their call contract differs from the attention interface, so we
+        # bind the dedicated transformers-side wrapper that adapts the arguments and hides the
+        # prefill-kernel / decode-fallback dispatch.
+        from .msa_attention import msa_attention_forward
+
+        kernel_function = attention_wrapper if attention_wrapper is not None else msa_attention_forward
     elif kernel_name is not None:
         kernel_function = getattr(kernel, kernel_name)
 

@@ -187,6 +187,11 @@ def _lazy_imports(
                 kernel_implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
             )
 
+            if getattr(kernel, "sparse_atten_func", None) is not None and not hasattr(
+                kernel, "flash_attn_varlen_func"
+            ):
+                return None, None, None, pad_input, unpad_input
+
             flash_attn_func = getattr(kernel, "flash_attn_func", None)
             flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
             flash_attn_with_kvcache = getattr(kernel, "flash_attn_with_kvcache", None)
@@ -255,7 +260,9 @@ def lazy_import_flash_attention(
         _flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn = _lazy_imports(
             implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
         )
-        _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn)
+        # Block-sparse kernels expose no flash varlen fn; their kwargs are handled by their own wrapper.
+        if _flash_varlen_fn is not None:
+            _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn)
 
     return (_flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn
 
