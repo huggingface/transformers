@@ -188,102 +188,54 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("output.dense", "mlp.fc2"),
         ],
         "tipsv2": [
-            *[
-                WeightConverter(
-                    source_patterns=f"vision_model.encoder.layer.{layer_idx}.attn.qkv.weight",
-                    target_patterns=[
-                        f"vision_model.encoder.layer.{layer_idx}.attention.attention.query.weight",
-                        f"vision_model.encoder.layer.{layer_idx}.attention.attention.key.weight",
-                        f"vision_model.encoder.layer.{layer_idx}.attention.attention.value.weight",
-                    ],
-                    operations=[Chunk(dim=0)],
-                )
-                for layer_idx in range(40)
-            ],
-            *[
-                WeightConverter(
-                    source_patterns=f"vision_model.encoder.layer.{layer_idx}.attn.qkv.bias",
-                    target_patterns=[
-                        f"vision_model.encoder.layer.{layer_idx}.attention.attention.query.bias",
-                        f"vision_model.encoder.layer.{layer_idx}.attention.attention.key.bias",
-                        f"vision_model.encoder.layer.{layer_idx}.attention.attention.value.bias",
-                    ],
-                    operations=[Chunk(dim=0)],
-                )
-                for layer_idx in range(40)
-            ],
-            *[
-                WeightConverter(
-                    source_patterns=f"text_encoder.transformer.resblocks.{layer_idx}.attn.in_proj_weight",
-                    target_patterns=[
-                        f"text_model.encoder.layers.{layer_idx}.self_attn.q_proj.weight",
-                        f"text_model.encoder.layers.{layer_idx}.self_attn.k_proj.weight",
-                        f"text_model.encoder.layers.{layer_idx}.self_attn.v_proj.weight",
-                    ],
-                    operations=[Chunk(dim=0)],
-                )
-                for layer_idx in range(27)
-            ],
-            *[
-                WeightConverter(
-                    source_patterns=f"text_encoder.transformer.resblocks.{layer_idx}.attn.in_proj_bias",
-                    target_patterns=[
-                        f"text_model.encoder.layers.{layer_idx}.self_attn.q_proj.bias",
-                        f"text_model.encoder.layers.{layer_idx}.self_attn.k_proj.bias",
-                        f"text_model.encoder.layers.{layer_idx}.self_attn.v_proj.bias",
-                    ],
-                    operations=[Chunk(dim=0)],
-                )
-                for layer_idx in range(27)
-            ],
-            WeightRenaming(r"^vision_encoder\.cls_token$", "vision_model.embeddings.cls_token"),
-            WeightRenaming(r"^vision_encoder\.mask_token$", "vision_model.embeddings.mask_token"),
-            WeightRenaming(r"^vision_encoder\.register_tokens$", "vision_model.embeddings.register_tokens"),
-            WeightRenaming(r"^vision_encoder\.pos_embed$", "vision_model.embeddings.position_embeddings"),
-            WeightRenaming(
-                r"^vision_encoder\.patch_embed\.proj\.", "vision_model.embeddings.patch_embeddings.projection."
+            WeightRenaming("text_encoder", "text_model"),
+            WeightRenaming("vision_encoder", "vision_model"),
+            WeightRenaming(r"\.patch_embed\.proj\.", ".embeddings.patch_embeddings.projection."),
+            WeightRenaming(r"\.cls_token", ".embeddings.cls_token"),
+            WeightRenaming(r"\.mask_token", ".embeddings.mask_token"),
+            WeightRenaming(r"\.register_tokens", ".embeddings.register_tokens"),
+            WeightRenaming(r"\.pos_embed", ".embeddings.position_embeddings"),
+            WeightRenaming(r"\.norm\.", ".layernorm."),
+            WeightRenaming(r"\.blocks\.(\d+)\.", r".encoder.layer.\1."),
+            WeightRenaming(r"\.attn\.proj\.", ".attention.output.dense."),
+            WeightRenaming(r"\.ls1\.gamma", ".layer_scale1.lambda1"),
+            WeightRenaming(r"\.ls2\.gamma", ".layer_scale2.lambda1"),
+            WeightRenaming(r"\.token_embedding\.", ".embeddings.token_embedding."),
+            WeightRenaming(r"\.ln_final\.", ".final_layer_norm."),
+            WeightRenaming(r"\.transformer\.resblocks\.(\d+)\.", r".encoder.layers.\1."),
+            WeightRenaming(r"\.ln_1\.", ".layer_norm1."),
+            WeightRenaming(r"\.ln_2\.", ".layer_norm2."),
+            WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.fc1."),
+            WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.fc2."),
+            WeightRenaming(r"\.attn\.out_proj\.", ".self_attn.out_proj."),
+            # Vision QKV split
+            WeightConverter(
+                source_patterns=r"\.attn\.qkv\.weight",
+                target_patterns=[
+                    ".attention.attention.query.weight",
+                    ".attention.attention.key.weight",
+                    ".attention.attention.value.weight",
+                ],
+                operations=[Chunk(dim=0)],
             ),
-            WeightRenaming(r"^vision_encoder\.norm\.", "vision_model.layernorm."),
-            WeightRenaming(
-                r"^vision_encoder\.blocks\.(\d+)\.attn\.proj\.",
-                r"vision_model.encoder.layer.\1.attention.output.dense.",
+            WeightConverter(
+                source_patterns=r"\.attn\.qkv\.bias",
+                target_patterns=[
+                    ".attention.attention.query.bias",
+                    ".attention.attention.key.bias",
+                    ".attention.attention.value.bias",
+                ],
+                operations=[Chunk(dim=0)],
             ),
-            WeightRenaming(
-                r"^vision_encoder\.blocks\.(\d+)\.ls1\.gamma$", r"vision_model.encoder.layer.\1.layer_scale1.lambda1"
+            WeightConverter(
+                source_patterns=r"\.attn\.in_proj_weight",
+                target_patterns=[".self_attn.q_proj.weight", ".self_attn.k_proj.weight", ".self_attn.v_proj.weight"],
+                operations=[Chunk(dim=0)],
             ),
-            WeightRenaming(
-                r"^vision_encoder\.blocks\.(\d+)\.ls2\.gamma$", r"vision_model.encoder.layer.\1.layer_scale2.lambda1"
-            ),
-            WeightRenaming(
-                r"^vision_encoder\.blocks\.(\d+)\.mlp\.w12\.",
-                r"vision_model.encoder.layer.\1.mlp.weights_in.",
-            ),
-            WeightRenaming(
-                r"^vision_encoder\.blocks\.(\d+)\.mlp\.w3\.",
-                r"vision_model.encoder.layer.\1.mlp.weights_out.",
-            ),
-            WeightRenaming(r"^vision_encoder\.blocks\.(\d+)\.", r"vision_model.encoder.layer.\1."),
-            WeightRenaming(r"^text_encoder\.token_embedding\.", "text_model.embeddings.token_embedding."),
-            WeightRenaming(r"^text_encoder\.ln_final\.", "text_model.final_layer_norm."),
-            WeightRenaming(
-                r"^text_encoder\.transformer\.resblocks\.(\d+)\.attn\.out_proj\.",
-                r"text_model.encoder.layers.\1.self_attn.out_proj.",
-            ),
-            WeightRenaming(
-                r"^text_encoder\.transformer\.resblocks\.(\d+)\.ln_1\.",
-                r"text_model.encoder.layers.\1.layer_norm1.",
-            ),
-            WeightRenaming(
-                r"^text_encoder\.transformer\.resblocks\.(\d+)\.ln_2\.",
-                r"text_model.encoder.layers.\1.layer_norm2.",
-            ),
-            WeightRenaming(
-                r"^text_encoder\.transformer\.resblocks\.(\d+)\.mlp\.c_fc\.",
-                r"text_model.encoder.layers.\1.mlp.fc1.",
-            ),
-            WeightRenaming(
-                r"^text_encoder\.transformer\.resblocks\.(\d+)\.mlp\.c_proj\.",
-                r"text_model.encoder.layers.\1.mlp.fc2.",
+            WeightConverter(
+                source_patterns=r"\.attn\.in_proj_bias",
+                target_patterns=[".self_attn.q_proj.bias", ".self_attn.k_proj.bias", ".self_attn.v_proj.bias"],
+                operations=[Chunk(dim=0)],
             ),
         ],
         "BeitBackbone": [
