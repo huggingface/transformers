@@ -132,6 +132,8 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_nextn_predict_layers",
         "router_jitter_noise",
     ],
+    "DeepseekV32Config": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace"],
+    "GlmMoeDsaConfig": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace"],
     "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
     "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
     "SeamlessM4TConfig": True,
