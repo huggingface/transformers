@@ -37,7 +37,7 @@ def rnnt_loss(
     Thin wrapper around [`torchaudio.functional.rnnt_loss`]. torchaudio is queried with `reduction="none"` to get
     the per-sample negative log-likelihoods, and the requested reduction is applied here. The reduction names and
     formulas mirror NeMo's `RNNTLoss` (the reference implementation used to train/finetune Parakeet), so that loss
-    magnitudes and gradient scaling match when finetuning a Parakeet checkpoint:
+    magnitudes and gradient scaling match when finetuning other RNNT models like Parakeet:
 
     - `"mean_volume"`: sum of per-sample losses divided by the sum of target lengths (per-token average over the
       whole batch). This is what `nvidia/parakeet-rnnt-0.6b` is trained with (`rnnt_reduction: mean_volume`).
