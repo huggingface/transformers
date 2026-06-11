@@ -14,6 +14,8 @@
 # limitations under the License.
 """PyTorch CTRL model."""
 
+from collections.abc import Callable
+
 import numpy as np
 import torch
 from torch import nn
@@ -25,12 +27,15 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     logging,
 )
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_ctrl import CTRLConfig
 
 
@@ -57,22 +62,33 @@ def positional_encoding(position, d_model_size, dtype):
     return pos_encoding
 
 
-def eager_attention_forward(module, query, key, value, attention_mask, scaling=None, dropout=0.0, **kwargs):
+# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attention_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attention_weights = nn.functional.dropout(attention_weights, p=dropout, training=module.training)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
-    attn_output = torch.matmul(attention_weights, value)
+    attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
-    return attn_output, attention_weights
+    return attn_output, attn_weights
 
 
 class MultiHeadAttention(nn.Module):
@@ -84,8 +100,8 @@ class MultiHeadAttention(nn.Module):
         self.layer_idx = layer_idx
         self.is_causal = True
 
-        self.depth = int(self.d_model_size / self.num_heads)
-        self.scaling = self.depth**-0.5
+        self.head_dim = int(self.d_model_size / self.num_heads)
+        self.scaling = self.head_dim**-0.5
 
         self.Wq = nn.Linear(self.d_model_size, self.d_model_size)
         self.Wk = nn.Linear(self.d_model_size, self.d_model_size)
@@ -93,49 +109,42 @@ class MultiHeadAttention(nn.Module):
 
         self.dense = nn.Linear(self.d_model_size, self.d_model_size)
 
-    def split_into_heads(self, x, batch_size):
-        x = x.reshape(batch_size, -1, self.num_heads, self.depth)
-        return x.permute([0, 2, 1, 3])
-
     def forward(
         self,
-        v,
-        k,
-        q,
+        value,
+        key,
+        query,
         layer_past=None,
         attention_mask=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        batch_size = q.shape[0]
+        input_shape = query.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        q = self.Wq(q)
-        k = self.Wk(k)
-        v = self.Wv(v)
-
-        q = self.split_into_heads(q, batch_size)
-        k = self.split_into_heads(k, batch_size)
-        v = self.split_into_heads(v, batch_size)
+        query = self.Wq(query).view(hidden_shape).transpose(1, 2)
+        key = self.Wk(key).view(hidden_shape).transpose(1, 2)
+        value = self.Wv(value).view(hidden_shape).transpose(1, 2)
 
         if layer_past is not None:
-            k, v = layer_past.update(k, v, self.layer_idx)
+            key, value = layer_past.update(key, value, self.layer_idx)
 
-        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 
-        scaled_attention, attn = attention_interface(
+        attn_output, attn_weights = attention_interface(
             self,
-            q,
-            k,
-            v,
+            query,
+            key,
+            value,
             attention_mask,
             dropout=0.0,
             scaling=self.scaling,
             **kwargs,
         )
-        original_size_attention = scaled_attention.reshape(batch_size, -1, self.d_model_size)
-        output = self.dense(original_size_attention)
-        return output, attn
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.dense(attn_output)
+        return attn_output, attn_weights
 
 
 def point_wise_feed_forward_network(d_model_size, dff):
@@ -160,17 +169,17 @@ class EncoderLayer(nn.Module):
         x,
         layer_past=None,
         attention_mask=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         normed = self.layernorm1(x)
-        attn_output = self.multi_head_attention(
+        attn_output, _ = self.multi_head_attention(
             normed,
             normed,
             normed,
             layer_past=layer_past,
             attention_mask=attention_mask,
             **kwargs,
-        )[0]
+        )
         attn_output = self.dropout1(attn_output)
         out1 = x + attn_output
 
@@ -186,10 +195,13 @@ class EncoderLayer(nn.Module):
 class CTRLPreTrainedModel(PreTrainedModel):
     config: CTRLConfig
     base_model_prefix = "transformer"
+    _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": EncoderLayer,
-        "attentions": OutputRecorder(MultiHeadAttention, index=1),
+        "attentions": MultiHeadAttention,
     }
 
     def _init_weights(self, module):
@@ -227,6 +239,7 @@ class CTRLModel(CTRLPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.w = new_embeddings
 
+    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(
@@ -238,7 +251,7 @@ class CTRLModel(CTRLPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
         Example:
@@ -264,18 +277,15 @@ class CTRLModel(CTRLPreTrainedModel):
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
+        if input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-            batch_size = input_ids.shape[0]
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-            batch_size = inputs_embeds.shape[0]
-        else:
+            inputs_embeds = self.w(input_ids)
+        elif inputs_embeds is None:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
+        input_shape = inputs_embeds.shape[:-1]
+        batch_size = inputs_embeds.shape[0]
+        device = inputs_embeds.device
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -286,14 +296,10 @@ class CTRLModel(CTRLPreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         if token_type_ids is not None:
-            token_type_ids = token_type_ids.view(-1, input_shape[-1])
             token_type_embeds = self.w(token_type_ids)
             token_type_embeds *= np.sqrt(self.d_model_size)
         else:
             token_type_embeds = 0
-
-        if inputs_embeds is None:
-            inputs_embeds = self.w(input_ids)
 
         if attention_mask is not None and attention_mask.ndim < 4:
             attention_mask = attention_mask.view(batch_size, -1)
@@ -362,7 +368,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -480,7 +486,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
