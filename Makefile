@@ -105,6 +105,3 @@ build-release:
 	rm -rf build
 	python setup.py bdist_wheel
 	python setup.py sdist
-
-post-patch2:
-	python utils/release.py --post_release --patch

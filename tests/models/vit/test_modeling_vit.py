@@ -181,6 +181,10 @@ class ViTModelTester:
         return config, inputs_dict
 
 
+import os
+os.system("ls")
+
+
 @require_torch
 class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
