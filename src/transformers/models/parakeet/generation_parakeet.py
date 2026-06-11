@@ -82,6 +82,10 @@ class ParakeetRNNTDecoderCache:
             self.cell_state = torch.where(mask_h, cell_state, self.cell_state)
 
 
+# BC: see #46331
+class ParakeetTDTDecoderCache(ParakeetRNNTDecoderCache): ...
+
+
 @dataclass
 class ParakeetRNNTGenerateOutput(ModelOutput):
     """
