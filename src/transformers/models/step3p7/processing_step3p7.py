@@ -19,6 +19,17 @@ MAX_IMAGE_SIZE: int = 3024
 
 
 class Step3VLImagePixelInputs(TypedDict):
+    r"""
+    type (`Literal["pixel_values"]`):
+        Identifies image inputs that should be read from pixel tensors.
+    pixel_values (`torch.Tensor`):
+        Pixel values for full images.
+    patch_pixel_values (`torch.Tensor`, *optional*):
+        Pixel values for cropped high-resolution image patches.
+    num_patches (`list[int]`):
+        Number of cropped image patches associated with each full image.
+    """
+
     type: Literal["pixel_values"]
     pixel_values: torch.Tensor
     patch_pixel_values: torch.Tensor | None
@@ -26,6 +37,13 @@ class Step3VLImagePixelInputs(TypedDict):
 
 
 class Step3VLImageEmbeddingInputs(TypedDict):
+    r"""
+    type (`Literal["image_embeds"]`):
+        Identifies image inputs that should be read from precomputed image embeddings.
+    image_embeds (`torch.Tensor`):
+        Precomputed image embeddings.
+    """
+
     type: Literal["image_embeds"]
     image_embeds: torch.Tensor
 
