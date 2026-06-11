@@ -62,7 +62,6 @@ class Qwen2AudioModelOutputWithPast(BaseModelOutputWithPast):
     labels: torch.LongTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Qwen2Audio causal language model (or autoregressive) outputs.
@@ -767,8 +766,6 @@ class Qwen2AudioModel(Qwen2AudioPreTrainedModel):
     """
 )
 class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-
     def __init__(self, config: Qwen2AudioConfig):
         super().__init__(config)
         self.model = Qwen2AudioModel(config)

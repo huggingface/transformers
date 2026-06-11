@@ -23,7 +23,6 @@ from dataclasses import MISSING, dataclass, fields
 from functools import wraps
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar, Union
 
-from huggingface_hub import create_repo
 from huggingface_hub.dataclasses import strict
 from packaging import version
 from typing_extensions import dataclass_transform
@@ -39,6 +38,7 @@ from .utils import (
     cached_file,
     copy_func,
     extract_commit_hash,
+    hf_api,
     is_torch_available,
     logging,
 )
@@ -73,6 +73,7 @@ ALLOWED_LAYER_TYPES = (
     "dense",
     "hybrid",  # for layers that have both mamba and attention in zamba and zamba2
     "moe",  # for nemotron_h, which uses either attention, mamba or moe
+    "deepseek_sparse_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
 )
 
 
@@ -521,7 +522,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # This attribute is important to know on load, but should not be serialized on save.

@@ -360,12 +360,12 @@ class VoxtralMultiModalProjector(nn.Module):
         return hidden_states
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Voxtral outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class VoxtralModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     audio_hidden_states (`torch.FloatTensor`, *optional*):
@@ -487,7 +487,6 @@ class VoxtralModel(VoxtralPreTrainedModel):
 )
 class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
     _keep_in_fp32_modules_strict = ["embed_positions"]
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config)
