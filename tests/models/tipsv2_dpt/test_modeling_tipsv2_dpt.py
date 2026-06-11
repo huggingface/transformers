@@ -178,7 +178,9 @@ class Tipsv2DptModelTester:
 
     def create_and_check_for_semantic_segmentation_with_loss(self, config, pixel_values):
         model = Tipsv2DptForSemanticSegmentation(config).to(torch_device).eval()
-        labels = ids_tensor([self.batch_size, self.decoder_height, self.decoder_width], self.num_labels).to(torch_device)
+        labels = ids_tensor([self.batch_size, self.decoder_height, self.decoder_width], self.num_labels).to(
+            torch_device
+        )
         with torch.no_grad():
             outputs = model(pixel_values, labels=labels)
         self.parent.assertIsNotNone(outputs.loss)
@@ -299,7 +301,7 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
                 ],
             }
         )
-        
+
         expected_depth = torch.tensor(EXPECTED_DEPTH.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_depth, rtol=1e-3, atol=1e-3)
 
@@ -312,7 +314,7 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
                 ],
             }
         )
-        
+
         expected_normals = torch.tensor(EXPECTED_NORMALS.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.normals[0, 0, :3, :3], expected_normals, rtol=1e-3, atol=1e-3)
 
@@ -325,7 +327,7 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
                 ],
             }
         )
-        
+
         expected_seg_logits = torch.tensor(EXPECTED_SEG_LOGITS.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_seg_logits, rtol=1e-3, atol=1e-3)
 
@@ -352,7 +354,7 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
                 ],
             }
         )
-        
+
         expected_depth = torch.tensor(EXPECTED_DEPTH.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_depth, rtol=1e-3, atol=1e-3)
 
@@ -389,7 +391,7 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
                 ],
             }
         )
-        
+
         expected_normals = torch.tensor(EXPECTED_NORMALS.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.normals[0, 0, :3, :3], expected_normals, rtol=1e-3, atol=1e-3)
 
@@ -429,7 +431,7 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
                 ],
             }
         )
-        
+
         expected_seg_logits = torch.tensor(EXPECTED_SEG_LOGITS.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_seg_logits, rtol=1e-3, atol=1e-3)
 

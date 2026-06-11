@@ -346,7 +346,7 @@ class Tipsv2DptFeatureFusionStage(nn.Module):
         self.layers = nn.ModuleList([Tipsv2DptFeatureFusionLayer(config) for _ in config.neck_hidden_sizes])
 
     def forward(self, hidden_states: list[torch.Tensor]) -> list[torch.Tensor]:
-        hidden_states = hidden_states[::-1]
+        hidden_states = hidden_states.reverse()
 
         fused_hidden_states = []
         fused_hidden_state = None

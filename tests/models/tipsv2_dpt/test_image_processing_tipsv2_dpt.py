@@ -24,8 +24,8 @@ if is_torch_available():
     import torch
 
     from transformers import Tipsv2DptImageProcessor
-    from transformers.models.tipsv2_dpt.modeling_tipsv2_dpt import Tipsv2DptNormalEstimatorOutput
     from transformers.modeling_outputs import DepthEstimatorOutput, SemanticSegmenterOutput
+    from transformers.models.tipsv2_dpt.modeling_tipsv2_dpt import Tipsv2DptNormalEstimatorOutput
 
 
 class Tipsv2DptImageProcessingTester:
