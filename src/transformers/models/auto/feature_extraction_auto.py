@@ -51,6 +51,8 @@ MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("musicgen", "EncodecFeatureExtractor"),
         ("parakeet_ctc", "ParakeetFeatureExtractor"),
         ("parakeet_encoder", "ParakeetFeatureExtractor"),
+        ("parakeet_rnnt", "ParakeetFeatureExtractor"),
+        ("parakeet_tdt", "ParakeetFeatureExtractor"),
         ("pe_audio_video", "PeAudioFeatureExtractor"),
         ("qwen2_5_omni", "WhisperFeatureExtractor"),
         ("qwen2_audio", "WhisperFeatureExtractor"),
