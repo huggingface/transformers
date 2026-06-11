@@ -591,7 +591,7 @@ class MiniMaxM3VLIndexer(nn.Module):
         scores = scores.view(batch, self.num_heads, q_len, num_key_blocks, self.block_size)
         block_scores = scores.amax(dim=-1).amax(dim=1)  # -> [B, S_q, num_key_blocks]
 
-        # Block-level causality on slot indices (so top-k never spends a slot on a future block).
+        # Block-level causality on key-slot indices (so top-k never spends a slot on a future block).
         q_block = q_positions // self.block_size  # [S_q]
         future = torch.arange(num_key_blocks, device=idx_q.device).view(1, 1, -1) > q_block.view(1, -1, 1)
         block_scores = block_scores.masked_fill(future, float("-inf"))
@@ -620,16 +620,14 @@ class MiniMaxM3VLIndexer(nn.Module):
         TODO: add the args and the shapes for help :)
         Expand per-query selected key-block indices into the dense `[B, 1, S_q, S_k]` additive
         mask the eager/SDPA attention interface consumes. When an `attention_mask` tensor already
-        exists (eager/SDPA) we restrict it to the selected blocks; that mask already carries
-        token-level causality, so within a selected block the run stays causal. When it is `None`
-        (e.g. when there is not padding the mask creation won't return one) we materialize
-        the block-sparse causal mask from scratch.
-
+        exists (eager/SDPA) we update it to the account for the blocks selected. When it is `None`
+        (e.g. when there is not padding the mask creation won't return one to reach sdpa fast path)
+        we materialize the block-sparse causal mask from scratch.
         """
         batch, q_len, _ = block_indices.shape
         num_key_blocks = -(-key_length // self.block_size)
 
-        # Scatter the kept blocks to `0.0`; `-1` slots land in a throwaway column we drop afterwards.
+        # Scatter the kept blocks to `0`; `-1` slots land in a throwaway column we drop afterwards.
         safe = block_indices.masked_fill(block_indices < 0, num_key_blocks)
         bias = block_indices.new_full((batch, q_len, num_key_blocks + 1), float("-inf"), dtype=dtype)
         bias.scatter_(-1, safe, 0.0)
@@ -707,10 +705,7 @@ class MiniMaxM3VLPreTrainedModel(PreTrainedModel):
         "attentions": MiniMaxM3VLAttention,
     }
     input_modalities = ("image", "video", "text")
-    # MTP modules ship in the upstream checkpoint but aren't part of this port.
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
-    # The MSA block-sparse kernel build currently lives on the repo's ``v0`` branch, so the
-    # revision is pinned here; listing it also authorizes loading it from outside ``kernels-community``.
     _compatible_flash_implementations = ["kernels-staging/msa@v0"]
 
     @torch.no_grad()
@@ -725,20 +720,10 @@ class MiniMaxM3VLPreTrainedModel(PreTrainedModel):
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, MiniMaxM3VLRMSNorm):
             init.zeros_(module.weight)
-        elif isinstance(module, MiniMaxM3VL3DRotaryEmbedding):
-            # ``inv_freq`` is a non-persistent buffer absent from the checkpoint, so under
-            # meta-device loading (`device_map`) it must be re-materialized here — the base
-            # rotary re-init only covers text RoPE modules carrying `original_inv_freq`.
-            inv_freq = 1.0 / (
-                module.theta ** (torch.arange(0, module.axis_dim, 2, dtype=torch.float32) / module.axis_dim)
-            )
-            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring
 class MiniMaxM3VLTextModel(MiniMaxM3VLPreTrainedModel):
-    """Stand-alone text backbone (no LM head). Used by [`MiniMaxM3VLModel`]."""
-
     config: MiniMaxM3VLTextConfig
 
     def __init__(self, config: MiniMaxM3VLTextConfig):
@@ -896,12 +881,9 @@ def load_balancing_loss_func(
 
 @auto_docstring
 class MiniMaxM3VLForCausalLM(MiniMaxM3VLPreTrainedModel, GenerationMixin):
-    """Text-only causal LM head."""
-
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-
     config: MiniMaxM3VLTextConfig
 
     def __init__(self, config: MiniMaxM3VLTextConfig):
@@ -1002,15 +984,11 @@ class MiniMaxM3VLForCausalLM(MiniMaxM3VLPreTrainedModel, GenerationMixin):
 
 
 class MiniMaxM3VLVisionEmbeddings(nn.Module):
-    """Conv3d patch embedding over a flat ``[N_patches, C * T * P * P]`` input.
+    """Patch embedding, identical to [`Qwen2_5_VisionPatchEmbed`] (reads its dims from the vision
+    config). The upstream checkpoint stores the conv as ``patch_embedding``, renamed to the
+    inherited ``proj`` in the conversion mapping."""
 
-    Identical to [`Qwen2_5_VisionPatchEmbed`]; only the constructor differs (it
-    reads the dims from the vision config). The upstream checkpoint stores the
-    conv as ``patch_embedding``, renamed to the inherited ``proj`` in the
-    conversion mapping.
-    """
-
-    def __init__(self, config: MiniMaxM3VLVisionConfig) -> None:
+    def __init__(self, config) -> None:
         super().__init__()
         self.patch_size = config.patch_size
         self.temporal_patch_size = config.temporal_patch_size
@@ -1057,8 +1035,6 @@ class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
         self.axis_dim = 2 * ((rope_dims // 3) // 2)
         self.spatial_merge_size = spatial_merge_size
         self.theta = theta
-        inv_freq = 1.0 / (theta ** (torch.arange(0, self.axis_dim, 2, dtype=torch.float32) / self.axis_dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(
         self, grid_thw: torch.Tensor, device: torch.device, dtype: torch.dtype
@@ -1074,9 +1050,13 @@ class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
             coords.append(torch.stack([ti, hi.repeat(t), wi.repeat(t)], dim=-1))
         coords = torch.cat(coords).to(device=device, dtype=torch.float32)
 
+        # ``inv_freq`` depends only on constants (theta, axis_dim); computing it inline here keeps
+        # the rotary buffer-free, so meta-device loading needs no ``_init_weights`` re-materialization.
         # Per-axis freqs (T|H|W) concatenated, then duplicated as ``cat([f, f])`` so they pair
         # with the half-rotation in ``apply_rotary_pos_emb_vision``.
-        inv_freq = self.inv_freq.to(device)
+        inv_freq = 1.0 / (
+            self.theta ** (torch.arange(0, self.axis_dim, 2, dtype=torch.float32, device=device) / self.axis_dim)
+        )
         freqs = torch.cat([coords[:, i : i + 1] * inv_freq for i in range(3)], dim=-1)
         emb = torch.cat([freqs, freqs], dim=-1)
         return emb.cos().to(dtype), emb.sin().to(dtype)

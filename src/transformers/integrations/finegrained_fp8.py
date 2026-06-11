@@ -806,6 +806,7 @@ def _move_attributes(new_module: nn.Module, source_module: nn.Module) -> None:
     if source_apply_gate is not None and source_apply_gate is not type(new_module)._apply_gate:
         new_module._apply_gate = types.MethodType(source_apply_gate, new_module)
 
+
 def replace_with_fp8_linear(
     model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
 ):
