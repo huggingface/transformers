@@ -273,11 +273,12 @@ def prepare_img():
 class Tipsv2DptModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return Tipsv2DptImageProcessor.from_pretrained("google/tipsv2-b14-dpt")
+        # TODO: switch to Auto
+        return Tipsv2DptImageProcessor()
 
     @slow
     def test_inference_model(self):
-        model = Tipsv2DptModel.from_pretrained("google/tipsv2-b14-dpt").eval().to(torch_device)
+        model = Tipsv2DptModel.from_pretrained("google/tipsv2-b14-dpt", device_map=torch_device).eval()
 
         image = prepare_img()
         image_processor = self.default_image_processor
@@ -288,9 +289,12 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
 
         self.assertIsInstance(outputs, Tipsv2DptOutput)
         _, _, height, width = inputs["pixel_values"].shape
-        self.assertEqual(outputs.predicted_depth.shape, torch.Size([1, height, width]))
-        self.assertEqual(outputs.normals.shape, torch.Size([1, 3, height, width]))
-        self.assertEqual(outputs.logits.shape, torch.Size([1, model.config.num_labels, height, width]))
+        expected_height, expected_width = 256, 256
+        self.assertEqual(outputs.predicted_depth.shape, torch.Size([1, expected_height, expected_width]))
+        self.assertEqual(outputs.normals.shape, torch.Size([1, 3, expected_height, expected_width]))
+        self.assertEqual(
+            outputs.logits.shape, torch.Size([1, model.config.num_labels, expected_height, expected_width])
+        )
 
         EXPECTED_DEPTH = Expectations(
             {
@@ -333,7 +337,7 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_depth_estimation(self):
-        model = Tipsv2DptForDepthEstimation.from_pretrained("google/tipsv2-b14-dpt").eval().to(torch_device)
+        model = Tipsv2DptForDepthEstimation.from_pretrained("google/tipsv2-b14-dpt", device_map=torch_device).eval()
 
         image = prepare_img()
         image_processor = self.default_image_processor
@@ -343,7 +347,8 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         _, _, height, width = inputs["pixel_values"].shape
-        self.assertEqual(outputs.predicted_depth.shape, torch.Size([1, height, width]))
+        expected_height, expected_width = 256, 256
+        self.assertEqual(outputs.predicted_depth.shape, torch.Size([1, expected_height, expected_width]))
 
         EXPECTED_DEPTH = Expectations(
             {
@@ -360,7 +365,7 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
 
         result = image_processor.post_process_depth_estimation(outputs)
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["predicted_depth"].shape, torch.Size([height, width]))
+        self.assertEqual(result[0]["predicted_depth"].shape, torch.Size([expected_height, expected_width]))
 
         target_size = (height // 2, width // 2)
         result = image_processor.post_process_depth_estimation(outputs, target_sizes=[target_size])
@@ -369,7 +374,7 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_normal_estimation(self):
-        model = Tipsv2DptForNormalEstimation.from_pretrained("google/tipsv2-b14-dpt").eval().to(torch_device)
+        model = Tipsv2DptForNormalEstimation.from_pretrained("google/tipsv2-b14-dpt", device_map=torch_device).eval()
 
         image = prepare_img()
         image_processor = self.default_image_processor
@@ -379,8 +384,9 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         _, _, height, width = inputs["pixel_values"].shape
+        expected_height, expected_width = 256, 256
         self.assertIsInstance(outputs, Tipsv2DptNormalEstimatorOutput)
-        self.assertEqual(outputs.normals.shape, torch.Size([1, 3, height, width]))
+        self.assertEqual(outputs.normals.shape, torch.Size([1, 3, expected_height, expected_width]))
 
         EXPECTED_NORMALS = Expectations(
             {
@@ -397,7 +403,7 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
 
         result = image_processor.post_process_normal_estimation(outputs)
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["normals"].shape, torch.Size([3, height, width]))
+        self.assertEqual(result[0]["normals"].shape, torch.Size([3, expected_height, expected_width]))
         norms = result[0]["normals"].norm(p=2, dim=0)
         torch.testing.assert_close(norms, torch.ones_like(norms), rtol=1e-4, atol=1e-4)
 
@@ -410,7 +416,9 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_semantic_segmentation(self):
-        model = Tipsv2DptForSemanticSegmentation.from_pretrained("google/tipsv2-b14-dpt").eval().to(torch_device)
+        model = Tipsv2DptForSemanticSegmentation.from_pretrained(
+            "google/tipsv2-b14-dpt", device_map=torch_device
+        ).eval()
 
         image = prepare_img()
         image_processor = self.default_image_processor
@@ -420,7 +428,10 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         _, _, height, width = inputs["pixel_values"].shape
-        self.assertEqual(outputs.logits.shape, torch.Size([1, model.config.num_labels, height, width]))
+        expected_height, expected_width = 256, 256
+        self.assertEqual(
+            outputs.logits.shape, torch.Size([1, model.config.num_labels, expected_height, expected_width])
+        )
 
         EXPECTED_SEG_LOGITS = Expectations(
             {
@@ -437,7 +448,7 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
 
         segmentation = image_processor.post_process_semantic_segmentation(outputs)
         self.assertEqual(len(segmentation), 1)
-        self.assertEqual(segmentation[0].shape, torch.Size([height, width]))
+        self.assertEqual(segmentation[0].shape, torch.Size([expected_height, expected_width]))
 
         EXPECTED_SEG_LABELS = Expectations(
             {

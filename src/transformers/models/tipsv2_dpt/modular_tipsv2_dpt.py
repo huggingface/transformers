@@ -13,6 +13,7 @@
 # limitations under the License.
 """TIPSv2-DPT model."""
 
+from collections.abc import Sized
 from dataclasses import dataclass
 
 import torch
@@ -27,8 +28,11 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import PILImageResampling
 from ...modeling_outputs import DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring
@@ -208,6 +212,29 @@ class Tipsv2DptConfig(PreTrainedConfig):
     semantic_loss_ignore_index: int = 255
 
     def __post_init__(self, **kwargs):
+        # Use num_labels and label2id when set. Otherwise fall back to num_labels=num_seg_classes which
+        # is set on original configs.
+        num_labels = kwargs.get("num_labels")
+        label2id = kwargs.get("label2id")
+        num_seg_classes = kwargs.pop("num_seg_classes", None)
+        if num_labels is not None and num_seg_classes is not None and num_labels != num_seg_classes:
+            logger.info(
+                f"`num_labels` ({num_labels}) and `num_seg_classes` ({num_seg_classes}) are both set in"
+                "the config and are not equal. The value from `num_labels` will be used."
+            )
+        elif (
+            label2id is not None
+            and num_seg_classes is not None
+            and isinstance(label2id, Sized)
+            and len(label2id) != num_seg_classes
+        ):
+            logger.info(
+                f"`label2id` (len={len(label2id)}) and `num_seg_classes` ({num_seg_classes}) are both set in"
+                "the config and are not equal. The value from `label2id` will be used."
+            )
+        if num_labels is None and label2id is None and num_seg_classes is not None:
+            kwargs["num_labels"] = num_seg_classes
+
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=self.backbone_config,
             default_config_type="tipsv2_vision_model",
@@ -346,11 +373,9 @@ class Tipsv2DptFeatureFusionStage(nn.Module):
         self.layers = nn.ModuleList([Tipsv2DptFeatureFusionLayer(config) for _ in config.neck_hidden_sizes])
 
     def forward(self, hidden_states: list[torch.Tensor]) -> list[torch.Tensor]:
-        hidden_states = hidden_states.reverse()
-
         fused_hidden_states = []
         fused_hidden_state = None
-        for hidden_state, layer in zip(hidden_states, self.layers):
+        for hidden_state, layer in zip(reversed(hidden_states), self.layers):
             if fused_hidden_state is None:
                 fused_hidden_state = layer(hidden_state)
             else:

@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from dataclasses import dataclass
 
 import torch
@@ -157,11 +156,9 @@ class Tipsv2DptFeatureFusionStage(nn.Module):
         self.layers = nn.ModuleList([Tipsv2DptFeatureFusionLayer(config) for _ in config.neck_hidden_sizes])
 
     def forward(self, hidden_states: list[torch.Tensor]) -> list[torch.Tensor]:
-        hidden_states = hidden_states.reverse()
-
         fused_hidden_states = []
         fused_hidden_state = None
-        for hidden_state, layer in zip(hidden_states, self.layers):
+        for hidden_state, layer in zip(reversed(hidden_states), self.layers):
             if fused_hidden_state is None:
                 fused_hidden_state = layer(hidden_state)
             else:

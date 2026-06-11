@@ -484,6 +484,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("timm_backbone", "TimmBackbone"),
         ("timm_wrapper", "TimmWrapperModel"),
         ("tipsv2", "Tipsv2Model"),
+        ("tipsv2_dpt", "Tipsv2DptModel"),
         ("tipsv2_text_model", "Tipsv2TextModel"),
         ("tipsv2_vision_model", "Tipsv2VisionModel"),
         ("tvp", "TvpModel"),
