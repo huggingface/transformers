@@ -1,4 +1,4 @@
-# Copyright 2025 The StepFun and HuggingFace Inc. teams. All rights reserved.
+# Copyright 2026 The StepFun and HuggingFace Inc. teams. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,14 +35,142 @@ from transformers.processing_utils import Unpack
 from transformers.utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 
 
+STEP_ROBOTICS_VISION_ENCODER_CONFIG_ARGS = r"""
+    width (`int`, *optional*, defaults to 1536):
+        Hidden size of the vision encoder.
+    layers (`int`, *optional*, defaults to 47):
+        Number of hidden layers in the vision encoder.
+    heads (`int`, *optional*, defaults to 16):
+        Number of attention heads in the vision encoder.
+    num_channels (`int`, *optional*, defaults to 3):
+        Number of input image channels.
+    image_size (`int`, *optional*, defaults to 728):
+        Size of the full image input expected by the vision encoder.
+    mlp_ratio (`float`, *optional*, defaults to `8960 / 1536`):
+        Ratio used to derive the intermediate size of the vision MLP layers.
+    patch_size (`int`, *optional*, defaults to 14):
+        Patch size used by the vision encoder.
+    hidden_act (`str`, *optional*, defaults to `"quick_gelu"`):
+        Activation function used by the vision encoder MLP layers.
+    layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        Epsilon used by layer normalization in the vision encoder.
+    use_cls_token (`bool`, *optional*, defaults to `False`):
+        Whether to prepend a class token to the vision patch sequence.
+    use_ln_pre (`bool`, *optional*, defaults to `True`):
+        Whether to apply layer normalization before the vision transformer.
+    use_ln_post (`bool`, *optional*, defaults to `False`):
+        Whether to apply layer normalization after the vision transformer.
+    use_abs_posemb (`bool`, *optional*, defaults to `True`):
+        Whether to add absolute position embeddings in the vision encoder.
+    use_rope2d (`bool`, *optional*, defaults to `True`):
+        Whether to use 2D rotary position embeddings in the vision encoder.
+    ls_init_value (`float`, *optional*, defaults to 0.1):
+        Initial value for layer scale parameters in the vision encoder.
+"""
+
+STEP3P7_TEXT_CONFIG_ARGS = r"""
+    hidden_size (`int`, *optional*, defaults to 4096):
+        Dimensionality of the decoder hidden states.
+    intermediate_size (`int`, *optional*, defaults to 11264):
+        Dimensionality of dense MLP intermediate states.
+    num_attention_heads (`int`, *optional*, defaults to 64):
+        Number of attention heads for each attention layer.
+    num_attention_groups (`int`, *optional*, defaults to 8):
+        Number of key/value attention groups.
+    num_hidden_layers (`int`, *optional*, defaults to 45):
+        Number of decoder layers.
+    max_seq_len (`int`, *optional*, defaults to 128000):
+        Maximum sequence length used by original Step checkpoints.
+    vocab_size (`int`, *optional*, defaults to 128815):
+        Vocabulary size of the text model.
+    rms_norm_eps (`float`, *optional*, defaults to 1e-5):
+        Epsilon used by RMS normalization layers.
+    moe_intermediate_size (`int`, *optional*, defaults to 1280):
+        Intermediate size of routed MoE experts.
+    moe_num_experts (`int`, *optional*, defaults to 288):
+        Number of routed MoE experts.
+    moe_top_k (`int`, *optional*, defaults to 8):
+        Number of experts selected per token.
+    rope_theta (`float`, *optional*, defaults to 10000):
+        Base period used by rotary position embeddings.
+    rope_scaling (`dict[str, Any]`, *optional*):
+        Rotary embedding scaling configuration.
+    max_position_embeddings (`int`, *optional*, defaults to 128000):
+        Maximum position embedding index supported by the model.
+    share_expert_dim (`int`, *optional*, defaults to 1280):
+        Intermediate size of shared experts.
+    head_dim (`int`, *optional*, defaults to 128):
+        Dimensionality of each attention head.
+    norm_expert_weight (`bool`, *optional*, defaults to `True`):
+        Whether to normalize router expert weights.
+    layer_types (`list[str]`, *optional*):
+        Attention type for each decoder layer.
+    sliding_window (`int`, *optional*):
+        Sliding window size for sliding attention layers.
+    pad_token_id (`int`, *optional*, defaults to 1):
+        Padding token id.
+    attention_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout probability for attention weights.
+    use_cache (`bool`, *optional*, defaults to `True`):
+        Whether the model should return key/value caches.
+    use_head_wise_attn_gate (`bool`, *optional*, defaults to `False`):
+        Whether to use head-wise attention gates.
+    use_moe_router_bias (`bool`, *optional*, defaults to `False`):
+        Whether MoE router projections use a bias term.
+    moe_router_activation (`str`, *optional*, defaults to `"softmax"`):
+        Activation function used by the MoE router.
+    moe_router_scaling_factor (`float`, *optional*, defaults to 1.0):
+        Scaling factor applied to MoE router scores.
+    need_fp32_gate (`bool`, *optional*, defaults to `False`):
+        Whether to compute router gates in float32.
+    attention_other_setting (`dict[str, Any]`, *optional*):
+        Additional attention settings from original checkpoints.
+    swiglu_limits (`list[float]`, *optional*):
+        Clamp limits for routed expert SwiGLU activations.
+    swiglu_limits_shared (`list[float]`, *optional*):
+        Clamp limits for shared expert SwiGLU activations.
+    use_rope_layers (`list[bool]`, *optional*):
+        Per-layer flags indicating whether RoPE is enabled.
+    yarn_only_types (`list[str]`, *optional*):
+        Layer type names that should use YaRN-style RoPE settings only.
+    moe_layers_enum (`tuple[int]`, *optional*):
+        Indices of layers that use MoE blocks.
+"""
+
+STEP3P7_CONFIG_ARGS = r"""
+    vision_config (`dict` or `StepRoboticsVisionEncoderConfig`, *optional*):
+        Configuration of the Step3p7 vision encoder.
+    text_config (`dict` or `Step3p7TextConfig`, *optional*):
+        Configuration of the Step3p7 text decoder.
+    understand_projector_stride (`int`, *optional*, defaults to 2):
+        Stride used when merging high-resolution patch features before projection.
+    projector_bias (`bool`, *optional*, defaults to `False`):
+        Whether the multimodal projector uses a bias term.
+    image_token_id (`int`, *optional*, defaults to 151679):
+        Token id used as image placeholder in text inputs.
+"""
+
+
 @strict
-@auto_docstring
+@auto_docstring(custom_args=STEP_ROBOTICS_VISION_ENCODER_CONFIG_ARGS)
 class StepRoboticsVisionEncoderConfig(PreTrainedConfig):
     r"""
     width (`int`, *optional*, defaults to 1536):
         Hidden size of the vision encoder.
+    layers (`int`, *optional*, defaults to 47):
+        Number of hidden layers in the vision encoder.
     heads (`int`, *optional*, defaults to 16):
         Number of attention heads in the vision encoder.
+    num_channels (`int`, *optional*, defaults to 3):
+        Number of input image channels.
+    image_size (`int`, *optional*, defaults to 728):
+        Size of the full image input expected by the vision encoder.
+    mlp_ratio (`float`, *optional*, defaults to `8960 / 1536`):
+        Ratio used to derive the intermediate size of the vision MLP layers.
+    patch_size (`int`, *optional*, defaults to 14):
+        Patch size used by the vision encoder.
+    hidden_act (`str`, *optional*, defaults to `"quick_gelu"`):
+        Activation function used by the vision encoder MLP layers.
     use_cls_token (`bool`, *optional*, defaults to `False`):
         Whether to prepend a class token to the vision patch sequence.
     use_ln_pre (`bool`, *optional*, defaults to `True`):
@@ -97,7 +225,7 @@ class StepRoboticsVisionEncoderConfig(PreTrainedConfig):
 
 
 @strict
-@auto_docstring
+@auto_docstring(custom_args=STEP3P7_TEXT_CONFIG_ARGS)
 class Step3p7TextConfig(PreTrainedConfig):
     model_type = "step3p5"
     architectures = ["Step3p5ForCausalLM"]
@@ -240,7 +368,7 @@ def _normalize_per_layer_values(
 
 
 @strict
-@auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
+@auto_docstring(custom_args=STEP3P7_CONFIG_ARGS, checkpoint="stepfun-ai/Step-3.7-Flash")
 class Step3p7Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
     # This loader is a compatibility shim for original Step VL checkpoints
@@ -305,7 +433,7 @@ def apply_rotary_emb(freqs: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
     return torch.cat((t_rot, t_pass), dim=-1).to(dtype)
 
 
-class EncoderRope2D(nn.Module):
+class Step3p7VisionEncoderRope2D(nn.Module):
     """Cacheable 2D rotary positional embedding."""
 
     def __init__(
@@ -381,7 +509,7 @@ class EncoderRope2D(nn.Module):
         return q, k
 
 
-class EncoderLayerScale(nn.Module):
+class Step3p7VisionEncoderLayerScale(nn.Module):
     """Per-channel residual scaling used when ls_init_value is set."""
 
     def __init__(self, dim: int, init_values: float):
@@ -392,7 +520,7 @@ class EncoderLayerScale(nn.Module):
         return hidden_states * self.gamma
 
 
-class EncoderMLP(nn.Module):
+class Step3p7VisionEncoderMLP(nn.Module):
     """Feed-forward network used inside each transformer block."""
 
     def __init__(self, hidden_size: int, intermediate_size: int, hidden_act: str):
@@ -406,7 +534,7 @@ class EncoderMLP(nn.Module):
         return hidden_states
 
 
-class EncoderVisionAttention(nn.Module):
+class Step3p7VisionEncoderAttention(nn.Module):
     """Multi-head self attention with optional 2D RoPE."""
 
     def __init__(
@@ -432,7 +560,7 @@ class EncoderVisionAttention(nn.Module):
 
         self.rope = None
         if use_rope2d:
-            self.rope = EncoderRope2D(
+            self.rope = Step3p7VisionEncoderRope2D(
                 dim=self.head_dim,
                 max_grid_height=max_grid_height,
                 max_grid_width=max_grid_width,
@@ -461,7 +589,7 @@ class EncoderVisionAttention(nn.Module):
         return self.out_proj(attn_output)
 
 
-class EncoderVisionBlock(nn.Module):
+class Step3p7VisionEncoderBlock(nn.Module):
     """A single Vision Transformer block (self-attention + MLP)."""
 
     def __init__(
@@ -478,7 +606,7 @@ class EncoderVisionBlock(nn.Module):
         use_rope2d: bool = True,
     ):
         super().__init__()
-        self.attn = EncoderVisionAttention(
+        self.attn = Step3p7VisionEncoderAttention(
             hidden_size,
             num_heads,
             max_grid_height=max_grid_height,
@@ -490,10 +618,10 @@ class EncoderVisionBlock(nn.Module):
         self.ln_2 = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
 
         intermediate = int(hidden_size * mlp_ratio)
-        self.mlp = EncoderMLP(hidden_size, intermediate, hidden_act)
+        self.mlp = Step3p7VisionEncoderMLP(hidden_size, intermediate, hidden_act)
 
-        self.ls_1 = EncoderLayerScale(hidden_size, ls_init_value)
-        self.ls_2 = EncoderLayerScale(hidden_size, ls_init_value)
+        self.ls_1 = Step3p7VisionEncoderLayerScale(hidden_size, ls_init_value)
+        self.ls_2 = Step3p7VisionEncoderLayerScale(hidden_size, ls_init_value)
 
     def forward(self, hidden_states: torch.Tensor, grid_hw: tuple[int, int]) -> torch.Tensor:
         residual = hidden_states
@@ -508,7 +636,7 @@ class EncoderVisionBlock(nn.Module):
         return hidden_states
 
 
-class EncoderVisionTransformer(nn.Module):
+class Step3p7VisionEncoderTransformer(nn.Module):
     """Stack of encoder blocks parameterised by Step35VisionEncoderConfig."""
 
     def __init__(
@@ -529,7 +657,7 @@ class EncoderVisionTransformer(nn.Module):
         self.layers = depth
         self.resblocks = nn.ModuleList(
             [
-                EncoderVisionBlock(
+                Step3p7VisionEncoderBlock(
                     embed_dim,
                     num_heads,
                     mlp_ratio,
@@ -598,7 +726,7 @@ class StepRoboticsVisionEncoder(nn.Module):
                 (self.hidden_size**-0.5) * torch.randn(int(self.use_cls_token) + grid_size**2, self.hidden_size)
             )
 
-        self.transformer = EncoderVisionTransformer(
+        self.transformer = Step3p7VisionEncoderTransformer(
             embed_dim=self.hidden_size,
             depth=self.num_hidden_layers,
             num_heads=self.num_heads,
@@ -914,7 +1042,7 @@ def softmax_routing_function(gating_output: torch.Tensor, top_k: int, renormaliz
     return expert_topk_weight, indices.to(torch.int32)
 
 
-class MoELinear(nn.Module):
+class Step3p7MoELinear(nn.Module):
     def __init__(self, num_experts, in_features, out_features):
         super().__init__()
         self.num_experts = num_experts
@@ -954,9 +1082,9 @@ class Step3p7MoEMLP(nn.Module):
         self.act_fn = ACT2FN["silu"]
         self.limit = swiglu_limit
 
-        self.up_proj = MoELinear(self.num_experts, self.hidden_size, self.moe_intermediate_size)
-        self.gate_proj = MoELinear(self.num_experts, self.hidden_size, self.moe_intermediate_size)
-        self.down_proj = MoELinear(self.num_experts, self.moe_intermediate_size, self.hidden_size)
+        self.up_proj = Step3p7MoELinear(self.num_experts, self.hidden_size, self.moe_intermediate_size)
+        self.gate_proj = Step3p7MoELinear(self.num_experts, self.hidden_size, self.moe_intermediate_size)
+        self.down_proj = Step3p7MoELinear(self.num_experts, self.moe_intermediate_size, self.hidden_size)
 
     def router_bias_func(self, gating_output: torch.Tensor, topk: int, renormalize: bool):
         gate_prob = torch.sigmoid(gating_output.float())

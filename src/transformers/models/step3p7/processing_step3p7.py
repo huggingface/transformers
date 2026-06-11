@@ -10,6 +10,7 @@ from transformers.feature_extraction_utils import BatchFeature, TensorType
 from transformers.image_utils import ImageInput
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin
 from transformers.tokenization_utils_tokenizers import TokenizersBackend
+from transformers.utils import auto_docstring
 
 from .image_processing_step3p7 import Step3VisionProcessor
 
@@ -182,6 +183,7 @@ class Step3VLProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class Step3VLProcessor(ProcessorMixin):
     @classmethod
     def _load_tokenizer_from_pretrained(
@@ -309,6 +311,7 @@ class Step3VLProcessor(ProcessorMixin):
 
         return "".join(result)
 
+    @auto_docstring
     def __call__(
         self,
         text: str | list[str] | None = None,
@@ -387,7 +390,6 @@ class Step3VLProcessor(ProcessorMixin):
             tensor_type=return_tensors,
         )
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
@@ -395,7 +397,6 @@ class Step3VLProcessor(ProcessorMixin):
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Gemma
     def decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to

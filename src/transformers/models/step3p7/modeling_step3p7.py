@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_step3p7.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 The StepFun and HuggingFace Inc. teams. All rights reserved.
+# Copyright 2026 The StepFun and HuggingFace Inc. teams. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ def apply_rotary_emb(freqs: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
     return torch.cat((t_rot, t_pass), dim=-1).to(dtype)
 
 
-class EncoderRope2D(nn.Module):
+class Step3p7VisionEncoderRope2D(nn.Module):
     """Cacheable 2D rotary positional embedding."""
 
     def __init__(
@@ -139,7 +139,7 @@ class EncoderRope2D(nn.Module):
         return q, k
 
 
-class EncoderLayerScale(nn.Module):
+class Step3p7VisionEncoderLayerScale(nn.Module):
     """Per-channel residual scaling used when ls_init_value is set."""
 
     def __init__(self, dim: int, init_values: float):
@@ -150,7 +150,7 @@ class EncoderLayerScale(nn.Module):
         return hidden_states * self.gamma
 
 
-class EncoderMLP(nn.Module):
+class Step3p7VisionEncoderMLP(nn.Module):
     """Feed-forward network used inside each transformer block."""
 
     def __init__(self, hidden_size: int, intermediate_size: int, hidden_act: str):
@@ -164,7 +164,7 @@ class EncoderMLP(nn.Module):
         return hidden_states
 
 
-class EncoderVisionAttention(nn.Module):
+class Step3p7VisionEncoderAttention(nn.Module):
     """Multi-head self attention with optional 2D RoPE."""
 
     def __init__(
@@ -190,7 +190,7 @@ class EncoderVisionAttention(nn.Module):
 
         self.rope = None
         if use_rope2d:
-            self.rope = EncoderRope2D(
+            self.rope = Step3p7VisionEncoderRope2D(
                 dim=self.head_dim,
                 max_grid_height=max_grid_height,
                 max_grid_width=max_grid_width,
@@ -219,7 +219,7 @@ class EncoderVisionAttention(nn.Module):
         return self.out_proj(attn_output)
 
 
-class EncoderVisionBlock(nn.Module):
+class Step3p7VisionEncoderBlock(nn.Module):
     """A single Vision Transformer block (self-attention + MLP)."""
 
     def __init__(
@@ -236,7 +236,7 @@ class EncoderVisionBlock(nn.Module):
         use_rope2d: bool = True,
     ):
         super().__init__()
-        self.attn = EncoderVisionAttention(
+        self.attn = Step3p7VisionEncoderAttention(
             hidden_size,
             num_heads,
             max_grid_height=max_grid_height,
@@ -248,10 +248,10 @@ class EncoderVisionBlock(nn.Module):
         self.ln_2 = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
 
         intermediate = int(hidden_size * mlp_ratio)
-        self.mlp = EncoderMLP(hidden_size, intermediate, hidden_act)
+        self.mlp = Step3p7VisionEncoderMLP(hidden_size, intermediate, hidden_act)
 
-        self.ls_1 = EncoderLayerScale(hidden_size, ls_init_value)
-        self.ls_2 = EncoderLayerScale(hidden_size, ls_init_value)
+        self.ls_1 = Step3p7VisionEncoderLayerScale(hidden_size, ls_init_value)
+        self.ls_2 = Step3p7VisionEncoderLayerScale(hidden_size, ls_init_value)
 
     def forward(self, hidden_states: torch.Tensor, grid_hw: tuple[int, int]) -> torch.Tensor:
         residual = hidden_states
@@ -266,7 +266,7 @@ class EncoderVisionBlock(nn.Module):
         return hidden_states
 
 
-class EncoderVisionTransformer(nn.Module):
+class Step3p7VisionEncoderTransformer(nn.Module):
     """Stack of encoder blocks parameterised by Step35VisionEncoderConfig."""
 
     def __init__(
@@ -287,7 +287,7 @@ class EncoderVisionTransformer(nn.Module):
         self.layers = depth
         self.resblocks = nn.ModuleList(
             [
-                EncoderVisionBlock(
+                Step3p7VisionEncoderBlock(
                     embed_dim,
                     num_heads,
                     mlp_ratio,
@@ -356,7 +356,7 @@ class StepRoboticsVisionEncoder(nn.Module):
                 (self.hidden_size**-0.5) * torch.randn(int(self.use_cls_token) + grid_size**2, self.hidden_size)
             )
 
-        self.transformer = EncoderVisionTransformer(
+        self.transformer = Step3p7VisionEncoderTransformer(
             embed_dim=self.hidden_size,
             depth=self.num_hidden_layers,
             num_heads=self.num_heads,
@@ -593,7 +593,7 @@ class Step3p7MLP(nn.Module):
         return self.down_proj(gate * up)
 
 
-class MoELinear(nn.Module):
+class Step3p7MoELinear(nn.Module):
     def __init__(self, num_experts, in_features, out_features):
         super().__init__()
         self.num_experts = num_experts
@@ -644,9 +644,9 @@ class Step3p7MoEMLP(nn.Module):
         self.act_fn = ACT2FN["silu"]
         self.limit = swiglu_limit
 
-        self.up_proj = MoELinear(self.num_experts, self.hidden_size, self.moe_intermediate_size)
-        self.gate_proj = MoELinear(self.num_experts, self.hidden_size, self.moe_intermediate_size)
-        self.down_proj = MoELinear(self.num_experts, self.moe_intermediate_size, self.hidden_size)
+        self.up_proj = Step3p7MoELinear(self.num_experts, self.hidden_size, self.moe_intermediate_size)
+        self.gate_proj = Step3p7MoELinear(self.num_experts, self.hidden_size, self.moe_intermediate_size)
+        self.down_proj = Step3p7MoELinear(self.num_experts, self.moe_intermediate_size, self.hidden_size)
 
     def router_bias_func(self, gating_output: torch.Tensor, topk: int, renormalize: bool):
         gate_prob = torch.sigmoid(gating_output.float())
