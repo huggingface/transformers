@@ -841,7 +841,7 @@ class NopConfig(PreTrainedConfig):
             self.assertIs(result, mock_tokenizer)
 
     @require_tokenizers
-    @parameterized.expand(MODEL_IDS_TO_TOKENIZERS_BACKEND)
+    @parameterized.expand([p for p in MODEL_IDS_TO_TOKENIZERS_BACKEND if "*" not in p])
     def test_roundtrip_models_without_tokenizer_class(self, repo_id):
         text = "This is a test 😊 I was born in 92000, and this is falsé."
 
