@@ -92,21 +92,22 @@ class DiaProcessor(ProcessorMixin):
 
     def _process_audio(self, audio, **kwargs):
         """Full audio processing: feature extraction → DAC codebook encoding → delay pattern."""
+        # Pop unused kwargs by feature_extractor
         delay_pattern = kwargs.pop("delay_pattern")
         bos_token_id = kwargs.pop("bos_token_id")
         eos_token_id = kwargs.pop("eos_token_id")
-        pad_token_id = kwargs.pop("pad_token_id")
         generation = kwargs.pop("generation")
+        kwargs.pop("pad_token_id")
 
         input_audios = self.feature_extractor(audio, **kwargs)
 
         compression_rate = math.prod(self.audio_tokenizer.config.downsampling_ratios)
         max_encoded_sequence_len = input_audios["padding_mask"][0].shape[-1] // compression_rate
-        num_channels = len(delay_pattern)
         max_delay = max(delay_pattern)
 
         decoder_input_ids_list = []
         decoder_attention_mask_list = []
+
         # TODO: dac with batching is currently broken, but non-batch is working
         # refer to https://gist.github.com/vasqu/643a45b680cf39fd7467271ee2eb6f80 for a validation script
         for padding_mask, audio_sample in zip(input_audios["padding_mask"], input_audios["input_values"]):
@@ -136,20 +137,7 @@ class DiaProcessor(ProcessorMixin):
 
         decoder_input_ids = torch.cat(decoder_input_ids_list, dim=0)
         decoder_attention_mask = torch.cat(decoder_attention_mask_list, dim=0)
-        batch_size = decoder_input_ids.shape[0]
-        max_seq_len = decoder_attention_mask.shape[-1]
-
-        precomputed_idx = self.build_indices(
-            bsz=batch_size, seq_len=max_seq_len, num_channels=num_channels, delay_pattern=delay_pattern, revert=False
-        )
-        prefill = torch.full((batch_size, max_seq_len, num_channels), fill_value=pad_token_id, dtype=torch.int)
-        max_audio_len = max_seq_len - max_delay
-        prefill[:, :max_audio_len] = decoder_input_ids
-
-        delayed_decoder_input_ids = self.apply_audio_delay(
-            audio=prefill, pad_token_id=pad_token_id, bos_token_id=bos_token_id, precomputed_idx=precomputed_idx
-        )
-        return {"decoder_input_ids": delayed_decoder_input_ids, "decoder_attention_mask": decoder_attention_mask}, []
+        return {"decoder_input_ids": decoder_input_ids, "decoder_attention_mask": decoder_attention_mask}, []
 
     @auto_docstring
     def __call__(
@@ -171,44 +159,40 @@ class DiaProcessor(ProcessorMixin):
                 "The `DiaProcessor` relies on the `audio_tokenizer` which requires `torch` but we couldn't "
                 "find it in your environment. You can install torch via `pip install torch`."
             )
-        if text is None:
-            raise ValueError("You need to specify the `text` input to process.")
 
-        # Read audio processing params from merged kwargs for validation and TTS mode
-        merged = self._merge_kwargs(DiaProcessorKwargs, **kwargs)
-        audio_kwargs = merged["audio_kwargs"]
+        output_kwargs = self._merge_kwargs(DiaProcessorKwargs, **kwargs)
+        audio_kwargs = output_kwargs["audio_kwargs"]
         generation = audio_kwargs.get("generation", True)
-        return_tensors = merged["text_kwargs"].get("return_tensors", None)
+        return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
+
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
+
         if generation and output_labels:
             raise ValueError(
                 f"Labels with `generation` is incompatible, got generation={generation}, output_labels={output_labels}."
             )
+
         if not generation and audio is None:
             raise ValueError("If you try to train, you should provide audio data as well.")
 
-        if isinstance(text, str):
-            text = [text]
-
         model_inputs = super().__call__(text=text, audio=audio, **kwargs)
-
         batch_size = model_inputs["input_ids"].shape[0]
+
+        delay_pattern = audio_kwargs["delay_pattern"]
+        audio_bos_token_id = audio_kwargs["bos_token_id"]
+        audio_pad_token_id = audio_kwargs["pad_token_id"]
+        max_delay = max(delay_pattern)
 
         # TTS mode: audio=None → start decoding from all-BOS tokens
         if audio is None:
-            delay_pattern = audio_kwargs["delay_pattern"]
-            bos_token_id = audio_kwargs["bos_token_id"]
-            pad_token_id = audio_kwargs["pad_token_id"]
             num_channels = len(delay_pattern)
-            max_delay = max(delay_pattern)
-            decoder_input_ids = torch.full((batch_size, 1, num_channels), bos_token_id, dtype=torch.long)
-            decoder_attention_mask = torch.ones(size=(batch_size, 1 + max_delay), dtype=torch.long)
-            model_inputs["decoder_input_ids"] = decoder_input_ids
-            model_inputs["decoder_attention_mask"] = decoder_attention_mask
+            # all bos to start with TTS, we preemptively add the delay
+            model_inputs["decoder_input_ids"] = torch.full(
+                (batch_size, 1, num_channels), audio_bos_token_id, dtype=torch.long
+            )
+            model_inputs["decoder_attention_mask"] = torch.ones(size=(batch_size, 1 + max_delay), dtype=torch.long)
         else:
-            pad_token_id = audio_kwargs["pad_token_id"]
-            bos_token_id = audio_kwargs["bos_token_id"]
             num_channels = model_inputs["decoder_input_ids"].shape[-1]
             if batch_size != model_inputs["decoder_input_ids"].shape[0]:
                 raise ValueError(
@@ -216,15 +200,53 @@ class DiaProcessor(ProcessorMixin):
                     f"audio samples={model_inputs['decoder_input_ids'].shape[0]} instead."
                 )
 
+        # prepare shift indices per delay
+        max_seq_len = model_inputs["decoder_attention_mask"].shape[-1]
+        max_audio_len = max_seq_len - max_delay
+        precomputed_idx = self.build_indices(
+            bsz=batch_size,
+            seq_len=max_seq_len,
+            num_channels=num_channels,
+            delay_pattern=delay_pattern,
+            revert=False,
+        )
+
+        # create delay pattern input
+        # the pad token will be used for masking which input is valid for prediction during generation
+        prefill = torch.full(
+            (batch_size, max_seq_len, num_channels),
+            fill_value=audio_pad_token_id,
+            dtype=torch.int,
+        )
+        prefill[:, :max_audio_len] = model_inputs["decoder_input_ids"]
+
+        model_inputs["decoder_input_ids"] = self.apply_audio_delay(
+            audio=prefill,
+            pad_token_id=audio_pad_token_id,
+            bos_token_id=audio_bos_token_id,
+            precomputed_idx=precomputed_idx,
+        )
+
         if output_labels:
             labels = model_inputs["decoder_input_ids"].clone()[:, 1:]
-            labels[labels == pad_token_id] = -100
-            labels[labels == bos_token_id] = -100
+            labels[labels == audio_pad_token_id] = -100
+            labels[labels == audio_bos_token_id] = -100
             model_inputs["labels"] = labels.transpose(1, 2).reshape(batch_size * num_channels, -1).contiguous().long()
             model_inputs["decoder_input_ids"] = model_inputs["decoder_input_ids"][:, :-1]
             model_inputs["decoder_attention_mask"] = model_inputs["decoder_attention_mask"][:, :-1]
 
         return model_inputs
+
+    def validate_inputs(
+        self,
+        text: str | list[str],
+        audio: AudioInput | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(audio=audio, text=text)
+
+        if text is None:
+            raise ValueError("You need to specify the `text` input to process.")
 
     def batch_decode(
         self,

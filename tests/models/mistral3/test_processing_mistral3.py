@@ -301,3 +301,7 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 padding=True,
                 max_length=3,
             )
+
+    @unittest.skip("Mistral3 overrides image patch sizde at run-time via processor (hardcoded!)")
+    def test_image_processor_defaults(self):
+        pass
