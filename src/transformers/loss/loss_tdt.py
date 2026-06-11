@@ -176,7 +176,7 @@ def ParakeetForTDTLoss(
     blank_token_id,
     durations,
     sigma=0.0,
-    reduction="mean_volume",
+    reduction="mean",
     **kwargs,
 ):
     device = token_logits.device
