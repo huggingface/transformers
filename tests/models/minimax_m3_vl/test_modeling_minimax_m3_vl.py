@@ -19,7 +19,7 @@ import unittest
 from transformers import (
     AutoTokenizer,
     MiniMaxM3VLConfig,
-    MiniMaxM3VLForConditionalGeneration,
+    MiniMaxM3SparseForConditionalGeneration,
     MiniMaxM3VLImageProcessorFast,
     MiniMaxM3VLModel,
     MiniMaxM3VLProcessor,
@@ -175,20 +175,20 @@ class MiniMaxM3VLVisionText2TextModelTester:
 @require_torch
 class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
-    Model tester for `MiniMaxM3VLForConditionalGeneration`.
+    Model tester for `MiniMaxM3SparseForConditionalGeneration`.
     """
 
     all_model_classes = (
         (
             MiniMaxM3VLModel,
-            MiniMaxM3VLForConditionalGeneration,
+            MiniMaxM3SparseForConditionalGeneration,
         )
         if is_torch_available()
         else ()
     )
     pipeline_model_mapping = (
         {
-            "image-text-to-text": MiniMaxM3VLForConditionalGeneration,
+            "image-text-to-text": MiniMaxM3SparseForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -255,7 +255,7 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         seqs = [torch.randint(low, vocab - 2, (n,), device=torch_device) for n in lengths]
         max_len = max(lengths)
 
-        model = MiniMaxM3VLForConditionalGeneration(config).to(torch_device).eval()
+        model = MiniMaxM3SparseForConditionalGeneration(config).to(torch_device).eval()
 
         per_seq_logits = []
         for seq in seqs:
@@ -401,32 +401,21 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
     model_id = "MiniMaxAI/Minimax-M3-preview"
 
     def _load_model(self):
-        from transformers import FineGrainedFP8Config
-
         # The indexer feeds SDPA an additive float mask (the block-sparse bias). On B200 + this
         # cuDNN build, the cuDNN SDPA backend segfaults in ``run_cudnn_SDP_fprop`` on such masks;
         # disabling it routes SDPA to the mem-efficient backend, which handles additive float masks.
         torch.backends.cuda.enable_cudnn_sdp(False)
 
-        cfg = MiniMaxM3VLConfig.from_pretrained(self.model_id, local_files_only=True)
-        quant = FineGrainedFP8Config(
-            activation_scheme="dynamic",
-            weight_block_size=tuple(cfg.quantization_config["weight_block_size"]),
-            dequantize=False,
-            modules_to_not_convert=cfg.quantization_config.get("ignored_layers"),
-        )
-        # Native (non-dequantized) MXFP8 compute path: weights stay in float8_e4m3fn.
-        quant.quant_method = "mxfp8"
-        model = MiniMaxM3VLForConditionalGeneration.from_pretrained(
+        # Out-of-the-box load: the MXFP8 ``quantization_config`` (quant_method, weight_block_size,
+        # and the ``ignored_layers`` skip-list) is read straight from the checkpoint's config.json
+        # and dispatched automatically — no hand-built quant config, no manual dtype patching.
+        model = MiniMaxM3SparseForConditionalGeneration.from_pretrained(
             self.model_id,
-            config=cfg,
-            quantization_config=quant,
             dtype=torch.bfloat16,
             device_map="auto",
             local_files_only=True,
         )
         model.eval()
-        model.model.vision_tower.to(torch.bfloat16)
         return model
 
     def _load_processor(self):
@@ -463,6 +452,22 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         print(f"\n[test_image_and_text_generation] generation:\n{decoded!r}\n")
         self.assertIsInstance(decoded, str)
         self.assertGreater(len(decoded.strip()), 0)
+
+    def test_real_image_apple_recognition(self):
+        import os
+
+        model = self._load_model()
+        processor = self._load_processor()
+
+        apple_path = os.path.join(os.path.dirname(__file__), "../../fixtures/tests_samples/COCO/apple.jpg")
+        image = Image.open(apple_path).convert("RGB")
+        text = self._prompt(processor, "What fruit is shown in this image? Answer in one word.")
+        inputs = processor(images=[image], text=text, return_tensors="pt").to(model.device)
+        with torch.no_grad():
+            output = model.generate(**inputs, max_new_tokens=16, do_sample=False)
+        completion = processor.batch_decode(output[:, inputs.input_ids.size(1) :], skip_special_tokens=True)[0]
+        print(f"\n[test_real_image_apple_recognition] completion:\n{completion!r}\n")
+        self.assertIn("apple", completion.lower())
 
     def test_batched_image_generation(self):
         """Batch of two image+text prompts, no padding.

@@ -140,7 +140,7 @@ print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
 [[autodoc]] MiniMaxM3VLForCausalLM
     - forward
 
-## MiniMaxM3VLForConditionalGeneration
+## MiniMaxM3SparseForConditionalGeneration
 
-[[autodoc]] MiniMaxM3VLForConditionalGeneration
+[[autodoc]] MiniMaxM3SparseForConditionalGeneration
     - forward

@@ -802,6 +802,9 @@ def _move_attributes(new_module: nn.Module, source_module: nn.Module) -> None:
     for name, value in vars(source_module).items():
         if isinstance(value, (int, float, bool)) and not hasattr(new_module, name):
             setattr(new_module, name, value)
+    source_apply_gate = getattr(type(source_module), "_apply_gate", None)
+    if source_apply_gate is not None and source_apply_gate is not type(new_module)._apply_gate:
+        new_module._apply_gate = types.MethodType(source_apply_gate, new_module)
 
 def replace_with_fp8_linear(
     model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
