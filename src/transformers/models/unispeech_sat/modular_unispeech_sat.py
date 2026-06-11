@@ -160,8 +160,8 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _can_record_outputs = {
-        "hidden_states": [UniSpeechSatEncoderLayer, UniSpeechSatEncoderLayerStableLayerNorm],
-        "attentions": OutputRecorder(UniSpeechSatAttention, index=1, layer_name="encoder"),
+        "hidden_states": [UniSpeechSatEncoderLayer, UniSpeechSatEncoderLayerStableLayerNorm],  # noqa: F821
+        "attentions": OutputRecorder(UniSpeechSatAttention, index=1, layer_name="encoder"),  # noqa: F821
     }
 
     @torch.no_grad()

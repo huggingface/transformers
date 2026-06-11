@@ -576,8 +576,8 @@ class HubertPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _can_record_outputs = {
-        "hidden_states": [HubertEncoderLayer, HubertEncoderLayerStableLayerNorm],
-        "attentions": OutputRecorder(HubertAttention, index=1, layer_name="encoder"),
+        "hidden_states": [HubertEncoderLayer, HubertEncoderLayerStableLayerNorm],  # noqa: F821
+        "attentions": OutputRecorder(HubertAttention, index=1, layer_name="encoder"),  # noqa: F821
     }
 
     @torch.no_grad()
