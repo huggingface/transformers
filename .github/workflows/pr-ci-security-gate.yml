@@ -1,0 +1,79 @@
+name: PR CI Security Gate
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  security-check:
+    # Members/collaborators/owners trigger PR CI directly — gate only needed for forks
+    if: "!contains(fromJSON('[\"MEMBER\",\"OWNER\",\"COLLABORATOR\"]'), github.event.pull_request.author_association)"
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Get changed files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh pr diff "$PR_NUMBER" --name-only --repo "$REPO" > /tmp/changed_files.txt
+          echo "Changed files:"
+          cat /tmp/changed_files.txt
+          grep '\.py$' /tmp/changed_files.txt > /tmp/py_files.txt || true
+
+      - name: Deny changes to CI and build infrastructure files
+        run: |
+          if grep -qE '^\.github/|^Dockerfile|^docker-compose|^Makefile|^setup\.py$|^pyproject\.toml$|^setup\.cfg$|^requirements' /tmp/changed_files.txt; then
+            echo "::error::PR modifies CI or build infrastructure — manual review required"
+            exit 1
+          fi
+
+      - name: Check if Python files changed
+        id: py-check
+        run: |
+          if [ -s /tmp/py_files.txt ]; then
+            echo "has_py=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No Python files changed — skipping Bandit"
+            echo "has_py=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout PR code for static analysis
+        if: steps.py-check.outputs.has_py == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Run Bandit on changed Python files
+        if: steps.py-check.outputs.has_py == 'true'
+        run: |
+          pip install bandit --quiet
+          xargs bandit --severity-level high --confidence-level medium -q < /tmp/py_files.txt
+
+  approve-pr-ci:
+    needs: security-check
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Find and approve the pending PR CI workflow run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          for i in $(seq 1 12); do
+            run_id=$(gh api \
+              "repos/$REPO/actions/runs?event=pull_request&head_sha=$HEAD_SHA&status=action_required" \
+              --jq '.workflow_runs[] | select(.name == "PR CI") | .id' | head -1)
+            if [ -n "$run_id" ]; then
+              gh api --method POST "repos/$REPO/actions/runs/$run_id/approve"
+              echo "Approved run $run_id"
+              exit 0
+            fi
+            echo "Attempt $i: run not yet pending, retrying in 5s..."
+            sleep 5
+          done
+          echo "No pending PR CI run found after retries — skipping"
