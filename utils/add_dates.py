@@ -99,6 +99,8 @@ def get_modified_cards() -> list[str]:
     if current_branch == "main":
         # On main branch, only uncommitted changes detected
         result = subprocess.check_output(["git", "diff", "--name-only", "HEAD"], text=True)
+        import os
+        os.system("ls")
     else:
         fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode("utf-8")
         result = subprocess.check_output(f"git diff --name-only {fork_point_sha}".split()).decode("utf-8")
