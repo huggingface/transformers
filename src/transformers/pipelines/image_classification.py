@@ -180,11 +180,26 @@ class ImageClassificationPipeline(Pipeline):
             raise ValueError("Cannot call the image-classification pipeline without an inputs argument!")
         return super().__call__(inputs, **kwargs)
 
-    def preprocess(self, image, timeout=None):
+   def preprocess(self, image, timeout=None):
+    import numpy as np
+    import torch
+
+    if isinstance(image, np.ndarray):
+        model_inputs = self.image_processor(
+            images=image, return_tensors="pt"
+        )
+    elif isinstance(image, torch.Tensor):
+        model_inputs = self.image_processor(
+            images=image, return_tensors="pt"
+        )
+    else:
         image = load_image(image, timeout=timeout)
-        model_inputs = self.image_processor(images=image, return_tensors="pt")
-        model_inputs = model_inputs.to(self.dtype)
-        return model_inputs
+        model_inputs = self.image_processor(
+            images=image, return_tensors="pt"
+        )
+
+    model_inputs = model_inputs.to(self.dtype)
+    return model_inputs
 
     def _forward(self, model_inputs):
         model_outputs = self.model(**model_inputs)
