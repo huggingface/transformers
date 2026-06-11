@@ -19,10 +19,11 @@ from typing import Any
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
-from transformers.configuration_utils import PretrainedConfig
+from transformers.configuration_utils import PreTrainedConfig
 from transformers.generation import GenerationMixin
 from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
@@ -34,7 +35,8 @@ from transformers.processing_utils import Unpack
 from transformers.utils import TransformersKwargs, can_return_tuple, logging
 
 
-class StepRoboticsVisionEncoderConfig(PretrainedConfig):
+@strict
+class StepRoboticsVisionEncoderConfig(PreTrainedConfig):
     model_type = "perception_encoder"
 
     def __init__(
@@ -74,9 +76,11 @@ class StepRoboticsVisionEncoderConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class Step3p7TextConfig(PretrainedConfig):
+@strict
+class Step3p7TextConfig(PreTrainedConfig):
     model_type = "step3p5"
     architectures = ["Step3p5ForCausalLM"]
+    tie_word_embeddings: bool = False
 
     def __init__(
         self,
@@ -214,7 +218,9 @@ def _normalize_per_layer_values(
     return normalized[:num_hidden_layers]
 
 
-class Step3p7Config(PretrainedConfig):
+@strict
+class Step3p7Config(PreTrainedConfig):
+    tie_word_embeddings: bool = False
     # This loader is a compatibility shim for original Step VL checkpoints
     # whose top-level config model_type is `step3p7`.
     model_type = "step3p7"
@@ -652,17 +658,6 @@ class Step3p7PreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        # Transformers only applies `_checkpoint_conversion_mapping` when `key_mapping` is
-        # passed explicitly to `from_pretrained` — inheriting the class attribute alone is
-        # not enough. Forward the class attribute through unless the caller already supplied
-        # one.
-        key_mapping = getattr(cls, "_checkpoint_conversion_mapping", None)
-        if key_mapping is not None and kwargs.get("key_mapping") is None:
-            kwargs["key_mapping"] = copy.deepcopy(key_mapping)
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-
 
 class Step3p7RotaryEmbedding(nn.Module):
     """RoPE with per-layer overrides for `rope_theta` (a list in step3p7 checkpoints) and
@@ -683,7 +678,7 @@ class Step3p7RotaryEmbedding(nn.Module):
             self.config.rope_theta = rope_theta
         elif isinstance(self.config.rope_theta, list):
             self.config.rope_theta = self.config.rope_theta[0]
-        # `rope_parameters` from PretrainedConfig.convert_rope_params_to_dict already inherits
+        # `rope_parameters` from PreTrainedConfig.convert_rope_params_to_dict already inherits
         # `rope_theta` from the parent config — which may have been a list — so propagate the
         # per-layer scalar here too.
         baked = copy.deepcopy(rope_parameters) if rope_parameters else None
@@ -1338,7 +1333,7 @@ class Step3p7TextModel(Step3p7TextPreTrainedModel):
 class Step3p7Model(Step3p7PreTrainedModel):
     config: Step3p7Config
     _tied_weights_keys = ["lm_head.weight"]
-    base_model_prefix = ""
+    base_model_prefix = "model"
 
     def __init__(self, config: Step3p7Config):
         super().__init__(config)
@@ -1467,11 +1462,6 @@ class Step3p7Model(Step3p7PreTrainedModel):
 
 
 class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        "^vision_model": "model.vision_model",
-        r"^model(?!\.(language_model|vision_model))": "model.language_model",
-        "^vit_large_projector": "model.vit_large_projector",
-    }
     _tied_weights_keys = ["lm_head.weight"]
     config: Step3p7Config
 

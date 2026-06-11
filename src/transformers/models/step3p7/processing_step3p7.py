@@ -5,14 +5,13 @@ from typing import Literal, TypedDict
 import numpy as np
 import torch
 from PIL import Image
-from torchvision import transforms
-from torchvision.transforms.functional import InterpolationMode
 
-from transformers import BaseImageProcessor
 from transformers.feature_extraction_utils import BatchFeature, TensorType
 from transformers.image_utils import ImageInput
-from transformers.processing_utils import ProcessorMixin
+from transformers.processing_utils import ProcessingKwargs, ProcessorMixin
 from transformers.tokenization_utils_tokenizers import TokenizersBackend
+
+from .image_processing_step3p7 import Step3VisionProcessor
 
 
 MAX_IMAGE_SIZE: int = 3024
@@ -31,68 +30,6 @@ class Step3VLImageEmbeddingInputs(TypedDict):
 
 
 ImageWithPatches = tuple[Image.Image, list[Image.Image], list[int] | None]
-
-
-class GPUToTensor(torch.nn.Module):
-    def forward(self, raw_image: np.ndarray | Image.Image) -> torch.Tensor:
-        if isinstance(raw_image, Image.Image):
-            return transforms.ToTensor()(raw_image)
-        if raw_image.ndim == 2:
-            raw_image = raw_image[:, :, None].repeat(3, -1)
-        if torch.cuda.is_available():
-            device = torch.device("cuda")
-        else:
-            device = torch.device("cpu")
-        image_tensor = torch.from_numpy(raw_image).to(device)
-        image_tensor = torch.permute(image_tensor, (2, 0, 1)).contiguous()
-        if image_tensor.dtype == torch.uint8:
-            image_tensor = image_tensor.to(torch.float32).div(255)
-        return image_tensor
-
-
-class Step3VisionProcessor(BaseImageProcessor):
-    def __init__(self, size, interpolation_mode="bicubic", patch_size=None):
-        mean = [0.48145466, 0.4578275, 0.40821073]
-        std = [0.26862954, 0.26130258, 0.27577711]
-        patch_size = patch_size if patch_size is not None else size
-
-        self.transform = transforms.Compose(
-            [
-                GPUToTensor(),
-                transforms.Normalize(mean, std),
-                transforms.Resize(
-                    (size, size),
-                    interpolation=InterpolationMode.BICUBIC
-                    if interpolation_mode == "bicubic"
-                    else InterpolationMode.BILINEAR,
-                    antialias=True,
-                ),
-            ]
-        )
-
-        self.patch_transform = (
-            transforms.Compose(
-                [
-                    GPUToTensor(),
-                    transforms.Normalize(mean, std),
-                    transforms.Resize(
-                        (patch_size, patch_size),
-                        interpolation=InterpolationMode.BICUBIC
-                        if interpolation_mode == "bicubic"
-                        else InterpolationMode.BILINEAR,
-                        antialias=True,
-                    ),
-                ]
-            )
-            if patch_size is not None
-            else None
-        )
-
-    def __call__(self, image, is_patch=False):
-        if is_patch:
-            return {"pixel_values": self.patch_transform(image).unsqueeze(0)}
-        else:
-            return {"pixel_values": self.transform(image).unsqueeze(0)}
 
 
 class ImagePatcher:
@@ -237,12 +174,15 @@ class ImagePatcher:
             return img, patches, [i in newlines for i in range(len(patches))] if len(patches) > 0 else None
 
 
-class Step3VLProcessor(ProcessorMixin):
-    # Align ProcessorMixin with our custom components.
-    # We only have an image processor (not a feature extractor) plus a tokenizer.
-    attributes = ["tokenizer"]
-    tokenizer_class = "AutoTokenizer"
+class Step3VLProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "images_kwargs": {
+            "is_patch": False,
+        },
+    }
 
+
+class Step3VLProcessor(ProcessorMixin):
     @classmethod
     def _load_tokenizer_from_pretrained(
         cls, sub_processor_type, pretrained_model_name_or_path, subfolder="", **kwargs
@@ -253,18 +193,35 @@ class Step3VLProcessor(ProcessorMixin):
             **kwargs,
         )
 
-    def __init__(self, tokenizer=None, chat_template=None, **kwargs) -> None:
-        self.image_size = 728
-        self.patch_size = 504
+    @classmethod
+    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict=None, **kwargs):
+        try:
+            return super()._get_arguments_from_pretrained(pretrained_model_name_or_path, processor_dict, **kwargs)
+        except OSError as error:
+            if "Can't load image processor" not in str(error):
+                raise
 
-        self.image_preprocessor = Step3VisionProcessor(self.image_size, "bilinear", self.patch_size)
+        kwargs = kwargs.copy()
+        subfolder = kwargs.pop("subfolder", "")
+        tokenizer = cls._load_tokenizer_from_pretrained(
+            "tokenizer", pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+        )
+        return [Step3VisionProcessor(), tokenizer]
+
+    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs) -> None:
+        if image_processor is None:
+            image_processor = kwargs.pop("image_preprocessor", None)
+        image_processor = image_processor if image_processor is not None else Step3VisionProcessor()
+        super().__init__(image_processor=image_processor, tokenizer=tokenizer, chat_template=chat_template, **kwargs)
+        self.image_preprocessor = self.image_processor
+        self.image_size = self.image_processor.size.height
+        self.patch_size = self.image_processor.patch_size.height
 
         self.num_image_feature_size = 169
         self.num_patch_feature_size = 81
         self.image_token = "<im_patch>"
         self.image_feature_placeholder = self.image_token * self.num_image_feature_size
         self.patch_feature_placeholder = self.image_token * self.num_patch_feature_size
-        super().__init__(tokenizer=tokenizer, chat_template=chat_template, **kwargs)
         self.patcher = ImagePatcher()
 
     @property
@@ -286,8 +243,10 @@ class Step3VLProcessor(ProcessorMixin):
         self,
         images: list[Image.Image],
         is_patch: bool = False,
+        **images_kwargs,
     ) -> list[torch.Tensor]:
-        return [self.image_preprocessor(img, is_patch=is_patch)["pixel_values"] for img in images]
+        images_kwargs.setdefault("return_tensors", "pt")
+        return [self.image_processor(img, is_patch=is_patch, **images_kwargs)["pixel_values"] for img in images]
 
     def _get_patch_repl(
         self,
@@ -357,8 +316,19 @@ class Step3VLProcessor(ProcessorMixin):
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
+        output_kwargs = self._merge_kwargs(
+            Step3VLProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs if self.tokenizer is not None else {},
+            **kwargs,
+        )
+        images_kwargs = output_kwargs["images_kwargs"]
+        images_kwargs.pop("is_patch", None)
+        text_kwargs = output_kwargs["text_kwargs"]
+        if return_tensors is not None:
+            text_kwargs["return_tensors"] = return_tensors
+
         if images is not None:
-            images = self.image_preprocessor.fetch_images(images)
+            images = self.image_processor.fetch_images(images)
         if text is None:
             text = []
         if not isinstance(text, list):
@@ -372,7 +342,7 @@ class Step3VLProcessor(ProcessorMixin):
 
         if len(images) == 0:
             image_inputs = {}
-            text_inputs = self.tokenizer(text)
+            text_inputs = self.tokenizer(text, **text_kwargs)
         else:
             splitted_images_data = self._split_images(images)
             pixel_values_lst = []
@@ -382,10 +352,12 @@ class Step3VLProcessor(ProcessorMixin):
             image_repl_ids_lst = []
             num_patches = []
             for raw_img, img_patches, patch_newline_mask in splitted_images_data:  # noqa: E501
-                pixel_values_lst.extend(self._convert_images_to_pixel_values([raw_img]))
+                pixel_values_lst.extend(self._convert_images_to_pixel_values([raw_img], **images_kwargs))
 
                 if len(img_patches) > 0:
-                    patch_pixel_values_lst.extend(self._convert_images_to_pixel_values(img_patches, is_patch=True))
+                    patch_pixel_values_lst.extend(
+                        self._convert_images_to_pixel_values(img_patches, is_patch=True, **images_kwargs)
+                    )
                 num_patches.append(len(img_patches))
 
                 image_repl_str, image_repl_ids = self._get_image_repl_features(1, len(img_patches), patch_newline_mask)
@@ -405,7 +377,7 @@ class Step3VLProcessor(ProcessorMixin):
                 image_inputs["patch_newline_mask"] = torch.tensor(patch_newline_mask_lst, dtype=torch.bool)
 
             text = [self.replace_placeholder(t, self.image_token, image_repl_str_lst) for t in text]
-            text_inputs = self.tokenizer(text)
+            text_inputs = self.tokenizer(text, **text_kwargs)
 
         return BatchFeature(
             {

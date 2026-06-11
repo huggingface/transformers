@@ -19,6 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_step3p7 import *
+    from .image_processing_pil_step3p7 import *
+    from .image_processing_step3p7 import *
     from .modeling_step3p7 import *
     from .processing_step3p7 import *
 else:

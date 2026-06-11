@@ -20,10 +20,13 @@
 from collections.abc import Sequence
 from typing import Any
 
-from transformers.configuration_utils import PretrainedConfig
+from huggingface_hub.dataclasses import strict
+
+from transformers.configuration_utils import PreTrainedConfig
 
 
-class StepRoboticsVisionEncoderConfig(PretrainedConfig):
+@strict
+class StepRoboticsVisionEncoderConfig(PreTrainedConfig):
     model_type = "perception_encoder"
 
     def __init__(
@@ -80,9 +83,11 @@ def _normalize_per_layer_values(
     return normalized[:num_hidden_layers]
 
 
-class Step3p7TextConfig(PretrainedConfig):
+@strict
+class Step3p7TextConfig(PreTrainedConfig):
     model_type = "step3p5"
     architectures = ["Step3p5ForCausalLM"]
+    tie_word_embeddings: bool = False
 
     def __init__(
         self,
@@ -203,7 +208,9 @@ class Step3p7TextConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class Step3p7Config(PretrainedConfig):
+@strict
+class Step3p7Config(PreTrainedConfig):
+    tie_word_embeddings: bool = False
     # This loader is a compatibility shim for original Step VL checkpoints
     # whose top-level config model_type is `step3p7`.
     model_type = "step3p7"
