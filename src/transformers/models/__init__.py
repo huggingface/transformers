@@ -78,6 +78,7 @@ if TYPE_CHECKING:
     from .convbert import *
     from .convnext import *
     from .convnextv2 import *
+    from .cosmos3_reasoner import *
     from .cpm import *
     from .cpmant import *
     from .csm import *
@@ -96,6 +97,7 @@ if TYPE_CHECKING:
     from .deepseek_v2 import *
     from .deepseek_v3 import *
     from .deepseek_v4 import *
+    from .deepseek_v32 import *
     from .deepseek_vl import *
     from .deepseek_vl_hybrid import *
     from .deformable_detr import *

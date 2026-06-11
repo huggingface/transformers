@@ -34,7 +34,7 @@ from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast
+from ...utils.generic import maybe_autocast, no_inherit_decorator
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
@@ -127,6 +127,7 @@ class CohereMLP(LlamaMLP):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
 
+@no_inherit_decorator
 class CohereAttention(LlamaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 

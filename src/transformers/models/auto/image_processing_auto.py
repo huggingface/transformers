@@ -33,7 +33,7 @@ from ...utils import (
     logging,
     safe_load_json_file,
 )
-from ...utils.import_utils import requires
+from ...utils.import_utils import is_torchvision_greater_or_equal, requires
 from .auto_factory import _LazyAutoMapping
 from .auto_mappings import IMAGE_PROCESSOR_MAPPING_NAMES
 from .configuration_auto import (
@@ -46,14 +46,18 @@ from .configuration_auto import (
 
 logger = logging.get_logger(__name__)
 
-# These image processors use Lanczos interpolation, which is not supported by fast image processors.
-# To avoid important differences in outputs, we default to using the PIL backend for these processors.
-DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS = [
+# These image processors use Lanczos interpolation, which is not supported by torchvision < 0.27.
+# To avoid important differences in outputs, we default to using the PIL backend for these processors
+# when running on older torchvision versions. With torchvision >= 0.27, Lanczos is natively supported
+# and these processors can use the torchvision backend directly.
+_LANCZOS_IMAGE_PROCESSORS = [
     "ChameleonImageProcessor",
     "FlavaImageProcessor",
     "Idefics3ImageProcessor",
     "SmolVLMImageProcessor",
 ]
+
+DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS = [] if is_torchvision_greater_or_equal("0.27") else _LANCZOS_IMAGE_PROCESSORS
 
 
 if TYPE_CHECKING:
@@ -74,6 +78,7 @@ else:
             ("colpali", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
             ("colqwen2", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("convnextv2", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
+            ("cosmos3_omni", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("cvt", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("data2vec-vision", {"torchvision": "BeitImageProcessor", "pil": "BeitImageProcessorPil"}),
             ("deimv2", {"torchvision": "RTDetrImageProcessor", "pil": "RTDetrImageProcessorPil"}),
@@ -316,8 +321,8 @@ def _resolve_backend(backend: str | None, use_fast: bool | None, base_class_name
       explicit backend is given.
     - Explicit backend string: returned as-is.
     - None resolution: forces 'pil' for processors in DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS
-      (Lanczos interpolation, unsupported by torchvision); otherwise picks 'torchvision' when
-      available, falling back to 'pil'.
+      (Lanczos interpolation, unsupported by torchvision < 0.27); otherwise picks 'torchvision'
+      when available, falling back to 'pil'.
     """
     if use_fast is not None:
         logger.warning_once(
