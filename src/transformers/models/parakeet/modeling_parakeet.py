@@ -1020,8 +1020,6 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
 
         loss = None
         if labels is not None:
-            # `self.loss_function` is the `PreTrainedModel` hook, which dispatches to `ParakeetForRNNTLoss`
-            # via `self.loss_type`.
             logit_lengths = encoder_outputs.attention_mask.sum(-1)
             loss = self.loss_function(
                 logits=logits[:, : int(logit_lengths.max())],
@@ -1029,7 +1027,7 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
                 logit_lengths=logit_lengths,
                 label_lengths=(labels != self.config.blank_token_id).sum(-1),
                 blank_token_id=self.config.blank_token_id,
-                reduction=self.config.loss_reduction,
+                **kwargs,
             )
 
         return ParakeetRNNTOutput(
@@ -1063,9 +1061,14 @@ class ParakeetTDTJointNetwork(ParakeetRNNTJointNetwork):
 class ParakeetForTDT(ParakeetTDTGenerationMixin, ParakeetForRNNT):
     config: ParakeetTDTConfig
 
-    def __init__(self, config: ParakeetTDTConfig):
+    def __init__(self, config: ParakeetRNNTConfig):
         super().__init__(config)
+        self.encoder = AutoModel.from_config(config.encoder_config)
+        self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.decoder_hidden_size)
+        self.decoder = ParakeetRNNTDecoder(config)
         self.joint = ParakeetTDTJointNetwork(config)
+        self.max_symbols_per_step = config.max_symbols_per_step  # used in generation
+
         self.post_init()
 
     @auto_docstring
@@ -1130,9 +1133,6 @@ class ParakeetForTDT(ParakeetTDTGenerationMixin, ParakeetForRNNT):
 
         loss = None
         if labels is not None:
-            # `self.loss_function` is the `PreTrainedModel` hook, which dispatches to `ParakeetForTDTLoss` via
-            # `self.loss_type`. The joint logits are split into token/duration parts and the TDT-only
-            # `durations` are passed.
             loss = self.loss_function(
                 token_logits=logits[..., : self.config.vocab_size],
                 duration_logits=logits[..., self.config.vocab_size :],
@@ -1141,7 +1141,7 @@ class ParakeetForTDT(ParakeetTDTGenerationMixin, ParakeetForRNNT):
                 label_lengths=(labels != self.config.pad_token_id).sum(-1),
                 blank_token_id=self.config.blank_token_id,
                 durations=self.config.durations,
-                reduction=self.config.loss_reduction,
+                **kwargs,
             )
 
         return ParakeetRNNTOutput(

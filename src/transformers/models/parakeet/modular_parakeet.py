@@ -876,7 +876,7 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
                 logit_lengths=logit_lengths,
                 label_lengths=(labels != self.config.blank_token_id).sum(-1),
                 blank_token_id=self.config.blank_token_id,
-                reduction=self.config.loss_reduction,
+                **kwargs,
             )
 
         return ParakeetRNNTOutput(
@@ -918,7 +918,7 @@ class ParakeetForTDT(ParakeetTDTGenerationMixin, ParakeetForRNNT):
         self.joint = ParakeetTDTJointNetwork(config)
         self.max_symbols_per_step = config.max_symbols_per_step  # used in generation
 
-        self.post_init() 
+        self.post_init()
 
     @auto_docstring
     @can_return_tuple
@@ -990,7 +990,7 @@ class ParakeetForTDT(ParakeetTDTGenerationMixin, ParakeetForRNNT):
                 label_lengths=(labels != self.config.pad_token_id).sum(-1),
                 blank_token_id=self.config.blank_token_id,
                 durations=self.config.durations,
-                reduction=self.config.loss_reduction,
+                **kwargs,
             )
 
         return ParakeetRNNTOutput(
