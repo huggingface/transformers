@@ -910,13 +910,9 @@ class ParakeetTDTJointNetwork(ParakeetRNNTJointNetwork):
 class ParakeetForTDT(ParakeetTDTGenerationMixin, ParakeetForRNNT):
     config: ParakeetTDTConfig
 
-    def __init__(self, config: ParakeetRNNTConfig):
+    def __init__(self, config: ParakeetTDTConfig):
         super().__init__(config)
-        self.encoder = AutoModel.from_config(config.encoder_config)
-        self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.decoder_hidden_size)
-        self.decoder = ParakeetRNNTDecoder(config)
         self.joint = ParakeetTDTJointNetwork(config)
-        self.max_symbols_per_step = config.max_symbols_per_step  # used in generation
 
         self.post_init()
 
