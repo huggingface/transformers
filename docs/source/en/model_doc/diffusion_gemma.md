@@ -112,7 +112,7 @@ model.generate(**inputs, max_new_tokens=256, decoder_input_ids=initial_estimate)
 ## DiffusionGemmaGenerationMixin
 
 [[autodoc]] DiffusionGemmaGenerationMixin
-    - generate 
+    - generate
 
 ## DiffusionGemmaGenerationConfig
 
