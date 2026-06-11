@@ -60,9 +60,7 @@ def rnnt_loss(
     """
 
     if not is_torchaudio_available():
-        raise ImportError(
-            "Computing the RNN-T loss requires torchaudio. Install it with `pip install torchaudio`."
-        )
+        raise ImportError("Computing the RNN-T loss requires torchaudio. Install it with `pip install torchaudio`.")
 
     valid_reductions = ("mean_volume", "mean_batch", "mean", "sum", "none")
     if reduction not in valid_reductions:
