@@ -18,10 +18,9 @@ from ..utils import is_torch_available, logging
 if is_torch_available():
     import torch
     from torch import nn
-from contextlib import contextmanager
 
 from ..core_model_loading import ConversionOps, _IdentityOp
-from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
+from ..quantizers.quantizers_utils import get_module_from_name, on_device, should_convert_module
 
 
 logger = logging.get_logger(__name__)
@@ -44,28 +43,6 @@ FP4_VALUES = [
     -4.0,
     -6.0,
 ]
-
-
-@contextmanager
-def on_device(dev):
-    if is_torch_available():
-        import torch
-
-        if isinstance(dev, torch.Tensor):
-            dev = dev.device
-        elif isinstance(dev, str):
-            dev = torch.device(dev)
-        dev_type = getattr(dev, "type", None)
-        if dev_type == "cuda":
-            with torch.cuda.device(dev):
-                yield
-                return
-        if dev_type == "xpu" and hasattr(torch, "xpu"):
-            with torch.xpu.device(dev):
-                yield
-                return
-    # other: CPU
-    yield
 
 
 class Mxfp4Quantize(ConversionOps):
@@ -511,15 +488,28 @@ def mlp_forward(self, hidden_states):
 
 
 def dequantize(module, param_name, param_value, target_device, dq_param_name, **kwargs):
+    from ..integrations.tensor_parallel import shard_and_distribute_module
+
+    model = kwargs.get("model")
+    empty_param = kwargs.get("empty_param")
+    casting_dtype = kwargs.get("casting_dtype")
+    to_contiguous = kwargs.get("to_contiguous")
+    rank = kwargs.get("rank")
     device_mesh = kwargs.get("device_mesh")
-    if device_mesh is not None:
-        raise NotImplementedError(
-            "MXFP4 quantization is not yet compatible with DTensor-based tensor parallelism. "
-            "Please disable TP or use a non-quantized model."
-        )
 
     for proj in ["gate_up_proj", "down_proj"]:
         if proj in param_name:
+            if device_mesh is not None:
+                param_value = shard_and_distribute_module(
+                    model,
+                    param_value,
+                    empty_param,
+                    dq_param_name,
+                    casting_dtype,
+                    to_contiguous,
+                    rank,
+                    device_mesh,
+                )
             blocks_attr = f"{proj}_blocks"
             scales_attr = f"{proj}_scales"
             setattr(module, param_name.rsplit(".", 1)[1], param_value)
@@ -544,19 +534,24 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, trito
         triton_kernels_hub.matmul_ogs.FlexCtx,
         triton_kernels_hub.matmul_ogs.InFlexData,
     )
+    from ..integrations.tensor_parallel import shard_and_distribute_module
 
+    model = kwargs.get("model")
+    empty_param = kwargs.get("empty_param")
+    casting_dtype = kwargs.get("casting_dtype")
+    to_contiguous = kwargs.get("to_contiguous")
+    rank = kwargs.get("rank")
     device_mesh = kwargs.get("device_mesh")
-    if device_mesh is not None:
-        raise NotImplementedError(
-            "MXFP4 quantization is not yet compatible with DTensor-based tensor parallelism. "
-            "Please disable TP or use a non-quantized model."
-        )
-
     if "blocks" in param_name:
         proj = param_name.split(".")[-1].split("_blocks")[0]
     if "scales" in param_name:
         proj = param_name.split(".")[-1].split("_scales")[0]
-    setattr(module, param_name.rsplit(".", 1)[1], torch.nn.Parameter(param_value, requires_grad=False))
+    if device_mesh is not None:
+        shard_and_distribute_module(
+            model, param_value, empty_param, param_name, casting_dtype, to_contiguous, rank, device_mesh
+        )
+    else:
+        setattr(module, param_name.rsplit(".", 1)[1], torch.nn.Parameter(param_value, requires_grad=False))
     blocks_attr = f"{proj}_blocks"
     scales_attr = f"{proj}_scales"
     blocks = getattr(module, blocks_attr)  # at this point values were loaded from ckpt

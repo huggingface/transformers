@@ -3,6 +3,8 @@ name: Self-hosted runner scale set (AMD mi325 scheduled CI caller)
 # Note: For every job in this workflow, the name of the runner scale set is finalized in the runner yaml i.e. huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml
 # For example, 1gpu scale set: amd-mi325-ci-1gpu
 #              2gpu scale set: amd-mi325-ci-2gpu
+# Important: Do not pin the reusable workflow ref to a SHA. AMD runner groups only route jobs for
+# workflows referenced at @main; a pinned SHA causes jobs to wait for a runner until the 24h timeout.
 
 on:
   workflow_run:
@@ -19,7 +21,7 @@ permissions:
 jobs:
   model-ci:
     name: Model CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@63657f571a92cc9759159442936061c51d6d9ae4 # main
+    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
     with:
       job: run_models_gpu
       slack_report_channel: "#amd-hf-ci"
@@ -32,7 +34,7 @@ jobs:
 
   torch-pipeline:
     name: Torch pipeline CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@63657f571a92cc9759159442936061c51d6d9ae4 # main
+    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
     with:
       job: run_pipelines_torch_gpu
       slack_report_channel: "#amd-hf-ci"
@@ -45,7 +47,7 @@ jobs:
 
   example-ci:
     name: Example CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@63657f571a92cc9759159442936061c51d6d9ae4 # main
+    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
     with:
       job: run_examples_gpu
       slack_report_channel: "#amd-hf-ci"
@@ -58,7 +60,7 @@ jobs:
 
   deepspeed-ci:
     name: DeepSpeed CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@63657f571a92cc9759159442936061c51d6d9ae4 # main
+    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
     with:
       job: run_torch_cuda_extensions_gpu
       slack_report_channel: "#amd-hf-ci"
