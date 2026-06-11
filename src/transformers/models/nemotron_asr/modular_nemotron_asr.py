@@ -327,6 +327,49 @@ class NemotronAsrProcessor(ParakeetProcessor):
         frame_ms = self.encoder_frame_ms
         return {round((right + 1) * frame_ms): right for right in self.supported_num_lookahead_tokens}
 
+    @property
+    def _subsampling_factor(self) -> int:
+        output_kwargs = self._merge_kwargs(
+            NemotronAsrProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs
+        )
+        return output_kwargs["audio_kwargs"]["subsampling_factor"]
+
+    @property
+    def num_mel_frames_first_audio_chunk(self) -> int:
+        """
+        Number of mel frames the first cache-aware streaming chunk must carry, for the model's
+        `default_num_lookahead_tokens`: `1 + subsampling_factor * num_lookahead_tokens`.
+        """
+        return 1 + self._subsampling_factor * self.default_num_lookahead_tokens
+
+    @property
+    def num_mel_frames_per_audio_chunk(self) -> int:
+        """
+        Number of mel frames each subsequent cache-aware streaming chunk must carry, for the model's
+        `default_num_lookahead_tokens`: `subsampling_factor * (num_lookahead_tokens + 1)`.
+        """
+        return self._subsampling_factor * (self.default_num_lookahead_tokens + 1)
+
+    @property
+    def num_samples_first_audio_chunk(self) -> int:
+        """
+        Number of raw audio samples to feed the processor (with `is_first_audio_chunk=True`, i.e. `center=True`)
+        so it returns exactly `num_mel_frames_first_audio_chunk` frames.
+        """
+        return (
+            self.num_mel_frames_first_audio_chunk - 1
+        ) * self.feature_extractor.hop_length + self.feature_extractor.win_length // 2
+
+    @property
+    def num_samples_per_audio_chunk(self) -> int:
+        """
+        Number of raw audio samples to feed the processor (with `is_first_audio_chunk=False`, i.e. `center=False`)
+        so it returns exactly `num_mel_frames_per_audio_chunk` frames.
+        """
+        return (
+            self.num_mel_frames_per_audio_chunk * self.feature_extractor.hop_length + self.feature_extractor.win_length
+        )
+
     def _resolve_num_lookahead_tokens(self, streaming_latency_ms: int | None) -> int:
         latencies = self.supported_streaming_latencies_ms
         if streaming_latency_ms is None:

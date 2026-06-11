@@ -19,64 +19,118 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-NemotronAsr is a cache-aware, streaming automatic speech recognition (ASR) model from the NVIDIA **Nemotron Speech Streaming**
-family. It pairs a [Fast Conformer](https://huggingface.co/papers/2305.05084) encoder ([`NemotronAsrEncoder`]) — adapted for
-cache-aware streaming inference with limited attention context, causal downsampling, and convolution/attention caches — with an
-RNN-T (Recurrent Neural Network Transducer) head ([`NemotronAsrForRNNT`]) composed of an LSTM prediction network and a joint
-network.
-
-Because the encoder is cache-aware, audio can be transcribed chunk-by-chunk with bounded latency while sharing left context
-through the encoder caches. The [`NemotronAsrCacheAwareStreamingBuffer`] helper splits an audio stream into the chunk sizes the
-encoder expects (handling the pre-encode cache, STFT lookahead, and mel-frame trimming), and [`NemotronAsrForRNNT.streaming_step`]
-threads the encoder + decoder state across chunks.
-
-This model can also be run offline (full utterance at once) with [`NemotronAsrForRNNT.generate`].
+TODO
 
 ## Usage
 
 ### Offline transcription
 
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
 ```python
-from transformers import AutoProcessor, NemotronAsrForRNNT
-from datasets import load_dataset, Audio
+from transformers import pipeline
 
-model_id = "nvidia/nemotron-speech-streaming-en-0.6b"
-processor = AutoProcessor.from_pretrained(model_id)
-model = NemotronAsrForRNNT.from_pretrained(model_id).eval()
-
-ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
-
-inputs = processor(ds[0]["audio"]["array"], return_tensors="pt", sampling_rate=16000)
-generated = model.generate(**inputs)
-print(processor.batch_decode(generated.sequences, skip_special_tokens=True))
+pipe = pipeline("automatic-speech-recognition", model="nvidia/nemotron-speech-streaming-en-0.6b")
+out = pipe("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
+print(out)
 ```
 
-### Streaming transcription
+</hfoption>
+<hfoption id="AutoModel">
 
 ```python
-import torch
-import soundfile as sf
-from transformers import AutoProcessor, NemotronAsrForRNNT, NemotronAsrCacheAwareStreamingBuffer
+from transformers import AutoModelForRNNT, AutoProcessor
+from transformers.audio_utils import load_audio
 
 model_id = "nvidia/nemotron-speech-streaming-en-0.6b"
 processor = AutoProcessor.from_pretrained(model_id)
-model = NemotronAsrForRNNT.from_pretrained(model_id).eval()
+model = AutoModelForRNNT.from_pretrained(model_id, device_map="auto")
 
-audio, _ = sf.read("audio.wav", dtype="float32")  # 16 kHz mono
+audio = load_audio(
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
+    sampling_rate=processor.feature_extractor.sampling_rate,
+)
 
-buffer = NemotronAsrCacheAwareStreamingBuffer(model, processor, att_context_size=[70, 6])
-buffer.append_audio(audio)
+inputs = processor(audio, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs.to(model.device, dtype=model.dtype)
+output = model.generate(**inputs, return_dict_in_generate=True)
+print(processor.decode(output.sequences, skip_special_tokens=True))
+```
 
-state = model.get_initial_streaming_state(batch_size=1, device=model.device, dtype=model.dtype)
-all_tokens = []
-for inputs, drop in buffer:
-    inputs = {k: v.to(model.device) for k, v in inputs.items()}
-    with torch.no_grad():
-        chunk_tokens = model.streaming_step(inputs, drop, state)
-    all_tokens.extend(chunk_tokens[0])
+</hfoption>
+</hfoptions>
 
-print(processor.batch_decode(torch.tensor([all_tokens]), skip_special_tokens=True)[0])
+### Streaming transcription
+> [!NOTE]
+> This is an experimental feature and the API is subject to change.
+
+For real-time transcription, each chunk of raw audio is passed straight to the processor with `is_streaming=True` and `is_first_audio_chunk=...` as it arrives; the processor runs the per-chunk STFT (`center=True` for the first chunk, `center=False` afterwards) so the features reproduce, frame-for-frame, a single full-utterance pass. The processor exposes the exact chunk sizes the cache-aware encoder requires for the model's default lookahead. To select a target streaming latency instead, see [TODO].
+
+```python
+from threading import Thread
+
+from transformers import AutoModelForRNNT, AutoProcessor, TextIteratorStreamer
+from transformers.audio_utils import load_audio
+
+
+model_id = "nvidia/nemotron-speech-streaming-en-0.6b"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForRNNT.from_pretrained(model_id, device_map="auto")
+
+sampling_rate = processor.feature_extractor.sampling_rate
+audio = load_audio(
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
+    sampling_rate=sampling_rate,
+)
+
+first_chunk_inputs = processor(
+    audio[: processor.num_samples_first_audio_chunk],
+    sampling_rate=sampling_rate,
+    is_streaming=True,
+    is_first_audio_chunk=True,
+    return_tensors="pt",
+)
+first_chunk_inputs = first_chunk_inputs.to(model.device, dtype=model.dtype)
+
+
+def input_features_generator():
+    # `center=True` yields one extra (partial) STFT frame; keep the exact number of valid frames.
+    yield first_chunk_inputs.input_features[:, : processor.num_mel_frames_first_audio_chunk, :]
+
+    mel_frame_idx = processor.num_mel_frames_first_audio_chunk
+    hop_length = processor.feature_extractor.hop_length
+    n_fft = processor.feature_extractor.n_fft
+
+    start_idx = mel_frame_idx * hop_length - n_fft // 2
+    while (end_idx := start_idx + processor.num_samples_per_audio_chunk) < audio.shape[0]:
+        inputs = processor(
+            audio[start_idx:end_idx],
+            sampling_rate=sampling_rate,
+            is_streaming=True,
+            is_first_audio_chunk=False,
+            return_tensors="pt",
+        )
+        inputs = inputs.to(model.device, dtype=model.dtype)
+        yield inputs.input_features
+
+        mel_frame_idx += processor.num_mel_frames_per_audio_chunk
+        start_idx = mel_frame_idx * hop_length - n_fft // 2
+
+
+streamer = TextIteratorStreamer(processor.tokenizer, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+generate_kwargs = {
+    "input_features": input_features_generator(),
+    "streamer": streamer,
+}
+thread = Thread(target=model.generate, kwargs=generate_kwargs)
+thread.start()
+
+# Iterate over the streamer to get text chunks as they are generated
+print("Model output (streaming):", end=" ", flush=True)
+for text_chunk in streamer:
+    print(text_chunk, end="", flush=True)
+thread.join()
 ```
 
 ## NemotronAsrConfig
@@ -91,17 +145,19 @@ print(processor.batch_decode(torch.tensor([all_tokens]), skip_special_tokens=Tru
 
 [[autodoc]] NemotronAsrFeatureExtractor
 
-## NemotronAsrCacheAwareStreamingBuffer
+## NemotronAsrProcessor
 
-[[autodoc]] NemotronAsrCacheAwareStreamingBuffer
+[[autodoc]] NemotronAsrProcessor
+    - __call__
+    - decode
 
 ## NemotronAsrEncoderModelOutput
 
 [[autodoc]] NemotronAsrEncoderModelOutput
 
-## NemotronAsrTDTOutput
+## NemotronAsrRNNTOutput
 
-[[autodoc]] NemotronAsrTDTOutput
+[[autodoc]] NemotronAsrRNNTOutput
 
 ## NemotronAsrEncoder
 
@@ -113,4 +169,3 @@ print(processor.batch_decode(torch.tensor([all_tokens]), skip_special_tokens=Tru
 [[autodoc]] NemotronAsrForRNNT
     - forward
     - generate
-    - streaming_step
