@@ -305,6 +305,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("squeezebert", "BertTokenizer" if is_tokenizers_available() else None),
         ("stablelm", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("starcoder2", "GPT2Tokenizer" if is_tokenizers_available() else None),
+        ("step3p7", "TokenizersBackend" if is_tokenizers_available() else None),
         ("switch_transformers", "T5Tokenizer" if is_tokenizers_available() else None),
         ("t5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("t5gemma", "GemmaTokenizer" if is_tokenizers_available() else None),
@@ -385,6 +386,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "qwen2",
     "step3p5",
     "step3_vl",
+    "step3p7",
     "vipllava",
     "cohere_asr",
 }
