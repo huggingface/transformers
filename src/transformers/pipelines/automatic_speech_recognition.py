@@ -176,8 +176,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             self.type = "seq2seq_whisper"
         elif model.__class__.__name__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES.values():
             self.type = "seq2seq"
-        elif model.config.model_type in ("parakeet_tdt", "parakeet_rnnt"):
-            # Both Parakeet transducers decode the same way (generate -> sequences); "tdt" is the transducer path.
+        elif model.config.model_type in ("parakeet_tdt", "parakeet_rnnt", "nemotron_asr"):
+            # Parakeet and NemotronAsr transducers decode the same way (generate -> sequences); "tdt" is the transducer path.
             self.type = "tdt"
         elif decoder is not None:
             self.decoder = decoder
