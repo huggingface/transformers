@@ -13,6 +13,7 @@ jobs:
     # Members/collaborators/owners trigger PR CI directly — gate only needed for forks
     if: "!contains(fromJSON('[\"MEMBER\",\"OWNER\",\"COLLABORATOR\"]'), github.event.pull_request.author_association)"
     runs-on: ubuntu-22.04
+    permissions: {}
     steps:
       - name: Get changed files
         env:
@@ -56,6 +57,7 @@ jobs:
 
   approve-pr-ci:
     needs: security-check
+    if: needs.security-check.result == 'success'
     runs-on: ubuntu-22.04
     steps:
       - name: Find and approve the pending PR CI workflow run
