@@ -29,7 +29,8 @@ from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassif
 from ...modeling_utils import PreTrainedModel, get_torch_context_manager_or_global_device
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import can_return_tuple
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_sew_d import SEWDConfig
 
 
@@ -683,10 +684,10 @@ class DisentangledSelfAttention(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        output_attentions=False,
         query_states=None,
         relative_pos=None,
         rel_embeddings=None,
+        **kwargs,
     ):
         """
         Call the module
@@ -700,9 +701,6 @@ class DisentangledSelfAttention(nn.Module):
                 An attention mask matrix of shape [*B*, *N*, *N*] where *B* is the batch size, *N* is the maximum
                 sequence length in which element [i,j] = *1* means the *i* th token in the input can attend to the *j*
                 th token.
-
-            output_attentions (`bool`, *optional*):
-                Whether return the attention matrix.
 
             query_states (`torch.FloatTensor`, *optional*):
                 The *Q* state in *Attention(Q,K,V)*.
@@ -757,10 +755,7 @@ class DisentangledSelfAttention(nn.Module):
         )
         new_context_layer_shape = context_layer.size()[:-2] + (-1,)
         context_layer = context_layer.view(new_context_layer_shape)
-        if output_attentions:
-            return (context_layer, attention_probs)
-        else:
-            return context_layer
+        return (context_layer, attention_probs)
 
     def disentangled_attention_bias(self, query_layer, key_layer, relative_pos, rel_embeddings, scale_factor):
         if relative_pos is None:
@@ -852,29 +847,24 @@ class SEWDAttention(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        output_attentions=False,
         query_states=None,
         relative_pos=None,
         rel_embeddings=None,
+        **kwargs,
     ):
-        self_output = self.self(
+        self_output, _ = self.self(
             hidden_states,
             attention_mask,
-            output_attentions,
             query_states=query_states,
             relative_pos=relative_pos,
             rel_embeddings=rel_embeddings,
+            **kwargs,
         )
-        if output_attentions:
-            self_output, att_matrix = self_output
         if query_states is None:
             query_states = hidden_states
         attention_output = self.output(self_output, query_states)
 
-        if output_attentions:
-            return (attention_output, att_matrix)
-        else:
-            return attention_output
+        return attention_output
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->SEWD
@@ -922,24 +912,19 @@ class SEWDLayer(GradientCheckpointingLayer):
         query_states=None,
         relative_pos=None,
         rel_embeddings=None,
-        output_attentions=False,
+        **kwargs,
     ):
         attention_output = self.attention(
             hidden_states,
             attention_mask,
-            output_attentions=output_attentions,
             query_states=query_states,
             relative_pos=relative_pos,
             rel_embeddings=rel_embeddings,
+            **kwargs,
         )
-        if output_attentions:
-            attention_output, att_matrix = attention_output
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
-        if output_attentions:
-            return (layer_output, att_matrix)
-        else:
-            return layer_output
+        return layer_output
 
 
 class ConvLayer(nn.Module):
@@ -1039,11 +1024,9 @@ class SEWDTransformerEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        output_hidden_states=True,
-        output_attentions=False,
         query_states=None,
         relative_pos=None,
-        return_dict=True,
+        **kwargs,
     ):
         if attention_mask.dim() <= 2:
             input_mask = attention_mask
@@ -1052,9 +1035,6 @@ class SEWDTransformerEncoder(nn.Module):
         attention_mask = self.get_attention_mask(attention_mask)
         relative_pos = self.get_rel_pos(hidden_states, query_states, relative_pos)
 
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
         if isinstance(hidden_states, Sequence):
             next_kv = hidden_states[0]
         else:
@@ -1062,20 +1042,14 @@ class SEWDTransformerEncoder(nn.Module):
         rel_embeddings = self.get_rel_embedding()
         output_states = next_kv
         for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (output_states,)
-
             output_states = layer_module(
                 next_kv,
                 attention_mask,
                 query_states=query_states,
                 relative_pos=relative_pos,
                 rel_embeddings=rel_embeddings,
-                output_attentions=output_attentions,
+                **kwargs,
             )
-
-            if output_attentions:
-                output_states, att_m = output_states
 
             if i == 0 and self.conv is not None:
                 output_states = self.conv(hidden_states, output_states, input_mask)
@@ -1087,17 +1061,7 @@ class SEWDTransformerEncoder(nn.Module):
             else:
                 next_kv = output_states
 
-            if output_attentions:
-                all_attentions = all_attentions + (att_m,)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (output_states,)
-
-        if not return_dict:
-            return tuple(v for v in [output_states, all_hidden_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=output_states, hidden_states=all_hidden_states, attentions=all_attentions
-        )
+        return BaseModelOutput(last_hidden_state=output_states)
 
 
 class SEWDEncoder(nn.Module):
@@ -1114,9 +1078,7 @@ class SEWDEncoder(nn.Module):
         self,
         hidden_states: torch.tensor,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         max_encoder_length = hidden_states.shape[1] // self.config.squeeze_factor
         if attention_mask is None:
@@ -1147,21 +1109,13 @@ class SEWDEncoder(nn.Module):
         hidden_states = pooled_hidden_states[..., :min_length] + position_embeddings[..., :min_length]
         hidden_states = hidden_states.transpose(1, 2)
 
-        encoder_outputs = self.encoder(hidden_states, attention_mask, output_hidden_states, output_attentions)
+        encoder_outputs = self.encoder(hidden_states, attention_mask, **kwargs)
 
         hidden_states = self.upsample(encoder_outputs.last_hidden_state)
         if hidden_states.shape[1] < n_input_timesteps:
             hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, n_input_timesteps - hidden_states.shape[1]))
 
-        if not return_dict:
-            return tuple(
-                v for v in [hidden_states, encoder_outputs.hidden_states, encoder_outputs.attentions] if v is not None
-            )
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -1171,6 +1125,10 @@ class SEWDPreTrainedModel(PreTrainedModel):
     main_input_name = "input_values"
     input_modalities = "audio"
     supports_gradient_checkpointing = True
+    _can_record_outputs = {
+        "hidden_states": SEWDLayer,
+        "attentions": OutputRecorder(DisentangledSelfAttention, index=1, layer_name="encoder"),
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1305,28 +1263,21 @@ class SEWDModel(SEWDPreTrainedModel):
 
         return hidden_states
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
         mask_time_indices: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
             masked extracted features in *config.proj_codevector_dim* space.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)
         extract_features = self.layer_norm(extract_features)
@@ -1344,21 +1295,12 @@ class SEWDModel(SEWDPreTrainedModel):
         encoder_outputs = self.encoder(
             hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        hidden_states = encoder_outputs[0]
+        hidden_states = encoder_outputs.last_hidden_state
 
-        if not return_dict:
-            return (hidden_states,) + encoder_outputs[1:]
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring(

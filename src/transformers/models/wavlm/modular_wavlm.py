@@ -149,7 +149,7 @@ class WavLMAttention(nn.Module):
             self.out_proj.bias,
             self.training,
             key_padding_mask,
-            need_weights=True, # eager attention always returns the attention weights
+            need_weights=True,  # eager attention always returns the attention weights
             attn_mask=gated_position_bias,
             use_separate_proj_weight=True,
             q_proj_weight=self.q_proj.weight,
