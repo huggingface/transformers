@@ -1902,14 +1902,12 @@ class GenerationMixin(ContinuousMixin):
             generation_config.cache_implementation = "dynamic_full"
 
         dynamic_cache_kwargs = {}
-        # `dynamic_full` drops the config so every layer becomes a plain full-attention layer; this only
-        # exists to replace rollback-unsafe sliding/chunked layers (incompatible with assisted decoding /
-        # contrastive search) with full ones. Models whose layer_types carry no sliding/chunked layers — but
-        # do carry custom cache layers like linear-attention or block-sparse — still need the config so the
-        # right cache layer class is built, so we only drop it when sliding/chunked layers are present.
-        layer_types = getattr(self.config.get_text_config(decoder=True), "layer_types", []) or []
-        has_rollback_unsafe_layers = any(x in ("sliding_attention", "chunked_attention") for x in layer_types)
-        if generation_config.cache_implementation != "dynamic_full" or not has_rollback_unsafe_layers:
+        # linear attention models always need to pass the config, otherwise it will use an Attention cache for the LinearAttention layers
+        is_linear_attention = any(
+            x in ("mamba", "conv", "linear_attention")
+            for x in (getattr(self.config.get_text_config(decoder=True), "layer_types", []) or [])
+        )
+        if generation_config.cache_implementation != "dynamic_full" or is_linear_attention:
             dynamic_cache_kwargs["config"] = self.config.get_text_config(decoder=True)
 
         if generation_config.cache_implementation == "offloaded":

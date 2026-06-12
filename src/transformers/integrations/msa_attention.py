@@ -1,3 +1,16 @@
+# Copyright 2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import torch
 import torch.nn.functional as F
 
@@ -9,13 +22,6 @@ logger = logging.get_logger(__name__)
 
 # `sparse_atten_func` only compiles for these per-query block size.
 MSA_SUPPORTED_TOPK = (4, 8, 16, 32)
-
-# Single-token decode reuses the bf16 varlen CSR kernel, but its fixed launch/schedule
-# cost (~0.14 ms) only beats dense SDPA once enough KV blocks can be skipped. Below this
-# many key blocks the selection isn't sparse enough to pay for the kernel, so we keep the
-# SDPA fallback. Empirical SM100 crossover (Hq=64/Hkv=4, block=128, topk=16) is ~2.25x topk;
-# 3x leaves a safe margin where the kernel is already >1.3x faster and the win grows with S.
-MSA_DECODE_MIN_BLOCKS_PER_TOPK = 3
 
 _MSA_KERNELS: dict[str, object] = {}
 
@@ -42,63 +48,43 @@ def _get_msa_kernel(attn_implementation: str):
     return _MSA_KERNELS[cache_key]
 
 
-def _can_run_kernel(
-    query: torch.Tensor, key: torch.Tensor, block_indices: torch.Tensor | None, block_size: int
-) -> bool:
-    """Gate the bf16 varlen CSR kernel (SM100, head_dim 128, supported topK).
+@torch.library.custom_op("transformers_msa::sparse_atten", mutates_args=())
+def _msa_sparse_atten_op(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    q2k: torch.Tensor,
+    cu_seqlens_q: torch.Tensor,
+    cu_seqlens_k: torch.Tensor,
+    topk: int,
+    block_size: int,
+    total_k: int,
+    max_seqlen_q: int,
+    max_seqlen_k: int,
+    qheads_per_kv: int,
+    scaling: float,
+    impl: str,
+) -> torch.Tensor:
+    """Opaque wrapper around the CuTe-DSL CSR build + block-sparse kernel.
 
-    The same kernel serves both prefill (q_len > 1) and single-token decode (q_len == 1):
-    decode is just a varlen call with one query slot. For decode we additionally require the
-    cache to be long enough that skipping unselected blocks beats a dense SDPA pass.
+    Registered as a ``torch.library`` custom op so ``torch.compile(fullgraph=True)`` treats the
+    whole CSR-build + attention as a single opaque node (no graph break) and ``reduce-overhead``
+    CUDA graphs can capture it. The internal ``build_k2q_csr`` output is data-dependent in shape,
+    but it never escapes this op (only the fixed-shape ``[total_q, Hq, D]`` attention output does),
+    so the fake/meta impl below is exact. The op is functional (no input mutation).
     """
-    if block_indices is None or query.device.type != "cuda":
-        return False
-    if torch.cuda.get_device_capability(query.device)[0] != 10:  # SM100 / Blackwell only
-        return False
-    if query.shape[-1] != 128:  # head_dim 128 only
-        return False
-    topk = _round_topk(block_indices.shape[-1])
-    if topk is None:
-        return False
-    if query.shape[2] == 1:  # decode: only worth it when the selection is genuinely sparse
-        num_kv_blocks = -(-key.shape[2] // block_size)
-        return num_kv_blocks >= MSA_DECODE_MIN_BLOCKS_PER_TOPK * topk
-    return True  # prefill
-
-
-def _sparse_attention(module, query, key, value, scaling, block_indices, block_size):
-    msa = _get_msa_kernel(module.config._attn_implementation)
-    bsz, num_q_heads, q_len, head_dim = query.shape
-    num_kv_heads, k_len = key.shape[1], key.shape[2]
-    qheads_per_kv = num_q_heads // num_kv_heads
-    num_selected = block_indices.shape[-1]
-    topk = _round_topk(num_selected)
-
-    # FA-style flatten: drop the batch dim into varlen [total, H, head_dim] + cu_seqlens.
-    q = query.transpose(1, 2).reshape(bsz * q_len, num_q_heads, head_dim).contiguous()
-    k = key.transpose(1, 2).reshape(bsz * k_len, num_kv_heads, head_dim).contiguous()
-    v = value.transpose(1, 2).reshape(bsz * k_len, num_kv_heads, head_dim).contiguous()
-    cu_seqlens_q = torch.arange(0, (bsz + 1) * q_len, q_len, device=q.device, dtype=torch.int32)
-    cu_seqlens_k = torch.arange(0, (bsz + 1) * k_len, k_len, device=q.device, dtype=torch.int32)
-
-    q2k = block_indices.to(torch.int32)
-    if topk > num_selected:
-        q2k = F.pad(q2k, (0, topk - num_selected), value=-1)
-    q2k = q2k.reshape(bsz * q_len, topk).unsqueeze(0).expand(num_kv_heads, -1, -1).contiguous()
-
-    # The CuTe-DSL kernel launches on the ambient ``current_device`` with no internal device
-    # guard, so under ``device_map`` (where a prior layer may have left the current device on a
-    # different GPU) it would reference this layer's tensors from the wrong context and raise
-    # ``cudaErrorInvalidValue``. Pin the context to the tensors' device for the launch.
-    with torch.cuda.device(query.device):
+    msa = _get_msa_kernel(impl)
+    # CuTe-DSL kernel launches on the ambient ``current_device`` with no internal guard; pin context
+    # to the tensors' device so device_map (mixed-GPU) layouts don't reference the wrong context.
+    with torch.cuda.device(q.device):
         k2q_row_ptr, k2q_q_indices = msa.build_k2q_csr(
             q2k,
             cu_seqlens_q,
             cu_seqlens_k,
             block_size,
-            total_k=bsz * k_len,
-            max_seqlen_k=k_len,
-            max_seqlen_q=q_len,
+            total_k=total_k,
+            max_seqlen_k=max_seqlen_k,
+            max_seqlen_q=max_seqlen_q,
             qhead_per_kv=qheads_per_kv,
         )
         attn_output = msa.sparse_atten_func(
@@ -110,12 +96,101 @@ def _sparse_attention(module, query, key, value, scaling, block_indices, block_s
             topk,
             cu_seqlens_q=cu_seqlens_q,
             cu_seqlens_k=cu_seqlens_k,
-            max_seqlen_q=q_len,
-            max_seqlen_k=k_len,
+            max_seqlen_q=max_seqlen_q,
+            max_seqlen_k=max_seqlen_k,
             blk_kv=block_size,
             causal=True,
             softmax_scale=scaling,
         )
+    return attn_output.contiguous()
+
+
+@_msa_sparse_atten_op.register_fake
+def _msa_sparse_atten_fake(
+    q, k, v, q2k, cu_seqlens_q, cu_seqlens_k, topk, block_size, total_k,
+    max_seqlen_q, max_seqlen_k, qheads_per_kv, scaling, impl,
+):
+    # Output matches the query varlen layout [total_q, Hq, head_dim].
+    return torch.empty_like(q)
+
+
+def _can_run_kernel(query: torch.Tensor, block_indices: torch.Tensor | None, block_size: int) -> bool:
+    """Gate the bf16 varlen CSR kernel (SM100, head_dim 128, blk_kv 128, supported topK).
+
+    Serves both prefill (q_len > 1) and single-token decode (q_len == 1) — decode is just a
+    varlen call with one query slot. The attention op is a sub-millisecond slice of each step,
+    so there's no context-length threshold: whenever the kernel is supported, it runs.
+    """
+    if block_indices is None or query.device.type != "cuda":
+        return False
+    if torch.cuda.get_device_capability(query.device)[0] != 10:  # SM100 / Blackwell only
+        return False
+    if query.shape[-1] != 128:  # head_dim 128 only
+        return False
+    if block_size != 128:  # SparseK2qCsrBuilderSm100 only supports blk_kv == 128
+        return False
+    return _round_topk(block_indices.shape[-1]) is not None
+
+
+def _is_padded_cache(cache_position: torch.Tensor | None, k_len: int) -> bool:
+    """Whether the KV buffer is longer than the valid region (a padded StaticCache).
+
+    Forces a device->host sync, so it is only ever called on the bsz>1 branch — the bsz==1 fast
+    path (the cudagraph target) short-circuits before this and stays sync-free.
+    """
+    if cache_position is None:
+        return False
+    return int(cache_position[-1]) + 1 < k_len
+
+
+def _sparse_attention(module, query, key, value, scaling, block_indices, block_size, cache_position):
+    bsz, num_q_heads, q_len, head_dim = query.shape
+    num_kv_heads, k_len = key.shape[1], key.shape[2]
+    qheads_per_kv = num_q_heads // num_kv_heads
+    num_selected = block_indices.shape[-1]
+    topk = _round_topk(num_selected)
+
+    # FA-style flatten: drop the batch dim into varlen [total, H, head_dim] + cu_seqlens.
+    q = query.transpose(1, 2).reshape(bsz * q_len, num_q_heads, head_dim).contiguous()
+    k = key.transpose(1, 2).reshape(bsz * k_len, num_kv_heads, head_dim).contiguous()
+    v = value.transpose(1, 2).reshape(bsz * k_len, num_kv_heads, head_dim).contiguous()
+    cu_seqlens_q = torch.arange(0, (bsz + 1) * q_len, q_len, device=q.device, dtype=torch.int32)
+    # Under a StaticCache `k_len` is the pre-allocated buffer (`max_cache_len`), not the valid length,
+    # so a packed `[0, k_len, 2*k_len, ...]` boundary would let the kernel's causal attend zero-padded
+    # future slots. For bsz==1 the real boundary is `[0, valid_k]` (valid_k = cache_position[-1]+1) built
+    # as a device tensor (no host sync) -- `build_k2q_csr` reads only the host shape hints `total_k`/
+    # `max_seqlen_k` (kept fixed at `bsz*k_len`/`k_len` below), so this stays compile/cudagraph stable.
+    # bsz>1 padded decode needs the kernel's paged layout and is routed to SDPA upstream, so the dense
+    # packed boundary is exact for every batched case that reaches here.
+    if bsz == 1 and cache_position is not None:
+        valid_k = (cache_position[-1] + 1).to(torch.int32).reshape(1)
+        cu_seqlens_k = torch.cat([torch.zeros(1, device=q.device, dtype=torch.int32), valid_k])
+    else:
+        cu_seqlens_k = torch.arange(0, (bsz + 1) * k_len, k_len, device=q.device, dtype=torch.int32)
+
+    q2k = block_indices.to(torch.int32)
+    if topk > num_selected:
+        q2k = F.pad(q2k, (0, topk - num_selected), value=-1)
+    q2k = q2k.reshape(bsz * q_len, topk).unsqueeze(0).expand(num_kv_heads, -1, -1).contiguous()
+
+    # Opaque custom op: keeps the CuTe-DSL CSR build + block-sparse kernel as a single graph node
+    # so ``torch.compile(fullgraph=True)`` doesn't break and ``reduce-overhead`` CUDA graphs capture it.
+    attn_output = _msa_sparse_atten_op(
+        q,
+        k,
+        v,
+        q2k,
+        cu_seqlens_q,
+        cu_seqlens_k,
+        topk,
+        block_size,
+        bsz * k_len,
+        q_len,
+        k_len,
+        qheads_per_kv,
+        scaling,
+        module.config._attn_implementation,
+    )
     return attn_output.reshape(bsz, q_len, num_q_heads, head_dim)
 
 
@@ -130,34 +205,35 @@ def msa_attention_forward(
     block_indices: torch.Tensor | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
-    """MiniMax Sparse Attention backend (``kernels-staging/msa``).
-
-    On the supported path (SM100, head_dim 128) this runs true block-sparse attention via
-    ``sparse_atten_func`` over the indexer's per-query selected key blocks (``block_indices``,
-    batch-local ids, ``-1`` padded), for both prefill (q_len > 1) and single-token decode
-    (q_len == 1, served as a one-slot varlen call over the contiguous bf16 cache). For everything
-    else (short context, non-SM100, ...) it transparently falls back to SDPA over the dense block
-    mask built from the same selection — the impl switch is hidden from the model and the user.
-    Returns ``[B, S_q, H, head_dim]``.
+    """
+    TODO: this opens a door to per-layer attn implementation which is something we might want lalter on.
     """
     if scaling is None:
         scaling = query.shape[-1] ** -0.5
 
-    # No block selection (the dense vision tower, or non-sparse layers without an indexer) -> plain SDPA.
+    # No block selection (the dense vision tower, or full-attention layers without an indexer) -> plain SDPA.
     if block_indices is None:
         return sdpa_attention_forward(
             module, query, key, value, attention_mask, dropout=dropout, scaling=scaling, **kwargs
         )
 
     block_size = module.indexer.block_size
-    if _can_run_kernel(query, key, block_indices, block_size):
-        attn_output = _sparse_attention(module, query, key, value, scaling, block_indices, block_size)
+    cache_position = kwargs.get("cache_position")
+    # bsz>1 over a padded StaticCache needs the kernel's paged layout (the dense packed varlen
+    # boundary would index the wrong rows for seq>0); route those to the SDPA fallback. bsz==1 and
+    # non-padded (dynamic) batches build an exact boundary, so they keep the kernel fast path.
+    paged_only = query.shape[0] > 1 and _is_padded_cache(cache_position, key.shape[2])
+    if _can_run_kernel(query, block_indices, block_size) and not paged_only:
+        attn_output = _sparse_attention(
+            module, query, key, value, scaling, block_indices, block_size, cache_position
+        )
         return attn_output, None
 
     # Hidden fallback: reconstruct the dense block mask from the selection and run SDPA.
     attention_mask = module.indexer.build_block_mask(
-        block_indices, attention_mask, key.shape[2], query.dtype, query.device
+        block_indices, attention_mask, key.shape[2], query.dtype, query.device, cache_position
     )
     return sdpa_attention_forward(
         module, query, key, value, attention_mask, dropout=dropout, scaling=scaling, **kwargs
     )
+

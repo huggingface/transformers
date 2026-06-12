@@ -435,45 +435,24 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
-        # MiniMax M3 VL upstream layout (matches the snapshot at
-        # ``MiniMaxAI/MiniMax-M3-preview``). Mirrors ``llava`` for the top-level
-        # text/vision/projector prefixes, then layers on the M3-specific renames
-        # for the lightning-index branch (``self_attn.index_<x>`` →
-        # ``self_attn.indexer.<x>``), the MoE-block rename (``block_sparse_moe``
-        # → ``mlp`` — our decoder layer always exposes the MLP at ``self.mlp``),
-        # and the expert / dense-MLP packing rules that mirror ``deepseek_v4``'s.
-        # The vision tower mirrors CLIP's nesting (``vision_tower.vision_model.``)
-        # so it needs no extra rename beyond the top-level prefix above.
-        "MiniMaxM3VLModel": [
-            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
-        ],
         "minimax_m3_vl": [
-            # ---- top-level prefix rewrites (llava-style) ----
             WeightRenaming(source_patterns=r"^language_model\.lm_head", target_patterns="lm_head"),
             WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
             WeightRenaming(source_patterns=r"^patch_merge_mlp", target_patterns="model.patch_merge"),
-            # The vision patch embed is the inherited ``Qwen2_5_VisionPatchEmbed``, whose conv
-            # is named ``proj``; the upstream checkpoint stores it as ``patch_embedding``.
             WeightRenaming(
                 source_patterns=r"\.embeddings\.patch_embedding\.",
                 target_patterns=".embeddings.proj.",
             ),
-            # The vision transformer holds its blocks directly (no ``CLIPEncoder`` wrapper),
-            # so flatten the checkpoint's ``vision_model.encoder.layers`` onto ``vision_model.layers``.
             WeightRenaming(
                 source_patterns=r"\.vision_model\.encoder\.layers\.",
                 target_patterns=".vision_model.layers.",
             ),
-            # ---- text decoder: MoE block path + lightning index branch ----
             WeightRenaming(
                 source_patterns=r"\.block_sparse_moe\.",
                 target_patterns=".mlp.",
             ),
-            # The router's correction bias lives on the gate (``MiniMaxM3VLTopKRouter``),
-            # not on the MoE block; the checkpoint stores it at the block level, so move
-            # it onto the gate after the ``block_sparse_moe`` → ``mlp`` rename above.
             WeightRenaming(
                 source_patterns=r"\.mlp\.e_score_correction_bias",
                 target_patterns=".mlp.gate.e_score_correction_bias",
@@ -494,11 +473,6 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"\.self_attn\.index_k_norm\.",
                 target_patterns=".self_attn.indexer.k_norm.",
             ),
-            # ---- expert packing: stack experts on dim 0, concat w1+w3 along intermediate dim ----
-            # Mirrors deepseek_v4 — the snapshot ships 128 separate experts each with
-            # `w1, w2, w3`, our `MiniMaxM3VLExperts` packs them as
-            # `gate_up_proj: [num_experts, 2*intermediate, hidden]` and
-            # `down_proj: [num_experts, hidden, intermediate]`.
             WeightConverter(
                 source_patterns=[
                     "mlp.experts.*.w1.weight",
@@ -512,7 +486,6 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="mlp.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
-            # ---- dense MLP (layers 0..2) and shared experts: pack gate+up into gate_up_proj ----
             WeightConverter(
                 source_patterns=["mlp.gate_proj.weight", "mlp.up_proj.weight"],
                 target_patterns="mlp.gate_up_proj.weight",

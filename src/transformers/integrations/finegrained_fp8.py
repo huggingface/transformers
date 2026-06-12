@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import functools
-import types
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -796,17 +795,6 @@ class FP8ExpertsInterface(ExpertsInterface):
 ALL_FP8_EXPERTS_FUNCTIONS = FP8ExpertsInterface()
 
 
-def _move_attributes(new_module: nn.Module, source_module: nn.Module) -> None:
-    # some of the attributes like swiglu limits etc are needed for the gating
-    # here we copy the attrs over.
-    for name, value in vars(source_module).items():
-        if isinstance(value, (int, float, bool)) and not hasattr(new_module, name):
-            setattr(new_module, name, value)
-    source_apply_gate = getattr(type(source_module), "_apply_gate", None)
-    if source_apply_gate is not None and source_apply_gate is not type(new_module)._apply_gate:
-        new_module._apply_gate = types.MethodType(source_apply_gate, new_module)
-
-
 def replace_with_fp8_linear(
     model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
 ):
@@ -854,7 +842,6 @@ def replace_with_fp8_linear(
                     has_gate=has_gate,
                     **module_kwargs,
                 )
-                _move_attributes(new_module, module)
             elif isinstance(module, nn.Linear):
                 new_module = FP8Linear(
                     in_features=module.in_features,

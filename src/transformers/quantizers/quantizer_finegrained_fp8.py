@@ -96,16 +96,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
     def _normalize_modules_to_not_convert(self, model: "PreTrainedModel"):
         """Rewrite the skip-list to the model's own module tree.
-
-        ``modules_to_not_convert`` (and its ``ignored_layers`` alias) ships inside the checkpoint's
-        ``quantization_config`` using the *checkpoint's* key layout. Composite / renamed models expose a
-        different module tree (e.g. a VL model nests its decoder under ``model.language_model`` and renames
-        ``block_sparse_moe`` to ``mlp``), and some weights are *fused* by weight converters (e.g.
-        ``gate_proj`` + ``up_proj`` -> ``gate_up_proj``), so a raw checkpoint name may point at a module that
-        no longer exists under that name and would be quantized anyway. Run every skip name through the
-        model's own ordered conversion chain — the same transforms the weight loader uses — so it lands on
-        the real (possibly fused / renamed) module. Names already in model-tree form match no source pattern
-        and pass through unchanged.
+        For models that were already released, if they have a list of modules to not quantize
+        we need to apply the weight renaming / weight conversion opérations to get the actual
+        layer name of the model in `transformers`.
         """
         skip = self.quantization_config.modules_to_not_convert
         if not skip:

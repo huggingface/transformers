@@ -53,9 +53,6 @@ class CacheLayerMixin(ABC):
         super().__init_subclass__(**kwargs)
         layer_type = cls.__dict__.get("layer_type", None)
         if layer_type is not None:
-            # Static layers go to the parallel static registry so a layer_type can carry both a
-            # dynamic and a static implementation (``StaticLayer`` is always defined by the time a
-            # subclass of it is, so the ``issubclass`` reference is safe here).
             if issubclass(cls, StaticLayer):
                 LAYER_TYPE_STATIC_CACHE_MAPPING[layer_type] = cls
             else:

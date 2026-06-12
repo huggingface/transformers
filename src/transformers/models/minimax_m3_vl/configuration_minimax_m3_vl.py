@@ -52,7 +52,7 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
     index_topk_blocks (`int`, *optional*, defaults to 16):
         Number of top-scoring key blocks each query may attend to.
     index_local_blocks (`int`, *optional*, defaults to 1):
-        Number of key blocks immediately preceding the query always kept visible.
+        Number of key blocks immediately preceding the query always kept visible / attended to.
     num_mtp_modules (`int`, *optional*, defaults to 0):
         Number of multi-token-prediction modules in the checkpoint; ignored at inference.
     """
@@ -112,7 +112,6 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
     }
     dense_intermediate_size: int = 12288
     shared_intermediate_size: int = 3072
-    n_shared_experts: int = 1
     use_routing_bias: bool = True
     routed_scaling_factor: float = 2.0
     rotary_dim: int = 64
