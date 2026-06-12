@@ -138,7 +138,7 @@ class ESMCModelTester:
 @require_torch
 class ESMCModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_mismatched_shapes = False
-    test_resize_embeddings = False  # ESMC's lm_head is an nn.Sequential, not a tied decoder
+    test_resize_embeddings = False  # ESMC's lm_head decoder is untied (tie_word_embeddings=False)
 
     all_model_classes = (
         (

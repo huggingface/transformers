@@ -187,7 +187,8 @@ class ESMCTokenizer(PreTrainedTokenizerFast):
     @property
     def chain_break_token_id(self) -> int:
         token_id = self.convert_tokens_to_ids(self._chain_break_token)
-        assert isinstance(token_id, int)
+        if not isinstance(token_id, int):
+            raise TypeError(f"Expected a single token id for the chain-break token, got {token_id!r}.")
         return token_id
 
     # ------------------------------------------------------------------
