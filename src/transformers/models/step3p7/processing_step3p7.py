@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from itertools import product
 from math import ceil
-from typing import TYPE_CHECKING, Any, Literal, TypedDict
+from typing import Any, Literal, TypedDict
 
 import numpy as np
 
@@ -12,10 +12,6 @@ from transformers.processing_utils import ProcessingKwargs, ProcessorMixin
 from transformers.tokenization_utils_tokenizers import TokenizersBackend
 from transformers.utils import auto_docstring, is_vision_available
 from transformers.utils.import_utils import is_torchvision_available, requires
-
-
-if TYPE_CHECKING:
-    import torch
 
 
 if is_vision_available():
@@ -41,8 +37,8 @@ class Step3VLImagePixelInputs(TypedDict):
     """
 
     type: Literal["pixel_values"]
-    pixel_values: torch.Tensor
-    patch_pixel_values: torch.Tensor | None
+    pixel_values: Any
+    patch_pixel_values: Any | None
     num_patches: list[int]
 
 
@@ -55,7 +51,7 @@ class Step3VLImageEmbeddingInputs(TypedDict):
     """
 
     type: Literal["image_embeds"]
-    image_embeds: torch.Tensor
+    image_embeds: Any
 
 
 ImageWithPatches = tuple[Any, list[Any], list[int] | None]
@@ -275,7 +271,7 @@ class Step3VLProcessor(ProcessorMixin):
         images: list[Image.Image],
         is_patch: bool = False,
         **images_kwargs,
-    ) -> list[torch.Tensor]:
+    ) -> list[Any]:
         images_kwargs.setdefault("return_tensors", "pt")
         return [self.image_processor(img, is_patch=is_patch, **images_kwargs)["pixel_values"] for img in images]
 
