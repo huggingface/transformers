@@ -51,7 +51,7 @@ check-code-quality:
 
 # Runs a full repository consistency check.
 check-repository-consistency:
-	@python utils/checkers.py $(REPO_CONSISTENCY_CHECKERS)
+	@python utils/checkers.py $(REPO_CONSISTENCY_CHECKERS) --num-workers 0
 
 # Runs typing and formatting checks + repository consistency check (ignores errors)
 check-repo:
