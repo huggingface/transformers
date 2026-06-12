@@ -122,3 +122,5 @@ RUN python3 -m pip uninstall -y kernels
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
+
+RUN pip freeze
