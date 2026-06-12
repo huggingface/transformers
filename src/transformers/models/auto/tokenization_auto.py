@@ -361,6 +361,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "deepseek_vl",
     "deepseek_vl_hybrid",
     "deepseek_vl_v2",
+    "multi_modality",  # deepseek-ai/deepseek-vl-7b-{base,chat}
     "deepseek_ocr",
     "deepseek_ocr2",
     "fuyu",
