@@ -185,13 +185,6 @@ class ESMCModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
-    @unittest.skip(
-        reason="ESMC returns `hidden_states` as a single stacked tensor (used by the SAE feature), "
-        "not the live per-layer tensors, so grad does not flow back to the returned copy."
-    )
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
 
 @slow
 @require_torch

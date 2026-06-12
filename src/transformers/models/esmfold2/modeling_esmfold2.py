@@ -2052,7 +2052,9 @@ def compute_lm_hidden_states(
     with torch.inference_mode():
         esmc_out = esmc(input_ids=lm_input_ids, sequence_id=sequence_id, output_hidden_states=True)
 
-    hs = esmc_out.hidden_states  # [n_layers+1, B, max_len, D]
+    # ESMC returns hidden states as the standard tuple of per-layer tensors; stack
+    # them into the single [n_layers+1, B, max_len, D] tensor the projection expects.
+    hs = torch.stack(esmc_out.hidden_states, dim=0)  # [n_layers+1, B, max_len, D]
     n_layers_plus_1, _, _, D = hs.shape
     result = torch.zeros(B, L, n_layers_plus_1, D, device=device, dtype=hs.dtype)
     for b in range(B):
