@@ -484,23 +484,23 @@ class ContinuousBatchingIOs:
         if use_padding is True. The padding is only useful if we want static shapes, like when using cuda graphs."""
         q_size = self.num_q_tokens
         kv_size = self.max_kv_read + self.num_q_tokens
-        batch_size = self._get_num_sequences(use_padding=use_padding) # TODO: rename to num_sequences
+        num_sequences = self._get_num_sequences(use_padding=use_padding)
 
         # Prepare the kwargs, the attributes that are either tensors or dict of tensors are initialized to empty dicts.
         kwargs = PagedAttentionArgs(
             input_ids=self.input_ids[:q_size].unsqueeze(0),
             position_ids=self.position_ids[:q_size].unsqueeze(0),
-            cu_seq_lens_q=self.cumulative_seqlens_q[: batch_size + 1],
+            cu_seq_lens_q=self.cumulative_seqlens_q[: num_sequences + 1],
             max_seqlen_q=self.max_seqlen_q,
-            logits_indices=self.logits_indices[:batch_size],
-            logits_processor_args=self._bulk_input_tensor[self.static_inputs :, :batch_size],
+            logits_indices=self.logits_indices[:num_sequences],
+            logits_processor_args=self._bulk_input_tensor[self.static_inputs :, :num_sequences],
             cu_seq_lens_k={},
             max_seqlen_k={},
             attention_mask=None if self.attention_mask is None else {},
             read_index=[],
             write_index=[],
             cache=self.cache,
-            block_table=self.block_table[:, :batch_size] if self.use_block_table else None,
+            block_table=self.block_table[:, :num_sequences] if self.use_block_table else None,
             use_cache=False,
         )
 
@@ -532,7 +532,7 @@ class ContinuousBatchingIOs:
 
         # For the attributes that are dict of tensors, we first fill the dict with the actual values
         for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
-            kwargs.cu_seq_lens_k[layer_type] = seqlens_k[: batch_size + 1]
+            kwargs.cu_seq_lens_k[layer_type] = seqlens_k[: num_sequences + 1]
             if use_padding:
                 kwargs.cu_seq_lens_k[layer_type][self.num_request_in_batch + 1 :] = self.total_seqlen_k[layer_type]
             kwargs.max_seqlen_k[layer_type] = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
