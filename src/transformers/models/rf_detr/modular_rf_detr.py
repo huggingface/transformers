@@ -26,7 +26,6 @@ from ...activations import ACT2FN
 from ...backbone_utils import (
     BackboneConfigMixin,
     consolidate_backbone_kwargs_to_config,
-    filter_output_hidden_states,
 )
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
@@ -758,7 +757,6 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
-    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,

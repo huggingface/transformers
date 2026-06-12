@@ -13,6 +13,8 @@
 # limitations under the License.
 """PyTorch DINOv2 model."""
 
+from collections.abc import Iterable
+
 import torch
 from torch import nn
 
@@ -26,6 +28,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..clip.modeling_clip import CLIPMLP
 from ..swin.modeling_swin import SwinDropPath
 from ..vit.modeling_vit import (
     ViTAttention,
@@ -75,8 +78,9 @@ class Dinov2Embeddings(nn.Module):
         class_pos_embed = self.position_embeddings[:, :1]
         patch_pos_embed = self.position_embeddings[:, 1:]
         dim = embeddings.shape[-1]
-        new_height = height // self.patch_size
-        new_width = width // self.patch_size
+        patch_size = self.patch_size if isinstance(self.patch_size, Iterable) else (self.patch_size, self.patch_size)
+        new_height = height // patch_size[0]
+        new_width = width // patch_size[1]
 
         sqrt_num_positions = torch_int(num_positions**0.5)
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
@@ -121,23 +125,14 @@ class Dinov2LayerScale(nn.Module):
         return hidden_state * self.lambda1
 
 
-class Dinov2MLP(nn.Module):
+class Dinov2MLP(CLIPMLP):
     def __init__(self, config) -> None:
-        super().__init__()
+        nn.Module.__init__(self)
         in_features = out_features = config.hidden_size
         hidden_features = int(config.hidden_size * config.mlp_ratio)
         self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
-        if isinstance(config.hidden_act, str):
-            self.activation = ACT2FN[config.hidden_act]
-        else:
-            self.activation = config.hidden_act
+        self.activation_fn = ACT2FN[config.hidden_act]
         self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.fc1(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        hidden_state = self.fc2(hidden_state)
-        return hidden_state
 
 
 class Dinov2SwiGLUFFN(nn.Module):
@@ -198,12 +193,6 @@ class Dinov2Layer(GradientCheckpointingLayer):
 @auto_docstring
 class Dinov2PreTrainedModel(ViTPreTrainedModel):
     config: Dinov2Config
-    base_model_prefix = "dinov2"
-    _no_split_modules = ["Dinov2Embeddings", "Dinov2Layer"]
-    _can_record_outputs = {
-        "hidden_states": Dinov2Layer,
-        "attentions": Dinov2Attention,
-    }
 
     @torch.no_grad()
     def _init_weights(self, module) -> None:
@@ -239,11 +228,7 @@ class Dinov2Model(Dinov2PreTrainedModel):
         self.embeddings = Dinov2Embeddings(config)
         self.encoder = Dinov2Encoder(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = None
         self.post_init()
-
-    def get_input_embeddings(self) -> Dinov2PatchEmbeddings:
-        return self.embeddings.patch_embeddings
 
     @can_return_tuple
     @auto_docstring
@@ -340,9 +325,6 @@ class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
         self.encoder = Dinov2Encoder(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_init()
-
-    def get_input_embeddings(self) -> Dinov2PatchEmbeddings:
-        return self.embeddings.patch_embeddings
 
     @can_return_tuple
     @filter_output_hidden_states

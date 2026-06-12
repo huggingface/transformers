@@ -238,17 +238,14 @@ class Dinov2WithRegistersMLP(nn.Module):
         in_features = out_features = config.hidden_size
         hidden_features = int(config.hidden_size * config.mlp_ratio)
         self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
-        if isinstance(config.hidden_act, str):
-            self.activation = ACT2FN[config.hidden_act]
-        else:
-            self.activation = config.hidden_act
+        self.activation_fn = ACT2FN[config.hidden_act]
         self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
 
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.fc1(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        hidden_state = self.fc2(hidden_state)
-        return hidden_state
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
 class Dinov2WithRegistersSwiGLUFFN(nn.Module):
@@ -390,11 +387,7 @@ class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
         self.embeddings = Dinov2WithRegistersEmbeddings(config)
         self.encoder = Dinov2WithRegistersEncoder(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = None
         self.post_init()
-
-    def get_input_embeddings(self) -> Dinov2WithRegistersPatchEmbeddings:
-        return self.embeddings.patch_embeddings
 
     @can_return_tuple
     @auto_docstring
@@ -498,9 +491,6 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.num_register_tokens = config.num_register_tokens
         self.post_init()
-
-    def get_input_embeddings(self) -> Dinov2WithRegistersPatchEmbeddings:
-        return self.embeddings.patch_embeddings
 
     @can_return_tuple
     @filter_output_hidden_states
