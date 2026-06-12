@@ -789,7 +789,7 @@ class ProcessorMixin(PushToHubMixin):
 
         return processed_audio, audio_replacements
 
-    # To be overriden by each model's processor if they need to add placeholder tokens
+    # To be overridden by each model's processor if they need to add placeholder tokens
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         raise NotImplementedError
 
