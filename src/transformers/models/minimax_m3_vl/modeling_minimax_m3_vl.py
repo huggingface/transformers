@@ -31,7 +31,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, DynamicLayer, StaticLayer
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernelized_func
+from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -406,7 +406,6 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class MiniMaxM3VLAttention(nn.Module):
     """
     M3 attention: per-head Gemma QK-norm + partial RoPE, optionally sparse indexer selection which require position IDs.
