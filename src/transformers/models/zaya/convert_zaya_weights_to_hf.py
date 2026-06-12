@@ -196,7 +196,7 @@ def convert_config(input_dir: Path, output_dir: Path) -> None:
         # is the total local attention span, including the current token.
         sliding_window = max(positive_windows) + 1 if positive_windows else None
 
-    rope_parameters = {
+    default_rope_parameters = {
         "hybrid": {
             "rope_type": "default",
             "rope_theta": rope_theta,
@@ -208,6 +208,7 @@ def convert_config(input_dir: Path, output_dir: Path) -> None:
             "partial_rotary_factor": partial_rotary_factor,
         },
     }
+    rope_parameters = {layer_type: default_rope_parameters[layer_type] for layer_type in sorted(set(layer_types))}
 
     for key in (*_UNUSED_CONFIG_KEYS, "swa_layers", "rope_theta", "swa_rotary_base"):
         config_dict.pop(key, None)
