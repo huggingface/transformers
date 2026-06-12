@@ -33,7 +33,7 @@ You can find the model card and checkpoint [here](https://huggingface.co/google/
 
 ## Usage examples
 
-Despite it being a text diffusion model and having a custom generation loop, most of the interface is shared with other model that can generate text with [`DiffusionGemmaGenerationMixin.generate`]. If you're using another `transformers` model in your app, you should be able to directly replace it with this model.
+Despite it being a text diffusion model and having a custom generation loop, most of the interface is shared with other models that can generate text with [`DiffusionGemmaGenerationMixin.generate`]. If you're using another `transformers` model in your app, you should be able to directly replace it with this model.
 
 ### Common caveats
 
@@ -90,7 +90,7 @@ model.generate(**inputs, max_new_tokens=256, streamer=streamer)
 
 ### Setting a starting denoising output
 
-The model is trained to iteratively refine blocks of 256 tokens. On some applications, it may be benefitial to provide a starting point for the decoder, rather than starting from random tokens. You can use the `decoder_input_ids`, available on all model interfaces, to set the starting canvas.
+The model is trained to iteratively refine blocks of 256 tokens. On some applications, it may be beneficial to provide a starting point for the decoder, rather than starting from random tokens. You can use the `decoder_input_ids`, available on all model interfaces, to set the starting canvas.
 
 ```py
 initial_estimate = ... # a tensor with shape (bsz, 256)

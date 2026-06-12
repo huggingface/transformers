@@ -55,7 +55,7 @@ logger = logging.get_logger(__name__)
 class DiffusionGemmaGenerationConfig(GenerationConfig):
     # no-format
     """
-    A GenerationConfig class with paremeterization customized for [`DiffusionGemmaGenerationMixin.generate`].
+    A GenerationConfig class with parameterization customized for [`DiffusionGemmaGenerationMixin.generate`].
 
     Args:
         > Parameters that control the length of the output
