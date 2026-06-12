@@ -124,6 +124,9 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
         sparse_cfg = kwargs.pop("sparse_attention_config", None) or {}
         moe_layer_freq = kwargs.pop("moe_layer_freq", None)
         super().__post_init__(**kwargs)
+        # Checkpoint declares "swigluoai", but the gate is computed inline from swiglu_alpha/limit; hidden_act
+        # is only the pointwise fallback and must be a real ACT2FN key, so normalize it to silu.
+        self.hidden_act = "silu"
 
         for flat, legacy in {
             "index_n_heads": "sparse_num_index_heads",
