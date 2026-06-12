@@ -1331,14 +1331,10 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
     def __init__(self, config: MossAudioTokenizerConfig):
         super().__init__(config)
 
-        self.config = config
         _ = config.version
-        self.sampling_rate = config.sampling_rate
-        self.downsample_rate = config.downsample_rate
-        self.causal_transformer_context_duration = config.causal_transformer_context_duration
 
         # Build encoder
-        current_frame_rate: float = float(self.sampling_rate)
+        current_frame_rate: float = float(self.config.sampling_rate)
         self.encoder = nn.ModuleList()
 
         for encoder_kwargs_i in config.encoder_config.to_module_configs():
@@ -1349,7 +1345,7 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
                 self.encoder.append(
                     MossAudioTokenizerProjectedTransformer(
                         **encoder_kwargs_i,
-                        context=int(current_frame_rate * self.causal_transformer_context_duration),
+                        context=int(current_frame_rate * self.config.causal_transformer_context_duration),
                     )
                 )
             current_frame_rate /= self.encoder[-1].downsample_ratio
@@ -1375,7 +1371,7 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
                 self.decoder.append(
                     MossAudioTokenizerProjectedTransformer(
                         **decoder_kwargs_i,
-                        context=int(current_frame_rate * self.causal_transformer_context_duration),
+                        context=int(current_frame_rate * self.config.causal_transformer_context_duration),
                     )
                 )
             current_frame_rate *= self.decoder[-1].downsample_ratio
@@ -1503,8 +1499,8 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
             input_lengths = torch.full((B,), T, device=device, dtype=torch.long)
 
         # Pad to multiple of downsample_rate
-        if T % self.downsample_rate != 0:
-            pad_length = self.downsample_rate - (T % self.downsample_rate)
+        if T % self.config.downsample_rate != 0:
+            pad_length = self.config.downsample_rate - (T % self.config.downsample_rate)
             input_values = F.pad(input_values, (0, pad_length))
 
         # Encode
@@ -1592,21 +1588,21 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
         else:
             if chunk_duration <= 0:
                 raise ValueError("`chunk_duration` must be > 0 when provided.")
-            if chunk_duration > self.causal_transformer_context_duration:
+            if chunk_duration > self.config.causal_transformer_context_duration:
                 raise ValueError(
                     "`chunk_duration` must be <= `config.causal_transformer_context_duration` "
-                    f"({self.causal_transformer_context_duration}), got {chunk_duration}."
+                    f"({self.config.causal_transformer_context_duration}), got {chunk_duration}."
                 )
             if B != 1:
                 raise ValueError("Streaming encode via `chunk_duration` currently only supports batch_size=1.")
 
-            chunk_length = int(round(chunk_duration * self.sampling_rate))
+            chunk_length = int(round(chunk_duration * self.config.sampling_rate))
             if chunk_length <= 0:
                 raise ValueError("`chunk_duration` is too small and results in chunk_length <= 0.")
-            if chunk_length % self.downsample_rate != 0:
+            if chunk_length % self.config.downsample_rate != 0:
                 raise ValueError(
                     "`chunk_duration * config.sampling_rate` must be divisible by `config.downsample_rate`. "
-                    f"Got chunk_length={chunk_length}, downsample_rate={self.downsample_rate}."
+                    f"Got chunk_length={chunk_length}, downsample_rate={self.config.downsample_rate}."
                 )
 
             input_length = int(input_lengths[0].item())
@@ -1713,24 +1709,24 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
         else:
             if chunk_duration <= 0:
                 raise ValueError("`chunk_duration` must be > 0 when provided.")
-            if chunk_duration > self.causal_transformer_context_duration:
+            if chunk_duration > self.config.causal_transformer_context_duration:
                 raise ValueError(
                     "`chunk_duration` must be <= `config.causal_transformer_context_duration` "
-                    f"({self.causal_transformer_context_duration}), got {chunk_duration}."
+                    f"({self.config.causal_transformer_context_duration}), got {chunk_duration}."
                 )
             if B != 1:
                 raise ValueError("Streaming decode via `chunk_duration` currently only supports batch_size=1.")
 
-            chunk_length = int(round(chunk_duration * self.sampling_rate))
+            chunk_length = int(round(chunk_duration * self.config.sampling_rate))
             if chunk_length <= 0:
                 raise ValueError("`chunk_duration` is too small and results in chunk_length <= 0.")
-            if chunk_length % self.downsample_rate != 0:
+            if chunk_length % self.config.downsample_rate != 0:
                 raise ValueError(
                     "`chunk_duration * config.sampling_rate` must be divisible by `config.downsample_rate`. "
-                    f"Got chunk_length={chunk_length}, downsample_rate={self.downsample_rate}."
+                    f"Got chunk_length={chunk_length}, downsample_rate={self.config.downsample_rate}."
                 )
 
-            chunk_frame_length = chunk_length // self.downsample_rate
+            chunk_frame_length = chunk_length // self.config.downsample_rate
             codes_length = int(codes_lengths[0].item())
             if codes_length <= chunk_frame_length:
                 decoder_output = self._decode_frame(audio_codes[..., :codes_length], codes_lengths)
