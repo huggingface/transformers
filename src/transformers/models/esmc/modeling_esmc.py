@@ -680,6 +680,7 @@ class ESMCModel(ESMCPreTrainedModel):
         output_hidden_states: bool | None = None,
         output_attentions: bool | None = None,
         return_dict: bool | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor, ...] | BaseModelOutput:
         r"""
         sequence_id (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -837,6 +838,7 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
         output_attentions: bool | None = None,
         return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor, ...] | ESMCMaskedLMOutput:
         r"""
         sequence_id (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -948,6 +950,7 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
         output_attentions: bool | None = None,
         return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor, ...] | ESMCSequenceClassifierOutput:
         r"""
         output_attentions (`bool`, *optional*):
@@ -1039,6 +1042,7 @@ class ESMCForTokenClassification(ESMCPreTrainedModel):
         output_attentions: bool | None = None,
         return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor, ...] | ESMCTokenClassifierOutput:
         r"""
         output_attentions (`bool`, *optional*):
