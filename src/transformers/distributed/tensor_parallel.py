@@ -718,10 +718,6 @@ ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 def select_parallel_plan(model) -> dict[str, str]:
     """
     Select the parallel plan to apply from explicit combo plans on the model.
-
-    ``DistributedConfig.tp_plan`` bypasses lookup and must be a complete plan.
-    Otherwise the (enable_sequence_parallel, enable_expert_parallel) pair selects
-    ``_tp_plan``, ``_sp_plan``, ``_tp_ep_plan``, or ``_sp_ep_plan`` on the model.
     """
     distributed_config = model.config.distributed_config
     user_tp_plan = distributed_config.tp_plan
