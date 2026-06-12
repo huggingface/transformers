@@ -561,6 +561,9 @@ class ProcessorTesterMixin:
         call_signature = inspect.signature(processor.__call__)
         input_args = [param.name for param in call_signature.parameters.values()]
         inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
+        # Shouldn't sample when input is a decoded video without metadata (fpx/duration/etc.)
+        if "videos" in inputs_dict:
+            inputs_dict["do_sample_frames"] = False
 
         inputs = processor(**inputs_dict, return_tensors="pt")
 
@@ -689,9 +692,9 @@ class ProcessorTesterMixin:
         video_input = self.prepare_video_inputs()
 
         # Process with both video_processor and processor
-        input_video_proc = video_processor(video_input, return_tensors="pt")
+        input_video_proc = video_processor(video_input, do_sample_frames=False, return_tensors="pt")
         try:
-            input_processor = processor(videos=video_input, return_tensors="pt")
+            input_processor = processor(videos=video_input, do_sample_frames=False, return_tensors="pt")
         except Exception:
             # The processor does not accept video only input, so we can skip this test
             self.skipTest("Processor does not accept video-only input.")
@@ -760,6 +763,7 @@ class ProcessorTesterMixin:
                         modalities.append("image")
                     if "video_processor" in attributes:
                         modalities.append("video")
+                        processor_inputs["do_sample_frames"] = False
                     if "audio_processor" in attributes or "feature_extractor" in attributes:
                         modalities.append("audio")
                     processor_inputs[param_name] = prepare_method(modalities=modalities)
@@ -806,6 +810,7 @@ class ProcessorTesterMixin:
         inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
 
         processing_kwargs = {"return_tensors": "pt", "padding": True}
+        # Shouldn't sample when input is a decoded video without metadata (fpx/duration/etc.)
         if "videos" in inputs_dict:
             processing_kwargs["do_sample_frames"] = False
 
@@ -2076,7 +2081,8 @@ class ProcessorTesterMixin:
         for h, w in image_sizes:
             image_inputs.append(np.random.randint(255, size=(h, w, 3), dtype=np.uint8))
 
-        text = [f"This is an image {getattr(self, 'image_token', '')}"] * len(image_inputs)
+        image_token = getattr(self, "image_token", "")
+        text = [f"This is an image {image_token}"] * len(image_inputs)
         inputs = processor(
             text=text, images=image_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
         )
@@ -2087,3 +2093,17 @@ class ProcessorTesterMixin:
         num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
         self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
+
+        # Test with two images per single text
+        text = [f"These are two images {image_token}{image_token}"] * len(image_inputs)
+        inputs = processor(
+            text=text,
+            images=image_inputs * 2,
+            padding=True,
+            return_mm_token_type_ids=True,
+            return_tensors="pt",
+        )
+
+        num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes * 2)
+        self.assertEqual(sum(num_image_tokens_from_call), sum(num_image_tokens_from_helper["num_image_tokens"]))

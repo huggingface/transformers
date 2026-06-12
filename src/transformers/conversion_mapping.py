@@ -44,6 +44,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "afmoe": "qwen2_moe",
     "deepseek_v2": "qwen2_moe",
     "deepseek_v3": "qwen2_moe",
+    "deepseek_v32": "qwen2_moe",
     "dots1": "qwen2_moe",
     "ernie4_5_moe": "qwen2_moe",
     "glm4_moe": "qwen2_moe",
@@ -66,20 +67,20 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
     "sam3_tracker_video": "sam3_tracker",
-    "altclip_vision_model": "clip_vision_model",
-    "chinese_clip_vision_model": "clip_vision_model",
-    "clipseg_vision_model": "clip_vision_model",
-    "metaclip_2_vision_model": "clip_vision_model",
-    "mlcd_vision": "clip_vision_model",
-    "mlcd": "clip_vision_model",
-    "siglip_vision_model": "clip_vision_model",
-    "siglip2_vision_model": "clip_vision_model",
-    "xclip_vision_model": "clip_vision_model",
-    "clipseg_text_model": "clip_text_model",
-    "metaclip_2_text_model": "clip_text_model",
-    "siglip_text_model": "clip_text_model",
-    "siglip2_text_model": "clip_text_model",
-    "xclip_text_model": "clip_text_model",
+    "AltCLIPVisionModel": "CLIPVisionModel",
+    "ChineseCLIPVisionModel": "CLIPVisionModel",
+    "CLIPSegVisionModel": "CLIPVisionModel",
+    "MetaClip2VisionModel": "CLIPVisionModel",
+    "mlcd_vision": "CLIPVisionModel",
+    "mlcd": "CLIPVisionModel",
+    "SiglipVisionModel": "CLIPVisionModel",
+    "Siglip2VisionModel": "CLIPVisionModel",
+    "xCLIPVisionModel": "CLIPVisionModel",
+    "CLIPSegTextModel": "CLIPTextModel",
+    "MetaClip2TextModel": "CLIPTextModel",
+    "SiglipTextModel": "CLIPTextModel",
+    "Siglip2TextModel": "CLIPTextModel",
+    "xCLIPTextModel": "CLIPTextModel",
     "paligemma": "llava",
     "aya_vision": "llava",
     "got_ocr2": "llava",
@@ -133,6 +134,21 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "gemma4_unified": [
+            WeightRenaming(source_patterns=r"vision_embedder\.patch_ln1", target_patterns="embed_vision.patch_ln1"),
+            WeightRenaming(
+                source_patterns=r"vision_embedder\.patch_dense", target_patterns="embed_vision.patch_dense"
+            ),
+            WeightRenaming(source_patterns=r"vision_embedder\.patch_ln2", target_patterns="embed_vision.patch_ln2"),
+            WeightRenaming(
+                source_patterns=r"vision_embedder\.pos_embedding", target_patterns="embed_vision.pos_embedding"
+            ),
+            WeightRenaming(source_patterns=r"vision_embedder\.pos_norm", target_patterns="embed_vision.pos_norm"),
+            WeightRenaming(
+                source_patterns=r"embed_vision\.embedding_projection",
+                target_patterns="embed_vision.multimodal_embedder.embedding_projection",
+            ),
+        ],
         "hrm_text": [
             WeightConverter(
                 source_patterns="mlp.gate_up_proj.weight",
@@ -328,6 +344,10 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 source_patterns=r"^layers\.(\d+)\.self_attn\.indexer\.",
                 target_patterns=r"layers.\1.self_attn.compressor.indexer.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.self_attn\.compressor\.indexer\.weights_proj\.",
+                target_patterns=r"layers.\1.self_attn.compressor.indexer.scorer.weights_proj.",
             ),
             WeightRenaming(
                 source_patterns=r"^layers\.(\d+)\.self_attn\.compressor\.norm\.",
@@ -551,8 +571,9 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
             WeightRenaming(source_patterns=r"^image_newline", target_patterns="model.image_newline"),
         ],
-        "clip_vision_model": [PrefixChange(prefix_to_remove="vision_model")],
-        "clip_text_model": [PrefixChange(prefix_to_remove="text_model")],
+        # Important to refer to classes by name, not model-type! Several classes share the same model type
+        "CLIPVisionModel": [PrefixChange(prefix_to_remove="vision_model")],
+        "CLIPTextModel": [PrefixChange(prefix_to_remove="text_model")],
         "VideoLlavaModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
@@ -793,6 +814,27 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="mlp.experts.down_proj",
                 operations=[Transpose(1, 2, check_dims=True)],
             ),
+        ],
+        "cosmos3_omni": [
+            # Cosmos3 unified checkpoints store the Reasoner LLM with the old `model.` prefix
+            # stripped off and the ViT under flat `blocks.*` / `merger.*` / `patch_embed.*` /
+            # `pos_embed.*` / `deepstack_merger_list.*`. Re-target both to the nested Qwen3-VL
+            # layout (`model.language_model.*` and `model.visual.*`). Newer checkpoints also
+            # use Diffusers-style attention names; map them back to Qwen3-VL module names.
+            WeightRenaming(
+                source_patterns=r"^(layers\.|embed_tokens\.|norm\.)",
+                target_patterns=r"model.language_model.\1",
+            ),
+            WeightRenaming(
+                source_patterns=r"^(blocks\.|merger\.|patch_embed\.|pos_embed\.|deepstack_merger_list\.)",
+                target_patterns=r"model.visual.\1",
+            ),
+            WeightRenaming(source_patterns=r"\.self_attn\.to_q\.", target_patterns=".self_attn.q_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.to_k\.", target_patterns=".self_attn.k_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.to_v\.", target_patterns=".self_attn.v_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.to_out\.", target_patterns=".self_attn.o_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.norm_q\.", target_patterns=".self_attn.q_norm."),
+            WeightRenaming(source_patterns=r"\.self_attn\.norm_k\.", target_patterns=".self_attn.k_norm."),
         ],
         "phimoe": [
             WeightRenaming(".block_sparse_moe.", ".mlp."),
@@ -1136,6 +1178,175 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns="LayerNorm.beta",
                 target_patterns="LayerNorm.bias",
             ),
+        ],
+        "sapiens2": [
+            WeightRenaming(r"^cls_token$", r"embeddings.cls_token"),
+            WeightRenaming(r"^storage_tokens$", r"embeddings.register_tokens"),
+            WeightRenaming(r"^patch_embed\.projection\.", r"embeddings.patch_embeddings."),
+            WeightRenaming(r"blocks\.(\d+)\.", r"model.layer.\1."),
+            WeightRenaming(r"attn\.proj\.", r"attention.o_proj."),
+            WeightRenaming(r"attn\.wq\.", r"attention.q_proj."),
+            WeightRenaming(r"attn\.wk\.", r"attention.k_proj."),
+            WeightRenaming(r"attn\.wv\.", r"attention.v_proj."),
+            WeightRenaming(r"attn\.q_norm\.", r"attention.q_norm."),
+            WeightRenaming(r"attn\.k_norm\.", r"attention.k_norm."),
+            WeightRenaming(r"attn\.gamma\.weight$", r"layer_scale1.lambda1"),
+            WeightRenaming(r"ffn\.w3\.", r"mlp.down_proj."),
+            WeightRenaming(r"\.ln1\.", r".norm1."),
+            WeightRenaming(r"\.ln2\.", r".norm2."),
+            WeightRenaming(r"^ln1\.", r"norm."),
+            WeightConverter(
+                source_patterns=r"ffn\.w12\.weight",
+                target_patterns=[r"mlp.gate_proj.weight", r"mlp.up_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=r"ffn\.w12\.bias",
+                target_patterns=[r"mlp.gate_proj.bias", r"mlp.up_proj.bias"],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
+        "Sapiens2ForSemanticSegmentation": [
+            WeightRenaming(r"^backbone\.", r"model."),
+            WeightRenaming(
+                r"decode_head\.deconv_layers\.0\.weight", r"decode_head.upsample_layers.0.convolution.weight"
+            ),
+            WeightRenaming(
+                r"decode_head\.deconv_layers\.3\.weight", r"decode_head.upsample_layers.1.convolution.weight"
+            ),
+            WeightRenaming(
+                r"decode_head\.deconv_layers\.6\.weight", r"decode_head.upsample_layers.2.convolution.weight"
+            ),
+            WeightRenaming(
+                r"decode_head\.deconv_layers\.9\.weight", r"decode_head.upsample_layers.3.convolution.weight"
+            ),
+            WeightRenaming(r"decode_head\.conv_layers\.0\.(weight|bias)", r"decode_head.conv_layers.0.convolution.\1"),
+            WeightRenaming(r"decode_head\.conv_layers\.3\.(weight|bias)", r"decode_head.conv_layers.1.convolution.\1"),
+            WeightRenaming(r"decode_head\.conv_seg\.", r"decode_head.predictor."),
+        ],
+        "Sapiens2ForPoseEstimation": [
+            WeightRenaming(r"^backbone\.", r"model."),
+            WeightRenaming(
+                r"decode_head\.deconv_layers\.0\.weight", r"decode_head.upsample_layers.0.convolution.weight"
+            ),
+            WeightRenaming(
+                r"decode_head\.deconv_layers\.3\.weight", r"decode_head.upsample_layers.1.convolution.weight"
+            ),
+            WeightRenaming(r"decode_head\.conv_layers\.0\.(weight|bias)", r"decode_head.conv_layers.0.convolution.\1"),
+            WeightRenaming(r"decode_head\.conv_layers\.3\.(weight|bias)", r"decode_head.conv_layers.1.convolution.\1"),
+            WeightRenaming(r"decode_head\.conv_layers\.6\.(weight|bias)", r"decode_head.conv_layers.2.convolution.\1"),
+            WeightRenaming(r"decode_head\.conv_pose\.", r"decode_head.predictor."),
+        ],
+        "Sapiens2ForNormalEstimation": [
+            WeightRenaming(r"^backbone\.", r"model."),
+            WeightRenaming(
+                r"decode_head\.input_conv\.0\.(weight|bias)",
+                r"decode_head.input_conv.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.upsample_blocks\.(\d+)\.0\.weight",
+                r"decode_head.upsample_layers.\1.convolution.weight",
+            ),
+            WeightRenaming(
+                r"decode_head\.upsample_blocks\.(\d+)\.0\.bias",
+                r"decode_head.upsample_layers.\1.convolution.bias",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.0\.(weight|bias)",
+                r"decode_head.conv_layers.0.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.3\.(weight|bias)",
+                r"decode_head.conv_layers.1.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.6\.(weight|bias)",
+                r"decode_head.conv_layers.2.convolution.\1",
+            ),
+            WeightRenaming(r"decode_head\.conv_normal\.", r"decode_head.predictor."),
+        ],
+        "Sapiens2ForPointmapEstimation": [
+            WeightRenaming(r"^backbone\.", r"model."),
+            WeightRenaming(
+                r"decode_head\.input_conv\.0\.(weight|bias)",
+                r"decode_head.input_conv.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.upsample_blocks\.(\d+)\.0\.weight",
+                r"decode_head.upsample_layers.\1.convolution.weight",
+            ),
+            WeightRenaming(
+                r"decode_head\.upsample_blocks\.(\d+)\.0\.bias",
+                r"decode_head.upsample_layers.\1.convolution.bias",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.0\.(weight|bias)",
+                r"decode_head.conv_layers.0.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.3\.(weight|bias)",
+                r"decode_head.conv_layers.1.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.6\.(weight|bias)",
+                r"decode_head.conv_layers.2.convolution.\1",
+            ),
+            WeightRenaming(r"decode_head\.conv_pointmap\.", r"decode_head.predictor."),
+            WeightRenaming(
+                r"decode_head\.scale_conv_layers\.0\.weight",
+                r"scale_head.conv_layers.0.convolution.weight",
+            ),
+            WeightRenaming(
+                r"decode_head\.scale_conv_layers\.0\.bias",
+                r"scale_head.conv_layers.0.convolution.bias",
+            ),
+            WeightRenaming(
+                r"decode_head\.scale_conv_layers\.3\.weight",
+                r"scale_head.conv_layers.1.convolution.weight",
+            ),
+            WeightRenaming(
+                r"decode_head\.scale_conv_layers\.3\.bias",
+                r"scale_head.conv_layers.1.convolution.bias",
+            ),
+            WeightRenaming(
+                r"decode_head\.scale_conv_layers\.6\.weight",
+                r"scale_head.conv_layers.2.convolution.weight",
+            ),
+            WeightRenaming(
+                r"decode_head\.scale_conv_layers\.6\.bias",
+                r"scale_head.conv_layers.2.convolution.bias",
+            ),
+            WeightRenaming(r"decode_head\.scale_final_layer\.1\.", r"scale_head.predictor.block1.layers.0."),
+            WeightRenaming(r"decode_head\.scale_final_layer\.3\.", r"scale_head.predictor.block2.layers.0."),
+            WeightRenaming(r"decode_head\.scale_final_layer\.5\.", r"scale_head.predictor.proj."),
+        ],
+        "Sapiens2ForImageMatting": [
+            WeightRenaming(r"^backbone\.", r"model."),
+            WeightRenaming(
+                r"decode_head\.input_conv\.0\.(weight|bias)",
+                r"decode_head.input_conv.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.upsample_blocks\.(\d+)\.0\.weight",
+                r"decode_head.upsample_layers.\1.convolution.weight",
+            ),
+            WeightRenaming(
+                r"decode_head\.upsample_blocks\.(\d+)\.0\.bias",
+                r"decode_head.upsample_layers.\1.convolution.bias",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.0\.(weight|bias)",
+                r"decode_head.conv_layers.0.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.3\.(weight|bias)",
+                r"decode_head.conv_layers.1.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.6\.(weight|bias)",
+                r"decode_head.conv_layers.2.convolution.\1",
+            ),
+            WeightRenaming(r"decode_head\.conv_matting\.", r"decode_head.predictor."),
         ],
     }
     # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.

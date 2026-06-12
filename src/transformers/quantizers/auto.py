@@ -28,6 +28,7 @@ from ..utils.quantization_config import (
     FineGrainedFP8Config,
     FourOverSixConfig,
     FPQuantConfig,
+    GemmaQuantizationConfig,
     GPTQConfig,
     HiggsConfig,
     HqqConfig,
@@ -55,6 +56,7 @@ from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
 from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from .quantizer_fouroversix import FourOverSixHfQuantizer
 from .quantizer_fp_quant import FPQuantHfQuantizer
+from .quantizer_gemma import GemmaQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
@@ -96,6 +98,7 @@ AUTO_QUANTIZER_MAPPING = {
     "mxfp4": Mxfp4HfQuantizer,
     "metal": MetalHfQuantizer,
     "sinq": SinqHfQuantizer,
+    "gemma": GemmaQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -123,6 +126,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "mxfp4": Mxfp4Config,
     "metal": MetalConfig,
     "sinq": SinqConfig,
+    "gemma": GemmaQuantizationConfig,
 }
 
 LOADING_ATTRIBUTES_CONFIG_TYPES = (
@@ -324,7 +328,7 @@ def register_quantizer(name: str):
 
 
 def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent):
-    pre_quantized = hasattr(config, "quantization_config")
+    pre_quantized = getattr(config, "quantization_config", None) is not None
     if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.quantization_config):
         pre_quantized = False
 
