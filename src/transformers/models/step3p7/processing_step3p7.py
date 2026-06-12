@@ -1,18 +1,23 @@
+from __future__ import annotations
+
 from itertools import product
 from math import ceil
-from typing import Literal, TypedDict
+from typing import Any, Literal, TypedDict
 
 import numpy as np
-import torch
-from PIL import Image
-
 from transformers.feature_extraction_utils import BatchFeature, TensorType
 from transformers.image_utils import ImageInput
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin
 from transformers.tokenization_utils_tokenizers import TokenizersBackend
-from transformers.utils import auto_docstring
+from transformers.utils import auto_docstring, is_vision_available
+from transformers.utils.import_utils import is_torchvision_available, requires
 
-from .image_processing_step3p7 import Step3VisionProcessor
+
+if is_vision_available():
+    from PIL import Image
+
+if is_vision_available() and is_torchvision_available():
+    from .image_processing_step3p7 import Step3VisionProcessor
 
 
 MAX_IMAGE_SIZE: int = 3024
@@ -48,7 +53,7 @@ class Step3VLImageEmbeddingInputs(TypedDict):
     image_embeds: torch.Tensor
 
 
-ImageWithPatches = tuple[Image.Image, list[Image.Image], list[int] | None]
+ImageWithPatches = tuple[Any, list[Any], list[int] | None]
 
 
 class ImagePatcher:
@@ -202,6 +207,7 @@ class Step3VLProcessorKwargs(ProcessingKwargs, total=False):
 
 
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class Step3VLProcessor(ProcessorMixin):
     @classmethod
     def _load_tokenizer_from_pretrained(
@@ -347,6 +353,8 @@ class Step3VLProcessor(ProcessorMixin):
         text_kwargs = output_kwargs["text_kwargs"]
         if return_tensors is not None:
             text_kwargs["return_tensors"] = return_tensors
+
+        import torch
 
         if images is not None:
             images = self.image_processor.fetch_images(images)
