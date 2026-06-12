@@ -355,6 +355,12 @@ class Llama4ImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
+        if not do_resize:
+            raise ValueError(
+                "Llama4 always resizes images to one of its supported resolutions; `do_resize=False` is not "
+                "supported because the resulting pixel values would have inconsistent shapes and could not be "
+                "tensorized."
+            )
         possible_resolutions = find_supported_resolutions(max_num_chunks=max_patches, patch_size=size)
         possible_resolutions = torch.tensor(possible_resolutions, device=images[0].device)
         # process images by batch, grouped by shape

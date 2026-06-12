@@ -23,7 +23,6 @@ from dataclasses import MISSING, dataclass, fields
 from functools import wraps
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar, Union
 
-from huggingface_hub import create_repo
 from huggingface_hub.dataclasses import strict
 from packaging import version
 from typing_extensions import dataclass_transform
@@ -39,6 +38,7 @@ from .utils import (
     cached_file,
     copy_func,
     extract_commit_hash,
+    hf_api,
     is_torch_available,
     logging,
 )
@@ -73,6 +73,7 @@ ALLOWED_LAYER_TYPES = (
     "dense",
     "hybrid",  # for layers that have both mamba and attention in zamba and zamba2
     "moe",  # for nemotron_h, which uses either attention, mamba or moe
+    "deepseek_sparse_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
 )
 
 
@@ -471,15 +472,17 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
     def validate_layer_type(self):
         """Check that `layer_types` is correctly defined."""
-        if not (getattr(self, "layer_types", None) is not None and hasattr(self, "num_hidden_layers")):
-            return
-        elif not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in self.layer_types):
-            raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES} but got {self.layer_types}")
-        elif self.num_hidden_layers is not None and self.num_hidden_layers != len(self.layer_types):
-            raise ValueError(
-                f"`num_hidden_layers` ({self.num_hidden_layers}) must be equal to the number of layer types "
-                f"({len(self.layer_types)})"
-            )
+        for layer_types in ["layer_types", "mlp_layer_types"]:
+            layers = getattr(self, layer_types, None)
+            if not (layers is not None and hasattr(self, "num_hidden_layers")):
+                return
+            elif not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layers):
+                raise ValueError(f"The `{layer_types}` entries must be in {ALLOWED_LAYER_TYPES} but got {layers}")
+            elif self.num_hidden_layers is not None and self.num_hidden_layers != len(layers):
+                raise ValueError(
+                    f"`num_hidden_layers` ({self.num_hidden_layers}) must be equal to the number of `{layer_types}` "
+                    f"({len(layers)})"
+                )
 
     @property
     def rope_scaling(self):
@@ -519,7 +522,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # This attribute is important to know on load, but should not be serialized on save.

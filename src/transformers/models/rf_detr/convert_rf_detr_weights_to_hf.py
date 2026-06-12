@@ -19,12 +19,7 @@ import json
 import torch
 from huggingface_hub import hf_hub_download
 
-from transformers import (
-    DetrImageProcessor,
-    RfDetrConfig,
-    RfDetrForInstanceSegmentation,
-    RfDetrForObjectDetection,
-)
+from transformers import RfDetrConfig, RfDetrForInstanceSegmentation, RfDetrForObjectDetection, RfDetrImageProcessor
 
 
 # Mapping of model names to their checkpoint files
@@ -223,7 +218,7 @@ def convert_rf_detr_checkpoint(
         print("MISMATCH:", len(loading_info["mismatched_keys"]))
         print(loading_info["mismatched_keys"])
 
-    image_processor = DetrImageProcessor(size=IMAGE_PROCESSORS[model_name], do_resize=True, use_fast=True)
+    image_processor = RfDetrImageProcessor(size=IMAGE_PROCESSORS[model_name], do_resize=True, use_fast=True)
 
     repo_id = f"{organization}/{model_name}"
     # Save model

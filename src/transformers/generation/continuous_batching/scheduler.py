@@ -15,7 +15,6 @@ import threading
 from abc import ABC, abstractmethod
 from collections import deque
 
-from ...utils.metrics import attach_tracer, traced
 from .cache import PagedAttentionCache
 from .requests import FutureRequestState, RequestState, RequestStatus, logger
 
@@ -27,9 +26,20 @@ class Scheduler(ABC):
     schedulers implement different strategies for prioritizing and batching requests.
     """
 
-    def __init__(self, cache: PagedAttentionCache):
+    def __init__(self, cache: PagedAttentionCache, safety_margin: float, max_requests_per_batch: int):
+        """Initializes the scheduler. The safety margin is the percentage of free blocks under which we stop
+        scheduling new prefill requests, so safety_margin = 0.1 means that when there is less than 10% of free blocks,
+        or equivalently when more than 90% of blocks are already allocated, we stop scheduling new prefill requests.
+        Setting safety_margin to 0.0 means no safety margin is applied."""
         self.cache = cache
+        self.safety_margin = safety_margin
+        self.max_requests_per_batch = max_requests_per_batch
         self._cancellation_lock = threading.Lock()
+        # Check args
+        if safety_margin < 0 or safety_margin > 1:
+            raise ValueError(f"Got {safety_margin = } but expected a value in [0, 1]")
+        if max_requests_per_batch < 1:
+            raise ValueError(f"Got {max_requests_per_batch = } but expected a value >= 1")
         # This is to compute the read cache used by a new request being scheduled
         self.read_cache_limit = None if self.cache.num_full_attention_groups else self.cache.config.sliding_window
         self.max_decode_fast_path_length = self.cache.max_blocks_per_request * self.cache.block_size
@@ -45,7 +55,6 @@ class Scheduler(ABC):
         self._requests_to_fork: list[RequestState] = []
         self.block_new_requests = False
 
-    @traced
     def add_waiting_request(self, state: RequestState):
         """Adds a request to the waiting list."""
         self.waiting_requests[state.request_id] = state
@@ -62,12 +71,10 @@ class Scheduler(ABC):
         Returns the list of scheduled requests in their "FutureRequestState" form, a boolean indicating if the decode
         fast path can be used, the total number of query tokens and the maximum number of kv tokens read."""
 
-    @traced
     def has_pending_requests(self) -> bool:
         """Checks if there are requests ready to be processed."""
         return bool(len(self.active_requests) or len(self.waiting_requests))
 
-    @traced
     def finish_request(self, request_id: str) -> None:
         """Completes processing of a request and frees its allocated cache blocks. This method is called
         when a request has finished generation or encountered an error.
@@ -83,20 +90,17 @@ class Scheduler(ABC):
         request_id = next(iter(self.active_requests))
         return request_id, self.active_requests.pop(request_id)
 
-    @traced
     def get_active_request_static_outputs(self, request_id: str) -> list[int]:
         """Gets generated tokens for an active request."""
         if request_id in self.active_requests:
             return self.active_requests[request_id].generated_tokens
         return []
 
-    @traced
     def set_request_cancellation(self, request_id: str):
         """Marks a request for cancellation."""
         with self._cancellation_lock:
             self._requests_to_cancel.add(request_id)
 
-    @traced
     def clear_cancelled_requests(self) -> list[RequestState]:
         """Remove all cancelled requests from active and waiting queues."""
         cancelled_states = []
@@ -114,14 +118,12 @@ class Scheduler(ABC):
             self._requests_to_cancel = set()
         return cancelled_states
 
-    @traced
     def request_is_cancelled(self, request_id: str) -> bool:
         """Checks if a request has been cancelled or removed."""
         return request_id in self._requests_to_cancel or (
             request_id not in self.active_requests and request_id not in self.waiting_requests
         )
 
-    @traced
     def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int) -> bool:
         """Allocate additional cache blocks for a request if the currently allocated blocks are insufficient to
         accommodate the next tokens. It calculates how many blocks are needed based on the request's current
@@ -209,7 +211,6 @@ class Scheduler(ABC):
         token_budget: int,
         cache_budget: int,
         request_ids_to_remove_from_waiting: set[str],
-        safety_margin: float = 0.0,
     ) -> tuple[list[FutureRequestState], bool, bool, int, int]:
         """Schedules candidate requests for the current batch.
 
@@ -220,8 +221,9 @@ class Scheduler(ABC):
         scheduled_requests = []
         one_allocation_failed = False
         decode_fast_path = self.cache.max_blocks_per_request > 0  # best way to check if decode fast path availability
-        safety_margins = safety_margin * self.cache.num_blocks
+        safety_margins = self.safety_margin * self.cache.num_blocks
         original_token_budget, original_cache_budget = token_budget, cache_budget
+        request_budget = self.max_requests_per_batch
 
         for state in candidates:
             num_free_blocks = self.cache.get_num_free_blocks()
@@ -272,6 +274,7 @@ class Scheduler(ABC):
             # Update the token and cache budgets
             token_budget -= request_len
             cache_budget -= read_cache_needed
+            request_budget -= 1
 
             # If using prefix sharing, we make note of the blocks that will be computed in the forward pass
             if self.cache.allow_block_sharing:
@@ -292,7 +295,7 @@ class Scheduler(ABC):
                 request_ids_to_remove_from_waiting.add(req_id)
 
             # Early exit of the loop if we have no budget left
-            if token_budget == 0 or (cache_budget <= 0 and not decode_fast_path):
+            if token_budget == 0 or (cache_budget <= 0 and not decode_fast_path) or request_budget <= 0:
                 break
 
         num_q_tokens = original_token_budget - token_budget
@@ -324,21 +327,16 @@ class Scheduler(ABC):
 
 
 # TODO: further common-ize the two classes
-@attach_tracer()
 class FIFOScheduler(Scheduler):
     """This scheduler processes requests in the order they arrive, meaning decoding requests has priority over
-    prefilling requests. Additionally, it includes a safety margin mechanism to prevent cache exhaustion. By default,
-    when 80% of the cache is full, new requests will not be scheduled to prioritize decoding active requests."""
+    prefilling requests."""
 
-    def __init__(self, cache: PagedAttentionCache, safety_margin: float = 0.2):
-        """Initializes the FIFO scheduler. The safety margin is the percentage of free blocks under which we stop
-        scheduling new prefill requests, so safety_margin = 0.1 means that when there is less than 10% of free blocks,
-        or equivalently when more than 90% of blocks are already allocated, we stop scheduling new prefill requests.
-        """
-        super().__init__(cache)
-        self.safety_margin = safety_margin
+    def __init__(self, cache: PagedAttentionCache, safety_margin: float | None, max_requests_per_batch: int):
+        """Initializes the FIFO scheduler, with a default safety margin of 0.15 (ie. 15% of free blocks)."""
+        if safety_margin is None:
+            safety_margin = 0.15
+        super().__init__(cache, safety_margin, max_requests_per_batch)
 
-    @traced
     def schedule_batch(
         self, token_budget: int, cache_budget: int
     ) -> tuple[list[FutureRequestState] | None, bool, int, int]:
@@ -363,7 +361,6 @@ class FIFOScheduler(Scheduler):
                 token_budget,
                 cache_budget,
                 request_ids_to_remove_from_waiting,
-                safety_margin=self.safety_margin,
             )
         )
 
@@ -379,13 +376,17 @@ class FIFOScheduler(Scheduler):
 
 # FIXME: prioritize adding from waiting reqs before scheduling `RequestStatus.DECODING` when cache space allows it
 # TODO: further consolidate the code by making more of it common. The reference Scheduler is FIFO, not this one.
-@attach_tracer()
 class PrefillFirstScheduler(Scheduler):
     """Scheduler that prioritizes split prefill requests over decoding requests. This scheduler ensures that split
     prefill requests (which are continuations of partially processed prompts) are completed before processing new
     decoding requests."""
 
-    @traced
+    def __init__(self, cache: PagedAttentionCache, safety_margin: float | None, max_requests_per_batch: int):
+        """Initializes the prefill first scheduler, with a default safety margin of 0.0 (no safety margin)."""
+        if safety_margin is None:
+            safety_margin = 0.0
+        super().__init__(cache, safety_margin, max_requests_per_batch)
+
     def schedule_batch(
         self, token_budget: int, cache_budget: int
     ) -> tuple[list[FutureRequestState] | None, bool, int, int]:
@@ -411,7 +412,6 @@ class PrefillFirstScheduler(Scheduler):
                 token_budget,
                 cache_budget,
                 request_ids_to_remove_from_waiting,
-                safety_margin=0.0,
             )
         )
 
