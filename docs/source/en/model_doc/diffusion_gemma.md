@@ -29,15 +29,18 @@ The encoder operates in a prefill capacity, processing the initial prompt and ge
 
 During inference, DiffusionGemma leverages multi-canvas sampling. Rather than generating one token at a time, the model iteratively denoises a full block of tokens using a diffusion sampler. Once a canvas is fully denoised, it is processed by the encoder and appended to the KV cache, after which the model generates the next canvas. This block-autoregressive approach facilitates text generation at higher speeds.
 
-You can find the model card and checkpoint [here](https://huggingface.co/google/diffusiongemma-26B-A4B-it).
+You can find the model card and checkpoint [here](https://huggingface.co/google/diffusiongemma-26B-A4B-it). You can find a visual guide to the model [here](https://newsletter.maartengrootendorst.com/p/a-visual-guide-to-diffusiongemma).
 
 ## Usage examples
 
-Despite it being a text diffusion model and having a custom generation loop, most of the interface is shared with other model that can generate text with `.generate()`. If you're using another `transformers` model in your app, you should be able to directly replace it with this model.
+Despite it being a text diffusion model and having a custom generation loop, most of the interface is shared with other models that can generate text with [`DiffusionGemmaGenerationMixin.generate`]. If you're using another `transformers` model in your app, you should be able to directly replace it with this model.
 
-Common caveats:
+### Common caveats
+
 - DiffusionGemma doesn't accept `use_cache`. It always uses a KV cache;
 - Support for common flags like `top_k` won't be available at release day, but will be added over time if they are compatible with text diffusion.
+
+### Basic example
 
 ```python
 from transformers import DiffusionGemmaForBlockDiffusion, AutoProcessor
@@ -62,6 +65,8 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     add_generation_prompt=True,
+    # Add the following to enable thinking
+    # enable_thinking=True,
 ).to(model.device)
 input_len = inputs["input_ids"].shape[-1]
 
@@ -71,6 +76,8 @@ output = model.generate(**inputs, max_new_tokens=256)
 print(processor.decode(output.sequences[0][input_len:], skip_special_tokens=True))
 ```
 
+### Streaming
+
 Like other models that can generate text, you can set a streamer class to stream text. Unlike other models, DiffusionGemma generates intermediate drafts before the final text. You can visualize them with `TextDiffusionStreamer`
 
 ```python
@@ -79,6 +86,15 @@ from transformers import TextDiffusionStreamer
 # (... copy from the example above, up to the `generate` call)
 streamer = TextDiffusionStreamer(tokenizer=processor.tokenizer)
 model.generate(**inputs, max_new_tokens=256, streamer=streamer)
+```
+
+### Setting a starting denoising output
+
+The model is trained to iteratively refine blocks of 256 tokens. On some applications, it may be beneficial to provide a starting point for the decoder, rather than starting from random tokens. You can use the `decoder_input_ids`, available on all model interfaces, to set the starting canvas.
+
+```py
+initial_estimate = ... # a tensor with shape (bsz, 256)
+model.generate(**inputs, max_new_tokens=256, decoder_input_ids=initial_estimate)
 ```
 
 ## DiffusionGemmaTextConfig
@@ -96,6 +112,7 @@ model.generate(**inputs, max_new_tokens=256, streamer=streamer)
 ## DiffusionGemmaGenerationMixin
 
 [[autodoc]] DiffusionGemmaGenerationMixin
+    - generate
 
 ## DiffusionGemmaGenerationConfig
 
