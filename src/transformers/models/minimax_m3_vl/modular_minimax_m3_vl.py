@@ -425,13 +425,11 @@ class MiniMaxM3VLAttention(MiniMaxM2Attention):
         )
         block_indices = None
         if self.indexer is not None:
-            # Normalize positions once to a batched `[B, S_q]` tensor (never None) so the indexer and
-            # `build_block_mask` index per-row without re-deriving the fallback or the batch axis. The
-            # index cache shares the kv-cache length, so `key_states.shape[2]` is the right fallback span.
             position_ids = kwargs.get("position_ids")
             if position_ids is None:
-                k_len = key_states.shape[2]
-                position_ids = torch.arange(k_len - query_states.shape[2], k_len, device=query_states.device)
+                position_ids = torch.arange(
+                    key_states.shape[2] - query_states.shape[2], key_states.shape[2], device=query_states.device
+                )
             position_ids = (position_ids if position_ids.ndim > 1 else position_ids.unsqueeze(0)).expand(
                 query_states.shape[0], -1
             )

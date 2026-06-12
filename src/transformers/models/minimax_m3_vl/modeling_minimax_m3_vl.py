@@ -458,6 +458,13 @@ class MiniMaxM3VLAttention(nn.Module):
         block_indices = None
         if self.indexer is not None:
             position_ids = kwargs.get("position_ids")
+            if position_ids is None:
+                position_ids = torch.arange(
+                    key_states.shape[2] - query_states.shape[2], key_states.shape[2], device=query_states.device
+                )
+            position_ids = (position_ids if position_ids.ndim > 1 else position_ids.unsqueeze(0)).expand(
+                query_states.shape[0], -1
+            )
             block_indices = self.indexer(hidden_states, position_embeddings, past_key_values, position_ids)
             if self.config._attn_implementation in ("eager", "sdpa"):
                 attention_mask = self.indexer.build_block_mask(
@@ -547,7 +554,7 @@ class MiniMaxM3VLIndexer(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         past_key_values: Cache | None,
-        position_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor,
     ) -> torch.Tensor:
         batch, q_len, _ = hidden_states.shape
         idx_q = self.q_proj(hidden_states).view(batch, q_len, -1, self.head_dim)
@@ -561,32 +568,28 @@ class MiniMaxM3VLIndexer(nn.Module):
             idx_k = past_key_values.layers[self.layer_idx].update_index(idx_k)
 
         k_len = idx_k.shape[2]
-        if position_ids is not None:
-            q_positions = position_ids if position_ids.ndim > 1 else position_ids.unsqueeze(0).expand(batch, -1)
-        else:
-            q_positions = torch.arange(k_len - q_len, k_len, device=idx_q.device).expand(batch, -1)
         num_key_blocks = -(-k_len // self.block_size)  # ceil-div
         pad = num_key_blocks * self.block_size - k_len
 
         scores = torch.matmul(idx_q.float(), idx_k.float().transpose(-1, -2))
         k_positions = torch.arange(k_len, device=idx_q.device)
-        token_future = k_positions[None, None, None, :] > q_positions[:, None, :, None]  # [B, 1, S_q, S_k]
+        token_future = k_positions[None, None, None, :] > position_ids[:, None, :, None]  # [B, 1, S_q, S_k]
         scores = scores.masked_fill(token_future, float("-inf"))
         if pad:
             scores = F.pad(scores, (0, pad), value=float("-inf"))
         scores = scores.view(batch, self.num_heads, q_len, num_key_blocks, self.block_size)
         block_scores = scores.amax(dim=-1).amax(dim=1)  # -> [B, S_q, num_key_blocks]
 
-        q_block = q_positions // self.block_size  # [B, S_q]
+        q_block = position_ids // self.block_size  # [B, S_q]
 
         if self.local_blocks > 0:
             local = torch.arange(self.local_blocks, device=idx_q.device)
             local_idx = (q_block[..., None] - local.view(1, 1, -1)).clamp(min=0)  # [B, S_q, local]
             block_scores.scatter_(-1, local_idx, float("inf"))
 
-        # Single top-`topk_blocks` budget. Slots that fall on a future/empty block keep their `-inf`
+        # Slots that fall on a future/empty block keep their `-inf`
         # score, which top-k sorts to the end, so tagging them `-1` yields left-packed block indices
-        # with `-1` right-padding -- the exact contract the block-sparse attention kernel consumes.
+        # with `-1` right-padding which is the format expect by block-sparse attention kernel.
         topk = min(self.topk_blocks, num_key_blocks)
         topk_scores, topk_indices = block_scores.topk(topk, dim=-1)  # [B, S_q, topk]
         return topk_indices.masked_fill(topk_scores == float("-inf"), -1)
@@ -598,7 +601,7 @@ class MiniMaxM3VLIndexer(nn.Module):
         key_length: int,
         dtype: torch.dtype,
         device: torch.device,
-        position_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor,
     ) -> torch.Tensor:
         """
         We build the full 4D attention mask (Batch, query, key, head)
@@ -620,12 +623,8 @@ class MiniMaxM3VLIndexer(nn.Module):
             padding_mask = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
             keep = block_keep & padding_mask
         else:
-            if position_ids is not None:
-                q_positions = position_ids if position_ids.ndim > 1 else position_ids.unsqueeze(0).expand(batch, -1)
-            else:
-                q_positions = torch.arange(key_length - q_len, key_length, device=device).expand(batch, -1)
             k_positions = torch.arange(key_length, device=device)
-            token_future = k_positions[None, None, None, :] > q_positions[:, None, :, None]  # [B, 1, S_q, S_k]
+            token_future = k_positions[None, None, None, :] > position_ids[:, None, :, None]  # [B, 1, S_q, S_k]
             keep = block_keep & ~token_future
         min_dtype = torch.finfo(dtype).min
         return torch.zeros(keep.shape, dtype=dtype, device=device).masked_fill(~keep, min_dtype)
@@ -1191,7 +1190,7 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
         self.post_init()
 
     @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @capture_outputs
     @auto_docstring
     def forward(
         self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
