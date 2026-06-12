@@ -183,7 +183,6 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
 @strict
 class MiniMaxM3VLConfig(PreTrainedConfig):
-
     model_type = "minimax_m3_vl"
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
     attribute_map = {
