@@ -625,7 +625,7 @@ class MiniMaxM3VLPreTrainedModel(MiniMaxM2PreTrainedModel):
     _supports_flex_attn = False
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _compatible_flash_implementations = ["kernels-staging/msa@v0"]
+    _compatible_flash_implementations = ["MiniMaxAI/msa"]
 
     @torch.no_grad()
     def _init_weights(self, module):

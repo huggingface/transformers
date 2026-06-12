@@ -690,7 +690,7 @@ class MiniMaxM3VLPreTrainedModel(PreTrainedModel):
     }
     input_modalities = ("image", "video", "text")
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
-    _compatible_flash_implementations = ["kernels-staging/msa@v0"]
+    _compatible_flash_implementations = ["MiniMaxAI/msa"]
 
     @torch.no_grad()
     def _init_weights(self, module):
