@@ -163,6 +163,7 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["sparse"] * self.num_hidden_layers
 
+        self.hidden_act = "silu"
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
 @strict
