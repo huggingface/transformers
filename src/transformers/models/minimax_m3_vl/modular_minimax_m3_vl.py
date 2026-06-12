@@ -136,6 +136,7 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
         sparse_cfg = kwargs.pop("sparse_attention_config", None) or {}
         moe_layer_freq = kwargs.pop("moe_layer_freq", None)
         PreTrainedConfig.__post_init__(self, **kwargs)
+        self.hidden_act = "silu"
 
         for flat, legacy in {
             "index_n_heads": "sparse_num_index_heads",
