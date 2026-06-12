@@ -1840,9 +1840,13 @@ class GenerationMixin(ContinuousMixin):
             "rwkv",
             "xlstm",
         )
-        # name clash between minimax and minimax m2, so we add this "or"
-        return "minimaxm2" in cls.__name__.lower() or all(
-            unsupported_name not in cls.__name__.lower() for unsupported_name in unsupported_model_names
+        # The "minimax" exclusion targets the original linear-attention MiniMax (custom cache); the later
+        # MiniMax M2 / M3 are standard attention models that use the regular Dynamic/Static caches.
+        name = cls.__name__.lower()
+        return (
+            "minimaxm2" in name
+            or "minimaxm3" in name
+            or all(unsupported_name not in name for unsupported_name in unsupported_model_names)
         )
 
     def _prepare_cache_for_generation(
@@ -1904,13 +1908,7 @@ class GenerationMixin(ContinuousMixin):
             generation_config.cache_implementation = "dynamic_full"
 
         dynamic_cache_kwargs = {}
-        # linear attention models always need to pass the config, otherwise it will use an Attention cache for the LinearAttention layers
-        is_linear_attention = any(
-            x in ("mamba", "conv", "linear_attention")
-            for x in (getattr(self.config.get_text_config(decoder=True), "layer_types", []) or [])
-        )
-        if generation_config.cache_implementation != "dynamic_full" or is_linear_attention:
-            dynamic_cache_kwargs["config"] = self.config.get_text_config(decoder=True)
+        dynamic_cache_kwargs["config"] = self.config.get_text_config(decoder=True)
 
         if generation_config.cache_implementation == "offloaded":
             dynamic_cache_kwargs["offloading"] = True

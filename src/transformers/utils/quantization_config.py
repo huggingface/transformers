@@ -60,6 +60,7 @@ class QuantizationMethod(str, Enum):
     FPQUANT = "fp_quant"
     AUTOROUND = "auto-round"
     MXFP4 = "mxfp4"
+    MXFP8 = "mxfp8"
     METAL = "metal"
     FOUR_OVER_SIX = "fouroversix"
     SINQ = "sinq"
@@ -1662,7 +1663,10 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         scale_fmt: str = "float",
         **kwargs,
     ):
-        self.quant_method = QuantizationMethod.FP8
+        self.quant_method = kwargs.pop("quant_method", QuantizationMethod.FP8)
+        # MiniMax ships the skip-list under ``ignored_layers``; accept it as an alias.
+        if modules_to_not_convert is None and "ignored_layers" in kwargs:
+            modules_to_not_convert = kwargs.pop("ignored_layers")
         self.modules_to_not_convert = modules_to_not_convert
         self.activation_scheme = activation_scheme
         self.weight_block_size = weight_block_size
