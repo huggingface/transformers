@@ -48,9 +48,6 @@ SPECIAL_CASES_TO_ALLOW = {
         "pooling_kernel_size",
     ],  # Used as meta data for other attributes/properties
     "MiniCPMV4_6Config": ["drop_vision_last_layer"],
-    # `rotary_dim` — partial-rotary size is driven by `rope_parameters["partial_rotary_factor"]`
-    #   at runtime; kept for checkpoint config compat (the config is `@strict`).
-    # `router_jitter_noise` — inherited from the Mixtral-style MoE config; not applied at inference.
     "MiniMaxM3VLTextConfig": ["rotary_dim", "router_jitter_noise"],
     "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
     "HYV3Config": ["output_router_logits"],
