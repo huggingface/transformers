@@ -1673,6 +1673,8 @@ class ContinuousBatchingConfig:
         cpu_group_timeout (`float`, *optional*, defaults to 300.0):
             The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None
             for no timeout. Default is 300 seconds.
+        use_default_compile_configs (`bool | None`, *optional*):
+            Deprecated in 5.11: please use default_compile_level instead.
     """
 
     # Size of each KV cache block
