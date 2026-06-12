@@ -324,6 +324,8 @@ class Tipsv2Config(PreTrainedConfig):
 
         self.text_config = Tipsv2TextConfig(**text_config_kwargs)
         self.vision_config = Tipsv2VisionConfig(**vision_config_kwargs)
+        if "temperature" in kwargs:
+            self.temperature_init_value = kwargs["temperature"]
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
