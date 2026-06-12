@@ -313,9 +313,9 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
         EXPECTED_NORMALS = Expectations(
             {
                 ("cuda", None): [
-                    [0.10756, 0.15431, 0.16018],
-                    [0.13642, 0.18439, 0.17021],
-                    [0.15226, 0.18382, 0.17060],
+                    [0.04218, 0.06954, 0.07597],
+                    [0.06383, 0.11129, 0.11132],
+                    [0.07500, 0.11867, 0.12064],
                 ],
             }
         )
@@ -335,6 +335,43 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
 
         expected_seg_logits = torch.tensor(EXPECTED_SEG_LOGITS.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_seg_logits, rtol=1e-3, atol=1e-3)
+
+        target_size = (height, width)
+
+        result = image_processor.post_process_depth_estimation(outputs, target_sizes=[target_size])
+        EXPECTED_POST_DEPTH = Expectations(
+            {
+                ("cuda", None): [
+                    [1.49565, 1.48132, 1.45840],
+                    [1.46976, 1.45724, 1.43721],
+                    [1.42834, 1.41871, 1.40331],
+                ],
+            }
+        )
+        expected_post_depth = torch.tensor(EXPECTED_POST_DEPTH.get_expectation(), device=torch_device)
+        torch.testing.assert_close(result[0]["predicted_depth"][:3, :3], expected_post_depth, rtol=1e-3, atol=1e-3)
+
+        result = image_processor.post_process_normal_estimation(outputs, target_sizes=[target_size])
+        EXPECTED_POST_NORMALS = Expectations(
+            {
+                ("cuda", None): [
+                    [0.10756, 0.12426, 0.15097],
+                    [0.11787, 0.13472, 0.16168],
+                    [0.13436, 0.15146, 0.17882],
+                ],
+            }
+        )
+        expected_post_normals = torch.tensor(EXPECTED_POST_NORMALS.get_expectation(), device=torch_device)
+        torch.testing.assert_close(result[0]["normals"][0, :3, :3], expected_post_normals, rtol=1e-3, atol=1e-3)
+
+        segmentation = image_processor.post_process_semantic_segmentation(outputs, target_sizes=[target_size])
+        EXPECTED_POST_SEG_LABELS = Expectations(
+            {
+                ("cuda", None): [[23, 23, 23], [23, 23, 23], [23, 23, 23]],
+            }
+        )
+        expected_post_seg_labels = torch.tensor(EXPECTED_POST_SEG_LABELS.get_expectation(), device=torch_device)
+        torch.testing.assert_close(segmentation[0][:3, :3], expected_post_seg_labels)
 
     @slow
     def test_inference_depth_estimation(self):
@@ -364,14 +401,21 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
         expected_depth = torch.tensor(EXPECTED_DEPTH.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_depth, rtol=1e-3, atol=1e-3)
 
-        result = image_processor.post_process_depth_estimation(outputs)
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["predicted_depth"].shape, torch.Size([expected_height, expected_width]))
-
-        target_size = (height // 2, width // 2)
+        target_size = (height, width)
         result = image_processor.post_process_depth_estimation(outputs, target_sizes=[target_size])
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["predicted_depth"].shape, torch.Size(target_size))
+        EXPECTED_POST_DEPTH = Expectations(
+            {
+                ("cuda", None): [
+                    [1.49565, 1.48132, 1.45840],
+                    [1.46976, 1.45724, 1.43721],
+                    [1.42834, 1.41871, 1.40331],
+                ],
+            }
+        )
+        expected_post_depth = torch.tensor(EXPECTED_POST_DEPTH.get_expectation(), device=torch_device)
+        torch.testing.assert_close(result[0]["predicted_depth"][:3, :3], expected_post_depth, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_inference_normal_estimation(self):
@@ -392,9 +436,9 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
         EXPECTED_NORMALS = Expectations(
             {
                 ("cuda", None): [
-                    [0.10756, 0.15431, 0.16018],
-                    [0.13642, 0.18439, 0.17021],
-                    [0.15226, 0.18382, 0.17060],
+                    [0.04218, 0.06954, 0.07597],
+                    [0.06383, 0.11129, 0.11132],
+                    [0.07500, 0.11867, 0.12064],
                 ],
             }
         )
@@ -402,18 +446,21 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
         expected_normals = torch.tensor(EXPECTED_NORMALS.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.normals[0, 0, :3, :3], expected_normals, rtol=1e-3, atol=1e-3)
 
-        result = image_processor.post_process_normal_estimation(outputs)
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["normals"].shape, torch.Size([3, expected_height, expected_width]))
-        norms = result[0]["normals"].norm(p=2, dim=0)
-        torch.testing.assert_close(norms, torch.ones_like(norms), rtol=1e-4, atol=1e-4)
-
-        target_size = (height // 2, width // 2)
+        target_size = (height, width)
         result = image_processor.post_process_normal_estimation(outputs, target_sizes=[target_size])
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["normals"].shape, torch.Size([3, *target_size]))
-        norms = result[0]["normals"].norm(p=2, dim=0)
-        torch.testing.assert_close(norms, torch.ones_like(norms), rtol=1e-4, atol=1e-4)
+        EXPECTED_POST_NORMALS = Expectations(
+            {
+                ("cuda", None): [
+                    [0.10756, 0.12426, 0.15097],
+                    [0.11787, 0.13472, 0.16168],
+                    [0.13436, 0.15146, 0.17882],
+                ],
+            }
+        )
+        expected_post_normals = torch.tensor(EXPECTED_POST_NORMALS.get_expectation(), device=torch_device)
+        torch.testing.assert_close(result[0]["normals"][0, :3, :3], expected_post_normals, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_inference_semantic_segmentation(self):
@@ -447,19 +494,14 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
         expected_seg_logits = torch.tensor(EXPECTED_SEG_LOGITS.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_seg_logits, rtol=1e-3, atol=1e-3)
 
-        segmentation = image_processor.post_process_semantic_segmentation(outputs)
+        target_size = (height, width)
+        segmentation = image_processor.post_process_semantic_segmentation(outputs, target_sizes=[target_size])
         self.assertEqual(len(segmentation), 1)
-        self.assertEqual(segmentation[0].shape, torch.Size([expected_height, expected_width]))
-
-        EXPECTED_SEG_LABELS = Expectations(
+        self.assertEqual(segmentation[0].shape, torch.Size(target_size))
+        EXPECTED_POST_SEG_LABELS = Expectations(
             {
                 ("cuda", None): [[23, 23, 23], [23, 23, 23], [23, 23, 23]],
             }
         )
-        expected_seg_labels = torch.tensor(EXPECTED_SEG_LABELS.get_expectation(), device=torch_device)
-        torch.testing.assert_close(segmentation[0][:3, :3], expected_seg_labels)
-
-        target_size = (height // 2, width // 2)
-        segmentation = image_processor.post_process_semantic_segmentation(outputs, target_sizes=[target_size])
-        self.assertEqual(len(segmentation), 1)
-        self.assertEqual(segmentation[0].shape, torch.Size(target_size))
+        expected_post_seg_labels = torch.tensor(EXPECTED_POST_SEG_LABELS.get_expectation(), device=torch_device)
+        torch.testing.assert_close(segmentation[0][:3, :3], expected_post_seg_labels)

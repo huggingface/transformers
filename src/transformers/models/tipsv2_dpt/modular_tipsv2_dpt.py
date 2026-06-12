@@ -116,9 +116,8 @@ class Tipsv2DptImageProcessor(TorchvisionBackend):
         for normal, target_size in zip(normals, target_sizes):
             if target_size is not None:
                 normal = nn.functional.interpolate(
-                    normal.unsqueeze(0), size=target_size, mode="bicubic", align_corners=False
+                    normal.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
                 ).squeeze(0)
-                normal = nn.functional.normalize(normal, p=2, dim=0)
             results.append({"normals": normal})
         return results
 
@@ -431,7 +430,7 @@ class Tipsv2DptNeck(nn.Module):
 class Tipsv2DptNormalEstimatorOutput(ModelOutput):
     r"""
     normals (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
-        L2-normalized surface normal predictions.
+        Raw normal map predictions (unnormalized).
     hidden_states (`tuple(torch.FloatTensor)`, *optional*):
         Hidden states of the backbone.
     attentions (`tuple(torch.FloatTensor)`, *optional*):
@@ -549,7 +548,6 @@ class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
 
         normals_fused = self.normals_neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
         normals = self.normals_decoder(normals_fused)
-        normals = nn.functional.normalize(normals, p=2, dim=1)
 
         seg_fused = self.segmentation_neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
         seg_logits = self.segmentation_decoder(seg_fused)
@@ -649,8 +647,7 @@ class Tipsv2DptForNormalEstimation(Tipsv2DptPreTrainedModel):
         patch_width = width // self.config.backbone_config.patch_size
 
         fused = self.neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
-        normals = self.decoder(fused)
-        normals = nn.functional.normalize(normals, p=2, dim=1)
+        normals = self.decoder(fused)  # (B, 3, H', W') — unnormalized
 
         return Tipsv2DptNormalEstimatorOutput(
             normals=normals,

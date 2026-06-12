@@ -107,9 +107,8 @@ class Tipsv2DptImageProcessor(TorchvisionBackend):
         for normal, target_size in zip(normals, target_sizes):
             if target_size is not None:
                 normal = nn.functional.interpolate(
-                    normal.unsqueeze(0), size=target_size, mode="bicubic", align_corners=False
+                    normal.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
                 ).squeeze(0)
-                normal = nn.functional.normalize(normal, p=2, dim=0)
             results.append({"normals": normal})
         return results
 
