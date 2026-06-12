@@ -20,8 +20,9 @@ Quickstart::
     model = ESMFold2Model.from_pretrained("biohub/ESMFold2", dtype=torch.bfloat16).cuda().eval()
     open("ubq.pdb", "w").write(model.infer_protein_as_pdb("MQIFVKTLTGKT..."))
 
-For multi-chain / ligand / MSA inputs see ``ESMFold2InputBuilder`` in the
-companion ``esm`` package.
+``infer_protein`` / ``infer_protein_as_pdb`` cover single-chain protein folding from a
+sequence; multi-chain, ligand, or MSA inputs are supported by building the structural
+feature tensors yourself and passing them directly to ``forward``.
 """
 
 from __future__ import annotations
@@ -230,7 +231,7 @@ class ESMFold2TransitionLayer(nn.Module):
         self.out_proj = nn.Linear(hidden, d_model, bias=False)
 
     def forward(self, x: Tensor) -> Tensor:
-        x = self.norm(x.float()).to(x.dtype)
+        x = self.norm(x)
         a = self.a_proj(x)
         b = self.b_proj(x)
         return self.out_proj(F.silu(a) * b)
@@ -913,7 +914,7 @@ class ESMFold2AtomDecoder(nn.Module):
             q_l = result
             intermediates = []
 
-        r_l = self.output_linear(self.norm(q_l.float()).to(q_l.dtype))
+        r_l = self.output_linear(self.norm(q_l))
         return r_l, intermediates
 
 
@@ -967,7 +968,7 @@ class ESMFold2AttentionPairBias(nn.Module):
         if z.dim() == 4 and z.shape[0] != bsz and num_diffusion_samples > 1:
             z = z.repeat_interleave(num_diffusion_samples, dim=0)
         if z.dim() == 4:
-            return self.pair_bias_proj(self.pair_norm(z.float()).to(z.dtype))
+            return self.pair_bias_proj(self.pair_norm(z))
         return z.unsqueeze(-1)
 
     def forward(
@@ -984,7 +985,7 @@ class ESMFold2AttentionPairBias(nn.Module):
         if s is not None:
             x = self.adaln(a, s)
         else:
-            x = self.pre_norm(a.float()).to(a.dtype)
+            x = self.pre_norm(a)
 
         n_keys = x.shape[1]
         q = self.q_proj(x).view(bsz, n_queries, self.num_heads, self.head_dim)
@@ -1055,7 +1056,7 @@ class ESMFold2ConditionedTransitionBlock(nn.Module):
         if s is not None:
             x = self.adaln(a, s)
         else:
-            x = self.pre_norm(a.float()).to(a.dtype)
+            x = self.pre_norm(a)
 
         swish_a, swish_b = self.lin_swish(x).chunk(2, dim=-1)
         b = F.silu(swish_a) * swish_b
@@ -1389,7 +1390,7 @@ class ESMFold2DiffusionModule(nn.Module):
         )
 
         # Step 4: add conditioned s
-        a = a + self.s_to_token(self.s_step_norm(s.float()).to(s.dtype))
+        a = a + self.s_to_token(self.s_step_norm(s))
 
         # Step 5: token transformer (pair bias is cached across steps via inference_cache)
         a, _ = self.token_transformer(
@@ -1402,7 +1403,7 @@ class ESMFold2DiffusionModule(nn.Module):
         )
 
         # Step 6: token norm
-        a = self.token_norm(a.float()).to(a.dtype)
+        a = self.token_norm(a)
 
         # Step 7: atom decoder
         r_update, dec_intermediates = self.atom_decoder(
@@ -1943,13 +1944,13 @@ class ESMFold2LanguageModelShim(nn.Module):
         # (e.g. bf16 backbone with an fp32 trunk); align to the projection dtype.
         hidden_states = hidden_states.to(self.base_z_linear[1].weight.dtype)
         # base_z_linear[0] is an fp32-pinned LayerNorm; upcast in, downcast out.
-        normed = self.base_z_linear[0](hidden_states.float()).to(hidden_states.dtype)
+        normed = self.base_z_linear[0](hidden_states)
         lm_z = self.base_z_linear[1](normed)  # [B, L, 81, d_z]
         weights = self.base_z_combine.softmax(0)  # [81]
         lm_z = (weights @ lm_z).squeeze(-2)  # [B, L, d_z]
         # base_z_mlp[1] is an fp32-pinned LayerNorm; upcast in, downcast out.
         pair = self.base_z_mlp[0](lm_z)
-        lm_z = self.base_z_mlp[1](pair.float()).to(pair.dtype)  # [B, L, L, d_z]
+        lm_z = self.base_z_mlp[1](pair)  # [B, L, L, d_z]
         return lm_z
 
 
@@ -2129,7 +2130,7 @@ class ESMFold2TriangleMultiplicativeBlock(nn.Module):
         if visibility is None:
             visibility = pair_grid.new_ones(pair_grid.shape[:-1])
 
-        normalized_grid = self.norm_start(pair_grid.float()).to(pair_grid.dtype)
+        normalized_grid = self.norm_start(pair_grid)
         bundled = self.proj_bundle(normalized_grid)
         signal, gate_logits = bundled.split(2 * self.latent_channels, dim=-1)
         # Gates and the O(N^3) contraction run in the activation dtype (bf16). This
@@ -2186,12 +2187,12 @@ class ESMFold2Transition(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         if self._chunk_size is None or x.shape[1] <= self._chunk_size:
-            return x + self.ffn(self.norm(x.float()).to(x.dtype))
+            return x + self.ffn(self.norm(x))
         out_list: list[Tensor] = []
         for s in range(0, x.shape[1], self._chunk_size):
             e = min(s + self._chunk_size, x.shape[1])
             sl = x[:, s:e]
-            out_list.append(sl + self.ffn(self.norm(sl.float()).to(sl.dtype)))
+            out_list.append(sl + self.ffn(self.norm(sl)))
         return torch.cat(out_list, dim=1)
 
 
@@ -2278,7 +2279,7 @@ class ESMFold2OuterProductMean(nn.Module):
         self._chunk_size = chunk_size
 
     def forward(self, m: Tensor, msa_attention_mask: Tensor) -> Tensor:
-        m_norm = self.norm(m.float()).to(m.dtype)
+        m_norm = self.norm(m)
         x = self.W(m_norm) * msa_attention_mask.unsqueeze(-1).to(m_norm.dtype)
         a, b = x.chunk(2, dim=-1)
         mask_f = msa_attention_mask.to(a.dtype)
@@ -2329,8 +2330,8 @@ class ESMFold2MSAPairWeightedAveraging(nn.Module):
         B, L, M, _ = msa_repr.shape
         h, dh = self.n_heads, self.head_width
 
-        msa_normed = self.norm_single(msa_repr.float()).to(msa_repr.dtype)
-        bias = self.compute_bias[1](self.compute_bias[0](pair_repr.float()).to(pair_repr.dtype))  # [B, L, L, n_heads]
+        msa_normed = self.norm_single(msa_repr)
+        bias = self.compute_bias[1](self.compute_bias[0](pair_repr))  # [B, L, L, n_heads]
         bias.masked_fill_(~pair_attention_mask.unsqueeze(-1).bool(), -1e5)
         attn = torch.softmax(bias, dim=-2, dtype=torch.float32).to(bias.dtype)  # softmax over j
 
@@ -2480,9 +2481,9 @@ class ESMFold2ConfidenceHead(nn.Module):
         relative_position_encoding: Tensor | None = None,
         token_bonds_encoding: Tensor | None = None,
     ) -> dict[str, Tensor]:
-        s_inputs_normed = self.s_inputs_norm(s_inputs.float()).to(s_inputs.dtype)
+        s_inputs_normed = self.s_inputs_norm(s_inputs)
 
-        z_base = self.z_norm(z.float()).to(z.dtype)
+        z_base = self.z_norm(z)
         if relative_position_encoding is not None:
             z_base = z_base + relative_position_encoding
         if token_bonds_encoding is not None:
@@ -2519,7 +2520,7 @@ class ESMFold2ConfidenceHead(nn.Module):
 
         atom_mask_f = atom_mask_m.float()
         s_at_atoms = gather_token_to_atom(single, atom_to_token_m)
-        s_at_atoms_ln = self.plddt_ln(s_at_atoms.float()).to(s_at_atoms.dtype)
+        s_at_atoms_ln = self.plddt_ln(s_at_atoms)
 
         intra_idx = _compute_intra_token_idx(atom_to_token_m)
         intra_idx = intra_idx.clamp(max=self.plddt_weight.shape[0] - 1)
@@ -2555,15 +2556,15 @@ class ESMFold2ConfidenceHead(nn.Module):
         plddt_ca = plddt_per_atom.gather(1, rep_idx_m)
 
         # PAE
-        pae_logits = self.pae_head(self.pae_ln(pair.float()).to(pair.dtype))
+        pae_logits = self.pae_head(self.pae_ln(pair))
         pae = _categorical_mean(pae_logits, start=0.0, end=32.0).detach()
 
         # PDE
-        pde_logits = self.pde_head(self.pde_ln(pair.float()).to(pair.dtype))
+        pde_logits = self.pde_head(self.pde_ln(pair))
         pde = _categorical_mean(pde_logits, start=0.0, end=32.0).detach()
 
         # Resolved (per-atom binary).
-        s_at_atoms_res = self.resolved_ln(s_at_atoms.float()).to(s_at_atoms.dtype)
+        s_at_atoms_res = self.resolved_ln(s_at_atoms)
         w_res = self.resolved_weight[intra_idx]
         resolved_logits = torch.einsum("...c,...cb->...b", s_at_atoms_res, w_res)
 
@@ -2889,7 +2890,7 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
             if refined_lm_z is not None:
                 z_inject_pair = z_inject_pair + refined_lm_z.to(z_inject_pair.dtype)
 
-            injected_pair = self.parcae_input_norm(z_inject_pair.float()).to(z_inject_pair.dtype)
+            injected_pair = self.parcae_input_norm(z_inject_pair)
             z = a * z + F.linear(injected_pair.to(z.dtype), b_mat)
             z = self.folding_trunk(z, pair_attention_mask=pair_mask)
 
