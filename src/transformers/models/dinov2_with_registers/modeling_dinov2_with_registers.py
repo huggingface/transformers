@@ -403,6 +403,7 @@ class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
             pre-training.
         """
+        pixel_values = pixel_values.to(self.embeddings.patch_embeddings.projection.weight.dtype)
         embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         attention_mask = create_bidirectional_mask(
             config=self.config,

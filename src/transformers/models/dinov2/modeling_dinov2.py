@@ -119,20 +119,29 @@ class Dinov2Embeddings(nn.Module):
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
-        batch_size, _, height, width = pixel_values.shape
-        target_dtype = self.patch_embeddings.projection.weight.dtype
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        bool_masked_pos: torch.BoolTensor | None = None,
+    ) -> torch.Tensor:
+        _, _, height, width = pixel_values.shape
+        embeddings = self.patch_embeddings(pixel_values)
+        batch_size, seq_len, _ = embeddings.size()
 
-        if bool_masked_pos is not None and self.mask_token is not None:
-            embeddings = torch.where(
-                bool_masked_pos.unsqueeze(-1), self.mask_token.to(embeddings.dtype).unsqueeze(0), embeddings
-            )
+        if bool_masked_pos is not None:
+            mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
+            # replace the masked visual tokens by mask_tokens
+            mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
+            embeddings = embeddings * (1 - mask) + mask_tokens * mask
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
-        embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+
+        if self.position_embeddings is not None:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+
         embeddings = self.dropout(embeddings)
+
         return embeddings
 
 
@@ -389,6 +398,7 @@ class Dinov2Model(Dinov2PreTrainedModel):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
             pre-training.
         """
+        pixel_values = pixel_values.to(self.embeddings.patch_embeddings.projection.weight.dtype)
         embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         attention_mask = create_bidirectional_mask(
             config=self.config,
@@ -508,6 +518,7 @@ class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
         [1, 768, 16, 16]
         ```"""
         kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
+        pixel_values = pixel_values.to(self.embeddings.patch_embeddings.projection.weight.dtype)
         embedding_output = self.embeddings(pixel_values)
         output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
         hidden_states = output.hidden_states
