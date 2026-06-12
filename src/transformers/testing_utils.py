@@ -3447,7 +3447,7 @@ def patch_psutil_cpu_memory(limit_bytes: int):
         mem = _original_virtual_memory()
         total = min(mem.total, limit_bytes)
         available = min(mem.available, limit_bytes)
-        used = total - available
+        used = min(mem.used, total)
         percent = 100 * used / total if total > 0 else 0.0
         return mem._replace(total=total, available=available, used=used, percent=percent)
 
