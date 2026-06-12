@@ -23,11 +23,11 @@ from ...utils import auto_docstring
 @strict
 class ESMCConfig(PreTrainedConfig):
     r"""
-    d_model (`int`, *optional*, defaults to 2560):
+    hidden_size (`int`, *optional*, defaults to 2560):
         Dimensionality of the encoder layers and the pooler layer.
-    n_heads (`int`, *optional*, defaults to 40):
+    num_attention_heads (`int`, *optional*, defaults to 40):
         Number of attention heads for each attention layer in the Transformer encoder.
-    n_layers (`int`, *optional*, defaults to 80):
+    num_hidden_layers (`int`, *optional*, defaults to 80):
         Number of hidden layers in the Transformer encoder.
     mask_token_id (`int`, *optional*, defaults to 32):
         Index of the mask token in the vocabulary (``"<mask>"``), used for masked language modelling.
@@ -53,11 +53,16 @@ class ESMCConfig(PreTrainedConfig):
     """
 
     model_type = "esmc"
+    attribute_map = {
+        "d_model": "hidden_size",
+        "n_heads": "num_attention_heads",
+        "n_layers": "num_hidden_layers",
+    }
 
     vocab_size: int | None = 64
-    d_model: int | None = 2560
-    n_heads: int | None = 40
-    n_layers: int | None = 80
+    hidden_size: int | None = 2560
+    num_attention_heads: int | None = 40
+    num_hidden_layers: int | None = 80
     pad_token_id: int | None = 1
     mask_token_id: int | None = 32
     initializer_range: float | None = 0.02

@@ -1926,9 +1926,7 @@ class ESMFold2LanguageModelShim(nn.Module):
         super().__init__()
 
         self.base_z_mlp = nn.Sequential(ESMFold2SingleToPair(d_z, d_z, d_z), ESMFold2LayerNorm(d_z))
-        self.base_z_linear = nn.Sequential(
-            ESMFold2LayerNorm(d_model), nn.Linear(d_model, d_z, bias=False)
-        )
+        self.base_z_linear = nn.Sequential(ESMFold2LayerNorm(d_model), nn.Linear(d_model, d_z, bias=False))
         self.base_z_combine = nn.Parameter(torch.zeros(num_layers + 1))
 
     def forward(self, hidden_states: Tensor) -> Tensor:
@@ -2311,9 +2309,7 @@ class ESMFold2MSAPairWeightedAveraging(nn.Module):
         self.n_heads = n_heads
         self.head_width = head_width
         self.norm_single = ESMFold2LayerNorm(d_msa)
-        self.compute_bias = nn.Sequential(
-            ESMFold2LayerNorm(d_pair), nn.Linear(d_pair, n_heads, bias=False)
-        )
+        self.compute_bias = nn.Sequential(ESMFold2LayerNorm(d_pair), nn.Linear(d_pair, n_heads, bias=False))
         self.Wv = nn.Linear(d_msa, n_heads * head_width, bias=False)
         self.Wgate = nn.Linear(d_msa, n_heads * head_width, bias=False)
         self.Wout = nn.Linear(n_heads * head_width, d_msa, bias=False)
