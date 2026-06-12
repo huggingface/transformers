@@ -12,18 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for MistralConverter: tekken.json parsing and HuggingFace tokenizer conversion."""
+"""Tests for Mistral tekken tokenizer detection, conversion, and save utilities."""
 
 import base64
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
-from transformers.integrations.mistral import MistralConverter
+from transformers import AutoTokenizer
+from transformers.integrations.mistral import (
+    MistralConverter,
+    convert_tekken_tokenizer,
+    resolve_mistral_format,
+    save_as_tekken,
+)
+from transformers.integrations.mistral.tokenizer import convert_tekken_image_processor
 from transformers.testing_utils import require_mistral_common, slow
 from transformers.utils.import_utils import is_mistral_common_available
 
@@ -128,6 +136,30 @@ def _build_fake_tekken_json(
     return output_path
 
 
+class TestResolveMistralFormat(unittest.TestCase):
+    def test_false_returns_false_none(self):
+        result = resolve_mistral_format("fake/path", mistral_format=False)
+        self.assertEqual(result, (False, None))
+
+    def test_none_without_tekken_file_returns_false(self):
+        # Use a real local directory that has no tekken.json
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            use, path = resolve_mistral_format(tmp_dir, mistral_format=None)
+            self.assertFalse(use)
+
+    @patch("transformers.integrations.mistral.tokenizer.is_mistral_common_available", return_value=True)
+    def test_true_without_tekken_file_raises_helpful_error(self, _mock):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(OSError) as ctx:
+                resolve_mistral_format(tmp_dir, mistral_format=True)
+            self.assertIn("mistral_format=False", str(ctx.exception))
+
+    @patch("transformers.integrations.mistral.tokenizer.is_mistral_common_available", return_value=False)
+    def test_true_without_mistral_common_raises(self, _mock):
+        with self.assertRaises(ImportError):
+            resolve_mistral_format("fake/path", mistral_format=True)
+
+
 class TestMistralConverter(unittest.TestCase):
     """Unit tests for MistralConverter using a synthetic tekken.json."""
 
@@ -145,6 +177,7 @@ class TestMistralConverter(unittest.TestCase):
     def test_from_tekken_file_sets_precomputed_fields(self):
         self.assertIsNotNone(self._converter._precomputed_vocab)
         self.assertIsNotNone(self._converter._precomputed_merges)
+        self.assertIsNotNone(self._converter._tekken_metadata)
 
     def test_converted_produces_working_tokenizer(self):
         ids = self._tokenizer.encode("a b c").ids
@@ -164,6 +197,19 @@ class TestMistralConverter(unittest.TestCase):
 
     def test_vocab_size(self):
         self.assertEqual(self._tokenizer.get_vocab_size(), _FULL_BYTE_VOCAB)
+
+    def test_tekken_metadata_content(self):
+        metadata = self._converter.tekken_metadata
+        self.assertEqual(metadata["version"], 1)
+        self.assertEqual(metadata["type"], "tekken")
+        self.assertIn("config", metadata)
+        self.assertEqual(metadata["config"]["version"], "v3")
+        self.assertNotIn("vocab", metadata, "Metadata should not contain the vocab itself")
+
+    def test_tekken_metadata_raises_without_from_file(self):
+        converter = MistralConverter()
+        with self.assertRaises(AttributeError):
+            _ = converter.tekken_metadata
 
     def test_special_tokens_assigned_by_rank_not_list_order(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -197,6 +243,185 @@ class TestMistralConverter(unittest.TestCase):
                     entry["rank"],
                     f"Special token {entry['token_str']!r} got wrong id",
                 )
+
+
+class TestConvertTekkenTokenizer(unittest.TestCase):
+    def test_basic_conversion(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = _build_fake_tekken_json(tmp_path)
+
+            tokenizer = convert_tekken_tokenizer(str(tekken_path))
+            self.assertIsNotNone(tokenizer)
+            self.assertEqual(tokenizer.vocab_size, _FULL_BYTE_VOCAB)
+
+    def test_tekken_metadata_preserved(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = _build_fake_tekken_json(tmp_path)
+
+            tokenizer = convert_tekken_tokenizer(str(tekken_path))
+            metadata = tokenizer.init_kwargs.get("tekken_metadata")
+            self.assertIsNotNone(metadata, "tekken_metadata not stored in init_kwargs")
+            self.assertEqual(metadata["config"]["version"], "v3")
+            self.assertEqual(metadata["version"], 1)
+            self.assertEqual(metadata["type"], "tekken")
+            self.assertIn("pattern", metadata["config"])
+
+    def test_special_tokens_set(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = _build_fake_tekken_json(tmp_path)
+
+            tokenizer = convert_tekken_tokenizer(str(tekken_path))
+            self.assertEqual(tokenizer.bos_token, "<s>")
+            self.assertEqual(tokenizer.eos_token, "</s>")
+            self.assertEqual(tokenizer.pad_token, "<pad>")
+            self.assertEqual(tokenizer.unk_token, "<unk>")
+
+
+class TestSaveAsTekken(unittest.TestCase):
+    def test_missing_metadata_raises(self):
+        tokenizer = MagicMock()
+        tokenizer.tekken_metadata = None
+        tokenizer.init_kwargs = {}
+
+        with self.assertRaisesRegex(ValueError, "tekken_metadata"):
+            save_as_tekken(tokenizer, "/tmp/opencode/test_save")
+
+    def test_roundtrip_tekken_to_hf_to_tekken(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_dir = tmp_path / "tekken"
+            tekken_dir.mkdir()
+            hf_dir = tmp_path / "hf"
+            hf_dir.mkdir()
+            reconstructed_dir = tmp_path / "reconstructed"
+            reconstructed_dir.mkdir()
+
+            tekken_path = _build_fake_tekken_json(tekken_dir)
+            original_tok = convert_tekken_tokenizer(str(tekken_path))
+            original_tok.save_pretrained(str(hf_dir))
+
+            reloaded_tok = AutoTokenizer.from_pretrained(str(hf_dir))
+            save_as_tekken(reloaded_tok, reconstructed_dir)
+
+            self.assertTrue((reconstructed_dir / "tekken.json").exists())
+
+            with open(tekken_path, encoding="utf-8") as f:
+                original = json.load(f)
+            with open(reconstructed_dir / "tekken.json", encoding="utf-8") as f:
+                reconstructed = json.load(f)
+
+            self.assertEqual(original, reconstructed)
+
+    def test_multimodal_metadata_preserved(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            image_config = {
+                "image_patch_size": 16,
+                "max_image_size": 1024,
+                "spatial_merge_size": 2,
+            }
+            tekken_path = _build_fake_tekken_json(tmp_path, image_config=image_config)
+
+            tok = convert_tekken_tokenizer(str(tekken_path))
+            metadata = tok.init_kwargs["tekken_metadata"]
+            self.assertEqual(metadata["image"], image_config)
+
+            reconstructed_dir = tmp_path / "reconstructed"
+            save_as_tekken(tok, reconstructed_dir)
+
+            with open(reconstructed_dir / "tekken.json", encoding="utf-8") as f:
+                reconstructed = json.load(f)
+
+            self.assertEqual(reconstructed["image"], image_config)
+
+    def test_creates_output_directory(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = _build_fake_tekken_json(tmp_path)
+            tok = convert_tekken_tokenizer(str(tekken_path))
+
+            new_dir = tmp_path / "nonexistent" / "nested"
+            output_path = save_as_tekken(tok, new_dir)
+            self.assertTrue(output_path.exists())
+            self.assertEqual(output_path.name, "tekken.json")
+
+
+class TestConvertTekkenImageProcessor(unittest.TestCase):
+    def test_missing_vision_encoder_raises(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = _build_fake_tekken_json(tmp_path)
+            params_path = tmp_path / "params.json"
+            with open(params_path, "w", encoding="utf-8") as f:
+                json.dump({"dim": 128, "n_heads": 2}, f)
+
+            with self.assertRaisesRegex(ValueError, "vision_encoder"):
+                convert_tekken_image_processor(str(tekken_path), str(params_path))
+
+    def _make_params(self, tmp_path, vision_encoder, **extra):
+        params_path = tmp_path / "params.json"
+        data = {**extra, "vision_encoder": vision_encoder}
+        with open(params_path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        return params_path
+
+    def test_valid_processor_creation(self):
+        from transformers.models.pixtral.image_processing_pixtral import PixtralImageProcessor
+        from transformers.models.pixtral.processing_pixtral import PixtralProcessor
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = _build_fake_tekken_json(tmp_path)
+            params_path = self._make_params(
+                tmp_path,
+                vision_encoder={"patch_size": 16, "image_size": 1024, "spatial_merge_size": 2},
+            )
+
+            processor = convert_tekken_image_processor(str(tekken_path), str(params_path))
+
+            # Processor type and sub-components
+            self.assertIsInstance(processor, PixtralProcessor)
+            self.assertIsInstance(processor.image_processor, PixtralImageProcessor)
+            self.assertIsNotNone(processor.tokenizer)
+
+            # Vision parameters forwarded correctly
+            self.assertEqual(processor.patch_size, 16)
+            self.assertEqual(processor.spatial_merge_size, 2)
+            self.assertEqual(processor.image_processor.patch_size, 16)
+            self.assertEqual(processor.image_processor.size, {"longest_edge": 1024})
+
+            # Hardcoded image tokens
+            self.assertEqual(processor.image_token, "[IMG]")
+            self.assertEqual(processor.image_break_token, "[IMG_BREAK]")
+            self.assertEqual(processor.image_end_token, "[IMG_END]")
+
+    def test_max_image_size_overrides_image_size(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = _build_fake_tekken_json(tmp_path)
+            params_path = self._make_params(
+                tmp_path,
+                vision_encoder={"patch_size": 16, "image_size": 512, "max_image_size": 2048},
+            )
+
+            processor = convert_tekken_image_processor(str(tekken_path), str(params_path))
+            self.assertEqual(processor.image_processor.size, {"longest_edge": 2048})
+
+    def test_chat_template_forwarded(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = _build_fake_tekken_json(tmp_path)
+            params_path = self._make_params(
+                tmp_path,
+                vision_encoder={"patch_size": 16, "image_size": 1024},
+            )
+            template = "{% for m in messages %}{{ m.content }}{% endfor %}"
+
+            processor = convert_tekken_image_processor(str(tekken_path), str(params_path), chat_template=template)
+            self.assertEqual(processor.chat_template, template)
 
 
 @require_mistral_common
@@ -399,6 +624,33 @@ class TestMistralConverterIntegration(unittest.TestCase):
                 hf_decoded = hf_tokenizer.decode([token_id], skip_special_tokens=True)
                 mc_decoded = mc_tokenizer.decode([token_id], skip_special_tokens=True)
                 self.assertEqual(hf_decoded, mc_decoded, f"Per-token decode mismatch for id={token_id} in {text!r}")
+
+
+@slow
+class TestSaveAsTekkenIntegration(unittest.TestCase):
+    """Round-trip a real tekken.json (with non-null token_str entries) through HF and back."""
+
+    def test_real_tekken_roundtrip_preserves_vocab_and_specials(self) -> None:
+        tekken_path = hf_hub_download(_INTEGRATION_REPOS[0], "tekken.json")
+        with open(tekken_path, encoding="utf-8") as f:
+            original = json.load(f)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            hf_dir = tmp_path / "hf"
+            reconstructed_dir = tmp_path / "reconstructed"
+
+            tok = convert_tekken_tokenizer(tekken_path)
+            tok.save_pretrained(str(hf_dir))
+            reloaded = AutoTokenizer.from_pretrained(str(hf_dir))
+            save_as_tekken(reloaded, reconstructed_dir)
+
+            with open(reconstructed_dir / "tekken.json", encoding="utf-8") as f:
+                reconstructed = json.load(f)
+
+        self.assertEqual(original["vocab"], reconstructed["vocab"])
+        self.assertEqual(original["special_tokens"], reconstructed["special_tokens"])
+        self.assertEqual(original.get("config"), reconstructed.get("config"))
 
 
 if __name__ == "__main__":

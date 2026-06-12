@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Mistral native format integration: tokenizer conversion utilities."""
+"""Mistral native format integration: config, weight, and tokenizer conversion."""
 
 from typing import TYPE_CHECKING
 
@@ -20,11 +20,23 @@ from ...utils import _LazyModule
 
 
 _import_structure = {
-    "tokenizer": ["MistralConverter"],
+    "tokenizer": [
+        "MistralConverter",
+        "convert_tekken_image_processor",
+        "convert_tekken_tokenizer",
+        "resolve_mistral_format",
+        "save_as_tekken",
+    ],
 }
 
 if TYPE_CHECKING:
-    from .tokenizer import MistralConverter
+    from .tokenizer import (
+        MistralConverter,
+        convert_tekken_image_processor,
+        convert_tekken_tokenizer,
+        resolve_mistral_format,
+        save_as_tekken,
+    )
 else:
     import sys
 

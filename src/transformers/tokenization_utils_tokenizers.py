@@ -205,6 +205,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
             converter = MistralConverter.from_tekken_file(vocab_file)
             local_kwargs["tokenizer_object"] = converter.converted()
+            local_kwargs["tekken_metadata"] = converter.tekken_metadata
             return local_kwargs
 
         # SentencePiece model (with TikToken fallback)
