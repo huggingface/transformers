@@ -201,11 +201,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         # Tekken converter (Mistral)
         if isinstance(vocab_file, str) and vocab_file.endswith("tekken.json") and os.path.isfile(vocab_file):
-            from .convert_slow_tokenizer import MistralConverter
+            from .integrations.mistral.tokenizer import MistralConverter
 
-            local_kwargs["vocab"], local_kwargs["merges"] = MistralConverter(
-                vocab_file=vocab_file
-            ).extract_vocab_merges_from_model(vocab_file)
+            converter = MistralConverter.from_tekken_file(vocab_file)
+            local_kwargs["tokenizer_object"] = converter.converted()
             return local_kwargs
 
         # SentencePiece model (with TikToken fallback)
