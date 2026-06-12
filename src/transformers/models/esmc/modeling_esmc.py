@@ -28,10 +28,11 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
 from ... import initialization as init
+from ...integrations import use_kernel_func_from_hub
 from ...masking_utils import create_bidirectional_mask  # type: ignore[import]
 from ...modeling_outputs import (  # type: ignore[import]
+    BaseModelOutput,
     MaskedLMOutput,
-    ModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
@@ -47,28 +48,6 @@ from .configuration_esmc import ESMCConfig
 
 
 @dataclass
-class ESMCOutput(ModelOutput):
-    """
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, d_model)`):
-            Sequence of hidden states at the output of the last layer, after layer normalisation.
-        hidden_states (`torch.FloatTensor`, *optional*):
-            Stacked hidden states for all encoder layers.
-            Shape ``(n_layers, batch_size, sequence_length, d_model)``.
-            Returned when ``output_hidden_states=True``.
-        attentions (`tuple(torch.FloatTensor)`, *optional*):
-            Per-layer attention weights of shape
-            ``(batch_size, num_heads, sequence_length, sequence_length)``.
-            Returned when ``output_attentions=True``.  Not available on the
-            ``flash_attention_2`` path.
-    """
-
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: torch.FloatTensor | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-
-
-@dataclass
 class ESMCMaskedLMOutput(MaskedLMOutput):
     """
     Args:
@@ -78,8 +57,9 @@ class ESMCMaskedLMOutput(MaskedLMOutput):
             Prediction scores of the language modelling head.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, d_model)`):
             Final hidden states after layer normalisation.
-        hidden_states (`torch.FloatTensor`, *optional*):
-            Stacked hidden states. Shape ``(n_layers, batch_size, sequence_length, d_model)``.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+            Tuple of per-layer hidden states, each of shape ``(batch_size, sequence_length, d_model)``
+            (the embedding output plus one per encoder layer). Returned when ``output_hidden_states=True``.
         attentions (`tuple(torch.FloatTensor)`, *optional*):
             Per-layer attention weights of shape
             ``(batch_size, num_heads, sequence_length, sequence_length)``.
@@ -89,7 +69,7 @@ class ESMCMaskedLMOutput(MaskedLMOutput):
     loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
     last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
@@ -103,8 +83,9 @@ class ESMCTokenClassifierOutput(TokenClassifierOutput):
             Classification scores (before SoftMax).
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, d_model)`):
             Final hidden states after layer normalisation.
-        hidden_states (`torch.FloatTensor`, *optional*):
-            Stacked hidden states. Shape ``(n_layers, batch_size, sequence_length, d_model)``.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+            Tuple of per-layer hidden states, each of shape ``(batch_size, sequence_length, d_model)``
+            (the embedding output plus one per encoder layer). Returned when ``output_hidden_states=True``.
         attentions (`tuple(torch.FloatTensor)`, *optional*):
             Per-layer attention weights of shape
             ``(batch_size, num_heads, sequence_length, sequence_length)``.
@@ -114,7 +95,7 @@ class ESMCTokenClassifierOutput(TokenClassifierOutput):
     loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
     last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
@@ -128,8 +109,9 @@ class ESMCSequenceClassifierOutput(SequenceClassifierOutput):
             Classification scores (before SoftMax).
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, d_model)`):
             Final hidden states after layer normalisation.
-        hidden_states (`torch.FloatTensor`, *optional*):
-            Stacked hidden states. Shape ``(n_layers, batch_size, sequence_length, d_model)``.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+            Tuple of per-layer hidden states, each of shape ``(batch_size, sequence_length, d_model)``
+            (the embedding output plus one per encoder layer). Returned when ``output_hidden_states=True``.
         attentions (`tuple(torch.FloatTensor)`, *optional*):
             Per-layer attention weights of shape
             ``(batch_size, num_heads, sequence_length, sequence_length)``.
@@ -139,7 +121,7 @@ class ESMCSequenceClassifierOutput(SequenceClassifierOutput):
     loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
     last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
@@ -287,6 +269,32 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -313,26 +321,6 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Apply Rotary Position Embedding to ``q`` and ``k`` in the activation dtype.
-
-    This deliberately differs from the otherwise-identical
-    :func:`~transformers.models.esm.modeling_esm.apply_rotary_pos_emb` (whose
-    ``rotate_half`` it reuses): that helper upcasts ``q``/``k`` to fp32 for the
-    rotation, but the reference ESMC implementation applies RoPE in the
-    activation dtype. Upcasting here would make bf16 inference diverge from the
-    published ESMC numerics — at bf16 it is the single source of fork-vs-port
-    drift, accumulating over the residual stream (~0.3 over 80 layers on
-    ESMC-6B). The rotation is a no-op-difference in fp32 (``q`` is already fp32),
-    so fp32 stays bit-exact. See ``modeling_esm`` for the argument semantics.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
 
 
 # ---------------------------------------------------------------------------
@@ -708,7 +696,7 @@ class ESMCModel(ESMCPreTrainedModel):
         output_hidden_states: bool | None = None,
         output_attentions: bool | None = None,
         return_dict: bool | None = None,
-    ) -> tuple[torch.Tensor, ...] | ESMCOutput:
+    ) -> tuple[torch.Tensor, ...] | BaseModelOutput:
         r"""
         sequence_id (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Integer chain-ID tensor for chain-aware attention masking. Tokens with the same
@@ -785,25 +773,25 @@ class ESMCModel(ESMCPreTrainedModel):
             output_attentions=output_attentions,
         )
 
-        collected_tensor: torch.Tensor | None = (
-            torch.stack(collected, dim=0) if collected else None  # type: ignore[arg-type]
-        )
-        hidden_states_tensor = collected_tensor if output_hidden_states else None
+        # Standard Transformers convention: a tuple of per-layer hidden states (the
+        # live activations collected in the encoder), not a stacked tensor. Consumers
+        # that want a single tensor (e.g. ESMFold2's LM projection) stack it themselves.
+        hidden_states = collected if output_hidden_states else None
 
         if not return_dict:
             return tuple(
                 v
                 for v in [
                     last_hidden_state,
-                    hidden_states_tensor,
+                    hidden_states,
                     attentions,
                 ]
                 if v is not None
             )
 
-        return ESMCOutput(
+        return BaseModelOutput(
             last_hidden_state=last_hidden_state,
-            hidden_states=hidden_states_tensor,
+            hidden_states=hidden_states,
             attentions=attentions,
         )
 
