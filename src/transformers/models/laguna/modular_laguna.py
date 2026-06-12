@@ -24,6 +24,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
+from ...distributed.plan_utils import init_combo_plans
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeModelOutputWithPast

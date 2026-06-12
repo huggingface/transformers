@@ -17,6 +17,7 @@ from typing import Any, Literal
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...distributed.plan_utils import init_combo_plans
 from ...utils import auto_docstring, logging
 from ...utils.type_validators import interval
 
@@ -215,6 +216,7 @@ class Gemma4TextConfig(PreTrainedConfig):
             self.rope_parameters = default_rope_params
 
         super().__post_init__(**kwargs)
+        init_combo_plans(self)
 
     def convert_rope_params_to_dict(self, **kwargs):
         # No need to handle BC for new models, because they have no old-format `rope_scaling`

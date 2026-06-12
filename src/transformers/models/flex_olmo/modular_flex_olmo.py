@@ -18,6 +18,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
+from ...distributed.plan_utils import init_combo_plans
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
@@ -114,6 +115,7 @@ class FlexOlmoConfig(PreTrainedConfig):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
         super().__post_init__(**kwargs)
+        init_combo_plans(self)
 
 
 # FlexOlmo RMS norm reuses Olmo2 RMS norm, which handles low precision slightly differently than the original Olmoe.

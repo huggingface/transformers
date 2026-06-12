@@ -14,6 +14,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...distributed.plan_utils import init_combo_plans
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -112,6 +113,7 @@ class OlmoeConfig(PreTrainedConfig):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
         super().__post_init__(**kwargs)
+        init_combo_plans(self)
 
 
 __all__ = ["OlmoeConfig"]

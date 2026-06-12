@@ -17,6 +17,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
+from ...distributed.plan_utils import init_combo_plans
 from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
     RopeParameters,
@@ -106,6 +107,7 @@ class MellumConfig(Qwen3MoeConfig):
             **kwargs,
             ignore_keys_at_rope_validation={"sliding_attention", "full_attention"},
         )
+        init_combo_plans(self)
 
     def _update_sp_plan(self):
         """Set per-layer SP entries depending on whether the MLP is dense or sparse."""

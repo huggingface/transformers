@@ -30,3 +30,22 @@ def merge_dense_and_ep_plan(dense_plan: dict[str, str], ep_plan: dict[str, str])
             and style in ("moe_tp_gate_up_colwise", "moe_tp_down_rowwise")
         )
     }
+
+
+def init_combo_plans(config) -> None:
+    """
+    Populate ``base_model_tp_ep_plan`` / ``base_model_sp_ep_plan`` on a config instance when unset.
+
+    Skips models that already define explicit combo plans (class or instance level).
+    """
+    ep_plan = config.base_model_ep_plan
+    if not ep_plan:
+        return
+
+    tp_plan = config.base_model_tp_plan
+    sp_plan = config.base_model_sp_plan
+
+    if tp_plan is not None and not config.base_model_tp_ep_plan:
+        config.base_model_tp_ep_plan = merge_dense_and_ep_plan(dict(tp_plan), dict(ep_plan))
+    if sp_plan is not None and not config.base_model_sp_ep_plan:
+        config.base_model_sp_ep_plan = merge_dense_and_ep_plan(dict(sp_plan), dict(ep_plan))

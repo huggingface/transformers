@@ -21,6 +21,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...distributed.plan_utils import init_combo_plans
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 
@@ -472,6 +473,7 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         self.mlp_only_layers = [] if self.mlp_only_layers is None else self.mlp_only_layers
         super().__post_init__(**kwargs)
         self._update_sp_plan()
+        init_combo_plans(self)
 
     def _update_sp_plan(self):
         self.base_model_sp_plan = self.base_model_sp_plan.copy()
