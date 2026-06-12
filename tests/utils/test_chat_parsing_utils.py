@@ -532,6 +532,32 @@ class ChatSchemaParserTest(unittest.TestCase):
             },
         )
 
+    def test_additional_properties_false_filters_extra_keys(self):
+        model_out = {
+            "role": "assistant",
+            "content": "Hello world",
+            "extra_key": "SHOULD_BE_REMOVED",
+        }
+
+        schema = {
+            "type": "object",
+            "properties": {
+                "role": {"const": "assistant"},
+                "content": {"type": "string"},
+            },
+            "additionalProperties": False,
+        }
+
+        parsed = recursive_parse(model_out, schema)
+
+        self.assertEqual(
+            parsed,
+            {
+                "role": "assistant",
+                "content": "Hello world",
+            },
+        )
+
     def test_required_fields_present(self):
         """Test that required fields pass validation when present in the output."""
         schema = {
