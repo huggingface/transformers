@@ -446,6 +446,9 @@ class ContinuousBatchingIOs:
             num_sequences_in_next_batch = self._get_num_sequences(use_padding=use_padding)
             fake_sequences = num_sequences_in_next_batch - self.num_request_in_batch
             cumulative_seqlens_q.extend(repeat(self.total_seqlen_q, fake_sequences))
+            # k will be padded in its own loop to avoid multiple loops
+        else:
+            fake_sequences = 0
 
         # When looping over request is done, we can build the actual tensors. This is faster than modifying the static
         # tensors inside the loop.
@@ -459,8 +462,10 @@ class ContinuousBatchingIOs:
 
         # Those kwargs are either dict of tensors or tensors, so we need to handle both cases
         for layer_type, layer_type_seqlens_k in cumulative_seqlens_k.items():
+            total_seqlen_k = layer_type_seqlens_k[-1]
+            self.total_seqlen_k[layer_type] = total_seqlen_k
+            layer_type_seqlens_k.extend(repeat(total_seqlen_k, fake_sequences))
             self.cumulative_seqlens_k[layer_type][: len(layer_type_seqlens_k)] = to_tensor(layer_type_seqlens_k)
-            self.total_seqlen_k[layer_type] = layer_type_seqlens_k[-1]
 
         # If we are not using the block table, we populate the write indices (and maybe the read indices)
         if not self.use_block_table:
@@ -533,8 +538,6 @@ class ContinuousBatchingIOs:
         # For the attributes that are dict of tensors, we first fill the dict with the actual values
         for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
             kwargs.cu_seq_lens_k[layer_type] = seqlens_k[: num_sequences + 1]
-            if use_padding:
-                kwargs.cu_seq_lens_k[layer_type][self.num_request_in_batch + 1 :] = self.total_seqlen_k[layer_type]
             kwargs.max_seqlen_k[layer_type] = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
             if self.attention_mask is not None:
                 k_len = kv_size if use_padding else self.total_seqlen_k[layer_type]
