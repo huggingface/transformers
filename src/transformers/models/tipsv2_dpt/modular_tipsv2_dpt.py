@@ -24,26 +24,18 @@ from typing_extensions import Unpack
 from ...activations import ACT2FN
 from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbone
 from ...configuration_utils import PreTrainedConfig
-from ...image_processing_backends import TorchvisionBackend
-from ...image_utils import PILImageResampling
 from ...modeling_outputs import DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoConfig
+from ..tipsv2.image_processing_tipsv2 import Tipsv2ImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
 
 @auto_docstring
-class Tipsv2DptImageProcessor(TorchvisionBackend):
-    resample = PILImageResampling.BILINEAR
-    size = {"height": 448, "width": 448}
-    do_resize = True
-    do_rescale = True
-    do_normalize = False
-    do_convert_rgb = True
-
+class Tipsv2DptImageProcessor(Tipsv2ImageProcessor):
     def post_process_depth_estimation(
         self,
         outputs,
