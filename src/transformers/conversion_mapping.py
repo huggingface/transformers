@@ -437,10 +437,18 @@ def _build_checkpoint_conversion_mapping():
         ],
         "minimax_m3_vl": [
             WeightRenaming(source_patterns=r"^language_model\.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model\.model\.", target_patterns="model.language_model."),
             WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
+            WeightRenaming(
+                source_patterns=r"^patch_merge_mlp\.linear_1\.",
+                target_patterns="model.multi_modal_projector.merge_1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^patch_merge_mlp\.linear_2\.",
+                target_patterns="model.multi_modal_projector.merge_2.",
+            ),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
-            WeightRenaming(source_patterns=r"^patch_merge_mlp", target_patterns="model.patch_merge"),
             WeightRenaming(
                 source_patterns=r"\.embeddings\.patch_embedding\.",
                 target_patterns=".embeddings.proj.",
@@ -450,12 +458,12 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns=".vision_model.layers.",
             ),
             WeightRenaming(
-                source_patterns=r"\.block_sparse_moe\.",
-                target_patterns=".mlp.",
+                source_patterns=r"\.language_model\.layers\.(\d+)\.block_sparse_moe\.",
+                target_patterns=r".language_model.layers.\1.mlp.",
             ),
             WeightRenaming(
-                source_patterns=r"\.mlp\.e_score_correction_bias",
-                target_patterns=".mlp.gate.e_score_correction_bias",
+                source_patterns=r"\.language_model\.layers\.(\d+)\.mlp\.e_score_correction_bias",
+                target_patterns=r".language_model.layers.\1.mlp.gate.e_score_correction_bias",
             ),
             WeightRenaming(
                 source_patterns=r"\.self_attn\.index_q_proj\.",

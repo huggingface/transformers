@@ -26,24 +26,6 @@ limitations under the License.
 MiniMax-M3-VL is the vision-language member of the MiniMax-M3 family. It pairs a CLIP-style vision tower (Conv3d patch embedding with 3D rotary position embeddings) with the MiniMax-M3 text backbone, a mixed dense/sparse Mixture-of-Experts decoder that uses SwiGLU-OAI gated experts and a lightning indexer for block-sparse attention.
 
 ## Architecture
-### Mixed dense/sparse MoE decoder
-
-`config.moe_layer_freq[i]` selects layer `i`'s MLP:
-
-* `0` — a dense [`MiniMaxM3VLDenseMLP`] at `dense_intermediate_size`.
-* `1` — a sparse [`MiniMaxM3VLSparseMoeBlock`]: a [`MiniMaxM3VLTopKRouter`] routes the top-`num_experts_per_tok`
-  of `num_local_experts` experts, scaled by `routed_scaling_factor`, with a single shared expert
-  (`n_shared_experts` at `shared_intermediate_size`) running on every token in parallel.
-
-The router scores experts with **`sigmoid`** (vs usually softmax) and adds an auxiliary-loss-free `e_score_correction_bias`
-*before* the top-k argmax, so the bias steers *which* experts are chosen without flowing gradients. The chosen experts' sigmoid weights are then renormalized to sum to 1. Both dense and routed experts use the **SwiGLU-OAI** activation:
-
-```python
-gate = gate.clamp(max=swiglu_limit)
-up = up.clamp(min=-swiglu_limit, max=swiglu_limit)
-out = (up + 1.0) * (gate * torch.sigmoid(gate * swiglu_alpha))  # swiglu_alpha=1.702, swiglu_limit=7.0
-```
-
 ### Block-sparse attention (Lightning Indexer)
 
 Every layer is GQA (`num_key_value_heads = 4`) with per-head QK-norm and **partial RoPE** on the first
@@ -68,10 +50,12 @@ CLIP-style encoder layers carrying a **3D rotary** position embedding (time / he
 
 ## Usage examples
 
+The example below runs the model on a real image loaded with [`~transformers.image_utils.load_image`].
+
 ```python
-from transformers import AutoModelForImageTextToText, AutoProcessor
-from PIL import Image
 import torch
+from transformers import AutoModelForImageTextToText, AutoProcessor
+from transformers.image_utils import load_image
 
 
 model = AutoModelForImageTextToText.from_pretrained(
@@ -79,13 +63,46 @@ model = AutoModelForImageTextToText.from_pretrained(
 )
 processor = AutoProcessor.from_pretrained("MiniMaxAI/MiniMax-M3-preview")
 
-image = Image.new("RGB", (672, 672), (127, 127, 127))
+image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg")
 messages = [
     {
         "role": "user",
         "content": [
             {"type": "image"},
             {"type": "text", "text": "Describe this image briefly."},
+        ],
+    }
+]
+text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+inputs = processor(images=[image], text=text, return_tensors="pt").to(model.device)
+
+generated_ids = model.generate(**inputs, max_new_tokens=32, do_sample=False)
+print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
+```
+
+### Apple example
+
+This example asks the model about an image of apples, again loading a real image with
+[`~transformers.image_utils.load_image`].
+
+```python
+import torch
+from transformers import AutoModelForImageTextToText, AutoProcessor
+from transformers.image_utils import load_image
+
+
+model = AutoModelForImageTextToText.from_pretrained(
+    "MiniMaxAI/MiniMax-M3-preview", dtype=torch.bfloat16, device_map="auto",
+)
+processor = AutoProcessor.from_pretrained("MiniMaxAI/MiniMax-M3-preview")
+
+image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg")
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "text", "text": "How many apples are in this image, and what color are they?"},
         ],
     }
 ]
@@ -112,9 +129,9 @@ print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
 
 [[autodoc]] MiniMaxM3VLProcessor
 
-## MiniMaxM3VLImageProcessorFast
+## MiniMaxM3VLImageProcessor
 
-[[autodoc]] MiniMaxM3VLImageProcessorFast
+[[autodoc]] MiniMaxM3VLImageProcessor
 
 ## MiniMaxM3VLVideoProcessor
 

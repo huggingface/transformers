@@ -30,19 +30,17 @@ from ..auto import AutoConfig
 class MiniMaxM3VLTextConfig(PreTrainedConfig):
     r"""
     dense_intermediate_size (`int`, *optional*, defaults to 12288):
-        Intermediate size of the dense MLP used on layers where ``moe_layer_freq[i] == 0``.
+        Intermediate size of the dense MLP used on layers whose `mlp_layer_types` entry is `"dense"`.
     shared_intermediate_size (`int`, *optional*, defaults to 3072):
         Intermediate size of a single shared expert in the MoE layers.
-    use_routing_bias (`bool`, *optional*, defaults to `True`):
-        Whether the MoE router adds a learned per-expert bias before top-k selection.
     rotary_dim (`int`, *optional*, defaults to 64):
         Number of head channels rotated by RoPE; the remaining channels are passed through unchanged.
     swiglu_alpha (`float`, *optional*, defaults to 1.702):
         Sigmoid gain of the SwiGLU-OAI activation.
     swiglu_limit (`float`, *optional*, defaults to 7.0):
         Clamp bound applied to the gate and up projections of the SwiGLU-OAI activation.
-    moe_layer_freq (`list[int]`, *optional*):
-        Per-layer flags (`0`/`1`) selecting a dense MLP (`0`) or a sparse MoE block (`1`).
+    mlp_layer_types (`list[str]`, *optional*):
+        Per-layer MLP selector: `"sparse"` for a MoE block, `"dense"` for a dense MLP.
     index_n_heads (`int`, *optional*, defaults to 4):
         Number of heads in the lightning indexer's dot-product scoring branch.
     index_head_dim (`int`, *optional*, defaults to 128):
@@ -53,8 +51,6 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
         Number of top-scoring key blocks each query may attend to.
     index_local_blocks (`int`, *optional*, defaults to 1):
         Number of key blocks immediately preceding the query always kept visible / attended to.
-    num_mtp_modules (`int`, *optional*, defaults to 0):
-        Number of multi-token-prediction modules in the checkpoint; ignored at inference.
     """
 
     model_type = "minimax_m3_vl_text"
@@ -112,26 +108,25 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
     }
     dense_intermediate_size: int = 12288
     shared_intermediate_size: int = 3072
-    use_routing_bias: bool = True
     routed_scaling_factor: float = 2.0
     rotary_dim: int = 64
     swiglu_alpha: float = 1.702
     swiglu_limit: float = 7.0
-    moe_layer_freq: list[int] | None = None
+    mlp_layer_types: list[str] | None = None
     index_n_heads: int = 4
     index_head_dim: int = 128
     index_block_size: int = 128
     index_topk_blocks: int = 16
     index_local_blocks: int = 1
     layer_types: list[str] | None = None
-    num_mtp_modules: int = 0
 
     def __post_init__(self, **kwargs):
         # Older checkpoints ship the lightning-indexer hyperparameters as a nested
-        # ``sparse_attention_config`` dict; fold it into the flat ``index_*`` fields
-        # (and derive ``layer_types`` from its per-layer frequency) before the strict
+        # `sparse_attention_config` dict; fold it into the flat `index_*` fields
+        # (and derive `layer_types` from its per-layer frequency) before the strict
         # parent init runs, so model code only ever reads flat config attributes.
         sparse_cfg = kwargs.pop("sparse_attention_config", None) or {}
+        moe_layer_freq = kwargs.pop("moe_layer_freq", None)
         super().__post_init__(**kwargs)
 
         for flat, legacy in {
@@ -144,9 +139,9 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
             if legacy in sparse_cfg:
                 setattr(self, flat, sparse_cfg[legacy])
 
-        # ``layer_types`` is the canonical per-layer attention dispatch: it tells
-        # ``DynamicCache(config=...)`` which layers want the sparse cache and tells
-        # ``MiniMaxM3VLAttention`` which layers build a sparse Lightning Indexer.
+        # `layer_types` is the canonical per-layer attention dispatch: it tells
+        # `DynamicCache(config=...)` which layers want the sparse cache and tells
+        # `MiniMaxM3VLAttention` which layers build a sparse Lightning Indexer.
         if self.layer_types is None and "sparse_attention_freq" in sparse_cfg:
             self.layer_types = [
                 "minimax_m3_sparse" if f else "full_attention" for f in sparse_cfg["sparse_attention_freq"]
@@ -154,17 +149,23 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
         if self.layer_types is None:
             self.layer_types = ["full_attention"] * self.num_hidden_layers
 
+        if self.mlp_layer_types is None and moe_layer_freq is not None:
+            self.mlp_layer_types = ["sparse" if f else "dense" for f in moe_layer_freq]
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = ["sparse"] * self.num_hidden_layers
+
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
 @strict
 class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     r"""
-    rope_theta (`float`, *optional*, defaults to 10000.0):
-        Base period of the vision tower's 3D rotary position embedding.
+    rope_parameters (`RopeParameters`, *optional*):
+        Standard RoPE configuration for the vision tower's 3D rotary position embedding.
     """
 
     model_type = "minimax_m3_vl_vision"
     base_config_key = "vision_config"
+    default_theta = 10000.0
 
     hidden_size: int = 1280
     intermediate_size: int = 5120
@@ -178,7 +179,7 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     hidden_act: str = "gelu"
     layer_norm_eps: float = 1e-05
     attention_dropout: float = 0.0
-    rope_theta: float = 10000.0
+    rope_parameters: RopeParameters | dict | None = None
     initializer_range: float = 0.02
 
 

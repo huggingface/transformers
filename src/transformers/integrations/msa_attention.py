@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import torch
-import torch.nn.functional as F
 
 from ..utils import logging
 from .sdpa_attention import sdpa_attention_forward
@@ -20,32 +19,42 @@ from .sdpa_attention import sdpa_attention_forward
 
 logger = logging.get_logger(__name__)
 
-# `sparse_atten_func` only compiles for these per-query block size.
+# `sparse_atten_func` only compiles for these per-query block counts.
 MSA_SUPPORTED_TOPK = (4, 8, 16, 32)
+# `SparseK2qCsrBuilderSm100` only supports a 128-key block.
+MSA_SUPPORTED_BLOCK_SIZE = 128
+# SM100 / Blackwell head_dim 128 kernel.
+MSA_SUPPORTED_HEAD_DIM = 128
 
-_MSA_KERNELS: dict[str, object] = {}
+_MSA_KERNEL = None
 
 
-def _round_topk(num_selected: int) -> int | None:
-    return next((t for t in MSA_SUPPORTED_TOPK if t >= num_selected), None)
+def load_and_register_msa_kernel(attn_implementation: str):
+    """Load the MSA hub kernel once and verify the expected callables are present.
 
-
-def _get_msa_kernel(attn_implementation: str):
-    """Lazily load (and cache) the MSA kernel from an ``attn_implementation`` string.
-
-    The string may carry a ``paged|`` prefix and/or an ``@<revision>`` pin (e.g.
-    ``kernels-staging/msa@v0``); the build currently lives on the repo's ``v0`` branch.
+    The ``attn_implementation`` string may carry a ``paged|`` prefix and/or an ``@<revision>`` pin
+    (e.g. ``kernels-staging/msa@v0``); the build currently lives on the repo's ``v0`` branch. The
+    loaded module is cached in a module-level global so registration happens once, not per call.
     """
+    global _MSA_KERNEL
+    if _MSA_KERNEL is not None:
+        return _MSA_KERNEL
+
+    from .hub_kernels import get_kernel
+
     repo_id = attn_implementation.split("|")[-1]
     repo_id, _, rev = repo_id.partition("@")
-    cache_key = f"{repo_id}@{rev}" if rev else repo_id
-    if cache_key not in _MSA_KERNELS:
-        from .hub_kernels import get_kernel
+    kernel = get_kernel(repo_id, revision=rev or None, version=None if rev else 0, allow_all_kernels=True)
 
-        _MSA_KERNELS[cache_key] = get_kernel(
-            repo_id, revision=rev or None, version=None if rev else 0, allow_all_kernels=True
-        )
-    return _MSA_KERNELS[cache_key]
+    for fn_name in ("sparse_atten_func", "build_k2q_csr"):
+        if not callable(getattr(kernel, fn_name, None)):
+            raise ImportError(
+                f"The MSA kernel loaded from `{repo_id}` does not expose a callable `{fn_name}`. "
+                "Make sure you request a compatible build, e.g. `kernels-staging/msa@v0`."
+            )
+
+    _MSA_KERNEL = kernel
+    return _MSA_KERNEL
 
 
 @torch.library.custom_op("transformers_msa::sparse_atten", mutates_args=())
@@ -73,7 +82,7 @@ def _msa_sparse_atten_op(
     but it never escapes this op (only the fixed-shape ``[total_q, Hq, D]`` attention output does),
     so the fake/meta impl below is exact. The op is functional (no input mutation).
     """
-    msa = _get_msa_kernel(impl)
+    msa = load_and_register_msa_kernel(impl)
     # CuTe-DSL kernel launches on the ambient ``current_device`` with no internal guard; pin context
     # to the tensors' device so device_map (mixed-GPU) layouts don't reference the wrong context.
     with torch.cuda.device(q.device):
@@ -107,50 +116,63 @@ def _msa_sparse_atten_op(
 
 @_msa_sparse_atten_op.register_fake
 def _msa_sparse_atten_fake(
-    q, k, v, q2k, cu_seqlens_q, cu_seqlens_k, topk, block_size, total_k,
-    max_seqlen_q, max_seqlen_k, qheads_per_kv, scaling, impl,
+    q,
+    k,
+    v,
+    q2k,
+    cu_seqlens_q,
+    cu_seqlens_k,
+    topk,
+    block_size,
+    total_k,
+    max_seqlen_q,
+    max_seqlen_k,
+    qheads_per_kv,
+    scaling,
+    impl,
 ):
     # Output matches the query varlen layout [total_q, Hq, head_dim].
     return torch.empty_like(q)
 
 
-def _can_run_kernel(query: torch.Tensor, block_indices: torch.Tensor | None, block_size: int) -> bool:
-    """Gate the bf16 varlen CSR kernel (SM100, head_dim 128, blk_kv 128, supported topK).
+def _validate_msa_init(module, query: torch.Tensor, dropout: float) -> None:
+    """Validate kernel capability, dropout and configured topk once per attention module.
 
-    Serves both prefill (q_len > 1) and single-token decode (q_len == 1) — decode is just a
-    varlen call with one query slot. The attention op is a sub-millisecond slice of each step,
-    so there's no context-length threshold: whenever the kernel is supported, it runs.
+    Mirrors the flash-attention integration, which checks capability/dropout at model init rather
+    than on every forward. The check is cached on the module so the hot path never re-runs it.
+
+    There is no SDPA fallback: a sparse layer either runs the MSA kernel or this raises. Serves both
+    prefill (q_len > 1) and single-token decode (q_len == 1) -- decode is just a varlen call with one
+    query slot, so there is no context-length threshold.
     """
-    if block_indices is None or query.device.type != "cuda":
-        return False
-    if torch.cuda.get_device_capability(query.device)[0] != 10:  # SM100 / Blackwell only
-        return False
-    if query.shape[-1] != 128:  # head_dim 128 only
-        return False
-    if block_size != 128:  # SparseK2qCsrBuilderSm100 only supports blk_kv == 128
-        return False
-    return _round_topk(block_indices.shape[-1]) is not None
-
-
-def _is_padded_cache(cache_position: torch.Tensor | None, k_len: int) -> bool:
-    """Whether the KV buffer is longer than the valid region (a padded StaticCache).
-
-    Forces a device->host sync, so it is only ever called on the bsz>1 branch — the bsz==1 fast
-    path (the cudagraph target) short-circuits before this and stays sync-free.
-    """
-    if cache_position is None:
-        return False
-    return int(cache_position[-1]) + 1 < k_len
+    if query.device.type != "cuda" or torch.cuda.get_device_capability(query.device)[0] != 10:
+        raise RuntimeError(
+            "MSA block-sparse attention requires an SM100 / Blackwell CUDA device. "
+            "Select a different `attn_implementation` on unsupported hardware."
+        )
+    if query.shape[-1] != MSA_SUPPORTED_HEAD_DIM:
+        raise ValueError(f"MSA block-sparse attention only supports head_dim {MSA_SUPPORTED_HEAD_DIM}.")
+    if module.indexer.block_size != MSA_SUPPORTED_BLOCK_SIZE:
+        raise ValueError(f"MSA block-sparse attention only supports block_size {MSA_SUPPORTED_BLOCK_SIZE}.")
+    if dropout != 0.0:
+        raise ValueError("MSA block-sparse attention does not support attention dropout; set `attention_dropout=0`.")
+    topk = module.indexer.topk_blocks
+    if topk not in MSA_SUPPORTED_TOPK:
+        raise ValueError(
+            f"MSA block-sparse attention only supports topk in {MSA_SUPPORTED_TOPK}, got `{topk}`. "
+            "Set `index_topk_blocks` to a supported value."
+        )
 
 
 def _sparse_attention(module, query, key, value, scaling, block_indices, block_size, cache_position):
     bsz, num_q_heads, q_len, head_dim = query.shape
     num_kv_heads, k_len = key.shape[1], key.shape[2]
     qheads_per_kv = num_q_heads // num_kv_heads
-    num_selected = block_indices.shape[-1]
-    topk = _round_topk(num_selected)
+    topk = block_indices.shape[-1]
 
-    # FA-style flatten: drop the batch dim into varlen [total, H, head_dim] + cu_seqlens.
+    # Flatten the batch dim into a packed varlen layout [total, H, head_dim] + cu_seqlens. The
+    # query boundary is a fixed stride (every row is `q_len` long), built device-side with no host
+    # sync so it stays compile/cudagraph stable.
     q = query.transpose(1, 2).reshape(bsz * q_len, num_q_heads, head_dim).contiguous()
     k = key.transpose(1, 2).reshape(bsz * k_len, num_kv_heads, head_dim).contiguous()
     v = value.transpose(1, 2).reshape(bsz * k_len, num_kv_heads, head_dim).contiguous()
@@ -160,8 +182,6 @@ def _sparse_attention(module, query, key, value, scaling, block_indices, block_s
     # future slots. For bsz==1 the real boundary is `[0, valid_k]` (valid_k = cache_position[-1]+1) built
     # as a device tensor (no host sync) -- `build_k2q_csr` reads only the host shape hints `total_k`/
     # `max_seqlen_k` (kept fixed at `bsz*k_len`/`k_len` below), so this stays compile/cudagraph stable.
-    # bsz>1 padded decode needs the kernel's paged layout and is routed to SDPA upstream, so the dense
-    # packed boundary is exact for every batched case that reaches here.
     if bsz == 1 and cache_position is not None:
         valid_k = (cache_position[-1] + 1).to(torch.int32).reshape(1)
         cu_seqlens_k = torch.cat([torch.zeros(1, device=q.device, dtype=torch.int32), valid_k])
@@ -169,8 +189,6 @@ def _sparse_attention(module, query, key, value, scaling, block_indices, block_s
         cu_seqlens_k = torch.arange(0, (bsz + 1) * k_len, k_len, device=q.device, dtype=torch.int32)
 
     q2k = block_indices.to(torch.int32)
-    if topk > num_selected:
-        q2k = F.pad(q2k, (0, topk - num_selected), value=-1)
     q2k = q2k.reshape(bsz * q_len, topk).unsqueeze(0).expand(num_kv_heads, -1, -1).contiguous()
 
     # Opaque custom op: keeps the CuTe-DSL CSR build + block-sparse kernel as a single graph node
@@ -217,23 +235,13 @@ def msa_attention_forward(
             module, query, key, value, attention_mask, dropout=dropout, scaling=scaling, **kwargs
         )
 
+    # A sparse layer always runs the MSA kernel -- there is no SDPA fallback. Capability/config is
+    # validated once per module (raises on unsupported hardware or config) and cached on the module.
+    if not getattr(module, "_msa_validated", False):
+        _validate_msa_init(module, query, dropout)
+        module._msa_validated = True
+
     block_size = module.indexer.block_size
     cache_position = kwargs.get("cache_position")
-    # bsz>1 over a padded StaticCache needs the kernel's paged layout (the dense packed varlen
-    # boundary would index the wrong rows for seq>0); route those to the SDPA fallback. bsz==1 and
-    # non-padded (dynamic) batches build an exact boundary, so they keep the kernel fast path.
-    paged_only = query.shape[0] > 1 and _is_padded_cache(cache_position, key.shape[2])
-    if _can_run_kernel(query, block_indices, block_size) and not paged_only:
-        attn_output = _sparse_attention(
-            module, query, key, value, scaling, block_indices, block_size, cache_position
-        )
-        return attn_output, None
-
-    # Hidden fallback: reconstruct the dense block mask from the selection and run SDPA.
-    attention_mask = module.indexer.build_block_mask(
-        block_indices, attention_mask, key.shape[2], query.dtype, query.device, cache_position
-    )
-    return sdpa_attention_forward(
-        module, query, key, value, attention_mask, dropout=dropout, scaling=scaling, **kwargs
-    )
-
+    attn_output = _sparse_attention(module, query, key, value, scaling, block_indices, block_size, cache_position)
+    return attn_output, None
