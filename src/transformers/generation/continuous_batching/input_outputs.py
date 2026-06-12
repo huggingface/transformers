@@ -123,7 +123,7 @@ class ContinuousBatchingIOs:
         # Setup input-related accumulators
         self.num_q_tokens = 0  # number of query tokens in the batch. Can be padded.
         self.max_kv_read = 0  # number of KV tokens read from cache (maxed across all groups). Can be padded.
-        self.true_batch_size = 0
+        self.num_request_in_batch = 0
         self.true_read_sizes = [0 for _ in range(cache.num_groups)]
         self.true_write_sizes = [0 for _ in range(cache.num_groups)]
         self.use_block_table = False  # True if all requests in batch have query_length == 1
@@ -233,7 +233,7 @@ class ContinuousBatchingIOs:
         # Transfer accumulators
         other.num_q_tokens = self.num_q_tokens
         other.max_kv_read = self.max_kv_read
-        other.true_batch_size = self.true_batch_size
+        other.num_request_in_batch = self.num_request_in_batch
         other.true_read_sizes = self.true_read_sizes[:]
         other.true_write_sizes = self.true_write_sizes[:]
         other.use_block_table = self.use_block_table
@@ -325,10 +325,10 @@ class ContinuousBatchingIOs:
             self.compute_stream.synchronize()
 
     def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int], list[float] | None]:
-        new_tokens = self.output_ids[0, : self.true_batch_size].tolist()
+        new_tokens = self.output_ids[0, : self.num_request_in_batch].tolist()
         # If logprobs are generated, we retrieve them from the output tensor and cast them to the right dtype
         if self.return_logprobs:
-            logprobs = self.output_ids[1, : self.true_batch_size].view(dtype=torch.float32).tolist()
+            logprobs = self.output_ids[1, : self.num_request_in_batch].view(dtype=torch.float32).tolist()
         # Otherwise, we can return an empty list because they wont be used
         else:
             logprobs = None
@@ -362,7 +362,7 @@ class ContinuousBatchingIOs:
         # Memoize the length of Q and KV
         self.num_q_tokens = num_q_tokens
         self.max_kv_read = 0 if self.use_block_table else max_kv_read  # No need to track KV read for decode-fast-path
-        self.true_batch_size = len(requests_in_batch)
+        self.num_request_in_batch = len(requests_in_batch)
         # Reset the static storage that is going to be used for the next batch
         self._reset_static_tensors()
 
@@ -426,6 +426,8 @@ class ContinuousBatchingIOs:
             arg_storage=self._bulk_input_tensor[self.static_inputs :],
         )
 
+        # If there is padding, we need to make sure the cumulative_seqlens and total_seqlen are coherent
+
         # When looping over request is done, we can build the actual tensors. This is faster than modifying the static
         # tensors inside the loop.
         to_tensor = partial(torch.tensor, dtype=torch.int32, device=self.device)
@@ -465,7 +467,7 @@ class ContinuousBatchingIOs:
         if use_padding is True. The padding is only useful if we want static shapes, like when using cuda graphs."""
         q_size = self.num_q_tokens
         kv_size = self.max_kv_read + self.num_q_tokens
-        batch_size = min(self.num_q_tokens, self.max_requests_per_batch) if use_padding else self.true_batch_size
+        batch_size = min(self.num_q_tokens, self.max_requests_per_batch) if use_padding else self.num_request_in_batch
 
         # Prepare the kwargs, the attributes that are either tensors or dict of tensors are initialized to empty dicts.
         kwargs = PagedAttentionArgs(
@@ -488,7 +490,7 @@ class ContinuousBatchingIOs:
         # If there is padding, make sure the padding sequences have length 0 (ie. cumulative lengths plateau)
         if use_padding:  # TODO: add per-path padding
             self.max_seqlen_q = q_size  # keep max_seqlen_q > 1 so FA skips the seqlen_q==1 GQA reshape on padded q
-            kwargs.cu_seq_lens_q[self.true_batch_size + 1 :] = self.total_seqlen_q
+            kwargs.cu_seq_lens_q[self.num_request_in_batch + 1 :] = self.total_seqlen_q
             # Additionally, if there are CUDA graphs, we need to pad max_seqlen_k so graph capture will work regardless
             # of the future Q / KV lengths of the next batches
             if not self.use_block_table and self.use_cuda_graph_varlen:
@@ -516,7 +518,7 @@ class ContinuousBatchingIOs:
         for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
             kwargs.cu_seq_lens_k[layer_type] = seqlens_k[: batch_size + 1]
             if use_padding:
-                kwargs.cu_seq_lens_k[layer_type][self.true_batch_size + 1 :] = self.total_seqlen_k[layer_type]
+                kwargs.cu_seq_lens_k[layer_type][self.num_request_in_batch + 1 :] = self.total_seqlen_k[layer_type]
             kwargs.max_seqlen_k[layer_type] = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
             if self.attention_mask is not None:
                 k_len = kv_size if use_padding else self.total_seqlen_k[layer_type]
