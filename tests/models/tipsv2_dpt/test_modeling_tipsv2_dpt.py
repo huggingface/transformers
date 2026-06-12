@@ -278,7 +278,8 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_model(self):
-        model = Tipsv2DptModel.from_pretrained("google/tipsv2-b14-dpt", device_map=torch_device).eval()
+        # TODO: switch to google repo before merge
+        model = Tipsv2DptModel.from_pretrained("guarin/tipsv2-b14-dpt", device_map=torch_device).eval()
 
         image = prepare_img()
         image_processor = self.default_image_processor
@@ -337,7 +338,7 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_depth_estimation(self):
-        model = Tipsv2DptForDepthEstimation.from_pretrained("google/tipsv2-b14-dpt", device_map=torch_device).eval()
+        model = Tipsv2DptForDepthEstimation.from_pretrained("guarin/tipsv2-b14-dpt", device_map=torch_device).eval()
 
         image = prepare_img()
         image_processor = self.default_image_processor
@@ -374,7 +375,7 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_normal_estimation(self):
-        model = Tipsv2DptForNormalEstimation.from_pretrained("google/tipsv2-b14-dpt", device_map=torch_device).eval()
+        model = Tipsv2DptForNormalEstimation.from_pretrained("guarin/tipsv2-b14-dpt", device_map=torch_device).eval()
 
         image = prepare_img()
         image_processor = self.default_image_processor
@@ -417,7 +418,7 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_semantic_segmentation(self):
         model = Tipsv2DptForSemanticSegmentation.from_pretrained(
-            "google/tipsv2-b14-dpt", device_map=torch_device
+            "guarin/tipsv2-b14-dpt", device_map=torch_device
         ).eval()
 
         image = prepare_img()
