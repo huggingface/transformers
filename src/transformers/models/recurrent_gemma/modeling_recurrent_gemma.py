@@ -503,6 +503,7 @@ class RecurrentGemmaMlp(nn.Module):
         gate = self.act_fn(self.gate_proj(hidden_states))
         return self.down_proj(gate * self.up_proj(hidden_states))
 
+
 TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaAttention}
 
 
