@@ -187,14 +187,15 @@ def _lazy_imports(
                 kernel_implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
             )
 
-            if getattr(kernel, "sparse_atten_func", None) is not None and not hasattr(
-                kernel, "flash_attn_varlen_func"
-            ):
-                return None, None, None, pad_input, unpad_input
-
             flash_attn_func = getattr(kernel, "flash_attn_func", None)
             flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
             flash_attn_with_kvcache = getattr(kernel, "flash_attn_with_kvcache", None)
+            # Block-sparse kernels (e.g. ``kernels-staging/msa``) expose ``sparse_atten_func`` rather than
+            # ``flash_attn_varlen_func``. ``load_and_register_attn_kernel`` already registered their dedicated
+            # wrapper into ``ALL_ATTENTION_FUNCTIONS``, so they dispatch through the attention interface and
+            # never touch the flash varlen globals -- preloading them here is a no-op, not an error.
+            if flash_attn_varlen_func is None and hasattr(kernel, "sparse_atten_func"):
+                return flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache, pad_input, unpad_input
             if flash_attn_varlen_func is None:
                 raise ValueError(
                     f"Could not find the currently requested flash attention implementation at `{implementation}`."
@@ -260,9 +261,9 @@ def lazy_import_flash_attention(
         _flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn = _lazy_imports(
             implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
         )
-        # Block-sparse kernels expose no flash varlen fn; their kwargs are handled by their own wrapper.
-        if _flash_varlen_fn is not None:
-            _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn)
+        # Block-sparse kernels register their own attention interface and expose no varlen fn to introspect;
+        # skip building the kwargs-support map (it is only consumed by the flash varlen path they never take).
+        _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn) if _flash_varlen_fn else None
 
     return (_flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn
 

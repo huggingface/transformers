@@ -31,10 +31,10 @@ class MiniMaxM3VLProcessorKwargs(ProcessingKwargs, total=False):
 class MiniMaxM3VLProcessor(ProcessorMixin):
     """Combines tokenizer + image_processor + video_processor for MiniMax M3 VL.
 
-    Expands ``IMAGE_TOKEN`` / ``VIDEO_TOKEN`` markers in the prompt into the matching
-    number of placeholder tokens (one per merged patch), wrapped in ``VISION_START_TOKEN``
-    / ``VISION_END_TOKEN`` brackets. Video chunks are additionally prefixed with a
-    ``]<]{seconds} seconds[>[`` timestamp marker per frame when metadata is available.
+    Expands `IMAGE_TOKEN` / `VIDEO_TOKEN` markers in the prompt into the matching
+    number of placeholder tokens (one per merged patch), wrapped in `VISION_START_TOKEN`
+    / `VISION_END_TOKEN` brackets. Video chunks are additionally prefixed with a
+    `]<]{seconds} seconds[>[` timestamp marker per frame when metadata is available.
     """
 
     valid_processor_kwargs = MiniMaxM3VLProcessorKwargs

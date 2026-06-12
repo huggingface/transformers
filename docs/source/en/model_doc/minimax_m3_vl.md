@@ -131,6 +131,14 @@ print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
 
 ## MiniMaxM3VLImageProcessor
 
+This is a standalone (non-modular) image processor: it shares the patch-flattening idea of [`Qwen2VLImageProcessor`]
+but does not inherit from it because the two diverge in ways that touch most of the class. The resize budget is driven by
+a `max_pixels` attribute and a `{"height", "width"}` `size` rather than Qwen's `shortest_edge`/`longest_edge` scheme; the
+`smart_resize` helper clamps the initial rounding with `max(factor, ...)`; and `_preprocess` performs real temporal
+handling (5D patches, last-frame repeat to fill `temporal_patch_size`, and a `grid_t` dimension) instead of Qwen's
+`grid_t = 1` + expand. Mapping to or subclassing Qwen would therefore change behavior or require overriding nearly
+everything, so the processor is kept on its own.
+
 [[autodoc]] MiniMaxM3VLImageProcessor
 
 ## MiniMaxM3VLVideoProcessor

@@ -17,7 +17,7 @@ from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
-from .image_processing_minimax_m3_vl_fast import smart_resize
+from .image_processing_minimax_m3_vl import smart_resize
 
 
 class MiniMaxM3VLVideoProcessorKwargs(VideosKwargs, total=False):
