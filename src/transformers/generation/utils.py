@@ -964,8 +964,25 @@ class GenerationMixin(ContinuousMixin):
 
         if hasattr(self, "_reorder_cache"):
             model_kwargs[cache_name] = self._reorder_cache(model_kwargs[cache_name], beam_idx)
-        else:
+        elif hasattr(model_kwargs[cache_name], "reorder_cache"):
             model_kwargs[cache_name].reorder_cache(beam_idx)
+        else:
+            model_kwargs[cache_name] = self._reorder_tensor_cache(model_kwargs[cache_name], beam_idx)
+
+    @staticmethod
+    def _reorder_tensor_cache(cache: Any, beam_idx: torch.Tensor) -> Any:
+        if isinstance(cache, torch.Tensor):
+            return cache.index_select(0, beam_idx.to(cache.device))
+        if isinstance(cache, list):
+            return [GenerationMixin._reorder_tensor_cache(item, beam_idx) for item in cache]
+        if isinstance(cache, tuple):
+            return tuple(GenerationMixin._reorder_tensor_cache(item, beam_idx) for item in cache)
+        if isinstance(cache, dict):
+            return {key: GenerationMixin._reorder_tensor_cache(value, beam_idx) for key, value in cache.items()}
+        if hasattr(cache, "rnn_state"):
+            cache.rnn_state = GenerationMixin._reorder_tensor_cache(cache.rnn_state, beam_idx)
+            return cache
+        raise AttributeError(f"{type(cache).__name__} does not support beam cache reordering")
 
     def _get_candidate_generator(
         self: "GenerativePreTrainedModel",

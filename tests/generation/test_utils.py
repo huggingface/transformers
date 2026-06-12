@@ -2729,6 +2729,36 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertIs(model_kwargs["state"]["cache"], cache)
         self.assertIs(model_kwargs["state"]["beam_idx"], beam_idx)
 
+    def test_beam_search_reorders_tensor_state_cache(self):
+        state = [torch.tensor([[0, 1], [2, 3], [4, 5]]), torch.tensor([[6], [7], [8]])]
+        beam_idx = torch.tensor([2, 0])
+        model_kwargs = {"state": state}
+
+        GenerationMixin()._reorder_cache_for_beam_search(model_kwargs, beam_idx)
+
+        self.assertEqual(model_kwargs["state"][0].tolist(), [[4, 5], [0, 1]])
+        self.assertEqual(model_kwargs["state"][1].tolist(), [[8], [6]])
+
+    def test_beam_search_reorders_cache_with_rnn_state(self):
+        class DummyRnnCache:
+            def __init__(self):
+                self.rnn_state = {
+                    0: (
+                        torch.tensor([[0, 1], [2, 3], [4, 5]]),
+                        torch.tensor([[6], [7], [8]]),
+                    )
+                }
+
+        cache = DummyRnnCache()
+        beam_idx = torch.tensor([2, 0])
+        model_kwargs = {"cache_params": cache}
+
+        GenerationMixin()._reorder_cache_for_beam_search(model_kwargs, beam_idx)
+
+        self.assertIs(model_kwargs["cache_params"], cache)
+        self.assertEqual(cache.rnn_state[0][0].tolist(), [[4, 5], [0, 1]])
+        self.assertEqual(cache.rnn_state[0][1].tolist(), [[8], [6]])
+
     def test_speculative_sampling(self):
         # assume vocab size 10, input length 5 + 3 generated candidates
         candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1, 4, 5]])  # input tokens
