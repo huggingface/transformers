@@ -25,10 +25,11 @@ from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPa
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_available, logging
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
+    AudioFlamingo3Model,
     AudioFlamingo3MultiModalProjector,
     AudioFlamingo3PreTrainedModel,
 )
@@ -189,6 +190,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+@no_inherit_decorator
 class GlmAsrAttention(LlamaAttention):
     def __init__(self, config: GlmAsrConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -342,9 +344,7 @@ class GlmAsrMultiModalProjector(AudioFlamingo3MultiModalProjector):
     The GlmAsr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Llama language model.
     """
 )
-class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
-    _supports_attention_backend = True
-
+class GlmAsrModel(AudioFlamingo3Model):
     @can_return_tuple
     @auto_docstring(
         custom_intro="Compute audio embeddings from log-mel input features using the audio encoder and multi-modal projector."
@@ -372,6 +372,20 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         audio_outputs.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
 
         return audio_outputs
+
+
+@auto_docstring(
+    custom_intro="""
+    The GlmAsr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Llama language model.
+    """
+)
+class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = GlmAsrModel(config)
+        self.post_init()
 
     def forward(
         self,
@@ -428,4 +442,10 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         )
 
 
-__all__ = ["GlmAsrEncoder", "GlmAsrForConditionalGeneration", "GlmAsrProcessor", "GlmAsrPreTrainedModel"]
+__all__ = [
+    "GlmAsrEncoder",
+    "GlmAsrForConditionalGeneration",
+    "GlmAsrModel",
+    "GlmAsrProcessor",
+    "GlmAsrPreTrainedModel",
+]

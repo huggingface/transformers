@@ -33,6 +33,12 @@ logger = logging.get_logger(__name__)
 # ``PreTrainedConfig`` (the decoder text config) as the only positional argument.
 LAYER_TYPE_CACHE_MAPPING: dict[str, type] = {}
 
+# Parallel registry for the *static* implementation of a custom layer type, consulted by
+# ``StaticCache``. A ``StaticLayer`` subclass with a ``layer_type`` registers here instead of in
+# ``LAYER_TYPE_CACHE_MAPPING`` (constructed with ``max_cache_len=...``), so a single ``layer_type``
+# can have both a dynamic and a static cache layer (e.g. M3's sparse-attention indexer cache).
+LAYER_TYPE_STATIC_CACHE_MAPPING: dict[str, type] = {}
+
 
 class CacheLayerMixin(ABC):
     """Base, abstract class for a single layer's cache."""
@@ -47,7 +53,11 @@ class CacheLayerMixin(ABC):
         super().__init_subclass__(**kwargs)
         layer_type = cls.__dict__.get("layer_type", None)
         if layer_type is not None:
-            LAYER_TYPE_CACHE_MAPPING[layer_type] = cls
+            static_base = globals().get("StaticLayer")
+            if static_base is not None and issubclass(cls, static_base):
+                LAYER_TYPE_STATIC_CACHE_MAPPING[layer_type] = cls
+            else:
+                LAYER_TYPE_CACHE_MAPPING[layer_type] = cls
 
     def __init__(self):
         self.keys: torch.Tensor | None = None
@@ -272,6 +282,82 @@ class DynamicSlidingWindowLayer(DynamicLayer):
             )
         super().crop(max_length)
         self.cumulative_length = self.keys.shape[-2]
+
+
+class DynamicIndexedLayer(DynamicLayer):
+    """
+    A cache layer that extends `DynamicLayer` with an extra indexer key cache for Dynamic Sparse Attention (DSA)
+    models (e.g. GLM MoE DSA, DeepSeek V32).
+
+    The main K/V cache stores tensors of shape `[batch_size, num_heads, seq_len, head_dim]` (inherited).
+    The indexer key cache stores a tensor of shape `[batch_size, seq_len, index_head_dim]` (3D, single-head).
+    """
+
+    # Auto-registers in ``LAYER_TYPE_CACHE_MAPPING`` so ``DynamicCache`` dispatches DSA layers here.
+    layer_type = "deepseek_sparse_attention"
+
+    def __init__(self, config: PreTrainedConfig | None = None):
+        super().__init__(config)
+        self.indexer_keys: torch.Tensor | None = None
+        self.is_indexer_initialized: bool = False
+
+    def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
+        self.indexer_dtype, self.indexer_device = indexer_key_states.dtype, indexer_key_states.device
+        self.indexer_keys = torch.tensor([], dtype=self.indexer_dtype, device=self.indexer_device)
+        self.is_indexer_initialized = True
+
+    def update_indexer(self, indexer_key_states: torch.Tensor) -> torch.Tensor:
+        """
+        Update the indexer key cache by concatenation, and return the full indexer keys.
+
+        Args:
+            indexer_key_states (`torch.Tensor`): New indexer keys, shape `[batch_size, seq_len, index_head_dim]`.
+
+        Returns:
+            `torch.Tensor`: The full cached indexer keys, shape `[batch_size, total_len, index_head_dim]`.
+        """
+        if not self.is_indexer_initialized:
+            self.lazy_initialization_indexer(indexer_key_states)
+        self.indexer_keys = torch.cat([self.indexer_keys, indexer_key_states], dim=1)
+        return self.indexer_keys
+
+    def offload(self):
+        super().offload()
+        if self.is_indexer_initialized:
+            self.indexer_keys = self.indexer_keys.to("cpu", non_blocking=True)
+
+    def prefetch(self):
+        super().prefetch()
+        if self.is_indexer_initialized and self.indexer_keys.device != self.device:
+            self.indexer_keys = self.indexer_keys.to(self.device, non_blocking=True)
+
+    def reset(self) -> None:
+        super().reset()
+        if self.is_indexer_initialized:
+            self.indexer_keys.zero_()
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
+            self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
+
+    def crop(self, max_length: int) -> None:
+        super().crop(max_length)
+        if not self.is_indexer_initialized or self.indexer_keys.numel() == 0:
+            return
+        effective = max_length if max_length >= 0 else self.indexer_keys.shape[1] - abs(max_length)
+        if self.indexer_keys.shape[1] > effective:
+            self.indexer_keys = self.indexer_keys[:, :effective, :]
+
+    def batch_repeat_interleave(self, repeats: int) -> None:
+        super().batch_repeat_interleave(repeats)
+        if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
+            self.indexer_keys = self.indexer_keys.repeat_interleave(repeats, dim=0)
+
+    def batch_select_indices(self, indices: torch.Tensor) -> None:
+        super().batch_select_indices(indices)
+        if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
+            self.indexer_keys = self.indexer_keys[indices, ...]
 
 
 class StaticLayer(CacheLayerMixin):
@@ -509,6 +595,73 @@ class StaticSlidingWindowLayer(StaticLayer):
     def reset(self):
         super().reset()
         self.cumulative_length_int = 0
+
+
+class StaticIndexedLayer(StaticLayer):
+    """
+    A `StaticLayer` with an additional statically-allocated indexer key cache for Dynamic Sparse
+    Attention (DSA) models (e.g. GLM MoE DSA, DeepSeek V32). This is the static, `torch.compile`-friendly
+    counterpart of `DynamicIndexedLayer`: the indexer key buffer is preallocated once and mutated in-place.
+
+    The main K/V cache is inherited from `StaticLayer` (`[batch_size, num_heads, max_cache_len, head_dim]`).
+    The indexer key cache stores a tensor of shape `[batch_size, max_cache_len, index_head_dim]` (3D, single-head).
+    """
+
+    def __init__(self, max_cache_len: int):
+        super().__init__(max_cache_len=max_cache_len)
+        self.indexer_keys: torch.Tensor | None = None
+        self.is_indexer_initialized: bool = False
+        # The indexer update runs independently of (and after) the main K/V `update` in the attention
+        # forward, so it tracks its own cumulative length rather than reusing `self.cumulative_length`.
+        self.indexer_cumulative_length = torch.tensor([0], dtype=int)
+
+    def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
+        self.indexer_dtype, self.indexer_device = indexer_key_states.dtype, indexer_key_states.device
+        max_batch_size, _, index_head_dim = indexer_key_states.shape
+        self.indexer_keys = torch.zeros(
+            (max_batch_size, self.max_cache_len, index_head_dim),
+            dtype=self.indexer_dtype,
+            device=self.indexer_device,
+        )
+        self.indexer_cumulative_length = self.indexer_cumulative_length.to(self.indexer_device)
+        # Tag as static addresses for cudagraphs / compile, mirroring the main K/V buffers.
+        if not is_torchdynamo_compiling():
+            torch._dynamo.mark_static_address(self.indexer_keys)
+            torch._dynamo.mark_static_address(self.indexer_cumulative_length)
+        self.is_indexer_initialized = True
+
+    def update_indexer(self, indexer_key_states: torch.Tensor) -> torch.Tensor:
+        """
+        Update the indexer key cache in-place at the current positions, and return the full static buffer.
+
+        Args:
+            indexer_key_states (`torch.Tensor`): New indexer keys, shape `[batch_size, seq_len, index_head_dim]`.
+
+        Returns:
+            `torch.Tensor`: The full static indexer key cache, shape `[batch_size, max_cache_len, index_head_dim]`.
+                Unfilled positions are masked out downstream by the indexer's attention mask, exactly as the
+                main `StaticLayer` returns its full preallocated K/V.
+        """
+        if not self.is_indexer_initialized:
+            self.lazy_initialization_indexer(indexer_key_states)
+
+        seq_len = indexer_key_states.shape[1]
+        cache_position = torch.arange(seq_len, device=self.indexer_device) + self.indexer_cumulative_length
+        # In-place to preserve the static data pointer (required for cudagraphs).
+        self.indexer_cumulative_length.add_(seq_len)
+        try:
+            self.indexer_keys.index_copy_(1, cache_position, indexer_key_states)
+        except NotImplementedError:
+            # Fallback for devices like MPS where index_copy_ might not be supported.
+            self.indexer_keys[:, cache_position] = indexer_key_states
+
+        return self.indexer_keys
+
+    def reset(self) -> None:
+        super().reset()
+        if self.is_indexer_initialized:
+            self.indexer_keys.zero_()
+            self.indexer_cumulative_length.zero_()
 
 
 class QuantizedLayer(DynamicLayer):
@@ -1065,6 +1218,27 @@ class Cache:
         recurrent_states = self.layers[layer_idx].update_recurrent_state(recurrent_states, **kwargs)
         return recurrent_states
 
+    def update_indexer(self, indexer_key_states: torch.Tensor, layer_idx: int) -> torch.Tensor:
+        """
+        Updates the indexer key cache for layer `layer_idx`.
+
+        Parameters:
+            indexer_key_states (`torch.Tensor`):
+                The new indexer key states to cache, shape `[batch_size, seq_len, index_head_dim]`.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+
+        Return:
+            `torch.Tensor`: The updated indexer key states (full cache).
+        """
+        if not hasattr(self.layers[layer_idx], "update_indexer"):
+            raise ValueError(
+                f"Cannot call `update_indexer` on layer {layer_idx} which is a "
+                f"{type(self.layers[layer_idx]).__name__}; it has no indexer key cache "
+                f"(expected a `DynamicIndexedLayer` or `StaticIndexedLayer`)."
+            )
+        return self.layers[layer_idx].update_indexer(indexer_key_states)
+
     def early_initialization(
         self,
         batch_size: int,
@@ -1420,8 +1594,9 @@ class StaticCache(Cache):
             else:
                 layer_types = ["full_attention" for _ in range(config.num_hidden_layers)]
         # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
-        if hasattr(config, "num_kv_shared_layers"):
-            layer_types = layer_types[: -config.num_kv_shared_layers]
+        num_kv_shared_layers = getattr(config, "num_kv_shared_layers", 0)
+        if num_kv_shared_layers > 0:
+            layer_types = layer_types[:-num_kv_shared_layers]
 
         sliding_layer_types = {
             name
@@ -1441,6 +1616,12 @@ class StaticCache(Cache):
             # LinearAttention layers are static by essence - using `"moe"` as well is a trick, see the comment about it on DynamicCache
             elif layer_type in ("mamba", "conv", "linear_attention", "moe"):
                 layer = LinearAttentionLayer()
+            # Custom layer types (e.g. M3's sparse-attention indexer cache) that registered a static variant.
+            elif layer_type in LAYER_TYPE_STATIC_CACHE_MAPPING:
+                layer = LAYER_TYPE_STATIC_CACHE_MAPPING[layer_type](max_cache_len=max_cache_len)
+            elif layer_type == "deepseek_sparse_attention":
+                # Static / compile-friendly indexed layer (preallocated indexer key cache).
+                layer = StaticIndexedLayer(max_cache_len=max_cache_len)
             else:
                 layer = StaticLayer(max_cache_len=max_cache_len)
             layers.append(layer)

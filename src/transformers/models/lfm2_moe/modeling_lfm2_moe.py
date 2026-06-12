@@ -401,6 +401,7 @@ class Lfm2MoeShortConv(nn.Module):
         x: torch.Tensor,
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
+        seq_idx: torch.IntTensor | None = None,
     ):
         x = apply_mask_to_padding_states(x, attention_mask)
         BCx = self.in_proj(x).transpose(-1, -2)
@@ -423,7 +424,8 @@ class Lfm2MoeShortConv(nn.Module):
                 conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
                 conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)
 
-            conv_out = causal_conv1d_fn(Bx, conv_weights, self.conv.bias, activation=None)
+            # `seq_idx` resets conv state at packed-sample boundaries; None = previous behaviour.
+            conv_out = causal_conv1d_fn(Bx, conv_weights, self.conv.bias, activation=None, seq_idx=seq_idx)
 
         y = C * conv_out
         y = self.out_proj(y.transpose(-1, -2).contiguous())
@@ -467,9 +469,10 @@ class Lfm2MoeShortConv(nn.Module):
         hidden_states: torch.Tensor,
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
+        seq_idx: torch.IntTensor | None = None,
     ):
         if is_fast_path_available and "cuda" in hidden_states.device.type and not is_torchdynamo_compiling():
-            return self.cuda_kernels_forward(hidden_states, past_key_values, attention_mask)
+            return self.cuda_kernels_forward(hidden_states, past_key_values, attention_mask, seq_idx=seq_idx)
         return self.slow_forward(hidden_states, past_key_values, attention_mask)
 
 
@@ -514,6 +517,7 @@ class Lfm2MoeDecoderLayer(GradientCheckpointingLayer):
                 hidden_states=self.operator_norm(hidden_states),
                 past_key_values=past_key_values,
                 attention_mask=attention_mask,
+                seq_idx=kwargs.get("seq_idx"),
             )
         hidden_states = hidden_states + residual
         hidden_states = hidden_states + self.feed_forward(self.ffn_norm(hidden_states))
@@ -630,10 +634,8 @@ class Lfm2MoeModel(Lfm2MoePreTrainedModel):
 @auto_docstring
 class Lfm2MoeForCausalLM(Lfm2MoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_allgather"}
-    _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)

@@ -504,6 +504,24 @@ class PagedAttentionCache:
         # FIXME: consolidate the cache into a single tensor of shape (group_size, 2, *self.k_or_v_cache_shape)
         # This will allow for  better .update and a single copy instead of one per cache tensor
 
+    def compute_max_num_forks(self, source_request_id: str) -> int:
+        """Computes the maximum number of children requests that can be forked from the source request."""
+        # Count, across all groups, the new blocks each fork would have to allocate (i.e. non-shareable blocks)
+        blocks_needed_per_fork = 0
+        for cm in self.group_cache_managers:
+            block_ids = cm.block_table[source_request_id]
+            shareable_blocks = 0
+            if cm.uses_block_sharing:
+                for block_id in block_ids:
+                    if not self._block_manager._id_to_block[block_id].is_complete:
+                        break
+                    shareable_blocks += 1
+            blocks_needed_per_fork += len(block_ids) - shareable_blocks
+        # If every block can be shared, no new allocations are needed and any number of forks is possible
+        if blocks_needed_per_fork == 0:
+            return 2**31  # absurdly large number, virtually infinite number of forks
+        return self.get_num_free_blocks() // blocks_needed_per_fork
+
     def fork_request(self, source_request_id: str, destination_request_ids: list[str]) -> tuple[list[int], list[int]]:
         """Fork the cache of a request (state) into the one of a list of requests with the given (dst_request_ids)."""
         # These lists will be the accumulators for the source and destination blocks for the cache copy
@@ -611,6 +629,8 @@ class PagedAttentionMemoryHandler:
             + k * self.num_groups * 8                  # write_index: [num_groups, M] int64
             + k * self.num_groups * 8                  # read_index: [num_groups, N + M] (M part only, int64)
         )
+        # TODO: the above could be refined by introducing the max_requests_per_batch, but then there is a min() and this
+        # is no longer a simple polynomial. Could be worth checking into.
         # -- N·M terms: cost per (page × batch token) --------------------------------------
         coeff_nm = k * self.num_attention_masks * a    # attention_mask: [1, 1, M, N + M] (N·M part only)
         # -- M² terms: cost per (batch token squared) --------------------------------------

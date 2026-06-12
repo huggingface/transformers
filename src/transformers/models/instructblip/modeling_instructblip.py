@@ -337,6 +337,8 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
     _no_split_modules = [
         "InstructBlipQFormerEmbeddings",
         "InstructBlipAttention",
+        "InstructBlipEncoderLayer",
+        "InstructBlipQFormerLayer",
         "InstructBlipQFormerMultiHeadAttention",
         "InstructBlipQFormerSelfOutput",
     ]
@@ -934,7 +936,7 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
         else:
             special_image_mask = input_ids == self.config.image_token_id
 
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask
 
     @can_return_tuple
@@ -992,6 +994,7 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
         query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device)
         if qformer_attention_mask is None:
             qformer_attention_mask = torch.ones_like(qformer_input_ids)
+        qformer_attention_mask = qformer_attention_mask.to(query_attention_mask.device)
         qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
         query_outputs = self.qformer(
             input_ids=qformer_input_ids,
@@ -1156,6 +1159,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device)
         if qformer_attention_mask is None:
             qformer_attention_mask = torch.ones_like(qformer_input_ids)
+        qformer_attention_mask = qformer_attention_mask.to(query_attention_mask.device)
         qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
         qformer_outputs = self.qformer(
             input_ids=qformer_input_ids,
@@ -1187,7 +1191,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         else:
             special_image_mask = input_ids == self.config.image_token_id
 
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask
 
     @can_return_tuple

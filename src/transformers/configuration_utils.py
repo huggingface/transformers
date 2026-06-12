@@ -23,7 +23,6 @@ from dataclasses import MISSING, dataclass, fields
 from functools import wraps
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar, Union
 
-from huggingface_hub import create_repo
 from huggingface_hub.dataclasses import strict
 from packaging import version
 from typing_extensions import dataclass_transform
@@ -39,6 +38,7 @@ from .utils import (
     cached_file,
     copy_func,
     extract_commit_hash,
+    hf_api,
     is_torch_available,
     logging,
 )
@@ -65,6 +65,7 @@ ALLOWED_LAYER_TYPES = (
     "chunked_attention",
     "compressed_sparse_attention",  # CSA, used in deepseek_v4
     "heavily_compressed_attention",  # HCA, used in deepseek_v4
+    "minimax_m3_sparse",  # lightning-index sparse attention, used in minimax_m3_vl
     "linear_attention",  # used in minimax
     "conv",  # used in LFMv2
     "mamba",
@@ -74,6 +75,7 @@ ALLOWED_LAYER_TYPES = (
     "hybrid",  # for zamba/zamba2/zaya1, which use full attention + conv states
     "hybrid_sliding",  # for zaya1, which uses swa + conv states
     "moe",  # for nemotron_h, which uses either attention, mamba or moe
+    "deepseek_sparse_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
 )
 
 
@@ -148,13 +150,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
       naming of attributes.
     - **base_model_tp_plan** (`dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a tensor
       parallel plan applied to the sub-module when `model.tensor_parallel` is called.
-    - **base_model_sp_plan** (`dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a sequence
-      parallel plan, used in place of `base_model_tp_plan` when `distributed_config.enable_sequence_parallel` is set.
-      Same key/value shape as the TP plan; values are style names registered in `ALL_PARALLEL_STYLES`
-      (e.g. `"vocab_reduce_scatter"`, `"rowwise_reduce_scatter"`, `"activation"`, `"module_allgather"`).
-    - **base_model_fsdp_plan** (`dict[Any, str]`) -- A dict that maps sub-modules of a base model to an FSDP2
-      sharding strategy (e.g. `"free_full_weight"` / `"keep_full_weight"`). Keys can be wildcard module paths
-      (e.g. `"layers.*"`) or tuples of paths (grouped into a single `fully_shard` call).
     - **base_model_pp_plan** (`dict[str, tuple[list[str]]]`) -- A dict that maps child-modules of a base model to a
       pipeline parallel plan that enables users to place the child-module on the appropriate device.
 
@@ -226,8 +221,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     keys_to_ignore_at_inference: ClassVar[list[str]] = []
     attribute_map: ClassVar[dict[str, str]] = {}
     base_model_tp_plan: ClassVar[dict[str, Any] | None] = None
-    base_model_sp_plan: ClassVar[dict[str, Any] | None] = None
-    base_model_fsdp_plan: ClassVar[dict[Any, str] | None] = None
     base_model_pp_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     base_model_ep_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     _auto_class: ClassVar[str | None] = None
@@ -481,15 +474,17 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
     def validate_layer_type(self):
         """Check that `layer_types` is correctly defined."""
-        if not (getattr(self, "layer_types", None) is not None and hasattr(self, "num_hidden_layers")):
-            return
-        elif not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in self.layer_types):
-            raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES} but got {self.layer_types}")
-        elif self.num_hidden_layers is not None and self.num_hidden_layers != len(self.layer_types):
-            raise ValueError(
-                f"`num_hidden_layers` ({self.num_hidden_layers}) must be equal to the number of layer types "
-                f"({len(self.layer_types)})"
-            )
+        for layer_types in ["layer_types", "mlp_layer_types"]:
+            layers = getattr(self, layer_types, None)
+            if not (layers is not None and hasattr(self, "num_hidden_layers")):
+                return
+            elif not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layers):
+                raise ValueError(f"The `{layer_types}` entries must be in {ALLOWED_LAYER_TYPES} but got {layers}")
+            elif self.num_hidden_layers is not None and self.num_hidden_layers != len(layers):
+                raise ValueError(
+                    f"`num_hidden_layers` ({self.num_hidden_layers}) must be equal to the number of `{layer_types}` "
+                    f"({len(layers)})"
+                )
 
     @property
     def rope_scaling(self):
@@ -529,7 +524,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # This attribute is important to know on load, but should not be serialized on save.
@@ -1028,9 +1023,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # Pop "kwargs" since they are unpacked and set in the post init
         output.pop("kwargs", None)
 
-        if "distributed_config" in output and hasattr(output["distributed_config"], "to_dict"):
-            output["distributed_config"] = output["distributed_config"].to_dict()
-
         def to_list(value):
             if isinstance(value, tuple):
                 value = [to_list(item) for item in value]
@@ -1176,7 +1168,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             "_experts_implementation_internal",
             "ignore_keys_at_rope_validation",
             "base_model_tp_plan",
-            "base_model_sp_plan",
             "base_model_pp_plan",
         ]:
             d.pop(key_to_remove, None)
