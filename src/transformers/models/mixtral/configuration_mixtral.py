@@ -76,6 +76,34 @@ class MixtralConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_experts_allreduce",
     }
+    # Inference TP + EP (complete plan — no runtime merge).
+    base_model_tp_ep_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+    }
+    # Training SP + EP (complete plan — no runtime merge).
+    base_model_sp_ep_plan = {
+        "embed_tokens": "vocab_reduce_scatter",
+        "layers.*.input_layernorm": "activation",
+        "layers.*.self_attn": "module_allgather_hidden_states",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_reduce_scatter",
+        "layers.*.post_attention_layernorm": "activation",
+        "layers.*.mlp": "module_allgather_split",
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "norm": "activation",
+    }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
