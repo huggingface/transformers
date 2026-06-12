@@ -29,8 +29,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @strict
 class Exaone4_5_VisionConfig(PreTrainedConfig):
     r"""
-    tokens_per_second (`int`, *optional*, defaults to 41):
-        Number of tokens to merge for each second of video.
     window_size (`int`, *optional*, defaults to 11):
         Size of windows.
     out_hidden_size (`int`, *optional*, defaults to 3584):
@@ -51,7 +49,6 @@ class Exaone4_5_VisionConfig(PreTrainedConfig):
     patch_size: int | list[int] | tuple[int, int] = 14
     spatial_merge_size: int = 2
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
-    tokens_per_second: int = 4
     window_size: int = 112
     out_hidden_size: int = 3584
     fullatt_block_indexes: list[int] | tuple[int, ...] = (7, 15, 23, 31)

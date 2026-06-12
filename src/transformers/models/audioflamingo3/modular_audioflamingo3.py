@@ -60,12 +60,12 @@ class AudioFlamingo3ModelOutputWithPast(VoxtralModelOutputWithPast):
     pass
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for AudioFlamingo3 causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class AudioFlamingo3CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -273,6 +273,8 @@ class AudioFlamingo3Model(VoxtralModel):
     """
 )
 class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
+    _tied_weights_keys = None
+
     def __init__(self, config):
         super().__init__(config)
         self.model = AudioFlamingo3Model(config)

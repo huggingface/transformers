@@ -88,7 +88,6 @@ class VibeVoiceAsrConfig(PreTrainedConfig):
     audio_bos_token_id: int = 151646
     audio_eos_token_id: int = 151647
     acoustic_tokenizer_chunk_size: int = 1440000
-    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.acoustic_tokenizer_encoder_config, dict):
@@ -169,12 +168,12 @@ class VibeVoiceAsrPreTrainedModel(VibeVoiceAcousticTokenizerPreTrainedModel):
     _supports_attention_backend = True
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for VibeVoice ASR outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class VibeVoiceAsrModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -186,12 +185,12 @@ class VibeVoiceAsrModelOutputWithPast(BaseModelOutputWithPast):
     audio_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for VibeVoice ASR causal language model outputs.
     """
 )
+@dataclass
 class VibeVoiceAsrCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -361,8 +360,6 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
     """
 )
 class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-
     def __init__(self, config: VibeVoiceAsrConfig):
         super().__init__(config)
         self.model = VibeVoiceAsrModel(config)
