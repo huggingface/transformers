@@ -22,6 +22,7 @@ from typing import Any, Literal
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...distributed.plan_utils import init_combo_plans
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -146,6 +147,7 @@ class LagunaConfig(PreTrainedConfig):
 
         # rope_parameters is keyed by layer type; tell the validator those keys are intentional.
         super().__post_init__(**kwargs, ignore_keys_at_rope_validation={"sliding_attention", "full_attention"})
+        init_combo_plans(self)
 
     def convert_rope_params_to_dict(self, **kwargs):
         # No need to handle BC for new models, because they have no old-format `rope_scaling`

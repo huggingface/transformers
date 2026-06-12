@@ -39,9 +39,9 @@ model = AutoModelForCausalLM.from_pretrained(
 ```
 
 > [!TIP]
-> With `enable_expert_parallel=True`, Transformers **merges** the model's expert-parallel plan with the dense recipe: [tensor parallelism](./perf_infer_gpu_multi) for attention and shared MLP when `enable_sequence_parallel=False` (typical inference), or the model's sequence-parallel plan for dense layers when `enable_sequence_parallel=True` (typical training with FSDP).
+> With `enable_expert_parallel=True`, Transformers selects a **complete** parallel plan from the model config: `base_model_tp_ep_plan` when `enable_sequence_parallel=False` (typical inference with [tensor parallelism](./perf_infer_gpu_multi)), or `base_model_sp_ep_plan` when `enable_sequence_parallel=True` (typical training with FSDP). Each combo plan is a single dict that covers both dense layers and MoE experts.
 
-At load time, `resolve_parallel_plan` composes `base_model_sp_plan` or `base_model_tp_plan` with `base_model_ep_plan`. Expert weights use `grouped_gemm` (shard along the expert dimension), `ep_router` routes tokens to local experts, and `moe_experts_allreduce` combines partial outputs. For MoE without expert parallelism, `moe_tp_gate_up_colwise` / `moe_tp_down_rowwise` shard within each expert instead. Weight sharding is declared per parameter in the config; the experts module entry only configures forward communication.
+At load time, `select_parallel_plan` picks the plan for the active flag combination. Expert weights use `grouped_gemm` (shard along the expert dimension), `ep_router` routes tokens to local experts, and `moe_experts_allreduce` combines partial outputs. For MoE without expert parallelism, `moe_tp_gate_up_colwise` / `moe_tp_down_rowwise` shard within each expert instead. Weight sharding is declared per parameter in the config; the experts module entry only configures forward communication.
 
 **Training (SP + EP + FSDP):**
 

@@ -21,6 +21,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...distributed.plan_utils import init_combo_plans
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -145,6 +146,7 @@ class MellumConfig(PreTrainedConfig):
             **kwargs,
             ignore_keys_at_rope_validation={"sliding_attention", "full_attention"},
         )
+        init_combo_plans(self)
 
     def _update_sp_plan(self):
         """Set per-layer SP entries depending on whether the MLP is dense or sparse."""
