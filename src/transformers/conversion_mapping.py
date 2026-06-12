@@ -1291,6 +1291,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.ln_2\.", ".layer_norm2."),
             WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.fc1."),
             WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.fc2."),
+            # WeightRenaming(r"\.mlp\.w12\.", ".mlp.weights_in."), # if config.use_swiglu_ffn=True
+            # WeightRenaming(r"\.mlp\.w3\.", ".mlp.weights_out."), # if config.use_swiglu_ffn=True
             WeightRenaming(r"\.attn\.out_proj\.", ".self_attn.out_proj."),
             WeightConverter(
                 source_patterns=r"\.attn\.qkv\.weight",
