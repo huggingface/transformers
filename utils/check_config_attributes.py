@@ -43,18 +43,6 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
     "MiniCPMV4_6Config": ["drop_vision_last_layer"],
-    "MiniMaxM3VLTextConfig": [
-        # Checkpoint-compat surface the modeling code never branches on:
-        # `num_mtp_modules` — MTP module count from upstream checkpoints; the MTP head is
-        #   not instantiated by the transformers M3 implementation (inference-only model).
-        # `rotary_dim` — redundant with `rope_parameters["partial_rotary_factor"]`, which is
-        #   what the rotary embedding actually reads (`head_dim * partial_rotary_factor`).
-        # `use_routing_bias` — M3 always builds the `e_score_correction_bias` router buffer
-        #   (always True in shipped checkpoints), so there is no branch on the flag.
-        "num_mtp_modules",
-        "rotary_dim",
-        "use_routing_bias",
-    ],
     "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
     "HYV3Config": ["output_router_logits"],
     "NougatConfig": ["decoder", "encoder"],

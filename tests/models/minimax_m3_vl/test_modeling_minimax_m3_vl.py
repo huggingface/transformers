@@ -504,16 +504,6 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         self.assertIn("red", completions[0].lower())
         self.assertIn("blue", completions[1].lower())
 
-    @unittest.skip(
-        "The block-sparse indexer anchors selection blocks to absolute key slots, so left-padding "
-        "shifts block boundaries and a left-padded row diverges from its unpadded run (early real "
-        "tokens can end up with a fully-masked sparse-attention row → degenerate generation). This is "
-        "the same slot-based limitation DeepSeek-V4 has; only right-padding is equivalent. Making blocks "
-        "content-relative (block ids from position_ids + a position-binned key pool + masking pad-key "
-        "scores before pooling) would fix this — see the MiniMaxM3VLIndexer docstring TODO."
-    )
-    def test_left_padding_compatibility(self):
-        pass
 
     def test_video_generation(self):
         """End-to-end video path: the processor emits ``pixel_values_videos`` / ``video_grid_thw`` and the
