@@ -16,7 +16,14 @@ import tempfile
 import unittest
 
 from tests.test_configuration_common import ConfigTester
-from transformers import AutoConfig, AutoModel, MossAudioTokenizerConfig
+from transformers import (
+    AutoConfig,
+    AutoModel,
+    MossAudioTokenizerConfig,
+    MossAudioTokenizerDecoderConfig,
+    MossAudioTokenizerEncoderConfig,
+    MossAudioTokenizerQuantizerConfig,
+)
 from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
 
 
@@ -31,17 +38,17 @@ def get_moss_audio_tokenizer_config(**kwargs):
         sampling_rate=16000,
         downsample_rate=4,
         causal_transformer_context_duration=1.0,
-        encoder_kwargs=[{"module_type": "PatchedPretransform", "patch_size": 4}],
-        decoder_kwargs=[{"module_type": "PatchedPretransform", "patch_size": 4}],
-        quantizer_kwargs={
-            "input_dim": 4,
-            "rvq_dim": 4,
-            "output_dim": 4,
-            "num_quantizers": 2,
-            "codebook_size": 16,
-            "codebook_dim": 2,
-            "quantizer_type": "rlfq",
-        },
+        encoder_config=MossAudioTokenizerEncoderConfig(patch_sizes=[4], input_dimensions=[]),
+        decoder_config=MossAudioTokenizerDecoderConfig(patch_sizes=[4], input_dimensions=[]),
+        quantizer_config=MossAudioTokenizerQuantizerConfig(
+            input_dim=4,
+            rvq_dim=4,
+            output_dim=4,
+            num_quantizers=2,
+            codebook_size=16,
+            codebook_dim=2,
+            quantizer_type="rlfq",
+        ),
         **kwargs,
     )
 
@@ -64,6 +71,46 @@ class MossAudioTokenizerModelTest(unittest.TestCase):
 
         model = AutoModel.from_config(get_moss_audio_tokenizer_config())
         self.assertIsInstance(model, MossAudioTokenizerModel)
+
+    def test_legacy_config_kwargs(self):
+        encoder_kwargs = [{"module_type": "PatchedPretransform", "patch_size": 4}]
+        decoder_kwargs = [{"module_type": "PatchedPretransform", "patch_size": 4}]
+        quantizer_kwargs = {
+            "input_dim": 4,
+            "rvq_dim": 4,
+            "output_dim": 4,
+            "num_quantizers": 2,
+            "codebook_size": 16,
+            "codebook_dim": 2,
+            "quantizer_type": "rlfq",
+        }
+
+        config = MossAudioTokenizerConfig(
+            sample_rate=16000,
+            downsample_rate=4,
+            causal_transformer_context_duration=1.0,
+            encoder_kwargs=encoder_kwargs,
+            decoder_kwargs=decoder_kwargs,
+            quantizer_kwargs=quantizer_kwargs,
+            code_dim=4,
+            reversed_decoder_kwargs=encoder_kwargs,
+        )
+
+        self.assertIsInstance(config.encoder_config, MossAudioTokenizerEncoderConfig)
+        self.assertIsInstance(config.decoder_config, MossAudioTokenizerDecoderConfig)
+        self.assertIsInstance(config.quantizer_config, MossAudioTokenizerQuantizerConfig)
+        self.assertEqual(config.sampling_rate, 16000)
+        self.assertEqual(config.encoder_kwargs, encoder_kwargs)
+        self.assertEqual(config.decoder_kwargs, decoder_kwargs)
+        self.assertEqual(config.quantizer_kwargs, quantizer_kwargs)
+
+        config_dict = config.to_dict()
+        self.assertIn("encoder_config", config_dict)
+        self.assertIn("decoder_config", config_dict)
+        self.assertIn("quantizer_config", config_dict)
+        self.assertNotIn("encoder_kwargs", config_dict)
+        self.assertNotIn("decoder_kwargs", config_dict)
+        self.assertNotIn("quantizer_kwargs", config_dict)
 
     def test_encode_decode_and_forward(self):
         config = get_moss_audio_tokenizer_config()

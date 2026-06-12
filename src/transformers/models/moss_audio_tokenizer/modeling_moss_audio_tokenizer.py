@@ -15,7 +15,6 @@
 
 from __future__ import annotations
 
-import copy
 import math
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
@@ -27,10 +26,22 @@ import torch.nn.functional as F
 
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import ModelOutput, auto_docstring, logging
-from .configuration_moss_audio_tokenizer import MossAudioTokenizerConfig
+from .configuration_moss_audio_tokenizer import MossAudioTokenizerConfig, MossAudioTokenizerQuantizerConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+def _quantizer_config_to_kwargs(config: MossAudioTokenizerQuantizerConfig) -> dict[str, int | str]:
+    return {
+        "input_dim": config.input_dim,
+        "rvq_dim": config.rvq_dim,
+        "output_dim": config.output_dim,
+        "num_quantizers": config.num_quantizers,
+        "codebook_size": config.codebook_size,
+        "codebook_dim": config.codebook_dim,
+        "quantizer_type": config.quantizer_type,
+    }
 
 
 # =============================================================================
@@ -1330,7 +1341,7 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
         current_frame_rate: float = float(self.sampling_rate)
         self.encoder = nn.ModuleList()
 
-        for encoder_kwargs_i in config.encoder_kwargs:
+        for encoder_kwargs_i in config.encoder_config.to_module_configs():
             encoder_kwargs_i = dict(encoder_kwargs_i)  # Make a copy
             if encoder_kwargs_i["module_type"] == "PatchedPretransform":
                 self.encoder.append(MossAudioTokenizerPatchedPretransform(**encoder_kwargs_i, is_downsample=True))
@@ -1344,7 +1355,7 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
             current_frame_rate /= self.encoder[-1].downsample_ratio
 
         # Build quantizer
-        quantizer_kwargs = dict(config.quantizer_kwargs)
+        quantizer_kwargs = _quantizer_config_to_kwargs(config.quantizer_config)
         quantizer_type = quantizer_kwargs.get("quantizer_type", getattr(config, "quantizer_type", "rvq"))
         if quantizer_type in {"rvq", "spec_rvq"}:
             self.quantizer = MossAudioTokenizerResidualVQ(**quantizer_kwargs)
@@ -1354,10 +1365,9 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
             raise ValueError(f"Unsupported quantizer_type: {quantizer_type}")
 
         # Build decoder
-        decoder_kwargs_list = copy.deepcopy(config.decoder_kwargs)
         self.decoder = nn.ModuleList()
 
-        for decoder_kwargs_i in decoder_kwargs_list:
+        for decoder_kwargs_i in config.decoder_config.to_module_configs():
             decoder_kwargs_i = dict(decoder_kwargs_i)
             if decoder_kwargs_i["module_type"] == "PatchedPretransform":
                 self.decoder.append(MossAudioTokenizerPatchedPretransform(**decoder_kwargs_i, is_downsample=False))

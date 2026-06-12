@@ -44,6 +44,18 @@ audio_values = decoded.audio
 
 [[autodoc]] MossAudioTokenizerConfig
 
+## MossAudioTokenizerEncoderConfig
+
+[[autodoc]] MossAudioTokenizerEncoderConfig
+
+## MossAudioTokenizerDecoderConfig
+
+[[autodoc]] MossAudioTokenizerDecoderConfig
+
+## MossAudioTokenizerQuantizerConfig
+
+[[autodoc]] MossAudioTokenizerQuantizerConfig
+
 ## MossAudioTokenizerModel
 
 [[autodoc]] MossAudioTokenizerModel
