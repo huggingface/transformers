@@ -160,12 +160,6 @@ class CodeLlamaTokenizer(TokenizersBackend):
             replacement="▁", prepend_scheme=prepend_scheme, split=False
         )
 
-        # Strip is intentionally omitted: conditional stripping is handled in
-        # _decode to avoid eating real user-provided leading spaces.
-        self._tokenizer.decoder = decoders.Sequence(
-            [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()]
-        )
-
         super().__init__(
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             unk_token=unk_token,
@@ -181,6 +175,14 @@ class CodeLlamaTokenizer(TokenizersBackend):
             add_bos_token=add_bos_token,
             additional_special_tokens=additional_special_tokens,
             **kwargs,
+        )
+        # Set after super().__init__() because from_pretrained loads tokenizer.json
+        # into self._tokenizer (overwriting whatever was set before super()), so any
+        # decoder assignment before the super() call is silently discarded.
+        # Strip is intentionally omitted: conditional stripping is handled in
+        # _decode to avoid eating real user-provided leading spaces.
+        self._tokenizer.decoder = decoders.Sequence(
+            [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()]
         )
         self._prefix_token = prefix_token
         self._middle_token = middle_token
