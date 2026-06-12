@@ -873,11 +873,15 @@ class ProcessorMixin(PushToHubMixin):
         batch_replacement_offsets = []
         for batch_idx in range(len(text)):
             last = 0
+            offset = 0
             replacement_offsets = []
             expanded_sample = []
             for m in re.finditer(regex_special_mm_tokens, text[batch_idx]):
                 start, end = m.span()
                 expanded_sample.append(text[batch_idx][last:start])
+
+                # adjust spans using running offset if one sample has several MM data associated
+                start_with_offset = start + offset
 
                 mm_type = m.lastgroup
                 replacement_text = next(replacements_iters[mm_type])
@@ -885,12 +889,14 @@ class ProcessorMixin(PushToHubMixin):
                     {
                         "type": mm_type,
                         "span": (start, end),
-                        "new_span": (start, start + len(replacement_text)),
+                        "new_span": (start_with_offset, start_with_offset + len(replacement_text)),
                         "text": m.group(),
                         "replacement": replacement_text,
                     }
                 )
                 expanded_sample.append(replacement_text)
+                # update the offsets and the last position
+                offset += len(replacement_text) - (end - start)
                 last = end
 
             expanded_sample.append(text[batch_idx][last:])
@@ -941,15 +947,33 @@ class ProcessorMixin(PushToHubMixin):
     # These values are used to build `mm_token_type_ids`
     @property
     def image_token_ids(self) -> list[int | None]:
+        if _image_token_ids := getattr(self, "_image_token_ids", None):
+            return _image_token_ids
         return [getattr(self, "image_token_id", None)]
+
+    @image_token_ids.setter
+    def image_token_ids(self, value: list[int | None]):
+        setattr(self, "_image_token_ids", value)
 
     @property
     def video_token_ids(self) -> list[int | None]:
+        if _video_token_ids := getattr(self, "_video_token_ids", None):
+            return _video_token_ids
         return [getattr(self, "video_token_id", None)]
+
+    @video_token_ids.setter
+    def video_token_ids(self, value: list[int | None]):
+        setattr(self, "_video_token_ids", value)
 
     @property
     def audio_token_ids(self) -> list[int | None]:
+        if _audio_token_ids := getattr(self, "_audio_token_ids", None):
+            return _audio_token_ids
         return [getattr(self, "audio_token_id", None)]
+
+    @audio_token_ids.setter
+    def audio_token_ids(self, value: list[int | None]):
+        setattr(self, "_audio_token_ids", value)
 
     def check_argument_for_proper_class(self, argument_name, argument):
         """
