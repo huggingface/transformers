@@ -484,7 +484,7 @@ class Tipsv2DptPreTrainedModel(PreTrainedModel):
     config: Tipsv2DptConfig
     base_model_prefix = "tipsv2_dpt"
     main_input_name = "pixel_values"
-    input_modalities = ("image",)
+    input_modalities = ["image"]
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module) -> None:
@@ -568,6 +568,8 @@ class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
     """
 )
 class Tipsv2DptForDepthEstimation(Tipsv2DptPreTrainedModel):
+    _keys_to_ignore_on_load_unexpected = {"normals_head", "normals_neck", "segmentation_head", "segmentation_neck"}
+
     def __init__(self, config: Tipsv2DptConfig):
         super().__init__(config)
         self.backbone = load_backbone(config)
@@ -619,6 +621,8 @@ class Tipsv2DptForDepthEstimation(Tipsv2DptPreTrainedModel):
     """
 )
 class Tipsv2DptForNormalEstimation(Tipsv2DptPreTrainedModel):
+    _keys_to_ignore_on_load_unexpected = {"depth_head", "depth_neck", "segmentation_head", "segmentation_neck"}
+
     def __init__(self, config: Tipsv2DptConfig):
         super().__init__(config)
         self.backbone = load_backbone(config)
@@ -659,6 +663,8 @@ class Tipsv2DptForNormalEstimation(Tipsv2DptPreTrainedModel):
     """
 )
 class Tipsv2DptForSemanticSegmentation(Tipsv2DptPreTrainedModel):
+    _keys_to_ignore_on_load_unexpected = {"depth_head", "depth_neck", "normals_head", "normals_neck"}
+
     def __init__(self, config: Tipsv2DptConfig):
         super().__init__(config)
         self.backbone = load_backbone(config)
