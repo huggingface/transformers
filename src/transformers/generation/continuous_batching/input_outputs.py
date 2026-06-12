@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from contextlib import nullcontext
-from dataclasses import dataclass
 from functools import partial
 from itertools import repeat
 from typing import Any
 
 import torch
+from typing_extensions import TypedDict
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.generation.configuration_utils import ContinuousBatchingConfig
@@ -29,9 +29,8 @@ from .requests import TMP_TOKEN_ID, FutureRequestState, logger
 from .utils import CudaGraphBuffer, aligned_divide, attn_mask_is_needed, build_attention_mask, pad_to_pow2
 
 
-@dataclass
-class PagedAttentionArgs:
-    """Dataclass containing the keyword arguments for a forward pass using paged attention.
+class PagedAttentionArgs(TypedDict):
+    """The keyword arguments for a forward pass using paged attention, passed directly as model forward kwargs.
 
     Attributes:
         input_ids: Input token IDs tensor of shape `(1, total_query_tokens)`.
@@ -66,25 +65,7 @@ class PagedAttentionArgs:
     cache: PagedAttentionCache
     block_table: torch.Tensor | None
     logits_processor_args: torch.Tensor
-    use_cache: bool = False
-
-    def asdict(self) -> dict[str, Any]:
-        return {
-            "input_ids": self.input_ids,
-            "attention_mask": self.attention_mask,
-            "position_ids": self.position_ids,
-            "cu_seq_lens_q": self.cu_seq_lens_q,
-            "cu_seq_lens_k": self.cu_seq_lens_k,
-            "max_seqlen_q": self.max_seqlen_q,
-            "max_seqlen_k": self.max_seqlen_k,
-            "write_index": self.write_index,
-            "read_index": self.read_index,
-            "logits_indices": self.logits_indices,
-            "cache": self.cache,
-            "block_table": self.block_table,
-            "logits_processor_args": self.logits_processor_args,
-            "use_cache": self.use_cache,
-        }
+    use_cache: bool
 
 
 class ContinuousBatchingIOs:
@@ -522,35 +503,35 @@ class ContinuousBatchingIOs:
 
         # When using block table, max_seqlen_q and max_seqlen_k are not used by flash_attn_with_kvcache, so we set them
         # to constant `1` to avoid dynamo guards on these changing integer values. This applies throughout this method.
-        kwargs.max_seqlen_q = 1 if self.use_block_table else self.max_seqlen_q
+        kwargs["max_seqlen_q"] = 1 if self.use_block_table else self.max_seqlen_q
 
         # For the attributes that are lists of tensors, we construct list of tensor references
         for i in range(self.cache.num_groups):
             write_index_size = q_size if use_padding else self.true_write_sizes[i]
-            kwargs.write_index.append(self.write_index_storage[i, :write_index_size])
+            kwargs["write_index"].append(self.write_index_storage[i, :write_index_size])
             # If there is no cache to read, pass a list of empty tensors so `cache.update` uses the write-only fast path
             if self.max_kv_read == 0:
                 read_index_size = 0
             else:
                 read_index_size = kv_size if use_padding else self.true_read_sizes[i]
-            kwargs.read_index.append(self.read_index_storage[i, :read_index_size])
+            kwargs["read_index"].append(self.read_index_storage[i, :read_index_size])
 
         # For the attributes that are dict of tensors, we first fill the dict with the actual values
         for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
-            kwargs.cu_seq_lens_k[layer_type] = seqlens_k[: num_sequences + 1]
-            kwargs.max_seqlen_k[layer_type] = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
+            kwargs["cu_seq_lens_k"][layer_type] = seqlens_k[: num_sequences + 1]
+            kwargs["max_seqlen_k"][layer_type] = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
             if self.attention_mask is not None:
                 k_len = kv_size if use_padding else self.total_seqlen_k[layer_type]
-                kwargs.attention_mask[layer_type] = self.attention_mask[layer_type][..., :q_size, :k_len]
+                kwargs["attention_mask"][layer_type] = self.attention_mask[layer_type][..., :q_size, :k_len]
 
         # If there is only one layer type, we remove the dicts around some attributes to avoid unnecessary overhead
         if len(self.cumulative_seqlens_k.keys()) == 1:
-            kwargs.cu_seq_lens_k = kwargs.cu_seq_lens_k.popitem()[1]  # type: ignore
-            kwargs.max_seqlen_k = kwargs.max_seqlen_k.popitem()[1]  # type: ignore
+            kwargs["cu_seq_lens_k"] = kwargs["cu_seq_lens_k"].popitem()[1]  # type: ignore
+            kwargs["max_seqlen_k"] = kwargs["max_seqlen_k"].popitem()[1]  # type: ignore
             if self.attention_mask is not None:
-                kwargs.attention_mask = kwargs.attention_mask.popitem()[1]  # type: ignore
+                kwargs["attention_mask"] = kwargs["attention_mask"].popitem()[1]  # type: ignore
 
-        return kwargs.asdict()  # TODO: this is imperfect, check if there is no better way to juggle dict / dataclass
+        return kwargs
 
     def get_cb_kwargs(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Returns the tensors used inside the generation step that are not inputs to the model forward pass. In
