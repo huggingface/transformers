@@ -455,6 +455,115 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
+        "minimax_m3_vl": [
+            # Ordering matters for save round-tripping: the reverse mapping flips the order *and* each
+            # transform (see deepseek_v4 above). We therefore split into two passes: structural prefix
+            # renames first (so they apply last on save / first on load), then specific in-prefix renames
+            # that operate on the already-prefixed keys. Every target prefix here is distinct and anchored,
+            # so no reversed source pattern is broad enough to steal keys from another namespace.
+            # ---- Pass 1: top-level + structural prefix renames ----
+            WeightRenaming(source_patterns=r"^language_model\.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model\.model\.", target_patterns="model.language_model."),
+            # The vision tower flattens CLIP's `vision_model.{encoder.layers,embeddings.patch_embedding,
+            # pre_layrnorm}` nesting onto `vision_tower.{layers,embeddings.proj,pre_layrnorm}`. Each rule is
+            # anchored and leaf-specific so its reverse re-inserts `vision_model` only on the right keys (a
+            # blanket `.vision_model.` -> `.` rule reverses to "match any char" and mangles every key).
+            WeightRenaming(
+                source_patterns=r"^vision_tower\.vision_model\.embeddings\.patch_embedding\.",
+                target_patterns="model.vision_tower.embeddings.proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^vision_tower\.vision_model\.encoder\.layers\.",
+                target_patterns="model.vision_tower.layers.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^vision_tower\.vision_model\.pre_layrnorm\.",
+                target_patterns="model.vision_tower.pre_layrnorm.",
+            ),
+            # The projector hosts both the upstream `multi_modal_projector.linear_{1,2}` and the
+            # `patch_merge_mlp.linear_{1,2}` (registered as `merge_linear_{1,2}`). Spell each leaf out so the
+            # reversed `linear_*` source never also matches `merge_linear_*` (or vice versa).
+            WeightRenaming(
+                source_patterns=r"^multi_modal_projector\.linear_1\.",
+                target_patterns="model.multi_modal_projector.linear_1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^multi_modal_projector\.linear_2\.",
+                target_patterns="model.multi_modal_projector.linear_2.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^patch_merge_mlp\.linear_1\.",
+                target_patterns="model.multi_modal_projector.merge_linear_1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^patch_merge_mlp\.linear_2\.",
+                target_patterns="model.multi_modal_projector.merge_linear_2.",
+            ),
+            # ---- Pass 2: specific in-prefix renames (operate on already-prefixed keys) ----
+            # MoE layers rename `block_sparse_moe.*` -> `mlp.*`, but dense layers already use `mlp.*`. A blanket
+            # `block_sparse_moe.` -> `mlp.` rule reverses to `mlp.` -> `block_sparse_moe.` and corrupts the dense
+            # layers on save, so we rename per MoE leaf (`experts` / `shared_experts` / `gate` / e-score). The
+            # reversed `mlp.experts.` / `mlp.shared_experts.` / `mlp.gate.weight` sources match only MoE
+            # sublayers, never the dense `mlp.gate_up_proj` / `mlp.down_proj`.
+            WeightRenaming(
+                source_patterns=r"\.language_model\.layers\.(\d+)\.block_sparse_moe\.experts\.",
+                target_patterns=r".language_model.layers.\1.mlp.experts.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.language_model\.layers\.(\d+)\.block_sparse_moe\.shared_experts\.",
+                target_patterns=r".language_model.layers.\1.mlp.shared_experts.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.language_model\.layers\.(\d+)\.block_sparse_moe\.gate\.weight",
+                target_patterns=r".language_model.layers.\1.mlp.gate.weight",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.language_model\.layers\.(\d+)\.block_sparse_moe\.e_score_correction_bias",
+                target_patterns=r".language_model.layers.\1.mlp.gate.e_score_correction_bias",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.self_attn\.index_q_proj\.",
+                target_patterns=".self_attn.indexer.q_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.self_attn\.index_k_proj\.",
+                target_patterns=".self_attn.indexer.k_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.self_attn\.index_q_norm\.",
+                target_patterns=".self_attn.indexer.q_norm.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.self_attn\.index_k_norm\.",
+                target_patterns=".self_attn.indexer.k_norm.",
+            ),
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.w1.weight",
+                    "mlp.experts.*.w3.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.w2.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=["mlp.gate_proj.weight", "mlp.up_proj.weight"],
+                target_patterns="mlp.gate_up_proj.weight",
+                operations=[Concatenate(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=[
+                    "mlp.shared_experts.gate_proj.weight",
+                    "mlp.shared_experts.up_proj.weight",
+                ],
+                target_patterns="mlp.shared_experts.gate_up_proj.weight",
+                operations=[Concatenate(dim=0)],
+            ),
+        ],
         "step3p7": [
             WeightRenaming(source_patterns=r"^vision_model", target_patterns="model.vision_model"),
             WeightRenaming(
