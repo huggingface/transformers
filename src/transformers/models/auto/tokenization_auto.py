@@ -398,6 +398,23 @@ TOKENIZER_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TOKENIZER_MAPPING_NAM
 
 CONFIG_TO_TYPE = {v: k for k, v in CONFIG_MAPPING_NAMES.items()}
 
+# Per-checkpoint overrides for models that declare a model_type which maps
+# to a correct tokenizer class (e.g. "llama" → LlamaTokenizer), but whose
+# tokenizer.json ships an incompatible ByteLevel-BPE pipeline that
+# LlamaTokenizer (SentencePiece-based) cannot load correctly.
+# Adding these model_types to MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
+# would break all genuine models of that type, so we key by checkpoint
+# name prefix instead.
+CHECKPOINT_PREFIXES_WITH_INCORRECT_HUB_TOKENIZER_CLASS: frozenset[str] = frozenset(
+    {
+        # DeepSeek-Coder v1 (1.3b / 6.7b / 33b, base + instruct): model_type=llama,
+        # tokenizer_class=LlamaTokenizerFast, but tokenizer.json is ByteLevel-BPE.
+        "deepseek-ai/deepseek-coder-",
+        # DeepSeek-LLM v1 (7b, base + chat): same mismatch.
+        "deepseek-ai/deepseek-llm-",
+    }
+)
+
 
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
@@ -705,6 +722,16 @@ class AutoTokenizer:
         # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
         tokenizer_config_class = tokenizer_config.get("tokenizer_class", None)
+
+        # Per-checkpoint override: some checkpoints declare a model_type that maps
+        # to the correct tokenizer class name, so the mismatch block below never
+        # fires, yet their tokenizer.json uses an incompatible backend. Force
+        # TokenizersBackend for known cases.
+        if TokenizersBackend is not None and any(
+            str(pretrained_model_name_or_path).startswith(prefix)
+            for prefix in CHECKPOINT_PREFIXES_WITH_INCORRECT_HUB_TOKENIZER_CLASS
+        ):
+            return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # Check for auto_map early to handle dynamic tokenizers properly
         tokenizer_auto_map = None
