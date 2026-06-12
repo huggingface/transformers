@@ -564,11 +564,6 @@ class ESMCEncoder(nn.Module):
 
 @auto_docstring
 class ESMCPreTrainedModel(PreTrainedModel):
-    """Base class for ESMC models.
-
-    Handles weight initialisation and declares module-level capabilities.
-    """
-
     config_class = ESMCConfig
     base_model_prefix = "esmc"
     supports_gradient_checkpointing = False
@@ -606,17 +601,6 @@ class ESMCPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class ESMCModel(ESMCPreTrainedModel):
-    """The bare ESMC encoder outputting raw hidden states.
-
-    ESMC is a protein language model trained by EvolutionaryScale using a
-    masked-token objective over amino acid sequences.  The architecture is a
-    standard Transformer encoder with RoPE positional embeddings, QK LayerNorm,
-    and SwiGLU feed-forward networks.
-
-    Args:
-        config: An :class:`ESMCConfig` instance.
-    """
-
     def __init__(self, config: ESMCConfig):
         super().__init__(config)
         self.embed = nn.Embedding(config.vocab_size, config.d_model)
@@ -779,13 +763,6 @@ class ESMCMaskedLMHead(nn.Module):
 
 @auto_docstring
 class ESMCForMaskedLM(ESMCPreTrainedModel):
-    """ESMC with a masked language modelling head.
-
-    This is the primary pre-training objective of ESMC.  The LM head consists
-    of a single hidden layer with GELU activation followed by LayerNorm and a
-    linear projection to ``vocab_size``.
-    """
-
     def __init__(self, config: ESMCConfig):
         super().__init__(config)
         self.esmc = ESMCModel(config)
@@ -903,13 +880,6 @@ class ESMCClassificationHead(nn.Module):
 
 @auto_docstring
 class ESMCForSequenceClassification(ESMCPreTrainedModel):
-    """ESMC with a sequence-level classification head.
-
-    A linear layer is applied to the ``<cls>`` token representation.
-    Supports regression (``num_labels == 1``), single-label classification,
-    and multi-label classification.
-    """
-
     def __init__(self, config: ESMCConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1000,12 +970,6 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
 
 @auto_docstring
 class ESMCForTokenClassification(ESMCPreTrainedModel):
-    """ESMC with a per-token classification head.
-
-    Useful for tasks such as secondary structure prediction, contact-map
-    prediction, or per-residue labelling.
-    """
-
     def __init__(self, config: ESMCConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
