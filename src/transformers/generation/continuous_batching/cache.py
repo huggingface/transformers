@@ -629,6 +629,8 @@ class PagedAttentionMemoryHandler:
             + k * self.num_groups * 8                  # write_index: [num_groups, M] int64
             + k * self.num_groups * 8                  # read_index: [num_groups, N + M] (M part only, int64)
         )
+        # TODO: the above could be refined by introducing the max_requests_per_batch, but then there is a min() and this
+        # is no longer a simple polynomial. Could be worth checking into.
         # -- N·M terms: cost per (page × batch token) --------------------------------------
         coeff_nm = k * self.num_attention_masks * a    # attention_mask: [1, 1, M, N + M] (N·M part only)
         # -- M² terms: cost per (batch token squared) --------------------------------------

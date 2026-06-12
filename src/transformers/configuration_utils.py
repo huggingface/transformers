@@ -73,6 +73,7 @@ ALLOWED_LAYER_TYPES = (
     "dense",
     "hybrid",  # for layers that have both mamba and attention in zamba and zamba2
     "moe",  # for nemotron_h, which uses either attention, mamba or moe
+    "deepseek_sparse_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
 )
 
 
