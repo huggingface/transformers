@@ -1402,7 +1402,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self._sp_plan = dict(cls_sp_plan)
         self._tp_ep_plan = dict(cls_tp_ep_plan)
         self._sp_ep_plan = dict(cls_sp_ep_plan)
-        self._ep_plan = {}
         self._pp_plan = {}
         self._fsdp_plan = dict(cls_fsdp_plan)
         # If current model is a base model, attach `base_model_*_plan` from config
@@ -1416,7 +1415,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self._sp_ep_plan = (
                 self.config.base_model_sp_ep_plan.copy() if self.config.base_model_sp_ep_plan is not None else {}
             )
-            self._ep_plan = self.config.base_model_ep_plan.copy() if self.config.base_model_ep_plan is not None else {}
             self._fsdp_plan = (
                 self.config.base_model_fsdp_plan.copy() if self.config.base_model_fsdp_plan is not None else {}
             )
@@ -1438,8 +1436,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # This works because the way the `__init__` and `post_init` are called on all submodules is depth-first in the graph
         for name, module in self.named_children():
             # Parallel plans
-            if plan := getattr(module, "_ep_plan", None):
-                self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_tp_plan", None):
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_sp_plan", None):
@@ -1484,7 +1480,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         The full tp plan for the model's modules
         """
-        # TODO(3outeille): should we resolve the plan here as well or rely on set attribute after resolving in apply_tensor_parallel?
+        # TODO(3outeille): should we resolve the plan here as well or rely on set attribute after select_parallel_plan in apply_tensor_parallel?
         return self._tp_plan
 
     @property
@@ -4454,8 +4450,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             verify_tp_sp_ep_plan(
                 expected_keys,
                 tp_plan=load_config.tp_plan,
-                sp_plan=getattr(model, "_sp_plan", None) or None,
-                ep_plan=getattr(model, "_ep_plan", None) or None,
             )
 
         # This offload index if for params explicitly on the "disk" in the device_map

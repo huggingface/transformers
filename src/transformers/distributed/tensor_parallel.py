@@ -730,53 +730,13 @@ MODEL_PARALLEL_PLAN_ATTRS: dict[tuple[bool, bool], str] = {
 }
 
 
-def resolve_parallel_plan(
-    model, user_tp_plan: dict[str, str] | None, enable_sp: bool, enable_ep: bool
-) -> dict[str, str]:
-    """
-    Resolve the parallel plan to apply, given enable_sequence_parallel and enable_expert_parallel.
-
-    user_tp_plan is an explicit override (DistributedConfig.tp_plan); when provided it
-    replaces the dense base recipe (_tp_plan / _sp_plan). _ep_plan is still overlaid
-    when EP is on. When user_tp_plan is None the base is resolved from the model defaults:
-        - user_tp_plan != None  -> user_tp_plan (∪ _ep_plan if EP)
-        - SP=true,  EP=false    -> _sp_plan
-        - SP=false, EP=true     -> _tp_plan ∪ _ep_plan (inference TP+EP)
-        - SP=true,  EP=true     -> _sp_plan ∪ _ep_plan (training SP+EP)
-        - SP=false, EP=false    -> _tp_plan (experts keep moe_tp_*)
-    """
-
-    if user_tp_plan is not None:  # either TP or SP
-        base = dict(user_tp_plan)
-    elif enable_sp:  # take default base_sp_plan
-        base = dict(getattr(model, "_sp_plan", None) or {})  # training plan
-    else:  # take default base_tp_plan
-        base = dict(getattr(model, "_tp_plan", None) or {})  # inference plan
-
-    if enable_ep:
-        base = {**base, **dict(getattr(model, "_ep_plan", None) or {})}
-        # Strip moe_tp_* for TP experts when EP is enabled
-        base = {
-            key: style
-            for key, style in base.items()
-            if not (
-                key.endswith((".gate_up_proj", ".down_proj"))
-                and style in ("moe_tp_gate_up_colwise", "moe_tp_down_rowwise")
-            )
-        }
-    return base
-
-
 def select_parallel_plan(model) -> dict[str, str]:
     """
-    Select the parallel plan to apply from explicit combo plans on the model/config.
+    Select the parallel plan to apply from explicit combo plans on the model.
 
     ``DistributedConfig.tp_plan`` bypasses lookup and must be a complete plan.
     Otherwise the (enable_sequence_parallel, enable_expert_parallel) pair selects
     ``_tp_plan``, ``_sp_plan``, ``_tp_ep_plan``, or ``_sp_ep_plan`` on the model.
-
-    Falls back to ``resolve_parallel_plan`` while models migrate from split tp/sp/ep
-    recipes to explicit combo dicts.
     """
     distributed_config = model.config.distributed_config
     user_tp_plan = distributed_config.tp_plan
@@ -787,16 +747,15 @@ def select_parallel_plan(model) -> dict[str, str]:
     ep = distributed_config.enable_expert_parallel
     plan_attr = MODEL_PARALLEL_PLAN_ATTRS[(sp, ep)]
     plan = getattr(model, plan_attr, None) or {}
-    if plan:
-        return dict(plan)
-
-    enable_sp = bool(
-        sp and getattr(model.config, "base_model_sp_plan", None) is not None
-    )
-    enable_ep = bool(
-        ep and getattr(model.config, "base_model_ep_plan", None) is not None
-    )
-    return resolve_parallel_plan(model, user_tp_plan=None, enable_sp=enable_sp, enable_ep=enable_ep)
+    if not plan:
+        config_attr = PARALLEL_PLAN_KEYS[(sp, ep)]
+        raise ValueError(
+            f"Model {model.config.model_type!r} has no {config_attr} (model.{plan_attr} is empty) but "
+            f"DistributedConfig requested enable_sequence_parallel={sp}, enable_expert_parallel={ep}. "
+            f"Add {config_attr} to the model config, set DistributedConfig.tp_plan explicitly, "
+            f"or change the flags."
+        )
+    return dict(plan)
 
 
 def apply_tensor_parallel(model, tp_mesh):
@@ -807,14 +766,8 @@ def apply_tensor_parallel(model, tp_mesh):
     install_forward). Plus the cross-cutting setup: tie-weights handling, SP position_ids
     injection, and loss_parallel activation.
     """
-    enable_sp = bool(
-        getattr(model.config.distributed_config, "enable_sequence_parallel", False)
-        and getattr(model.config, "base_model_sp_plan", None) is not None
-    )
-    enable_ep = bool(
-        getattr(model.config.distributed_config, "enable_expert_parallel", False)
-        and getattr(model.config, "base_model_ep_plan", None) is not None
-    )
+    enable_sp = bool(getattr(model.config.distributed_config, "enable_sequence_parallel", False))
+    enable_ep = bool(getattr(model.config.distributed_config, "enable_expert_parallel", False))
 
     # case when enable_sequence_parallel=True and tp_plan!=None (but tp_plan has no sequence parallel styles keys) raise an error
     user_tp_plan = model.config.distributed_config.tp_plan

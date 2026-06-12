@@ -37,6 +37,7 @@ def init_combo_plans(config) -> None:
     Populate ``base_model_tp_ep_plan`` / ``base_model_sp_ep_plan`` on a config instance when unset.
 
     Skips models that already define explicit combo plans (class or instance level).
+    Uses ``base_model_ep_plan`` only as a config-time recipe input, not a runtime overlay.
     """
     ep_plan = config.base_model_ep_plan
     if not ep_plan:
@@ -49,3 +50,14 @@ def init_combo_plans(config) -> None:
         config.base_model_tp_ep_plan = merge_dense_and_ep_plan(dict(tp_plan), dict(ep_plan))
     if sp_plan is not None and not config.base_model_sp_ep_plan:
         config.base_model_sp_ep_plan = merge_dense_and_ep_plan(dict(sp_plan), dict(ep_plan))
+
+
+def refresh_combo_plans(config) -> None:
+    """Rebuild combo plans from the current tp/sp/ep recipes (e.g. after quantizer patches)."""
+    ep_plan = config.base_model_ep_plan
+    if not ep_plan:
+        return
+    if config.base_model_tp_plan is not None:
+        config.base_model_tp_ep_plan = merge_dense_and_ep_plan(dict(config.base_model_tp_plan), dict(ep_plan))
+    if config.base_model_sp_plan is not None:
+        config.base_model_sp_ep_plan = merge_dense_and_ep_plan(dict(config.base_model_sp_plan), dict(ep_plan))
