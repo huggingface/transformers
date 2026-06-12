@@ -27,15 +27,6 @@ class MiniMaxM3VLProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-class MiniMaxM3ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": True,
-        },
-    }
-
-
 @auto_docstring
 class MiniMaxM3VLProcessor(ProcessorMixin):
     """Combines tokenizer + image_processor + video_processor for MiniMax M3 VL.
@@ -104,7 +95,7 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = MiniMaxM3ProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs = MiniMaxM3VLProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
             merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
@@ -116,7 +107,7 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = MiniMaxM3ProcessorKwargs._defaults.get("videos_kwargs", {})
+            videos_kwargs = MiniMaxM3VLProcessorKwargs._defaults.get("videos_kwargs", {})
             videos_kwargs.update(kwargs)
             num_video_patches = [
                 self.video_processor.get_number_of_video_patches(*video_size, videos_kwargs)

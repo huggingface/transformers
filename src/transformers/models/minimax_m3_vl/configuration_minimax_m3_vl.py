@@ -121,10 +121,6 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
     layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
-        # Older checkpoints ship the lightning-indexer hyperparameters as a nested
-        # `sparse_attention_config` dict; fold it into the flat `index_*` fields
-        # (and derive `layer_types` from its per-layer frequency) before the strict
-        # parent init runs, so model code only ever reads flat config attributes.
         sparse_cfg = kwargs.pop("sparse_attention_config", None) or {}
         moe_layer_freq = kwargs.pop("moe_layer_freq", None)
         super().__post_init__(**kwargs)
@@ -218,6 +214,10 @@ class MiniMaxM3VLConfig(PreTrainedConfig):
 
         if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
             self.tie_word_embeddings = self.text_config.tie_word_embeddings
+
+        # Channel dim after grouping `spatial_merge_size**2` projected patches, consumed by the
+        # patch-merge MLP inside `MiniMaxM3VLMultiModalProjector`.
+        self.merged_hidden_size = self.text_config.hidden_size * (self.vision_config.spatial_merge_size**2)
 
         super().__post_init__(**kwargs)
 
