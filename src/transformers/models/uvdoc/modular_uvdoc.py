@@ -535,7 +535,6 @@ class UVDocBackbone(BackboneMixin, UVDocPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
         hidden_states = self.resnet(pixel_values)
         outputs = self.bridge(hidden_states, **kwargs)
 
