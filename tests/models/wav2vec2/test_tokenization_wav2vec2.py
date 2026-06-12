@@ -158,6 +158,16 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(batch_tokens, batch_tokens_2)
         self.assertEqual(batch_tokens, ["HELLO<unk>", "BYE BYE<unk>"])
 
+    def test_word_delimiter_is_not_skipped_as_special_token(self):
+        tokenizer = self.get_tokenizer()
+        token_ids = tokenizer("HELLO WORLD").input_ids
+
+        special_tokens_mask = tokenizer.get_special_tokens_mask(token_ids, already_has_special_tokens=True)
+        self.assertEqual(special_tokens_mask, [0] * len(token_ids))
+        self.assertIn(
+            tokenizer.word_delimiter_token, tokenizer.convert_ids_to_tokens(token_ids, skip_special_tokens=True)
+        )
+
     def test_tokenizer_decode_added_tokens(self):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-base-960h")
         tokenizer.add_tokens(["!", "?", "<new_tokens>"])
