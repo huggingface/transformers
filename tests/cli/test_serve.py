@@ -37,6 +37,7 @@ from transformers.cli.serving.utils import (
     BaseHandler,
     GenerationState,
     Modality,
+    _starts_in_thinking,
     get_tool_call_config,
     parse_tool_calls,
 )
@@ -538,6 +539,34 @@ class TestChunkSSE(unittest.TestCase):
     def test_chunk_to_sse_wraps_plain_string(self):
         result = BaseHandler.chunk_to_sse("hello")
         self.assertEqual(result, "data: hello\n\n")
+
+
+@require_serve
+class TestStartsInThinking(unittest.TestCase):
+    def test_prompt_ends_exactly_with_opener(self):
+        # DeepSeek-R1 / QwQ style: prompt ends with the thinking opener.
+        self.assertTrue(_starts_in_thinking([1, 2, 3, 100], [100]))
+
+    def test_opener_with_single_trailing_whitespace(self):
+        # Tolerate one trailing token (e.g. "\n") after the opener.
+        self.assertTrue(_starts_in_thinking([1, 2, 100, 7], [100]))
+
+    def test_closed_block_trailing_end_token_is_not_in_thinking(self):
+        # Gemma 4 with thinking disabled prefills an empty, already-closed block:
+        # ``<|channel>thought\n<channel|>``. The single trailing token is the end
+        # token, so the prompt is NOT left inside a thinking block.
+        self.assertFalse(_starts_in_thinking([1, 2, 100, 45518, 107, 101], [100, 45518, 107], end_id=101))
+
+    def test_closed_block_without_end_id_still_matches(self):
+        # Without ``end_id`` the closing-tag guard cannot fire (back-compat).
+        self.assertTrue(_starts_in_thinking([1, 2, 100, 45518, 107, 101], [100, 45518, 107]))
+
+    def test_no_thinking_tail(self):
+        self.assertFalse(_starts_in_thinking([1, 2, 3, 4], [100], end_id=101))
+
+    def test_batched_input_ids(self):
+        self.assertTrue(_starts_in_thinking([[1, 2, 100]], [100]))
+        self.assertFalse(_starts_in_thinking([[1, 2, 100], [3, 4, 100]], [100]))
 
 
 @require_serve

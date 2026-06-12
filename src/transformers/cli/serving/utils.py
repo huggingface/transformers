@@ -263,7 +263,7 @@ def get_reasoning_config(processor, model: "PreTrainedModel", input_ids=None) ->
         schema = _DEFAULT_THINKING_TOKENS["schema"]
     config: dict = {"start_ids": start_ids, "end_id": end_id, "schema": schema}
     if input_ids is not None:
-        config["start_in_thinking"] = _starts_in_thinking(input_ids, start_ids)
+        config["start_in_thinking"] = _starts_in_thinking(input_ids, start_ids, end_id)
     return config
 
 
@@ -287,7 +287,7 @@ def parse_reasoning(processor, generated_ids, content: str, reasoning_config: di
     return content, None
 
 
-def _starts_in_thinking(input_ids, start_ids: list[int]) -> bool:
+def _starts_in_thinking(input_ids, start_ids: list[int], end_id: int | None = None) -> bool:
     """True if the rendered prompt ends with an unclosed thinking block.
 
     Some reasoning-model chat templates prefill the thinking opener as the final
@@ -298,6 +298,10 @@ def _starts_in_thinking(input_ids, start_ids: list[int]) -> bool:
 
     The prefill always lands at the tail of the prompt (optionally followed by a
     single whitespace token like ``\\n``), so we only inspect the last few tokens.
+    When the single trailing token is the thinking *end* token, the block was
+    prefilled already-closed (e.g. Gemma 4 with thinking disabled emits an empty
+    ``<|channel>thought\\n<channel|>``), so the prompt is *not* left inside a
+    thinking block and we must not match.
     """
     if hasattr(input_ids, "tolist"):
         input_ids = input_ids.tolist()
@@ -311,6 +315,8 @@ def _starts_in_thinking(input_ids, start_ids: list[int]) -> bool:
         if len(input_ids) >= n + trailing:
             end = len(input_ids) - trailing
             if input_ids[end - n : end] == start_ids:
+                if trailing == 1 and end_id is not None and input_ids[end] == end_id:
+                    return False
                 return True
     return False
 
