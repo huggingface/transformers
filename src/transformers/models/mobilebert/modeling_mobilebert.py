@@ -682,7 +682,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
         self.cls.predictions.bias = new_embeddings.bias
 
     def resize_token_embeddings(self, new_num_tokens: int | None = None) -> nn.Embedding:
-        # resize dense output embedings at first
+        # resize dense output embeddings at first
         self.cls.predictions.dense = self._get_resized_lm_head(
             self.cls.predictions.dense, new_num_tokens=new_num_tokens, transposed=True
         )
@@ -782,7 +782,7 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
         self.cls.predictions.bias = new_embeddings.bias
 
     def resize_token_embeddings(self, new_num_tokens: int | None = None) -> nn.Embedding:
-        # resize dense output embedings at first
+        # resize dense output embeddings at first
         self.cls.predictions.dense = self._get_resized_lm_head(
             self.cls.predictions.dense, new_num_tokens=new_num_tokens, transposed=True
         )
