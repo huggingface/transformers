@@ -39,6 +39,8 @@ def contiguous_runs(indices: list[int]) -> list[tuple[int, int, int]]:
     """Groups an index list into (start_index, offset, length) runs of consecutive values, so scattered block copies
     can be performed as a few slice copies."""
     runs = []
+    if not indices:
+        return runs
     start = prev = indices[0]
     offset = 0
     for i in range(1, len(indices)):
@@ -82,7 +84,8 @@ class OffloadingManager:
 
         # Compute the size of the CPU swap pool in blocks
         num_cpu_blocks = self._compute_num_cpu_blocks(cpu_offload_space_gib, safety_threshold)
-        self._num_cpu_blocks = distributed_helper.tp_all_reduce_min(num_cpu_blocks)
+        num_cpu_blocks = torch.tensor(num_cpu_blocks, dtype=torch.int32, device="cpu")
+        self._num_cpu_blocks = int(distributed_helper.tp_all_reduce_min(num_cpu_blocks, on_cpu=True).item())
 
         offloading_enabled = cpu_offload_space_gib is not None and cpu_offload_space_gib > 0
         if self._num_cpu_blocks == 0:
@@ -196,12 +199,12 @@ class OffloadingManager:
             free_blocks += self.cache.blocks_in_use(state.request_id)  # approximation because of prefix sharing
         if not victims:
             return 0
+        victims.reverse()  # ensures the oldest (ie. largest) requests are offloaded first
 
         # Copy as many victims as fit in the CPU pool, in one batched copy. Must happen before the blocks are freed.
         cpu_offloaded = self._offload_to_cpu(victims)
-
         # Requeue victims oldest-first so they will become active again in (roughly) their original order
-        for state in reversed(victims):
+        for state in victims:
             request_id = state.request_id
             if request_id in cpu_offloaded:
                 # We set the allocated blocks to 0 so the scheduler re-allocates all blocks using position_offset.
@@ -294,16 +297,19 @@ class OffloadingManager:
                 gpu_view.index_copy_(0, gpu_ids, staging)
         self._free_cpu_blocks = sorted(self._free_cpu_blocks + all_cpu_indices)
 
-    def free_request_cpu_cache(self, state: RequestState) -> None:
+    def free_request_cpu_cache(self, state: RequestState, keep_unsorted: bool = False) -> None:
         """Free CPU blocks for a single request (e.g., on cancellation)."""
         if state.is_cpu_offloaded:
             self._return_cpu_blocks(state.request_id)
             state.is_cpu_offloaded = False
+            if not keep_unsorted:
+                self._free_cpu_blocks.sort()
 
     def free_all_waiting_cpu_caches(self) -> None:
         """Free all CPU-offloaded caches in the waiting queue (e.g., on fail_all or reset)."""
         for state in self.scheduler.waiting_requests.values():
-            self.free_request_cpu_cache(state)
+            self.free_request_cpu_cache(state, keep_unsorted=True)
+        self._free_cpu_blocks.sort()
 
     def reset(self) -> None:
         """Reset CPU offloading state for a new generation session."""
@@ -323,7 +329,7 @@ class OffloadingManager:
         offloaded: list[tuple[RequestState, list[int], list[int]]] = []
         all_gpu_indices: list[int] = []
         free_pool_blocks = len(self._free_cpu_blocks)
-        for state in reversed(victims):  # reversed so that the oldest (ie. largest) requests are offloaded first
+        for state in victims:
             gpu_indices = []
             group_block_counts = []
             for cm in self.cache.group_cache_managers:
@@ -357,7 +363,7 @@ class OffloadingManager:
                         gathered_blocks[offset : offset + length], non_blocking=True
                     )
 
-        # No explicit sync needed: finish_request is bookeeping, and the next forward pass serializes on the same stream
+        # No explicit sync needed: finish_request is logical, and the next forward pass serializes on the same stream
         offset = 0
         for state, gpu_indices, group_block_counts in offloaded:
             self._request_id_to_cpu_blocks[state.request_id] = all_cpu_indices[offset : offset + len(gpu_indices)]
@@ -370,5 +376,5 @@ class OffloadingManager:
         """Return CPU blocks to the free pool without copying anything."""
         cpu_ids = self._request_id_to_cpu_blocks.pop(request_id)
         group_counts = self._request_id_to_group_block_counts.pop(request_id)
-        self._free_cpu_blocks = sorted(self._free_cpu_blocks + cpu_ids)
+        self._free_cpu_blocks.extend(cpu_ids)
         return cpu_ids, group_counts
