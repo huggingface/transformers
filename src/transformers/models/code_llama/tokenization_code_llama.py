@@ -233,7 +233,7 @@ class CodeLlamaTokenizer(TokenizersBackend):
     def _decode(self, token_ids, skip_special_tokens=False, **kwargs):
         text = super()._decode(token_ids, skip_special_tokens=skip_special_tokens, **kwargs)
 
-        if not self.add_prefix_space or not text.startswith(" "):
+        if not text.startswith(" "):
             return text
 
         # The Metaspace prepend gives a synthetic ▁ that merges INTO the first
@@ -243,6 +243,9 @@ class CodeLlamaTokenizer(TokenizersBackend):
         # token. A pure-▁ token is one whose text is entirely ▁ characters.
         # Skip any leading BOS/special tokens before inspecting the first real
         # token.
+        # Note: we do not gate on self.add_prefix_space here because the
+        # tokenizer.json loaded by from_pretrained may have a different
+        # prepend_scheme than self.add_prefix_space reflects.
         all_special_ids = set(self.all_special_ids)
         first_real_id = next((t for t in token_ids if t not in all_special_ids), None)
         if first_real_id is not None:
