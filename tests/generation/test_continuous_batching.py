@@ -630,6 +630,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=False)
         num_input_tokens = inputs.input_ids.shape[1]
 
+        # Flush compile cache if CB used compile
+        if continuous_batching_config.default_compile_level > 0:
+            flush_memory(flush_compile=True)
+
         # Generation without continuous batching (reload model to avoid any state contamination)
         _, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, dtype)
         model.generation_config.max_new_tokens = max_new_tokens
