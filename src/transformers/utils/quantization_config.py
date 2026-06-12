@@ -1114,6 +1114,9 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             do not override, should be compressed-tensors
         run_compressed (`bool`, *optional*, defaults to `True`): alter submodules (usually linear) in order to
             emulate compressed model execution if True, otherwise use default submodule
+        dequantize (`bool`, *optional*, defaults to `False`): only used for FP8 checkpoints. When `True`, the FP8
+            weights are dequantized back to the model dtype (e.g. BF16) at load time instead of running through the
+            accelerated FP8 kernels. Useful when the model needs to be fine-tuned or saved in BF16.
     """
 
     def __init__(
@@ -1126,6 +1129,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         ignore: list[str] | None = None,
         quant_method: str = "compressed-tensors",
         run_compressed: bool = True,
+        dequantize: bool = False,
         **kwargs,
     ):
         if is_compressed_tensors_available():
@@ -1137,6 +1141,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         self.quantization_config = None
 
         self.run_compressed = run_compressed
+        self.dequantize = dequantize
 
         # parse from dict to load nested QuantizationScheme objects
         if config_groups or kv_cache_scheme:
@@ -1222,7 +1227,19 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         return serializable_config_dict
 
     def get_loading_attributes(self):
-        return {"run_compressed": self.run_compressed}
+        return {"run_compressed": self.run_compressed, "dequantize": self.dequantize}
+
+    @property
+    def is_fp8(self):
+        """Whether this config describes FP8 quantization (float weights with 8 bits)."""
+        ct_qconfig = self.quantization_config
+        if ct_qconfig is None:
+            return False
+        for group in ct_qconfig.config_groups.values():
+            weights = group.weights
+            if weights is not None and weights.type == "float" and weights.num_bits == 8:
+                return True
+        return False
 
     @property
     def is_quantized(self):

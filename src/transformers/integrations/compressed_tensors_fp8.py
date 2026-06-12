@@ -77,7 +77,7 @@ class CompressedTensorsFP8Linear(nn.Linear):
 
     Stores weights in FP8 format and uses torch._scaled_mm for FP8 matmul.
     Activation is dynamically quantized per-row via quantize_fp8_per_row.
-    Weight scale (per-channel or per-tensor) is stored as weight_scale_inv.
+    Weight scale (per-channel or per-tensor) is stored as weight_scale.
     """
 
     def __init__(
@@ -95,7 +95,7 @@ class CompressedTensorsFP8Linear(nn.Linear):
         self.weight = nn.Parameter(torch.empty(out_features, in_features, dtype=dtype))
 
         # Weight scale: per-channel (out_features, 1) or per-tensor (scalar → expanded at load)
-        self.weight_scale_inv = nn.Parameter(torch.zeros((out_features, 1), dtype=torch.float32))
+        self.weight_scale = nn.Parameter(torch.zeros((out_features, 1), dtype=torch.float32))
 
         if self.has_bias:
             self.bias = nn.Parameter(torch.empty(self.out_features))
@@ -107,21 +107,22 @@ class CompressedTensorsFP8Linear(nn.Linear):
         if self.weight.element_size() > 1:
             return F.linear(input, self.weight, self.bias)
 
-        # Save shape for restoring after squashing batch dims
+        # Save shape for restoring after squashing batch dims, then flatten once
+        # (both the kernel and the fallback path operate on a 2D tensor).
         output_shape = (*input.shape[:-1], -1)
+        x = input.reshape(-1, input.shape[-1])
 
         if _can_use_fp8_kernel():
             # XPU or CUDA SM89+: FP8 kernel path (quantize activation + scaled_mm)
-            x = input.reshape(-1, input.shape[-1])
             x_quantized, x_scale = _quantize_fp8_per_row(x)
 
-            weight_scale_float32 = self.weight_scale_inv.to(torch.float32)
-
-            # Ensure scale_b has shape (1, out_features) for row-wise _scaled_mm
+            # Ensure scale_b has shape (1, out_features) for row-wise _scaled_mm.
+            # weight_scale is already float32 (declared as such), so no cast needed.
             # Per-channel: (out_features, 1) → .t() → (1, out_features) ✓
-            # Per-tensor: (1, 1) → need to expand to (1, out_features)
-            scale_b = weight_scale_float32.t()
-            if scale_b.shape[-1] == 1 and self.out_features > 1:
+            # Per-tensor:  (1, 1) → need to expand to (1, out_features)
+            scale_b = self.weight_scale.t()
+            is_per_tensor = scale_b.shape[-1] == 1 and self.out_features > 1
+            if is_per_tensor:
                 # expand() creates a stride-0 view; _scaled_mm requires contiguous scales.
                 # The scale tensor is tiny so .contiguous() cost is negligible.
                 scale_b = scale_b.expand(1, self.out_features).contiguous()
@@ -137,8 +138,8 @@ class CompressedTensorsFP8Linear(nn.Linear):
             del x_quantized, x_scale
         else:
             # CUDA SM80 (A100): no FP8 hardware, dequantize weight to BF16 + normal matmul
-            w = self.weight.to(input.dtype) * self.weight_scale_inv.to(input.dtype)
-            output = F.linear(input.view(-1, input.shape[-1]), w, self.bias)
+            w = self.weight.to(input.dtype) * self.weight_scale.to(input.dtype)
+            output = F.linear(x, w, self.bias)
 
         output = output.reshape(output_shape)
         return output
@@ -158,14 +159,15 @@ def replace_with_compressed_tensors_fp8_linear(
 
         module_kwargs = {} if pre_quantized else {"dtype": None}
         if isinstance(module, nn.Linear):
-            with torch.device("meta"):
-                new_module = CompressedTensorsFP8Linear(
-                    in_features=module.in_features,
-                    out_features=module.out_features,
-                    activation_scheme=activation_scheme,
-                    has_bias=module.bias is not None,
-                    **module_kwargs,
-                )
+            # This method already runs under a `torch.device("meta")` context manager,
+            # so the new module is created on meta automatically.
+            new_module = CompressedTensorsFP8Linear(
+                in_features=module.in_features,
+                out_features=module.out_features,
+                activation_scheme=activation_scheme,
+                has_bias=module.bias is not None,
+                **module_kwargs,
+            )
             model.set_submodule(module_name, new_module)
             has_been_replaced = True
 
@@ -181,14 +183,14 @@ def replace_with_compressed_tensors_fp8_linear(
 
 
 class CompressedTensorsScaleConvert(ConversionOps):
-    """Convert compressed-tensors `weight_scale` to `weight_scale_inv`.
+    """Reshape the compressed-tensors `weight_scale` for the row-wise FP8 kernel.
 
     In compressed-tensors, `weight_scale` is the dequantization multiplier:
         bf16_weight = fp8_weight * weight_scale
 
-    In our CompressedTensorsFP8Linear, `weight_scale_inv` has the same semantics (it's
-    multiplied with the FP8 weight to get the dequantized value), so no inversion is needed.
-    The conversion also reshapes the scale: scalar → (1, 1), 1D (N,) → (N, 1).
+    Our CompressedTensorsFP8Linear keeps the exact same `weight_scale` name and
+    semantics, so no renaming/inversion is needed. We only reshape the scale so it
+    matches the kernel layout: scalar → (1, 1), 1D (N,) → (N, 1).
     """
 
     def convert(self, input_dict, **kwargs):
@@ -208,19 +210,7 @@ class CompressedTensorsScaleConvert(ConversionOps):
             dequant_scale = dequant_scale.unsqueeze(-1)
         # else: already 2D (N, 1), keep as-is
 
-        return {"weight_scale_inv": dequant_scale}
-
-    @property
-    def reverse_op(self):
-        return _IdentityOp()
-
-
-class CompressedTensorsActivationScaleConvert(ConversionOps):
-    """Rename compressed-tensors `input_scale` to `activation_scale`."""
-
-    def convert(self, input_dict, **kwargs):
-        scale = input_dict["input_scale"][0]
-        return {"activation_scale": scale.to(torch.float32)}
+        return {"weight_scale": dequant_scale}
 
     @property
     def reverse_op(self):
@@ -263,6 +253,17 @@ class CompressedTensorsFp8Dequantize(ConversionOps):
         return dequantized.to(torch.bfloat16)
 
     def convert(self, input_dict, full_layer_name=None, **kwargs):
+        # Terminal plain-Linear case (dequantize=True): the simple "weight$" pattern
+        # maps 1:1 onto a single target weight. Fold the scale in and emit a single
+        # BF16 tensor under the resolved target name.
+        if "weight$" in input_dict:
+            weight = input_dict["weight$"][0]
+            scale_key = next((k for k in input_dict if "weight_scale" in k), None)
+            if scale_key is None:
+                return {full_layer_name: weight}
+            scale = input_dict[scale_key][0]
+            return {full_layer_name: self._dequantize_one(weight, scale)}
+
         weight_keys = [k for k in input_dict if "weight" in k and "weight_scale" not in k]
         scale_keys = [k for k in input_dict if "weight_scale" in k]
 
@@ -295,45 +296,6 @@ class CompressedTensorsFp8Dequantize(ConversionOps):
 
     @property
     def reverse_op(self):
-        return CompressedTensorsFP8PerRowQuantize()
-
-
-class CompressedTensorsFP8PerRowQuantize(ConversionOps):
-    """Online quantization: convert BF16 weight to FP8 per-row.
-
-    For each row of the weight matrix, computes:
-        scale = max_abs(row) / FP8_MAX
-        quantized_row = clamp(row / scale, FP8_MIN, FP8_MAX).to(FP8)
-        weight_scale_inv = scale  (dequant multiplier)
-
-    Used when loading a BF16 model with CompressedTensorsConfig for online FP8.
-    """
-
-    def convert(self, input_dict, **kwargs):
-        # input_dict = {target_key: [bf16_weight_tensor]}
-        target_key, value = next(iter(input_dict.items()))
-        weight = value[0].to(torch.float32)
-
-        # Per-row quantization: one scale per output channel
-        row_max_abs = weight.abs().amax(dim=-1)  # (out_features,)
-        safe_max = torch.where(row_max_abs > 0, row_max_abs, torch.ones_like(row_max_abs))
-        scales = safe_max / _FP8_MAX  # dequant scale: bf16 = fp8 * scale
-
-        # Quantize
-        quantized = torch.clamp(weight / scales.unsqueeze(-1), min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-
-        # Derive scale key: model.layers.0.xxx.weight -> model.layers.0.xxx.weight_scale_inv
-        if target_key.endswith("weight"):
-            scale_key = target_key.rsplit(".", 1)[0] + ".weight_scale_inv"
-        else:
-            scale_key = target_key + "_scale_inv"
-
-        # weight_scale_inv shape: (out_features, 1) for row-wise kernel
-        return {
-            target_key: quantized,
-            scale_key: scales.unsqueeze(-1),
-        }
-
-    @property
-    def reverse_op(self):
-        return CompressedTensorsFp8Dequantize()
+        # Dequantization is one-way here: we never re-quantize on save (online FP8
+        # quantization is intentionally not supported — use finegrained-fp8 for that).
+        return _IdentityOp()
