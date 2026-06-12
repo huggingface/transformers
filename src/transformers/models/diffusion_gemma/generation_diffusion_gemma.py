@@ -158,9 +158,10 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
             not isinstance(self.max_denoising_steps, int) or self.max_denoising_steps <= 0
         ):
             raise ValueError(f"`max_denoising_steps` must be a positive integer, but got {self.max_denoising_steps}")
-        if self.sampler_config is not None and not isinstance(self.sampler_config, (EntropyBoundSamplerConfig)):
+        if self.sampler_config is not None and type(self.sampler_config) not in SAMPLER_CLASS_FOR_CONFIG:
             raise ValueError(
-                f"`sampler_config` must be an instance of `EntropyBoundSamplerConfig`, but got {type(self.sampler_config)}"
+                "`sampler_config` must be an instance of one of "
+                f"{[cls.__name__ for cls in SAMPLER_CLASS_FOR_CONFIG]}, but got {type(self.sampler_config)}"
             )
 
         if self.t_min is not None and self.t_min < 0:
@@ -463,6 +464,261 @@ class EntropyBoundSampler:
         random_canvas = self.initialize_canvas(batch_size, device)
         renoised_canvas = torch.where(renoise_mask, random_canvas, accepted_canvas)
         return renoised_canvas
+
+
+@dataclass
+class DiscreteDDIMSamplerConfig:
+    """
+    Configuration class for [`DiscreteDDIMSampler`]. The sampler itself is parameter free: the denoising trajectory
+    is fully determined by `max_denoising_steps` and the temperature schedule applied to the logits.
+    """
+
+    def to_dict(self):
+        # Stores the class name as well, so we can load it back
+        obj_dict = copy.deepcopy(self.__dict__)
+        obj_dict["_cls_name"] = self.__class__.__name__
+        return obj_dict
+
+
+class DiscreteDDIMSampler:
+    r"""
+    Discrete version of the DDIM step for the uniform corruption process, following "Structured Denoising Diffusion
+    Models in Discrete State-Spaces" (D3PM, https://arxiv.org/abs/2107.03006).
+
+    With a linear corruption schedule, the survival probability of a clean token at time `t` is `alpha(t) = 1 - t`.
+    One denoising step from time `t` to `s < t` samples every canvas position from the exact posterior
+    `q(x_s | x_t, x0_hat)`, which for the uniform kernel decomposes into three routes: jump to the predicted clean
+    token `x0_hat`, stay on the current token `x_t`, or jump to a uniformly random token.
+
+    Args:
+        config (`DiscreteDDIMSamplerConfig`):
+            The configuration of the sampler.
+        canvas_length (`int`):
+            The length of the canvas.
+        vocab_size (`int`):
+            The size of the vocabulary.
+        max_denoising_steps (`int`):
+            The number of denoising steps, which defines the linear time grid the posterior is evaluated on.
+    """
+
+    def __init__(
+        self, config: DiscreteDDIMSamplerConfig, canvas_length: int, vocab_size: int, max_denoising_steps: int
+    ):
+        self.canvas_length = canvas_length
+        self.vocab_size = vocab_size
+        self.max_denoising_steps = max_denoising_steps
+        self.accepted_token_mask = None  # positions that were not renoised in the last step
+
+    def initialize_canvas(self, batch_size: int, device: torch.device) -> torch.LongTensor:
+        """
+        Initializes and returns a new canvas of `canvas_length` tokens with random values from the vocabulary.
+        """
+        canvas_ids = torch.randint(
+            low=0,
+            high=self.vocab_size,
+            size=(batch_size, self.canvas_length),
+            device=device,
+        )
+        return canvas_ids
+
+    def accept_canvas(
+        self,
+        current_canvas: torch.LongTensor,
+        denoiser_canvas: torch.LongTensor,
+        logits: torch.FloatTensor,
+        cur_step: int,
+    ) -> torch.LongTensor:
+        """
+        Samples the next canvas from the posterior `q(x_s | x_t, x0_hat)` of the uniform corruption process.
+
+        With `a = alpha_t / alpha_s` (survival probability from `s` to `t`) and `b = alpha_s`, the posterior mass of
+        each route is
+
+            clean: `b * (1 - a) / K + a * b * 1[x_t = x0_hat]`,  stay: `a * (1 - b) / K`,
+            noise: `(1 - a) * (1 - b) / K`,
+
+        so the last step (`b = 1`) deterministically commits the predicted clean tokens.
+
+        Args:
+            current_canvas (`torch.LongTensor`):
+                The current canvas `x_t`.
+            denoiser_canvas (`torch.LongTensor`):
+                The canvas sampled from the denoiser predictions, i.e. `x0_hat`.
+            logits (`torch.FloatTensor`):
+                The logits from the denoiser. (Unused in this sampler: `x0_hat` is already sampled from them)
+            cur_step (`int`):
+                The current step, which determines `alpha_t` and `alpha_s` on the linear schedule.
+
+        Returns:
+            torch.LongTensor: The next canvas.
+        """
+        # `cur_step` counts down from `max_denoising_steps` to 1: t = cur_step / N and s = (cur_step - 1) / N,
+        # with survival probability alpha(t) = 1 - t on the linear schedule
+        step = torch.as_tensor(cur_step, device=current_canvas.device, dtype=torch.float32)
+        alpha_t = 1 - step / self.max_denoising_steps
+        alpha_s = 1 - (step - 1) / self.max_denoising_steps
+        survival = alpha_t / alpha_s
+
+        same = (current_canvas == denoiser_canvas).float()
+        clean_mass = alpha_s * (1 - survival) / self.vocab_size + survival * alpha_s * same
+        stay_mass = survival * (1 - alpha_s) / self.vocab_size * torch.ones_like(same)
+        noise_mass = (1 - survival) * (1 - alpha_s) / self.vocab_size * torch.ones_like(same)
+
+        route_probs = torch.stack([clean_mass, stay_mass, noise_mass], dim=-1)
+        route_probs = route_probs / route_probs.sum(dim=-1, keepdim=True)
+        routes = torch.multinomial(route_probs.view(-1, 3), num_samples=1).view_as(current_canvas)
+
+        random_canvas = self.initialize_canvas(current_canvas.shape[0], current_canvas.device)
+        next_canvas = torch.where(routes == 0, denoiser_canvas, current_canvas)
+        next_canvas = torch.where(routes == 2, random_canvas, next_canvas)
+        self.accepted_token_mask = routes != 2
+        return next_canvas
+
+    def renoise_canvas(self, accepted_canvas: torch.LongTensor, cur_step: int) -> torch.LongTensor:
+        """
+        Returns the canvas unchanged: the noise route of `accept_canvas` already renoises.
+        """
+        return accepted_canvas
+
+
+@dataclass
+class BlockRefinementSamplerConfig:
+    """
+    Configuration class for [`BlockRefinementSampler`].
+
+    Args:
+        threshold (`float`, *optional*, defaults to 0.95):
+            Tokens whose sampled probability exceeds this threshold are committed regardless of the per-step quota.
+        editing_threshold (`float`, *optional*):
+            When set, already committed tokens are replaced if the denoiser predicts a different token with
+            probability above this threshold. `None` disables editing.
+    """
+
+    threshold: float = 0.95
+    editing_threshold: float | None = None
+
+    def __post_init__(self):
+        if not isinstance(self.threshold, float) or not (0.0 < self.threshold <= 1.0):
+            raise ValueError(f"`threshold` must be a float in (0, 1] (got {self.threshold})")
+        if self.editing_threshold is not None and not (0.0 < self.editing_threshold <= 1.0):
+            raise ValueError(f"`editing_threshold` must be in (0, 1] or None (got {self.editing_threshold})")
+
+    def to_dict(self):
+        # Stores the class name as well, so we can load it back
+        obj_dict = copy.deepcopy(self.__dict__)
+        obj_dict["_cls_name"] = self.__class__.__name__
+        return obj_dict
+
+
+class BlockRefinementSampler:
+    r"""
+    Commit-by-confidence sampler, mirroring the block-wise iterative refinement of `diffusers`'
+    `BlockRefinementScheduler` adapted to the uniform corruption process (uncommitted positions are renoised with
+    random tokens instead of a mask token).
+
+    At every step the per-step quota of not-yet-committed positions with the highest sampled probability is
+    committed, along with any position above `threshold`. Once committed, a position keeps its token, unless
+    `editing_threshold` is set and the denoiser predicts a different token above it.
+
+    Args:
+        config (`BlockRefinementSamplerConfig`):
+            The configuration of the sampler.
+        canvas_length (`int`):
+            The length of the canvas.
+        vocab_size (`int`):
+            The size of the vocabulary.
+        max_denoising_steps (`int`):
+            The number of denoising steps, over which the canvas length is evenly distributed as per-step quotas.
+    """
+
+    def __init__(
+        self, config: BlockRefinementSamplerConfig, canvas_length: int, vocab_size: int, max_denoising_steps: int
+    ):
+        self.threshold = config.threshold
+        self.editing_threshold = config.editing_threshold
+        self.canvas_length = canvas_length
+        self.vocab_size = vocab_size
+        self.max_denoising_steps = max_denoising_steps
+        self.accepted_token_mask = None  # committed positions, kept across the steps of one canvas
+
+    def initialize_canvas(self, batch_size: int, device: torch.device) -> torch.LongTensor:
+        """
+        Initializes and returns a new canvas of `canvas_length` tokens with random values from the vocabulary, and
+        resets the committed positions.
+        """
+        self.accepted_token_mask = torch.zeros(batch_size, self.canvas_length, dtype=torch.bool, device=device)
+        canvas_ids = torch.randint(
+            low=0,
+            high=self.vocab_size,
+            size=(batch_size, self.canvas_length),
+            device=device,
+        )
+        return canvas_ids
+
+    def accept_canvas(
+        self,
+        current_canvas: torch.LongTensor,
+        denoiser_canvas: torch.LongTensor,
+        logits: torch.FloatTensor,
+        cur_step: int,
+    ) -> torch.LongTensor:
+        """
+        Commits the per-step quota of highest-confidence positions (plus any position above `threshold`), keeps
+        previously committed tokens, and optionally edits them.
+
+        Args:
+            current_canvas (`torch.LongTensor`):
+                The current canvas.
+            denoiser_canvas (`torch.LongTensor`):
+                The canvas sampled from the denoiser predictions.
+            logits (`torch.FloatTensor`):
+                The logits from the denoiser, used to compute the confidence of the sampled tokens.
+            cur_step (`int`):
+                The current step, which determines the cumulative commit quota.
+
+        Returns:
+            torch.LongTensor: The accepted canvas.
+        """
+        committed = self.accepted_token_mask
+        probs = torch.softmax(logits.float(), dim=-1)
+        confidence = probs.gather(-1, denoiser_canvas.unsqueeze(-1)).squeeze(-1)
+
+        # Cumulative quota: evenly distribute the canvas across the denoising steps (`cur_step` counts down to 1)
+        steps_done = self.max_denoising_steps - torch.as_tensor(cur_step, device=current_canvas.device) + 1
+        target = (steps_done * self.canvas_length + self.max_denoising_steps - 1) // self.max_denoising_steps
+        needed = (target - committed.sum(dim=-1)).clamp(min=0)
+
+        # Among uncommitted positions, commit the `needed` most confident ones, plus threshold commits
+        masked_confidence = confidence.masked_fill(committed, float("-inf"))
+        ranks = masked_confidence.argsort(dim=-1, descending=True).argsort(dim=-1)
+        newly_committed = ~committed & ((ranks < needed[:, None]) | (confidence > self.threshold))
+
+        accepted_canvas = torch.where(newly_committed, denoiser_canvas, current_canvas)
+        if self.editing_threshold is not None:
+            edits = committed & (denoiser_canvas != current_canvas) & (confidence > self.editing_threshold)
+            accepted_canvas = torch.where(edits, denoiser_canvas, accepted_canvas)
+
+        self.accepted_token_mask = committed | newly_committed
+        return accepted_canvas
+
+    def renoise_canvas(self, accepted_canvas: torch.LongTensor, cur_step: int) -> torch.LongTensor:
+        """
+        Renoises all positions that have not been committed yet.
+        """
+        random_canvas = torch.randint(
+            low=0,
+            high=self.vocab_size,
+            size=accepted_canvas.shape,
+            device=accepted_canvas.device,
+        )
+        return torch.where(self.accepted_token_mask, accepted_canvas, random_canvas)
+
+
+SAMPLER_CLASS_FOR_CONFIG = {
+    EntropyBoundSamplerConfig: EntropyBoundSampler,
+    DiscreteDDIMSamplerConfig: DiscreteDDIMSampler,
+    BlockRefinementSamplerConfig: BlockRefinementSampler,
+}
 
 
 class DiffusionGemmaAdaptiveStopping(ABC):
@@ -1231,7 +1487,8 @@ class DiffusionGemmaGenerationMixin:
         Prepares and returns the sampler for generation, given the parameterization in `generation_config`.
         """
         # Assumption: validation of the type in `sampler_config` happens in `generation_config.validate()`
-        return EntropyBoundSampler(
+        sampler_class = SAMPLER_CLASS_FOR_CONFIG[type(generation_config.sampler_config)]
+        return sampler_class(
             config=generation_config.sampler_config,
             canvas_length=self.config.canvas_length,
             vocab_size=self.config.text_config.vocab_size,
@@ -1326,6 +1583,10 @@ __all__ = [
     "DiffusionGemmaGenerationConfig",
     "EntropyBoundSamplerConfig",
     "EntropyBoundSampler",
+    "DiscreteDDIMSamplerConfig",
+    "DiscreteDDIMSampler",
+    "BlockRefinementSamplerConfig",
+    "BlockRefinementSampler",
     "StableAndConfidentStoppingCriteria",
     "LinearTemperatureScheduleLogitsProcessor",
 ]
