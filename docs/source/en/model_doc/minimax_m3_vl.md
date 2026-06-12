@@ -115,6 +115,13 @@ print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
 
 ## Fastest inference configuration
 
+| ctx | SDPA decode | MSA decode | MSA decode adv. | SDPA prefill | MSA prefill | MSA prefill adv. |
+| --: | ----------: | ---------: | --------------: | -----------: | ----------: | ---------------: |
+|  2K |  27.8 tok/s |       31.0 |            +12% |       303 ms |      257 ms |            1.18× |
+|  4K |  23.4 tok/s |       30.5 |            +30% |       684 ms |      460 ms |            1.49× |
+|  8K |  17.8 tok/s |       29.6 |            +66% |      1906 ms |      976 ms |            1.95× |
+| 16K |  12.0 tok/s |       27.6 |           +130% |      6110 ms |     2344 ms |            2.61× |
+
 The checkpoint ships in native MXFP8. For **decode throughput**, the fastest validated configuration is
 **bf16 (dequantized at load) + the MSA block-sparse attention kernel + tensor & expert parallelism + a
 `reduce-overhead` cudagraph compile** — roughly **31 tok/s** decode on 8×B200 at a 2048-token prefill.
