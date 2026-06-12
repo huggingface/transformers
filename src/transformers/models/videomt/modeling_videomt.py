@@ -144,18 +144,16 @@ class VideomtMLP(nn.Module):
 class VideomtGatedMLP(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-        in_features = out_features = config.hidden_size
         hidden_features = int(config.hidden_size * config.mlp_ratio)
         hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
+        self.gate_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
+        self.up_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
+        self.down_proj = nn.Linear(hidden_features, config.hidden_size, bias=True)
+        self.act_fn = nn.functional.silu
 
-        self.weights_in = nn.Linear(in_features, 2 * hidden_features, bias=True)
-        self.weights_out = nn.Linear(hidden_features, out_features, bias=True)
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.weights_in(hidden_state)
-        x1, x2 = hidden_state.chunk(2, dim=-1)
-        hidden = nn.functional.silu(x1) * x2
-        return self.weights_out(hidden)
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 def eager_attention_forward(
@@ -243,18 +241,16 @@ class VideomtAttention(nn.Module):
 class VideomtSwiGLUFFN(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-        in_features = out_features = config.hidden_size
         hidden_features = int(config.hidden_size * config.mlp_ratio)
         hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
+        self.gate_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
+        self.up_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
+        self.down_proj = nn.Linear(hidden_features, config.hidden_size, bias=True)
+        self.act_fn = nn.functional.silu
 
-        self.weights_in = nn.Linear(in_features, 2 * hidden_features, bias=True)
-        self.weights_out = nn.Linear(hidden_features, out_features, bias=True)
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.weights_in(hidden_state)
-        x1, x2 = hidden_state.chunk(2, dim=-1)
-        hidden = nn.functional.silu(x1) * x2
-        return self.weights_out(hidden)
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class VideomtDropPath(nn.Module):
@@ -291,10 +287,7 @@ class VideomtLayer(GradientCheckpointingLayer):
         self.layer_scale1 = VideomtLayerScale(config)
         self.drop_path = VideomtDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        if config.use_swiglu_ffn:
-            self.mlp = VideomtSwiGLUFFN(config)
-        else:
-            self.mlp = VideomtMLP(config)
+        self.mlp = VideomtSwiGLUFFN(config) if config.use_swiglu_ffn else VideomtMLP(config)
         self.layer_scale2 = VideomtLayerScale(config)
 
     def forward(
@@ -303,16 +296,18 @@ class VideomtLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output, _ = self.attention(hidden_states_norm, attention_mask=attention_mask, **kwargs)
-        self_attention_output = self.layer_scale1(self_attention_output)
-        hidden_states = self.drop_path(self_attention_output) + hidden_states
+        residual = hidden_states
+        hidden_states = self.norm1(hidden_states)
+        hidden_states, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
+        hidden_states = self.layer_scale1(hidden_states)
+        hidden_states = self.drop_path(hidden_states) + residual
 
-        layer_output = self.norm2(hidden_states)
-        layer_output = self.mlp(layer_output)
-        layer_output = self.layer_scale2(layer_output)
-        layer_output = self.drop_path(layer_output) + hidden_states
-        return layer_output
+        residual = hidden_states
+        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.layer_scale2(hidden_states)
+        hidden_states = self.drop_path(hidden_states) + residual
+        return hidden_states
 
 
 class VideomtLayerScale(nn.Module):

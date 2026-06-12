@@ -181,12 +181,34 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("attention.attention.key", "attention.k_proj"),
             WeightRenaming("attention.attention.value", "attention.v_proj"),
             WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightConverter(
+                source_patterns="mlp.weights_in.weight",
+                target_patterns=["mlp.gate_proj.weight", "mlp.up_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.weights_in.bias",
+                target_patterns=["mlp.gate_proj.bias", "mlp.up_proj.bias"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming("mlp.weights_out", "mlp.down_proj"),
         ],
         "Dinov2WithRegistersModel": [
             WeightRenaming("attention.attention.query", "attention.q_proj"),
             WeightRenaming("attention.attention.key", "attention.k_proj"),
             WeightRenaming("attention.attention.value", "attention.v_proj"),
             WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightConverter(
+                source_patterns="mlp.weights_in.weight",
+                target_patterns=["mlp.gate_proj.weight", "mlp.up_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.weights_in.bias",
+                target_patterns=["mlp.gate_proj.bias", "mlp.up_proj.bias"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming("mlp.weights_out", "mlp.down_proj"),
         ],
         "ViTMSNForImageClassification": [
             WeightRenaming(r"^encoder\.", "vit.encoder."),

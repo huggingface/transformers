@@ -294,18 +294,16 @@ class RfDetrDinov2MLP(nn.Module):
 class RfDetrDinov2SwiGLUFFN(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-        in_features = out_features = config.hidden_size
         hidden_features = int(config.hidden_size * config.mlp_ratio)
         hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
+        self.gate_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
+        self.up_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
+        self.down_proj = nn.Linear(hidden_features, config.hidden_size, bias=True)
+        self.act_fn = nn.functional.silu
 
-        self.weights_in = nn.Linear(in_features, 2 * hidden_features, bias=True)
-        self.weights_out = nn.Linear(hidden_features, out_features, bias=True)
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.weights_in(hidden_state)
-        x1, x2 = hidden_state.chunk(2, dim=-1)
-        hidden = nn.functional.silu(x1) * x2
-        return self.weights_out(hidden)
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class RfDetrDinov2DropPath(nn.Module):
@@ -342,10 +340,7 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
         self.layer_scale1 = RfDetrDinov2LayerScale(config)
         self.drop_path = RfDetrDinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        if config.use_swiglu_ffn:
-            self.mlp = RfDetrDinov2SwiGLUFFN(config)
-        else:
-            self.mlp = RfDetrDinov2MLP(config)
+        self.mlp = RfDetrDinov2SwiGLUFFN(config) if config.use_swiglu_ffn else RfDetrDinov2MLP(config)
         self.layer_scale2 = RfDetrDinov2LayerScale(config)
         self.num_windows = config.num_windows
         self.global_attention = layer_idx not in config.window_block_indexes

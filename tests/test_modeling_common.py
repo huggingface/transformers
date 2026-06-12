@@ -4792,6 +4792,7 @@ class ModelTesterMixin:
         config_to_set.moe_layer_start_index = 1  # same as above but for Ernie 4.5...
         config_to_set.mlp_only_layers = [0]  # same but for qwens
         config_to_set.num_dense_layers = 1  # lfm2_moe
+        config_to_set.use_swiglu_ffn = True  # dinov2 family: exercise the unfused SwiGLU (gate/up) split converter
 
         for model_class in self.all_model_classes:
             if skip_base_model and "For" not in model_class.__name__:
