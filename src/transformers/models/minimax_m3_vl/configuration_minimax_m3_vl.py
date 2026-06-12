@@ -149,6 +149,7 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
         if self.layer_types is None:
             self.layer_types = ["full_attention"] * self.num_hidden_layers
 
+        # `mlp_layer_types` is the per-layer MLP dispatch read by `MiniMaxM3VLDecoderLayer`:
         if self.mlp_layer_types is None and moe_layer_freq is not None:
             self.mlp_layer_types = ["sparse" if f else "dense" for f in moe_layer_freq]
         if self.mlp_layer_types is None:

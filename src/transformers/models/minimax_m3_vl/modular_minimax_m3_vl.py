@@ -721,13 +721,14 @@ class MiniMaxM3VLTextModel(MiniMaxM2Model):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        # `full_attention` and `minimax_m3_sparse` layers both build on the same dense causal mask
-        # (the sparse layers narrow it further inside the attention via the lightning indexer), so a
-        # single causal mask is shared across both layer types. When generate compiles with a static
-        # cache it precomputes this per-layer-type mapping and feeds it back as `attention_mask`; in
-        # that case route it straight through instead of rebuilding (rebuilding would crash on the dict).
-        causal_mask_mapping = attention_mask
-        if not isinstance(causal_mask_mapping, dict):
+        # Both `full_attention` and `minimax_m3_sparse` layers share one dense causal mask (the
+        # sparse layers narrow it further inside attention via the lightning indexer), so a single
+        # mask is built and passed to every layer. `generate` with a static cache precomputes a
+        # per-layer-type mask dict (the config declares `layer_types`); since the masks are
+        # identical, collapse it back to the shared mask instead of rebuilding.
+        if isinstance(attention_mask, dict):
+            causal_mask = next(iter(attention_mask.values()))
+        else:
             causal_mask = create_causal_mask(
                 config=self.config,
                 inputs_embeds=inputs_embeds,
@@ -735,17 +736,16 @@ class MiniMaxM3VLTextModel(MiniMaxM2Model):
                 past_key_values=past_key_values,
                 position_ids=position_ids,
             )
-            causal_mask_mapping = dict.fromkeys(self.config.layer_types, causal_mask)
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # `position_ids` is threaded to every layer so the sparse layers' lightning indexer can anchor
         # block selection to each query's content position (see `MiniMaxM3VLIndexer`).
-        for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[self.config.layer_types[layer_idx]],
+                attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
@@ -970,29 +970,32 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
 
 
 class MiniMaxM3VLMultiModalProjector(LlavaMultiModalProjector):
-    """Single projector mapping vision-tower features to text hidden states.
-
-    Two GELU MLP stages with a spatial merge in between: `linear_1`/`linear_2` project
-    each patch from `vision_config.hidden_size` through `projector_hidden_size` to
-    `text_config.hidden_size`, then `spatial_merge_size**2` neighbouring patches are
-    grouped into the channel dim and `merge_1`/`merge_2` fuse them back down to a single
-    `text_config.hidden_size` token.
-    """
+    """Two GELU MLP layers projecting each vision patch from `vision_config.hidden_size`
+    through `projector_hidden_size` to `text_config.hidden_size`."""
 
     def __init__(self, config: MiniMaxM3VLConfig):
         nn.Module.__init__(self)
-        text_hidden = config.text_config.hidden_size
-        self.spatial_merge_size = config.vision_config.spatial_merge_size
         self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.projector_hidden_size, bias=True)
         self.act = ACT2FN["gelu"]
+        self.linear_2 = nn.Linear(config.projector_hidden_size, config.text_config.hidden_size, bias=True)
+
+
+class MiniMaxM3VLPatchMerger(nn.Module):
+    """Spatial patch merger: groups `spatial_merge_size**2` neighbouring (already projected)
+    patches into the channel dim, then a 2-layer GELU MLP fuses them back to a single
+    `text_config.hidden_size` token."""
+
+    def __init__(self, config: MiniMaxM3VLConfig):
+        super().__init__()
+        text_hidden = config.text_config.hidden_size
+        self.spatial_merge_size = config.vision_config.spatial_merge_size
+        self.linear_1 = nn.Linear(text_hidden * (self.spatial_merge_size**2), config.projector_hidden_size, bias=True)
+        self.act = ACT2FN["gelu"]
         self.linear_2 = nn.Linear(config.projector_hidden_size, text_hidden, bias=True)
-        self.merge_1 = nn.Linear(text_hidden * (self.spatial_merge_size**2), config.projector_hidden_size, bias=True)
-        self.merge_2 = nn.Linear(config.projector_hidden_size, text_hidden, bias=True)
 
     def forward(self, image_features: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.linear_2(self.act(self.linear_1(image_features)))
-        hidden_states = hidden_states.reshape(hidden_states.shape[0] // (self.spatial_merge_size**2), -1)
-        return self.merge_2(self.act(self.merge_1(hidden_states)))
+        hidden_states = image_features.reshape(image_features.shape[0] // (self.spatial_merge_size**2), -1)
+        return self.linear_2(self.act(self.linear_1(hidden_states)))
 
 
 class MiniMaxM3VLModelOutputWithPast(LlavaModelOutputWithPast):
@@ -1043,6 +1046,7 @@ class MiniMaxM3VLModel(LlavaModel):
         super().__init__(config)
         self.vision_tower = MiniMaxM3VLVisionModel(config.vision_config)
         self.multi_modal_projector = MiniMaxM3VLMultiModalProjector(config)
+        self.patch_merge = MiniMaxM3VLPatchMerger(config)
         self.language_model = MiniMaxM3VLTextModel(config.text_config)
         self.post_init()
 
@@ -1061,7 +1065,8 @@ class MiniMaxM3VLModel(LlavaModel):
         # attentions) while stashing the projected + spatially-merged features —
         # ready to scatter into the text embeddings — in `pooler_output`.
         vision_outputs = self.vision_tower(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
-        vision_outputs.pooler_output = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
+        image_features = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
+        vision_outputs.pooler_output = self.patch_merge(image_features)
         return vision_outputs
 
     @merge_with_config_defaults
@@ -1085,7 +1090,8 @@ class MiniMaxM3VLModel(LlavaModel):
         # Video frames flow through the same vision pipeline as images (the tower is
         # grid-agnostic); only the placeholder token they scatter into differs.
         vision_outputs = self.vision_tower(pixel_values=pixel_values_videos, image_grid_thw=video_grid_thw, **kwargs)
-        vision_outputs.pooler_output = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
+        image_features = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
+        vision_outputs.pooler_output = self.patch_merge(image_features)
         return vision_outputs
 
     def get_placeholder_mask(

@@ -170,6 +170,18 @@ def _sparse_attention(module, query, key, value, scaling, block_indices, block_s
     qheads_per_kv = num_q_heads // num_kv_heads
     topk = block_indices.shape[-1]
 
+    # The indexer emits `min(index_topk_blocks, num_key_blocks)` selected blocks, so on sequences with
+    # fewer key blocks than the configured budget the width lands on an arbitrary value (e.g. 12) that the
+    # `SparseK2qCsrBuilderSm100` CSR builder rejects -- it only accepts a CSR width in `MSA_SUPPORTED_TOPK`.
+    # Right-pad the selection up to the next supported width with `-1`, the same empty-slot sentinel the
+    # kernel already skips, so behaviour is unchanged and the width is always one the builder accepts. The
+    # width is a Python int (static under `torch.compile`), so this stays fullgraph / cudagraph stable.
+    padded_topk = next(t for t in MSA_SUPPORTED_TOPK if t >= topk)
+    if padded_topk != topk:
+        pad = block_indices.new_full((*block_indices.shape[:-1], padded_topk - topk), -1)
+        block_indices = torch.cat([block_indices, pad], dim=-1)
+        topk = padded_topk
+
     # Flatten the batch dim into a packed varlen layout [total, H, head_dim] + cu_seqlens. The
     # query boundary is a fixed stride (every row is `q_len` long), built device-side with no host
     # sync so it stays compile/cudagraph stable.

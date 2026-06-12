@@ -440,14 +440,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^language_model\.model\.", target_patterns="model.language_model."),
             WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
-            WeightRenaming(
-                source_patterns=r"^patch_merge_mlp\.linear_1\.",
-                target_patterns="model.multi_modal_projector.merge_1.",
-            ),
-            WeightRenaming(
-                source_patterns=r"^patch_merge_mlp\.linear_2\.",
-                target_patterns="model.multi_modal_projector.merge_2.",
-            ),
+            WeightRenaming(source_patterns=r"^patch_merge_mlp", target_patterns="model.patch_merge"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
             WeightRenaming(
                 source_patterns=r"\.embeddings\.patch_embedding\.",
