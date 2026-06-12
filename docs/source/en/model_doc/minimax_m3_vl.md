@@ -39,7 +39,7 @@ the block. The result is a `[B, 1, S_q, S_k]` additive bias summed onto the caus
 Theoretically this means that the attention is only computed over the selected blocks of keys, but `transformers` does not support the kernels that compute this efficiently! 
 We are adding it to `kernels` asap!
 
-<img alt="MiniMax M3 Lightning Indexer mask" src="./minimax_m3_vl_indexer_mask.svg" />
+<img alt="MiniMax M3 Lightning Indexer mask" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/minimax_m3_vl_indexer_mask.svg" />
 
 
 ### Vision tower

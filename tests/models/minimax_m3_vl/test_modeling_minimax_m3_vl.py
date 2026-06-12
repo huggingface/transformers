@@ -219,6 +219,14 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_reverse_loading_mapping(self):
+        # The conversion mapping rewrites the flat checkpoint keys into the nested
+        # `model.language_model.*` / `model.vision_tower.*` / `model.multi_modal_projector.*` layout.
+        # That leading `model.` is the base-model prefix, so the mapping is only visible on the
+        # model-with-head, not on the base `MiniMaxM3VLModel` (whose keys lack the prefix). Skip the
+        # base-model check, like the other composite VLMs.
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
     @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_batched_and_grouped_inference(self, name, dtype):
         # In low precision the grouped/batched/sonic expert kernels accumulate in a different order
