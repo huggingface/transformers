@@ -292,6 +292,7 @@ IGNORE_NON_TESTED = (
         "Sam3LiteTextTextModel",  # Building part of a bigger model, tested implicitly through Sam3LiteTextModel
         "Exaone4_5_VisionModel",  # Building part of a bigger model
         "Granite4VisionTextModel",  # Building part of bigger (tested) model. Tested implicitly through Granite4VisionModel.
+        "Step3p7TextModel",  # Building part of bigger (tested) model
         "DiffusionGemmaDecoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderTextModel",  # TODO(joaogante)
@@ -488,6 +489,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SLANeXtSLAHead",  # Building part of bigger (tested) model
     "SLANeXtBackbone",  # Building part of bigger (tested) model
     "PPFormulaNetTextModel",  # Building part of bigger (tested) model
+    "Step3p7TextModel",  # Building part of bigger (tested) model
     "PPFormulaNetVisionModel",  # Building part of bigger (tested) model
     "PPFormulaNetModel",  # Building part of bigger (tested) model
     "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model

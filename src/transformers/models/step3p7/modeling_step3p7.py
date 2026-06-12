@@ -31,7 +31,7 @@ from transformers.generation import GenerationMixin
 from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
 from transformers.modeling_layers import GradientCheckpointingLayer
-from transformers.modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from transformers.modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.processing_utils import Unpack
@@ -746,6 +746,9 @@ def rotate_half(x):
 
 def apply_rotary_pos_emb(q, k, cos, sin):
     """Applies Rotary Position Embedding to (q, k) on the first `cos.shape[-1]` dims."""
+    if cos.ndim == q.ndim - 1:
+        cos = cos.unsqueeze(1)
+        sin = sin.unsqueeze(1)
     rotary_dim = cos.shape[-1]
     q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
     k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
@@ -993,7 +996,6 @@ class Step3p7TextPreTrainedModel(Step3p7PreTrainedModel):
 class Step3p7TextModel(Step3p7TextPreTrainedModel):
     _no_split_modules = ["Step3p7DecoderLayer"]
     base_model_prefix = "model"
-    _tied_weights_keys = ["lm_head.weight"]
     config: Step3p7TextConfig
 
     def __init__(self, config: Step3p7TextConfig):
@@ -1107,6 +1109,8 @@ class Step3p7TextModel(Step3p7TextPreTrainedModel):
             hidden_states = layer_outputs
 
         hidden_states = self.norm(hidden_states)
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -1123,7 +1127,6 @@ class Step3p7TextModel(Step3p7TextPreTrainedModel):
 )
 class Step3p7Model(Step3p7PreTrainedModel):
     config: Step3p7Config
-    _tied_weights_keys = ["lm_head.weight"]
     base_model_prefix = "model"
 
     def __init__(self, config: Step3p7Config):
@@ -1152,16 +1155,13 @@ class Step3p7Model(Step3p7PreTrainedModel):
         image_features = image_features.view(bsz, -1, side * side).permute(0, 2, 1)
         return self.vit_large_projector(image_features)
 
-    def get_image_features(
+    def _get_image_features_tensor(
         self,
         pixel_values: torch.FloatTensor | None,
         patch_pixel_values: torch.FloatTensor | None = None,
         num_patches: torch.Tensor | None = None,
         image_embeds: torch.FloatTensor | None = None,
     ) -> torch.Tensor:
-        """Returns a `(N_total, hidden)` tensor of image features ready to be scattered into
-        `inputs_embeds` at the placeholder positions. Either `pixel_values` (with optional
-        per-image high-res `patch_pixel_values`) or pre-computed `image_embeds` must be set."""
         if image_embeds is not None:
             return image_embeds.view(-1, image_embeds.shape[-1]).to(self.dtype).to(self.device)
 
@@ -1187,6 +1187,38 @@ class Step3p7Model(Step3p7PreTrainedModel):
                 cur += n
             merged.append(base[i].reshape(-1, base.shape[-1]))
         return torch.cat(merged, dim=0)
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor | None,
+        patch_pixel_values: torch.FloatTensor | None = None,
+        num_patches: torch.Tensor | None = None,
+        image_embeds: torch.FloatTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> torch.Tensor | BaseModelOutputWithPooling:
+        """Returns image features ready to be scattered into `inputs_embeds`."""
+        return_dict = return_dict if return_dict is not None else getattr(self.config, "return_dict", True)
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else getattr(self.config, "output_hidden_states", False)
+            or getattr(self.config.vision_config, "output_hidden_states", False)
+        )
+        image_features = self._get_image_features_tensor(
+            pixel_values=pixel_values,
+            patch_pixel_values=patch_pixel_values,
+            num_patches=num_patches,
+            image_embeds=image_embeds,
+        )
+        hidden_states = (image_features, image_features) if output_hidden_states else None
+        if not return_dict:
+            return image_features, image_features, hidden_states
+        return BaseModelOutputWithPooling(
+            last_hidden_state=image_features,
+            pooler_output=image_features,
+            hidden_states=hidden_states,
+        )
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor | None, inputs_embeds: torch.FloatTensor
@@ -1235,7 +1267,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
 
         image_features: torch.Tensor | None = None
         if pixel_values is not None or image_embeds is not None:
-            image_features = self.get_image_features(
+            image_features = self._get_image_features_tensor(
                 pixel_values=pixel_values,
                 patch_pixel_values=patch_pixel_values,
                 num_patches=num_patches,
@@ -1244,6 +1276,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
             mask = self.get_placeholder_mask(input_ids, inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
 
+        kwargs.pop("return_dict", None)
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1251,6 +1284,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             cache_position=cache_position,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1269,8 +1303,9 @@ class Step3p7Model(Step3p7PreTrainedModel):
     """
 )
 class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     config: Step3p7Config
+    base_model_prefix = "model"
 
     def __init__(self, config: Step3p7Config):
         super().__init__(config)
@@ -1294,6 +1329,7 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
     def language_model(self):
         return self.model.language_model
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1321,6 +1357,7 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         cache_position (`torch.LongTensor`, *optional*):
             Positions of the input sequence tokens in the cache.
         """
+        kwargs.pop("return_dict", None)
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1333,6 +1370,7 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             cache_position=cache_position,
+            return_dict=True,
             **kwargs,
         )
 

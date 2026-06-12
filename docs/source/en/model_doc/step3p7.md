@@ -80,6 +80,11 @@ print(processor.decode(outputs[0], skip_special_tokens=True))
 [[autodoc]] Step3VLProcessor
     - __call__
 
+## Step3p7Processor
+
+[[autodoc]] Step3p7Processor
+    - __call__
+
 ## Step3p7Model
 
 [[autodoc]] Step3p7Model
