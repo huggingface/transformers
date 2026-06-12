@@ -24,7 +24,9 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    TransformersKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -228,11 +230,10 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         hidden_out_layers: list[int] | None = None,
         channelwise_loss_weight: list[float] | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MossTTSDelayOutputWithPast:
         r"""
         Args:
@@ -250,8 +251,6 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
         if len(input_ids.shape) != 3 or input_ids.shape[-1] != self.config.n_vq + 1:
             raise ValueError("`Input_ids`'s shape should be exactly (batch_size, sequence_length, 1 + n_vq).")
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-
         # 1. Prepare Embeddings
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings(input_ids)
@@ -265,7 +264,6 @@ class MossTTSDelayModel(MossTTSDelayPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
             output_hidden_states=True,  # Always need hidden states for multi-head projection
             return_dict=True,
             cache_position=cache_position,
