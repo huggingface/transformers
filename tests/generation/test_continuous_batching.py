@@ -852,10 +852,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, num_blocks=4, block_size=32
         )
 
-        # Patch offload_one_request to verify it's called at least once
-        original_offload = OffloadingManager.offload_one_request
+        # Patch offload_requests to verify it's called at least once
+        original_offload = OffloadingManager.offload_requests
         with patch.object(
-            OffloadingManager, "offload_one_request", autospec=True, side_effect=original_offload
+            OffloadingManager, "offload_requests", autospec=True, side_effect=original_offload
         ) as mock_offload:
             self._test_continuous_batching_parity(
                 model_id=model_id,
