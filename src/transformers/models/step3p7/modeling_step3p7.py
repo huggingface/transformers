@@ -599,7 +599,7 @@ class Step3p7MoELinear(nn.Module):
         self.num_experts = num_experts
         self.in_features = in_features
         self.out_features = out_features
-        self.weight = nn.Parameter(torch.empty(num_experts, out_features, in_features))
+        self.weight = nn.Parameter(torch.zeros(num_experts, out_features, in_features))
 
     def forward(self, x, expert_id):
         x = F.linear(x.float(), self.weight[expert_id].float())
