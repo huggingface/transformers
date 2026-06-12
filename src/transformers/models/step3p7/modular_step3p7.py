@@ -154,7 +154,7 @@ STEP3P7_CONFIG_ARGS = r"""
 
 
 @strict
-@auto_docstring(custom_args=STEP_ROBOTICS_VISION_ENCODER_CONFIG_ARGS)
+@auto_docstring(custom_args=STEP_ROBOTICS_VISION_ENCODER_CONFIG_ARGS, checkpoint="stepfun-ai/Step-3.7-Flash")
 class StepRoboticsVisionEncoderConfig(PreTrainedConfig):
     r"""
     width (`int`, *optional*, defaults to 1536):
@@ -214,7 +214,7 @@ class StepRoboticsVisionEncoderConfig(PreTrainedConfig):
 
 
 @strict
-@auto_docstring(custom_args=STEP3P7_TEXT_CONFIG_ARGS)
+@auto_docstring(custom_args=STEP3P7_TEXT_CONFIG_ARGS, checkpoint="stepfun-ai/Step-3.7-Flash")
 class Step3p7TextConfig(PreTrainedConfig):
     r"""
     num_attention_groups (`int`, *optional*, defaults to 8):
