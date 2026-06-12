@@ -31,11 +31,13 @@ if is_torch_available():
         AutoConfig,
         AutoProcessor,
         AutoTokenizer,
+        BlockRefinementSamplerConfig,
         Cache,
         DiffusionGemmaConfig,
         DiffusionGemmaForBlockDiffusion,
         DiffusionGemmaGenerationConfig,
         DiffusionGemmaModel,
+        DiscreteDDIMSamplerConfig,
         DynamicCache,
         EntropyBoundSamplerConfig,
         StaticCache,
@@ -570,6 +572,12 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
             ("static_cache", {"cache_implementation": "static"}),  # static cache -> triggers compilation
             # Diffusion-specific common kwargs
             ("custom_sampler", {"sampler_config": EntropyBoundSamplerConfig(0.1)}),
+            ("ddim_sampler", {"sampler_config": DiscreteDDIMSamplerConfig()}),
+            ("block_refinement_sampler", {"sampler_config": BlockRefinementSamplerConfig()}),
+            (
+                "block_refinement_sampler_editing",
+                {"sampler_config": BlockRefinementSamplerConfig(editing_threshold=0.9)},
+            ),
             (
                 "custom_temperature",
                 {"t_min": 0.1, "t_max": 0.2},

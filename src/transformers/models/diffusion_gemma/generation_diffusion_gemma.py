@@ -70,9 +70,9 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
 
         max_denoising_steps (`int`):
             The maximum number of denoising steps to perform.
-        sampler_config (`EntropyBoundSamplerConfig`):
-            The configuration for the sampler. See [`EntropyBoundSampler`] to learn how a sampler operates in a
-            text diffusion model.
+        sampler_config (`EntropyBoundSamplerConfig`, `DiscreteDDIMSamplerConfig` or `BlockRefinementSamplerConfig`):
+            The configuration for the sampler, which also selects the sampler class. See [`EntropyBoundSampler`] to
+            learn how a sampler operates in a text diffusion model.
         t_min (`float`):
             The final temperature in the schedule, i.e. at the last denoising step. See
             [`LinearTemperatureScheduleLogitsProcessor`] for more details.
@@ -124,7 +124,9 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
         # Diffusion parameters
         # There can be only one sampler at a time, but multiple logits processors and/or stopping criteria.
         self.max_denoising_steps: int = kwargs.pop("max_denoising_steps", None)
-        self.sampler_config: EntropyBoundSamplerConfig = kwargs.pop("sampler_config", None)
+        self.sampler_config: EntropyBoundSamplerConfig | DiscreteDDIMSamplerConfig | BlockRefinementSamplerConfig = (
+            kwargs.pop("sampler_config", None)
+        )
         self.t_min: float = kwargs.pop("t_min", None)
         self.t_max: float = kwargs.pop("t_max", None)
         self.stability_threshold: int = kwargs.pop("stability_threshold", None)

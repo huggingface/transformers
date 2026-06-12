@@ -97,6 +97,28 @@ initial_estimate = ... # a tensor with shape (bsz, 256)
 model.generate(**inputs, max_new_tokens=256, decoder_input_ids=initial_estimate)
 ```
 
+### Choosing a sampler
+
+The sampler that denoises each canvas is selected through `sampler_config`. Three samplers are available:
+
+- [`EntropyBoundSamplerConfig`] (default): accepts the tokens whose prediction entropy is below a bound, renoises the rest.
+- [`DiscreteDDIMSamplerConfig`]: samples every position from the exact posterior of the uniform corruption process. It works well with a constant temperature of 0.7 and 20 denoising steps.
+- [`BlockRefinementSamplerConfig`]: commits an even share of the canvas at each step, most confident tokens first. Setting `editing_threshold` allows later steps to revise already committed tokens.
+
+```python
+from transformers import DiscreteDDIMSamplerConfig
+
+# (... copy from the example above, up to the `generate` call)
+output = model.generate(
+    **inputs,
+    max_new_tokens=256,
+    max_denoising_steps=20,
+    sampler_config=DiscreteDDIMSamplerConfig(),
+    t_min=0.7,
+    t_max=0.7,
+)
+```
+
 ## DiffusionGemmaTextConfig
 
 [[autodoc]] DiffusionGemmaTextConfig
@@ -125,6 +147,22 @@ model.generate(**inputs, max_new_tokens=256, decoder_input_ids=initial_estimate)
 ## EntropyBoundSampler
 
 [[autodoc]] EntropyBoundSampler
+
+## DiscreteDDIMSamplerConfig
+
+[[autodoc]] DiscreteDDIMSamplerConfig
+
+## DiscreteDDIMSampler
+
+[[autodoc]] DiscreteDDIMSampler
+
+## BlockRefinementSamplerConfig
+
+[[autodoc]] BlockRefinementSamplerConfig
+
+## BlockRefinementSampler
+
+[[autodoc]] BlockRefinementSampler
 
 ## StableAndConfidentStoppingCriteria
 

@@ -23,8 +23,12 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        BlockRefinementSampler,
+        BlockRefinementSamplerConfig,
         DiffusionGemmaGenerationConfig,
         DiffusionGemmaGenerationMixin,
+        DiscreteDDIMSampler,
+        DiscreteDDIMSamplerConfig,
         EntropyBoundSampler,
         EntropyBoundSamplerConfig,
         GenerationConfig,
@@ -111,6 +115,29 @@ class DiffusionGemmaGenerationClassesTester(unittest.TestCase):
                 loaded_attr = getattr(loaded_config, attr_name)
                 self.assertEqual(original_attr, loaded_attr)  # same class, same contents
 
+    def test_save_load_sampler_configs(self):
+        """
+        Tests that each sampler config round-trips through save/load of the generation config.
+        """
+        sampler_configs = (
+            EntropyBoundSamplerConfig(entropy_bound=0.1),
+            DiscreteDDIMSamplerConfig(),
+            BlockRefinementSamplerConfig(threshold=0.9, editing_threshold=0.99),
+        )
+        for sampler_config in sampler_configs:
+            original_config = DiffusionGemmaGenerationConfig(sampler_config=sampler_config)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                original_config.save_pretrained(tmp_dir)
+                loaded_config = DiffusionGemmaGenerationConfig.from_pretrained(tmp_dir)
+                self.assertEqual(loaded_config.sampler_config, sampler_config)
+
+    def test_bad_sampler_config(self):
+        """
+        Tests that an unknown sampler config type is rejected at validation time.
+        """
+        with self.assertRaises(ValueError):
+            DiffusionGemmaGenerationConfig(sampler_config=GenerationConfig())
+
     def test_eb_sampler_initialize_canvas(self):
         """
         Tests that `initialize_canvas` is working as expected for `EntropyBoundSampler`.
@@ -176,6 +203,114 @@ class DiffusionGemmaGenerationClassesTester(unittest.TestCase):
         num_not_renoised_canvas = (renoised_canvas == accepted_canvas).sum().item()
         self.assertGreaterEqual(num_not_renoised_canvas, 10)  # can be >10 if the same token is sampled in the same pos
         self.assertTrue((accepted_canvas[0, :9] == renoised_canvas[0, :9]).all())
+
+    def test_ddim_sampler_accept_canvas(self):
+        """
+        Tests that `accept_canvas` is working as expected for `DiscreteDDIMSampler`.
+        Please see comments in the test for expected logic and corner cases.
+        """
+        sampler = _get_ddim_sampler()
+        current_canvas = sampler.initialize_canvas(batch_size=1, device=torch_device)
+        denoiser_canvas = sampler.initialize_canvas(batch_size=1, device=torch_device)
+        logits = torch.zeros((1, 256, 10000), device=torch_device)
+
+        # the last step has alpha_s = 1: the posterior deterministically commits the predicted clean tokens
+        accepted_canvas = sampler.accept_canvas(
+            current_canvas=current_canvas, denoiser_canvas=denoiser_canvas, logits=logits, cur_step=1
+        )
+        self.assertTrue((accepted_canvas == denoiser_canvas).all())
+        self.assertTrue(sampler.accepted_token_mask.all())
+
+        # at an intermediate step, positions where the denoiser agrees with the current canvas carry almost all the
+        # posterior mass on the clean route, so nearly the whole canvas is kept
+        accepted_canvas = sampler.accept_canvas(
+            current_canvas=current_canvas, denoiser_canvas=current_canvas, logits=logits, cur_step=24
+        )
+        num_kept = (accepted_canvas == current_canvas).sum().item()
+        self.assertGreaterEqual(num_kept, 250)
+
+    def test_ddim_sampler_renoise_canvas(self):
+        """
+        Tests that `renoise_canvas` is a no-op for `DiscreteDDIMSampler`: the noise route of `accept_canvas`
+        already renoises.
+        """
+        sampler = _get_ddim_sampler()
+        accepted_canvas = sampler.initialize_canvas(batch_size=1, device=torch_device)
+        renoised_canvas = sampler.renoise_canvas(accepted_canvas=accepted_canvas, cur_step=24)
+        self.assertTrue((renoised_canvas == accepted_canvas).all())
+
+    def test_block_refinement_sampler_accept_canvas(self):
+        """
+        Tests that `accept_canvas` is working as expected for `BlockRefinementSampler`.
+        Please see comments in the test for expected logic and corner cases.
+        """
+        # threshold = 1.0 disables threshold commits (confidence is strictly below 1), so only the quota applies
+        sampler = _get_block_refinement_sampler(threshold=1.0)
+        current_canvas = sampler.initialize_canvas(batch_size=1, device=torch_device)
+        denoiser_canvas = sampler.initialize_canvas(batch_size=1, device=torch_device)
+        logits = torch.zeros((1, 256, 10000), device=torch_device)
+
+        # first step (`cur_step` counts down from `max_denoising_steps`): the quota is ceil(256 / 48) = 6 positions
+        sampler.accept_canvas(
+            current_canvas=current_canvas, denoiser_canvas=denoiser_canvas, logits=logits, cur_step=48
+        )
+        self.assertEqual(sampler.accepted_token_mask.sum().item(), 6)
+
+        # second step: the cumulative quota grows to ceil(2 * 256 / 48) = 11, committed positions stay committed
+        committed_before = sampler.accepted_token_mask.clone()
+        sampler.accept_canvas(
+            current_canvas=current_canvas, denoiser_canvas=denoiser_canvas, logits=logits, cur_step=47
+        )
+        self.assertEqual(sampler.accepted_token_mask.sum().item(), 11)
+        self.assertTrue(sampler.accepted_token_mask[committed_before].all())
+
+        # last step: the whole canvas is committed
+        sampler.accept_canvas(
+            current_canvas=current_canvas, denoiser_canvas=denoiser_canvas, logits=logits, cur_step=1
+        )
+        self.assertTrue(sampler.accepted_token_mask.all())
+
+        # tokens above `threshold` are committed beyond the quota of 6
+        sampler = _get_block_refinement_sampler(threshold=0.5)
+        sampler.initialize_canvas(batch_size=1, device=torch_device)
+        confident_logits = logits.clone()
+        confident_logits[0, torch.arange(20), denoiser_canvas[0, :20]] = 1e6
+        sampler.accept_canvas(
+            current_canvas=current_canvas, denoiser_canvas=denoiser_canvas, logits=confident_logits, cur_step=48
+        )
+        self.assertEqual(sampler.accepted_token_mask.sum().item(), 20)
+
+    def test_block_refinement_sampler_editing(self):
+        """
+        Tests that `editing_threshold` lets the sampler replace a committed token when the denoiser confidently
+        disagrees with it.
+        """
+        sampler = _get_block_refinement_sampler(threshold=1.0, editing_threshold=0.5)
+        current_canvas = sampler.initialize_canvas(batch_size=1, device=torch_device)
+        sampler.accepted_token_mask[:] = True  # pretend the whole canvas is already committed
+
+        denoiser_canvas = (current_canvas + 1) % 10000  # the denoiser disagrees everywhere...
+        logits = torch.zeros((1, 256, 10000), device=torch_device)
+        logits[0, 0, denoiser_canvas[0, 0]] = 1e6  # ...but is only confident at position 0
+
+        accepted_canvas = sampler.accept_canvas(
+            current_canvas=current_canvas, denoiser_canvas=denoiser_canvas, logits=logits, cur_step=24
+        )
+        self.assertEqual(accepted_canvas[0, 0], denoiser_canvas[0, 0])
+        self.assertTrue((accepted_canvas[0, 1:] == current_canvas[0, 1:]).all())
+
+    def test_block_refinement_sampler_renoise_canvas(self):
+        """
+        Tests that `renoise_canvas` is working as expected for `BlockRefinementSampler`.
+        Committed tokens are kept and all other positions are renoised.
+        """
+        sampler = _get_block_refinement_sampler(threshold=1.0)
+        accepted_canvas = sampler.initialize_canvas(batch_size=1, device=torch_device)
+        sampler.accepted_token_mask[0, :6] = True
+
+        renoised_canvas = sampler.renoise_canvas(accepted_canvas=accepted_canvas, cur_step=47)
+        self.assertTrue((renoised_canvas[0, :6] == accepted_canvas[0, :6]).all())
+        self.assertFalse((renoised_canvas[0, 6:] == accepted_canvas[0, 6:]).all())
 
     def test_linear_temperature_schedule(self):
         t_min = 0.4
@@ -310,6 +445,31 @@ def _get_eb_sampler(entropy_bound: float = 0.1) -> EntropyBoundSampler:
     """Returns a parameterized `EntropyBoundSampler`"""
     sampler_config = EntropyBoundSamplerConfig(entropy_bound=entropy_bound)
     sampler = EntropyBoundSampler(
+        config=sampler_config,
+        canvas_length=256,
+        vocab_size=10000,
+        max_denoising_steps=48,
+    )
+    return sampler
+
+
+def _get_ddim_sampler() -> DiscreteDDIMSampler:
+    """Returns a parameterized `DiscreteDDIMSampler`"""
+    sampler = DiscreteDDIMSampler(
+        config=DiscreteDDIMSamplerConfig(),
+        canvas_length=256,
+        vocab_size=10000,
+        max_denoising_steps=48,
+    )
+    return sampler
+
+
+def _get_block_refinement_sampler(
+    threshold: float = 0.95, editing_threshold: float | None = None
+) -> BlockRefinementSampler:
+    """Returns a parameterized `BlockRefinementSampler`"""
+    sampler_config = BlockRefinementSamplerConfig(threshold=threshold, editing_threshold=editing_threshold)
+    sampler = BlockRefinementSampler(
         config=sampler_config,
         canvas_length=256,
         vocab_size=10000,
