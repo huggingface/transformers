@@ -447,7 +447,7 @@ class BartPreTrainedModel(PreTrainedModel):
 class PretrainedBartModel(BartPreTrainedModel):
     def __init_subclass__(self):
         warnings.warn(
-            "The class `PretrainedBartModel` has been depreciated, please use `BartPreTrainedModel` instead.",
+            "The class `PretrainedBartModel` has been deprecated, please use `BartPreTrainedModel` instead.",
             FutureWarning,
         )
 
@@ -455,7 +455,7 @@ class PretrainedBartModel(BartPreTrainedModel):
 class BartPretrainedModel(BartPreTrainedModel):
     def __init_subclass__(self):
         warnings.warn(
-            "The class `PretrainedBartModel` has been depreciated, please use `BartPreTrainedModel` instead.",
+            "The class `PretrainedBartModel` has been deprecated, please use `BartPreTrainedModel` instead.",
             FutureWarning,
         )
 
