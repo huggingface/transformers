@@ -142,14 +142,6 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
         moe_layer_freq = kwargs.pop("moe_layer_freq", None)
         PreTrainedConfig.__post_init__(self, **kwargs)
 
-        # Checkpoints label the gated MLP nonlinearity "swiglu"/"swigluoai", but the gating
-        # (clamp + `gate * sigmoid(gate * swiglu_alpha)`) is computed inline in the MLP/experts
-        # `_apply_gate`, not via `ACT2FN[hidden_act]`. So `act_fn` only needs to resolve to the
-        # underlying elementwise nonlinearity (SiLU); normalize it here instead of registering a
-        # misleading "swiglu" -> SiLU entry in the global ACT2CLS.
-        if self.hidden_act in ("swiglu", "swigluoai"):
-            self.hidden_act = "silu"
-
         for flat, legacy in {
             "index_n_heads": "sparse_num_index_heads",
             "index_head_dim": "sparse_index_dim",
@@ -377,6 +369,7 @@ class MiniMaxM3VLExperts(DeepseekV4Experts):
         super().__init__(config)
         self.swiglu_alpha = config.swiglu_alpha
         self.swiglu_limit = config.swiglu_limit
+        del self.act_fn
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         # same as GPT OSS, but the weights are not interleaved
@@ -728,23 +721,31 @@ class MiniMaxM3VLTextModel(MiniMaxM2Model):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        # `full_attention` and `minimax_m3_sparse` layers both build on the same dense causal mask
+        # (the sparse layers narrow it further inside the attention via the lightning indexer), so a
+        # single causal mask is shared across both layer types. When generate compiles with a static
+        # cache it precomputes this per-layer-type mapping and feeds it back as `attention_mask`; in
+        # that case route it straight through instead of rebuilding (rebuilding would crash on the dict).
+        causal_mask_mapping = attention_mask
+        if not isinstance(causal_mask_mapping, dict):
+            causal_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                position_ids=position_ids,
+            )
+            causal_mask_mapping = dict.fromkeys(self.config.layer_types, causal_mask)
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # `position_ids` is threaded to every layer so the sparse layers' lightning indexer can anchor
         # block selection to each query's content position (see `MiniMaxM3VLIndexer`).
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=causal_mask_mapping[self.config.layer_types[layer_idx]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
