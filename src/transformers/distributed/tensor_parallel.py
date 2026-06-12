@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import contextlib
+import functools
 import re
 
 from ..utils import logging
@@ -28,6 +29,8 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
     import torch.distributed as dist
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
+
+    from .sharding_utils import _find_strided_shard_placement_from_fused_params
 
     # Cache this result has it's a C FFI call which can be pretty time-consuming
     _torch_distributed_available = torch.distributed.is_available()
@@ -56,18 +59,18 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     The `is_weight` is important because for weights, we want to support `.weights` and `.bias` cases seamlessly! but
     not parent classes for `post_init` calls
     """
-    # Try exact (indexed) keys before wildcard ones, so a per-layer override wins over a
-    # generic rule.
-    # e.g. for param "layers.0.mlp.experts.gate_up_proj", an indexed plan key
-    # "layers.0.mlp.experts.gate_up_proj" is matched here, before collapsing to the generic
-    # "layers.*.mlp.experts.gate_up_proj".
+    # Lookup order (most -> least specific):
+    # 1. exact param key -> layers.1.mlp.experts.gate_up_proj
     if parameter_name in tp_plan:
         return tp_plan[parameter_name]
-    elif is_weight and "." in parameter_name and (module_name := parameter_name.rsplit(".", 1)[0]) in tp_plan:
-        return tp_plan[module_name]
     generic_param_name = replace_layer_number_by_wildcard(parameter_name)
+    # 2. wildcard param key -> layers.*.mlp.experts.gate_up_proj
     if generic_param_name in tp_plan:
         return tp_plan[generic_param_name]
+    # 3. parent module (indexed) -> layers.1.mlp.experts
+    elif is_weight and "." in parameter_name and (module_name := parameter_name.rsplit(".", 1)[0]) in tp_plan:
+        return tp_plan[module_name]
+    # 4. parent module (wildcard) -> layers.*.mlp.experts
     elif is_weight and "." in generic_param_name and (module_name := generic_param_name.rsplit(".", 1)[0]) in tp_plan:
         return tp_plan[module_name]
     return None
@@ -348,81 +351,33 @@ class PrepareModuleInput(TensorParallelLayer):
 # =============================================================================
 
 
-# TODO(3outeille): this can be removed once we merge sp + ep / tp + ep plans.
-# no more strided shard on gate_up_proj because we will be using grouped_gemm.
 def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tensor) -> torch.Tensor:
     """Stitch a local grad back onto the original DTensor parameter.
 
-    During forward we replace the DTensor param with a detached plain-tensor
-    leaf (see _swap_dtensor_params_for_local) because grouped_mm / fused
-    ops don't accept DTensor inputs. That swap breaks the autograd link between
-    the local leaf's grad and the DTensor param's .grad, so this tensor hook
-    runs on the leaf and copies/accumulates the grad onto the original DTensor.
-
-    NOTE: An autograd-aware param.to_local() swap would let backward stitch
-    the grad automatically, but DTensor's backward path then redistributes the
-    resulting grad — and that redistribute does not currently support
-    _StridedShard placements (used by MoEExpertsParallel / PackedColwiseParallel).
+    Used when the forward swap detaches the local leaf (``_StridedShard`` params) because
+    DTensor backward redistribute does not support that placement as a source.
     """
     tensor_meta = original_param._spec.tensor_meta
     detached_grad = local_grad.detach()
-    grad_dtensor = DTensor.from_local(
-        detached_grad,
-        original_param.device_mesh,
-        original_param.placements,
-        run_check=False,
-        shape=tensor_meta.shape,
-        stride=tensor_meta.stride,
-    )
     with torch.no_grad():
-        existing_grad = original_param.grad
-        if existing_grad is None:
-            original_param.grad = grad_dtensor
-        elif isinstance(existing_grad, DTensor):
-            existing_grad._local_tensor.add_(detached_grad)
+        if original_param.grad is None:
+            original_param.grad = DTensor.from_local(
+                detached_grad,
+                original_param.device_mesh,
+                original_param.placements,
+                run_check=False,
+                shape=tensor_meta.shape,
+                stride=tensor_meta.stride,
+            )
+        elif isinstance(original_param.grad, DTensor):
+            original_param.grad._local_tensor.add_(detached_grad)
         else:
-            existing_grad.add_(detached_grad)
+            original_param.grad.add_(detached_grad)
     return local_grad
 
 
-@contextlib.contextmanager
-def _swap_dtensor_params_for_local(module):
-    """Temporarily replace DTensor params with local-shard Parameters for forward.
-
-    grouped_mm / fused kernels don't accept DTensor inputs, so each DTensor
-    param is swapped for a detached local Parameter. A tensor hook
-    (_accumulate_local_param_grad) on the local leaf copies the backward
-    grad back onto the original DTensor.
-
-    The original DTensor params are restored on exit (even on exception) so
-    save_pretrained / state-dict still see sharded params.
-    """
-    shadows = {}
-    for name, param in list(module.named_parameters(recurse=False)):
-        if not isinstance(param, DTensor):
-            continue
-        shadows[name] = param
-        local = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
-        if param.requires_grad:
-            local.register_hook(lambda g, p=param: _accumulate_local_param_grad(p, g))
-        module._parameters.pop(name)
-        setattr(module, name, local)
-    try:
-        yield
-    finally:
-        for name, param in shadows.items():
-            if hasattr(module, name):
-                delattr(module, name)
-            module.register_parameter(name, param)
-
-
 class PackedColwiseParallel(TensorParallelLayer):
-    """Column-wise parallel style for fused linear weights packed along the output dimension.
-
-    Unlike the plain ColwiseParallel, the packed forward swaps params to local leaves
-    (_swap_dtensor_params_for_local) rather than relying on DTensor dispatch, so its
-    redistributes stay synchronous.
-    """
+    """Column-wise parallel style for fused linear weights packed along the output dimension."""
 
     def __init__(
         self,
@@ -457,8 +412,28 @@ class PackedColwiseParallel(TensorParallelLayer):
         input_tensor = input_tensor.to_local()
         return (input_tensor,) + args[1:], kwargs
 
+    @contextlib.contextmanager
     def context_around_forward(self, module):
-        return _swap_dtensor_params_for_local(module)
+        # grouped_mm etc needs plain tensors, so swap the params
+        to_swap_params = [
+            (name, param) for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)
+        ]
+        for name, param in to_swap_params:
+            del module._parameters[name]
+            if _find_strided_shard_placement_from_fused_params(param.placements) is not None:
+                local = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
+                if param.requires_grad:
+                    local.register_hook(functools.partial(_accumulate_local_param_grad, param))
+            else:
+                local = param.to_local()
+            setattr(module, name, local)
+        try:
+            yield
+        finally:
+            for name, param in to_swap_params:
+                # restore the original DTensor params
+                delattr(module, name)
+                module.register_parameter(name, param)
 
     def transform_output_post_forward(self, module, output, mesh):
         if output is None or self.use_local_output:
@@ -566,8 +541,29 @@ class MoEExpertsParallel(TensorParallelLayer):
         module.forward = tp_forward
         return module
 
+    @contextlib.contextmanager
     def context_around_forward(self, module):
-        return _swap_dtensor_params_for_local(module)
+        # grouped_mm experts forward needs plain tensors, so swap the params
+        to_swap_params = [
+            (name, param) for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)
+        ]
+        for name, param in to_swap_params:
+            del module._parameters[name]
+            # Happens only when train in TP only (experts dont use grouped_gemm but rely on moe_tp_gate_up_colwise)
+            if _find_strided_shard_placement_from_fused_params(param.placements) is not None:
+                local = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
+                if param.requires_grad:
+                    local.register_hook(functools.partial(_accumulate_local_param_grad, param))
+            else:
+                local = param.to_local()
+            setattr(module, name, local)
+        try:
+            yield
+        finally:
+            # restore the original DTensor params
+            for name, param in to_swap_params:
+                delattr(module, name)
+                module.register_parameter(name, param)
 
     def transform_output_post_forward(self, module, output, mesh):
         if output is None:
