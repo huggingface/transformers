@@ -59,7 +59,7 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     The `is_weight` is important because for weights, we want to support `.weights` and `.bias` cases seamlessly! but
     not parent classes for `post_init` calls
     """
-    # Lookup order (most → least specific):
+    # Lookup order (most -> least specific):
     # 1. exact param key -> layers.1.mlp.experts.gate_up_proj
     if parameter_name in tp_plan:
         return tp_plan[parameter_name]
