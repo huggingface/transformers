@@ -31,6 +31,7 @@ from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from transformers.models.gemma3.modeling_gemma3 import Gemma3RMSNorm, repeat_kv
 from transformers.processing_utils import Unpack
 from transformers.utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 
@@ -906,18 +907,6 @@ def apply_rotary_pos_emb(q, k, cos, sin):
     return torch.cat([q_embed, q_pass], dim=-1), torch.cat([k_embed, k_pass], dim=-1)
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -1144,23 +1133,15 @@ class Step3p7MoEMLP(nn.Module):
         return final_hidden_states
 
 
-class Step3p7RMSNorm(nn.Module):
+class Step3p7RMSNorm(Gemma3RMSNorm):
     def __init__(
         self,
         hidden_size: int,
         eps: float = 1e-5,
     ) -> None:
-        super().__init__()
+        super().__init__(hidden_size, eps)
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        dtype = x.dtype
-        x = x.float()
-        variance = x.pow(2).mean(dim=-1, keepdim=True)
-        normed = x * torch.rsqrt(variance + self.variance_epsilon)
-        normed = normed * (self.weight.float() + 1)
-        return normed.to(dtype)
 
 
 class Step3p7Attention(nn.Module):
