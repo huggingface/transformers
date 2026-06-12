@@ -1477,10 +1477,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     @property
     def tp_plan(self) -> dict[str, str]:
-        """
-        The full tp plan for the model's modules
-        """
-        # TODO(3outeille): should we resolve the plan here as well or rely on set attribute after select_parallel_plan in apply_tensor_parallel?
         return self._tp_plan
 
     @property
