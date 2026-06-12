@@ -17,11 +17,10 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
+from ..esmc.configuration_esmc import ESMCConfig
 
 
 logger = logging.get_logger(__name__)
-
-_DEFAULT_ESMC_HF_REPO = "biohub/ESMC-6B"
 
 
 # ---------------------------------------------------------------------------
@@ -46,9 +45,6 @@ class ParcaeConfig(PreTrainedConfig):
     """Release-only config for the parcae diffusion-loop scheduler."""
 
     enabled: bool | None = True
-    poisson_mean: float | None = 3.0
-    min_steps: int | None = 1
-    max_steps: int | None = 6
     coda_n_layers: int | None = 2
 
 
@@ -114,8 +110,6 @@ class DiffusionModuleConfig(PreTrainedConfig):
     c_z: int | None = 256
     c_s_inputs: int | None = 451
     fourier_dim: int | None = 256
-    relpos_r_max: int | None = 32
-    relpos_s_max: int | None = 2
     atom_num_blocks: int | None = 3
     atom_num_heads: int | None = 4
     token_num_blocks: int | None = 12
@@ -131,9 +125,6 @@ class DiffusionStructureHeadConfig(PreTrainedConfig):
 
     diffusion_module: dict | DiffusionModuleConfig | None = None
     distogram_bins: int | None = 128
-    # Training noise: sigma ~ sigma_data * exp(mu + sigma * N(0,1))
-    train_noise_log_mean: float | None = -1.2
-    train_noise_log_std: float | None = 1.5
     # Sampling defaults (ODE)
     gamma_0: float | None = 0.605
     gamma_min: float | None = 1.107
@@ -200,13 +191,10 @@ class ESMFold2Config(PreTrainedConfig):
         Number of trunk loops for iterative refinement.
     num_diffusion_samples (`int`, *optional*, defaults to 8):
         Number of parallel structure predictions to generate.
-    lm_d_model (`int`, *optional*, defaults to 2560):
-        Hidden size of the ESMC language-model backbone.
-    lm_num_layers (`int`, *optional*, defaults to 80):
-        Number of layers in the ESMC language-model backbone.
-    esmc_id (`str`, *optional*, defaults to `"biohub/ESMC-6B"`):
-        Hub id of the ESMC backbone, loaded separately (the ESMFold2 checkpoint
-        does not bundle ESMC weights).
+    esmc_config (`ESMCConfig`, *optional*):
+        Configuration of the bundled ESMC language-model backbone. Defaults to the
+        ESMC-6B configuration. The backbone weights are part of the ESMFold2
+        checkpoint (built with `AutoModel.from_config(esmc_config)`).
     msa_encoder_overwrite (`bool`, *optional*, defaults to `True`):
         If `True`, MSA encoder output replaces the pair stream; if `False`, it
         is added.
@@ -250,6 +238,7 @@ class ESMFold2Config(PreTrainedConfig):
         "msa_encoder": MSAEncoderConfig,
         "parcae": ParcaeConfig,
         "lm_encoder": LMEncoderConfig,
+        "esmc_config": ESMCConfig,
     }
 
     type: str | None = "release"
@@ -259,9 +248,7 @@ class ESMFold2Config(PreTrainedConfig):
     n_relative_chain_bins: int | None = 2
     num_loops: int | None = 10
     num_diffusion_samples: int | None = 8
-    lm_d_model: int | None = 2560
-    lm_num_layers: int | None = 80
-    esmc_id: str | None = _DEFAULT_ESMC_HF_REPO
+    esmc_config: dict | ESMCConfig | None = None
     msa_encoder_overwrite: bool | None = True
     inputs: dict | InputsEmbedderConfig | None = None
     folding_trunk: dict | FoldingTrunkConfig | None = None
@@ -292,6 +279,7 @@ class ESMFold2Config(PreTrainedConfig):
         self.msa_encoder = _init_nested(MSAEncoderConfig, self.msa_encoder)
         self.parcae = _init_nested(ParcaeConfig, self.parcae)
         self.lm_encoder = _init_nested(LMEncoderConfig, self.lm_encoder)
+        self.esmc_config = _init_nested(ESMCConfig, self.esmc_config)
 
         super().__post_init__(**kwargs)
 

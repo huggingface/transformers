@@ -483,28 +483,16 @@ def prepare_protein_features(sequence: str) -> dict[str, Tensor]:
 _RES_TYPE_TO_3LETTER: dict[int, str] = {rt: three for three, rt in PROTEIN_RESIDUE_TO_RES_TYPE.items()}
 _RES_TYPE_TO_3LETTER[PROTEIN_UNK_RES_TYPE] = "UNK"
 
-# Featurization keys that ``output_to_pdb`` reads off the forward output.
-# ``infer_protein`` re-attaches them because ``forward`` does not echo them
-# back; both ESMFold2 model classes share this list.
-OUTPUT_TO_PDB_FEATURE_KEYS: tuple[str, ...] = (
-    "res_type",
-    "atom_to_token",
-    "ref_atom_name_chars",
-    "atom_attention_mask",
-    "token_attention_mask",
-    "residue_index",
-)
 
+def output_to_pdb(output, features: dict) -> str:
+    """Convert an ESMFold2 forward output into a PDB string.
 
-def output_to_pdb(output: dict) -> str:
-    """Convert an ESMFold2 protein forward output into a PDB string.
-
-    Expects ``output`` to carry the featurization keys re-attached by
-    ``infer_protein`` (``res_type``, ``atom_to_token``,
-    ``ref_atom_name_chars``, ``atom_attention_mask``,
-    ``token_attention_mask``, ``residue_index``) alongside the predicted
-    ``sample_atom_coords`` and ``plddt``. Builds a 37-atom
-    ``OFProtein`` (per-atom pLDDT in the b-factor column) and renders it
+    Reads the predicted ``sample_atom_coords`` and ``plddt`` from ``output`` (an
+    [`~transformers.models.esmfold2.modeling_esmfold2.ESMFold2Output`]) and the
+    featurization tensors it needs (``res_type``, ``atom_to_token``,
+    ``ref_atom_name_chars``, ``atom_attention_mask``, ``token_attention_mask``,
+    ``residue_index``) from the ``features`` dict the model was run on. Builds a
+    37-atom ``OFProtein`` (per-atom pLDDT in the b-factor column) and renders it
     with the OpenFold utilities shipped in ``transformers.models.esm``.
     """
     from transformers.models.esm.openfold_utils import OFProtein, to_pdb
@@ -516,12 +504,12 @@ def output_to_pdb(output: dict) -> str:
     coords = coords.detach().cpu().numpy()[0]
 
     plddt = output["plddt"].detach().cpu().numpy()[0]
-    atom_to_token = output["atom_to_token"].cpu().numpy()
-    ref_chars = output["ref_atom_name_chars"].cpu().numpy()
-    res_type = output["res_type"].cpu().numpy()
-    token_mask = output["token_attention_mask"].cpu().numpy().astype(bool)
-    atom_mask_in = output["atom_attention_mask"].cpu().numpy().astype(bool)
-    residue_index_arr = output["residue_index"].cpu().numpy()
+    atom_to_token = features["atom_to_token"].cpu().numpy()
+    ref_chars = features["ref_atom_name_chars"].cpu().numpy()
+    res_type = features["res_type"].cpu().numpy()
+    token_mask = features["token_attention_mask"].cpu().numpy().astype(bool)
+    atom_mask_in = features["atom_attention_mask"].cpu().numpy().astype(bool)
+    residue_index_arr = features["residue_index"].cpu().numpy()
 
     if atom_to_token.ndim == 2:
         atom_to_token = atom_to_token[0]
