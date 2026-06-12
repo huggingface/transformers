@@ -16,7 +16,6 @@
 
 import tempfile
 import unittest
-from unittest.mock import patch
 
 from parameterized import parameterized
 
@@ -120,30 +119,14 @@ class PhimoeIntegrationTest(unittest.TestCase):
     @classmethod
     def get_model(cls):
         if cls.model is None:
-            import accelerate.utils
-
-            # Our CI runners with A10 GPU use instance sharing, which makes each runner report ~750 GB of CPU RAM.
-            # With that much CPU memory visible, `device_map="auto"` fits all layers on GPU+CPU with nothing
-            # spilling to disk. This produces a device map that causes GPU OOM when the model is actually run.
-            # We patch `accelerate_max_memory` to cap CPU at 60 GiB — the amount a dedicated A10 instance
-            # normally sees — so that the same layers are offloaded to disk as on a real single-tenant runner,
-            # avoiding the OOM.
-            _original_get_max_memory = accelerate.utils.get_max_memory
-
-            def _cap_cpu_memory(max_memory=None):
-                result = _original_get_max_memory(max_memory)
-                result["cpu"] = min(result.get("cpu", float("inf")), 60 * 1024**3)
-                return result
-
             cls.offload_dir = tempfile.TemporaryDirectory()
-            with patch("transformers.integrations.accelerate.accelerate_max_memory", _cap_cpu_memory):
-                cls.model = PhimoeForCausalLM.from_pretrained(
-                    "microsoft/Phi-3.5-MoE-instruct",
-                    experts_implementation="eager",
-                    dtype="auto",
-                    device_map="auto",
-                    offload_folder=cls.offload_dir.name,
-                )
+            cls.model = PhimoeForCausalLM.from_pretrained(
+                "microsoft/Phi-3.5-MoE-instruct",
+                experts_implementation="eager",
+                dtype="auto",
+                device_map="auto",
+                offload_folder=cls.offload_dir.name,
+            )
         return cls.model
 
     @classmethod

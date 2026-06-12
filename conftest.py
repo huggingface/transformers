@@ -28,11 +28,21 @@ from transformers.testing_utils import (
     HfDoctestModule,
     HfDocTestParser,
     is_torch_available,
+    patch_psutil_cpu_memory,
     patch_testing_methods_to_collect_info,
     patch_torch_compile_force_graph,
 )
 from transformers.utils import enable_tf32
 from transformers.utils.network_logging import register_network_debug_plugin
+
+
+# In K8S instance-sharing CI, each runner sees the full machine's CPU RAM (~750 GB) even though it only
+# owns a fraction. This causes `device_map="auto"` to overfill GPU+CPU with nothing offloaded to disk,
+# leading to GPU OOM at runtime. When CI_CPU_MEMORY_LIMIT_GB is set, cap psutil.virtual_memory so the
+# entire test session sees a realistic per-runner memory budget.
+_cpu_memory_limit_gb = os.environ.get("CI_CPU_MEMORY_LIMIT_GB")
+if _cpu_memory_limit_gb is not None:
+    patch_psutil_cpu_memory(int(float(_cpu_memory_limit_gb) * 1024**3))
 
 
 NOT_DEVICE_TESTS = {

@@ -43,6 +43,9 @@ env:
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
+  # K8S instance-sharing makes each runner report the full machine's CPU RAM (~750 GB). Cap it to the
+  # amount a dedicated A10 instance would see, so `device_map="auto"` produces a sane device map.
+  CI_CPU_MEMORY_LIMIT_GB: 60
 
 permissions:
   contents: read
