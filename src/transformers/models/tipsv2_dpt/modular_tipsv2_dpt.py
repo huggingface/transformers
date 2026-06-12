@@ -28,6 +28,7 @@ from ...modeling_outputs import DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoConfig
+from ..dpt.modeling_dpt import DPTReassembleLayer
 from ..tipsv2.image_processing_tipsv2 import Tipsv2ImageProcessor
 
 
@@ -239,25 +240,8 @@ class Tipsv2DptConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class Tipsv2DptReassembleLayer(nn.Module):
-    def __init__(self, config: Tipsv2DptConfig, channels: int, factor: float):
-        super().__init__()
-        hidden_size = config.backbone_config.hidden_size
-        self.projection = nn.Conv2d(in_channels=hidden_size, out_channels=channels, kernel_size=1)
-
-        if factor > 1:
-            self.resize = nn.ConvTranspose2d(
-                channels, channels, kernel_size=int(factor), stride=int(factor), padding=0
-            )
-        elif factor == 1:
-            self.resize = nn.Identity()
-        else:
-            self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=int(1 / factor), padding=1)
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.projection(hidden_state)
-        hidden_state = self.resize(hidden_state)
-        return hidden_state
+class Tipsv2DptReassembleLayer(DPTReassembleLayer):
+    pass
 
 
 class Tipsv2DptReassembleStage(nn.Module):
@@ -496,16 +480,12 @@ class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
     def __init__(self, config: Tipsv2DptConfig):
         super().__init__(config)
         self.backbone = load_backbone(config)
-
         self.depth_neck = Tipsv2DptNeck(config)
         self.depth_decoder = Tipsv2DptDecoder(config, out_channels=config.num_depth_bins)
-
         self.normals_neck = Tipsv2DptNeck(config)
         self.normals_decoder = Tipsv2DptDecoder(config, out_channels=3)
-
         self.segmentation_neck = Tipsv2DptNeck(config)
         self.segmentation_decoder = Tipsv2DptDecoder(config, out_channels=config.num_labels)
-
         self.post_init()
 
     def get_input_embeddings(self):

@@ -31,22 +31,30 @@ from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return
 from .configuration_tipsv2_dpt import Tipsv2DptConfig
 
 
+def _get_backbone_hidden_size(config):
+    if config.backbone_config is not None and hasattr(config.backbone_config, "hidden_size"):
+        return config.backbone_config.hidden_size
+    else:
+        return config.hidden_size
+
+
 class Tipsv2DptReassembleLayer(nn.Module):
-    def __init__(self, config: Tipsv2DptConfig, channels: int, factor: float):
+    def __init__(self, config: Tipsv2DptConfig, channels: int, factor: int):
         super().__init__()
-        hidden_size = config.backbone_config.hidden_size
+        # projection
+        hidden_size = _get_backbone_hidden_size(config)
         self.projection = nn.Conv2d(in_channels=hidden_size, out_channels=channels, kernel_size=1)
 
+        # up/down sampling depending on factor
         if factor > 1:
-            self.resize = nn.ConvTranspose2d(
-                channels, channels, kernel_size=int(factor), stride=int(factor), padding=0
-            )
+            self.resize = nn.ConvTranspose2d(channels, channels, kernel_size=factor, stride=factor, padding=0)
         elif factor == 1:
             self.resize = nn.Identity()
-        else:
+        elif factor < 1:
+            # so should downsample
             self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=int(1 / factor), padding=1)
 
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_state):
         hidden_state = self.projection(hidden_state)
         hidden_state = self.resize(hidden_state)
         return hidden_state
@@ -288,16 +296,12 @@ class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
     def __init__(self, config: Tipsv2DptConfig):
         super().__init__(config)
         self.backbone = load_backbone(config)
-
         self.depth_neck = Tipsv2DptNeck(config)
         self.depth_decoder = Tipsv2DptDecoder(config, out_channels=config.num_depth_bins)
-
         self.normals_neck = Tipsv2DptNeck(config)
         self.normals_decoder = Tipsv2DptDecoder(config, out_channels=3)
-
         self.segmentation_neck = Tipsv2DptNeck(config)
         self.segmentation_decoder = Tipsv2DptDecoder(config, out_channels=config.num_labels)
-
         self.post_init()
 
     def get_input_embeddings(self):
