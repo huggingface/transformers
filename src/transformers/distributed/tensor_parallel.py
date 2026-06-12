@@ -715,21 +715,6 @@ class ParallelInterface(GeneralInterface):
 
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
-PARALLEL_PLAN_KEYS: dict[tuple[bool, bool], str] = {
-    (False, False): "base_model_tp_plan",
-    (True, False): "base_model_sp_plan",
-    (False, True): "base_model_tp_ep_plan",
-    (True, True): "base_model_sp_ep_plan",
-}
-
-MODEL_PARALLEL_PLAN_ATTRS: dict[tuple[bool, bool], str] = {
-    (False, False): "_tp_plan",
-    (True, False): "_sp_plan",
-    (False, True): "_tp_ep_plan",
-    (True, True): "_sp_ep_plan",
-}
-
-
 def select_parallel_plan(model) -> dict[str, str]:
     """
     Select the parallel plan to apply from explicit combo plans on the model.
@@ -745,10 +730,18 @@ def select_parallel_plan(model) -> dict[str, str]:
 
     sp = distributed_config.enable_sequence_parallel
     ep = distributed_config.enable_expert_parallel
-    plan_attr = MODEL_PARALLEL_PLAN_ATTRS[(sp, ep)]
+    if sp and ep:
+        plan_attr = "_sp_ep_plan"
+    elif sp:
+        plan_attr = "_sp_plan"
+    elif ep:
+        plan_attr = "_tp_ep_plan"
+    else:
+        plan_attr = "_tp_plan"
+    config_attr = f"base_model{plan_attr}"
+
     plan = getattr(model, plan_attr, None) or {}
     if not plan:
-        config_attr = PARALLEL_PLAN_KEYS[(sp, ep)]
         raise ValueError(
             f"Model {model.config.model_type!r} has no {config_attr} (model.{plan_attr} is empty) but "
             f"DistributedConfig requested enable_sequence_parallel={sp}, enable_expert_parallel={ep}. "
