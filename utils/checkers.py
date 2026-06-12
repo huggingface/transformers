@@ -88,7 +88,7 @@ class _NullTrace:
     def __exit__(self, *exc):
         return False
 
-    def set_exit_code(self, returncode):
+    def set_exit_code(self, returncode, **kwargs):
         pass
 
 
@@ -609,7 +609,7 @@ def main():
                     rc, output = run_checker(name, fix=args.fix, line_callback=window.add_line)
                     elapsed = time.perf_counter() - checker_start
                     window.finish(success=(rc == 0), elapsed=elapsed, show_lines=(rc == 0))
-                    otel_step.set_exit_code(rc)
+                    otel_step.set_exit_code(rc, command=cmd_str, output=output)
                     if rc != 0:
                         print()
                         _print_output(output)
@@ -654,7 +654,7 @@ def main():
                     status = "OK" if rc == 0 else "FAILED"
                     print(f"{status} ({format_elapsed(elapsed)})", flush=True)
                     print(flush=True)
-                    otel_step.set_exit_code(rc)
+                    otel_step.set_exit_code(rc, command=cmd_str, output=output)
                     if rc == 0 and cache is not None:
                         cache.update(name)
                     elif rc != 0:
