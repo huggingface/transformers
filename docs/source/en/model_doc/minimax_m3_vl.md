@@ -113,6 +113,81 @@ generated_ids = model.generate(**inputs, max_new_tokens=32, do_sample=False)
 print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
 ```
 
+## Fastest inference configuration
+
+The checkpoint ships in native MXFP8. For **decode throughput**, the fastest validated configuration is
+**bf16 (dequantized at load) + the MSA block-sparse attention kernel + tensor & expert parallelism + a
+`reduce-overhead` cudagraph compile** — roughly **31 tok/s** decode on 8×B200 at a 2048-token prefill.
+
+Keeping the weights in **native FP8 is a memory-footprint option only — it is never faster on this setup**.
+The FP8 Triton experts/linear kernels lower as opaque inductor fallback kernels that cudagraph cannot
+capture on the hot expert path, so native-FP8 decode measured ~4.2 tok/s (≈7× slower than the bf16 path)
+even under `torch.compile(fullgraph=True)`. Use FP8 only when the bf16 weights do not fit.
+
+| config (sdpa baseline, TP+EP, 2048-token prefill, 8×B200) | decode |
+|---|---|
+| bf16 dequantize-at-load + **MSA** + compile/cudagraph | **~31 tok/s** |
+| bf16 dequantize-at-load + sdpa + compile/cudagraph | ~28 tok/s |
+| native FP8 + compile/cudagraph | ~4 tok/s (memory-only, not for speed) |
+
+Dequantizing to bf16 only fits with even sharding across GPUs (TP/EP), not with `device_map="auto"`
+(pipeline placement OOMs at load). Launch one process per GPU with `torchrun`:
+
+```bash
+torchrun --nproc_per_node=8 fastest_m3_vl.py
+```
+
+```python
+# fastest_m3_vl.py
+import os, sys
+import torch
+import torch.distributed as dist
+from transformers import (
+    AutoModelForImageTextToText,
+    AutoTokenizer,
+    CompileConfig,
+    FineGrainedFP8Config,
+)
+from transformers.distributed import DistributedConfig
+
+# The indexer feeds SDPA an additive float mask; the cuDNN SDP backend segfaults on it (B200).
+torch.backends.cuda.enable_cudnn_sdp(False)
+
+model = AutoModelForImageTextToText.from_pretrained(
+    "MiniMaxAI/MiniMax-M3-preview",
+    dtype=torch.bfloat16,
+    # Dequantize the native MXFP8 weights to bf16 at load (the speed win); needs even TP/EP sharding.
+    quantization_config=FineGrainedFP8Config(dequantize=True),
+    tp_plan="auto",
+    distributed_config=DistributedConfig(enable_expert_parallel=True),
+    attn_implementation="kernels-staging/msa@v0",  # MSA block-sparse attention kernel
+)
+model.eval()
+
+tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M3-preview")
+messages = [{"role": "user", "content": "Summarize the history of computing."}]
+inputs = tokenizer.apply_chat_template(
+    messages, add_generation_prompt=True, return_tensors="pt", return_dict=True
+).to(f"cuda:{os.environ.get('LOCAL_RANK', '0')}")
+
+generated_ids = model.generate(
+    **inputs,
+    max_new_tokens=128,
+    do_sample=False,
+    # Static cache + reduce-overhead cudagraph capture is what pushes decode to ~31 tok/s.
+    cache_implementation="static",
+    compile_config=CompileConfig(mode="reduce-overhead", fullgraph=True),
+)
+if int(os.environ.get("RANK", "0")) == 0:
+    print(tokenizer.decode(generated_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True))
+
+# cudagraph-captured NCCL collectives deadlock the NCCL/CUDA destructors at teardown; the output is
+# already produced, so hard-exit to skip the hanging cleanup.
+if dist.is_initialized():
+    sys.stdout.flush()
+    os._exit(0)
+```
+
 ## MiniMaxM3VLConfig
 
 [[autodoc]] MiniMaxM3VLConfig

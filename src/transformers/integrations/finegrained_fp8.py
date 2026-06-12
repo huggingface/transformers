@@ -671,6 +671,8 @@ class FP8Experts(nn.Module):
         self.activation_scheme = activation_scheme
         self.num_experts = _first_attr(config, "num_local_experts", "num_experts")
         self.intermediate_dim = _first_attr(config, "moe_intermediate_size", "intermediate_size")
+        self.swiglu_alpha = getattr(config, "swiglu_alpha", None)
+        self.swiglu_limit = getattr(config, "swiglu_limit", None)
         self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
 
         if self.has_gate:
@@ -708,6 +710,12 @@ class FP8Experts(nn.Module):
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
+        if self.swiglu_alpha is not None:
+            # Clamped SwiGLU-OAI gate (same math as the model's non-quantized experts).
+            gate = gate.clamp(max=self.swiglu_limit)
+            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+            glu = gate * torch.sigmoid(gate * self.swiglu_alpha)
+            return (up + 1.0) * glu
         return self.act_fn(gate) * up
 
     def forward(
