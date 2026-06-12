@@ -4672,6 +4672,28 @@ class GenerationIntegrationTests(unittest.TestCase):
             )
             assert value == "success"
 
+    def test_custom_generate_local_directory_requires_trust_remote_code(self):
+        """Tests that `trust_remote_code` is required for a local-directory `custom_generate` too (not
+        just for Hub repos): otherwise a repository's `custom_generate/generate.py` would execute on
+        load without any opt-in."""
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            custom_generate_dir = Path(tmp_dir) / "custom_generate"
+            custom_generate_dir.mkdir()
+            with open(custom_generate_dir / "generate.py", "w") as f:
+                f.write("def generate(*args, **kwargs):\n    return 'should_not_run'\n")
+            with self.assertRaises(ValueError):
+                model.generate(
+                    **model_inputs,
+                    max_new_tokens=10,
+                    trust_remote_code=False,
+                    custom_generate=str(tmp_dir),
+                )
+
     def test_custom_generate_callable(self):
         """Tests that passing a callable to `custom_generate` executes the callable decoding loop"""
         model = AutoModelForCausalLM.from_pretrained(
