@@ -1292,7 +1292,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.fc1."),
             WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.fc2."),
             WeightRenaming(r"\.attn\.out_proj\.", ".self_attn.out_proj."),
-            # Vision QKV split
             WeightConverter(
                 source_patterns=r"\.attn\.qkv\.weight",
                 target_patterns=[
@@ -1322,98 +1321,100 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Chunk(dim=0)],
             ),
         ],
-        # TODO: Cleanup before merge
-        "Tipsv2DptModel": [
-            WeightRenaming(r"depth_head\.reassemble\.", "depth_neck.reassemble_stage."),
-            WeightRenaming(r"depth_head\.fusion_blocks\.", "depth_neck.fusion_stage.layers."),
-            WeightRenaming(r"depth_head\.convs\.", "depth_neck.convs."),
-            WeightRenaming(r"depth_head\.project\.", "depth_neck.project."),
-            WeightRenaming(r"depth_head\.depth_head\.", "depth_decoder.head."),
-            WeightRenaming(r"normals_head\.reassemble\.", "normals_neck.reassemble_stage."),
-            WeightRenaming(r"normals_head\.fusion_blocks\.", "normals_neck.fusion_stage.layers."),
-            WeightRenaming(r"normals_head\.convs\.", "normals_neck.convs."),
-            WeightRenaming(r"normals_head\.project\.", "normals_neck.project."),
-            WeightRenaming(r"normals_head\.normals_head\.", "normals_decoder.head."),
-            WeightRenaming(r"segmentation_head\.reassemble\.", "segmentation_neck.reassemble_stage."),
-            WeightRenaming(r"segmentation_head\.fusion_blocks\.", "segmentation_neck.fusion_stage.layers."),
-            WeightRenaming(r"segmentation_head\.convs\.", "segmentation_neck.convs."),
-            WeightRenaming(r"segmentation_head\.project\.", "segmentation_neck.project."),
-            WeightRenaming(r"segmentation_head\.segmentation_head\.", "segmentation_decoder.head."),
-            WeightRenaming(
-                r"_neck\.reassemble_stage\.readout_projects\.(\d+)\.(weight|bias)$",
-                r"_neck.reassemble_stage.readout_projects.\1.0.\2",
+        "Tipsv2VisionBackbone": [
+            WeightRenaming(r"^vision_encoder\.", ""),
+            WeightRenaming(r"^patch_embed\.proj\.", "embeddings.patch_embeddings.projection."),
+            WeightRenaming(r"^cls_token$", "embeddings.cls_token"),
+            WeightRenaming(r"^mask_token$", "embeddings.mask_token"),
+            WeightRenaming(r"^register_tokens$", "embeddings.register_tokens"),
+            WeightRenaming(r"^pos_embed$", "embeddings.position_embeddings"),
+            WeightRenaming(r"^norm\.", "layernorm."),
+            WeightRenaming(r"^blocks\.(\d+)\.", r"encoder.layer.\1."),
+            WeightRenaming(r"\.attn\.proj\.", ".attention.output.dense."),
+            WeightRenaming(r"\.ls1\.gamma", ".layer_scale1.lambda1"),
+            WeightRenaming(r"\.ls2\.gamma", ".layer_scale2.lambda1"),
+            WeightConverter(
+                source_patterns=r"\.attn\.qkv\.weight",
+                target_patterns=[
+                    ".attention.attention.query.weight",
+                    ".attention.attention.key.weight",
+                    ".attention.attention.value.weight",
+                ],
+                operations=[Chunk(dim=0)],
             ),
-            WeightRenaming(
-                r"_neck\.reassemble_stage\.out_projections\.(\d+)\.", r"_neck.reassemble_stage.layers.\1.projection."
-            ),
-            WeightRenaming(
-                r"_neck\.reassemble_stage\.resize_layers\.(\d+)\.", r"_neck.reassemble_stage.layers.\1.resize."
-            ),
-            WeightRenaming(
-                r"_neck\.fusion_stage\.layers\.(\d+)\.out_conv\.", r"_neck.fusion_stage.layers.\1.projection."
-            ),
-            WeightRenaming(
-                r"_neck\.fusion_stage\.layers\.(\d+)\.main_unit\.conv1\.",
-                r"_neck.fusion_stage.layers.\1.residual_layer2.convolution1.",
-            ),
-            WeightRenaming(
-                r"_neck\.fusion_stage\.layers\.(\d+)\.main_unit\.conv2\.",
-                r"_neck.fusion_stage.layers.\1.residual_layer2.convolution2.",
-            ),
-            WeightRenaming(
-                r"_neck\.fusion_stage\.layers\.(\d+)\.residual_unit\.conv1\.",
-                r"_neck.fusion_stage.layers.\1.residual_layer1.convolution1.",
-            ),
-            WeightRenaming(
-                r"_neck\.fusion_stage\.layers\.(\d+)\.residual_unit\.conv2\.",
-                r"_neck.fusion_stage.layers.\1.residual_layer1.convolution2.",
-            ),
-        ],
-        "Tipsv2DptForSemanticSegmentation": [
-            WeightRenaming(r"segmentation_head\.reassemble\.", "neck.reassemble_stage."),
-            WeightRenaming(r"segmentation_head\.fusion_blocks\.", "neck.fusion_stage.layers."),
-            WeightRenaming(r"segmentation_head\.convs\.", "neck.convs."),
-            WeightRenaming(r"segmentation_head\.project\.", "neck.project."),
-            WeightRenaming(r"segmentation_head\.segmentation_head\.", "decoder.head."),
-            WeightRenaming(
-                r"reassemble_stage\.readout_projects\.(\d+)\.(weight|bias)$",
-                r"reassemble_stage.readout_projects.\1.0.\2",
-            ),
-            WeightRenaming(r"reassemble_stage\.out_projections\.(\d+)\.", r"reassemble_stage.layers.\1.projection."),
-            WeightRenaming(r"reassemble_stage\.resize_layers\.(\d+)\.", r"reassemble_stage.layers.\1.resize."),
-            WeightRenaming(r"fusion_stage\.layers\.(\d+)\.out_conv\.", r"fusion_stage.layers.\1.projection."),
-            WeightRenaming(
-                r"fusion_stage\.layers\.(\d+)\.main_unit\.conv1\.",
-                r"fusion_stage.layers.\1.residual_layer2.convolution1.",
-            ),
-            WeightRenaming(
-                r"fusion_stage\.layers\.(\d+)\.main_unit\.conv2\.",
-                r"fusion_stage.layers.\1.residual_layer2.convolution2.",
-            ),
-            WeightRenaming(
-                r"fusion_stage\.layers\.(\d+)\.residual_unit\.conv1\.",
-                r"fusion_stage.layers.\1.residual_layer1.convolution1.",
-            ),
-            WeightRenaming(
-                r"fusion_stage\.layers\.(\d+)\.residual_unit\.conv2\.",
-                r"fusion_stage.layers.\1.residual_layer1.convolution2.",
+            WeightConverter(
+                source_patterns=r"\.attn\.qkv\.bias",
+                target_patterns=[
+                    ".attention.attention.query.bias",
+                    ".attention.attention.key.bias",
+                    ".attention.attention.value.bias",
+                ],
+                operations=[Chunk(dim=0)],
             ),
         ],
     }
-    mapping["Tipsv2DptForDepthEstimation"] = [
-        WeightRenaming(r"depth_head\.reassemble\.", "neck.reassemble_stage."),
-        WeightRenaming(r"depth_head\.fusion_blocks\.", "neck.fusion_stage.layers."),
-        WeightRenaming(r"depth_head\.convs\.", "neck.convs."),
-        WeightRenaming(r"depth_head\.project\.", "neck.project."),
-        WeightRenaming(r"depth_head\.depth_head\.", "decoder.head."),
-    ] + mapping["Tipsv2DptForSemanticSegmentation"][5:]
-    mapping["Tipsv2DptForNormalEstimation"] = [
-        WeightRenaming(r"normals_head\.reassemble\.", "neck.reassemble_stage."),
-        WeightRenaming(r"normals_head\.fusion_blocks\.", "neck.fusion_stage.layers."),
-        WeightRenaming(r"normals_head\.convs\.", "neck.convs."),
-        WeightRenaming(r"normals_head\.project\.", "neck.project."),
-        WeightRenaming(r"normals_head\.normals_head\.", "decoder.head."),
-    ] + mapping["Tipsv2DptForSemanticSegmentation"][5:]
+    # The backbone structural renames and QKV converters are handled automatically by the
+    # Tipsv2VisionBackbone mapping (scoped to "backbone") via the composite-model DFS walk.
+    # Only the prefix rename is needed here to route checkpoint keys into that scope.
+    _tipsv2_dpt_backbone_prefix = [WeightRenaming("vision_encoder", "backbone")]
+    # Shared neck/decoder structural renames for single-task DPT models (depth/normals/seg).
+    _tipsv2_dpt_neck_renames = [
+        WeightRenaming(
+            r"head\.reassemble\.readout_projects\.(\d+)",
+            r"neck.reassemble_stage.readout_projects.\1.0",
+        ),
+        WeightRenaming(r"head\.reassemble\.out_projections\.(\d+)\.", r"neck.reassemble_stage.layers.\1.projection."),
+        WeightRenaming(r"head\.reassemble\.resize_layers\.(\d+)\.", r"neck.reassemble_stage.layers.\1.resize."),
+        WeightRenaming(r"head\.fusion_blocks\.(\d+)\.out_conv\.", r"neck.fusion_stage.layers.\1.projection."),
+        WeightRenaming(
+            r"head\.fusion_blocks\.(\d+)\.main_unit\.conv1\.",
+            r"neck.fusion_stage.layers.\1.residual_layer2.convolution1.",
+        ),
+        WeightRenaming(
+            r"head\.fusion_blocks\.(\d+)\.main_unit\.conv2\.",
+            r"neck.fusion_stage.layers.\1.residual_layer2.convolution2.",
+        ),
+        WeightRenaming(
+            r"head\.fusion_blocks\.(\d+)\.residual_unit\.conv1\.",
+            r"neck.fusion_stage.layers.\1.residual_layer1.convolution1.",
+        ),
+        WeightRenaming(
+            r"head\.fusion_blocks\.(\d+)\.residual_unit\.conv2\.",
+            r"neck.fusion_stage.layers.\1.residual_layer1.convolution2.",
+        ),
+        WeightRenaming(r"head\.convs", "neck.convs"),
+        WeightRenaming(r"head\.project", "neck.project"),
+    ]
+    mapping["Tipsv2DptModel"] = (
+        _tipsv2_dpt_backbone_prefix
+        + _tipsv2_dpt_neck_renames
+        + [
+            WeightRenaming(r"depth_head\.depth_head\.", "depth_decoder.head."),
+            WeightRenaming(r"normals_head\.normals_head\.", "normals_decoder.head."),
+            WeightRenaming(r"segmentation_head\.segmentation_head\.", "segmentation_decoder.head."),
+        ]
+    )
+    mapping["Tipsv2DptForDepthEstimation"] = (
+        _tipsv2_dpt_backbone_prefix
+        + _tipsv2_dpt_neck_renames
+        + [
+            WeightRenaming(r"depth_head\.depth_head\.", "decoder.head."),
+        ]
+    )
+    mapping["Tipsv2DptForNormalEstimation"] = (
+        _tipsv2_dpt_backbone_prefix
+        + _tipsv2_dpt_neck_renames
+        + [
+            WeightRenaming(r"normals_head\.normals_head\.", "decoder.head."),
+        ]
+    )
+    mapping["Tipsv2DptForSemanticSegmentation"] = (
+        _tipsv2_dpt_backbone_prefix
+        + _tipsv2_dpt_neck_renames
+        + [
+            WeightRenaming(r"segmentation_head\.segmentation_head\.", "decoder.head."),
+        ]
+    )
 
     # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
     mapping["esm"] += mapping["legacy"].copy()

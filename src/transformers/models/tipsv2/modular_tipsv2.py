@@ -408,6 +408,25 @@ class Tipsv2VisionModel(Dinov2WithRegistersModel):
 
 
 class Tipsv2VisionBackbone(Dinov2WithRegistersBackbone):
+    _keys_to_ignore_on_load_unexpected = {"text_encoder"}
+
+    def __init__(self, config: "Tipsv2Config | Tipsv2VisionConfig"):
+        if isinstance(config, Tipsv2Config):  # for compatibility with AutoBackbone
+            config = config.vision_config
+            super().__init__(config)
+        else:
+            super().__init__(config)
+        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
+        self.embeddings = Tipsv2VisionEmbeddings(config)
+        self.encoder = Tipsv2VisionEncoder(config)
+
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        self.num_register_tokens = config.num_register_tokens
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
     @can_return_tuple
     @filter_output_hidden_states
     @auto_docstring

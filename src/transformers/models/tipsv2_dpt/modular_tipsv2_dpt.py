@@ -327,11 +327,11 @@ class Tipsv2DptPreActResidualLayer(nn.Module):
         super().__init__()
         self.activation1 = nn.ReLU()
         self.convolution1 = nn.Conv2d(
-            config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=3, stride=1, padding=1, bias=True
+            config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=3, stride=1, padding=1, bias=False
         )
         self.activation2 = nn.ReLU()
         self.convolution2 = nn.Conv2d(
-            config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=3, stride=1, padding=1, bias=True
+            config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=3, stride=1, padding=1, bias=False
         )
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
@@ -344,15 +344,17 @@ class Tipsv2DptPreActResidualLayer(nn.Module):
 
 
 class Tipsv2DptFeatureFusionLayer(nn.Module):
-    def __init__(self, config: Tipsv2DptConfig, align_corners: bool = True):
+    def __init__(self, config: Tipsv2DptConfig, align_corners: bool = True, has_residual: bool = True):
         super().__init__()
         self.align_corners = align_corners
+        self.has_residual = has_residual
         self.projection = nn.Conv2d(config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=1, bias=True)
-        self.residual_layer1 = Tipsv2DptPreActResidualLayer(config)
+        if has_residual:
+            self.residual_layer1 = Tipsv2DptPreActResidualLayer(config)
         self.residual_layer2 = Tipsv2DptPreActResidualLayer(config)
 
     def forward(self, hidden_state: torch.Tensor, residual: torch.Tensor | None = None) -> torch.Tensor:
-        if residual is not None:
+        if residual is not None and self.has_residual:
             if hidden_state.shape != residual.shape:
                 residual = nn.functional.interpolate(
                     residual, size=(hidden_state.shape[2], hidden_state.shape[3]), mode="bilinear", align_corners=False
@@ -370,7 +372,12 @@ class Tipsv2DptFeatureFusionLayer(nn.Module):
 class Tipsv2DptFeatureFusionStage(nn.Module):
     def __init__(self, config: Tipsv2DptConfig):
         super().__init__()
-        self.layers = nn.ModuleList([Tipsv2DptFeatureFusionLayer(config) for _ in config.neck_hidden_sizes])
+        self.layers = nn.ModuleList(
+            [
+                Tipsv2DptFeatureFusionLayer(config, has_residual=(idx > 0))
+                for idx in range(len(config.neck_hidden_sizes))
+            ]
+        )
 
     def forward(self, hidden_states: list[torch.Tensor]) -> list[torch.Tensor]:
         fused_hidden_states = []
