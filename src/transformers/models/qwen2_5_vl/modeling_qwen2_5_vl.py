@@ -96,17 +96,21 @@ class Qwen2_5_VLMLP(nn.Module):
 
 
 class Qwen2_5_VisionPatchEmbed(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(
+        self,
+        patch_size: int | list[int] | tuple[int, int] = 14,
+        temporal_patch_size: int | list[int] | tuple[int, int] = 2,
+        in_channels: int = 3,
+        embed_dim: int = 1152,
+    ) -> None:
         super().__init__()
-        self.patch_size = config.patch_size
-        self.temporal_patch_size = config.temporal_patch_size
-        self.in_channels = config.num_channels
-        self.embed_dim = config.hidden_size
+        self.patch_size = patch_size
+        self.temporal_patch_size = temporal_patch_size
+        self.in_channels = in_channels
+        self.embed_dim = embed_dim
 
-        kernel_size = [self.temporal_patch_size, self.patch_size, self.patch_size]
-        self.proj = nn.Conv3d(
-            self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=False
-        )
+        kernel_size = [temporal_patch_size, patch_size, patch_size]
+        self.proj = nn.Conv3d(in_channels, embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         target_dtype = self.proj.weight.dtype

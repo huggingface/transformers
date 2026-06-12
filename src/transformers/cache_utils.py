@@ -53,7 +53,8 @@ class CacheLayerMixin(ABC):
         super().__init_subclass__(**kwargs)
         layer_type = cls.__dict__.get("layer_type", None)
         if layer_type is not None:
-            if issubclass(cls, StaticLayer):
+            static_base = globals().get("StaticLayer")
+            if static_base is not None and issubclass(cls, static_base):
                 LAYER_TYPE_STATIC_CACHE_MAPPING[layer_type] = cls
             else:
                 LAYER_TYPE_CACHE_MAPPING[layer_type] = cls
