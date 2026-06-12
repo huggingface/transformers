@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-02-17 and added to Hugging Face Transformers on 2026-02-09.*
+*This model was published in HF papers on 2026-02-17 and contributed to Hugging Face Transformers on 2026-02-09.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -65,6 +65,9 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 </hfoption>
 </hfoptions>
+
+> [!NOTE]
+> **The MLA query LoRA path (`q_lora_rank`) is required.** Like DeepSeek-V3.2, the DSA indexer scores queries from the low-rank query latent `q_a_layernorm(q_a_proj(x))` (its `wq_b` projection is sized by `q_lora_rank`), so the model always uses the LoRA query path and `q_lora_rank` must be set — the released checkpoint uses `2048`. The optional non-LoRA `q_proj` path that [DeepSeek-V3](./deepseek_v3) exposes for `q_lora_rank=None` is **not supported** here: without the query latent there is nothing for the indexer to consume.
 
 ## GlmMoeDsaConfig
 
