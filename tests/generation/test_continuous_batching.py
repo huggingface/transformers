@@ -1339,6 +1339,42 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             self.assertTrue(mock_offload.called, "_offload_to_cpu was not called despite few blocks being available.")
 
     @require_torch_accelerator
+    def test_cpu_offloading_parity_async(self) -> None:
+        """Same as test_cpu_offloading_parity but with async batching, where offloading can evict requests that are
+        in flight in the previous batch, exercising the rollback-on-restore path."""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=True,
+            allow_block_sharing=True,
+            use_async_batching=True,
+            num_blocks=4,
+            block_size=32,
+            cpu_offload_space=1.0,
+        )
+
+        # Spy on _offload_to_cpu to check it ran and that at least one victim was in flight (rollback path)
+        original_offload = OffloadingManager._offload_to_cpu
+        in_flight_victim_seen = False
+
+        def spy_offload(manager, victims):
+            nonlocal in_flight_victim_seen
+            in_flight_victim_seen |= any(
+                state.position_offset == len(state.initial_tokens) + len(state.generated_tokens) for state in victims
+            )
+            return original_offload(manager, victims)
+
+        with patch.object(OffloadingManager, "_offload_to_cpu", autospec=True, side_effect=spy_offload) as mock:
+            self._test_continuous_batching_parity(
+                model_id=model_id,
+                continuous_batching_config=continuous_batching_config,
+                attn_implementation="sdpa",
+                max_new_tokens=30,
+                num_repeat_prompts=4,
+            )
+            self.assertTrue(mock.called, "_offload_to_cpu was not called despite few blocks being available.")
+            self.assertTrue(in_flight_victim_seen, "No in-flight victim was offloaded: rollback path not exercised.")
+
+    @require_torch_accelerator
     def test_cpu_offloading_disabled_when_zero(self) -> None:
         """Test that cpu_offload_space=0 produces the same output as the legacy path."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"

@@ -271,6 +271,7 @@ class ContinuousBatchProcessor:
             cpu_offload_space_gib=continuous_batching_config.cpu_offload_space,
             safety_threshold=continuous_batching_config.cpu_offload_space_safety_threshold,
             compute_stream=self.inputs_and_outputs.compute_stream,
+            distributed_helper=self.distributed_helper,
         )
 
         # Setup the model runner
@@ -377,13 +378,13 @@ class ContinuousBatchProcessor:
         )
 
         # If requests_in_batch is None, it means the cache is full and no requests can be scheduled. We loop over active
-        # requests and offload enough so that the remaining ones can all be sceduled. The loop is necessary because of
+        # requests and offload enough so that the remaining ones can all be scheduled. The loop is necessary because of
         # prefix sharing: offloading a fully shared request has 0 impact. Its termination is guaranteed.
         while requests_in_batch is None:
             # Stop case: no request can be offloaded.
             if self.offloading_manager.offload_requests() == 0:
                 raise RuntimeError("No requests can be scheduled and no requests can be offloaded.")
-            # Otherwise, the loop has offloaded as least request, and we try scheduling again.
+            # Otherwise, the loop has offloaded at least one request, and we try scheduling again.
             requests_in_batch, use_decode_fast_path, num_q_tokens, max_kv_read = self.scheduler.schedule_batch(
                 self.max_batch_tokens, self.cache.num_pages
             )
@@ -399,11 +400,12 @@ class ContinuousBatchProcessor:
         self.offloading_manager.restore_scheduled_requests(requests_in_batch)
 
         # Otherwise, we can continue with the non-empty batch and log in the dimensions before padding
-        logger.debug(
-            f"Scheduled: {len(requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, "
-            f"Active: {len(self.scheduler.active_requests)}. cum Q: {num_q_tokens}. "
-            f"cum KV: {max_kv_read}, free blocks: {self.cache.get_num_free_blocks()}"
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                f"Scheduled: {len(requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, "
+                f"Active: {len(self.scheduler.active_requests)}. cum Q: {num_q_tokens}. "
+                f"cum KV: {max_kv_read}, free blocks: {self.cache.get_num_free_blocks()}"
+            )
 
         # If inputs are static sized, eg. for compile, we find the padded sizes of the queries and keys/values
         num_q_tokens, max_kv_read = self.model_runner.maybe_pad_inputs(num_q_tokens, max_kv_read, use_decode_fast_path)
