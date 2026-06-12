@@ -14,7 +14,6 @@
 from contextlib import nullcontext
 from functools import partial
 from itertools import repeat
-from typing import Any
 
 import torch
 from typing_extensions import TypedDict
@@ -459,13 +458,13 @@ class ContinuousBatchingIOs:
                     self.read_index_storage[i, : len(group_read_indices)] = to_index_tensor(group_read_indices)
                     self.true_read_sizes[i] = len(group_read_indices)
 
-    def _get_num_sequences(self, use_padding: bool = False) -> int:
+    def _get_num_sequences(self, use_padding: bool) -> int:
         """Get the number of sequences for the current batch, accounting for padding if there is any."""
         if use_padding:
             return min(self.num_q_tokens, self.max_requests_per_batch)
         return self.num_request_in_batch
 
-    def get_model_kwargs(self, use_padding: bool = False) -> dict[str, Any]:
+    def get_model_kwargs(self, use_padding: bool = False) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch, eventually padding the query dimension and KV dimensions
         if use_padding is True. The padding is only useful if we want static shapes, like when using cuda graphs."""
         q_size = self.num_q_tokens
@@ -732,7 +731,7 @@ class ContinuousBatchingAsyncIOs:
         return torch.tensor(carry_over_ids, dtype=torch.int32)
 
     # The get_model_kwargs method is where the H2D transfer happens
-    def get_model_kwargs(self, use_padding: bool = False) -> dict[str, Any]:
+    def get_model_kwargs(self, use_padding: bool = False) -> PagedAttentionArgs:
         io_pair = self.io_pairs[self.current_pair]
         io_pair.transfer_inputs_h2d(self.h2d_stream)
         self.h2d_stream.record_event(io_pair.h2d_over)
