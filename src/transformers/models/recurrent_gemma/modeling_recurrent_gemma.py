@@ -488,6 +488,9 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         self.conv1d_state = torch.zeros((batch, self.hidden_size, self.conv1d_width - 1), device=device, dtype=dtype)
 
 
+TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaAttention}
+
+
 class RecurrentGemmaMlp(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -502,9 +505,6 @@ class RecurrentGemmaMlp(nn.Module):
     def forward(self, hidden_states):
         gate = self.act_fn(self.gate_proj(hidden_states))
         return self.down_proj(gate * self.up_proj(hidden_states))
-
-
-TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaAttention}
 
 
 class RecurrentGemmaDecoderLayer(GradientCheckpointingLayer):
