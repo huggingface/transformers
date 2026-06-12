@@ -21,7 +21,6 @@ from torch import nn
 from torch.nn import functional as F
 
 from ...configuration_utils import PreTrainedConfig
-from ...distributed.plan_utils import init_combo_plans
 from ...integrations import use_experts_implementation
 from ...masking_utils import create_bidirectional_sliding_window_mask
 from ...modeling_layers import GenericForTokenClassification
@@ -117,7 +116,6 @@ class OpenAIPrivacyFilterConfig(GptOssConfig):
             self.label2id = {label: idx for idx, label in self.id2label.items()}
 
         PreTrainedConfig.__post_init__(self, **kwargs)
-        init_combo_plans(self)
 
 
 class OpenAIPrivacyFilterRMSNorm(GptOssRMSNorm):

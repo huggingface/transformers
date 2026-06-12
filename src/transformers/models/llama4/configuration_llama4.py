@@ -17,7 +17,6 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...distributed.plan_utils import init_combo_plans
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 
@@ -135,6 +134,22 @@ class Llama4TextConfig(PreTrainedConfig):
         "layers.*.feed_forward.down_proj": "rowwise_allreduce",
         "layers.*.feed_forward.router": "ep_router",
     }
+    base_model_tp_ep_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.feed_forward.shared_expert.gate_proj": "colwise",
+        "layers.*.feed_forward.shared_expert.up_proj": "colwise",
+        "layers.*.feed_forward.shared_expert.down_proj": "rowwise_allreduce",
+        "layers.*.feed_forward.gate_proj": "colwise",
+        "layers.*.feed_forward.up_proj": "colwise",
+        "layers.*.feed_forward.down_proj": "rowwise_allreduce",
+        "layers.*.feed_forward.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.feed_forward.experts.down_proj": "grouped_gemm",
+        "layers.*.feed_forward.experts": "moe_experts_allreduce",
+        "layers.*.feed_forward.router": "ep_router",
+    }
 
     vocab_size: int = 202048
     hidden_size: int = 5120
@@ -200,7 +215,6 @@ class Llama4TextConfig(PreTrainedConfig):
             ]
 
         super().__post_init__(**kwargs)
-        init_combo_plans(self)
 
 
 @auto_docstring(checkpoint="meta-llama/Llama-4-Scout-17B-16E")

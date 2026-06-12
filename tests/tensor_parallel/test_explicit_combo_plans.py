@@ -19,40 +19,29 @@ from transformers.utils import is_torch_available
 
 
 if is_torch_available():
-    from transformers.distributed.plan_utils import merge_dense_and_ep_plan
     from transformers.models.mixtral.configuration_mixtral import MixtralConfig
     from transformers.models.qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 
 
 @require_torch
 class ExplicitComboPlansTest(unittest.TestCase):
-    def test_mixtral_tp_ep_matches_dense_ep_merge(self):
+    def test_mixtral_combo_plans_are_populated(self):
         config = MixtralConfig()
-        expected = merge_dense_and_ep_plan(config.base_model_tp_plan, config.base_model_ep_plan)
-        self.assertEqual(config.base_model_tp_ep_plan, expected)
+        self.assertTrue(config.base_model_tp_ep_plan)
+        self.assertTrue(config.base_model_sp_ep_plan)
+        self.assertEqual(config.base_model_tp_ep_plan["layers.*.mlp.gate"], "ep_router")
+        self.assertEqual(config.base_model_tp_ep_plan["layers.*.mlp.experts.gate_up_proj"], "grouped_gemm")
+        self.assertEqual(config.base_model_sp_ep_plan["layers.*.mlp.gate"], "ep_router")
+        self.assertEqual(config.base_model_sp_ep_plan["layers.*.mlp.experts.gate_up_proj"], "grouped_gemm")
 
-    def test_mixtral_sp_ep_matches_dense_ep_merge(self):
-        config = MixtralConfig()
-        expected = merge_dense_and_ep_plan(config.base_model_sp_plan, config.base_model_ep_plan)
-        self.assertEqual(config.base_model_sp_ep_plan, expected)
-
-    def test_qwen3_moe_tp_ep_matches_dense_ep_merge(self):
+    def test_qwen3_moe_combo_plans_are_populated(self):
         config = Qwen3MoeConfig()
-        expected = merge_dense_and_ep_plan(config.base_model_tp_plan, config.base_model_ep_plan)
-        self.assertEqual(config.base_model_tp_ep_plan, expected)
-
-    def test_qwen3_moe_sp_ep_matches_dense_ep_merge(self):
-        config = Qwen3MoeConfig()
-        expected = merge_dense_and_ep_plan(config.base_model_sp_plan, config.base_model_ep_plan)
-        self.assertEqual(config.base_model_sp_ep_plan, expected)
-
-    def test_merge_dense_and_ep_plan_strips_moe_tp(self):
-        dense = {"layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise"}
-        ep = {"layers.*.mlp.experts.gate_up_proj": "grouped_gemm"}
-        self.assertEqual(
-            merge_dense_and_ep_plan(dense, ep),
-            {"layers.*.mlp.experts.gate_up_proj": "grouped_gemm"},
-        )
+        self.assertTrue(config.base_model_tp_ep_plan)
+        self.assertTrue(config.base_model_sp_ep_plan)
+        self.assertEqual(config.base_model_tp_ep_plan["layers.*.mlp.gate"], "ep_router")
+        self.assertEqual(config.base_model_tp_ep_plan["layers.*.mlp.experts.gate_up_proj"], "grouped_gemm")
+        self.assertEqual(config.base_model_sp_ep_plan["layers.*.mlp.gate"], "ep_router")
+        self.assertEqual(config.base_model_sp_ep_plan["layers.*.mlp.experts.gate_up_proj"], "grouped_gemm")
 
 
 if __name__ == "__main__":

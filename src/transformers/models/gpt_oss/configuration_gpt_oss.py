@@ -16,7 +16,6 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...distributed.plan_utils import init_combo_plans
 from ...utils import auto_docstring
 
 
@@ -93,7 +92,6 @@ class GptOssConfig(PreTrainedConfig):
                 "original_max_position_embeddings": 4096,
             }
         super().__post_init__(**kwargs)
-        init_combo_plans(self)
 
 
 __all__ = ["GptOssConfig"]

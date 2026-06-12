@@ -219,9 +219,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         "layers.*.mlp.experts.down_proj_scales": "grouped_gemm",
                     }
                 )
-                from ..distributed.plan_utils import refresh_combo_plans
-
-                refresh_combo_plans(config)
         return config
 
     def update_ep_plan(self, config):
@@ -235,9 +232,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         "layers.*.mlp.experts.down_proj_scales": "grouped_gemm",
                     }
                 )
-                from ..distributed.plan_utils import refresh_combo_plans
-
-                refresh_combo_plans(config)
         return config
 
     def get_state_dict_and_metadata(self, model):

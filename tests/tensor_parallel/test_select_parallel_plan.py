@@ -22,7 +22,6 @@ from transformers.utils import is_torch_available
 
 if is_torch_available():
     from transformers.distributed.configuration_utils import DistributedConfig
-    from transformers.distributed.plan_utils import merge_dense_and_ep_plan
     from transformers.distributed.tensor_parallel import apply_tensor_parallel, select_parallel_plan
 
 
@@ -32,22 +31,14 @@ EP_PLAN = {
     "layers.*.mlp.gate": "ep_router",
     "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
 }
-TP_EP_PLAN = merge_dense_and_ep_plan(
-    {
-        **TP_PLAN,
-        "layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
-        "layers.*.mlp.experts.down_proj": "moe_tp_down_rowwise",
-    },
-    EP_PLAN,
-)
-SP_EP_PLAN = merge_dense_and_ep_plan(
-    {
-        **SP_PLAN,
-        "layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
-        "layers.*.mlp.experts.down_proj": "moe_tp_down_rowwise",
-    },
-    EP_PLAN,
-)
+TP_EP_PLAN = {
+    **TP_PLAN,
+    **EP_PLAN,
+}
+SP_EP_PLAN = {
+    **SP_PLAN,
+    **EP_PLAN,
+}
 
 USER_TP_PLAN = {"layers.*.self_attn.o_proj": "rowwise_allreduce"}
 USER_SP_PLAN = {"embed_tokens": "vocab_reduce_scatter", "layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise"}

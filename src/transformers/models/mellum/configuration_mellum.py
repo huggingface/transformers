@@ -21,7 +21,6 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...distributed.plan_utils import init_combo_plans
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -87,6 +86,42 @@ class MellumConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_experts_allreduce",
     }
+    # Inference TP + EP (per-layer overrides applied in `_update_parallel_plans`).
+    base_model_tp_ep_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+    }
+    # Training SP + EP (per-layer overrides applied in `_update_parallel_plans`).
+    base_model_sp_ep_plan = {
+        "embed_tokens": "vocab_reduce_scatter",
+        "layers.*.input_layernorm": "activation",
+        "layers.*.self_attn": "module_allgather_hidden_states",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_reduce_scatter",
+        "layers.*.self_attn.q_norm": "activation_seq_dim_2",
+        "layers.*.self_attn.k_norm": "activation_seq_dim_2",
+        "layers.*.post_attention_layernorm": "activation",
+        "layers.*.mlp": "module_allgather_split",
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise_reduce_scatter",
+        "norm": "activation",
+    }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
@@ -140,13 +175,20 @@ class MellumConfig(PreTrainedConfig):
                 "sliding_attention": {"rope_type": "default", "rope_theta": 10000.0},
             }
 
-        self._update_sp_plan()
+        self._update_parallel_plans()
 
         super().__post_init__(
             **kwargs,
             ignore_keys_at_rope_validation={"sliding_attention", "full_attention"},
         )
-        init_combo_plans(self)
+
+    def _is_moe_layer(self, layer_idx: int) -> bool:
+        return self.mlp_layer_types[layer_idx] == "sparse"
+
+    def _update_parallel_plans(self):
+        self._update_sp_plan()
+        self._update_sp_ep_plan()
+        self._update_tp_ep_plan()
 
     def _update_sp_plan(self):
         """Set per-layer SP entries depending on whether the MLP is dense or sparse."""
@@ -165,6 +207,52 @@ class MellumConfig(PreTrainedConfig):
                 self.base_model_sp_plan.update(
                     {
                         f"layers.{i}.mlp": "module_allgather_split",
+                        f"layers.{i}.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
+                        f"layers.{i}.mlp.experts.down_proj": "moe_tp_down_rowwise",
+                        f"layers.{i}.mlp.experts": "moe_experts_allreduce",
+                    }
+                )
+
+    def _update_sp_ep_plan(self):
+        self.base_model_sp_ep_plan = self.base_model_sp_ep_plan.copy()
+        for i, mlp_type in enumerate(self.mlp_layer_types):
+            if mlp_type == "dense":
+                self.base_model_sp_ep_plan.update(
+                    {
+                        f"layers.{i}.mlp": "module_allgather",
+                        f"layers.{i}.mlp.gate_proj": "colwise",
+                        f"layers.{i}.mlp.up_proj": "colwise",
+                        f"layers.{i}.mlp.down_proj": "rowwise_reduce_scatter",
+                    }
+                )
+            else:
+                self.base_model_sp_ep_plan.update(
+                    {
+                        f"layers.{i}.mlp": "module_allgather_split",
+                        f"layers.{i}.mlp.gate": "ep_router",
+                        f"layers.{i}.mlp.experts.gate_up_proj": "grouped_gemm",
+                        f"layers.{i}.mlp.experts.down_proj": "grouped_gemm",
+                        f"layers.{i}.mlp.experts": "moe_experts_allreduce",
+                    }
+                )
+
+    def _update_tp_ep_plan(self):
+        self.base_model_tp_ep_plan = self.base_model_tp_ep_plan.copy()
+        for i, mlp_type in enumerate(self.mlp_layer_types):
+            if mlp_type == "dense":
+                self.base_model_tp_ep_plan.update(
+                    {
+                        f"layers.{i}.mlp.gate_proj": "colwise",
+                        f"layers.{i}.mlp.up_proj": "colwise",
+                        f"layers.{i}.mlp.down_proj": "rowwise_allreduce",
+                    }
+                )
+            else:
+                self.base_model_tp_ep_plan.update(
+                    {
+                        f"layers.{i}.mlp.gate": "ep_router",
+                        f"layers.{i}.mlp.experts.gate_up_proj": "grouped_gemm",
+                        f"layers.{i}.mlp.experts.down_proj": "grouped_gemm",
                         f"layers.{i}.mlp.experts": "moe_experts_allreduce",
                     }
                 )

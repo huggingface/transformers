@@ -20,7 +20,6 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...distributed.plan_utils import init_combo_plans
 from ...utils import auto_docstring
 
 
@@ -121,7 +120,6 @@ class OpenAIPrivacyFilterConfig(PreTrainedConfig):
             self.label2id = {label: idx for idx, label in self.id2label.items()}
 
         super().__post_init__(**kwargs)
-        init_combo_plans(self)
 
 
 __all__ = ["OpenAIPrivacyFilterConfig"]

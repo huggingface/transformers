@@ -17,7 +17,6 @@ from typing import Any, Literal
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...distributed.plan_utils import init_combo_plans
 from ...utils import auto_docstring, logging
 from ...utils.type_validators import interval
 
@@ -143,6 +142,19 @@ class Gemma4TextConfig(PreTrainedConfig):
         "layers.*.experts.down_proj": "grouped_gemm",
         "layers.*.experts": "moe_experts_allreduce",
     }
+    base_model_tp_ep_plan = {
+        "layers.*.self_attn.q_proj": "colwise_allgather",
+        "layers.*.self_attn.k_proj": "colwise_allgather",
+        "layers.*.self_attn.v_proj": "colwise_allgather",
+        "layers.*.self_attn.o_proj": "vocab_allreduce",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        "layers.*.router": "ep_router",
+        "layers.*.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.experts.down_proj": "grouped_gemm",
+        "layers.*.experts": "moe_experts_allreduce",
+    }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
@@ -216,7 +228,6 @@ class Gemma4TextConfig(PreTrainedConfig):
             self.rope_parameters = default_rope_params
 
         super().__post_init__(**kwargs)
-        init_combo_plans(self)
 
     def convert_rope_params_to_dict(self, **kwargs):
         # No need to handle BC for new models, because they have no old-format `rope_scaling`

@@ -14,7 +14,6 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...distributed.plan_utils import init_combo_plans
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -315,8 +314,6 @@ class DeepseekV4Config(PreTrainedConfig):
             }
             compress.setdefault("rope_type", "default")
             self.rope_parameters = {"main": main, "compress": compress}
-
-        init_combo_plans(self)
 
 
 __all__ = ["DeepseekV4Config"]
