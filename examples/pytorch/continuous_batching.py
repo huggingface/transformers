@@ -118,7 +118,7 @@ def batch_generate(
         "max_blocks_per_request": cb_config.max_blocks_per_request,
         "use_cuda_graph": cb_config.use_cuda_graph,
         "use_async_batching": cb_config.use_async_batching,
-        "use_default_compile_configs": cb_config.use_default_compile_configs,
+        "default_compile_level": cb_config.default_compile_level,
         "gen_time": gen_time,
         "token_count": token_count,
         "tok_per_sec": tok_per_sec,
@@ -149,7 +149,9 @@ if __name__ == "__main__":
     # Performance parameters
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
     parser.add_argument("--cuda-graph", "-cg", help="Use cuda graphs", type=str, default=None)
-    parser.add_argument("--compile", action="store_true", help="Compile the model using torch.compile")
+    parser.add_argument(
+        "--compile", type=int, default=0, help="Compile level (0: no compile, 1-3: more perf, longer warmup time)"
+    )
     parser.add_argument("--use-async", action=argparse.BooleanOptionalAction, help="Use asynchronous batching")
     parser.add_argument(
         "--block-table", "-bt", type=int, default=0, help="Block table size, ie. number of blocks / request"
@@ -275,7 +277,7 @@ if __name__ == "__main__":
         max_blocks_per_request=args.block_table,
         use_cuda_graph=use_cuda_graph,
         use_async_batching=args.use_async,
-        use_default_compile_configs=args.compile,
+        default_compile_level=args.compile,
     )
 
     # If we need to compare, we need to generate the reference outputs
