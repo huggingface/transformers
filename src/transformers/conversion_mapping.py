@@ -790,6 +790,16 @@ def _build_checkpoint_conversion_mapping():
                 "rotary_embeddings.inv_freq",
             ),
         ],
+        # Scoped to the class (not the "esmc" model_type) so it only applies to the
+        # head model: the published ESMC checkpoints store the masked-LM head as an
+        # ``nn.Sequential`` (keys ``lm_head.{0,2,3}``); ``ESMCForMaskedLM`` uses a
+        # named ``ESMCMaskedLMHead`` (``dense`` / ``layer_norm`` / ``decoder``). Remap
+        # on load (and reverse on save). ``ESMCModel`` (the backbone) has no lm_head.
+        "ESMCForMaskedLM": [
+            WeightRenaming(r"lm_head\.0\.", "lm_head.dense."),
+            WeightRenaming(r"lm_head\.2\.", "lm_head.layer_norm."),
+            WeightRenaming(r"lm_head\.3\.", "lm_head.decoder."),
+        ],
         "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
         "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],
         "timesfm2_5": [

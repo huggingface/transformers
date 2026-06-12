@@ -654,8 +654,6 @@ def get_model_modules() -> list[str]:
     _ignore_modules = [
         "modeling_auto",
         "modeling_encoder_decoder",
-        # Shared ESMFold2 building blocks; the public model is in modeling_esmfold2.
-        "modeling_esmfold2_common",
         "modeling_marian",
         "modeling_retribert",
         "modeling_speech_encoder_decoder",

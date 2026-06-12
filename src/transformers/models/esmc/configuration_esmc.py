@@ -19,7 +19,7 @@ from ...configuration_utils import PreTrainedConfig  # type: ignore[import]
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="biohub/ESMC-600M")
+@auto_docstring(checkpoint="biohub/ESMC-6B")
 @strict
 class ESMCConfig(PreTrainedConfig):
     r"""
@@ -41,7 +41,7 @@ class ESMCConfig(PreTrainedConfig):
     ```python
     >>> from transformers import ESMCConfig, ESMCModel
 
-    >>> # Initializing an ESMC biohub/ESMC-600M style configuration
+    >>> # Initializing an ESMC biohub/ESMC-6B style configuration
     >>> configuration = ESMCConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
