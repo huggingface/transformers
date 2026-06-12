@@ -192,7 +192,25 @@ class TestHubKernels(TestCasePlus):
         del model
 
     def test_kernels_mapping(self):
-        kernel_config = KernelConfig(kernel_mapping={"RMSNorm": "kernels-community/layer_norm:LlamaRMSNorm"})
+        kernel_config = KernelConfig(kernel_mapping={"RMSNorm": "kernels-community/layer-norm:LlamaRMSNorm"})
+        model = AutoModelForCausalLM.from_pretrained(
+            "unsloth/Llama-3.2-1B-Instruct", use_kernels=True, device_map=torch_device, kernel_config=kernel_config
+        )
+
+        EXPECTED_OUTPUT = set()
+        EXPECTED_OUTPUT.add("Hello, I'm looking for a reliable and trustworthy online")
+
+        tokenized_input = self.tokenizer(self.input, return_tensors="pt").input_ids.to(model.device)
+        output = model.generate(tokenized_input, max_new_tokens=10, do_sample=False)
+        output = self.tokenizer.decode(output[0], skip_special_tokens=True)
+        self.assertTrue(output in EXPECTED_OUTPUT)
+
+        del model
+
+    def test_kernels_mapping_explicit_version(self):
+        kernel_config = KernelConfig(
+            kernel_mapping={"RMSNorm": ("kernels-community/layer-norm:LlamaRMSNorm", {"version": 1})}
+        )
         model = AutoModelForCausalLM.from_pretrained(
             "unsloth/Llama-3.2-1B-Instruct", use_kernels=True, device_map=torch_device, kernel_config=kernel_config
         )
@@ -225,24 +243,30 @@ class TestHubKernels(TestCasePlus):
 @require_kernels
 class TestKernelsEnv(TestCasePlus):
     def test_disable_hub_kernels(self):
-        with patch.dict(os.environ, {"USE_HUB_KERNELS": "OFF"}):
-            import importlib
+        import importlib
 
-            from transformers.integrations import hub_kernels
+        original_state = hub_kernels_pkg.__dict__.copy()
 
-            importlib.reload(hub_kernels)
-
-            self.assertFalse(hub_kernels._kernels_enabled)
+        try:
+            with patch.dict(os.environ, {"USE_HUB_KERNELS": "OFF"}):
+                importlib.reload(hub_kernels_pkg)
+                self.assertFalse(hub_kernels_pkg._kernels_enabled)
+        finally:
+            hub_kernels_pkg.__dict__.clear()
+            hub_kernels_pkg.__dict__.update(original_state)
 
     def test_enable_hub_kernels(self):
-        with patch.dict(os.environ, {"USE_HUB_KERNELS": "ON"}):
-            import importlib
+        import importlib
 
-            from transformers.integrations import hub_kernels
+        original_state = hub_kernels_pkg.__dict__.copy()
 
-            importlib.reload(hub_kernels)
-
-            self.assertTrue(hub_kernels._kernels_enabled)
+        try:
+            with patch.dict(os.environ, {"USE_HUB_KERNELS": "ON"}):
+                importlib.reload(hub_kernels_pkg)
+                self.assertTrue(hub_kernels_pkg._kernels_enabled)
+        finally:
+            hub_kernels_pkg.__dict__.clear()
+            hub_kernels_pkg.__dict__.update(original_state)
 
 
 @require_kernels
@@ -270,24 +294,20 @@ class TestKernelUtilities(TestCasePlus):
     def test_lazy_load_kernel_success_and_cache(self):
         sentinel = types.SimpleNamespace(name="sentinel")
 
-        original_get_kernel = getattr(kernels_pkg, "get_kernel")
-        try:
+        def fake_get_kernel(repo_id, revision=None, version=None):
+            self.assertIn(repo_id, {"kernels-community/causal-conv1d"})
+            return sentinel
 
-            def fake_get_kernel(repo_id, revision=None, version=None):
-                self.assertIn(repo_id, {"kernels-community/causal-conv1d"})
-                return sentinel
-
-            setattr(hub_kernels_pkg, "get_kernel", fake_get_kernel)
+        with patch.object(hub_kernels_pkg, "get_kernel", fake_get_kernel):
             _KERNEL_MODULE_MAPPING.pop("causal-conv1d", None)
 
             mod1 = lazy_load_kernel("causal-conv1d")
             self.assertIs(mod1, sentinel)
+
             mod2 = lazy_load_kernel("causal-conv1d")
             self.assertIs(mod2, sentinel)
-        finally:
-            setattr(kernels_pkg, "get_kernel", original_get_kernel)
-            # Ensure cache is cleared to avoid holding onto module references across tests
-            _KERNEL_MODULE_MAPPING.pop("causal-conv1d", None)
+
+        _KERNEL_MODULE_MAPPING.pop("causal-conv1d", None)
 
     def test_lazy_load_kernel_unknown(self):
         name = "unknown-kernel-name"
@@ -299,47 +319,42 @@ class TestKernelUtilities(TestCasePlus):
         _KERNEL_MODULE_MAPPING.pop(name, None)
 
     def test_lazy_load_kernel_version(self):
-        HUB = _HUB_KERNEL_MAPPING
         name = "causal-conv1d"
         version_spec = ">=0.0.4,<0.1.0"
-        original_get_kernel = getattr(kernels_pkg, "get_kernel")
-        original_entry = HUB.get(name, None)
 
         # Use a real ModuleType so caching short-circuits on the second call
         sentinel_mod = types.ModuleType("sentinel_kernel_module")
         call_count = {"n": 0}
 
-        try:
-            # Inject dict-style mapping with repo_id and version
-            HUB[name] = {"repo_id": "kernels-community/causal-conv1d", "version": version_spec}  # type: ignore[assignment]
-            _KERNEL_MODULE_MAPPING.pop(name, None)
+        def fake_get_kernel(repo_id, revision=None, version=None):
+            call_count["n"] += 1
+            self.assertEqual(repo_id, "kernels-community/causal-conv1d")
+            self.assertIsNone(revision, "revision must not be set when version is provided")
+            self.assertEqual(version, version_spec)
+            return sentinel_mod
 
-            def fake_get_kernel(repo_id, revision=None, version=None):
-                call_count["n"] += 1
-                self.assertEqual(repo_id, "kernels-community/causal-conv1d")
-                self.assertIsNone(revision, "revision must not be set when version is provided")
-                self.assertEqual(version, version_spec)
-                return sentinel_mod
+        patched_hub_mapping = copy.deepcopy(_HUB_KERNEL_MAPPING)
+        patched_hub_mapping[name] = {
+            "repo_id": "kernels-community/causal-conv1d",
+            "version": version_spec,
+        }
 
-            # Patch kernels.get_kernel so lazy_load_kernel picks it up on import
-            setattr(hub_kernels_pkg, "get_kernel", fake_get_kernel)
+        patched_module_mapping = copy.deepcopy(_KERNEL_MODULE_MAPPING)
+        patched_module_mapping.pop(name, None)
 
-            # Act
+        with (
+            patch.dict(lazy_load_kernel.__globals__, {
+                "_HUB_KERNEL_MAPPING": patched_hub_mapping,
+                "_KERNEL_MODULE_MAPPING": patched_module_mapping,
+                "get_kernel": fake_get_kernel,
+            }),
+        ):
             mod1 = lazy_load_kernel(name)
             mod2 = lazy_load_kernel(name)
 
-            # Assert
             self.assertIs(mod1, sentinel_mod)
             self.assertIs(mod2, sentinel_mod)
             self.assertEqual(call_count["n"], 1, "second call should hit the cache")
-        finally:
-            # Restore patched function and mapping to avoid side effects
-            setattr(kernels_pkg, "get_kernel", original_get_kernel)
-            if original_entry is None:
-                HUB.pop(name, None)
-            else:
-                HUB[name] = original_entry
-            _KERNEL_MODULE_MAPPING.pop(name, None)
 
 
 @require_kernels

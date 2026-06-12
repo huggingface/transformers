@@ -21,6 +21,7 @@ from types import ModuleType
 from packaging import version as pkg_version
 
 from ..utils import ENV_VARS_TRUE_VALUES, logging
+from ..utils.generic import is_flash_attention_requested
 from ..utils.import_utils import is_kernels_available
 from .flash_attention import flash_attention_forward
 
@@ -100,18 +101,17 @@ try:
         #        version=1,
         #    )
         # },
-        # TODO: liger version will change
         "SwiGLUMLP": {
             "cuda": {
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
                     layer_name="LigerSwiGLUMLP",
-                    version=1,
+                    version=2,
                 ),
                 Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
                     layer_name="LigerTiledSwiGLUMLP",
-                    version=1,
+                    version=2,
                 ),
             },
         },
@@ -120,12 +120,12 @@ try:
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
                     layer_name="LigerGEGLUMLP",
-                    version=1,
+                    version=2,
                 ),
                 Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
                     layer_name="LigerTiledGEGLUMLP",
-                    version=1,
+                    version=2,
                 ),
             },
         },
@@ -134,7 +134,7 @@ try:
                 Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
                     layer_name="LigerLinear",
-                    version=1,
+                    version=2,
                 ),
             },
         },
@@ -144,24 +144,24 @@ try:
                 Mode.TRAINING: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
                     layer_name="LigerRMSNorm",
-                    version=1,
+                    version=2,
                 ),
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
                     layer_name="LigerRMSNorm",
-                    version=1,
+                    version=2,
                 ),
             },
             "rocm": {
                 Mode.TRAINING: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
                     layer_name="LigerRMSNorm",
-                    version=1,
+                    version=2,
                 ),
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
                     layer_name="LigerRMSNorm",
-                    version=1,
+                    version=2,
                 ),
             },
             "xpu": {
@@ -182,12 +182,12 @@ try:
                 Mode.TRAINING: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
                     layer_name="LigerRMSNorm",
-                    version=1,
+                    version=2,
                 ),
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger-kernels",
                     layer_name="LigerRMSNorm",
-                    version=1,
+                    version=2,
                 ),
             },
         },
@@ -292,7 +292,7 @@ try:
             "ForCausalLMLoss": {
                 "cuda": {
                     Mode.TRAINING | Mode.TORCH_COMPILE: FuncRepository(
-                        repo_id="kernels-community/liger-kernels", func_name="LigerForCausalLMLoss", version=1
+                        repo_id="kernels-community/liger-kernels", func_name="LigerForCausalLMLoss", version=2
                     ),
                 },
             },
@@ -407,13 +407,23 @@ def load_and_register_attn_kernel(
     # extract the rev after the @ if it exists
     repo_id, _, rev = repo_id.partition("@")
     repo_id = repo_id.strip()
+
+    # create revision xor version
     rev = rev.strip() if rev else None
+    version = None
+    if rev is None:
+        # FA4 is still in beta -> redirect to v0 else default to v1
+        is_fa4 = is_flash_attention_requested(requested_attention_implementation=repo_id, version=4)
+        version = 0 if is_fa4 else 1
 
     # Load the kernel from hub
     try:
-        kernel = get_kernel(repo_id, revision=rev, allow_all_kernels=allow_all_kernels)
+        kernel = get_kernel(repo_id, revision=rev, version=version, allow_all_kernels=allow_all_kernels)
+    except ValueError:
+        raise
     except Exception as e:
         raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.")
+
     # correctly wrap the kernel
     if hasattr(kernel, "flash_attn_varlen_func"):
         if attention_wrapper is None:
@@ -441,6 +451,10 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
             repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
             revision = _HUB_KERNEL_MAPPING[kernel_name].get("revision", None)
             version = _HUB_KERNEL_MAPPING[kernel_name].get("version", None)
+            # Default version as it's mandatory
+            if version is None and revision is None:
+                version = 1
+
             kernel = get_kernel(repo_id, revision=revision, version=version)
             mapping[kernel_name] = kernel
         except FileNotFoundError:
