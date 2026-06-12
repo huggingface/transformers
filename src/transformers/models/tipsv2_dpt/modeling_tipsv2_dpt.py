@@ -214,7 +214,7 @@ class Tipsv2DptNeck(nn.Module):
 class Tipsv2DptNormalEstimatorOutput(ModelOutput):
     r"""
     normals (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
-        Raw normal map predictions (unnormalized; L2-normalize in `post_process_normal_estimation`).
+        L2-normalized surface normal predictions.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*):
         Hidden states of the backbone.
     attentions (`tuple(torch.FloatTensor)`, *optional*):
@@ -318,7 +318,7 @@ class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
         patch_width = width // self.config.backbone_config.patch_size
 
         depth_fused = self.depth_neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
-        depth_logits = self.depth_decoder(depth_fused)
+        depth_logits = self.depth_decoder(torch.relu(depth_fused))
         probs = torch.relu(depth_logits) + self.config.min_depth
         probs = probs / probs.sum(dim=1, keepdim=True)
         depth_bins = torch.linspace(
@@ -332,6 +332,7 @@ class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
 
         normals_fused = self.normals_neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
         normals = self.normals_decoder(normals_fused)
+        normals = nn.functional.normalize(normals, p=2, dim=1)
 
         seg_fused = self.segmentation_neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
         seg_logits = self.segmentation_decoder(seg_fused)
@@ -378,7 +379,7 @@ class Tipsv2DptForDepthEstimation(Tipsv2DptPreTrainedModel):
         patch_width = width // self.config.backbone_config.patch_size
 
         fused = self.neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
-        logits = self.decoder(fused)  # (B, num_depth_bins, H', W')
+        logits = self.decoder(torch.relu(fused))  # (B, num_depth_bins, H', W')
 
         probs = torch.relu(logits) + self.config.min_depth
         probs = probs / probs.sum(dim=1, keepdim=True)
@@ -431,7 +432,8 @@ class Tipsv2DptForNormalEstimation(Tipsv2DptPreTrainedModel):
         patch_width = width // self.config.backbone_config.patch_size
 
         fused = self.neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
-        normals = self.decoder(fused)  # (B, 3, H', W') — unnormalized
+        normals = self.decoder(fused)
+        normals = nn.functional.normalize(normals, p=2, dim=1)
 
         return Tipsv2DptNormalEstimatorOutput(
             normals=normals,

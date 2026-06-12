@@ -1405,10 +1405,7 @@ def _build_checkpoint_conversion_mapping():
     mapping["Tipsv2DptForNormalEstimation"] = (
         _tipsv2_dpt_backbone_prefix
         + _tipsv2_dpt_neck_renames
-        + [
-            WeightRenaming(r"normals_head\.normals_head\.", "decoder.head."),
-            WeightRenaming(r"normals_", "")
-        ]
+        + [WeightRenaming(r"normals_head\.normals_head\.", "decoder.head."), WeightRenaming(r"normals_", "")]
     )
     mapping["Tipsv2DptForSemanticSegmentation"] = (
         _tipsv2_dpt_backbone_prefix
