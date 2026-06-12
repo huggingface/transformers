@@ -2,15 +2,20 @@ from __future__ import annotations
 
 from itertools import product
 from math import ceil
-from typing import Any, Literal, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 import numpy as np
+
 from transformers.feature_extraction_utils import BatchFeature, TensorType
 from transformers.image_utils import ImageInput
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin
 from transformers.tokenization_utils_tokenizers import TokenizersBackend
 from transformers.utils import auto_docstring, is_vision_available
 from transformers.utils.import_utils import is_torchvision_available, requires
+
+
+if TYPE_CHECKING:
+    import torch
 
 
 if is_vision_available():
