@@ -93,6 +93,7 @@ if is_torch_available():
         GenerateDecoderOnlyOutput,
         GenerateEncoderDecoderOutput,
         GenerationConfig,
+        GenerationMixin,
         LogitsProcessorList,
         MaxLengthCriteria,
         MinLengthLogitsProcessor,
@@ -2697,6 +2698,37 @@ class GenerationTesterMixin:
 
 @require_torch
 class UtilsFunctionsTest(unittest.TestCase):
+    def test_beam_search_reorders_non_standard_cache_name(self):
+        class DummyCache:
+            def __init__(self):
+                self.beam_idx = None
+
+            def reorder_cache(self, beam_idx):
+                self.beam_idx = beam_idx
+
+        cache = DummyCache()
+        beam_idx = torch.tensor([1, 0])
+        model_kwargs = {"past_key_values": None, "cache_params": cache}
+
+        GenerationMixin()._reorder_cache_for_beam_search(model_kwargs, beam_idx)
+
+        self.assertIs(cache.beam_idx, beam_idx)
+        self.assertIs(model_kwargs["cache_params"], cache)
+
+    def test_beam_search_reorders_non_standard_cache_name_with_legacy_hook(self):
+        class DummyModel(GenerationMixin):
+            def _reorder_cache(self, cache, beam_idx):
+                return {"cache": cache, "beam_idx": beam_idx}
+
+        cache = object()
+        beam_idx = torch.tensor([1, 0])
+        model_kwargs = {"state": cache}
+
+        DummyModel()._reorder_cache_for_beam_search(model_kwargs, beam_idx)
+
+        self.assertIs(model_kwargs["state"]["cache"], cache)
+        self.assertIs(model_kwargs["state"]["beam_idx"], beam_idx)
+
     def test_speculative_sampling(self):
         # assume vocab size 10, input length 5 + 3 generated candidates
         candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1, 4, 5]])  # input tokens
