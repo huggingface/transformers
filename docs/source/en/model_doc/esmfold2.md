@@ -24,10 +24,10 @@ ESMFold2 is an all-atom protein structure prediction model. It predicts 3D coord
 backbone. The architecture combines a sliding-window atom encoder with 3D rotary position embeddings, a pairwise
 folding trunk applied iteratively (the "parcae" recurrence), a diffusion-based structure head, and a confidence head.
 
-The ESMC backbone is **not bundled** in the ESMFold2 checkpoint; it is loaded separately from the repository named by
-`config.esmc_id` (default [`biohub/ESMC-6B`](https://huggingface.co/biohub/ESMC-6B)).
-[`ESMFold2Model.from_pretrained`](#transformers.ESMFold2Model) loads it automatically — pass `load_esmc=False` to skip
-this (e.g. when supplying precomputed language-model hidden states).
+The ESMC backbone is a bundled submodule: it is built from `config.esmc_config` (defaulting to the ESMC-6B
+configuration) and its weights are part of the ESMFold2 checkpoint under `esmc.*`, so a single
+[`ESMFold2Model.from_pretrained`](#transformers.ESMFold2Model) loads the whole model — no separate backbone download.
+You can still bypass the backbone by supplying precomputed `lm_hidden_states` to `forward`.
 
 The model checkpoint is available on the Hugging Face Hub at
 [`biohub/ESMFold2`](https://huggingface.co/biohub/ESMFold2).
@@ -39,7 +39,7 @@ import torch
 
 from transformers import ESMFold2Model
 
-# Loading the model also downloads and attaches the ESMC backbone (config.esmc_id).
+# The ESMC backbone is bundled in the checkpoint and loaded with the model.
 # bf16 is the recommended inference precision.
 model = ESMFold2Model.from_pretrained("biohub/ESMFold2", dtype=torch.bfloat16).cuda().eval()
 
@@ -48,8 +48,9 @@ with open("prediction.pdb", "w") as f:
     f.write(pdb_string)
 ```
 
-`infer_protein` returns the raw outputs (atom coordinates, distogram logits and confidence metrics) as a dictionary if
-you need them instead of a PDB string. Generation is stochastic — set a manual seed for reproducible structures.
+`infer_protein` returns the raw outputs (atom coordinates, distogram logits and confidence metrics) as an
+[`~models.esmfold2.modeling_esmfold2.ESMFold2Output`] if you need them instead of a PDB string. Generation is
+stochastic — set a manual seed for reproducible structures.
 
 ## Faster inference with a fused kernel
 
@@ -74,6 +75,10 @@ pdb_string = model.infer_protein_as_pdb("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ")
 ## ESMFold2Config
 
 [[autodoc]] ESMFold2Config
+
+## ESMFold2PreTrainedModel
+
+[[autodoc]] ESMFold2PreTrainedModel
 
 ## ESMFold2Model
 

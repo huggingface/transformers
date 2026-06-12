@@ -180,7 +180,7 @@ class ESMCRotaryEmbedding(nn.Module):
 
     def _apply(self, fn, recurse=True):
         # Keep ``inv_freq`` in fp32 even when the module is cast to bf16/fp16 (e.g.
-        # ``ESMFold2Model.load_esmc`` does ``.to(bf16)``). ``super()._apply`` would
+        # when ESMFold2 loads its bundled ESMC backbone in bf16). ``super()._apply`` would
         # round the rotary frequencies to bf16, which drifts the RoPE angles and is
         # the dominant source of bf16 fork-vs-port divergence in the ESMFold2 backbone.
         result = super()._apply(fn, recurse=recurse)
@@ -232,8 +232,8 @@ def _swiglu_hidden_dim(expansion_ratio: float, d_model: int) -> int:
     return int(((expansion_ratio * d_model) + 255) // 256 * 256)
 
 
-class _PyTorchLayerNormLinear(nn.Module):
-    """LayerNorm followed by a Linear projection.
+class ESMCLayerNormLinear(nn.Module):
+    """LayerNorm followed by a Linear projection (the fused QKV projection).
 
     Parameters are named ``layer_norm_weight``, ``layer_norm_bias`` and
     ``weight`` to match the published ESMC checkpoint layout. The LayerNorm runs
@@ -257,23 +257,24 @@ class _PyTorchLayerNormLinear(nn.Module):
         return F.linear(x, self.weight)
 
 
-class _PyTorchLayerNormMLP(nn.Module):
-    """LayerNorm + SwiGLU MLP.
+class ESMCSwiGLUMLP(nn.Module):
+    """LayerNorm + SwiGLU feed-forward network.
 
     Parameters are named ``layer_norm_weight``, ``layer_norm_bias``,
     ``fc1_weight`` and ``fc2_weight`` to match the published ESMC checkpoint
-    layout.
+    layout. ESMC was trained with ``bias=False``, so this network has no biases.
     """
 
-    def __init__(self, hidden_size: int, ffn_hidden_size: int, eps: float = 1e-5) -> None:
+    def __init__(self, d_model: int, expansion_ratio: float, eps: float = 1e-5) -> None:
         super().__init__()
-        self.hidden_size = hidden_size
+        ffn_hidden_size = _swiglu_hidden_dim(expansion_ratio, d_model)
+        self.hidden_size = d_model
         self.ffn_hidden_size = ffn_hidden_size
         self.eps = eps
-        self.layer_norm_weight = nn.Parameter(torch.ones(hidden_size))
-        self.layer_norm_bias = nn.Parameter(torch.zeros(hidden_size))
-        self.fc1_weight = nn.Parameter(torch.empty(2 * ffn_hidden_size, hidden_size))
-        self.fc2_weight = nn.Parameter(torch.empty(hidden_size, ffn_hidden_size))
+        self.layer_norm_weight = nn.Parameter(torch.ones(d_model))
+        self.layer_norm_bias = nn.Parameter(torch.zeros(d_model))
+        self.fc1_weight = nn.Parameter(torch.empty(2 * ffn_hidden_size, d_model))
+        self.fc2_weight = nn.Parameter(torch.empty(d_model, ffn_hidden_size))
         nn.init.normal_(self.fc1_weight, std=0.02)
         nn.init.normal_(self.fc2_weight, std=0.02)
 
@@ -291,32 +292,18 @@ class _PyTorchLayerNormMLP(nn.Module):
         return F.linear(x, self.fc2_weight)
 
 
-def _swiglu_ln_ffn(d_model: int, expansion_ratio: float, bias: bool) -> nn.Module:
-    """LayerNorm + SwiGLU MLP."""
-    assert not bias, "ESMC was trained with bias=False; bias=True not supported"
-    hidden = _swiglu_hidden_dim(expansion_ratio, d_model)
-    return _PyTorchLayerNormMLP(hidden_size=d_model, ffn_hidden_size=hidden)
+class ESMCGeluMLP(nn.Module):
+    """LayerNorm + GELU feed-forward network (the non-default ``ffn_type='gelu'``)."""
 
+    def __init__(self, d_model: int, expansion_ratio: float, bias: bool = False) -> None:
+        super().__init__()
+        hidden = int(expansion_ratio * d_model)
+        self.layer_norm = nn.LayerNorm(d_model)
+        self.fc1 = nn.Linear(d_model, hidden, bias=bias)
+        self.fc2 = nn.Linear(hidden, d_model, bias=bias)
 
-def _make_attn_layernorm_qkv(d_model: int, bias: bool) -> nn.Module:
-    """LayerNorm + fused QKV projection."""
-    assert not bias, "ESMC was trained with bias=False; bias=True not supported"
-    return _PyTorchLayerNormLinear(d_model, d_model * 3)
-
-
-def _make_attn_out_proj(d_model: int, bias: bool) -> nn.Module:
-    """Attention output projection."""
-    return nn.Linear(d_model, d_model, bias=bias)
-
-
-def _gelu_ln_ffn(d_model: int, expansion_ratio: float, bias: bool) -> nn.Sequential:
-    hidden = int(expansion_ratio * d_model)
-    return nn.Sequential(
-        nn.LayerNorm(d_model),
-        nn.Linear(d_model, hidden, bias=bias),
-        nn.GELU(),
-        nn.Linear(hidden, d_model, bias=bias),
-    )
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.fc2(F.gelu(self.fc1(self.layer_norm(x))))
 
 
 # ---------------------------------------------------------------------------
@@ -324,7 +311,7 @@ def _gelu_ln_ffn(d_model: int, expansion_ratio: float, bias: bool) -> nn.Sequent
 # ---------------------------------------------------------------------------
 
 
-class MultiHeadAttention(nn.Module):
+class ESMCAttention(nn.Module):
     """Multi-head self-attention with QK LayerNorm and RoPE.
 
     Args:
@@ -344,6 +331,8 @@ class MultiHeadAttention(nn.Module):
         qk_layernorm: bool = True,
     ):
         super().__init__()
+        if bias:
+            raise ValueError("ESMC was trained with bias=False; bias=True is not supported.")
         self.config = config
         self.d_model = d_model
         self.n_heads = n_heads
@@ -355,9 +344,8 @@ class MultiHeadAttention(nn.Module):
         # attention_mask is passed (unpadded inputs), silently masking causally.
         self.is_causal = False
 
-        assert not bias, "ESMC was trained with bias=False; bias=True not supported"
-        self.layernorm_qkv = _make_attn_layernorm_qkv(d_model, bias)
-        self.out_proj = _make_attn_out_proj(d_model, bias)
+        self.layernorm_qkv = ESMCLayerNormLinear(d_model, d_model * 3)
+        self.out_proj = nn.Linear(d_model, d_model, bias=bias)
 
         if qk_layernorm:
             self.q_ln = nn.LayerNorm(d_model, bias=bias)
@@ -424,7 +412,7 @@ class MultiHeadAttention(nn.Module):
 # ---------------------------------------------------------------------------
 
 
-class UnifiedTransformerBlock(nn.Module):
+class ESMCLayer(nn.Module):
     """Single transformer block: pre-norm attention + pre-norm FFN with residual scaling.
 
     Args:
@@ -451,13 +439,15 @@ class UnifiedTransformerBlock(nn.Module):
         ffn_type: str = "swiglu",
     ):
         super().__init__()
+        if bias:
+            raise ValueError("ESMC was trained with bias=False; bias=True is not supported.")
 
-        self.attn = MultiHeadAttention(config, d_model, n_heads, bias=bias, qk_layernorm=qk_layernorm)
+        self.attn = ESMCAttention(config, d_model, n_heads, bias=bias, qk_layernorm=qk_layernorm)
 
         if ffn_type == "swiglu":
-            self.ffn = _swiglu_ln_ffn(d_model, expansion_ratio, bias)
+            self.ffn = ESMCSwiGLUMLP(d_model, expansion_ratio)
         elif ffn_type == "gelu":
-            self.ffn = _gelu_ln_ffn(d_model, expansion_ratio, bias)
+            self.ffn = ESMCGeluMLP(d_model, expansion_ratio, bias)
         else:
             raise ValueError(f"Unknown ffn_type: {ffn_type!r}. Choose 'swiglu' or 'gelu'.")
 
@@ -497,8 +487,8 @@ class UnifiedTransformerBlock(nn.Module):
         return x, attn_weights
 
 
-class TransformerStack(nn.Module):
-    """Stack of :class:`UnifiedTransformerBlock` layers with a final LayerNorm.
+class ESMCEncoder(nn.Module):
+    """Stack of :class:`ESMCLayer` layers with a final LayerNorm.
 
     Args:
         d_model: Hidden dimension.
@@ -528,7 +518,7 @@ class TransformerStack(nn.Module):
         super().__init__()
         self.blocks = nn.ModuleList(
             [
-                UnifiedTransformerBlock(
+                ESMCLayer(
                     config,
                     d_model,
                     n_heads,
@@ -619,7 +609,7 @@ class ESMCPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
-    _no_split_modules = ["UnifiedTransformerBlock"]
+    _no_split_modules = ["ESMCLayer"]
     _keys_to_ignore_on_load_unexpected = [r"\._extra_state$"]
 
     def _init_weights(self, module: nn.Module):
@@ -627,11 +617,11 @@ class ESMCPreTrainedModel(PreTrainedModel):
         # The fused LN+projection modules are handled explicitly: the base
         # `_init_weights` matches norms by class-name substring ("LayerNorm"),
         # which would otherwise mis-initialize their (Linear) `weight` to ones.
-        if isinstance(module, _PyTorchLayerNormLinear):
+        if isinstance(module, ESMCLayerNormLinear):
             init.ones_(module.layer_norm_weight)
             init.zeros_(module.layer_norm_bias)
             init.normal_(module.weight, mean=0.0, std=std)
-        elif isinstance(module, _PyTorchLayerNormMLP):
+        elif isinstance(module, ESMCSwiGLUMLP):
             init.ones_(module.layer_norm_weight)
             init.zeros_(module.layer_norm_bias)
             init.normal_(module.fc1_weight, mean=0.0, std=std)
@@ -665,7 +655,7 @@ class ESMCModel(ESMCPreTrainedModel):
         super().__init__(config)
         self.embed = nn.Embedding(config.vocab_size, config.d_model)
         self.rotary_emb = ESMCRotaryEmbedding(config)
-        self.transformer = TransformerStack(
+        self.transformer = ESMCEncoder(
             config,
             config.d_model,
             config.n_heads,
@@ -701,7 +691,7 @@ class ESMCModel(ESMCPreTrainedModel):
         output_attentions (`bool`, *optional*):
             Whether to return the per-block attention weights of shape
             ``(batch_size, num_heads, sequence_length, sequence_length)``.
-            Forces a manual-SDPA path inside :class:`MultiHeadAttention` so the
+            Forces a manual-SDPA path inside :class:`ESMCAttention` so the
             attention probabilities are observable; raises on the
             ``flash_attention_2`` path.
 
@@ -710,8 +700,8 @@ class ESMCModel(ESMCPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, ESMCModel
 
-        >>> model = ESMCModel.from_pretrained("Biohub/ESMC-600M-2024-12")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Biohub/ESMC-600M-2024-12")
+        >>> model = ESMCModel.from_pretrained("biohub/ESMC-300M")
+        >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M")
         >>> inputs = tokenizer(["MLKNVQVQLV"], return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> outputs.last_hidden_state.shape
@@ -794,15 +784,26 @@ class ESMCModel(ESMCPreTrainedModel):
 # ---------------------------------------------------------------------------
 
 
-def _esmc_lm_head(d_model: int, output_dim: int, hidden_dim: int | None = None) -> nn.Sequential:
-    """Linear → GELU → LayerNorm → Linear projection head for masked LM."""
-    hidden_dim = hidden_dim if hidden_dim is not None else d_model
-    return nn.Sequential(
-        nn.Linear(d_model, hidden_dim),
-        nn.GELU(),
-        nn.LayerNorm(hidden_dim),
-        nn.Linear(hidden_dim, output_dim),
-    )
+class ESMCMaskedLMHead(nn.Module):
+    """Masked-language-modelling head: Linear → GELU → LayerNorm → Linear.
+
+    The published checkpoints store this head as an ``nn.Sequential`` (keys
+    ``lm_head.{0,2,3}``); the ``esmc`` entry in ``conversion_mapping.py`` remaps
+    them onto ``dense`` / ``layer_norm`` / ``decoder`` on load (and back on save).
+    """
+
+    def __init__(self, d_model: int, output_dim: int, hidden_dim: int | None = None) -> None:
+        super().__init__()
+        hidden_dim = hidden_dim if hidden_dim is not None else d_model
+        self.dense = nn.Linear(d_model, hidden_dim)
+        self.layer_norm = nn.LayerNorm(hidden_dim)
+        self.decoder = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = F.gelu(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
+        return self.decoder(hidden_states)
 
 
 # ---------------------------------------------------------------------------
@@ -822,14 +823,14 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
     def __init__(self, config: ESMCConfig):
         super().__init__(config)
         self.esmc = ESMCModel(config)
-        self.lm_head = _esmc_lm_head(config.d_model, config.vocab_size)
+        self.lm_head = ESMCMaskedLMHead(config.d_model, config.vocab_size)
         self.post_init()
 
     def get_output_embeddings(self) -> nn.Linear:
-        return self.lm_head[-1]  # type: ignore[return-value]
+        return self.lm_head.decoder
 
     def set_output_embeddings(self, new_embeddings: nn.Linear):
-        self.lm_head[-1] = new_embeddings
+        self.lm_head.decoder = new_embeddings
 
     @can_return_tuple
     @auto_docstring
@@ -860,8 +861,8 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
         >>> from transformers import AutoTokenizer, ESMCForMaskedLM
         >>> import torch
 
-        >>> model = ESMCForMaskedLM.from_pretrained("Biohub/ESMC-600M-2024-12")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Biohub/ESMC-600M-2024-12")
+        >>> model = ESMCForMaskedLM.from_pretrained("biohub/ESMC-300M")
+        >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M")
         >>> inputs = tokenizer(["MLKNVQ<mask>LV"], return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> outputs.logits.shape
@@ -912,7 +913,7 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
 # ---------------------------------------------------------------------------
 
 
-class _ESMCClassificationHead(nn.Module):
+class ESMCClassificationHead(nn.Module):
     """Dense classification head applied to the ``<cls>`` token representation."""
 
     def __init__(self, config: ESMCConfig):
@@ -947,7 +948,7 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.esmc = ESMCModel(config)
-        self.classifier = _ESMCClassificationHead(config)
+        self.classifier = ESMCClassificationHead(config)
         self.post_init()
 
     @can_return_tuple
