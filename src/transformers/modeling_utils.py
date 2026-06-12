@@ -1395,9 +1395,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # before the instance attribute shadows them — task-head plans live on the head class.
         cls_tp_plan = getattr(self, "_tp_plan", None) or {}
         cls_sp_plan = getattr(self, "_sp_plan", None) or {}
+        cls_tp_ep_plan = getattr(self, "_tp_ep_plan", None) or {}
+        cls_sp_ep_plan = getattr(self, "_sp_ep_plan", None) or {}
         cls_fsdp_plan = getattr(self, "_fsdp_plan", None) or {}
         self._tp_plan = dict(cls_tp_plan)
         self._sp_plan = dict(cls_sp_plan)
+        self._tp_ep_plan = dict(cls_tp_ep_plan)
+        self._sp_ep_plan = dict(cls_sp_ep_plan)
         self._ep_plan = {}
         self._pp_plan = {}
         self._fsdp_plan = dict(cls_fsdp_plan)
@@ -1406,6 +1410,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
             self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
             self._sp_plan = self.config.base_model_sp_plan.copy() if self.config.base_model_sp_plan is not None else {}
+            self._tp_ep_plan = (
+                self.config.base_model_tp_ep_plan.copy() if self.config.base_model_tp_ep_plan is not None else {}
+            )
+            self._sp_ep_plan = (
+                self.config.base_model_sp_ep_plan.copy() if self.config.base_model_sp_ep_plan is not None else {}
+            )
             self._ep_plan = self.config.base_model_ep_plan.copy() if self.config.base_model_ep_plan is not None else {}
             self._fsdp_plan = (
                 self.config.base_model_fsdp_plan.copy() if self.config.base_model_fsdp_plan is not None else {}
@@ -1434,6 +1444,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_sp_plan", None):
                 self._sp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_tp_ep_plan", None):
+                self._tp_ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_sp_ep_plan", None):
+                self._sp_ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_pp_plan", None):
                 self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_fsdp_plan", None):

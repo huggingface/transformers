@@ -715,6 +715,20 @@ class ParallelInterface(GeneralInterface):
 
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
+PARALLEL_PLAN_KEYS: dict[tuple[bool, bool], str] = {
+    (False, False): "base_model_tp_plan",
+    (True, False): "base_model_sp_plan",
+    (False, True): "base_model_tp_ep_plan",
+    (True, True): "base_model_sp_ep_plan",
+}
+
+MODEL_PARALLEL_PLAN_ATTRS: dict[tuple[bool, bool], str] = {
+    (False, False): "_tp_plan",
+    (True, False): "_sp_plan",
+    (False, True): "_tp_ep_plan",
+    (True, True): "_sp_ep_plan",
+}
+
 
 def resolve_parallel_plan(
     model, user_tp_plan: dict[str, str] | None, enable_sp: bool, enable_ep: bool
@@ -753,6 +767,38 @@ def resolve_parallel_plan(
     return base
 
 
+def select_parallel_plan(model) -> dict[str, str]:
+    """
+    Select the parallel plan to apply from explicit combo plans on the model/config.
+
+    ``DistributedConfig.tp_plan`` bypasses lookup and must be a complete plan.
+    Otherwise the (enable_sequence_parallel, enable_expert_parallel) pair selects
+    ``_tp_plan``, ``_sp_plan``, ``_tp_ep_plan``, or ``_sp_ep_plan`` on the model.
+
+    Falls back to ``resolve_parallel_plan`` while models migrate from split tp/sp/ep
+    recipes to explicit combo dicts.
+    """
+    distributed_config = model.config.distributed_config
+    user_tp_plan = distributed_config.tp_plan
+    if user_tp_plan is not None:
+        return dict(user_tp_plan)
+
+    sp = distributed_config.enable_sequence_parallel
+    ep = distributed_config.enable_expert_parallel
+    plan_attr = MODEL_PARALLEL_PLAN_ATTRS[(sp, ep)]
+    plan = getattr(model, plan_attr, None) or {}
+    if plan:
+        return dict(plan)
+
+    enable_sp = bool(
+        sp and getattr(model.config, "base_model_sp_plan", None) is not None
+    )
+    enable_ep = bool(
+        ep and getattr(model.config, "base_model_ep_plan", None) is not None
+    )
+    return resolve_parallel_plan(model, user_tp_plan=None, enable_sp=enable_sp, enable_ep=enable_ep)
+
+
 def apply_tensor_parallel(model, tp_mesh):
     """Apply tensor parallelism by looking each style up by string name.
 
@@ -784,28 +830,27 @@ def apply_tensor_parallel(model, tp_mesh):
             f"tp_plan: {user_tp_plan}"
         )
 
-    tp_plan = resolve_parallel_plan(model, user_tp_plan, enable_sp=enable_sp, enable_ep=enable_ep)
-    logger.info(f"TP plan has been resolved: {tp_plan}")
-    model.tp_plan = tp_plan
+    model.tp_plan = dict(select_parallel_plan(model))
+    logger.info(f"TP plan has been resolved: {model.tp_plan}")
 
     # tie_weights() replaces lm_head.weight with embed_tokens.weight after TP is applied.
     # If embed_tokens isn't in the plan, sharding lm_head as a DTensor causes tie to
     # clobber it with a plain tensor (and forward then mixes DTensor/Tensor). Skip
     # lm_head TP in that case so both ends stay plain and the tie is a real alias.
     if getattr(model.config, "tie_word_embeddings", False):
-        tied_source_in_plan = any(k.endswith("embed_tokens") for k in tp_plan)
+        tied_source_in_plan = any(k.endswith("embed_tokens") for k in model.tp_plan)
         if not tied_source_in_plan:
-            tp_plan.pop("lm_head", None)
+            model.tp_plan.pop("lm_head", None)
 
     for name, module in model.named_modules():
         # Shard each parameter directly on the module using the specified style.
         for p_name, _ in list(module.named_parameters(recurse=False)):
             full = f"{name}.{p_name}" if name else p_name
-            style_name = _get_parameter_tp_plan(parameter_name=full, tp_plan=tp_plan, is_weight=True)
+            style_name = _get_parameter_tp_plan(parameter_name=full, tp_plan=model.tp_plan, is_weight=True)
             if style_name is not None and style_name in ALL_PARALLEL_STYLES:
                 ALL_PARALLEL_STYLES[style_name].shard_param(module, p_name, tp_mesh)
         # Install forward hooks for modules as needed by the plan.
-        style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=tp_plan, is_weight=False)
+        style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=model.tp_plan, is_weight=False)
         if style_name is not None and style_name in ALL_PARALLEL_STYLES:
             if style_name == "moe_experts_allreduce":
                 ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh, is_expert_parallel=enable_ep)
@@ -834,7 +879,7 @@ def apply_tensor_parallel(model, tp_mesh):
     # loss_parallel patches F.cross_entropy to work with Shard(-1) logits.
     # It must be active during both forward and backward, so we enable it
     # once rather than as a context manager.
-    has_loss_parallel = any(v == "colwise_loss_parallel" for v in tp_plan.values())
+    has_loss_parallel = any(v == "colwise_loss_parallel" for v in model.tp_plan.values())
     if has_loss_parallel:
         from torch.distributed.tensor.parallel import loss_parallel
 

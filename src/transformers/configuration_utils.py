@@ -148,9 +148,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     - **base_model_tp_plan** (`dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a tensor
       parallel plan applied to the sub-module when `model.tensor_parallel` is called.
     - **base_model_sp_plan** (`dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a sequence
-      parallel plan, used in place of `base_model_tp_plan` when `distributed_config.enable_sequence_parallel` is set.
-      Same key/value shape as the TP plan; values are style names registered in `ALL_PARALLEL_STYLES`
-      (e.g. `"vocab_reduce_scatter"`, `"rowwise_reduce_scatter"`, `"activation"`, `"module_allgather"`).
+      parallel plan, used when `distributed_config.enable_sequence_parallel=True` and
+      `enable_expert_parallel=False`. Same key/value shape as the TP plan.
+    - **base_model_tp_ep_plan** (`dict[str, Any]`) -- Complete plan for inference TP + expert parallel
+      (`enable_sequence_parallel=False`, `enable_expert_parallel=True`).
+    - **base_model_sp_ep_plan** (`dict[str, Any]`) -- Complete plan for training SP + expert parallel
+      (`enable_sequence_parallel=True`, `enable_expert_parallel=True`).
     - **base_model_fsdp_plan** (`dict[Any, str]`) -- A dict that maps sub-modules of a base model to an FSDP2
       sharding strategy (e.g. `"free_full_weight"` / `"keep_full_weight"`). Keys can be wildcard module paths
       (e.g. `"layers.*"`) or tuples of paths (grouped into a single `fully_shard` call).
@@ -226,6 +229,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     attribute_map: ClassVar[dict[str, str]] = {}
     base_model_tp_plan: ClassVar[dict[str, Any] | None] = None
     base_model_sp_plan: ClassVar[dict[str, Any] | None] = None
+    base_model_tp_ep_plan: ClassVar[dict[str, Any] | None] = None
+    base_model_sp_ep_plan: ClassVar[dict[str, Any] | None] = None
     base_model_fsdp_plan: ClassVar[dict[Any, str] | None] = None
     base_model_pp_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     base_model_ep_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None

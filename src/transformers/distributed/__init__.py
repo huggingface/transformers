@@ -25,6 +25,7 @@ _import_structure = {
         "ALL_PARALLEL_STYLES",
         "apply_tensor_parallel",
         "resolve_parallel_plan",
+        "select_parallel_plan",
         "verify_tp_sp_ep_plan",
     ],
     "utils": [],
@@ -40,6 +41,7 @@ if TYPE_CHECKING:
         ALL_PARALLEL_STYLES,
         apply_tensor_parallel,
         resolve_parallel_plan,
+        select_parallel_plan,
         verify_tp_sp_ep_plan,
     )
 
