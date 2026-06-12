@@ -2474,18 +2474,16 @@ class TrainingArguments:
                 Defines the scope of what is pushed to the Hub and when. Possible values are:
 
                 - `"end"`: push the model, its configuration, the processing_class e.g. tokenizer (if passed along to the [`Trainer`]) and a
-                draft of a model card when the [`~Trainer.save_model`] method is called.
+                  draft of a model card when the [`~Trainer.save_model`] method is called.
                 - `"every_save"`: push the model, its configuration, the processing_class e.g. tokenizer (if passed along to the [`Trainer`])
-                  and
-                a draft of a model card each time there is a model save. The pushes are asynchronous to not block
-                training, and in case the save are very frequent, a new push is only attempted if the previous one is
-                finished. A last push is made with the final model at the end of training.
+                  and a draft of a model card each time there is a model save. The pushes are asynchronous to not block
+                  training, and in case the save are very frequent, a new push is only attempted if the previous one is
+                  finished. A last push is made with the final model at the end of training.
                 - `"checkpoint"`: like `"every_save"` but the latest checkpoint is also pushed in a subfolder named
-                last-checkpoint, allowing you to resume training easily with
-                `trainer.train(resume_from_checkpoint="last-checkpoint")`.
+                  last-checkpoint, allowing you to resume training easily with
+                  `trainer.train(resume_from_checkpoint="last-checkpoint")`.
                 - `"all_checkpoints"`: like `"checkpoint"` but all checkpoints are pushed like they appear in the
-                  output
-                folder (so you will get one checkpoint folder per folder in your final repository)
+                  output folder (so you will get one checkpoint folder per folder in your final repository)
 
             token (`str`, *optional*):
                 The token to use to push the model to the Hub. Will default to the token in the cache folder obtained
