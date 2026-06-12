@@ -63,6 +63,38 @@ from collections import deque
 from pathlib import Path
 
 
+# Optional OpenTelemetry instrumentation. When transformers-ci[otel] is installed
+# and OTEL_* env is configured (e.g. by `configure-ci-otel` in CI), each checker
+# run emits a span; otherwise this is a complete no-op. The producer-side helper
+# lives in transformers-ci, so importing it must never be a hard dependency.
+try:
+    from transformersci.otel import instrument as _otel
+except ImportError:  # transformers-ci[otel] not installed → tracing disabled
+    _otel = None
+
+
+class _NullTrace:
+    """No-op with the same shape as transformersci.otel.instrument's Run/Step."""
+
+    def run(self, *args, **kwargs):
+        return self
+
+    def step(self, *args, **kwargs):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def set_exit_code(self, returncode):
+        pass
+
+
+_tracer = _otel if _otel is not None else _NullTrace()
+
+
 UTILS_DIR = Path(__file__).parent
 REPO_ROOT = UTILS_DIR.parent
 CACHE_PATH = UTILS_DIR / ".checkers_cache.json"
@@ -545,82 +577,94 @@ def main():
     failures = []
     skipped = 0
     total_start = time.perf_counter()
-    for name in names:
-        label = CHECKERS[name][0]
+    # One trace per checkers run; one span per checker. No-op unless
+    # transformers-ci[otel] is installed and OTEL_* is configured. The job name
+    # rides in via OTEL_RESOURCE_ATTRIBUTES (set by configure-ci-otel), so the
+    # value below is only a fallback for un-wrapped local runs.
+    job = os.environ.get("TRANSFORMERS_TEST_OTEL_JOB", "local_checks")
+    with _tracer.run(job, attributes={"transformers.check.mode": "fix" if args.fix else "check"}) as otel_run:
+        for name in names:
+            label = CHECKERS[name][0]
+            with otel_run.step(
+                f"utils/checkers.py::{name}",
+                attributes={"transformers.check.name": name, "transformers.check.label": label},
+            ) as otel_step:
+                # Skip if all relevant files are unchanged since last clean run
+                if cache is not None and cache.is_current(name):
+                    skipped += 1
+                    otel_step.set_exit_code(0)
+                    if is_tty:
+                        print(f"{GREEN}✓ {label} (cached){RESET}\n")
+                    else:
+                        print(f"{label} (cached)\n", flush=True)
+                    continue
 
-        # Skip if all relevant files are unchanged since last clean run
-        if cache is not None and cache.is_current(name):
-            skipped += 1
-            if is_tty:
-                print(f"{GREEN}✓ {label} (cached){RESET}\n")
-            else:
-                print(f"{label} (cached)\n", flush=True)
-            continue
+                cmd_str = get_checker_command(name, fix=args.fix)
+                checker_start = time.perf_counter()
 
-        cmd_str = get_checker_command(name, fix=args.fix)
-        checker_start = time.perf_counter()
-
-        if is_tty:
-            window = SlidingWindow(label, max_lines=10)
-            if cmd_str:
-                window.add_line(f"$ {cmd_str}")
-            rc, output = run_checker(name, fix=args.fix, line_callback=window.add_line)
-            elapsed = time.perf_counter() - checker_start
-            window.finish(success=(rc == 0), elapsed=elapsed, show_lines=(rc == 0))
-            if rc != 0:
-                print()
-                _print_output(output)
-            print()
-            if rc == 0 and cache is not None:
-                cache.update(name)
-            elif rc != 0:
-                if cache is not None:
-                    cache.invalidate(name)
-                failures.append(name)
-                if not args.keep_going:
-                    if cache is not None:
-                        cache.save()
-                    sys.exit(1)
-        else:
-            print(f"{label}", flush=True)
-            if cmd_str:
-                print(f"$ {cmd_str}", flush=True)
-            if is_ci:
-                streamed_output = []
-
-                def print_line(line):
-                    streamed_output.append(line)
-                    print(line, end="", flush=True)
-
-                rc, output = run_checker(name, fix=args.fix, line_callback=print_line)
-                if rc != 0 and output:
-                    streamed_text = "".join(streamed_output)
-                    if output.startswith(streamed_text):
-                        _print_output(output[len(streamed_text) :])
-                    elif output != streamed_text:
+                if is_tty:
+                    window = SlidingWindow(label, max_lines=10)
+                    if cmd_str:
+                        window.add_line(f"$ {cmd_str}")
+                    rc, output = run_checker(name, fix=args.fix, line_callback=window.add_line)
+                    elapsed = time.perf_counter() - checker_start
+                    window.finish(success=(rc == 0), elapsed=elapsed, show_lines=(rc == 0))
+                    otel_step.set_exit_code(rc)
+                    if rc != 0:
+                        print()
                         _print_output(output)
-            else:
-                rc, output = run_checker(name, fix=args.fix)
-                if rc == 0:
-                    tail = output.splitlines()[-10:]
-                    if tail:
-                        print("\n".join(tail), flush=True)
+                    print()
+                    if rc == 0 and cache is not None:
+                        cache.update(name)
+                    elif rc != 0:
+                        if cache is not None:
+                            cache.invalidate(name)
+                        failures.append(name)
+                        if not args.keep_going:
+                            if cache is not None:
+                                cache.save()
+                            sys.exit(1)
                 else:
-                    _print_output(output)
-            elapsed = time.perf_counter() - checker_start
-            status = "OK" if rc == 0 else "FAILED"
-            print(f"{status} ({format_elapsed(elapsed)})", flush=True)
-            print(flush=True)
-            if rc == 0 and cache is not None:
-                cache.update(name)
-            elif rc != 0:
-                if cache is not None:
-                    cache.invalidate(name)
-                failures.append(name)
-                if not args.keep_going:
-                    if cache is not None:
-                        cache.save()
-                    sys.exit(1)
+                    print(f"{label}", flush=True)
+                    if cmd_str:
+                        print(f"$ {cmd_str}", flush=True)
+                    if is_ci:
+                        streamed_output = []
+
+                        def print_line(line):
+                            streamed_output.append(line)
+                            print(line, end="", flush=True)
+
+                        rc, output = run_checker(name, fix=args.fix, line_callback=print_line)
+                        if rc != 0 and output:
+                            streamed_text = "".join(streamed_output)
+                            if output.startswith(streamed_text):
+                                _print_output(output[len(streamed_text) :])
+                            elif output != streamed_text:
+                                _print_output(output)
+                    else:
+                        rc, output = run_checker(name, fix=args.fix)
+                        if rc == 0:
+                            tail = output.splitlines()[-10:]
+                            if tail:
+                                print("\n".join(tail), flush=True)
+                        else:
+                            _print_output(output)
+                    elapsed = time.perf_counter() - checker_start
+                    status = "OK" if rc == 0 else "FAILED"
+                    print(f"{status} ({format_elapsed(elapsed)})", flush=True)
+                    print(flush=True)
+                    otel_step.set_exit_code(rc)
+                    if rc == 0 and cache is not None:
+                        cache.update(name)
+                    elif rc != 0:
+                        if cache is not None:
+                            cache.invalidate(name)
+                        failures.append(name)
+                        if not args.keep_going:
+                            if cache is not None:
+                                cache.save()
+                            sys.exit(1)
 
     if cache is not None:
         cache.save()
