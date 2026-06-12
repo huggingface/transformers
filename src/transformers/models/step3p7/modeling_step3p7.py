@@ -1403,9 +1403,13 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         is_first_iteration: bool = False,
         **kwargs,
     ):
-        # Overridden so we only forward image inputs on the prefill step. `generate()` pre-creates
-        # an empty DynamicCache and may not pass `cache_position` into this hook, so the explicit
-        # `is_first_iteration` flag is the only reliable prefill signal.
+        is_prefill = is_first_iteration
+        if inputs_embeds is not None and not is_prefill:
+            if past_key_values is None:
+                is_prefill = True
+            elif hasattr(past_key_values, "get_seq_length") and past_key_values.get_seq_length() == 0:
+                is_prefill = True
+
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -1413,11 +1417,11 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
+            is_first_iteration=is_prefill,
             **kwargs,
         )
 
-        if is_first_iteration or not kwargs.get("use_cache", True):
+        if is_prefill or not kwargs.get("use_cache", True):
             model_inputs["pixel_values"] = pixel_values
             model_inputs["patch_pixel_values"] = patch_pixel_values
             model_inputs["num_patches"] = num_patches

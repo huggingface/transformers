@@ -216,6 +216,47 @@ class StepRoboticsVisionEncoderConfig(PreTrainedConfig):
 @strict
 @auto_docstring(custom_args=STEP3P7_TEXT_CONFIG_ARGS)
 class Step3p7TextConfig(PreTrainedConfig):
+    r"""
+    num_attention_groups (`int`, *optional*, defaults to 8):
+        Number of key/value attention groups.
+    max_seq_len (`int`, *optional*, defaults to 128000):
+        Maximum sequence length used by original Step checkpoints.
+    moe_num_experts (`int`, *optional*, defaults to 288):
+        Number of routed MoE experts.
+    moe_top_k (`int`, *optional*, defaults to 8):
+        Number of experts selected per token.
+    rope_theta (`float` or `list[float]`, *optional*, defaults to 10000):
+        Base period used by rotary position embeddings.
+    rope_scaling (`dict`, *optional*):
+        Rotary embedding scaling configuration.
+    share_expert_dim (`int`, *optional*, defaults to 1280):
+        Intermediate size of shared experts.
+    norm_expert_weight (`bool`, *optional*, defaults to `True`):
+        Whether to normalize router expert weights.
+    use_head_wise_attn_gate (`bool`, *optional*, defaults to `False`):
+        Whether to use head-wise attention gates.
+    use_moe_router_bias (`bool`, *optional*, defaults to `False`):
+        Whether MoE router projections use a bias term.
+    moe_router_activation (`str`, *optional*, defaults to `"softmax"`):
+        Activation function used by the MoE router.
+    moe_router_scaling_factor (`float`, *optional*, defaults to 1.0):
+        Scaling factor applied to MoE router scores.
+    need_fp32_gate (`bool`, *optional*, defaults to `False`):
+        Whether to compute router gates in float32.
+    attention_other_setting (`dict`, *optional*):
+        Additional attention settings from original checkpoints.
+    swiglu_limits (`list`, *optional*):
+        Clamp limits for routed expert SwiGLU activations.
+    swiglu_limits_shared (`list`, *optional*):
+        Clamp limits for shared expert SwiGLU activations.
+    use_rope_layers (`list[bool]`, *optional*):
+        Per-layer flags indicating whether RoPE is enabled.
+    yarn_only_types (`list[str]`, *optional*):
+        Layer type names that should use YaRN-style RoPE settings only.
+    moe_layers_enum (`tuple[int]`, `list[int]` or `str`, *optional*):
+        Indices of layers that use MoE blocks.
+    """
+
     model_type = "step3p5"
     architectures = ["Step3p5ForCausalLM"]
 
@@ -330,6 +371,11 @@ def _normalize_per_layer_values(
 @strict
 @auto_docstring(custom_args=STEP3P7_CONFIG_ARGS, checkpoint="stepfun-ai/Step-3.7-Flash")
 class Step3p7Config(PreTrainedConfig):
+    r"""
+    understand_projector_stride (`int`, *optional*, defaults to 2):
+        Stride used when merging high-resolution patch features before projection.
+    """
+
     sub_configs = {"vision_config": StepRoboticsVisionEncoderConfig, "text_config": Step3p7TextConfig}
     # This loader is a compatibility shim for original Step VL checkpoints
     # whose top-level config model_type is `step3p7`.
@@ -1747,9 +1793,13 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         is_first_iteration: bool = False,
         **kwargs,
     ):
-        # Overridden so we only forward image inputs on the prefill step. `generate()` pre-creates
-        # an empty DynamicCache and may not pass `cache_position` into this hook, so the explicit
-        # `is_first_iteration` flag is the only reliable prefill signal.
+        is_prefill = is_first_iteration
+        if inputs_embeds is not None and not is_prefill:
+            if past_key_values is None:
+                is_prefill = True
+            elif hasattr(past_key_values, "get_seq_length") and past_key_values.get_seq_length() == 0:
+                is_prefill = True
+
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -1757,11 +1807,11 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
+            is_first_iteration=is_prefill,
             **kwargs,
         )
 
-        if is_first_iteration or not kwargs.get("use_cache", True):
+        if is_prefill or not kwargs.get("use_cache", True):
             model_inputs["pixel_values"] = pixel_values
             model_inputs["patch_pixel_values"] = patch_pixel_values
             model_inputs["num_patches"] = num_patches
