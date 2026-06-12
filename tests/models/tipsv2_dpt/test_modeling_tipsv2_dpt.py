@@ -278,7 +278,7 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_model(self):
-        # TODO: switch to google repo before merge
+        # TODO: switch to google repo before merge
         model = Tipsv2DptModel.from_pretrained("guarin/tipsv2-b14-dpt", device_map=torch_device).eval()
 
         image = prepare_img()

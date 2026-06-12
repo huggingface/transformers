@@ -1399,6 +1399,7 @@ def _build_checkpoint_conversion_mapping():
         + _tipsv2_dpt_neck_renames
         + [
             WeightRenaming(r"depth_head\.depth_head\.", "decoder.head."),
+            WeightRenaming(r"depth_", ""),
         ]
     )
     mapping["Tipsv2DptForNormalEstimation"] = (
@@ -1406,6 +1407,7 @@ def _build_checkpoint_conversion_mapping():
         + _tipsv2_dpt_neck_renames
         + [
             WeightRenaming(r"normals_head\.normals_head\.", "decoder.head."),
+            WeightRenaming(r"normals_", "")
         ]
     )
     mapping["Tipsv2DptForSemanticSegmentation"] = (
@@ -1413,6 +1415,7 @@ def _build_checkpoint_conversion_mapping():
         + _tipsv2_dpt_neck_renames
         + [
             WeightRenaming(r"segmentation_head\.segmentation_head\.", "decoder.head."),
+            WeightRenaming(r"segmentation_", ""),
         ]
     )
 
