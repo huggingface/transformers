@@ -32,11 +32,16 @@ logger = logging.get_logger(__name__)
 class MSAEncoderConfig(PreTrainedConfig):
     """Config for the optional MSA encoder module (Large MSA models only)."""
 
+    attribute_map = {
+        "n_layers": "num_hidden_layers",
+        "n_heads_msa": "num_attention_heads",
+    }
+
     enabled: bool | None = False
     d_msa: int | None = 128
     d_hidden: int | None = 32
-    n_layers: int | None = 4
-    n_heads_msa: int | None = 8
+    num_hidden_layers: int | None = 4
+    num_attention_heads: int | None = 8
     msa_head_width: int | None = 32
 
 
@@ -52,8 +57,10 @@ class ParcaeConfig(PreTrainedConfig):
 class LMEncoderConfig(PreTrainedConfig):
     """Release-only config for the LM-side pair encoder."""
 
+    attribute_map = {"n_layers": "num_hidden_layers"}
+
     enabled: bool | None = True
-    n_layers: int | None = 4
+    num_hidden_layers: int | None = 4
     lm_dropout: float | None = 0.25
     per_loop_lm_dropout: bool | None = True
 
@@ -62,10 +69,15 @@ class LMEncoderConfig(PreTrainedConfig):
 class AtomAttentionConfig(PreTrainedConfig):
     """Config for the SWA atom encoder/decoder with 3D RoPE."""
 
+    attribute_map = {
+        "n_blocks": "num_hidden_layers",
+        "n_heads": "num_attention_heads",
+    }
+
     d_atom: int | None = 128
     d_token: int | None = 768
-    n_blocks: int | None = 3
-    n_heads: int | None = 4
+    num_hidden_layers: int | None = 3
+    num_attention_heads: int | None = 4
     swa_window_size: int | None = 128
     expansion_ratio: int | None = 2
     spatial_rope_base_frequency: float | None = 20.0
@@ -78,8 +90,13 @@ class AtomAttentionConfig(PreTrainedConfig):
 class FoldingTrunkConfig(PreTrainedConfig):
     """Config for a pairwise folding trunk stack."""
 
-    n_layers: int | None = 24
-    n_heads: int | None = 8
+    attribute_map = {
+        "n_layers": "num_hidden_layers",
+        "n_heads": "num_attention_heads",
+    }
+
+    num_hidden_layers: int | None = 24
+    num_attention_heads: int | None = 8
     dropout: float | None = 0.0
 
 
@@ -161,7 +178,7 @@ class ConfidenceHeadConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if self.folding_trunk is None:
-            self.folding_trunk = FoldingTrunkConfig(n_layers=4)
+            self.folding_trunk = FoldingTrunkConfig(num_hidden_layers=4)
         elif isinstance(self.folding_trunk, dict):
             self.folding_trunk = FoldingTrunkConfig(**self.folding_trunk)
         super().__post_init__(**kwargs)
