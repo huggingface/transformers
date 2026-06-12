@@ -131,8 +131,6 @@ STEP3P7_TEXT_CONFIG_ARGS = r"""
         Number of key/value attention groups.
     num_hidden_layers (`int`, *optional*, defaults to 45):
         Number of decoder layers.
-    max_seq_len (`int`, *optional*, defaults to 128000):
-        Maximum sequence length used by original Step checkpoints.
     vocab_size (`int`, *optional*, defaults to 128815):
         Vocabulary size of the text model.
     rms_norm_eps (`float`, *optional*, defaults to 1e-5):
@@ -153,8 +151,6 @@ STEP3P7_TEXT_CONFIG_ARGS = r"""
         Intermediate size of shared experts.
     head_dim (`int`, *optional*, defaults to 128):
         Dimensionality of each attention head.
-    norm_expert_weight (`bool`, *optional*, defaults to `True`):
-        Whether to normalize router expert weights.
     layer_types (`list[str]`, *optional*):
         Attention type for each decoder layer.
     sliding_window (`int`, *optional*):
@@ -183,8 +179,6 @@ STEP3P7_TEXT_CONFIG_ARGS = r"""
         Clamp limits for routed expert SwiGLU activations.
     swiglu_limits_shared (`list[float]`, *optional*):
         Clamp limits for shared expert SwiGLU activations.
-    use_rope_layers (`list[bool]`, *optional*):
-        Per-layer flags indicating whether RoPE is enabled.
     yarn_only_types (`list[str]`, *optional*):
         Layer type names that should use YaRN-style RoPE settings only.
     moe_layers_enum (`tuple[int]`, *optional*):
@@ -215,8 +209,6 @@ class Step3p7TextConfig(PreTrainedConfig):
     r"""
     num_attention_groups (`int`, *optional*, defaults to 8):
         Number of key/value attention groups.
-    max_seq_len (`int`, *optional*, defaults to 128000):
-        Maximum sequence length used by original Step checkpoints.
     moe_num_experts (`int`, *optional*, defaults to 288):
         Number of routed MoE experts.
     moe_top_k (`int`, *optional*, defaults to 8):
@@ -227,8 +219,6 @@ class Step3p7TextConfig(PreTrainedConfig):
         Rotary embedding scaling configuration.
     share_expert_dim (`int`, *optional*, defaults to 1280):
         Intermediate size of shared experts.
-    norm_expert_weight (`bool`, *optional*, defaults to `True`):
-        Whether to normalize router expert weights.
     use_head_wise_attn_gate (`bool`, *optional*, defaults to `False`):
         Whether to use head-wise attention gates.
     use_moe_router_bias (`bool`, *optional*, defaults to `False`):
@@ -245,8 +235,6 @@ class Step3p7TextConfig(PreTrainedConfig):
         Clamp limits for routed expert SwiGLU activations.
     swiglu_limits_shared (`list`, *optional*):
         Clamp limits for shared expert SwiGLU activations.
-    use_rope_layers (`list[bool]`, *optional*):
-        Per-layer flags indicating whether RoPE is enabled.
     yarn_only_types (`list[str]`, *optional*):
         Layer type names that should use YaRN-style RoPE settings only.
     moe_layers_enum (`tuple[int]`, `list[int]` or `str`, *optional*):
@@ -261,7 +249,6 @@ class Step3p7TextConfig(PreTrainedConfig):
     num_attention_heads: int = 64
     num_attention_groups: int = 8
     num_hidden_layers: int = 45
-    max_seq_len: int = 128000
     vocab_size: int = 128815
     rms_norm_eps: float = 1e-5
     moe_intermediate_size: int = 1280
@@ -272,7 +259,6 @@ class Step3p7TextConfig(PreTrainedConfig):
     max_position_embeddings: int = 128000
     share_expert_dim: int = 1280
     head_dim: int = 128
-    norm_expert_weight: bool = True
     layer_types: list[str] | None = None
     sliding_window: int | None = None
     pad_token_id: int = 1
@@ -288,7 +274,6 @@ class Step3p7TextConfig(PreTrainedConfig):
     attention_other_setting: dict[str, Any] | None = None
     swiglu_limits: list[float | int | None] | None = None
     swiglu_limits_shared: list[float | int | None] | None = None
-    use_rope_layers: list[bool] | None = None
     yarn_only_types: list[str] | None = None
     moe_layers_enum: tuple[int, ...] | list[int] | str = (
         3,
@@ -352,8 +337,6 @@ STEP3P7_CONFIG_ARGS = r"""
         Configuration of the Step3p7 vision encoder.
     text_config (`dict` or `Step3p7TextConfig`, *optional*):
         Configuration of the Step3p7 text decoder.
-    understand_projector_stride (`int`, *optional*, defaults to 2):
-        Stride used when merging high-resolution patch features before projection.
     projector_bias (`bool`, *optional*, defaults to `False`):
         Whether the multimodal projector uses a bias term.
     image_token_id (`int`, *optional*, defaults to 151679):
@@ -364,10 +347,7 @@ STEP3P7_CONFIG_ARGS = r"""
 @strict
 @auto_docstring(custom_args=STEP3P7_CONFIG_ARGS, checkpoint="stepfun-ai/Step-3.7-Flash")
 class Step3p7Config(PreTrainedConfig):
-    r"""
-    understand_projector_stride (`int`, *optional*, defaults to 2):
-        Stride used when merging high-resolution patch features before projection.
-    """
+    r""" """
 
     sub_configs = {"vision_config": StepRoboticsVisionEncoderConfig, "text_config": Step3p7TextConfig}
     # This loader is a compatibility shim for original Step VL checkpoints
@@ -376,7 +356,6 @@ class Step3p7Config(PreTrainedConfig):
 
     vision_config: dict | StepRoboticsVisionEncoderConfig | None = None
     text_config: dict | Step3p7TextConfig | None = None
-    understand_projector_stride: int = 2
     projector_bias: bool = False
     image_token_id: int = 151679
     tie_word_embeddings: bool = False
