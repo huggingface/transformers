@@ -260,6 +260,7 @@ def test_get_cached_module_file_local_handles_symlinked_hub_cache(monkeypatch, t
     assert (cache_dir / "base.py").exists(), "transitive import must be copied"
     assert (cache_dir / "base.py").read_text(encoding="utf-8") == 'BASE = "transitive"\n'
 
+
 def test_get_cached_module_file_local_cache_key_keeps_hash_stable_with_different_basenames(monkeypatch, tmp_path):
     modules_cache = tmp_path / "hf_modules_cache"
     monkeypatch.setattr(dynamic_module_utils, "HF_MODULES_CACHE", str(modules_cache))
