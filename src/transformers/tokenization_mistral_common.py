@@ -304,6 +304,10 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         )
 
     @property
+    def is_fast(self) -> bool:
+        return False
+
+    @property
     def mode(self) -> ValidationMode:
         """
         `ValidationMode`: The mode used by the tokenizer. Possible values are:
@@ -620,6 +624,9 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         if one_token:
             return ids[0]
         return ids
+
+    def convert_tokens_to_string(self, tokens: list[str]) -> str:
+        return "".join(tokens)
 
     def _text_to_ids(self, text: TextInput, add_special_tokens: bool) -> list[int]:
         """
