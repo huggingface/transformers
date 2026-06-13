@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 import re
 from typing import TYPE_CHECKING
 
@@ -172,25 +173,56 @@ class TorchAoHfQuantizer(HfQuantizer):
 
         return TorchAoQuantize(self)
 
+    def _discover_quantized_param_names(self) -> set[str]:
+        """Extract unique parameter names of quantized params from torchao safetensors metadata.
+
+        The metadata keys are the original fully-qualified parameter names,
+        e.g. "model.layers.0.self_attn.q_proj.weight" or
+            "model.decoder.layers.0.experts.gate_up_proj".
+        Only entries representing tensor subclasses (not plain Tensors) are included.
+        """
+        if not hasattr(self, "metadata") or not self.metadata:
+            return {"weight"}  # conservative fallback
+
+        from torchao.prototype.safetensors.safetensors_utils import is_metadata_torchao
+
+        if not is_metadata_torchao(self.metadata):
+            raise ValueError("Invalid torchao safetensors metadata")
+
+        param_names = set()
+        for meta_key, meta_value in self.metadata.items():
+            if "." not in meta_key:
+                continue
+            try:
+                meta = json.loads(meta_value)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if meta.get("_type") == "Tensor":
+                continue  # skip non-quantized params
+            param_names.add(meta_key.rsplit(".", 1)[-1])
+
+        return param_names or {"weight"}
+
     def get_weight_conversions(self):
         from ..integrations.torchao import TorchAoDeserialize
 
         if self.pre_quantized:
-            return [
-                WeightConverter(
-                    # TODO: incr flexibility by generalizing the source patterns to match the format of "_weight_"
-                    # note that the matching logic is greedy, so for ex, if _weight_scale is before _weight_scale_and_zero in this list, it will match _weight_scale always (this is incorrect)
-                    # thus, the order of source_patterns is intentional
-                    source_patterns=[
-                        "_weight_qdata",
-                        "_weight_scale_and_zero",
-                        "_weight_per_tensor_scale",
-                        "_weight_scale",
-                        "_weight_zero_point",
-                        "_weight_act_pre_scale",
-                    ],
-                    target_patterns="weight",
-                    operations=[TorchAoDeserialize(self)],
-                ),
-            ]
+            param_names = self._discover_quantized_param_names()
+            converters = []
+            for param_name in sorted(param_names):
+                converters.append(
+                    WeightConverter(
+                        source_patterns=[
+                            f"_{param_name}_qdata",
+                            f"_{param_name}_scale_and_zero",
+                            f"_{param_name}_per_tensor_scale",
+                            f"_{param_name}_scale",
+                            f"_{param_name}_zero_point",
+                            f"_{param_name}_act_pre_scale",
+                        ],
+                        target_patterns=param_name,
+                        operations=[TorchAoDeserialize(self)],
+                    ),
+                )
+            return converters
         return []
