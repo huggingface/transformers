@@ -1707,16 +1707,15 @@ class Trainer:
             num_batches = (
                 self.args.gradient_accumulation_steps if update_step != (num_update_steps_per_epoch - 1) else remainder
             )
+            if rng_to_sync:
+                self._load_rng_state(resume_from_checkpoint)
+                rng_to_sync = False
+
             batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches, self.args.device)
 
             # This is used to correctly scale the loss when the last accumulation step has fewer batches.
             # Not used if `num_items_in_batch` is not None.
             self.current_gradient_accumulation_steps = len(batch_samples)
-
-            # need to sync after if we skipped the batches in `get_batch_samples` for shuffle order reason
-            if rng_to_sync:
-                self._load_rng_state(resume_from_checkpoint)
-                rng_to_sync = False
 
             # Inner loop: forward + backward for each micro-batch. Gradients are
             # accumulated without syncing until the last micro-batch, then we clip,
