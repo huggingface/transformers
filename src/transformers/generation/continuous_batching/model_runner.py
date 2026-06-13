@@ -281,7 +281,7 @@ class ModelRunner:
         start = time.perf_counter()
         try:
             self.inputs_and_outputs.prepare_batch_tensors(
-                future_states, self.logit_processor, use_decode_fast_path, padded_q, padded_kv
+                future_states, self.logit_processor, use_decode_fast_path, padded_q, padded_kv, use_padding=True
             )
             batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=True)
             carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
