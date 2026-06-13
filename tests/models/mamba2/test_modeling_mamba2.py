@@ -18,12 +18,13 @@ import unittest
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
+    require_causal_conv1d,
+    require_mamba_2_ssm,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
 )
-from transformers.utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -227,7 +228,7 @@ class Mamba2ModelTester:
         result_chunk = torch.cat([out_first.last_hidden_state, out_rest.last_hidden_state], dim=1)
 
         self.parent.assertTrue(
-            torch.allclose(result_tbt, result_chunk, atol=1e-3, rtol=1e-3),
+            torch.allclose(result_tbt, result_chunk, atol=1e-4, rtol=1e-4),
             msg=f"Max diff: {(result_tbt - result_chunk).abs().max().item():.6f}",
         )
 
@@ -235,10 +236,6 @@ class Mamba2ModelTester:
         model = Mamba2Model(config)
         model.eval()
 
-        if not (is_mamba_2_ssm_available() and is_causal_conv1d_available()):
-            self.parent.skipTest(
-                "This test needs the Mamba2 fast path. Skipping as the necessary packages have not been found."
-            )
         if torch_device != "cuda":
             self.parent.skipTest("This test needs the Mamba2 fast path. Skipping as we need a cuda capable device.")
 
@@ -290,10 +287,9 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.model_tester.create_and_check_mamba2_chunked_prefill(*config_and_inputs)
 
     @require_torch_accelerator
+    @require_mamba_2_ssm
+    @require_causal_conv1d
     def test_mamba2_chunked_prefill_cuda_path(self):
-        if not (is_mamba_2_ssm_available() and is_causal_conv1d_available()):
-            self.skipTest("Requires mamba-ssm and causal-conv1d packages.")
-
         torch.manual_seed(0)
         config = self.model_tester.get_config()
         L = 8
@@ -313,10 +309,12 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         result_chunk = torch.cat([out_first.last_hidden_state, out_rest.last_hidden_state], dim=1)
 
         self.assertTrue(
-            torch.allclose(result_tbt, result_chunk, atol=1e-3, rtol=1e-3),
+            torch.allclose(result_tbt, result_chunk, atol=1e-4, rtol=1e-4),
             msg=f"Max diff: {(result_tbt - result_chunk).abs().max().item():.6f}",
         )
 
+    @require_mamba_2_ssm
+    @require_causal_conv1d
     def test_mamba2_slow_vs_fast_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
