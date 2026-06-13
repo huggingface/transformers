@@ -1356,6 +1356,50 @@ class ModelUtilsTest(TestCasePlus):
             for p1, p2 in zip(model.parameters(), new_model.parameters()):
                 torch.testing.assert_close(p1, p2)
 
+    def test_from_pretrained_does_not_reinit_custom_model_weights(self):
+        # Regression test for #46620: a custom (out-of-tree) `PreTrainedModel` whose `_init_weights` writes
+        # parameters in-place (e.g. `module.weight.data.normal_(...)`, the common downstream pattern) used to have
+        # its loaded weights silently overwritten by `_init_weights` during `from_pretrained`, returning a
+        # randomly-initialized model while `loading_info` still reported a clean load (no missing/unexpected/
+        # mismatched keys, no warning).
+        class CustomModel(PreTrainedModel):
+            base_model_prefix = "custom"
+            config_class = PreTrainedConfig
+
+            def __init__(self, config):
+                super().__init__(config)
+                self.linear = nn.Linear(5, 5)
+                self.post_init()
+
+            def _init_weights(self, module):
+                if isinstance(module, nn.Linear):
+                    module.weight.data.normal_(mean=0.0, std=0.02)
+                    if module.bias is not None:
+                        module.bias.data.zero_()
+
+            def forward(self, x):
+                return self.linear(x)
+
+        model = CustomModel(PreTrainedConfig())
+        with torch.no_grad():
+            for param in model.parameters():
+                param.fill_(0.5)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            reloaded, loading_info = CustomModel.from_pretrained(tmp_dir, output_loading_info=True)
+
+        # The saved weights must survive loading (they used to be overwritten by `_init_weights`).
+        for name, param in reloaded.named_parameters():
+            self.assertTrue(
+                torch.allclose(param, torch.full_like(param, 0.5)),
+                f"`{name}` was re-initialized after loading instead of keeping the saved weights",
+            )
+        # The load was (and stays) clean - this is what made the bug silent.
+        self.assertEqual(len(loading_info["missing_keys"]), 0)
+        self.assertEqual(len(loading_info["unexpected_keys"]), 0)
+        self.assertEqual(len(loading_info["mismatched_keys"]), 0)
+
     def test_safetensors_load_from_hub(self):
         safetensors_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-safetensors")
         pytorch_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")

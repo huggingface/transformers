@@ -2496,18 +2496,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if getattr(module, "_is_hf_initialized", False):
             return
 
-        # This check is for remote code that does NOT use either `torch.init` or `transformers.initialization` in `_init_weights`
-        # which allow to check the flag directly on param. As they don't and write the params in-place, params would be reinitialized
-        # otherwise
-        if (
-            is_remote_code
-            and all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
-            and all(
-                getattr(buffer, "_is_hf_initialized", False)
-                for buffer in module.buffers(recurse=False)
-                if buffer is not None
-            )
-        ):
+        # Backstop for any `_init_weights` (custom/out-of-tree models as well as remote code) that does not go through
+        # `torch.init` or `transformers.initialization`, which check the `_is_hf_initialized` flag directly on the
+        # param/buffer. Such implementations write the params in-place (e.g. `module.weight.data.normal_(...)`), so
+        # already-loaded params would be silently reinitialized otherwise. If this module directly owns params/buffers
+        # and all of them are already initialized, skip re-initialization entirely.
+        # Only modules that directly own params/buffers are eligible: a module owning none (its params live in child
+        # modules) may still initialize those children via parent dispatch in `_init_weights`, so it must not be
+        # skipped here (otherwise e.g. the projections of a `T5`-style attention block would never be initialized).
+        own_tensors = [*module.parameters(recurse=False), *(b for b in module.buffers(recurse=False) if b is not None)]
+        if own_tensors and all(getattr(tensor, "_is_hf_initialized", False) for tensor in own_tensors):
             module._is_hf_initialized = True
             return
 
