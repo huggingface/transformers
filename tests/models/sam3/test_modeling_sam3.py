@@ -275,6 +275,19 @@ class Sam3ModelTester:
 
         return config, pixel_values, input_ids, attention_mask
 
+    def prepare_labels(self):
+        labels = []
+        for _ in range(self.batch_size):
+            num_boxes = 3
+            boxes = torch.rand(num_boxes, 4, device=torch_device)
+            boxes[:, 2:] = boxes[:, :2] + 0.2
+            boxes = torch.clamp(boxes, 0, 1)
+            masks = (torch.rand(num_boxes, self.image_size // 4, self.image_size // 4,
+                                device=torch_device) > 0.5).float()
+            is_valid = torch.ones(num_boxes, dtype=torch.bool, device=torch_device)
+            labels.append({"boxes": boxes, "masks": masks, "is_valid_mask": is_valid})
+        return labels
+
     def get_config(self):
         backbone_config = Sam3ViTConfig(
             hidden_size=self.hidden_size,
@@ -342,6 +355,17 @@ class Sam3ModelTester:
             detr_encoder_config=detr_encoder_config,
             detr_decoder_config=detr_decoder_config,
             mask_decoder_config=mask_decoder_config,
+            auxiliary_loss=False,
+            ce_loss_coefficient=20.0,
+            bbox_loss_coefficient=5.0,
+            giou_loss_coefficient=2.0,
+            mask_loss_coefficient=200.0,
+            dice_loss_coefficient=10.0,
+            ce_pos_weight=10.0,
+            ce_alpha=0.25,
+            ce_gamma=2.0,
+            mask_focal_alpha=0.25,
+            mask_focal_gamma=2.0,
         )
 
     def create_and_check_model(self, config, pixel_values, input_ids, attention_mask):
@@ -717,6 +741,54 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     ):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
+    def test_training(self):
+        """Override: Sam3Model IS in MODEL_MAPPING_NAMES so inherited test_training
+        skips it. Without this, training is never tested on this model."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
+    def test_forward_with_labels(self):
+        """Forward with labels produces loss, loss_dict, and flowing gradients."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            outputs = model(**inputs)
+
+            self.assertIsNotNone(outputs.loss)
+            self.assertIsNotNone(outputs.loss_dict)
+            self.assertIsInstance(outputs.loss, torch.Tensor)
+            self.assertGreater(outputs.loss.item(), 0.0)
+
+            outputs.loss.backward()
+            has_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.parameters())
+            self.assertTrue(has_grad, "No non-zero gradients after backward")
+
+    def test_auxiliary_loss(self):
+        """Aux loss enabled + multilayers produces aux outputs and aux loss keys."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.detr_decoder_config.num_layers = 3
+        config.auxiliary_loss = True
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            outputs = model(**inputs)
+
+            self.assertIsNotNone(outputs.auxiliary_outputs)
+            self.assertEqual(len(outputs.auxiliary_outputs), 2)
+            aux_keys = [k for k in outputs.loss_dict if "aux" in k]
+            self.assertGreater(len(aux_keys), 0)
+
     def test_forward_with_text_embeds(self):
         """Test that text_embeds parameter works correctly."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -963,6 +1035,9 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 inputs_dict["input_ids"] = torch.randint(0, vocab_size, (batch_size, 16), device=torch_device)
             if "attention_mask" not in inputs_dict or inputs_dict.get("attention_mask") is None:
                 inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["input_ids"])
+
+        if return_labels:
+            inputs_dict["labels"] = self.model_tester.prepare_labels()
 
         return inputs_dict
 
