@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ..image_transforms import corners_to_center_format
 from ..utils import is_scipy_available, is_vision_available, requires_backends
 
-from ..image_transforms import corners_to_center_format
+
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
@@ -33,7 +33,8 @@ from .loss_for_object_detection import (
     sigmoid_focal_loss,
 )
 
-#taken from https://github.com/facebookresearch/sam3/blob/main/sam3/train/matcher.py
+
+# taken from https://github.com/facebookresearch/sam3/blob/main/sam3/train/matcher.py
 class Sam3HungarianMatcher(nn.Module):
     """
     This class computes an assignment between the targets and the predictions
@@ -68,28 +69,28 @@ class Sam3HungarianMatcher(nn.Module):
     @torch.no_grad()
     def forward(self, outputs, targets):
         """
-            Args:
-                outputs (`dict`):
-                    A dictionary that contains at least these entries:
-                    * "pred_logits": Tensor of dim [batch_size, num_queries, 1] with the
-                      binary classification logits
-                    * "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the
-                      predicted box coordinates in cxcywh format.
-                targets (`dict`):
-                    A dictionary containing:
-                    * "boxes_padded": Tensor of dim [batch_size, max_gt_boxes, 4] with
-                      ground-truth boxes in cxcywh format, zero-padded for images with
-                      fewer than max_gt_boxes targets.
-                    * "num_boxes": Tensor of dim [batch_size] with the number of
-                      ground-truth boxes per image.
+        Args:
+            outputs (`dict`):
+                A dictionary that contains at least these entries:
+                * "pred_logits": Tensor of dim [batch_size, num_queries, 1] with the
+                  binary classification logits
+                * "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the
+                  predicted box coordinates in cxcywh format.
+            targets (`dict`):
+                A dictionary containing:
+                * "boxes_padded": Tensor of dim [batch_size, max_gt_boxes, 4] with
+                  ground-truth boxes in cxcywh format, zero-padded for images with
+                  fewer than max_gt_boxes targets.
+                * "num_boxes": Tensor of dim [batch_size] with the number of
+                  ground-truth boxes per image.
 
-            Returns:
-                `tuple[Tensor]`: A tuple of three tensors `(batch_idx, src_idx, tgt_idx)` where:
-                - `batch_idx` is the batch index for each matched pair
-                - `src_idx` is the index of the selected prediction query
-                - `tgt_idx` is the index into the packed target tensor `targets["boxes"]`
-                For each batch element, len(matched) = min(num_queries, num_target_boxes).
-            """
+        Returns:
+            `tuple[Tensor]`: A tuple of three tensors `(batch_idx, src_idx, tgt_idx)` where:
+            - `batch_idx` is the batch index for each matched pair
+            - `src_idx` is the index of the selected prediction query
+            - `tgt_idx` is the index into the packed target tensor `targets["boxes"]`
+            For each batch element, len(matched) = min(num_queries, num_target_boxes).
+        """
         out_score = outputs["pred_logits"].squeeze(-1)
         out_bbox = outputs["pred_boxes"]
         tgt_bbox = targets["boxes_padded"]
@@ -118,17 +119,12 @@ class Sam3HungarianMatcher(nn.Module):
         log_out_prob = F.logsigmoid(out_score)
         log_one_minus_out_prob = F.logsigmoid(-out_score)
         cost_class = (
-                -alpha * (1 - out_prob) ** gamma * log_out_prob
-                + (1 - alpha) * out_prob ** gamma * log_one_minus_out_prob
+            -alpha * (1 - out_prob) ** gamma * log_out_prob + (1 - alpha) * out_prob**gamma * log_one_minus_out_prob
         )
         cost_class = cost_class.unsqueeze(-1).expand_as(cost_bbox)
 
         # Final cost matrix
-        cost_matrix = (
-                self.cost_bbox * cost_bbox
-                + self.cost_class * cost_class
-                + self.cost_giou * cost_giou
-        )
+        cost_matrix = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
         cost_matrix = cost_matrix.cpu()
 
         num_boxes = targets["num_boxes"]
@@ -140,10 +136,12 @@ class Sam3HungarianMatcher(nn.Module):
                 src_indices.append((torch.zeros(0, dtype=torch.int64), torch.zeros(0, dtype=torch.int64)))
             else:
                 assignment = linear_sum_assignment(c[:, :n_targets].numpy())
-                src_indices.append((
-                    torch.as_tensor(assignment[0], dtype=torch.int64),
-                    torch.as_tensor(assignment[1], dtype=torch.int64),
-                ))
+                src_indices.append(
+                    (
+                        torch.as_tensor(assignment[0], dtype=torch.int64),
+                        torch.as_tensor(assignment[1], dtype=torch.int64),
+                    )
+                )
 
         tgt_parts, offset = [], 0
         for i, (_, tgt) in enumerate(src_indices):
@@ -158,12 +156,14 @@ class Sam3HungarianMatcher(nn.Module):
 
         return batch_idx, src_idx, tgt_idx
 
+
 class Sam3Loss(nn.Module):
     """
     This class computes the losses for Sam3Model. The process happens in two steps:
         1) we compute Hungarian assignment between ground truth boxes and the outputs of the model
         2) we supervise each pair of matched ground-truth / prediction (supervise class, boxes, and masks).
     """
+
     def __init__(self, config):
         super().__init__()
         self.matcher = Sam3HungarianMatcher()
@@ -238,7 +238,7 @@ class Sam3Loss(nn.Module):
         offset = 0
         for i, n in enumerate(num_boxes):
             if n > 0:
-                boxes_padded[i, :n] = boxes_cxcywh[offset:offset + n]
+                boxes_padded[i, :n] = boxes_cxcywh[offset : offset + n]
                 offset += n
 
         masks_packed = None
@@ -266,14 +266,10 @@ class Sam3Loss(nn.Module):
         prob = src_logits.sigmoid()
 
         with torch.no_grad():
-            target_classes = torch.zeros(
-                src_logits.shape[:2], dtype=torch.float, device=src_logits.device
-            )
+            target_classes = torch.zeros(src_logits.shape[:2], dtype=torch.float, device=src_logits.device)
             target_classes[(indices[0], indices[1])] = 1
 
-            src_boxes_xyxy = center_to_corners_format(
-                outputs["pred_boxes"][(indices[0], indices[1])]
-            )
+            src_boxes_xyxy = center_to_corners_format(outputs["pred_boxes"][(indices[0], indices[1])])
             target_boxes_xyxy = targets["boxes_xyxy"][indices[2]]
             iou_mat, _ = box_iou(src_boxes_xyxy, target_boxes_xyxy)
             iou = torch.diag(iou_mat)
@@ -284,15 +280,13 @@ class Sam3Loss(nn.Module):
             positive_target[(indices[0], indices[1])] = t
 
         # Positive loss: BCE with IoU-adaptive target, weighted by pos_weight
-        loss_bce = F.binary_cross_entropy_with_logits(
-            src_logits, positive_target, reduction="none"
-        )
+        loss_bce = F.binary_cross_entropy_with_logits(src_logits, positive_target, reduction="none")
         loss_bce = loss_bce * target_classes * self.ce_pos_weight
 
         # Negative loss: BCE with focal weight prob^gamma
-        loss_bce = loss_bce + F.binary_cross_entropy_with_logits(
-            src_logits, target_classes, reduction="none"
-        ) * (1 - target_classes) * (prob ** self.ce_gamma)
+        loss_bce = loss_bce + F.binary_cross_entropy_with_logits(src_logits, target_classes, reduction="none") * (
+            1 - target_classes
+        ) * (prob**self.ce_gamma)
 
         loss_bce = loss_bce.mean()
         return {"loss_ce": loss_bce}
@@ -310,9 +304,7 @@ class Sam3Loss(nn.Module):
         src_boxes_xyxy = center_to_corners_format(src_boxes)
         target_boxes_xyxy = targets["boxes_xyxy"][indices[2]]
 
-        loss_giou = 1 - torch.diag(
-            generalized_box_iou(src_boxes_xyxy, target_boxes_xyxy)
-        )
+        loss_giou = 1 - torch.diag(generalized_box_iou(src_boxes_xyxy, target_boxes_xyxy))
 
         return {
             "loss_bbox": loss_bbox.sum() / num_boxes,
@@ -366,8 +358,11 @@ class Sam3Loss(nn.Module):
 
         return {
             "loss_mask": sigmoid_focal_loss(
-                src_masks, target_masks, num_boxes,
-                alpha=self.mask_focal_alpha, gamma=self.mask_focal_gamma,
+                src_masks,
+                target_masks,
+                num_boxes,
+                alpha=self.mask_focal_alpha,
+                gamma=self.mask_focal_gamma,
             ),
             "loss_dice": dice_loss(src_masks, target_masks, num_boxes),
         }

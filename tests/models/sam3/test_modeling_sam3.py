@@ -282,8 +282,9 @@ class Sam3ModelTester:
             boxes = torch.rand(num_boxes, 4, device=torch_device)
             boxes[:, 2:] = boxes[:, :2] + 0.2
             boxes = torch.clamp(boxes, 0, 1)
-            masks = (torch.rand(num_boxes, self.image_size // 4, self.image_size // 4,
-                                device=torch_device) > 0.5).float()
+            masks = (
+                torch.rand(num_boxes, self.image_size // 4, self.image_size // 4, device=torch_device) > 0.5
+            ).float()
             is_valid = torch.ones(num_boxes, dtype=torch.bool, device=torch_device)
             labels.append({"boxes": boxes, "masks": masks, "is_valid_mask": is_valid})
         return labels

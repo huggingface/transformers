@@ -22,8 +22,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from ...utils import is_torchvision_available
 from ...loss.loss_sam3 import Sam3Loss
+from ...utils import is_torchvision_available
 
 
 if is_torchvision_available():
@@ -2472,7 +2472,6 @@ class Sam3Model(Sam3PreTrainedModel):
                 },
                 targets=labels,
             )
-
 
         return Sam3ImageSegmentationOutput(
             pred_masks=mask_outputs.pred_masks,
