@@ -2516,7 +2516,6 @@ class Sam3Model(Sam3PreTrainedModel):
                 targets=labels,
             )
 
-
         return Sam3ImageSegmentationOutput(
             pred_masks=mask_outputs.pred_masks,
             pred_boxes=pred_boxes,
