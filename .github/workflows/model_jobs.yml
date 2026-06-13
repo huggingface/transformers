@@ -110,19 +110,19 @@ jobs:
           python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
 
-#      - name: Install torch 2.13 Nightly
-#        working-directory: /transformers
-#        run: |
-#          python3 -m pip uninstall -y torch torchvision torchaudio torchcodec
-#          python3 -m pip install --no-cache-dir "torchcodec==0.15.0.dev20260606" --index-url https://download.pytorch.org/whl/nightly/cpu
-#          python3 -m pip install --no-cache-dir "torch==2.13.0.dev20260606" "torchvision==0.28.0.dev20260606" "torchaudio==2.11.0.dev20260606" --index-url https://download.pytorch.org/whl/nightly/cu126
-
-      - name: Install torch 2.13 RC
+      - name: Install torch 2.12 Stable
         working-directory: /transformers
         run: |
           python3 -m pip uninstall -y torch torchvision torchaudio torchcodec
-          python3 -m pip install --no-cache-dir "torchcodec" --index-url https://download.pytorch.org/whl/test/cpu
-          python3 -m pip install --no-cache-dir "torch" "torchvision" "torchaudio" --index-url https://download.pytorch.org/whl/test/cu126
+          python3 -m pip install --no-cache-dir "torchcodec" --index-url https://download.pytorch.org/whl/cpu
+          python3 -m pip install --no-cache-dir "torch" "torchvision" "torchaudio" --index-url https://download.pytorch.org/whl/cu126
+
+#      - name: Install torch 2.13 RC
+#        working-directory: /transformers
+#        run: |
+#          python3 -m pip uninstall -y torch torchvision torchaudio torchcodec
+#          python3 -m pip install --no-cache-dir "torchcodec" --index-url https://download.pytorch.org/whl/test/cpu
+#          python3 -m pip install --no-cache-dir "torch" "torchvision" "torchaudio" --index-url https://download.pytorch.org/whl/test/cu126
 
 
       - name: NVIDIA-SMI
