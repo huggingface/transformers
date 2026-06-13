@@ -229,6 +229,21 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(text_en, "h ə l oʊ h aʊ ɑːɹ j uː")
         self.assertEqual(text_fr, "ɛ l o h aʊ a ʁ j u")
 
+    def test_phonemize_lang_switch_roundtrip(self):
+        # Regression for: phonemize() failed to update self.phonemizer_lang after switching
+        # backends, so a subsequent call with the original lang skipped re-init and returned
+        # phonemes from the most recently cached backend (issue #46614).
+        tokenizer = self.tokenizer_class.from_pretrained(
+            "facebook/wav2vec2-lv-60-espeak-cv-ft", word_delimiter_token=None
+        )
+        input_text = "hello"
+
+        first = tokenizer.phonemize(input_text, phonemizer_lang="en-us")
+        tokenizer.phonemize(input_text, phonemizer_lang="fr-fr")
+        after_switch = tokenizer.phonemize(input_text, phonemizer_lang="en-us")
+
+        self.assertEqual(first, after_switch)
+
     def test_case_insensitive(self):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
         input_text_up = "Hello how Are you"
