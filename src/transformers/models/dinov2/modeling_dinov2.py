@@ -486,6 +486,7 @@ class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
     def forward(
         self,
         pixel_values: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
         r"""
@@ -517,7 +518,12 @@ class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
         kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.projection.weight.dtype)
         embedding_output = self.embeddings(pixel_values)
-        output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
+        output: BaseModelOutput = self.encoder(embedding_output, attention_mask=attention_mask, **kwargs)
         hidden_states = output.hidden_states
 
         feature_maps = ()
@@ -530,8 +536,14 @@ class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
                     # this was actually a bug in the original implementation that we copied here,
                     # cause normally the order is height, width
                     batch_size, _, height, width = pixel_values.shape
-                    patch_size = self.config.patch_size
-                    hidden_state = hidden_state.reshape(batch_size, height // patch_size, width // patch_size, -1)
+                    patch_size = (
+                        self.config.patch_size
+                        if isinstance(self.config.patch_size, Iterable)
+                        else (self.config.patch_size, self.config.patch_size)
+                    )
+                    hidden_state = hidden_state.reshape(
+                        batch_size, height // patch_size[0], width // patch_size[1], -1
+                    )
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps += (hidden_state,)
 

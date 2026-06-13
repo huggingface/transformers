@@ -97,8 +97,13 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         patch_pos_embed = self.position_embeddings[:, 1:]
         dim = embeddings.shape[-1]
 
-        height = height // self.config.patch_size
-        width = width // self.config.patch_size
+        patch_size = (
+            self.config.patch_size
+            if isinstance(self.config.patch_size, Iterable)
+            else (self.config.patch_size, self.config.patch_size)
+        )
+        height = height // patch_size[0]
+        width = width // patch_size[1]
 
         sqrt_num_positions = torch_int(num_positions**0.5)
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
@@ -496,6 +501,7 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
     def forward(
         self,
         pixel_values: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
         r"""
@@ -526,7 +532,12 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
         ```"""
         kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
         embedding_output = self.embeddings(pixel_values)
-        output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
+        output: BaseModelOutput = self.encoder(embedding_output, attention_mask=attention_mask, **kwargs)
         hidden_states = output.hidden_states
 
         feature_maps = ()
@@ -539,8 +550,14 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
                     # this was actually a bug in the original implementation that we copied here,
                     # cause normally the order is height, width
                     batch_size, _, height, width = pixel_values.shape
-                    patch_size = self.config.patch_size
-                    hidden_state = hidden_state.reshape(batch_size, height // patch_size, width // patch_size, -1)
+                    patch_size = (
+                        self.config.patch_size
+                        if isinstance(self.config.patch_size, Iterable)
+                        else (self.config.patch_size, self.config.patch_size)
+                    )
+                    hidden_state = hidden_state.reshape(
+                        batch_size, height // patch_size[0], width // patch_size[1], -1
+                    )
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps += (hidden_state,)
 

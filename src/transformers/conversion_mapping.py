@@ -129,6 +129,8 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "ViTMAEModel": "ViTModel",
     "ViTMSNModel": "ViTModel",
     "VivitModel": "ViTModel",
+    "Dinov2Backbone": "Dinov2Model",
+    "Dinov2WithRegistersBackbone": "Dinov2WithRegistersModel",
 }
 
 
