@@ -373,4 +373,4 @@ Per altri esempi sul fine-tuning, fai riferimento a:
 
 - [🤗 Transformers Examples](https://github.com/huggingface/transformers/tree/main/examples) include scripts per addestrare compiti comuni di NLP in PyTorch e TensorFlow.
 
-- [🤗 Transformers Notebooks](notebooks) contiene diversi notebooks su come mettere a punto un modello per compiti specifici in PyTorch e TensorFlow.
+- [🤗 Transformers Notebooks](https://github.com/huggingface/notebooks) contiene diversi notebooks su come mettere a punto un modello per compiti specifici in PyTorch e TensorFlow.

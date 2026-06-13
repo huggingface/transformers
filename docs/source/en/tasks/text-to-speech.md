@@ -282,10 +282,10 @@ containing the corresponding speaker embedding.
 >>> import os
 >>> import torch
 >>> from speechbrain.inference.classifiers import EncoderClassifier
->>> from accelerate.test_utils.testing import get_backend
+>>> from transformers import infer_device
 
 >>> spk_model_name = "speechbrain/spkrec-xvect-voxceleb"
->>> device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
+>>> device = infer_device()
 >>> speaker_model = EncoderClassifier.from_hparams(
 ...     source=spk_model_name,
 ...     run_opts={"device": device},
@@ -408,7 +408,7 @@ instructs the model to ignore that part of the spectrogram when calculating the 
 ... class TTSDataCollatorWithPadding:
 ...     processor: Any
 
-...     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+...     def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
 ...         input_ids = [{"input_ids": feature["input_ids"]} for feature in features]
 ...         label_features = [{"input_values": feature["labels"]} for feature in features]
 ...         speaker_features = [feature["speaker_embeddings"] for feature in features]

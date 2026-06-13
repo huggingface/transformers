@@ -35,7 +35,7 @@ class ReformerConfig(PretrainedConfig):
     Args:
         attention_head_size (`int`, *optional*, defaults to 64):
             Dimensionality of the projected key, query and value vectors
-        attn_layers (`List[str]`, *optional*, defaults to `["local", "lsh", "local", "lsh", "local", "lsh"]`):
+        attn_layers (`list[str]`, *optional*, defaults to `["local", "lsh", "local", "lsh", "local", "lsh"]`):
             List of attention layer types in ascending order. It can be chosen between a LSHSelfAttention layer
             (`"lsh"`) and a LocalSelfAttention layer (`"local"`).
 
@@ -47,13 +47,13 @@ class ReformerConfig(PretrainedConfig):
         axial_norm_std (`float`, *optional*, defaults to 1.0):
             The standard deviation of the normal_initializer for initializing the weight matrices of the axial
             positional encodings.
-        axial_pos_shape (`List[int]`, *optional*, defaults to `[64, 64]`):
+        axial_pos_shape (`list[int]`, *optional*, defaults to `[64, 64]`):
             The position dims of the axial position encodings. During training, the product of the position dims has to
             be equal to the sequence length.
 
             For more information on how axial position embeddings work, see [Axial Position
             Encodings](reformer#axial-positional-encodings).
-        axial_pos_embds_dim (`List[int]`, *optional*, defaults to `[64, 192]`):
+        axial_pos_embds_dim (`list[int]`, *optional*, defaults to `[64, 192]`):
             The embedding dims of the axial position encodings. The sum of the embedding dims has to be equal to the
             hidden size.
 
@@ -113,7 +113,7 @@ class ReformerConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_buckets (`int` or `List[int]`, *optional*):
+        num_buckets (`int` or `list[int]`, *optional*):
             Number of buckets, the key query vectors can be "hashed into" using the locality sensitive hashing scheme.
             Each query key vector is hashed into a hash in `1, ..., num_buckets`. The number of buckets can also be
             factorized into a list for improved memory complexity. In this case, each query key vector is hashed into a

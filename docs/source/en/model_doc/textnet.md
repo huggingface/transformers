@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-11-03 and added to Hugging Face Transformers on 2025-01-08.*
 
 # TextNet
 
@@ -22,18 +23,18 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The TextNet model was proposed in [FAST: Faster Arbitrarily-Shaped Text Detector with Minimalist Kernel Representation](https://arxiv.org/abs/2111.02394) by Zhe Chen, Jiahao Wang, Wenhai Wang, Guo Chen, Enze Xie, Ping Luo, Tong Lu. TextNet is a vision backbone useful for text detection tasks. It is the result of neural architecture search (NAS) on backbones with reward function as text detection task (to provide powerful features for text detection).
+The TextNet model was proposed in [FAST: Faster Arbitrarily-Shaped Text Detector with Minimalist Kernel Representation](https://huggingface.co/papers/2111.02394) by Zhe Chen, Jiahao Wang, Wenhai Wang, Guo Chen, Enze Xie, Ping Luo, Tong Lu. TextNet is a vision backbone useful for text detection tasks. It is the result of neural architecture search (NAS) on backbones with reward function as text detection task (to provide powerful features for text detection).
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/fast_architecture.png"
 alt="drawing" width="600"/>
 
-<small> TextNet backbone as part of FAST. Taken from the <a href="https://arxiv.org/abs/2111.02394">original paper.</a> </small>
+<small> TextNet backbone as part of FAST. Taken from the <a href="https://huggingface.co/papers/2111.02394">original paper.</a> </small>
 
 This model was contributed by [Raghavan](https://huggingface.co/Raghavan), [jadechoghari](https://huggingface.co/jadechoghari) and [nielsr](https://huggingface.co/nielsr).
 
 ## Usage tips
 
-TextNet is mainly used as a backbone network for the architecture search of text detection. Each stage of the backbone network is comprised of a stride-2 convolution and searchable blocks. 
+TextNet is mainly used as a backbone network for the architecture search of text detection. Each stage of the backbone network is comprised of a stride-2 convolution and searchable blocks.
 Specifically, we present a layer-level candidate set, defined as {conv3×3, conv1×3, conv3×1, identity}. As the 1×3 and 3×1 convolutions have asymmetric kernels and oriented structure priors, they may help to capture the features of extreme aspect-ratio and rotated text lines.
 
 TextNet is the backbone for Fast, but can also be used as an efficient text/image classification, we add a `TextNetForImageClassification` as is it would allow people to train an image classifier on top of the pre-trained textnet weights
@@ -47,6 +48,11 @@ TextNet is the backbone for Fast, but can also be used as an efficient text/imag
 [[autodoc]] TextNetImageProcessor
     - preprocess
 
+## TextNetImageProcessorFast
+
+[[autodoc]] TextNetImageProcessorFast
+    - preprocess
+
 ## TextNetModel
 
 [[autodoc]] TextNetModel
@@ -56,4 +62,3 @@ TextNet is the backbone for Fast, but can also be used as an efficient text/imag
 
 [[autodoc]] TextNetForImageClassification
     - forward
-

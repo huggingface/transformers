@@ -18,8 +18,6 @@
 
 from __future__ import annotations
 
-from typing import Dict, Optional, Tuple, Union
-
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
@@ -61,7 +59,7 @@ _IMAGE_CLASS_CHECKPOINT = "apple/mobilevit-small"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
+def make_divisible(value: int, divisor: int = 8, min_value: int | None = None) -> int:
     """
     Ensure that all layers have a channel count that is divisible by `divisor`. This function is taken from the
     original TensorFlow repo. It can be seen here:
@@ -88,7 +86,7 @@ class TFMobileViTConvLayer(keras.layers.Layer):
         bias: bool = False,
         dilation: int = 1,
         use_normalization: bool = True,
-        use_activation: Union[bool, str] = True,
+        use_activation: bool | str = True,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -155,7 +153,7 @@ class TFMobileViTConvLayer(keras.layers.Layer):
 
 class TFMobileViTInvertedResidual(keras.layers.Layer):
     """
-    Inverted residual block (MobileNetv2): https://arxiv.org/abs/1801.04381
+    Inverted residual block (MobileNetv2): https://huggingface.co/papers/1801.04381
     """
 
     def __init__(
@@ -487,7 +485,7 @@ class TFMobileViTTransformer(keras.layers.Layer):
 
 class TFMobileViTLayer(keras.layers.Layer):
     """
-    MobileViT block: https://arxiv.org/abs/2110.02178
+    MobileViT block: https://huggingface.co/papers/2110.02178
     """
 
     def __init__(
@@ -555,7 +553,7 @@ class TFMobileViTLayer(keras.layers.Layer):
         )
         self.hidden_size = hidden_size
 
-    def unfolding(self, features: tf.Tensor) -> Tuple[tf.Tensor, Dict]:
+    def unfolding(self, features: tf.Tensor) -> tuple[tf.Tensor, dict]:
         patch_width, patch_height = self.patch_width, self.patch_height
         patch_area = tf.cast(patch_width * patch_height, "int32")
 
@@ -599,7 +597,7 @@ class TFMobileViTLayer(keras.layers.Layer):
         }
         return patches, info_dict
 
-    def folding(self, patches: tf.Tensor, info_dict: Dict) -> tf.Tensor:
+    def folding(self, patches: tf.Tensor, info_dict: dict) -> tf.Tensor:
         patch_width, patch_height = self.patch_width, self.patch_height
         patch_area = int(patch_width * patch_height)
 
@@ -764,7 +762,7 @@ class TFMobileViTEncoder(keras.layers.Layer):
         output_hidden_states: bool = False,
         return_dict: bool = True,
         training: bool = False,
-    ) -> Union[tuple, TFBaseModelOutput]:
+    ) -> tuple | TFBaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.layers):
@@ -830,10 +828,10 @@ class TFMobileViTMainLayer(keras.layers.Layer):
     def call(
         self,
         pixel_values: tf.Tensor | None = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutputWithPooling]:
+    ) -> tuple[tf.Tensor] | TFBaseModelOutputWithPooling:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -871,7 +869,7 @@ class TFMobileViTMainLayer(keras.layers.Layer):
             if not self.expand_output:
                 remaining_encoder_outputs = encoder_outputs[1:]
                 remaining_encoder_outputs = tuple(
-                    [tf.transpose(h, perm=(0, 3, 1, 2)) for h in remaining_encoder_outputs[0]]
+                    tf.transpose(h, perm=(0, 3, 1, 2)) for h in remaining_encoder_outputs[0]
                 )
                 remaining_encoder_outputs = (remaining_encoder_outputs,)
                 return output + remaining_encoder_outputs
@@ -880,7 +878,7 @@ class TFMobileViTMainLayer(keras.layers.Layer):
 
         # Change the other hidden state outputs to NCHW as well
         if output_hidden_states:
-            hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1]])
+            hidden_states = tuple(tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1])
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -960,7 +958,7 @@ MOBILEVIT_START_DOCSTRING = r"""
 
 MOBILEVIT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]`, `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`np.ndarray`, `tf.Tensor`, `list[tf.Tensor]`, `dict[str, tf.Tensor]` or `dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`MobileViTImageProcessor.__call__`] for details.
 
@@ -998,10 +996,10 @@ class TFMobileViTModel(TFMobileViTPreTrainedModel):
     def call(
         self,
         pixel_values: tf.Tensor | None = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutputWithPooling]:
+    ) -> tuple[tf.Tensor] | TFBaseModelOutputWithPooling:
         output = self.mobilevit(pixel_values, output_hidden_states, return_dict, training=training)
         return output
 
@@ -1046,11 +1044,11 @@ class TFMobileViTForImageClassification(TFMobileViTPreTrainedModel, TFSequenceCl
     def call(
         self,
         pixel_values: tf.Tensor | None = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
         labels: tf.Tensor | None = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[tuple, TFImageClassifierOutputWithNoAttention]:
+        return_dict: bool | None = None,
+        training: bool | None = False,
+    ) -> tuple | TFImageClassifierOutputWithNoAttention:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -1125,7 +1123,7 @@ class TFMobileViTASPPPooling(keras.layers.Layer):
 
 class TFMobileViTASPP(keras.layers.Layer):
     """
-    ASPP module defined in DeepLab papers: https://arxiv.org/abs/1606.00915, https://arxiv.org/abs/1706.05587
+    ASPP module defined in DeepLab papers: https://huggingface.co/papers/1606.00915, https://huggingface.co/papers/1706.05587
     """
 
     def __init__(self, config: MobileViTConfig, **kwargs) -> None:
@@ -1208,7 +1206,7 @@ class TFMobileViTASPP(keras.layers.Layer):
 
 class TFMobileViTDeepLabV3(keras.layers.Layer):
     """
-    DeepLabv3 architecture: https://arxiv.org/abs/1706.05587
+    DeepLabv3 architecture: https://huggingface.co/papers/1706.05587
     """
 
     def __init__(self, config: MobileViTConfig, **kwargs) -> None:
@@ -1287,10 +1285,10 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
         self,
         pixel_values: tf.Tensor | None = None,
         labels: tf.Tensor | None = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[tuple, TFSemanticSegmenterOutputWithNoAttention]:
+    ) -> tuple | TFSemanticSegmenterOutputWithNoAttention:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,

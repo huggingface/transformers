@@ -26,7 +26,7 @@ Try prompting a LLM to classify some text. When you create a prompt, it's import
 from transformers import pipeline
 import torch
 
-pipeline = pipeline(task="text-generation", model="mistralai/Mistal-7B-Instruct-v0.1", torch_dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(task="text-generation", model="mistralai/Mistal-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
 prompt = """Classify the text into neutral, negative or positive.
 Text: This movie is definitely one of my favorite movies of its kind. The interaction between respectable and morally strong characters is an ode to chivalry and the honor code amongst thieves and policemen.
 Sentiment:
@@ -78,32 +78,61 @@ Crafting a good prompt alone, also known as zero-shot prompting, may not be enou
 
 This section covers a few prompting techniques.
 
-### Few-shot
+### Few-shot prompting
 
-Few-shot prompting improves accuracy and performance by including specific examples of what a model should generate given an input. The explicit examples give the model a better understanding of the task and the output format you're looking for. Try experimenting with different numbers of examples (2, 4, 8, etc.) to see how it affects performance.
+Few-shot prompting improves accuracy and performance by including specific examples of what a model should generate given an input. The explicit examples give the model a better understanding of the task and the output format you're looking for. Try experimenting with different numbers of examples (2, 4, 8, etc.) to see how it affects performance. The example below provides the model with 1 example (1-shot) of the output format (a date in MM/DD/YYYY format) it should return.
 
-The example below provides the model with 1 example (1-shot) of the output format (a date in MM/DD/YYYY format) it should return.
-
-```py
+```python
 from transformers import pipeline
 import torch
 
-pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", torch_dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
 prompt = """Text: The first human went into space and orbited the Earth on April 12, 1961.
 Date: 04/12/1961
-Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon. 
+Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon.
 Date:"""
 
 outputs = pipeline(prompt, max_new_tokens=12, do_sample=True, top_k=10)
 for output in outputs:
     print(f"Result: {output['generated_text']}")
-Result: Text: The first human went into space and orbited the Earth on April 12, 1961.
-Date: 04/12/1961
-Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon. 
-Date: 09/28/1960
+# Result: Text: The first human went into space and orbited the Earth on April 12, 1961.
+# Date: 04/12/1961
+# Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon.
+# Date: 09/28/1960
 ```
 
-The downside of few-shot prompting is that you need to create lengthier prompts which increases computation and latency. There is also a limit to prompt lengths. Finally, a model can learn unintended patterns from your examples and it doesn't work well on complex reasoning tasks.
+The downside of few-shot prompting is that you need to create lengthier prompts which increases computation and latency. There is also a limit to prompt lengths. Finally, a model can learn unintended patterns from your examples, and it may not work well on complex reasoning tasks.
+
+To improve few-shot prompting for modern instruction-tuned LLMs, use a model's specific [chat template](../conversations). These models are trained on datasets with turn-based conversations between a "user" and "assistant". Structuring your prompt to align with this can improve performance.
+
+Structure your prompt as a turn-based conversation and use the [`apply_chat_template`] method to tokenize and format it.
+
+```python
+from transformers import pipeline
+import torch
+
+pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
+
+messages = [
+    {"role": "user", "content": "Text: The first human went into space and orbited the Earth on April 12, 1961."},
+    {"role": "assistant", "content": "Date: 04/12/1961"},
+    {"role": "user", "content": "Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon."}
+]
+
+prompt = pipeline.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+
+outputs = pipeline(prompt, max_new_tokens=12, do_sample=True, top_k=10)
+
+for output in outputs:
+    print(f"Result: {output['generated_text']}")
+```
+
+While the basic few-shot prompting approach embedded examples within a single text string, the chat template format offers the following benefits.
+
+- The model may have a potentially improved understanding because it can better recognize the pattern and the expected roles of user input and assistant output.
+- The model may more consistently output the desired output format because it is structured like its input during training.
+
+Always consult a specific instruction-tuned model's documentation to learn more about the format of their chat template so that you can structure your few-shot prompts accordingly.
 
 ### Chain-of-thought
 
@@ -115,7 +144,7 @@ The example below provides the model with several prompts to work through interm
 from transformers import pipeline
 import torch
 
-pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", torch_dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
 prompt = """Let's go through this step-by-step:
 1. You start with 15 muffins.
 2. You eat 2 muffins, leaving you with 13 muffins.
@@ -163,7 +192,7 @@ The examples below demonstrate prompting a LLM for different tasks.
 from transformers import pipeline
 import torch
 
-pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", torch_dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
 prompt = """Return a list of named entities in the text.
 Text: The company was founded in 2016 by French entrepreneurs Clément Delangue, Julien Chaumond, and Thomas Wolf in New York City, originally as a company that developed a chatbot app targeted at teenagers.
 Named entities:
@@ -182,7 +211,7 @@ Result:  [Clément Delangue, Julien Chaumond, Thomas Wolf, company, New York Cit
 from transformers import pipeline
 import torch
 
-pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", torch_dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
 prompt = """Translate the English text to French.
 Text: Sometimes, I've believed as many as six impossible things before breakfast.
 Translation:
@@ -201,7 +230,7 @@ Result: À l'occasion, j'ai croyu plus de six choses impossibles
 from transformers import pipeline
 import torch
 
-pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", torch_dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
 prompt = """Permaculture is a design process mimicking the diversity, functionality and resilience of natural ecosystems. The principles and practices are drawn from traditional ecological knowledge of indigenous cultures combined with modern scientific understanding and technological innovations. Permaculture design provides a framework helping individuals and communities develop innovative, creative and effective strategies for meeting basic needs while preparing for and mitigating the projected impacts of climate change.
 Write a summary of the above text.
 Summary:
@@ -220,7 +249,7 @@ Result: Permaculture is the design process that involves mimicking natural ecosy
 from transformers import pipeline
 import torch
 
-pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", torch_dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
 prompt = """Answer the question using the context below.
 Context: Gazpacho is a cold soup and drink made of raw, blended vegetables. Most gazpacho includes stale bread, tomato, cucumbers, onion, bell peppers, garlic, olive oil, wine vinegar, water, and salt. Northern recipes often include cumin and/or pimentón (smoked sweet paprika). Traditionally, gazpacho was made by pounding the vegetables in a mortar with a pestle; this more laborious method is still sometimes used as it helps keep the gazpacho cool and avoids the foam and silky consistency of smoothie versions made in blenders or food processors.
 Question: What modern tool is used to make gazpacho?

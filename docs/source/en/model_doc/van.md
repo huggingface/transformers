@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-02-20 and added to Hugging Face Transformers on 2023-06-20.*
 
 # VAN
 
@@ -31,7 +32,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 ## Overview
 
-The VAN model was proposed in [Visual Attention Network](https://arxiv.org/abs/2202.09741) by Meng-Hao Guo, Cheng-Ze Lu, Zheng-Ning Liu, Ming-Ming Cheng, Shi-Min Hu.
+The VAN model was proposed in [Visual Attention Network](https://huggingface.co/papers/2202.09741) by Meng-Hao Guo, Cheng-Ze Lu, Zheng-Ning Liu, Ming-Ming Cheng, Shi-Min Hu.
 
 This paper introduces a new attention layer based on convolution operations able to capture both local and distant relationships. This is done by combining normal and large kernel convolution layers. The latter uses a dilated convolution to capture distant correlations.
 
@@ -43,7 +44,7 @@ Tips:
 
 - VAN does not have an embedding layer, thus the `hidden_states` will have a length equal to the number of stages.
 
-The figure below illustrates the architecture of a Visual Attention Layer. Taken from the [original paper](https://arxiv.org/abs/2202.09741).
+The figure below illustrates the architecture of a Visual Attention Layer. Taken from the [original paper](https://huggingface.co/papers/2202.09741).
 
 <img width="600" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/van_architecture.png"/>
 
@@ -73,4 +74,3 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] VanForImageClassification
     - forward
-

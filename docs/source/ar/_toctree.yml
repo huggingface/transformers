@@ -23,8 +23,6 @@
     title: تحميل النماذج المخصصة وتدريبها باستخدام 🤗 PEFT
   - local: model_sharing
     title: مشاركة نموذجك
-  - local: agents
-    title: الوكلاء
   - local: llm_tutorial
     title: التوليد باستخدام LLMs
   - local: conversations
@@ -252,8 +250,6 @@
   title: أطر مفاهيمية
 # - sections:
 #   - sections:
-#     - local: main_classes/agent
-#       title: الوكلاء والأدوات
 #     - local: model_doc/auto
 #       title: فئات يتم إنشاؤها ديناميكيًا
 #     - local: main_classes/backbones

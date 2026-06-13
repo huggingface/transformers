@@ -17,7 +17,7 @@
 import math
 import random
 from functools import partial
-from typing import Optional, Tuple
+from typing import Optional
 
 import flax.linen as nn
 import jax
@@ -101,10 +101,12 @@ WHISPER_INPUTS_DOCSTRING = r"""
     Args:
         input_features (`numpy.ndarray` of shape `(batch_size, feature_size, sequence_length)`):
             Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
-            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`WhisperFeatureExtractor`] should be used for extracting the features, padding and conversion into a
-            tensor of type `numpy.ndarray`. See [`~WhisperFeatureExtractor.__call__`]
+            loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a
+            `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or the soundfile library
+            (`pip install soundfile`).
+            To prepare the array into `input_features`, the [`WhisperFeatureExtractor`] should be used for extracting
+            the features, padding and conversion into a tensor of type `numpy.ndarray`.
+            See [`~WhisperFeatureExtractor.__call__`]
         attention_mask (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Whisper does not support masking of the `input_features`, this argument is preserved for compatibility, but
             is not used. By default the silence in the input log mel spectrogram are ignored.
@@ -116,7 +118,7 @@ WHISPER_INPUTS_DOCSTRING = r"""
         decoder_attention_mask (`numpy.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default. If you want to change padding behavior, you should modify to your needs. See diagram 1
-            in [the paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+            in [the paper](https://huggingface.co/papers/1910.13461) for more information on the default strategy.
         position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Whisper does not use `position_ids` in the encoder as `input_features` is always the same size and doesn't
             use masking, but this argument is preserved for compatibility. By default the silence in the input log mel
@@ -138,10 +140,11 @@ WHISPER_ENCODE_INPUTS_DOCSTRING = r"""
     Args:
         input_features (`numpy.ndarray` of shape `(batch_size, feature_size, sequence_length)`):
             Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
-            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`WhisperFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-            tensor of type `numpy.ndarray`. See [`~WhisperFeatureExtractor.__call__`].
+            loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via
+            the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into `input_features`, the [`WhisperFeatureExtractor`] should be used for extracting
+            the mel features, padding and conversion into a tensor of type `numpy.ndarray`.
+            See [`~WhisperFeatureExtractor.__call__`].
         attention_mask (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Whisper does not support masking of the `input_features`, this argument is preserved for compatibility, but
             is not used. By default the silence in the input log mel spectrogram are ignored.
@@ -171,11 +174,11 @@ WHISPER_DECODE_INPUTS_DOCSTRING = r"""
         decoder_attention_mask (`numpy.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default. If you want to change padding behavior, you should modify to your needs. See diagram 1
-            in [the paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+            in [the paper](https://huggingface.co/papers/1910.13461) for more information on the default strategy.
         decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
             range `[0, config.max_position_embeddings - 1]`.
-        past_key_values (`Dict[str, numpy.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
+        past_key_values (`dict[str, numpy.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
             Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
             auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
         output_attentions (`bool`, *optional*):
@@ -230,7 +233,7 @@ class FlaxWhisperAttention(nn.Module):
         attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         is_cross_attention = key_value_states is not None
         batch_size = hidden_states.shape[0]
 
@@ -318,7 +321,7 @@ class FlaxWhisperAttention(nn.Module):
         return hidden_state.reshape(hidden_state.shape[:2] + (self.embed_dim,))
 
     @nn.compact
-    def _concatenate_to_cache(self, key, value, query, attention_mask) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    def _concatenate_to_cache(self, key, value, query, attention_mask) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         # detect if we're initializing by absence of existing cache data.
         is_initialized = self.has_variable("cache", "cached_key")
         cached_key = self.variable("cache", "cached_key", jnp.zeros, key.shape, key.dtype)
@@ -382,7 +385,7 @@ class FlaxWhisperEncoderLayer(nn.Module):
         attention_mask: jnp.ndarray,
         output_attentions: bool = True,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, attn_weights = self.self_attn(hidden_states=hidden_states, attention_mask=attention_mask)
@@ -439,7 +442,7 @@ class FlaxWhisperEncoderLayerCollection(nn.Module):
         for encoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if not deterministic and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None)
@@ -514,7 +517,7 @@ class FlaxWhisperDecoderLayer(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = True,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
@@ -595,7 +598,7 @@ class FlaxWhisperDecoderLayerCollection(nn.Module):
         for decoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-                # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+                # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if not deterministic and (dropout_probability < self.layerdrop):
                 layer_outputs = (None, None, None)
@@ -680,7 +683,7 @@ class FlaxWhisperEncoder(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         if input_features.shape[1:] != (self.config.num_mel_bins, self.config.max_source_positions * 2):
             raise ValueError(
                 "input_features.shape[1:], must be equal to (self.config.num_mel_bins,"
@@ -756,7 +759,7 @@ class FlaxWhisperDecoder(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         input_embeds = self.embed_tokens(input_ids)
         position_embeds = self.embed_positions(position_ids)
 
@@ -867,7 +870,7 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: WhisperConfig,
-        input_shape: Tuple[int] = None,
+        input_shape: Optional[tuple[int]] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -886,7 +889,7 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
             gradient_checkpointing=True,
         )
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_features = jnp.zeros(input_shape, dtype="f4")
         input_features = input_features.at[(..., -1)].set(self.config.eos_token_id)
@@ -970,7 +973,7 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
         **kwargs,
     ):
@@ -1025,12 +1028,12 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_position_ids: Optional[jnp.ndarray] = None,
-        past_key_values: dict = None,
+        past_key_values: Optional[dict] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         r"""
@@ -1144,7 +1147,7 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1278,12 +1281,12 @@ class FlaxWhisperForConditionalGeneration(FlaxWhisperPreTrainedModel):
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_position_ids: Optional[jnp.ndarray] = None,
-        past_key_values: dict = None,
+        past_key_values: Optional[dict] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         r"""
@@ -1599,7 +1602,7 @@ class FlaxWhisperForAudioClassification(FlaxWhisperPreTrainedModel):
     module_class = FlaxWhisperForAudioClassificationModule
     dtype: jnp.dtype = jnp.float32
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_features = jnp.zeros(input_shape, dtype="f4")
         input_features = input_features.at[(..., -1)].set(self.config.eos_token_id)
@@ -1631,7 +1634,7 @@ class FlaxWhisperForAudioClassification(FlaxWhisperPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
         **kwargs,
     ):
@@ -1670,7 +1673,7 @@ FLAX_WHISPER_AUDIO_CLASSIFICATION_DOCSTRING = r"""
     >>> model = FlaxWhisperForAudioClassification.from_pretrained(
     ...     "sanchit-gandhi/whisper-medium-fleurs-lang-id", from_pt=True
     ... )
-    >>> ds = load_dataset("google/fleurs", "all", split="validation", streaming=True, trust_remote_code=True)
+    >>> ds = load_dataset("google/fleurs", "all", split="validation", streaming=True)
 
     >>> sample = next(iter(ds))
 

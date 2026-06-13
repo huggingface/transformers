@@ -35,9 +35,9 @@ class FunnelConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the Funnel transformer. Defines the number of different tokens that can be represented
             by the `inputs_ids` passed when calling [`FunnelModel`] or [`TFFunnelModel`].
-        block_sizes (`List[int]`, *optional*, defaults to `[4, 4, 4]`):
+        block_sizes (`list[int]`, *optional*, defaults to `[4, 4, 4]`):
             The sizes of the blocks used in the model.
-        block_repeats (`List[int]`, *optional*):
+        block_repeats (`list[int]`, *optional*):
             If passed along, each layer of each block is repeated the number of times indicated.
         num_decoder_layers (`int`, *optional*, defaults to 2):
             The number of layers in the decoder (when not using the base model).

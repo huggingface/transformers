@@ -85,7 +85,7 @@ python run_glue.py \
 As an alternative, we can use the script [`run_classification.py`](./run_classification.py) to fine-tune models on a single/multi-label classification task. 
 
 The following example fine-tunes BERT on the `en` subset of  [`amazon_reviews_multi`](https://huggingface.co/datasets/amazon_reviews_multi) dataset.
-We can specify the metric, the label column and aso choose which text columns to use jointly for classification. 
+We can specify the metric, the label column and also choose which text columns to use jointly for classification.
 ```bash
 dataset="amazon_reviews_multi"
 subset="en"

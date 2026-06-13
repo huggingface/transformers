@@ -9,6 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was released on 2023-04-09 and added to Hugging Face Transformers on 2023-07-17.*
 
 # Bark
 
@@ -19,7 +20,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-Bark is a transformer-based text-to-speech model proposed by Suno AI in [suno-ai/bark](https://github.com/suno-ai/bark).
+[Bark](https://huggingface.co/suno/bark) is a transformer-based text-to-speech model proposed by Suno AI in [suno-ai/bark](https://github.com/suno-ai/bark).
 
 Bark is made of 4 main models:
 
@@ -42,18 +43,18 @@ Bark can be optimized with just a few extra lines of code, which **significantly
 You can speed up inference and reduce memory footprint by 50% simply by loading the model in half-precision.
 
 ```python
-from transformers import BarkModel
+from transformers import BarkModel, infer_device
 import torch
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16).to(device)
+device = infer_device()
+model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16).to(device)
 ```
 
 #### Using CPU offload
 
 As mentioned above, Bark is made up of 4 sub-models, which are called up sequentially during audio generation. In other words, while one sub-model is in use, the other sub-models are idle.
 
-If you're using a CUDA device, a simple solution to benefit from an 80% reduction in memory footprint is to offload the submodels from GPU to CPU when they're idle. This operation is called *CPU offloading*. You can use it with one line of code as follows:
+If you're using a CUDA GPU or Intel XPU, a simple solution to benefit from an 80% reduction in memory footprint is to offload the submodels from device to CPU when they're idle. This operation is called *CPU offloading*. You can use it with one line of code as follows:
 
 ```python
 model.enable_cpu_offload()
@@ -75,7 +76,7 @@ Note that 🤗 Optimum must be installed before using this feature. [Here's how 
 
 Flash Attention 2 is an even faster, optimized version of the previous optimization.
 
-##### Installation 
+##### Installation
 
 First, check whether your hardware is compatible with Flash Attention 2. The latest list of compatible hardware can be found in the [official documentation](https://github.com/Dao-AILab/flash-attention#installation-and-features). If your hardware is not compatible with Flash Attention 2, you can still benefit from attention kernel optimisations through Better Transformer support covered [above](https://huggingface.co/docs/transformers/main/en/model_doc/bark#using-better-transformer).
 
@@ -85,17 +86,15 @@ Next, [install](https://github.com/Dao-AILab/flash-attention#installation-and-fe
 pip install -U flash-attn --no-build-isolation
 ```
 
-
 ##### Usage
 
 To load a model using Flash Attention 2, we can pass the `attn_implementation="flash_attention_2"` flag to [`.from_pretrained`](https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.PreTrainedModel.from_pretrained). We'll also load the model in half-precision (e.g. `torch.float16`), since it results in almost no degradation to audio quality but significantly lower memory usage and faster inference:
 
 ```python
-model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
+model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
 ```
 
 ##### Performance comparison
-
 
 The following diagram shows the latency for the native attention implementation (no optimisation) against Better Transformer and Flash Attention 2. In all cases, we generate 400 semantic tokens on a 40GB A100 GPU with PyTorch 2.1. Flash Attention 2 is also consistently faster than Better Transformer, and its performance improves even more as batch sizes increase:
 
@@ -107,19 +106,18 @@ To put this into perspective, on an NVIDIA A100 and when generating 400 semantic
 
 At batch size 8, on an NVIDIA A100, Flash Attention 2 is also 10% faster than Better Transformer, and at batch size 16, 25%.
 
-
 #### Combining optimization techniques
 
 You can combine optimization techniques, and use CPU offload, half-precision and Flash Attention 2 (or 🤗 Better Transformer) all at once.
 
 ```python
-from transformers import BarkModel
+from transformers import BarkModel, infer_device
 import torch
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 
 # load in fp16 and use Flash Attention 2
-model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
+model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
 
 # enable CPU offload
 model.enable_cpu_offload()
@@ -146,7 +144,7 @@ These presets are also uploaded in the hub [here](https://huggingface.co/suno/ba
 >>> audio_array = audio_array.cpu().numpy().squeeze()
 ```
 
-Bark can generate highly realistic, **multilingual** speech as well as other audio - including music, background noise and simple sound effects. 
+Bark can generate highly realistic, **multilingual** speech as well as other audio - including music, background noise and simple sound effects.
 
 ```python
 >>> # Multilingual speech - simplified Chinese
@@ -163,7 +161,6 @@ Bark can generate highly realistic, **multilingual** speech as well as other aud
 ```
 
 The model can also produce **nonverbal communications** like laughing, sighing and crying.
-
 
 ```python
 >>> # Adding non-speech cues to the input text
@@ -234,4 +231,3 @@ To save the audio, simply take the sample rate from the model config and some sc
 
 [[autodoc]] BarkSemanticConfig
     - all
-

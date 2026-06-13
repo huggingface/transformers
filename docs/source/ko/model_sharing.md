@@ -56,7 +56,7 @@ picture-in-picture" allowfullscreen></iframe>
 모델을 허브에 공유하기 전에 Hugging Face 자격 증명이 필요합니다. 터미널에 액세스할 수 있는 경우, 🤗 Transformers가 설치된 가상 환경에서 다음 명령을 실행합니다. 그러면 Hugging Face 캐시 폴더(기본적으로 `~/.cache/`)에 액세스 토큰을 저장합니다:
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 Jupyter 또는 Colaboratory와 같은 노트북을 사용 중인 경우, [`huggingface_hub`](https://huggingface.co/docs/hub/adding-a-library) 라이브러리가 설치되었는지 확인하세요. 이 라이브러리를 사용하면 API로 허브와 상호 작용할 수 있습니다.

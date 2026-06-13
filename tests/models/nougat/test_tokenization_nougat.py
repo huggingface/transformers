@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import unittest
 
 from transformers import NougatTokenizerFast
@@ -33,19 +33,24 @@ class NougatTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_vocab_key = "tokenizer_file"
     special_tokens_map = {"bos_token": "<s>", "eos_token": "</s>", "unk_token": "<unk>", "pad_token": "<pad>"}
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
         tokenizer = NougatTokenizerFast.from_pretrained("facebook/nougat-base")
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
-    def get_rust_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return NougatTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
+        _kwargs = copy.deepcopy(cls.special_tokens_map)
+        _kwargs.update(kwargs)
+        kwargs = _kwargs
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return NougatTokenizerFast.from_pretrained(pretrained_name, **kwargs)
 
     def test_padding(self, max_length=6):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
                 # Simple input
                 sentence1 = "This is a simple input"
                 sentence2 = ["This is a simple input 1", "This is a simple input 2"]

@@ -16,7 +16,26 @@
 Audio/Text processor class for SeamlessM4T
 """
 
-from ...processing_utils import ProcessorMixin
+from typing import Optional, Union
+
+from ...audio_utils import AudioInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
+
+
+logger = logging.get_logger(__name__)
+
+
+class SeamlessM4TTextKwargs(TextKwargs):
+    src_lang: Optional[str]
+    tgt_lang: Optional[str]
+
+
+class SeamlessM4TProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: SeamlessM4TTextKwargs
+    _defaults = {}
 
 
 class SeamlessM4TProcessor(ProcessorMixin):
@@ -37,35 +56,35 @@ class SeamlessM4TProcessor(ProcessorMixin):
 
     feature_extractor_class = "SeamlessM4TFeatureExtractor"
     tokenizer_class = ("SeamlessM4TTokenizer", "SeamlessM4TTokenizerFast")
+    valid_processor_kwargs = SeamlessM4TProcessorKwargs
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    def __call__(self, text=None, audios=None, src_lang=None, tgt_lang=None, **kwargs):
+    @deprecate_kwarg("audios", version="v4.59.0", new_name="audio")
+    def __call__(
+        self,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        audios: Optional[AudioInput] = None,
+        audio: Optional[AudioInput] = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
         and `kwargs` arguments to SeamlessM4TTokenizerFast's [`~SeamlessM4TTokenizerFast.__call__`] if `text` is not
-        `None` to encode the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
+        `None` to encode the text. To prepare the audio(s), this method forwards the `audios` and `kwargs` arguments to
         SeamlessM4TFeatureExtractor's [`~SeamlessM4TFeatureExtractor.__call__`] if `audios` is not `None`. Please refer
         to the docstring of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            audios (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            audios (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
                 of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a number of channels,
                 and T the sample length of the audio.
-            src_lang (`str`, *optional*):
-                The language code of the input texts/audios. If not specified, the last `src_lang` specified will be
-                used.
-            tgt_lang (`str`, *optional*):
-                The code of the target language. If not specified, the last `tgt_lang` specified will be used.
-            kwargs (*optional*):
-                Remaining dictionary of keyword arguments that will be passed to the feature extractor and/or the
-                tokenizer.
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
 
@@ -75,46 +94,16 @@ class SeamlessM4TProcessor(ProcessorMixin):
               `None`).
             - **input_features** -- Audio input features to be fed to a model. Returned when `audios` is not `None`.
         """
-        sampling_rate = kwargs.pop("sampling_rate", None)
-
-        if text is None and audios is None:
-            raise ValueError("You have to specify either text or audios. Both cannot be none.")
-        elif text is not None and audios is not None:
+        if text is not None and audios is not None:
             raise ValueError(
                 "Text and audios are mututally exclusive when passed to `SeamlessM4T`. Specify one or another."
             )
-        elif text is not None:
-            if tgt_lang is not None:
-                self.tokenizer.tgt_lang = tgt_lang
-            if src_lang is not None:
-                self.tokenizer.src_lang = src_lang
-            encoding = self.tokenizer(text, **kwargs)
-
-            return encoding
-
-        else:
-            encoding = self.feature_extractor(audios, sampling_rate=sampling_rate, **kwargs)
-            return encoding
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to SeamlessM4TTokenizerFast's [`~PreTrainedTokenizer.batch_decode`].
-        Please refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to SeamlessM4TTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names))
+        if audio is None and audios is not None:
+            logger.warning(
+                "Passing `audios` as keyword argument is deprecated and will be removed in v4.63, please pass `audio` instead."
+            )
+            audio = audios
+        return super().__call__(text=text, audio=audio, **kwargs)
 
 
 __all__ = ["SeamlessM4TProcessor"]

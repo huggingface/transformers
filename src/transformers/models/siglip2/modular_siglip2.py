@@ -12,15 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Tuple, Union
+from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from transformers.models.siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 from transformers.models.siglip.modeling_siglip import (
+    BaseModelOutput,
     BaseModelOutputWithPooling,
     ImageClassifierOutput,
     SiglipForImageClassification,
@@ -36,6 +36,7 @@ from transformers.models.siglip.modeling_siglip import (
 )
 
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...utils import auto_docstring, filter_out_non_signature_kwargs
 
 
 class Siglip2TextConfig(SiglipTextConfig):
@@ -208,7 +209,7 @@ class Siglip2VisionEmbeddings(nn.Module):
         Args:
             pixel_values (`torch.FloatTensor`):
                 Pixel values of shape (batch_size, max_num_patches, num_channels * patch_size * patch_size)
-            spatial_shapes (`List[Tuple[int, int]]`):
+            spatial_shapes (`list[tuple[int, int]]`):
                 Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
         """
 
@@ -231,8 +232,7 @@ class Siglip2VisionEmbeddings(nn.Module):
 
 class Siglip2VisionTransformer(SiglipVisionTransformer):
     def __init__(self, config: Siglip2VisionConfig):
-        super().__init__()
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        super().__init__(config)
 
     # Update: add `spatial_shapes` and `attention_mask`
     def forward(
@@ -242,40 +242,35 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
         spatial_shapes: torch.LongTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> BaseModelOutputWithPooling:
         r"""
-        Returns:
-
+        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
+            Tensor containing the spatial dimensions (height, width) of the input images.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = self.embeddings(pixel_values, spatial_shapes)
 
-        if attention_mask is not None and not self._use_flash_attention_2:
+        if attention_mask is not None and self.config._attn_implementation != "flash_attention_2":
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
         else:
             encoder_attention_mask = attention_mask
 
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
         pooler_output = self.head(last_hidden_state, attention_mask) if self.use_head else None
-        if not return_dict:
-            return (last_hidden_state, pooler_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -326,48 +321,86 @@ class Siglip2VisionModel(SiglipVisionModel):
         spatial_shapes: torch.LongTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
+            Tensor containing the spatial dimensions (height, width) of the input images.
 
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, Siglip2VisionModel
+
+        >>> model = Siglip2VisionModel.from_pretrained("google/siglip2-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled features
+        ```"""
         return self.vision_model(
             pixel_values=pixel_values,
             attention_mask=pixel_attention_mask,
             spatial_shapes=spatial_shapes,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
 
 class Siglip2Model(SiglipModel):
     # Update: add `spatial_shapes` and `pixel_attention_mask`
+    @filter_out_non_signature_kwargs()
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_attention_mask: Optional[torch.Tensor] = None,
         spatial_shapes: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
-        # Use Siglip2Model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        r"""
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
+            Tensor containing the spatial dimensions (height, width) of the input images.
 
-        vision_outputs = self.vision_model(
+        Returns:
+            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
+            applying the projection layer to the pooled output of [`Siglip2VisionModel`].
+
+        Examples:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoProcessor, AutoModel
+        >>> from transformers.image_utils import load_image
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = load_image(url)
+
+        >>> model = AutoModel.from_pretrained("google/siglip2-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     image_features = model.get_image_features(**inputs)
+        ```
+        """
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             attention_mask=pixel_attention_mask,
             spatial_shapes=spatial_shapes,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-
-        pooled_output = vision_outputs[1]
+        pooled_output = vision_outputs.pooler_output
 
         return pooled_output
 
@@ -383,35 +416,66 @@ class Siglip2Model(SiglipModel):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Siglip2Output]:
+    ) -> Siglip2Output:
+        r"""
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
+            Tensor containing the spatial dimensions (height, width) of the input images.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss.
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, AutoModel
+        >>> import torch
+
+        >>> model = AutoModel.from_pretrained("google/siglip2-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> texts = ["a photo of 2 cats", "a photo of 2 dogs"]
+        >>> # important: we pass `padding=max_length` since the model was trained with this
+        >>> inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> logits_per_image = outputs.logits_per_image
+        >>> probs = torch.sigmoid(logits_per_image) # these are the probabilities
+        >>> print(f"{probs[0][0]:.1%} that image 0 is '{texts[0]}'")
+        31.9% that image 0 is 'a photo of 2 cats'
+        ```
+        """
         # Use Siglip2 model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vision_outputs = self.vision_model(
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             attention_mask=pixel_attention_mask,
             spatial_shapes=spatial_shapes,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        image_embeds = vision_outputs[1]
-        text_embeds = text_outputs[1]
+        image_embeds = vision_outputs.pooler_output
+        text_embeds = text_outputs.pooler_output
 
         # normalized features
         image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
@@ -434,10 +498,6 @@ class Siglip2Model(SiglipModel):
             nll = -torch.sum(loglik, dim=-1)
             loss = nll.mean()
 
-        if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
-            return ((loss,) + output) if loss is not None else output
-
         return Siglip2Output(
             loss=loss,
             logits_per_image=logits_per_image,
@@ -459,24 +519,57 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ImageClassifierOutput]:
+    ) -> ImageClassifierOutput:
+        r"""
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
+            Tensor containing the spatial dimensions (height, width) of the input images.
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, Siglip2ForImageClassification
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> # note: we are loading a `Siglip2Model` from the hub here,
+        >>> # so the head will be randomly initialized, hence the predictions will be random if seed is not set above.
+        >>> image_processor = AutoImageProcessor.from_pretrained("google/siglip2-base-patch16-224")
+        >>> model = Siglip2ForImageClassification.from_pretrained("google/siglip2-base-patch16-224")
+
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
+        >>> # model predicts one of the two classes
+        >>> predicted_class_idx = logits.argmax(-1).item()
+        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        Predicted class: LABEL_1
+        ```
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.vision_model(
+        outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values,
             attention_mask=pixel_attention_mask,
             spatial_shapes=spatial_shapes,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
 
         # average pool the patch tokens
         if pixel_attention_mask is not None:
@@ -490,32 +583,7 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+            loss = self.loss_function(labels, logits, self.config)
 
         return ImageClassifierOutput(
             loss=loss,

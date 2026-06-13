@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -199,24 +198,6 @@ class RoFormerModelTester:
         )
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = RoFormerForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_for_generate_causal_lm(
         self,
@@ -452,7 +433,6 @@ class RoFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         (
             config,
             input_ids,
@@ -533,7 +513,9 @@ class RoFormerSinusoidalPositionalEmbeddingTest(unittest.TestCase):
 
     def test_basic(self):
         input_ids = torch.tensor([[4, 10]], dtype=torch.long, device=torch_device)
-        emb1 = RoFormerSinusoidalPositionalEmbedding(num_positions=6, embedding_dim=6).to(torch_device)
+        emb1 = RoFormerSinusoidalPositionalEmbedding(num_positions=6, embedding_dim=6)
+        emb1._init_weight()
+        emb1 = emb1.to(torch_device)
         emb = emb1(input_ids.shape)
         desired_weights = torch.tensor(
             [[0.0000, 0.0000, 0.0000, 1.0000, 1.0000, 1.0000], [0.8415, 0.0464, 0.0022, 0.5403, 0.9989, 1.0000]]
@@ -552,6 +534,7 @@ class RoFormerSinusoidalPositionalEmbeddingTest(unittest.TestCase):
             ]
         ).to(torch_device)
         emb1 = RoFormerSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512).to(torch_device)
+        emb1._init_weight()
         weights = emb1.weight.data[:3, :5].to(torch_device)
 
         self.assertTrue(
@@ -572,7 +555,9 @@ class RoFormerSelfAttentionRotaryPositionEmbeddingTest(unittest.TestCase):
         key_layer = (
             -torch.arange(2 * 12 * 16 * 64, dtype=torch.float, device=torch_device).reshape(2, 12, 16, 64) / 100
         ).to(torch_device)
-        embed_positions = RoFormerSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=64).to(torch_device)
+        embed_positions = RoFormerSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=64)
+        embed_positions._init_weight()
+        embed_positions = embed_positions.to(torch_device)
         sinusoidal_pos = embed_positions([2, 16, 768])[None, None, :, :]
 
         query_layer, key_layer = RoFormerSelfAttention.apply_rotary_position_embeddings(

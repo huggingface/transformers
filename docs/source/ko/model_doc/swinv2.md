@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## 개요 [[overview]]
 
-Swin Transformer V2는  Ze Liu, Han Hu, Yutong Lin, Zhuliang Yao, Zhenda Xie, Yixuan Wei, Jia Ning, Yue Cao, Zheng Zhang, Li Dong, Furu Wei, Baining Guo가 제안한 논문 [Swin Transformer V2: Scaling Up Capacity and Resolution](https://arxiv.org/abs/2111.09883)에서 소개되었습니다.
+Swin Transformer V2는  Ze Liu, Han Hu, Yutong Lin, Zhuliang Yao, Zhenda Xie, Yixuan Wei, Jia Ning, Yue Cao, Zheng Zhang, Li Dong, Furu Wei, Baining Guo가 제안한 논문 [Swin Transformer V2: Scaling Up Capacity and Resolution](https://huggingface.co/papers/2111.09883)에서 소개되었습니다.
 
 논문의 초록은 다음과 같습니다:
 

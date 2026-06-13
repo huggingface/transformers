@@ -172,7 +172,7 @@ MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로([데이터 
 ...     processor: AutoProcessor
 ...     padding: Union[bool, str] = "longest"
 
-...     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+...     def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
 ...         # 입력과 레이블을 분할합니다
 ...         # 길이가 다르고, 각각 다른 패딩 방법을 사용해야 하기 때문입니다
 ...         input_features = [{"input_values": feature["input_values"][0]} for feature in features]

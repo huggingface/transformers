@@ -473,13 +473,6 @@ Hier ist zum Beispiel ein Test, der nur ausgeführt werden muss, wenn 2 oder meh
 def test_example_with_multi_gpu():
 ```
 
-Wenn ein Test `tensorflow` benötigt, verwenden Sie den Dekorator `require_tf`. Zum Beispiel:
-
-```python no-style
-@require_tf
-def test_tf_thing_with_tensorflow():
-```
-
 Diese Dekors können gestapelt werden. Wenn zum Beispiel ein Test langsam ist und mindestens eine GPU unter pytorch benötigt, können Sie
 wie Sie ihn einrichten können:
 
@@ -1204,9 +1197,6 @@ if torch.cuda.is_available():
 import numpy as np
 
 np.random.seed(seed)
-
-# tf RNG
-tf.random.set_seed(seed)
 ```
 
 ### Tests debuggen

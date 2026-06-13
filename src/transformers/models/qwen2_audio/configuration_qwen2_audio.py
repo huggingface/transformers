@@ -44,7 +44,7 @@ class Qwen2AudioEncoderConfig(PretrainedConfig):
         encoder_ffn_dim (`int`, *optional*, defaults to 5120):
             Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
         encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         d_model (`int`, *optional*, defaults to 1280):
             Dimensionality of the layers.
@@ -59,7 +59,7 @@ class Qwen2AudioEncoderConfig(PretrainedConfig):
             The dropout ratio for activations inside the fully connected layer.
         scale_embedding (`bool`, *optional*, defaults to `False`):
             Scale embeddings by diving by sqrt(d_model).
-        init_std (`float`, *optional*, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         max_source_positions (`int`, *optional*, defaults to 1500):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
@@ -94,7 +94,7 @@ class Qwen2AudioEncoderConfig(PretrainedConfig):
         activation_function="gelu",
         activation_dropout=0.0,
         scale_embedding=False,
-        init_std=0.02,
+        initializer_range=0.02,
         max_source_positions=1500,
         **kwargs,
     ):
@@ -111,7 +111,7 @@ class Qwen2AudioEncoderConfig(PretrainedConfig):
         self.activation_dropout = activation_dropout
         self.encoder_layerdrop = encoder_layerdrop
         self.num_hidden_layers = encoder_layers
-        self.init_std = init_std
+        self.initializer_range = initializer_range
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.max_source_positions = max_source_positions
 
@@ -157,6 +157,9 @@ class Qwen2AudioConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_audio"
+    attribute_map = {
+        "audio_token_id": "audio_token_index",
+    }
     sub_configs = {"text_config": AutoConfig, "audio_config": AutoConfig}
 
     def __init__(
@@ -169,9 +172,7 @@ class Qwen2AudioConfig(PretrainedConfig):
         self.audio_token_index = audio_token_index
 
         if isinstance(audio_config, dict):
-            audio_config["model_type"] = (
-                audio_config["model_type"] if "model_type" in audio_config else "qwen2_audio_encoder"
-            )
+            audio_config["model_type"] = audio_config.get("model_type", "qwen2_audio_encoder")
             audio_config = CONFIG_MAPPING[audio_config["model_type"]](**audio_config)
         elif audio_config is None:
             audio_config = CONFIG_MAPPING["qwen2_audio_encoder"](
@@ -189,7 +190,7 @@ class Qwen2AudioConfig(PretrainedConfig):
         self.audio_config = audio_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "qwen2"
+            text_config["model_type"] = text_config.get("model_type", "qwen2")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["qwen2"]()

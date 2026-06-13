@@ -65,7 +65,7 @@ examples/pytorch/token-classification/run_ner.py \
 
 Most example scripts should have the first two command line arguments and some have the third one. You can quickly check if a given example supports any of these by passing a `-h` option, e.g.:
 ```bash
-examples/pytorch/token-classification/run_ner.py -h
+token-classification/run_ner.py -h
 ```
 
 ## Resuming training
@@ -90,7 +90,7 @@ To specify a given repository name, use the `--hub_model_id` argument. You will 
 
 A few notes on this integration:
 
-- you will need to be logged in to the Hugging Face website locally for it to work, the easiest way to achieve this is to run `huggingface-cli login` and then type your username and password when prompted. You can also pass along your authentication token with the `--hub_token` argument.
+- you will need to be logged in to the Hugging Face website locally for it to work, the easiest way to achieve this is to run `hf auth login` and then type your username and password when prompted. You can also pass along your authentication token with the `--hub_token` argument.
 - the `output_dir` you pick will either need to be a new folder or a local clone of the distant repository you are using.
 
 ## Distributed training and mixed precision
@@ -110,7 +110,7 @@ classification MNLI task using the `run_glue` script, with 8 GPUs:
 
 ```bash
 torchrun \
-    --nproc_per_node 8 pytorch/text-classification/run_glue.py \
+    --nproc_per_node 8 text-classification/run_glue.py \
     --model_name_or_path google-bert/bert-large-uncased-whole-word-masking \
     --task_name mnli \
     --do_train \

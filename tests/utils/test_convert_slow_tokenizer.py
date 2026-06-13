@@ -20,12 +20,16 @@ class ConvertSlowTokenizerTest(unittest.TestCase):
 
         with warnings.catch_warnings(record=True) as w:
             _ = SpmConverter(original_tokenizer_without_bytefallback)
+        # We are looking for if there is any `UserWarning` with
+        # `The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option which is not implemented in the fast tokenizers.`
+        w = [x for x in w if x.category.__name__ != "DeprecationWarning"]
         self.assertEqual(len(w), 0)
 
         original_tokenizer_with_bytefallback = FakeOriginalTokenizer(vocab_file=spm_model_file_with_bytefallback)
 
         with warnings.catch_warnings(record=True) as w:
             _ = SpmConverter(original_tokenizer_with_bytefallback)
+        w = [x for x in w if x.category.__name__ != "DeprecationWarning"]
         self.assertEqual(len(w), 1)
 
         self.assertIn(

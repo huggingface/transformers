@@ -13,15 +13,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Tuple
+from typing import Optional, TypedDict
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...utils import add_start_docstrings, logging
+from ...processing_utils import Unpack
+from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 from ..granitemoe.modeling_granitemoe import (
     GraniteMoeDecoderLayer,
     GraniteMoeForCausalLM,
@@ -34,7 +35,29 @@ from .configuration_granitemoeshared import GraniteMoeSharedConfig
 logger = logging.get_logger(__name__)
 
 
-_CONFIG_FOR_DOC = "GraniteMoeSharedConfig"
+class GraniteFlashAttentionKwargs(TypedDict, total=False):
+    """
+    Keyword arguments for advanced Flash Attention, causal-conv1d, and mamba_ssm kernel usage.
+    Use cases include padding-free training and fewer `torch.compile` graph breaks.
+
+    Attributes:
+        cu_seq_lens_q (`torch.LongTensor`)
+            Gets cumulative sequence length for query state.
+        cu_seq_lens_k (`torch.LongTensor`)
+            Gets cumulative sequence length for key state.
+        max_length_q (`int`):
+            Maximum sequence length for query state.
+        max_length_k (`int`):
+            Maximum sequence length for key state.
+        seq_idx (`torch.IntTensor):
+            Index of each packed sequence.
+    """
+
+    cu_seq_lens_q: torch.LongTensor
+    cu_seq_lens_k: torch.LongTensor
+    max_length_q: int
+    max_length_k: int
+    seq_idx: torch.IntTensor
 
 
 class GraniteMoeSharedMLP(nn.Module):
@@ -47,7 +70,7 @@ class GraniteMoeSharedMLP(nn.Module):
     """
 
     def __init__(self, config: GraniteMoeSharedConfig):
-        super(GraniteMoeSharedMLP, self).__init__()
+        super().__init__()
 
         self.input_size = config.hidden_size
         self.hidden_size = config.shared_intermediate_size
@@ -68,19 +91,20 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
         super().__init__(config, layer_idx)
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeSharedMLP(config)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         output_router_logits: Optional[bool] = False,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        **kwargs: Unpack[GraniteFlashAttentionKwargs],
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -93,29 +117,29 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_values (`Cache`, *optional*): cached past key and value projection states
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence
             output_router_logits (`bool`, *optional*):
                 Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
                 should not be returned during inference.
-            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
             kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
+                Arbitrary kwargs. Can be used to provide `GraniteFlashAttentionKwargs` for
+                padding-free training and/or improve torch.compile performance.
         """
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -144,127 +168,18 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
         if output_attentions:
             outputs += (self_attn_weights,)
 
-        if use_cache:
-            outputs += (present_key_value,)
-
         if output_router_logits:
             outputs += (router_logits,)
 
         return outputs
 
 
-GRANITEMOESHARED_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`GraniteMoeSharedConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare GraniteMoeShared Model outputting raw hidden-states without any specific head on top.",
-    GRANITEMOESHARED_START_DOCSTRING,
-)
 class GraniteMoeSharedPreTrainedModel(GraniteMoePreTrainedModel):
-    config_class = GraniteMoeSharedConfig
+    config: GraniteMoeSharedConfig
     _no_split_modules = ["GraniteMoeSharedDecoderLayer"]
 
 
-GRANITEMOESHARED_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
-            `past_key_values`).
-
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
-            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-            Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance;
-            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-            cache format.
-
-            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-            legacy cache format will be returned.
-
-            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
-            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
-            of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
-"""
-
-
-@add_start_docstrings(
-    "The bare GraniteMoeShared Model outputting raw hidden-states without any specific head on top.",
-    GRANITEMOESHARED_START_DOCSTRING,
-)
 class GraniteMoeSharedModel(GraniteMoeModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`GraniteMoeDecoderLayer`]
-
-    Args:
-        config: GraniteMoeSharedConfig
-    """
-
     def __init__(self, config: GraniteMoeSharedConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(

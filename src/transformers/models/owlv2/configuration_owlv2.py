@@ -14,12 +14,6 @@
 # limitations under the License.
 """OWLv2 model configuration"""
 
-from typing import TYPE_CHECKING, Dict
-
-
-if TYPE_CHECKING:
-    pass
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -271,7 +265,7 @@ class Owlv2Config(PretrainedConfig):
         self.initializer_factor = 1.0
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: Dict, vision_config: Dict, **kwargs):
+    def from_text_vision_configs(cls, text_config: dict, vision_config: dict, **kwargs):
         r"""
         Instantiate a [`Owlv2Config`] (or a derived class) from owlv2 text model configuration and owlv2 vision
         model configuration.

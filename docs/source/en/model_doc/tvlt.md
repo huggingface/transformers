@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-09-28 and added to Hugging Face Transformers on 2023-06-20.*
 
 # TVLT
 
@@ -30,7 +31,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 ## Overview
 
-The TVLT model was proposed in [TVLT: Textless Vision-Language Transformer](https://arxiv.org/abs/2209.14156)
+The TVLT model was proposed in [TVLT: Textless Vision-Language Transformer](https://huggingface.co/papers/2209.14156)
 by Zineng Tang, Jaemin Cho, Yixin Nie, Mohit Bansal (the first three authors contributed equally). The Textless Vision-Language Transformer (TVLT) is a model that uses raw visual and audio inputs for vision-and-language representation learning, without using text-specific modules such as tokenization or automatic speech recognition (ASR). It can perform various audiovisual and vision-language tasks like retrieval, question answering, etc.
 
 The abstract from the paper is the following:
@@ -42,7 +43,7 @@ The abstract from the paper is the following:
 alt="drawing" width="600"/>
 </p>
 
-<small> TVLT architecture. Taken from the <a href="[https://arxiv.org/abs/2102.03334](https://arxiv.org/abs/2209.14156)">original paper</a>. </small>
+<small> TVLT architecture. Taken from the <a href="[https://huggingface.co/papers/2102.03334](https://huggingface.co/papers/2209.14156)">original paper</a>. </small>
 
 The original code can be found [here](https://github.com/zinengtang/TVLT). This model was contributed by [Zineng Tang](https://huggingface.co/ZinengTang).
 

@@ -13,64 +13,16 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ....utils import OptionalDependencyNotAvailable, _LazyModule, is_sentencepiece_available, is_torch_available
-
-
-_import_structure = {
-    "configuration_xlm_prophetnet": ["XLMProphetNetConfig"],
-}
-
-try:
-    if not is_sentencepiece_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_xlm_prophetnet"] = ["XLMProphetNetTokenizer"]
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_xlm_prophetnet"] = [
-        "XLMProphetNetDecoder",
-        "XLMProphetNetEncoder",
-        "XLMProphetNetForCausalLM",
-        "XLMProphetNetForConditionalGeneration",
-        "XLMProphetNetModel",
-        "XLMProphetNetPreTrainedModel",
-    ]
+from ....utils import _LazyModule
+from ....utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_xlm_prophetnet import XLMProphetNetConfig
-
-    try:
-        if not is_sentencepiece_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_xlm_prophetnet import XLMProphetNetTokenizer
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_xlm_prophetnet import (
-            XLMProphetNetDecoder,
-            XLMProphetNetEncoder,
-            XLMProphetNetForCausalLM,
-            XLMProphetNetForConditionalGeneration,
-            XLMProphetNetModel,
-            XLMProphetNetPreTrainedModel,
-        )
-
+    from .configuration_xlm_prophetnet import *
+    from .modeling_xlm_prophetnet import *
+    from .tokenization_xlm_prophetnet import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)

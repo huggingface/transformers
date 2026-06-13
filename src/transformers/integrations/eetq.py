@@ -36,7 +36,7 @@ def _replace_with_eetq_linear(
     """
     Private method that wraps the recursion for module replacement.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
     """
     if current_key_name is None:
         current_key_name = []
@@ -93,10 +93,10 @@ def replace_with_eetq_linear(
     Parameters:
         model (`torch.nn.Module`):
             Input model or `torch.nn.Module` as the function is run recursively.
-        modules_to_not_convert (`List[`str`]`, *optional*, defaults to `["lm_head"]`):
+        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `["lm_head"]`):
             Names of the modules to not convert in `EetqLinear`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
-        current_key_name (`List[`str`]`, *optional*):
+        current_key_name (`list[`str`]`, *optional*):
             An array to track the current key of the recursion. This is used to check whether the current key (part of
             it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
             `disk`).

@@ -138,7 +138,6 @@ args = TrainingArguments(
     per_device_train_batch_size=4,
 +   optim="adalomo",
     gradient_checkpointing=True,
-    gradient_checkpointing=True,
     logging_strategy="steps",
     logging_steps=1,
     learning_rate=2e-6,
@@ -164,7 +163,7 @@ args = TrainingArguments(
     output_dir="./test-schedulefree",
     max_steps=1000,
     per_device_train_batch_size=4,
-+   optim="schedule_free_radamw,
++   optim="schedule_free_radamw",
 +   lr_scheduler_type="constant",
     gradient_checkpointing=True,
     logging_strategy="steps",
@@ -172,5 +171,31 @@ args = TrainingArguments(
     learning_rate=2e-6,
     save_strategy="no",
     run_name="sfo",
+)
+```
+
+## StableAdamW
+
+```bash
+pip install torch-optimi
+```
+
+[StableAdamW](https://huggingface.co/papers/2304.13013) is a hybrid between AdamW and AdaFactor. It ports AdaFactor's update clipping into AdamW, which removes the need for gradient clipping. Otherwise, it behaves as a drop-in replacement for AdamW.
+
+> [!TIP]
+> If training on large batch sizes or still observing training loss spikes, consider reducing beta_2 between [0.95, 0.99].
+
+```diff
+args = TrainingArguments(
+    output_dir="./test-stable-adamw",
+    max_steps=1000,
+    per_device_train_batch_size=4,
++   optim="stable_adamw",
+    gradient_checkpointing=True,
+    logging_strategy="steps",
+    logging_steps=1,
+    learning_rate=2e-6,
+    save_strategy="no",
+    run_name="stable-adamw",
 )
 ```

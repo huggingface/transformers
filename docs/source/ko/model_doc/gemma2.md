@@ -30,12 +30,6 @@ Gemma2 모델은 Google의 Gemma2 팀이 작성한 [Gemma2: Open Models Based on
 
 - 원본 체크포인트는 변환 스크립트 `src/transformers/models/Gemma2/convert_Gemma2_weights_to_hf.py`를 사용하여 변환할 수 있습니다.
 
-<Tip warning={true}>
-
-- Gemma2는 매 두 번째 레이어마다 슬라이딩 윈도우 어텐션을 사용하므로 [`~DynamicCache`] 또는 텐서의 튜플과 같은 일반적인 kv 캐싱에는 적합하지 않습니다. Gemma2의 forward 호출에서 캐싱을 활성화하려면 [`~HybridCache`] 인스턴스를 초기화하고 이를 `past_key_values`로 forward 호출에 전달해야 합니다. 또한 `past_key_values`에 이미 이전의 키와 값이 포함되어 있다면 `cache_position`도 준비해야 합니다.
-
-</Tip>
-
 이 모델은 [Arthur Zucker](https://huggingface.co/ArthurZ), [Pedro Cuenca](https://huggingface.co/pcuenq), [Tom Arsen]()이 기여했습니다.
 
 ## Gemma2Config [[transformers.Gemma2Config]]

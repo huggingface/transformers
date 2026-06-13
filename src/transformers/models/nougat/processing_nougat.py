@@ -16,7 +16,7 @@
 Processor class for Nougat.
 """
 
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput, TruncationStrategy
 
@@ -50,28 +50,28 @@ class NougatProcessor(ProcessorMixin):
         self,
         images=None,
         text=None,
-        do_crop_margin: bool = None,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_crop_margin: Optional[bool] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
         resample: "PILImageResampling" = None,  # noqa: F821
-        do_thumbnail: bool = None,
-        do_align_long_axis: bool = None,
-        do_pad: bool = None,
-        do_rescale: bool = None,
-        rescale_factor: Union[int, float] = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        do_thumbnail: Optional[bool] = None,
+        do_align_long_axis: Optional[bool] = None,
+        do_pad: Optional[bool] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[Union[int, float]] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         data_format: Optional["ChannelDimension"] = "channels_first",  # noqa: F821
         input_data_format: Optional[Union[str, "ChannelDimension"]] = None,  # noqa: F821
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
-        text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text_pair: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        text_target: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         text_pair_target: Optional[
-            Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+            Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]
         ] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
+        truncation: Optional[Union[bool, str, TruncationStrategy]] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         is_split_into_words: bool = False,
@@ -137,20 +137,6 @@ class NougatProcessor(ProcessorMixin):
         else:
             inputs["labels"] = encodings["input_ids"]
             return inputs
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to NougatTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to NougatTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
 
     def post_process_generation(self, *args, **kwargs):
         """

@@ -15,7 +15,7 @@
 """Flax OPT model."""
 
 from functools import partial
-from typing import Optional, Tuple
+from typing import Optional
 
 import flax.linen as nn
 import jax
@@ -185,7 +185,7 @@ class FlaxOPTAttention(nn.Module):
         attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -308,7 +308,7 @@ class FlaxOPTDecoderLayer(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = True,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         residual = hidden_states
 
         # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
@@ -522,7 +522,7 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: OPTConfig,
-        input_shape: Tuple[int] = (1, 1),
+        input_shape: tuple[int] = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -531,7 +531,7 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         attention_mask = jnp.ones_like(input_ids)
@@ -585,8 +585,8 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
         input_ids: jnp.ndarray,
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
-        params: dict = None,
-        past_key_values: dict = None,
+        params: Optional[dict] = None,
+        past_key_values: Optional[dict] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,

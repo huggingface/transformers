@@ -65,14 +65,14 @@ class AltCLIPTextConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         pad_token_id (`int`, *optional*, defaults to 1): The id of the *padding* token.
         bos_token_id (`int`, *optional*, defaults to 0): The id of the *beginning-of-sequence* token.
-        eos_token_id (`Union[int, List[int]]`, *optional*, defaults to 2):
+        eos_token_id (`Union[int, list[int]]`, *optional*, defaults to 2):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -303,7 +303,7 @@ class AltCLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if key in text_config and value != text_config[key] and key != "transformers_version":
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -335,7 +335,7 @@ class AltCLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                if key in vision_config and value != vision_config[key] and key != "transformers_version":
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (
@@ -367,18 +367,6 @@ class AltCLIPConfig(PretrainedConfig):
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
-
-    @classmethod
-    def from_text_vision_configs(cls, text_config: AltCLIPTextConfig, vision_config: AltCLIPVisionConfig, **kwargs):
-        r"""
-        Instantiate a [`AltCLIPConfig`] (or a derived class) from altclip text model configuration and altclip vision
-        model configuration.
-
-        Returns:
-            [`AltCLIPConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
 
 __all__ = ["AltCLIPTextConfig", "AltCLIPVisionConfig", "AltCLIPConfig"]

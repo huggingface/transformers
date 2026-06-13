@@ -293,6 +293,7 @@ class Pix2StructConfig(PretrainedConfig):
     ```"""
 
     model_type = "pix2struct"
+    sub_configs = {"text_config": Pix2StructTextConfig, "vision_config": Pix2StructVisionConfig}
 
     def __init__(
         self,
@@ -331,20 +332,6 @@ class Pix2StructConfig(PretrainedConfig):
         self.vision_config.initializer_range = self.initializer_range
 
         self.is_vqa = is_vqa
-
-    @classmethod
-    def from_text_vision_configs(
-        cls, text_config: Pix2StructTextConfig, vision_config: Pix2StructVisionConfig, **kwargs
-    ):
-        r"""
-        Instantiate a [`Pix2StructConfig`] (or a derived class) from pix2struct text model configuration and pix2struct
-        vision model configuration.
-
-        Returns:
-            [`Pix2StructConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
 
 __all__ = ["Pix2StructConfig", "Pix2StructTextConfig", "Pix2StructVisionConfig"]

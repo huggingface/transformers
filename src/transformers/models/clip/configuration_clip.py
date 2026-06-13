@@ -15,7 +15,8 @@
 """CLIP model configuration"""
 
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Optional
 
 
 if TYPE_CHECKING:
@@ -295,7 +296,7 @@ class CLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if key in text_config and value != text_config[key] and key != "transformers_version":
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -327,7 +328,7 @@ class CLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                if key in vision_config and value != vision_config[key] and key != "transformers_version":
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (
@@ -359,18 +360,6 @@ class CLIPConfig(PretrainedConfig):
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
-
-    @classmethod
-    def from_text_vision_configs(cls, text_config: CLIPTextConfig, vision_config: CLIPVisionConfig, **kwargs):
-        r"""
-        Instantiate a [`CLIPConfig`] (or a derived class) from clip text model configuration and clip vision model
-        configuration.
-
-        Returns:
-            [`CLIPConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
 
 class CLIPOnnxConfig(OnnxConfig):

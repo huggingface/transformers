@@ -14,7 +14,7 @@
 # limitations under the License.
 """FLAVA model configurations"""
 
-from typing import Any, Dict
+from typing import Any, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -151,9 +151,9 @@ class FlavaTextConfig(PretrainedConfig):
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -472,10 +472,10 @@ class FlavaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        image_config: Dict[str, Any] = None,
-        text_config: Dict[str, Any] = None,
-        multimodal_config: Dict[str, Any] = None,
-        image_codebook_config: Dict[str, Any] = None,
+        image_config: Optional[dict[str, Any]] = None,
+        text_config: Optional[dict[str, Any]] = None,
+        multimodal_config: Optional[dict[str, Any]] = None,
+        image_codebook_config: Optional[dict[str, Any]] = None,
         hidden_size: int = 768,
         layer_norm_eps: float = 1e-12,
         projection_dim: int = 768,
@@ -516,7 +516,7 @@ class FlavaConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if key in text_config and value != text_config[key] and key != "transformers_version":
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -548,7 +548,7 @@ class FlavaConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_image_config_dict` and `image_config` but being different.
             for key, value in _image_config_dict.items():
-                if key in image_config and value != image_config[key] and key not in ["transformers_version"]:
+                if key in image_config and value != image_config[key] and key != "transformers_version":
                     # If specified in `image_config_dict`
                     if key in image_config_dict:
                         message = (
@@ -576,11 +576,7 @@ class FlavaConfig(PretrainedConfig):
             # Give a warning if the values exist in both `_multimodal_config_dict` and `multimodal_config` but being
             # different.
             for key, value in _multimodal_config_dict.items():
-                if (
-                    key in multimodal_config
-                    and value != multimodal_config[key]
-                    and key not in ["transformers_version"]
-                ):
+                if key in multimodal_config and value != multimodal_config[key] and key != "transformers_version":
                     # If specified in `multimodal_config_dict`
                     if key in multimodal_config_dict:
                         message = (
@@ -611,7 +607,7 @@ class FlavaConfig(PretrainedConfig):
                 if (
                     key in image_codebook_config
                     and value != image_codebook_config[key]
-                    and key not in ["transformers_version"]
+                    and key != "transformers_version"
                 ):
                     # If specified in `image_codebook_config_dict`
                     if key in image_codebook_config_dict:

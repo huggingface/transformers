@@ -331,7 +331,7 @@ python examples/pytorch/summarization/run_summarization.py
 所有脚本都可以将您的最终模型上传到[Model Hub](https://huggingface.co/models)。在开始之前，请确保您已登录Hugging Face：
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 然后，在脚本中添加`push_to_hub`参数。这个参数会创建一个带有您Hugging Face用户名和`output_dir`中指定的文件夹名称的仓库。

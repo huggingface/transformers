@@ -363,7 +363,6 @@ Leverage [`Trainer`](https://huggingface.co/docs/transformers/main_classes/train
 
 Most of the training arguments are self-explanatory, but one that is quite important here is `remove_unused_columns=False`. This one will drop any features not used by the model's call function. By default it's `True` because usually it's ideal to drop unused feature columns, making it easier to unpack inputs into the model's call function. But, in this case, you need the unused features ('video' in particular) in order to create `pixel_values` (which is a mandatory key our model expects in its inputs).
 
-
 ```py
 >>> from transformers import TrainingArguments, Trainer
 
@@ -405,7 +404,7 @@ def compute_metrics(eval_pred):
 
 **A note on evaluation**:
 
-In the [VideoMAE paper](https://arxiv.org/abs/2203.12602), the authors use the following evaluation strategy. They evaluate the model on several clips from test videos and apply different crops to those clips and report the aggregate score. However, in the interest of simplicity and brevity, we don't consider that in this tutorial.
+In the [VideoMAE paper](https://huggingface.co/papers/2203.12602), the authors use the following evaluation strategy. They evaluate the model on several clips from test videos and apply different crops to those clips and report the aggregate score. However, in the interest of simplicity and brevity, we don't consider that in this tutorial.
 
 Also, define a `collate_fn`, which will be used to batch examples together. Each batch consists of 2 keys, namely `pixel_values` and `labels`.
 
@@ -464,7 +463,7 @@ Load a video for inference:
 The simplest way to try out your fine-tuned model for inference is to use it in a [`pipeline`](https://huggingface.co/docs/transformers/main/en/main_classes/pipelines#transformers.VideoClassificationPipeline). Instantiate a `pipeline` for video classification with your model, and pass your video to it:
 
 ```py
->>> from transformers import pipeline
+>>> from transformers import pipeline, infer_device
 
 >>> video_cls = pipeline(model="my_awesome_video_cls_model")
 >>> video_cls("https://huggingface.co/datasets/sayakpaul/ucf101-subset/resolve/main/v_BasketballDunk_g14_c06.avi")
@@ -477,7 +476,6 @@ The simplest way to try out your fine-tuned model for inference is to use it in 
 
 You can also manually replicate the results of the `pipeline` if you'd like.
 
-
 ```py
 >>> def run_inference(model, video):
 ...     # (num_frames, num_channels, height, width)
@@ -489,7 +487,7 @@ You can also manually replicate the results of the `pipeline` if you'd like.
 ...         ),  # this can be skipped if you don't have labels available.
 ...     }
 
-...     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+...     device = torch.device(infer_device())
 ...     inputs = {k: v.to(device) for k, v in inputs.items()}
 ...     model = model.to(device)
 

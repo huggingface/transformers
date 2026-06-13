@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-01-13 and added to Hugging Face Transformers on 2023-06-20.*
 
 # XLM-ProphetNet
 
@@ -40,10 +41,9 @@ You can do so by running the following command: `pip install -U transformers==4.
 **DISCLAIMER:** If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title) and assign
 @patrickvonplaten
 
-
 ## Overview
 
-The XLM-ProphetNet model was proposed in [ProphetNet: Predicting Future N-gram for Sequence-to-Sequence Pre-training,](https://arxiv.org/abs/2001.04063) by Yu Yan, Weizhen Qi, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei
+The XLM-ProphetNet model was proposed in [ProphetNet: Predicting Future N-gram for Sequence-to-Sequence Pre-training,](https://huggingface.co/papers/2001.04063) by Yu Yan, Weizhen Qi, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei
 Zhang, Ming Zhou on 13 Jan, 2020.
 
 XLM-ProphetNet is an encoder-decoder model and can predict n-future tokens for "ngram" language modeling instead of

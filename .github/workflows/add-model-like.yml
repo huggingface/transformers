@@ -54,7 +54,7 @@ jobs:
       - name: Create model files
         run: |
           . ~/venv/bin/activate
-          transformers-cli add-new-model-like --config_file tests/fixtures/add_distilbert_like_config.json --path_to_repo .
+          transformers add-new-model-like --config_file tests/fixtures/add_distilbert_like_config.json --path_to_repo .
           make style
           make fix-copies
 

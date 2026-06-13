@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-04-05 and added to Hugging Face Transformers on 2022-11-21.*
 
 # Audio Spectrogram Transformer
 
@@ -24,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Audio Spectrogram Transformer model was proposed in [AST: Audio Spectrogram Transformer](https://arxiv.org/abs/2104.01778) by Yuan Gong, Yu-An Chung, James Glass.
+The Audio Spectrogram Transformer model was proposed in [AST: Audio Spectrogram Transformer](https://huggingface.co/papers/2104.01778) by Yuan Gong, Yu-An Chung, James Glass.
 The Audio Spectrogram Transformer applies a [Vision Transformer](vit) to audio, by turning audio into an image (spectrogram). The model obtains state-of-the-art results
 for audio classification.
 
@@ -35,7 +36,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/audio_spectogram_transformer_architecture.png"
 alt="drawing" width="600"/>
 
-<small> Audio Spectrogram Transformer architecture. Taken from the <a href="https://arxiv.org/abs/2104.01778">original paper</a>.</small>
+<small> Audio Spectrogram Transformer architecture. Taken from the <a href="https://huggingface.co/papers/2104.01778">original paper</a>.</small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/YuanGongND/ast).
@@ -47,22 +48,22 @@ sure the input has mean of 0 and std of 0.5). [`ASTFeatureExtractor`] takes care
 mean and std by default. You can check [`ast/src/get_norm_stats.py`](https://github.com/YuanGongND/ast/blob/master/src/get_norm_stats.py) to see how
 the authors compute the stats for a downstream dataset.
 - Note that the AST needs a low learning rate (the authors use a 10 times smaller learning rate compared to their CNN model proposed in the
-[PSLA paper](https://arxiv.org/abs/2102.01243)) and converges quickly, so please search for a suitable learning rate and learning rate scheduler for your task.
+[PSLA paper](https://huggingface.co/papers/2102.01243)) and converges quickly, so please search for a suitable learning rate and learning rate scheduler for your task.
 
 ### Using Scaled Dot Product Attention (SDPA)
 
-PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
-encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
-[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
 or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
 page for more information.
 
-SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set
 `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
 
-```
+```py
 from transformers import ASTForAudioClassification
-model = ASTForAudioClassification.from_pretrained("MIT/ast-finetuned-audioset-10-10-0.4593", attn_implementation="sdpa", torch_dtype=torch.float16)
+model = ASTForAudioClassification.from_pretrained("MIT/ast-finetuned-audioset-10-10-0.4593", attn_implementation="sdpa", dtype=torch.float16)
 ...
 ```
 

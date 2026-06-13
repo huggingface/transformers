@@ -21,6 +21,7 @@ import io
 import json
 import math
 import os
+import re
 import sys
 import warnings
 from collections.abc import Iterator, Mapping
@@ -52,7 +53,7 @@ if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))
 
 if is_torch_xla_available():
-    import torch_xla.core.xla_model as xm
+    import torch_xla.runtime as xr
 
 if is_torch_available():
     from torch.optim.lr_scheduler import LRScheduler
@@ -148,13 +149,11 @@ def find_batch_size(tensors):
             if result is not None:
                 return result
     elif isinstance(tensors, Mapping):
-        for key, value in tensors.items():
+        for value in tensors.values():
             result = find_batch_size(value)
             if result is not None:
                 return result
-    elif isinstance(tensors, torch.Tensor):
-        return tensors.shape[0] if len(tensors.shape) >= 1 else None
-    elif isinstance(tensors, np.ndarray):
+    elif isinstance(tensors, (torch.Tensor, np.ndarray)):
         return tensors.shape[0] if len(tensors.shape) >= 1 else None
 
 
@@ -225,7 +224,7 @@ def distributed_broadcast_scalars(
     device: Optional[torch.device] = torch.device("cuda"),
 ) -> torch.Tensor:
     try:
-        tensorized_scalar = torch.tensor(scalars).to(device)
+        tensorized_scalar = torch.tensor(scalars, device=device)
         output_tensors = [tensorized_scalar.clone() for _ in range(dist.get_world_size())]
         dist.all_gather(output_tensors, tensorized_scalar)
         concat = torch.cat(output_tensors, dim=0)
@@ -271,7 +270,7 @@ class DistributedSamplerWithLoop(DistributedSampler):
             Dataset used for sampling.
         batch_size (`int`):
             The batch size used with this sampler
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             All other keyword arguments passed to `DistributedSampler`.
     """
 
@@ -398,9 +397,9 @@ class SequentialDistributedSampler(Sampler):
 
 
 def get_tpu_sampler(dataset: torch.utils.data.Dataset, batch_size: int):
-    if xm.xrt_world_size() <= 1:
+    if xr.world_size() <= 1:
         return RandomSampler(dataset)
-    return DistributedSampler(dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
+    return DistributedSampler(dataset, num_replicas=xr.world_size(), rank=xr.global_ordinal())
 
 
 def nested_new_like(arrays, num_samples, padding_index=-100):
@@ -633,10 +632,7 @@ class LengthGroupedSampler(Sampler):
         self.batch_size = batch_size
         if lengths is None:
             model_input_name = model_input_name if model_input_name is not None else "input_ids"
-            if (
-                not (isinstance(dataset[0], dict) or isinstance(dataset[0], BatchEncoding))
-                or model_input_name not in dataset[0]
-            ):
+            if not isinstance(dataset[0], (dict, BatchEncoding)) or model_input_name not in dataset[0]:
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{model_input_name}' key."
@@ -644,7 +640,7 @@ class LengthGroupedSampler(Sampler):
             lengths = [len(feature[model_input_name]) for feature in dataset]
         elif isinstance(lengths, torch.Tensor):
             logger.info(
-                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to List[int]..."
+                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to list[int]..."
             )
             lengths = lengths.tolist()
 
@@ -696,10 +692,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
 
         if lengths is None:
             model_input_name = model_input_name if model_input_name is not None else "input_ids"
-            if (
-                not (isinstance(dataset[0], dict) or isinstance(dataset[0], BatchEncoding))
-                or model_input_name not in dataset[0]
-            ):
+            if not isinstance(dataset[0], (dict, BatchEncoding)) or model_input_name not in dataset[0]:
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{model_input_name}' key."
@@ -708,7 +701,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         elif isinstance(lengths, torch.Tensor):
             logger.info(
                 "If lengths is a torch.Tensor, DistributedLengthGroupedSampler will be slow. Converting lengths to"
-                " List[int]..."
+                " list[int]..."
             )
             lengths = lengths.tolist()
 
@@ -921,8 +914,9 @@ def _get_learning_rate(self):
             last_lr = self.optimizer.param_groups[0]["lr"]
         else:
             last_lr = self.lr_scheduler.get_last_lr()[0]
-        if torch.is_tensor(last_lr):
-            last_lr = last_lr.item()
+
+    if torch.is_tensor(last_lr):
+        last_lr = last_lr.item()
     return last_lr
 
 
@@ -935,16 +929,16 @@ def _secs2timedelta(secs):
     return f"{datetime.timedelta(seconds=int(secs))}.{msec:02d}"
 
 
-def metrics_format(self, metrics: dict[str, float]) -> dict[str, float]:
+def metrics_format(metrics: dict[str, float]) -> dict[str, float]:
     """
     Reformat Trainer metrics values to a human-readable format.
 
     Args:
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics returned from train/evaluate/predict
 
     Returns:
-        metrics (`Dict[str, float]`): The reformatted metrics
+        metrics (`dict[str, float]`): The reformatted metrics
     """
 
     metrics_copy = metrics.copy()
@@ -970,7 +964,7 @@ def log_metrics(self, split, metrics):
     Args:
         split (`str`):
             Mode/split name: one of `train`, `eval`, `test`
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics returned from train/evaluate/predictmetrics: metrics dict
 
     Notes on memory reports:
@@ -1044,8 +1038,8 @@ def log_metrics(self, split, metrics):
         return
 
     print(f"***** {split} metrics *****")
-    metrics_formatted = self.metrics_format(metrics)
-    k_width = max(len(str(x)) for x in metrics_formatted.keys())
+    metrics_formatted = metrics_format(metrics)
+    k_width = max(len(str(x)) for x in metrics_formatted)
     v_width = max(len(str(x)) for x in metrics_formatted.values())
     for key in sorted(metrics_formatted.keys()):
         print(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
@@ -1060,7 +1054,7 @@ def save_metrics(self, split, metrics, combined=True):
     Args:
         split (`str`):
             Mode/split name: one of `train`, `eval`, `test`, `all`
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics returned from train/evaluate/predict
         combined (`bool`, *optional*, defaults to `True`):
             Creates combined metrics by updating `all_results.json` with metrics of this call
@@ -1123,8 +1117,9 @@ def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None
     """
     Returns the names of the model parameters that are not inside a forbidden layer.
     """
-    if forbidden_layer_names is None:
-        forbidden_layer_names = []
+    forbidden_layer_patterns = (
+        [re.compile(pattern) for pattern in forbidden_layer_names] if forbidden_layer_names is not None else []
+    )
     result = []
     for name, child in model.named_children():
         child_params = get_parameter_names(child, forbidden_layer_types, forbidden_layer_names)
@@ -1132,12 +1127,13 @@ def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None
             f"{name}.{n}"
             for n in child_params
             if not isinstance(child, tuple(forbidden_layer_types))
-            and not any(forbidden in f"{name}.{n}".lower() for forbidden in forbidden_layer_names)
+            and not any(pattern.search(f"{name}.{n}".lower()) for pattern in forbidden_layer_patterns)
         ]
     # Add model specific parameters that are not in any child
     result += [
-        k for k in model._parameters.keys() if not any(forbidden in k.lower() for forbidden in forbidden_layer_names)
+        k for k in model._parameters if not any(pattern.search(k.lower()) for pattern in forbidden_layer_patterns)
     ]
+
     return result
 
 
@@ -1204,7 +1200,7 @@ if is_sagemaker_mp_enabled():
             return type(tensor)({k: smp_nested_concat(v) for k, v in tensor.items()})
         # It doesn't seem possible to check here if `tensor` is a StepOutput because StepOutput lives in `smp.step`
         # which is also the name of the decorator so Python is confused.
-        return tensor.concat().detach().cpu()
+        return tensor.detach().concat().cpu()
 
 
 @dataclass
@@ -1289,7 +1285,7 @@ class AcceleratorConfig:
         },
     )
 
-    non_blocking: Optional[bool] = field(
+    non_blocking: bool = field(
         default=False,
         metadata={
             "help": "Whether to use non-blocking CUDA calls to help minimize synchronization during "
@@ -1327,7 +1323,7 @@ class AcceleratorConfig:
         with open_file(json_file, "r", encoding="utf-8") as f:
             config_dict = json.load(f)
         # Check for keys and load sensible defaults
-        extra_keys = sorted(key for key in config_dict.keys() if key not in cls.__dataclass_fields__.keys())
+        extra_keys = sorted(key for key in config_dict if key not in cls.__dataclass_fields__)
         if len(extra_keys) > 0:
             raise ValueError(
                 f"The config file at {json_file} had unknown keys ({extra_keys}), please try upgrading your `transformers`"
@@ -1353,7 +1349,7 @@ class LayerWiseDummyOptimizer(torch.optim.Optimizer):
     https://github.com/hiyouga/LLaMA-Factory/commit/8664262cde3919e10eaecbd66e8c5d356856362e#diff-ebe08ab14496dfb9e06075f0fdd36799ef6d1535cc4dd4715b74c4e3e06fe3ba
     """
 
-    def __init__(self, optimizer_dict=None, *args, **kwargs):
+    def __init__(self, optimizer_dict=None, **kwargs):
         dummy_tensor = torch.randn(1, 1)
         self.optimizer_dict = optimizer_dict
         super().__init__([dummy_tensor], {"lr": kwargs.get("lr", 1e-03)})
@@ -1377,8 +1373,7 @@ class LayerWiseDummyScheduler(LRScheduler):
         self.default_lr = kwargs["lr"]
         optimizer = LayerWiseDummyOptimizer(**kwargs)
         last_epoch = -1
-        verbose = False
-        super().__init__(optimizer, last_epoch, verbose)
+        super().__init__(optimizer, last_epoch)
 
     def get_lr(self):
         # default value

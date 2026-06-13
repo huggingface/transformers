@@ -24,7 +24,7 @@ import random
 import re
 import threading
 import time
-from typing import Any, NamedTuple, Optional, Union
+from typing import Any, Callable, NamedTuple, Optional, Union
 
 import numpy as np
 
@@ -49,11 +49,12 @@ if is_torch_available():
     import torch
 
 
-def seed_worker(_):
+def seed_worker(worker_id: int, num_workers: int, rank: int):
     """
     Helper function to set worker seed during Dataloader initialization.
     """
-    worker_seed = torch.initial_seed() % 2**32
+    init_seed = torch.initial_seed() % 2**32
+    worker_seed = num_workers * rank + init_seed
     set_seed(worker_seed)
 
 
@@ -259,7 +260,7 @@ class BestRun(NamedTuple):
             with run-{run_id}).
         objective (`float`):
             The objective that was obtained for this run.
-        hyperparameters (`Dict[str, Any]`):
+        hyperparameters (`dict[str, Any]`):
             The hyperparameters picked to get this run.
         run_summary (`Optional[Any]`):
             A summary of tuning experiments. `ray.tune.ExperimentAnalysis` object for Ray backend.
@@ -277,7 +278,7 @@ def default_compute_objective(metrics: dict[str, float]) -> float:
     metrics are provided to the [`Trainer`], the sum of all metrics otherwise.
 
     Args:
-        metrics (`Dict[str, float]`): The metrics returned by the evaluate method.
+        metrics (`dict[str, float]`): The metrics returned by the evaluate method.
 
     Return:
         `float`: The objective to minimize or maximize
@@ -287,9 +288,7 @@ def default_compute_objective(metrics: dict[str, float]) -> float:
     _ = metrics.pop("epoch", None)
     # Remove speed metrics
     speed_metrics = [
-        m
-        for m in metrics.keys()
-        if m.endswith("_runtime") or m.endswith("_per_second") or m.endswith("_compilation_time")
+        m for m in metrics if m.endswith("_runtime") or m.endswith("_per_second") or m.endswith("_compilation_time")
     ]
     for sm in speed_metrics:
         _ = metrics.pop(sm, None)
@@ -308,7 +307,7 @@ def default_hp_space_optuna(trial) -> dict[str, float]:
     }
 
 
-def default_hp_space_ray(trial) -> dict[str, float]:
+def default_hp_space_ray(trial) -> dict[str, Any]:
     from .integrations import is_ray_tune_available
 
     assert is_ray_tune_available(), "This function needs ray installed: `pip install ray[tune]`"
@@ -335,7 +334,7 @@ def default_hp_space_sigopt(trial):
     ]
 
 
-def default_hp_space_wandb(trial) -> dict[str, float]:
+def default_hp_space_wandb(trial) -> dict[str, Any]:
     from .integrations import is_wandb_available
 
     if not is_wandb_available():
@@ -362,13 +361,13 @@ class HPSearchBackend(ExplicitEnum):
 
 def is_main_process(local_rank):
     """
-    Whether or not the current process is the local process, based on `xm.get_ordinal()` (for TPUs) first, then on
+    Whether or not the current process is the local process, based on `xr.global_ordinal()` (for TPUs) first, then on
     `local_rank`.
     """
     if is_torch_xla_available():
-        import torch_xla.core.xla_model as xm
+        import torch_xla.runtime as xr
 
-        return xm.get_ordinal() == 0
+        return xr.global_ordinal() == 0
     return local_rank in [-1, 0]
 
 
@@ -377,9 +376,9 @@ def total_processes_number(local_rank):
     Return the number of processes launched in parallel. Works with `torch.distributed` and TPUs.
     """
     if is_torch_xla_available():
-        import torch_xla.core.xla_model as xm
+        import torch_xla.runtime as xr
 
-        return xm.xrt_world_size()
+        return xr.world_size()
     elif local_rank != -1 and is_torch_available():
         import torch
 
@@ -422,16 +421,17 @@ class SchedulerType(ExplicitEnum):
     Scheduler names for the parameter `lr_scheduler_type` in [`TrainingArguments`].
     By default, it uses "linear". Internally, this retrieves `get_linear_schedule_with_warmup` scheduler from [`Trainer`].
     Scheduler types:
-       - "linear" = get_linear_schedule_with_warmup
-       - "cosine" = get_cosine_schedule_with_warmup
-       - "cosine_with_restarts" = get_cosine_with_hard_restarts_schedule_with_warmup
-       - "polynomial" = get_polynomial_decay_schedule_with_warmup
-       - "constant" =  get_constant_schedule
-       - "constant_with_warmup" = get_constant_schedule_with_warmup
-       - "inverse_sqrt" = get_inverse_sqrt_schedule
-       - "reduce_lr_on_plateau" = get_reduce_on_plateau_schedule
-       - "cosine_with_min_lr" = get_cosine_with_min_lr_schedule_with_warmup
-       - "warmup_stable_decay" = get_wsd_schedule
+       - "linear" = [`get_linear_schedule_with_warmup`]
+       - "cosine" = [`get_cosine_schedule_with_warmup`]
+       - "cosine_with_restarts" = [`get_cosine_with_hard_restarts_schedule_with_warmup`]
+       - "polynomial" = [`get_polynomial_decay_schedule_with_warmup`]
+       - "constant" =  [`get_constant_schedule`]
+       - "constant_with_warmup" = [`get_constant_schedule_with_warmup`]
+       - "inverse_sqrt" = [`get_inverse_sqrt_schedule`]
+       - "reduce_lr_on_plateau" = [`get_reduce_on_plateau_schedule`]
+       - "cosine_with_min_lr" = [`get_cosine_with_min_lr_schedule_with_warmup`]
+       - "cosine_warmup_with_min_lr" = [`get_cosine_with_min_lr_schedule_with_warmup_lr_rate`]
+       - "warmup_stable_decay" = [`get_wsd_schedule`]
     """
 
     LINEAR = "linear"
@@ -443,6 +443,7 @@ class SchedulerType(ExplicitEnum):
     INVERSE_SQRT = "inverse_sqrt"
     REDUCE_ON_PLATEAU = "reduce_lr_on_plateau"
     COSINE_WITH_MIN_LR = "cosine_with_min_lr"
+    COSINE_WARMUP_WITH_MIN_LR = "cosine_warmup_with_min_lr"
     WARMUP_STABLE_DECAY = "warmup_stable_decay"
 
 
@@ -488,7 +489,7 @@ class TrainerMemoryTracker:
         if self.skip_memory_metrics:
             return
 
-        import psutil  # noqa
+        import psutil
 
         if is_torch_cuda_available() or is_torch_mlu_available() or is_torch_musa_available():
             import torch
@@ -792,14 +793,14 @@ def number_of_arguments(func):
 
 
 def find_executable_batch_size(
-    function: callable = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
+    function: Optional[Callable] = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
 ):
     """
     Args:
     A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
-    CUDNN, the batch size is cut in half and passed to `function`. `function` must take in a `batch_size` parameter as
+    CUDNN, the batch size is multiplied by 0.9 and passed to `function`. `function` must take in a `batch_size` parameter as
     its first argument.
-        function (`callable`, *optional*)
+        function (`Callable`, *optional*)
             A function to wrap
         starting_batch_size (`int`, *optional*)
             The batch size to try and fit into memory
@@ -875,7 +876,7 @@ def check_target_module_exists(optim_target_modules, key: str, return_is_regex: 
     """A helper method to check if the passed module's key name matches any of the target modules in the optim_target_modules.
 
     Args:
-        optim_target_modules (`Union[str, List[str]]`):
+        optim_target_modules (`Union[str, list[str]]`):
             A list of strings to try to match. Can be also a full string.
         key (`str`):
             A key to search any matches in optim_target_modules
@@ -894,7 +895,7 @@ def check_target_module_exists(optim_target_modules, key: str, return_is_regex: 
 
     if isinstance(optim_target_modules, str):
         target_module_found = bool(re.fullmatch(optim_target_modules, key))
-        is_regex = True if not optim_target_modules == key else False
+        is_regex = optim_target_modules != key
     elif key in optim_target_modules:  # from here, target_module_found must be a list of str
         # this module is specified directly in target_modules
         target_module_found = True

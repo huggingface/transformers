@@ -16,7 +16,6 @@ import json
 import os
 import re
 import time
-from typing import Dict, List
 
 from get_ci_error_statistics import get_jobs
 from slack_sdk import WebClient
@@ -60,7 +59,7 @@ def extract_first_line_failure(failures_short_lines):
 
 
 class Message:
-    def __init__(self, title: str, doc_test_results: Dict):
+    def __init__(self, title: str, doc_test_results: dict):
         self.title = title
 
         self.n_success = sum(job_result["n_success"] for job_result in doc_test_results.values())
@@ -90,11 +89,11 @@ class Message:
         return f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
 
     @property
-    def header(self) -> Dict:
+    def header(self) -> dict:
         return {"type": "header", "text": {"type": "plain_text", "text": self.title}}
 
     @property
-    def no_failures(self) -> Dict:
+    def no_failures(self) -> dict:
         return {
             "type": "section",
             "text": {
@@ -110,7 +109,7 @@ class Message:
         }
 
     @property
-    def failures(self) -> Dict:
+    def failures(self) -> dict:
         return {
             "type": "section",
             "text": {
@@ -129,7 +128,7 @@ class Message:
         }
 
     @property
-    def category_failures(self) -> List[Dict]:
+    def category_failures(self) -> list[dict]:
         failure_blocks = []
 
         MAX_ERROR_TEXT = 3000 - len("The following examples had failures:\n\n\n\n") - len("[Truncated]\n")
@@ -301,7 +300,7 @@ def retrieve_available_artifacts():
         def add_path(self, path: str):
             self.paths.append({"name": self.name, "path": path})
 
-    _available_artifacts: Dict[str, Artifact] = {}
+    _available_artifacts: dict[str, Artifact] = {}
 
     directories = filter(os.path.isdir, os.listdir())
     for directory in directories:
@@ -333,7 +332,7 @@ if __name__ == "__main__":
 
     doc_test_results = {}
     # `artifact_key` is the artifact path
-    for artifact_key, artifact_obj in available_artifacts.items():
+    for artifact_obj in available_artifacts.values():
         artifact_path = artifact_obj.paths[0]
         if not artifact_path["path"].startswith("doc_tests_gpu_test_reports_"):
             continue
@@ -372,7 +371,7 @@ if __name__ == "__main__":
                         file_path, test = line, line
 
                     job_result["failed"].append(test)
-                    failure = all_failures[test] if test in all_failures else "N/A"
+                    failure = all_failures.get(test, "N/A")
                     job_result["failures"][test] = failure
 
     # Save and to be uploaded as artifact

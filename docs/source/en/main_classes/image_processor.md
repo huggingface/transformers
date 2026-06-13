@@ -16,8 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Image Processor
 
-An image processor is in charge of preparing input features for vision models and post processing their outputs. This includes transformations such as resizing, normalization, and conversion to PyTorch, TensorFlow, Flax and Numpy tensors. It may also include model specific post-processing such as converting logits to segmentation masks.
-
+An image processor is in charge of loading images (optionally), preparing input features for vision models and post processing their outputs. This includes transformations such as resizing, normalization, and conversion to PyTorch and Numpy tensors. It may also include model specific post-processing such as converting logits to segmentation masks.
 Fast image processors are available for a few models and more will be added in the future. They are based on the [torchvision](https://pytorch.org/vision/stable/index.html) library and provide a significant speed-up, especially when processing on GPU.
 They have the same API as the base image processors and can be used as drop-in replacements.
 To use a fast image processor, you need to install the `torchvision` library, and set the `use_fast` argument to `True` when instantiating the image processor:
@@ -27,6 +26,7 @@ from transformers import AutoImageProcessor
 
 processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50", use_fast=True)
 ```
+
 Note that `use_fast` will be set to `True` by default in a future release.
 
 When using a fast image processor, you can also set the `device` argument to specify the device on which the processing should be done. By default, the processing is done on the same device as the inputs if the inputs are tensors, or on the CPU otherwise.
@@ -58,7 +58,6 @@ Here are some speed comparisons between the base and fast image processors for t
 
 These benchmarks were run on an [AWS EC2 g5.2xlarge instance](https://aws.amazon.com/ec2/instance-types/g5/), utilizing an NVIDIA A10G Tensor Core GPU.
 
-
 ## ImageProcessingMixin
 
 [[autodoc]] image_processing_utils.ImageProcessingMixin
@@ -72,7 +71,6 @@ These benchmarks were run on an [AWS EC2 g5.2xlarge instance](https://aws.amazon
 ## BaseImageProcessor
 
 [[autodoc]] image_processing_utils.BaseImageProcessor
-
 
 ## BaseImageProcessorFast
 

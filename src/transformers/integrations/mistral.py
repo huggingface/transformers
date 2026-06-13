@@ -16,10 +16,8 @@ class MistralConverter:
         pattern=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
         add_prefix_space=False,
         additional_special_tokens=None,
-        *args,
         **kwargs,
     ):
-        super().__init__(*args)
         self.vocab = vocab
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space

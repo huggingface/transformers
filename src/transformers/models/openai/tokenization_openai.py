@@ -18,7 +18,7 @@ import json
 import os
 import re
 import unicodedata
-from typing import Optional, Tuple
+from typing import Optional
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
@@ -178,14 +178,14 @@ class BasicTokenizer:
         # like the all of the other languages.
         if (
             (cp >= 0x4E00 and cp <= 0x9FFF)
-            or (cp >= 0x3400 and cp <= 0x4DBF)  #
-            or (cp >= 0x20000 and cp <= 0x2A6DF)  #
-            or (cp >= 0x2A700 and cp <= 0x2B73F)  #
-            or (cp >= 0x2B740 and cp <= 0x2B81F)  #
-            or (cp >= 0x2B820 and cp <= 0x2CEAF)  #
+            or (cp >= 0x3400 and cp <= 0x4DBF)
+            or (cp >= 0x20000 and cp <= 0x2A6DF)
+            or (cp >= 0x2A700 and cp <= 0x2B73F)
+            or (cp >= 0x2B740 and cp <= 0x2B81F)
+            or (cp >= 0x2B820 and cp <= 0x2CEAF)
             or (cp >= 0xF900 and cp <= 0xFAFF)
-            or (cp >= 0x2F800 and cp <= 0x2FA1F)  #
-        ):  #
+            or (cp >= 0x2F800 and cp <= 0x2FA1F)
+        ):
             return True
 
         return False
@@ -363,7 +363,7 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).replace("</w>", " ").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return

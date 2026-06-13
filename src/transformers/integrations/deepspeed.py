@@ -22,7 +22,7 @@ import weakref
 from functools import partialmethod
 
 from ..dependency_versions_check import dep_version_check
-from ..utils import is_accelerate_available, is_torch_available, is_torch_mlu_available, logging
+from ..utils import is_accelerate_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -40,9 +40,6 @@ def is_deepspeed_available():
     # AND checking it has an author field in the metadata that is HuggingFace.
     if package_exists:
         try:
-            if is_torch_mlu_available():
-                _ = importlib_metadata.metadata("deepspeed-mlu")
-                return True
             _ = importlib_metadata.metadata("deepspeed")
             return True
         except importlib_metadata.PackageNotFoundError:
@@ -224,17 +221,20 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         hidden_size_auto_keys = [x for x in hidden_size_based_keys if self.is_auto(x)]
 
         if len(hidden_size_auto_keys) > 0:
-            if hasattr(model.config, "hidden_size"):
-                hidden_size = model.config.hidden_size
-            elif hasattr(model.config, "hidden_sizes"):
-                # if there are many hidden sizes pick the largest one
-                hidden_size = max(model.config.hidden_sizes)
-            elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_size"):
-                hidden_size = model.config.text_config.hidden_size
-            elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_sizes"):
-                # if there are many hidden sizes pick the largest one
-                hidden_size = max(model.config.text_config.hidden_sizes)
-            else:
+            hidden_size = None
+            if hasattr(model, "config"):
+                if hasattr(model.config, "hidden_size"):
+                    hidden_size = model.config.hidden_size
+                elif hasattr(model.config, "hidden_sizes"):
+                    # if there are many hidden sizes pick the largest one
+                    hidden_size = max(model.config.hidden_sizes)
+                elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_size"):
+                    hidden_size = model.config.text_config.hidden_size
+                elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_sizes"):
+                    # if there are many hidden sizes pick the largest one
+                    hidden_size = max(model.config.text_config.hidden_sizes)
+
+            if hidden_size is None:
                 raise ValueError(
                     "The model's config file has neither `hidden_size` nor `hidden_sizes` entry, "
                     "therefore it's not possible to automatically fill out the following `auto` entries "
@@ -306,7 +306,7 @@ def deepspeed_config():
         return None
 
 
-def _load_state_dict_into_zero3_model(model_to_load, state_dict, assign_to_params_buffers=False):
+def _load_state_dict_into_zero3_model(model_to_load, state_dict):
     """
     Loads state dict into a model specifically for Zero3, since DeepSpeed does not support the `transformers`
     tensor parallelism API.
@@ -336,7 +336,7 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, assign_to_param
             # In sharded models, each shard has only part of the full state_dict, so only gather
             # parameters that are in the current state_dict.
             named_parameters = dict(module.named_parameters(prefix=prefix[:-1], recurse=False))
-            params_to_gather = [named_parameters[k] for k in state_dict.keys() if k in named_parameters]
+            params_to_gather = [named_parameters[k] for k in state_dict if k in named_parameters]
             if len(params_to_gather) > 0:
                 # because zero3 puts placeholders in model params, this context
                 # manager gathers (unpartitions) the params of the current layer, then loads from
@@ -349,10 +349,7 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, assign_to_param
             if child is not None:
                 load(child, state_dict, prefix + name + ".", assign_to_params_buffers)
 
-    load(model_to_load, state_dict, assign_to_params_buffers=assign_to_params_buffers)
-    # Delete `state_dict` so it could be collected by GC earlier. Note that `state_dict` is a copy of the argument, so
-    # it's safe to delete it.
-    del state_dict
+    load(model_to_load, state_dict, assign_to_params_buffers=False)
 
     return error_msgs
 
@@ -375,7 +372,7 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
 
     optimizer = None
     if "optimizer" in config:
-        if args.adafactor:
+        if args.optim == "adafactor":
             raise ValueError(
                 "--adafactor was passed, but also found `optimizer` configured in the DeepSpeed config. "
                 "Only one optimizer can be configured."
@@ -464,11 +461,16 @@ def deepspeed_init(trainer, num_training_steps, inference=False):
         model_parameters = None
     else:
         trainer.optimizer = None  # important for when deepspeed_init is used as re-init
-        tp_size = hf_deepspeed_config.config.get("tensor_parallel", {}).get("autotp_size", 0)
-        if tp_size > 1:
+        deepspeed_tp_size = hf_deepspeed_config.config.get("tensor_parallel", {}).get("autotp_size", 1)
+        if deepspeed_tp_size > 1:
             import deepspeed
 
-            model = deepspeed.tp_model_init(model=model, tp_size=tp_size, dtype=hf_deepspeed_config.dtype())
+            model = deepspeed.tp_model_init(
+                model=model,
+                tp_size=deepspeed_tp_size,
+                dtype=hf_deepspeed_config.dtype(),
+                config=hf_deepspeed_config.config,
+            )
         model_parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
         optimizer, lr_scheduler = deepspeed_optim_sched(
             trainer, hf_deepspeed_config, args, num_training_steps, model_parameters

@@ -57,8 +57,8 @@ rendered properly in your Markdown viewer.
 
 |                                  模型                                   | PyTorch 支持 | TensorFlow 支持 | Flax 支持 |
 |:------------------------------------------------------------------------:|:---------------:|:------------------:|:------------:|
-|                        [ALBERT](../en/model_doc/albert.md)                        |       ✅        |         ✅         |      ✅      |
-|                         [ALIGN](../en/model_doc/align.md)                         |       ✅        |         ❌         |      ❌      |
+|                        [ALBERT](../en/model_doc/albert)                        |       ✅        |         ✅         |      ✅      |
+|                         [ALIGN](../en/model_doc/align)                         |       ✅        |         ❌         |      ❌      |
 |                       [AltCLIP](../en/model_doc/altclip)                       |       ✅        |         ❌         |      ❌      |
 | [Audio Spectrogram Transformer](../en/model_doc/audio-spectrogram-transformer) |       ✅        |         ❌         |      ❌      |
 |                    [Autoformer](../en/model_doc/autoformer)                    |       ✅        |         ❌         |      ❌      |

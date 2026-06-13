@@ -49,8 +49,8 @@ class Phi3Config(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         resid_pdrop (`float`, *optional*, defaults to 0.0):
             Dropout probability for mlp outputs.
@@ -210,7 +210,7 @@ class Phi3Config(PretrainedConfig):
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_short_factor = self.rope_scaling.get("short_factor", None)
         rope_scaling_long_factor = self.rope_scaling.get("long_factor", None)
-        if rope_scaling_type is None or rope_scaling_type not in ["longrope"]:
+        if rope_scaling_type is None or rope_scaling_type != "longrope":
             raise ValueError(f"`rope_scaling`'s type field must be one of ['longrope'], got {rope_scaling_type}")
         if not (
             isinstance(rope_scaling_short_factor, list)

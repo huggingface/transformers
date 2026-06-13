@@ -25,23 +25,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] pytorch_utils.Conv1D
 
-[[autodoc]] modeling_utils.PoolerStartLogits
-    - forward
-
-[[autodoc]] modeling_utils.PoolerEndLogits
-    - forward
-
-[[autodoc]] modeling_utils.PoolerAnswerClass
-    - forward
-
-[[autodoc]] modeling_utils.SquadHeadOutput
-
-[[autodoc]] modeling_utils.SQuADHead
-    - forward
-
-[[autodoc]] modeling_utils.SequenceSummary
-    - forward
-
 ## PyTorch帮助函数
 
 [[autodoc]] pytorch_utils.apply_chunking_to_forward

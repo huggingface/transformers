@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## 概要
 
-ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Language Representations](https://arxiv.org/abs/1909.11942)」という論文でZhenzhong Lan、Mingda Chen、Sebastian Goodman、Kevin Gimpel、Piyush Sharma、Radu Soricutによって提案されました。BERTのメモリ消費を減らしトレーニングを高速化するためのパラメータ削減技術を2つ示しています：
+ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Language Representations](https://huggingface.co/papers/1909.11942)」という論文でZhenzhong Lan、Mingda Chen、Sebastian Goodman、Kevin Gimpel、Piyush Sharma、Radu Soricutによって提案されました。BERTのメモリ消費を減らしトレーニングを高速化するためのパラメータ削減技術を2つ示しています：
 
 - 埋め込み行列を2つの小さな行列に分割する。
 - グループ間で分割された繰り返し層を使用する。
@@ -47,7 +47,7 @@ ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Lan
 
 ## 参考資料
 
-- [テキスト分類タスクガイド](../tasks/sequence_classification)
+- [テキスト分類タスクガイド(英語版)](../../en/tasks/sequence_classification)
 - [トークン分類タスクガイド](../tasks/token_classification)
 - [質問応答タスクガイド](../tasks/question_answering)
 - [マスクされた言語モデルタスクガイド](../tasks/masked_language_modeling)
