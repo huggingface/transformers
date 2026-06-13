@@ -13,11 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-06-11.*
+*This model was contributed to Hugging Face Transformers on 2026-06-13.*
 
 # Step3p7
 
-Step3p7 is a multimodal vision-language model from StepFun. It combines a Step3p7 text decoder with a StepRobotics vision encoder and a multimodal projector to generate text conditioned on text and image inputs.
+Step3p7 is a multimodal vision-language model from StepFun. It combines a Step3p7 text decoder with a Step3p7 vision encoder and a multimodal projector to generate text conditioned on text and image inputs.
 
 The Transformers implementation supports loading original Step3p7 checkpoints with the standard [`AutoConfig`], [`AutoProcessor`], and [`AutoModelForCausalLM`] APIs.
 
@@ -61,9 +61,9 @@ print(processor.decode(outputs[0], skip_special_tokens=True))
 
 [[autodoc]] Step3p7TextConfig
 
-## StepRoboticsVisionEncoderConfig
+## Step3p7VisionEncoderConfig
 
-[[autodoc]] StepRoboticsVisionEncoderConfig
+[[autodoc]] Step3p7VisionEncoderConfig
 
 ## Step3VisionProcessor
 

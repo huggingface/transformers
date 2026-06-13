@@ -37,7 +37,7 @@ from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.processing_utils import Unpack
 from transformers.utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 
-from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, StepRoboticsVisionEncoderConfig
+from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, Step3p7VisionEncoderConfig
 
 
 logger = logging.get_logger(__name__)
@@ -142,26 +142,28 @@ class Step3p7VisionEncoderRope2D(nn.Module):
 class Step3p7VisionEncoderLayerScale(nn.Module):
     """Per-channel residual scaling used when ls_init_value is set."""
 
-    def __init__(self, dim: int, init_values: float):
+    def __init__(self, dim: int, init_values: float) -> None:
         super().__init__()
-        self.gamma = nn.Parameter(torch.full((dim,), init_values))
+        self.lambda1 = nn.Parameter(torch.full((dim,), init_values))
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:  # (B, L, D)
-        return hidden_states * self.gamma
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        return hidden_state * self.lambda1
 
 
 class Step3p7VisionEncoderMLP(nn.Module):
     """Feed-forward network used inside each transformer block."""
 
-    def __init__(self, hidden_size: int, intermediate_size: int, hidden_act: str):
+    def __init__(self, hidden_size: int, intermediate_size: int, hidden_act: str) -> None:
         super().__init__()
-        self.c_fc = nn.Linear(hidden_size, intermediate_size, bias=True)
-        self.act_fn = ACT2FN[hidden_act]
-        self.c_proj = nn.Linear(intermediate_size, hidden_size, bias=True)
+        self.fc1 = nn.Linear(hidden_size, intermediate_size, bias=True)
+        self.activation = ACT2FN[hidden_act]
+        self.fc2 = nn.Linear(intermediate_size, hidden_size, bias=True)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.c_proj(self.act_fn(self.c_fc(hidden_states)))
-        return hidden_states
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.fc1(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        hidden_state = self.fc2(hidden_state)
+        return hidden_state
 
 
 class Step3p7VisionEncoderAttention(nn.Module):
@@ -309,16 +311,16 @@ class Step3p7VisionEncoderTransformer(nn.Module):
         return hidden_states
 
 
-class StepRoboticsVisionEncoder(nn.Module):
+class Step3p7VisionEncoder(nn.Module):
     """
-    Vision encoder built from StepRoboticsVisionEncoderConfig.
+    Vision encoder built from Step3p7VisionEncoderConfig.
 
     The encoder performs patch embedding followed by a stack of transformer
-    blocks. Only the config fields defined in StepRoboticsVisionEncoderConfig (and
-    StepRoboticVLConfig.vision_config) are expected.
+    blocks. Only the config fields defined in Step3p7VisionEncoderConfig (and
+    Step3p7Config.vision_config) are expected.
     """
 
-    def __init__(self, config: StepRoboticsVisionEncoderConfig):
+    def __init__(self, config: Step3p7VisionEncoderConfig):
         super().__init__()
         self.config = config
 
@@ -606,17 +608,6 @@ class Step3p7MoELinear(nn.Module):
         return x
 
 
-def sigmoid_routing_function(gating_output: torch.Tensor, topk: int, renormalize: bool):
-    gating_output = gating_output.float()
-    gate_prob = torch.sigmoid(gating_output)
-    gate_prob = gate_prob / gate_prob.sum(dim=-1, keepdim=True)
-    topk_prob, indices = torch.topk(gate_prob, k=topk, dim=1)
-    expert_topk_weight = topk_prob
-    if renormalize:
-        expert_topk_weight = expert_topk_weight / torch.sum(expert_topk_weight, dim=-1, keepdim=True)
-    return expert_topk_weight, indices
-
-
 class Step3p7MoEMLP(nn.Module):
     def __init__(self, config, swiglu_limit=None):
         super().__init__()
@@ -631,8 +622,6 @@ class Step3p7MoEMLP(nn.Module):
                 torch.zeros(config.moe_num_experts, dtype=torch.float32), requires_grad=False
             )
             self.custom_routing_function = self.router_bias_func
-        elif config.moe_router_activation == "sigmoid":
-            self.custom_routing_function = sigmoid_routing_function
         else:
             self.custom_routing_function = None
         self.need_fp32_gate = config.need_fp32_gate
@@ -1137,7 +1126,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
 
     def __init__(self, config: Step3p7Config):
         super().__init__(config)
-        self.vision_model = StepRoboticsVisionEncoder(config.vision_config)
+        self.vision_model = Step3p7VisionEncoder(config.vision_config)
         self.language_model = Step3p7TextModel(config.text_config)
         self.vit_large_projector = nn.Linear(
             config.vision_config.width * 4, config.text_config.hidden_size, bias=config.projector_bias
@@ -1447,5 +1436,5 @@ __all__ = [
     "Step3p7PreTrainedModel",
     "Step3p7TextModel",
     "Step3p7TextPreTrainedModel",
-    "StepRoboticsVisionEncoder",
+    "Step3p7VisionEncoder",
 ]

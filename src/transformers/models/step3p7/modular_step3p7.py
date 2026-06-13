@@ -31,12 +31,13 @@ from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from transformers.models.dinov2.modeling_dinov2 import Dinov2LayerScale, Dinov2MLP
 from transformers.models.gemma3.modeling_gemma3 import Gemma3RMSNorm, repeat_kv
 from transformers.processing_utils import Unpack
 from transformers.utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 
 
-STEP_ROBOTICS_VISION_ENCODER_CONFIG_ARGS = r"""
+STEP3P7_VISION_ENCODER_CONFIG_ARGS = r"""
     width (`int`, *optional*, defaults to 1536):
         Hidden size of the vision encoder.
     layers (`int`, *optional*, defaults to 47):
@@ -116,8 +117,6 @@ STEP3P7_TEXT_CONFIG_ARGS = r"""
         Whether to use head-wise attention gates.
     use_moe_router_bias (`bool`, *optional*, defaults to `False`):
         Whether MoE router projections use a bias term.
-    moe_router_activation (`str`, *optional*, defaults to `"softmax"`):
-        Activation function used by the MoE router.
     moe_router_scaling_factor (`float`, *optional*, defaults to 1.0):
         Scaling factor applied to MoE router scores.
     need_fp32_gate (`bool`, *optional*, defaults to `False`):
@@ -135,7 +134,7 @@ STEP3P7_TEXT_CONFIG_ARGS = r"""
 """
 
 STEP3P7_CONFIG_ARGS = r"""
-    vision_config (`dict` or `StepRoboticsVisionEncoderConfig`, *optional*):
+    vision_config (`dict` or `Step3p7VisionEncoderConfig`, *optional*):
         Configuration of the Step3p7 vision encoder.
     text_config (`dict` or `Step3p7TextConfig`, *optional*):
         Configuration of the Step3p7 text decoder.
@@ -147,8 +146,8 @@ STEP3P7_CONFIG_ARGS = r"""
 
 
 @strict
-@auto_docstring(custom_args=STEP_ROBOTICS_VISION_ENCODER_CONFIG_ARGS, checkpoint="stepfun-ai/Step-3.7-Flash")
-class StepRoboticsVisionEncoderConfig(PreTrainedConfig):
+@auto_docstring(custom_args=STEP3P7_VISION_ENCODER_CONFIG_ARGS, checkpoint="stepfun-ai/Step-3.7-Flash")
+class Step3p7VisionEncoderConfig(PreTrainedConfig):
     r"""
     width (`int`, *optional*, defaults to 1536):
         Hidden size of the vision encoder.
@@ -226,8 +225,6 @@ class Step3p7TextConfig(PreTrainedConfig):
         Whether to use head-wise attention gates.
     use_moe_router_bias (`bool`, *optional*, defaults to `False`):
         Whether MoE router projections use a bias term.
-    moe_router_activation (`str`, *optional*, defaults to `"softmax"`):
-        Activation function used by the MoE router.
     moe_router_scaling_factor (`float`, *optional*, defaults to 1.0):
         Scaling factor applied to MoE router scores.
     need_fp32_gate (`bool`, *optional*, defaults to `False`):
@@ -271,7 +268,6 @@ class Step3p7TextConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
     use_head_wise_attn_gate: bool = False
     use_moe_router_bias: bool = False
-    moe_router_activation: str = "softmax"
     moe_router_scaling_factor: float = 1.0
     need_fp32_gate: bool = False
     attention_other_setting: dict[str, Any] | None = None
@@ -357,12 +353,12 @@ def _normalize_per_layer_values(
 class Step3p7Config(PreTrainedConfig):
     r""" """
 
-    sub_configs = {"vision_config": StepRoboticsVisionEncoderConfig, "text_config": Step3p7TextConfig}
+    sub_configs = {"vision_config": Step3p7VisionEncoderConfig, "text_config": Step3p7TextConfig}
     # This loader is a compatibility shim for original Step VL checkpoints
     # whose top-level config model_type is `step3p7`.
     model_type = "step3p7"
 
-    vision_config: dict | StepRoboticsVisionEncoderConfig | None = None
+    vision_config: dict | Step3p7VisionEncoderConfig | None = None
     text_config: dict | Step3p7TextConfig | None = None
     projector_bias: bool = False
     image_token_id: int = 151679
@@ -374,9 +370,9 @@ class Step3p7Config(PreTrainedConfig):
             shared_rope_scaling = dict(shared_rope_scaling)
 
         if self.vision_config is None:
-            self.vision_config = StepRoboticsVisionEncoderConfig()
+            self.vision_config = Step3p7VisionEncoderConfig()
         elif isinstance(self.vision_config, dict):
-            self.vision_config = StepRoboticsVisionEncoderConfig(**self.vision_config)
+            self.vision_config = Step3p7VisionEncoderConfig(**self.vision_config)
 
         if self.text_config is None:
             self.text_config = Step3p7TextConfig(rope_scaling=shared_rope_scaling)
@@ -495,29 +491,22 @@ class Step3p7VisionEncoderRope2D(nn.Module):
         return q, k
 
 
-class Step3p7VisionEncoderLayerScale(nn.Module):
+class Step3p7VisionEncoderLayerScale(Dinov2LayerScale):
     """Per-channel residual scaling used when ls_init_value is set."""
 
     def __init__(self, dim: int, init_values: float):
-        super().__init__()
-        self.gamma = nn.Parameter(torch.full((dim,), init_values))
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:  # (B, L, D)
-        return hidden_states * self.gamma
+        nn.Module.__init__(self)
+        self.lambda1 = nn.Parameter(torch.full((dim,), init_values))
 
 
-class Step3p7VisionEncoderMLP(nn.Module):
+class Step3p7VisionEncoderMLP(Dinov2MLP):
     """Feed-forward network used inside each transformer block."""
 
     def __init__(self, hidden_size: int, intermediate_size: int, hidden_act: str):
-        super().__init__()
-        self.c_fc = nn.Linear(hidden_size, intermediate_size, bias=True)
-        self.act_fn = ACT2FN[hidden_act]
-        self.c_proj = nn.Linear(intermediate_size, hidden_size, bias=True)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.c_proj(self.act_fn(self.c_fc(hidden_states)))
-        return hidden_states
+        nn.Module.__init__(self)
+        self.fc1 = nn.Linear(hidden_size, intermediate_size, bias=True)
+        self.activation = ACT2FN[hidden_act]
+        self.fc2 = nn.Linear(intermediate_size, hidden_size, bias=True)
 
 
 class Step3p7VisionEncoderAttention(nn.Module):
@@ -665,16 +654,16 @@ class Step3p7VisionEncoderTransformer(nn.Module):
         return hidden_states
 
 
-class StepRoboticsVisionEncoder(nn.Module):
+class Step3p7VisionEncoder(nn.Module):
     """
-    Vision encoder built from StepRoboticsVisionEncoderConfig.
+    Vision encoder built from Step3p7VisionEncoderConfig.
 
     The encoder performs patch embedding followed by a stack of transformer
-    blocks. Only the config fields defined in StepRoboticsVisionEncoderConfig (and
-    StepRoboticVLConfig.vision_config) are expected.
+    blocks. Only the config fields defined in Step3p7VisionEncoderConfig (and
+    Step3p7Config.vision_config) are expected.
     """
 
-    def __init__(self, config: StepRoboticsVisionEncoderConfig):
+    def __init__(self, config: Step3p7VisionEncoderConfig):
         super().__init__()
         self.config = config
 
@@ -997,28 +986,6 @@ class Step3p7MLP(nn.Module):
         return self.down_proj(gate * up)
 
 
-def sigmoid_routing_function(gating_output: torch.Tensor, topk: int, renormalize: bool):
-    gating_output = gating_output.float()
-    gate_prob = torch.sigmoid(gating_output)
-    gate_prob = gate_prob / gate_prob.sum(dim=-1, keepdim=True)
-    topk_prob, indices = torch.topk(gate_prob, k=topk, dim=1)
-    expert_topk_weight = topk_prob
-    if renormalize:
-        expert_topk_weight = expert_topk_weight / torch.sum(expert_topk_weight, dim=-1, keepdim=True)
-    return expert_topk_weight, indices
-
-
-def softmax_routing_function(gating_output: torch.Tensor, top_k: int, renormalize: bool):
-    gating_output = gating_output.float()
-    gate_prob = torch.softmax(gating_output, dim=-1)
-    gate_prob = gate_prob / gate_prob.sum(dim=-1, keepdim=True)
-    topk_prob, indices = torch.topk(gate_prob, k=top_k, dim=1)
-    expert_topk_weight = topk_prob
-    if renormalize:
-        expert_topk_weight = expert_topk_weight / torch.sum(expert_topk_weight, dim=-1, keepdim=True)
-    return expert_topk_weight, indices.to(torch.int32)
-
-
 class Step3p7MoELinear(nn.Module):
     def __init__(self, num_experts, in_features, out_features):
         super().__init__()
@@ -1046,8 +1013,6 @@ class Step3p7MoEMLP(nn.Module):
                 torch.zeros(config.moe_num_experts, dtype=torch.float32), requires_grad=False
             )
             self.custom_routing_function = self.router_bias_func
-        elif config.moe_router_activation == "sigmoid":
-            self.custom_routing_function = sigmoid_routing_function
         else:
             self.custom_routing_function = None
         self.need_fp32_gate = config.need_fp32_gate
@@ -1481,7 +1446,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
 
     def __init__(self, config: Step3p7Config):
         super().__init__(config)
-        self.vision_model = StepRoboticsVisionEncoder(config.vision_config)
+        self.vision_model = Step3p7VisionEncoder(config.vision_config)
         self.language_model = Step3p7TextModel(config.text_config)
         self.vit_large_projector = nn.Linear(
             config.vision_config.width * 4, config.text_config.hidden_size, bias=config.projector_bias
@@ -1793,6 +1758,6 @@ __all__ = [
     "Step3p7TextConfig",
     "Step3p7TextModel",
     "Step3p7TextPreTrainedModel",
-    "StepRoboticsVisionEncoder",
-    "StepRoboticsVisionEncoderConfig",
+    "Step3p7VisionEncoder",
+    "Step3p7VisionEncoderConfig",
 ]

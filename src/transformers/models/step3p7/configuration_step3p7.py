@@ -26,7 +26,7 @@ from transformers.configuration_utils import PreTrainedConfig
 from transformers.utils import auto_docstring
 
 
-STEP_ROBOTICS_VISION_ENCODER_CONFIG_ARGS = r"""
+STEP3P7_VISION_ENCODER_CONFIG_ARGS = r"""
     width (`int`, *optional*, defaults to 1536):
         Hidden size of the vision encoder.
     layers (`int`, *optional*, defaults to 47):
@@ -61,8 +61,8 @@ STEP_ROBOTICS_VISION_ENCODER_CONFIG_ARGS = r"""
 
 
 @strict
-@auto_docstring(custom_args=STEP_ROBOTICS_VISION_ENCODER_CONFIG_ARGS, checkpoint="stepfun-ai/Step-3.7-Flash")
-class StepRoboticsVisionEncoderConfig(PreTrainedConfig):
+@auto_docstring(custom_args=STEP3P7_VISION_ENCODER_CONFIG_ARGS, checkpoint="stepfun-ai/Step-3.7-Flash")
+class Step3p7VisionEncoderConfig(PreTrainedConfig):
     r"""
     width (`int`, *optional*, defaults to 1536):
         Hidden size of the vision encoder.
@@ -167,8 +167,6 @@ STEP3P7_TEXT_CONFIG_ARGS = r"""
         Whether to use head-wise attention gates.
     use_moe_router_bias (`bool`, *optional*, defaults to `False`):
         Whether MoE router projections use a bias term.
-    moe_router_activation (`str`, *optional*, defaults to `"softmax"`):
-        Activation function used by the MoE router.
     moe_router_scaling_factor (`float`, *optional*, defaults to 1.0):
         Scaling factor applied to MoE router scores.
     need_fp32_gate (`bool`, *optional*, defaults to `False`):
@@ -223,8 +221,6 @@ class Step3p7TextConfig(PreTrainedConfig):
         Whether to use head-wise attention gates.
     use_moe_router_bias (`bool`, *optional*, defaults to `False`):
         Whether MoE router projections use a bias term.
-    moe_router_activation (`str`, *optional*, defaults to `"softmax"`):
-        Activation function used by the MoE router.
     moe_router_scaling_factor (`float`, *optional*, defaults to 1.0):
         Scaling factor applied to MoE router scores.
     need_fp32_gate (`bool`, *optional*, defaults to `False`):
@@ -268,7 +264,6 @@ class Step3p7TextConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
     use_head_wise_attn_gate: bool = False
     use_moe_router_bias: bool = False
-    moe_router_activation: str = "softmax"
     moe_router_scaling_factor: float = 1.0
     need_fp32_gate: bool = False
     attention_other_setting: dict[str, Any] | None = None
@@ -333,7 +328,7 @@ class Step3p7TextConfig(PreTrainedConfig):
 
 
 STEP3P7_CONFIG_ARGS = r"""
-    vision_config (`dict` or `StepRoboticsVisionEncoderConfig`, *optional*):
+    vision_config (`dict` or `Step3p7VisionEncoderConfig`, *optional*):
         Configuration of the Step3p7 vision encoder.
     text_config (`dict` or `Step3p7TextConfig`, *optional*):
         Configuration of the Step3p7 text decoder.
@@ -349,12 +344,12 @@ STEP3P7_CONFIG_ARGS = r"""
 class Step3p7Config(PreTrainedConfig):
     r""" """
 
-    sub_configs = {"vision_config": StepRoboticsVisionEncoderConfig, "text_config": Step3p7TextConfig}
+    sub_configs = {"vision_config": Step3p7VisionEncoderConfig, "text_config": Step3p7TextConfig}
     # This loader is a compatibility shim for original Step VL checkpoints
     # whose top-level config model_type is `step3p7`.
     model_type = "step3p7"
 
-    vision_config: dict | StepRoboticsVisionEncoderConfig | None = None
+    vision_config: dict | Step3p7VisionEncoderConfig | None = None
     text_config: dict | Step3p7TextConfig | None = None
     projector_bias: bool = False
     image_token_id: int = 151679
@@ -366,9 +361,9 @@ class Step3p7Config(PreTrainedConfig):
             shared_rope_scaling = dict(shared_rope_scaling)
 
         if self.vision_config is None:
-            self.vision_config = StepRoboticsVisionEncoderConfig()
+            self.vision_config = Step3p7VisionEncoderConfig()
         elif isinstance(self.vision_config, dict):
-            self.vision_config = StepRoboticsVisionEncoderConfig(**self.vision_config)
+            self.vision_config = Step3p7VisionEncoderConfig(**self.vision_config)
 
         if self.text_config is None:
             self.text_config = Step3p7TextConfig(rope_scaling=shared_rope_scaling)
@@ -391,4 +386,4 @@ class Step3p7Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Step3p7Config", "Step3p7TextConfig", "StepRoboticsVisionEncoderConfig"]
+__all__ = ["Step3p7Config", "Step3p7TextConfig", "Step3p7VisionEncoderConfig"]

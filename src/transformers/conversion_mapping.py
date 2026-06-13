@@ -569,6 +569,18 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 source_patterns=r"^model(?!\.(language_model|vision_model))", target_patterns="model.language_model"
             ),
+            WeightRenaming(
+                source_patterns=r"model\.vision_model\.transformer\.resblocks\.(\d+)\.ls_(\d+)\.gamma",
+                target_patterns=r"model.vision_model.transformer.resblocks.\1.ls_\2.lambda1",
+            ),
+            WeightRenaming(
+                source_patterns=r"model\.vision_model\.transformer\.resblocks\.(\d+)\.mlp\.c_fc\.",
+                target_patterns=r"model.vision_model.transformer.resblocks.\1.mlp.fc1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"model\.vision_model\.transformer\.resblocks\.(\d+)\.mlp\.c_proj\.",
+                target_patterns=r"model.vision_model.transformer.resblocks.\1.mlp.fc2.",
+            ),
             WeightRenaming(source_patterns=r"^vit_large_projector", target_patterns="model.vit_large_projector"),
         ],
         "qwen2_audio": [

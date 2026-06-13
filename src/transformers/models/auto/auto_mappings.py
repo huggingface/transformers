@@ -441,7 +441,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("pegasus", "PegasusConfig"),
         ("pegasus_x", "PegasusXConfig"),
         ("perceiver", "PerceiverConfig"),
-        ("perception_encoder", "StepRoboticsVisionEncoderConfig"),
+        ("perception_encoder", "Step3p7VisionEncoderConfig"),
         ("perception_lm", "PerceptionLMConfig"),
         ("persimmon", "PersimmonConfig"),
         ("phi", "PhiConfig"),

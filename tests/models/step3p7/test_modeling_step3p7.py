@@ -22,7 +22,7 @@ from transformers import (
     Step3p7ForConditionalGeneration,
     Step3p7Model,
     Step3p7TextConfig,
-    StepRoboticsVisionEncoderConfig,
+    Step3p7VisionEncoderConfig,
     is_torch_available,
 )
 from transformers.testing_utils import require_torch, torch_device
@@ -39,7 +39,7 @@ class Step3p7ModelTester(VLMModelTester):
     config_class = Step3p7Config
     conditional_generation_class = Step3p7ForConditionalGeneration
     text_config_class = Step3p7TextConfig
-    vision_config_class = StepRoboticsVisionEncoderConfig
+    vision_config_class = Step3p7VisionEncoderConfig
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("batch_size", 2)
@@ -119,7 +119,7 @@ class Step3p7ModelTest(VLMModelTest, unittest.TestCase):
         config = self.model_tester.get_config()
         self.assertIsInstance(config, Step3p7Config)
         self.assertIsInstance(config.text_config, Step3p7TextConfig)
-        self.assertIsInstance(config.vision_config, StepRoboticsVisionEncoderConfig)
+        self.assertIsInstance(config.vision_config, Step3p7VisionEncoderConfig)
         self.assertEqual(config.hidden_size, self.model_tester.hidden_size)
         self.assertEqual(config.image_token_id, self.model_tester.image_token_id)
 
