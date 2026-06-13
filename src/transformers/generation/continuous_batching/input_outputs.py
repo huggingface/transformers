@@ -14,9 +14,9 @@
 from contextlib import nullcontext
 from functools import partial
 from itertools import repeat
+from typing import TypedDict
 
 import torch
-from typing_extensions import TypedDict
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.generation.configuration_utils import ContinuousBatchingConfig
