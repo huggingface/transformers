@@ -748,9 +748,10 @@ class AutoTokenizer:
                     except ValueError as e:
                         if class_name == "MistralCommonBackend" and "No tokenizer file found" in str(e):
                             logger.warning(
-                                "`mistral-common` is installed so `AutoTokenizer.from_pretrained()` resolved to "
-                                "`%s` for model type `%s` but no `tekken.json` file was found. Falling back to "
-                                "`TokenizersBackend`.", class_name, config_model_type
+                                "`mistral-common` is installed so `AutoTokenizer.from_pretrained()` resolved to `%s` for "
+                                "model type `%s` but no `tekken.json` file was found. Falling back to `TokenizersBackend`.",
+                                class_name,
+                                config_model_type,
                             )
                         else:
                             raise
