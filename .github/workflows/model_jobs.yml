@@ -117,12 +117,12 @@ jobs:
 #          python3 -m pip install --no-cache-dir "torchcodec" --index-url https://download.pytorch.org/whl/cpu
 #          python3 -m pip install --no-cache-dir "torch" "torchvision" "torchaudio" --index-url https://download.pytorch.org/whl/cu126
 
-      - name: Install torch 2.13 RC
-        working-directory: /transformers
-        run: |
-          python3 -m pip uninstall -y torch torchvision torchaudio torchcodec
-          python3 -m pip install --no-cache-dir "torchcodec" --index-url https://download.pytorch.org/whl/test/cpu
-          python3 -m pip install --no-cache-dir "torch" "torchvision" "torchaudio" --index-url https://download.pytorch.org/whl/test/cu126
+#      - name: Install torch 2.13 RC
+#        working-directory: /transformers
+#        run: |
+#          python3 -m pip uninstall -y torch torchvision torchaudio torchcodec
+#          python3 -m pip install --no-cache-dir "torchcodec" --index-url https://download.pytorch.org/whl/test/cpu
+#          python3 -m pip install --no-cache-dir "torch" "torchvision" "torchaudio" --index-url https://download.pytorch.org/whl/test/cu126
 
 
       - name: NVIDIA-SMI
