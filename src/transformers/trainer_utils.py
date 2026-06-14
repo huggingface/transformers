@@ -1095,6 +1095,11 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
         index = json.load(f)
 
     shard_files = list(set(index["weight_map"].values()))
+    load_index_name = os.path.basename(load_index)
+    from .utils.hub import _join_checkpoint_shard_path, _validate_checkpoint_shard_filename
+
+    for shard_file in shard_files:
+        _validate_checkpoint_shard_filename(shard_file, load_index_name)
 
     # If strict=True, error before loading any of the state dicts.
     # TODO: Here, update the weight map with the config.dynamic_weight_conversion
@@ -1119,7 +1124,8 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
         loader = partial(torch.load, map_location="cpu", weights_only=True)
 
     for shard_file in shard_files:
-        state_dict = loader(os.path.join(folder, shard_file))
+        shard_path = _join_checkpoint_shard_path(folder, "", shard_file, load_index_name)
+        state_dict = loader(shard_path)
         model.load_state_dict(state_dict, strict=False)
 
         # Make sure memory is freed before we load the next state dict.

@@ -464,8 +464,18 @@ def accelerate_disk_offload(
         if sharded_metadata is None:
             weight_map = dict.fromkeys(safe_open(checkpoint_files[0], framework="pt").keys(), checkpoint_files[0])
         else:
-            folder = os.path.sep.join(checkpoint_files[0].split(os.path.sep)[:-1])
-            weight_map = {k: os.path.join(folder, v) for k, v in sharded_metadata["weight_map"].items()}
+            folder = os.path.dirname(checkpoint_files[0])
+            from ..utils.hub import _join_checkpoint_shard_path
+
+            resolved_by_name = {os.path.basename(path): path for path in checkpoint_files}
+            weight_map = {}
+            for key, shard_filename in sharded_metadata["weight_map"].items():
+                if shard_filename in resolved_by_name:
+                    weight_map[key] = resolved_by_name[shard_filename]
+                else:
+                    weight_map[key] = _join_checkpoint_shard_path(
+                        folder, "", shard_filename, "model.safetensors.index.json"
+                    )
 
         # Update the weight names according to the `weight_mapping`
         weight_renaming_map = {

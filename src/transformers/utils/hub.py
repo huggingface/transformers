@@ -401,7 +401,7 @@ def cached_files(
             existing_files.append(resolved_file)
 
     if os.path.isdir(path_or_repo_id):
-        return existing_files if existing_files else None
+        return existing_files or None
 
     if cache_dir is None:
         cache_dir = constants.HF_HUB_CACHE
@@ -848,6 +848,42 @@ def convert_file_size_to_int(size: int | str):
     raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
 
 
+def _validate_checkpoint_shard_filename(shard_filename: str, index_filename: str) -> None:
+    """
+    Reject shard filenames that could escape the checkpoint directory (CWE-22).
+
+    Uses a lexical check only (abspath + commonpath, not realpath/resolve) so legitimate
+    Hugging Face cache symlinks are not broken.
+    """
+    if os.path.isabs(shard_filename) or shard_filename.startswith(("/", "\\")):
+        raise ValueError(
+            f"Invalid shard filename {shard_filename!r} in index file {index_filename!r}. "
+            "Shard filenames must be relative paths."
+        )
+    if ".." in Path(shard_filename).parts:
+        raise ValueError(
+            f"Invalid shard filename {shard_filename!r} in index file {index_filename!r}. "
+            "Shard filenames must not contain '..' path components."
+        )
+
+
+def _join_checkpoint_shard_path(base_dir: str, subfolder: str, shard_filename: str, index_filename: str) -> str:
+    _validate_checkpoint_shard_filename(shard_filename, index_filename)
+    base = os.path.abspath(os.path.join(base_dir, subfolder))
+    shard_path = os.path.join(base_dir, subfolder, shard_filename)
+    resolved = os.path.abspath(shard_path)
+    try:
+        contained = os.path.commonpath([base, resolved]) == base
+    except ValueError:
+        contained = False
+    if not contained:
+        raise ValueError(
+            f"Invalid shard filename {shard_filename!r} in index file {index_filename!r}. "
+            "Resolved shard path must stay within the model directory."
+        )
+    return shard_path
+
+
 def get_checkpoint_shard_files(
     pretrained_model_name_or_path,
     index_filename,
@@ -880,13 +916,18 @@ def get_checkpoint_shard_files(
         index = json.loads(f.read())
 
     shard_filenames = sorted(set(index["weight_map"].values()))
+    for shard_filename in shard_filenames:
+        _validate_checkpoint_shard_filename(shard_filename, index_filename)
     sharded_metadata = index["metadata"]
     sharded_metadata["all_checkpoint_keys"] = list(index["weight_map"].keys())
     sharded_metadata["weight_map"] = index["weight_map"].copy()
 
     # First, let's deal with local folder.
     if os.path.isdir(pretrained_model_name_or_path):
-        shard_filenames = [os.path.join(pretrained_model_name_or_path, subfolder, f) for f in shard_filenames]
+        shard_filenames = [
+            _join_checkpoint_shard_path(pretrained_model_name_or_path, subfolder, f, index_filename)
+            for f in shard_filenames
+        ]
         return shard_filenames, sharded_metadata
 
     # At this stage pretrained_model_name_or_path is a model identifier on the Hub. Try to get everything from cache,
