@@ -59,7 +59,7 @@ To call a pipeline on many items, you can call it with a *list*.
 
 To iterate over full datasets it is recommended to use a `dataset` directly. This means you don't need to allocate
 the whole dataset at once, nor do you need to do batching yourself. This should work just as fast as custom loops on
-GPU. If it doesn't don't hesitate to create an issue.
+GPU. If it doesn't, don't hesitate to create an issue.
 
 ```python
 import datasets
