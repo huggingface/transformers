@@ -647,7 +647,7 @@ class GenerationConfig(PushToHubMixin):
             )
         # 1.2. Cache attributes
         # "paged" re-routes to continuous batching and so it is a valid cache implementation. But we do not want to test
-        # it with the `generate` as the other would be, so we we cannot add it to ALL_CACHE_IMPLEMENTATIONS
+        # it with the `generate` as the other would be, so we cannot add it to ALL_CACHE_IMPLEMENTATIONS
         valid_cache_implementations = ALL_CACHE_IMPLEMENTATIONS + ("paged",)
         if self.cache_implementation is not None and self.cache_implementation not in valid_cache_implementations:
             raise ValueError(
