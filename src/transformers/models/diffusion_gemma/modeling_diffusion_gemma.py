@@ -1463,7 +1463,8 @@ class DiffusionGemmaBlockDiffusionOutputWithPast(CausalLMOutputWithPast):
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
         Language modeling loss.
     aux_loss (`torch.FloatTensor`, *optional*, returned when `output_router_logits=True` is passed):
-        Load balancing loss for the MoE experts.
+        Load balancing loss for the MoE experts, already weighted by `router_aux_loss_coef` and ready to be added
+        to the training loss.
     logits (`torch.FloatTensor` of shape `(batch_size, canvas_length, config.text_config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -1709,6 +1710,7 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
         self.final_logit_softcapping = config.text_config.final_logit_softcapping
         self.num_experts = config.text_config.num_experts
         self.num_experts_per_tok = config.text_config.top_k_experts
+        self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1781,10 +1783,11 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
         logits = torch.tanh(logits)
         logits = logits * self.final_logit_softcapping
 
-        # 3. Load balancing loss over the decoder experts. The canvas is unpadded, so no attention mask is needed.
+        # 3. Load balancing loss over the decoder experts, weighted by `router_aux_loss_coef` so it is ready to be
+        # added to the training loss. The canvas is unpadded, so no attention mask is needed.
         aux_loss = None
         if output_router_logits:
-            aux_loss = load_balancing_loss_func(
+            aux_loss = self.router_aux_loss_coef * load_balancing_loss_func(
                 model_outputs.router_logits,
                 self.num_experts,
                 self.num_experts_per_tok,
