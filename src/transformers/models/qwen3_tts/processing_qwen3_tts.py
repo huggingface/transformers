@@ -111,18 +111,138 @@ class Qwen3TTSProcessor(ProcessorMixin):
             tensor_type=kwargs.get("return_tensors"),
         )
 
-    def apply_chat_template(self, conversations, chat_template=None, **kwargs):
+    @staticmethod
+    def _extract_text(content):
+        """Extract the text from a message `content`, which may be a string or a list of content parts."""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, (list, tuple)):
+            texts = [part["text"] for part in content if isinstance(part, dict) and part.get("type") == "text"]
+            return " ".join(texts)
+        raise ValueError(f"Unsupported message content type: {type(content)}")
+
+    def _build_synthesis_text(self, text):
+        return f"<|im_start|>assistant\n{text}<|im_end|>\n<|im_start|>assistant\n"
+
+    def _build_instruct_text(self, instruct):
+        return f"<|im_start|>user\n{instruct}<|im_end|>\n"
+
+    def apply_chat_template(self, conversation, chat_template=None, **kwargs):
         """
-        Apply the chat template to a conversation.
+        Convert one or more conversations into the inputs expected by
+        [`Qwen3TTSForConditionalGeneration.generate`].
+
+        Each conversation is a list of messages with a `role` and `content`. Following the standard chat format,
+        `content` may be a string or a list of parts such as `{"type": "text", "text": ...}`. Roles are mapped as
+        follows:
+
+        - `system` (and `scene`): natural-language voice/style instruction, becomes `instruct_ids` (VoiceDesign).
+        - `user`: the text to synthesize, becomes `input_ids`. The optional `language` and `speaker` keys on the
+          message control the spoken language and the speaker preset.
+
+        Returns a [`BatchFeature`] with `input_ids`, `instruct_ids`, `languages`, and `speakers` ready to be passed
+        to `generate`.
+        """
+        if isinstance(conversation[0], dict):
+            conversations = [conversation]
+        else:
+            conversations = conversation
+
+        input_ids, instruct_ids, languages, speakers = [], [], [], []
+        for messages in conversations:
+            instruct_parts, synthesis_text = [], None
+            language, speaker = "auto", None
+            for message in messages:
+                role = message["role"]
+                text = self._extract_text(message["content"])
+                if role in ("system", "scene"):
+                    instruct_parts.append(text)
+                elif role == "user":
+                    synthesis_text = text
+                    language = message.get("language", language)
+                    speaker = message.get("speaker", speaker)
+                else:
+                    raise ValueError(f"Unsupported message role for Qwen3TTS: {role!r}")
+
+            if synthesis_text is None:
+                raise ValueError("Each conversation must contain a `user` message with the text to synthesize.")
+
+            input_ids.append(
+                self.tokenizer(self._build_synthesis_text(synthesis_text), return_tensors="pt")["input_ids"]
+            )
+            if instruct_parts:
+                instruct = self._build_instruct_text(" ".join(instruct_parts))
+                instruct_ids.append(self.tokenizer(instruct, return_tensors="pt")["input_ids"])
+            else:
+                instruct_ids.append(None)
+            languages.append(language)
+            speakers.append(speaker)
+
+        data = {"input_ids": input_ids, "languages": languages, "speakers": speakers}
+        if any(ids is not None for ids in instruct_ids):
+            data["instruct_ids"] = instruct_ids
+        return BatchFeature(data=data)
+
+    def batch_decode(self, audio_codes):
+        """
+        Decode a batch of generated audio codes into audio waveforms using the audio tokenizer.
 
         Args:
-            conversations: Single conversation dict or list of conversation dicts.
-            chat_template: Optional custom chat template.
-            **kwargs: Additional arguments passed to the chat template.
+            audio_codes (`list[torch.Tensor]` or `torch.Tensor`):
+                The audio codes returned by [`Qwen3TTSForConditionalGeneration.generate`]. Either a list of tensors of
+                shape `(codes_length, num_quantizers)` (one per sample) or a single batched tensor of shape
+                `(batch_size, codes_length, num_quantizers)`.
+
+        Returns:
+            `list[torch.Tensor]`: A list of decoded audio waveforms, one per sample.
         """
-        if isinstance(conversations[0], dict):
-            conversations = [conversations]
-        return super().apply_chat_template(conversations, chat_template, **kwargs)
+        if isinstance(audio_codes, torch.Tensor) and audio_codes.dim() == 3:
+            audio_codes = list(audio_codes)
+
+        audios = []
+        with torch.no_grad():
+            for codes in audio_codes:
+                codes = codes.unsqueeze(0).to(self.audio_tokenizer.device)
+                audios.append(self.audio_tokenizer.decode(codes, return_dict=True).audio_values[0])
+        return audios
+
+    def decode(self, audio_codes):
+        """
+        Decode a single sequence of generated audio codes into an audio waveform.
+
+        Args:
+            audio_codes (`torch.Tensor`):
+                Audio codes of shape `(codes_length, num_quantizers)` for a single sample.
+
+        Returns:
+            `torch.Tensor`: The decoded audio waveform.
+        """
+        return self.batch_decode([audio_codes])[0]
+
+    def save_audio(
+        self,
+        audio: AudioInput,
+        saving_path: str | Path | list[str | Path],
+        **kwargs: Unpack[Qwen3TTSProcessorKwargs],
+    ):
+        if not is_soundfile_available():
+            raise ImportError("Please install `soundfile` to save audio files.")
+
+        audio = make_list_of_audio(audio)
+
+        if isinstance(saving_path, (str, Path)):
+            saving_path = [saving_path]
+        elif not (isinstance(saving_path, (list, tuple)) and all(isinstance(p, (str, Path)) for p in saving_path)):
+            raise ValueError("Invalid input path. Please provide a string, or a list of strings")
+
+        if len(audio) != len(saving_path):
+            raise ValueError("The number of audio and saving paths must be the same")
+
+        sampling_rate = self.audio_tokenizer.config.output_sample_rate
+        for audio_value, p in zip(audio, saving_path):
+            if isinstance(audio_value, torch.Tensor):
+                audio_value = audio_value.cpu().float().numpy()
+            sf.write(p, audio_value, sampling_rate)
 
     @property
     def model_input_names(self):
