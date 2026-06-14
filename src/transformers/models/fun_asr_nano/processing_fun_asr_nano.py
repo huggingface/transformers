@@ -34,15 +34,31 @@ class FunAsrNanoProcessor(ProcessorMixin):
         feature_extractor=None,
         tokenizer=None,
         chat_template=None,
-        audio_token="<|AUDIO|>",
+        audio_token="<|object_ref_start|>",
+        audio_downsample_rate=1,
     ):
         r"""
-        audio_token (`str`, *optional*, defaults to `"<|AUDIO|>"`):
-            The token to use for audio tokens.
+        audio_token (`str`, *optional*, defaults to `"<|object_ref_start|>"`):
+            The token to use for audio placeholders.
+        audio_downsample_rate (`int`, *optional*, defaults to 1):
+            Downsampling ratio applied by the audio adaptor, used to expand audio placeholder tokens.
         """
-        self.audio_token = audio_token
         if chat_template is None:
             chat_template = self.default_chat_template
+
+        if tokenizer is not None and tokenizer.convert_tokens_to_ids(audio_token) is None:
+            fallback_audio_token = "<|object_ref_start|>"
+            if tokenizer.convert_tokens_to_ids(fallback_audio_token) is None:
+                raise ValueError(f"Audio token {audio_token!r} is not present in the tokenizer vocabulary.")
+            logger.warning_once(
+                f"Audio token {audio_token!r} is not present in the tokenizer vocabulary. "
+                f"Using {fallback_audio_token!r} instead."
+            )
+            chat_template = chat_template.replace(audio_token, fallback_audio_token)
+            audio_token = fallback_audio_token
+
+        self.audio_token = audio_token
+        self.audio_downsample_rate = audio_downsample_rate
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     @auto_docstring
@@ -61,19 +77,48 @@ class FunAsrNanoProcessor(ProcessorMixin):
         if text is None:
             raise ValueError("You need to specify `text` input to process.")
 
-        text_inputs = self.tokenizer(
-            text,
-            return_tensors=return_tensors,
-            padding=True,
-            **kwargs,
-        )
-
+        is_batched_text = isinstance(text, list)
+        text = list(text) if is_batched_text else [text]
+        audio_features = None
         if audio is not None:
             audio_features = self.feature_extractor(
                 audio,
                 sampling_rate=sampling_rate or self.feature_extractor.sampling_rate,
                 return_tensors=return_tensors,
             )
+
+            num_audio_tokens = sum(sample.count(self.audio_token) for sample in text)
+            num_audios = 1 if isinstance(audio, np.ndarray) and audio.ndim == 1 else len(audio)
+            if num_audio_tokens != num_audios:
+                raise ValueError(
+                    f"Found {num_audio_tokens} {self.audio_token} token{'s' if num_audio_tokens > 1 else ''} "
+                    f"in provided text but received {num_audios} audio{'s' if num_audios > 1 else ''}."
+                )
+
+            audio_lengths = audio_features["feature_lengths"].tolist()
+            expanded_text = []
+            for sample in text:
+                replace_str = []
+                while self.audio_token in sample:
+                    audio_length = audio_lengths.pop(0)
+                    num_audio_tokens = (audio_length - 1) // self.audio_downsample_rate + 1
+                    replace_str.append(self.audio_token * int(num_audio_tokens))
+                    sample = sample.replace(self.audio_token, "<placeholder>", 1)
+
+                while "<placeholder>" in sample:
+                    sample = sample.replace("<placeholder>", replace_str.pop(0), 1)
+                expanded_text.append(sample)
+            text = expanded_text
+
+        tokenizer_kwargs = kwargs.copy()
+        tokenizer_kwargs.setdefault("padding", True)
+        text_inputs = self.tokenizer(
+            text,
+            return_tensors=return_tensors,
+            **tokenizer_kwargs,
+        )
+
+        if audio_features is not None:
             return BatchFeature(data={**text_inputs, **audio_features})
 
         return BatchFeature(data=dict(text_inputs))
@@ -92,7 +137,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
         Default chat template for Fun-ASR-Nano. Formats messages with audio placeholders.
 
         Content can be a string or a list of dicts with "type" field ("audio" or "text").
-        Audio elements are replaced with <|AUDIO|> token placeholder.
+        Audio elements are replaced with the <|object_ref_start|> token placeholder.
 
         Example:
 
@@ -119,7 +164,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
                 "{% else %}"
                     "{% for content in message['content'] %}"
                         "{% if content['type'] == 'audio' %}"
-                            "<|AUDIO|>"
+                            "<|object_ref_start|>"
                         "{% elif content['type'] == 'text' %}"
                             "{{ content['text'] }}"
                         "{% endif %}"

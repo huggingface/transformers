@@ -17,7 +17,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
@@ -74,11 +74,31 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
 @strict
 class FunAsrNanoAdaptorConfig(PreTrainedConfig):
     r"""
     Configuration for the Fun-ASR-Nano audio adaptor.
+
+    downsample_rate (`int`, *optional*, defaults to 1):
+        Downsampling factor applied to the encoder sequence before projecting to the language model.
+    encoder_dim (`int`, *optional*, defaults to 512):
+        Hidden size of the audio encoder output.
+    llm_dim (`int`, *optional*, defaults to 1024):
+        Hidden size of the language model input embeddings.
+    ffn_dim (`int`, *optional*, defaults to 2048):
+        Hidden size of the adaptor feed-forward projection.
+    num_layers (`int`, *optional*, defaults to 2):
+        Number of adaptor transformer layers.
+    attention_heads (`int`, *optional*, defaults to 8):
+        Number of attention heads in adaptor transformer layers.
+    dropout_rate (`float`, *optional*, defaults to 0.0):
+        Dropout probability used in the adaptor.
+    use_low_frame_rate (`bool`, *optional*, defaults to `True`):
+        Whether the adaptor expects low-frame-rate audio features.
     """
+
+    model_type = "fun_asr_nano_adaptor"
 
     downsample_rate: int = 1
     encoder_dim: int = 512
@@ -90,11 +110,31 @@ class FunAsrNanoAdaptorConfig(PreTrainedConfig):
     use_low_frame_rate: bool = True
 
 
+@auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
 @strict
 class FunAsrNanoCtcConfig(PreTrainedConfig):
     r"""
     Configuration for the Fun-ASR-Nano CTC decoder.
+
+    vocab_size (`int`, *optional*, defaults to 60515):
+        Size of the CTC decoder vocabulary.
+    encoder_dim (`int`, *optional*, defaults to 512):
+        Hidden size of the audio encoder output.
+    decoder_dim (`int`, *optional*, defaults to 512):
+        Hidden size of the CTC decoder.
+    ffn_dim (`int`, *optional*, defaults to 2048):
+        Hidden size of the CTC decoder feed-forward projection.
+    num_layers (`int`, *optional*, defaults to 5):
+        Number of CTC decoder transformer layers.
+    downsample_rate (`int`, *optional*, defaults to 1):
+        Downsampling factor applied before the CTC decoder projection.
+    blank_id (`int`, *optional*, defaults to 60514):
+        Token ID used as the CTC blank label.
+    dropout_rate (`float`, *optional*, defaults to 0.0):
+        Dropout probability used in the CTC decoder.
     """
+
+    model_type = "fun_asr_nano_ctc"
 
     vocab_size: int = 60515
     encoder_dim: int = 512
@@ -135,7 +175,12 @@ class FunAsrNanoConfig(PreTrainedConfig):
     """
 
     model_type = "fun_asr_nano"
-    sub_configs = {"text_config": "auto", "audio_encoder_config": FunAsrNanoEncoderConfig}
+    sub_configs = {
+        "text_config": AutoConfig,
+        "audio_encoder_config": FunAsrNanoEncoderConfig,
+        "adaptor_config": FunAsrNanoAdaptorConfig,
+        "ctc_config": FunAsrNanoCtcConfig,
+    }
 
     audio_encoder_config: dict | FunAsrNanoEncoderConfig | None = None
     adaptor_config: dict | FunAsrNanoAdaptorConfig | None = None
