@@ -256,6 +256,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         word_delimiter = self.word_delimiter_token + " " if self.word_delimiter_token is not None else ""
         if phonemizer_lang is not None and phonemizer_lang != self.phonemizer_lang:
             self.init_backend(phonemizer_lang)
+            self.phonemizer_lang = phonemizer_lang
         else:
             phonemizer_lang = self.phonemizer_lang
 

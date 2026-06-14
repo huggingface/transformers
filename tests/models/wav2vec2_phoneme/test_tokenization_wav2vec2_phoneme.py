@@ -229,6 +229,18 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(text_en, "h ə l oʊ h aʊ ɑːɹ j uː")
         self.assertEqual(text_fr, "ɛ l o h aʊ a ʁ j u")
 
+    def test_phonemize_restores_language_after_switching_back(self):
+        tokenizer = self.tokenizer_class.from_pretrained(
+            "facebook/wav2vec2-lv-60-espeak-cv-ft", word_delimiter_token=None
+        )
+        input_text = "Hello how are you"
+
+        input_ids_en = tokenizer(input_text, phonemizer_lang="en-us").input_ids
+        tokenizer(input_text, phonemizer_lang="es")
+        input_ids_en_after = tokenizer(input_text, phonemizer_lang="en-us").input_ids
+
+        self.assertEqual(input_ids_en, input_ids_en_after)
+
     def test_case_insensitive(self):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
         input_text_up = "Hello how Are you"
