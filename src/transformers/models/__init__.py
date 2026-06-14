@@ -104,6 +104,7 @@ if TYPE_CHECKING:
     from .deimv2 import *
     from .deit import *
     from .deprecated import *
+    from .diffusion_gemma import *
     from .depth_anything import *
     from .depth_pro import *
     from .detr import *
