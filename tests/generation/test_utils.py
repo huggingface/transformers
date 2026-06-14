@@ -1592,7 +1592,7 @@ class GenerationTesterMixin:
 
             # 4. get eager + dynamic cache results for future comparison
             dynamic_outputs = []
-            # Ignores all `torch.compile` usage, useful to test models that that have non-default compilable caches
+            # Ignores all `torch.compile` usage, useful to test models that have non-default compilable caches
             # (who would have used compilation in this section)
             with torch.compiler.set_stance("force_eager"):
                 for model_inputs in model_input_sets:
