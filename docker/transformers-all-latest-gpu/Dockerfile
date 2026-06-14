@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.6.0-cudnn-devel-ubuntu22.04
+FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu22.04
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -9,9 +9,9 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.11.0'
+ARG PYTORCH='2.13.0'
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu126'
+ARG CUDA='cu130'
 
 # This needs to be compatible with the above `PYTORCH`.
 ARG TORCHCODEC='0.11.0'
@@ -32,38 +32,12 @@ RUN python3 -m pip install --no-cache-dir -e ./transformers[dev]
 # 2. For `torchcodec`, use `cpu` as we don't have `libnvcuvid.so` on the host runner. See https://github.com/meta-pytorch/torchcodec/issues/912
 #    **Important**: We need to specify `torchcodec` version if the torch version is not the latest stable one.
 # 3. `set -e` means "exit immediately if any command fails".
-RUN set -e; \
-    # Determine torch version
-    if [ ${#PYTORCH} -gt 0 ] && [ "$PYTORCH" != "pre" ]; then \
-        VERSION="torch==${PYTORCH}.*"; \
-        TORCHCODEC_VERSION="torchcodec==${TORCHCODEC}.*"; \
-    else \
-        VERSION="torch"; \
-        TORCHCODEC_VERSION="torchcodec"; \
-    fi; \
-    \
-    # Log the version being installed
-    echo "Installing torch version: $VERSION"; \
-    \
-    # Install PyTorch packages
-    if [ "$PYTORCH" != "pre" ]; then \
-        python3 -m pip install --no-cache-dir -U \
-            $VERSION \
-            torchvision \
-            torchaudio \
-            --extra-index-url https://download.pytorch.org/whl/$CUDA; \
-        # We need to specify the version if the torch version is not the latest stable one.
-        python3 -m pip install --no-cache-dir -U \
-            $TORCHCODEC_VERSION --extra-index-url https://download.pytorch.org/whl/cpu; \
-    else \
-        python3 -m pip install --no-cache-dir -U --pre \
-            torch \
-            torchvision \
-            torchaudio \
-            --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA; \
-        python3 -m pip install --no-cache-dir -U --pre \
-            torchcodec --extra-index-url https://download.pytorch.org/whl/nightly/cpu; \
-    fi
+RUN python3 -m pip uninstall -y torch torchvision torchaudio torchcodec
+
+RUN python3 -m pip install --no-cache-dir torchcodec==0.14.0 --index-url https://download.pytorch.org/whl/test/cpu
+
+RUN python3 -m pip install --no-cache-dir torch==2.13.0 torchvision==0.28.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/test/cu130
+
 
 RUN python3 -m pip install --no-cache-dir -U timm
 
