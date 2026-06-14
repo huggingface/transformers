@@ -228,12 +228,10 @@ class PPOCRV6SmallDetModelTest(ModelTesterMixin, unittest.TestCase):
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
 
-# TODO: vasqu
 @require_cv2
 @require_torch
 @require_vision
 @slow
-@unittest.skip(reason="PP-OCRv6_small_det_safetensors weights have not been uploaded yet.")
 class PPOCRV6SmallDetModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/PP-OCRv6_small_det_safetensors"
@@ -253,15 +251,22 @@ class PPOCRV6SmallDetModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs)
 
-        results = self.image_processor.post_process_object_detection(outputs, target_sizes=inputs["target_sizes"])
+        results = self.image_processor.post_process_object_detection(
+            outputs,
+            target_sizes=inputs["target_sizes"],
+            threshold=0.2,
+            box_threshold=0.45,
+            max_candidates=3000,
+            unclip_ratio=1.4,
+        )
 
         expected_shape_logits = torch.Size((bs, c // 3, h, w))
 
         expected_logits = torch.tensor(
             [
-                [4.7810e-07, 5.0727e-07, 4.7810e-07],
-                [5.7200e-07, 6.0746e-07, 5.7200e-07],
-                [4.7810e-07, 5.0727e-07, 4.7810e-07],
+                [8.9092e-09, 1.9418e-08, 2.0646e-08],
+                [2.4656e-08, 5.7081e-08, 7.8255e-09],
+                [5.1891e-08, 1.3607e-07, 1.8573e-08],
             ],
             device=torch_device,
         )
@@ -272,10 +277,10 @@ class PPOCRV6SmallDetModelIntegrationTest(unittest.TestCase):
         expected_shape_boxes = torch.Size((4, 4, 2))
         expected_boxes = torch.tensor(
             [
-                [[76, 550], [451, 539], [452, 576], [77, 587]],
-                [[11, 504], [518, 483], [520, 534], [13, 555]],
-                [[189, 452], [401, 445], [402, 482], [190, 490]],
-                [[38, 408], [488, 387], [490, 433], [40, 454]],
+                [[77, 551], [400, 541], [401, 576], [78, 586]],
+                [[21, 504], [517, 485], [519, 534], [23, 553]],
+                [[192, 453], [400, 445], [402, 483], [194, 491]],
+                [[35, 408], [487, 387], [489, 434], [37, 455]],
             ],
             dtype=torch.short,
             device=torch_device,
@@ -284,7 +289,7 @@ class PPOCRV6SmallDetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(results[0]["boxes"].shape, expected_shape_boxes)
         torch.testing.assert_close(results[0]["boxes"], expected_boxes, rtol=2e-2, atol=2e-2)
 
-        expected_scores = torch.tensor([0.8363, 0.8170, 0.8746, 0.8694]).to(torch_device)
+        expected_scores = torch.tensor([0.8839, 0.8671, 0.8665, 0.8777]).to(torch_device)
         self.assertEqual(len(results[0]["scores"]), 4)
         torch.testing.assert_close(
             torch.tensor(results[0]["scores"]).to(device=torch_device), expected_scores, rtol=2e-2, atol=2e-2
