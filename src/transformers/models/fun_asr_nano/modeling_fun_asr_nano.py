@@ -305,12 +305,12 @@ class FunAsrNanoEncoder(PreTrainedModel):
         return_dict: bool = True,
         **kwargs,
     ) -> BaseModelOutput | tuple:
-        hidden_states = input_features
+        hidden_states = input_features.to(dtype=next(self.parameters()).dtype)
         batch_size, max_len, _ = hidden_states.shape
 
         if feature_lengths is not None:
             mask = torch.arange(max_len, device=hidden_states.device)[None, :] < feature_lengths[:, None]
-            mask = mask[:, None, :].float()
+            mask = mask[:, None, :].to(dtype=hidden_states.dtype)
         else:
             mask = None
 
@@ -630,6 +630,7 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
     ) -> FunAsrNanoCausalLMOutput | tuple:
@@ -642,15 +643,24 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
             labels: Labels for language modeling loss (-100 for ignored positions).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-            if input_features is not None and input_ids is not None and input_ids.shape[1] != 1:
+            special_audio_mask = input_ids == self.audio_token_index
+            if (
+                input_features is not None
+                and input_ids is not None
+                and input_ids.shape[1] != 1
+                and special_audio_mask.any()
+            ):
                 audio_embeds, audio_embed_lens, _, _ = self.encode_audio(input_features, feature_lengths)
 
                 # Mask and scatter audio embeddings into token positions
-                special_audio_mask = input_ids == self.audio_token_index
                 special_audio_mask_expanded = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds)
 
                 num_audios, max_audio_len, embed_dim = audio_embeds.shape
@@ -658,6 +668,11 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
                     torch.arange(max_audio_len, device=audio_embeds.device)[None, :] < audio_embed_lens[:, None]
                 )
                 flat_audio = audio_embeds[audio_len_mask]
+                if special_audio_mask.sum() != flat_audio.shape[0]:
+                    raise ValueError(
+                        f"Number of audio tokens ({special_audio_mask.sum().item()}) does not match "
+                        f"number of audio features ({flat_audio.shape[0]})."
+                    )
 
                 inputs_embeds = inputs_embeds.masked_scatter(
                     special_audio_mask_expanded, flat_audio.to(inputs_embeds.dtype)
@@ -670,6 +685,7 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
             return_dict=True,
             **kwargs,
         )
