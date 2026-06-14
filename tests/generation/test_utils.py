@@ -553,6 +553,8 @@ class GenerationTesterMixin:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
                 new_model = model_class.from_pretrained(tmp_dir, device_map="auto")
+                if not hasattr(new_model, "hf_device_map") or len(set(new_model.hf_device_map.values())) == 1:
+                    self.skipTest(reason="Model is not distributed across multiple devices")
 
                 new_model.generate(
                     max_new_tokens=self.max_new_tokens,
@@ -723,9 +725,10 @@ class GenerationTesterMixin:
             generation_kwargs.update({"assistant_model": assistant_model})
             output_assisted = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
 
-            # `gpt_oss` seems to have larger differences on CPU every other generated tokens, sth. like
-            # 1e-9, 1e-5, 1e-9, 1e-5. While on GPU, they are all very small 1e-9.
-            if is_moe_model(config):
+            # some models requires larger tolerance
+            if model.config.model_type in ["vibevoice_asr"]:
+                atol = rtol = 5e-3
+            elif is_moe_model(config):
                 atol = rtol = 1e-3
             else:
                 atol = rtol = 1e-5
@@ -4668,6 +4671,28 @@ class GenerationIntegrationTests(unittest.TestCase):
                 trust_remote_code=True,
             )
             assert value == "success"
+
+    def test_custom_generate_local_directory_requires_trust_remote_code(self):
+        """Tests that `trust_remote_code` is required for a local-directory `custom_generate` too (not
+        just for Hub repos): otherwise a repository's `custom_generate/generate.py` would execute on
+        load without any opt-in."""
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            custom_generate_dir = Path(tmp_dir) / "custom_generate"
+            custom_generate_dir.mkdir()
+            with open(custom_generate_dir / "generate.py", "w") as f:
+                f.write("def generate(*args, **kwargs):\n    return 'should_not_run'\n")
+            with self.assertRaises(ValueError):
+                model.generate(
+                    **model_inputs,
+                    max_new_tokens=10,
+                    trust_remote_code=False,
+                    custom_generate=str(tmp_dir),
+                )
 
     def test_custom_generate_callable(self):
         """Tests that passing a callable to `custom_generate` executes the callable decoding loop"""

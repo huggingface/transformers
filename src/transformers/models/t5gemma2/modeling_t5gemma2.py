@@ -911,10 +911,10 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
             special_image_mask = input_ids == image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         n_image_features = image_features.shape[0] * image_features.shape[1]
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}",
         )
         return special_image_mask
@@ -1183,7 +1183,7 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
     _tied_weights_keys = {
         "lm_head.out_proj.weight": "model.encoder.text_model.embed_tokens.weight",
     }
-    _tp_plan = {"lm_head.out_proj": "colwise_allgather"}
+    _tp_plan = {"lm_head.out_proj": "colwise_gather_output"}
     _pp_plan = {"lm_head.out_proj": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: T5Gemma2Config):

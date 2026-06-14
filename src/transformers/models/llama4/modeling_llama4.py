@@ -590,9 +590,7 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "language_model"
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_allgather"}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
-    _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     config: Llama4TextConfig
 
     def __init__(self, config: Llama4TextConfig):
@@ -1236,9 +1234,9 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
         )
         return special_image_mask

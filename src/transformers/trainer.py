@@ -46,7 +46,7 @@ import numpy as np
 import safetensors.torch
 import torch
 import torch.distributed as dist
-from huggingface_hub import CommitInfo, ModelCard, create_repo, upload_folder
+from huggingface_hub import CommitInfo, ModelCard
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
@@ -55,7 +55,6 @@ from . import __version__
 from .configuration_utils import PreTrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
-from .distributed.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
@@ -67,10 +66,12 @@ from .integrations.deepspeed import (
     is_deepspeed_available,
     propagate_args_to_deepspeed,
 )
+from .integrations.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
 from .integrations.liger import apply_liger_kernel
 from .integrations.neftune import activate_neftune, deactivate_neftune
 from .integrations.peft import MIN_PEFT_VERSION
 from .integrations.tpu import save_tpu_checkpoint, tpu_spmd_dataloader, wrap_model_xla_fsdp
+from .loss.loss_utils import LOSS_MAPPING, ForCausalLMLoss
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
 from .models.auto.modeling_auto import (
@@ -161,6 +162,7 @@ from .utils import (
     can_return_loss,
     check_torch_load_is_safe,
     find_labels,
+    hf_api,
     is_accelerate_available,
     is_datasets_available,
     is_in_notebook,
@@ -507,6 +509,13 @@ class Trainer:
         default_label_names = find_labels(model_to_inspect.__class__)
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.can_return_loss = can_return_loss(model_to_inspect.__class__)
+
+        # Causal LM losses shift labels internally (predictions at position i target label[i+1]), so position 0 of
+        # each row is never a prediction target. The valid-prediction count used by `num_items_in_batch` must therefore
+        # be taken over `labels[..., 1:]`, not the full label tensor. Inspect the actual loss function via
+        # LOSS_MAPPING so model-specific loss_types that route to ForCausalLMLoss (e.g. CsmForConditionalGeneration)
+        # are caught too.
+        self._loss_shifts_labels = LOSS_MAPPING.get(getattr(model_to_inspect, "loss_type", None)) is ForCausalLMLoss
 
         if self.args.label_smoothing_factor != 0:
             if getattr(self.model.config, "problem_type", None) == "multi_label_classification":
@@ -2015,7 +2024,12 @@ class Trainer:
             and (self.model_accepts_loss_kwargs or self.compute_loss_func)
             and num_items_in_batch is not None
         ):
-            loss *= self.accelerator.num_processes if self.args.n_gpu <= 1 else self.args.n_gpu
+            # TP and EP-as-TP ranks see replicated batches; `num_processes` over-counts
+            # them by `tp_size`. Mirror the divisor used in `_get_num_items_in_batch`.
+            loss_scale = self.accelerator.num_processes
+            if (pc := getattr(self.accelerator, "parallelism_config", None)) is not None:
+                loss_scale //= pc.tp_size
+            loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
 
         return (loss, outputs) if return_outputs else loss
 
@@ -2133,7 +2147,17 @@ class Trainer:
         if count_num_items_in_batch:
             # For now we don't support object detection
             try:
-                num_items_in_batch = sum((batch["labels"].ne(-100)).sum() for batch in batch_samples)
+                # Causal LM losses shift labels; count over `labels[..., 1:]` to avoid over-counting position 0.
+                # If the collator already provides `shift_labels` (e.g. padding-free collators), use it as-is.
+                labels_for_count = [
+                    batch["shift_labels"]
+                    if "shift_labels" in batch
+                    else batch["labels"][..., 1:]
+                    if self._loss_shifts_labels
+                    else batch["labels"]
+                    for batch in batch_samples
+                ]
+                num_items_in_batch = sum(labels.ne(-100).sum() for labels in labels_for_count)
             except (TypeError, AttributeError):
                 pass
 
@@ -2391,10 +2415,9 @@ class Trainer:
     def get_tp_size(self) -> int:
         """Get the tensor parallel size from either the model or DeepSpeed config."""
 
-        # TODO: adapt it cleaner with distributed config once distributed api is stable
-        dc = getattr(getattr(self.model, "config", None), "distributed_config", None)
-        if dc is not None and dc.tp_size is not None:
-            return dc.tp_size
+        # 1. Check model.tp_size first
+        if (model_tp := getattr(self.model, "_tp_size", None)) is not None:
+            return model_tp
 
         # 2. Fall back to DeepSpeed config if enabled
         if self.is_deepspeed_enabled and (deepspeed_config := getattr(self.args, "hf_deepspeed_config", None)):
@@ -3918,7 +3941,7 @@ class Trainer:
             repo_name = self.args.hub_model_id
 
         token = token if token is not None else self.args.hub_token
-        repo_url = create_repo(repo_name, token=token, private=self.args.hub_private_repo, exist_ok=True)
+        repo_url = hf_api().create_repo(repo_name, token=token, private=self.args.hub_private_repo, exist_ok=True)
         self.hub_model_id = repo_url.repo_id
         self.push_in_progress = None
 
@@ -4068,7 +4091,7 @@ class Trainer:
         # Wait for the current upload to be finished.
         self._finish_current_push()
 
-        return upload_folder(
+        return hf_api().upload_folder(
             repo_id=self.hub_model_id,
             folder_path=self.args.output_dir,
             commit_message=commit_message,
@@ -4115,7 +4138,7 @@ class Trainer:
         else:
             commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
 
-        model_push_job = upload_folder(
+        model_push_job = hf_api().upload_folder(
             repo_id=self.hub_model_id,
             folder_path=output_dir,
             commit_message=commit_message,
@@ -4131,7 +4154,7 @@ class Trainer:
             path_in_repo = (
                 "last-checkpoint" if self.args.hub_strategy == HubStrategy.CHECKPOINT else Path(checkpoint_folder).name
             )
-            checkpoint_push = upload_folder(
+            checkpoint_push = hf_api().upload_folder(
                 repo_id=self.hub_model_id,
                 folder_path=checkpoint_folder,
                 path_in_repo=path_in_repo,

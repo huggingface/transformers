@@ -182,6 +182,7 @@ class InstructBlipVideoModel(InstructBlipModel):
 
         qformer_input_ids = qformer_input_ids.repeat_interleave(frames, dim=0)
         qformer_attention_mask = qformer_attention_mask.repeat_interleave(frames, dim=0)
+        qformer_attention_mask = qformer_attention_mask.to(query_attention_mask.device)
         qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
         query_outputs = self.qformer(
             input_ids=qformer_input_ids,
@@ -209,7 +210,7 @@ class InstructBlipVideoModel(InstructBlipModel):
             )
             special_image_mask = special_image_mask.all(-1)
 
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
         inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, language_model_inputs)
 
@@ -288,6 +289,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
 
         qformer_input_ids = qformer_input_ids.repeat_interleave(frames, dim=0)
         qformer_attention_mask = qformer_attention_mask.repeat_interleave(frames, dim=0)
+        qformer_attention_mask = qformer_attention_mask.to(query_attention_mask.device)
         qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
         qformer_outputs = self.qformer(
             input_ids=qformer_input_ids,
@@ -324,7 +326,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         else:
             special_image_mask = input_ids == self.config.video_token_id
 
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask
 
     @can_return_tuple

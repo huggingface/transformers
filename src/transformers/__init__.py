@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "5.8.0.dev0"
+__version__ = "5.13.0.dev0"
 
 import importlib
 import sys
@@ -104,7 +104,6 @@ _import_structure = {
     "debug_utils": [],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
-    "distributed": [],
     "dynamic_module_utils": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
@@ -114,6 +113,7 @@ _import_structure = {
         "CompileConfig",
         "ContinuousBatchingConfig",
         "GenerationConfig",
+        "TextDiffusionStreamer",
         "TextIteratorStreamer",
         "TextStreamer",
         "WatermarkingConfig",
@@ -260,6 +260,7 @@ _import_structure = {
         "FineGrainedFP8Config",
         "FourOverSixConfig",
         "FPQuantConfig",
+        "GemmaQuantizationConfig",
         "GPTQConfig",
         "HiggsConfig",
         "HqqConfig",
@@ -366,7 +367,9 @@ else:
     _import_structure["cache_utils"] = [
         "CacheLayerMixin",
         "DynamicLayer",
+        "DynamicIndexedLayer",
         "StaticLayer",
+        "StaticIndexedLayer",
         "StaticSlidingWindowLayer",
         "QuantoQuantizedLayer",
         "HQQQuantizedLayer",
@@ -486,12 +489,14 @@ if TYPE_CHECKING:
     from .backbone_utils import BackboneConfigMixin, BackboneMixin
     from .cache_utils import Cache as Cache
     from .cache_utils import DynamicCache as DynamicCache
+    from .cache_utils import DynamicIndexedLayer as DynamicIndexedLayer
     from .cache_utils import DynamicLayer as DynamicLayer
     from .cache_utils import EncoderDecoderCache as EncoderDecoderCache
     from .cache_utils import HQQQuantizedLayer as HQQQuantizedLayer
     from .cache_utils import QuantizedCache as QuantizedCache
     from .cache_utils import QuantoQuantizedLayer as QuantoQuantizedLayer
     from .cache_utils import StaticCache as StaticCache
+    from .cache_utils import StaticIndexedLayer as StaticIndexedLayer
     from .cache_utils import StaticLayer as StaticLayer
     from .cache_utils import StaticSlidingWindowLayer as StaticSlidingWindowLayer
     from .configuration_utils import PreTrainedConfig as PreTrainedConfig
@@ -592,6 +597,7 @@ if TYPE_CHECKING:
     from .generation import SynthIDTextWatermarkingConfig as SynthIDTextWatermarkingConfig
     from .generation import SynthIDTextWatermarkLogitsProcessor as SynthIDTextWatermarkLogitsProcessor
     from .generation import TemperatureLogitsWarper as TemperatureLogitsWarper
+    from .generation import TextDiffusionStreamer as TextDiffusionStreamer
     from .generation import TextIteratorStreamer as TextIteratorStreamer
     from .generation import TextStreamer as TextStreamer
     from .generation import TopHLogitsWarper as TopHLogitsWarper
@@ -776,6 +782,7 @@ if TYPE_CHECKING:
     from .utils.quantization_config import FineGrainedFP8Config as FineGrainedFP8Config
     from .utils.quantization_config import FourOverSixConfig as FourOverSixConfig
     from .utils.quantization_config import FPQuantConfig as FPQuantConfig
+    from .utils.quantization_config import GemmaQuantizationConfig as GemmaQuantizationConfig
     from .utils.quantization_config import GPTQConfig as GPTQConfig
     from .utils.quantization_config import HiggsConfig as HiggsConfig
     from .utils.quantization_config import HqqConfig as HqqConfig
@@ -833,15 +840,18 @@ else:
         # Also map XImageProcessorFast -> XImageProcessor for backward compat with old class names.
         def getattr_factory(target):
             def _getattr(name):
-                new_name = name.removesuffix("Fast")
-                logger.warning(
-                    "Accessing `%s` from `%s`. Returning `%s` instead. Behavior may be "
-                    "different and this alias will be removed in future versions.",
-                    name,
-                    target,
-                    new_name,
-                )
-                return getattr(importlib.import_module(target, __name__), new_name)
+                if name.endswith("Fast"):
+                    new_name = name.removesuffix("Fast")
+                    logger.warning_once(
+                        "Accessing `%s` from `%s`. Returning `%s` instead. Behavior may be "
+                        "different and this alias will be removed in future versions.",
+                        name,
+                        target,
+                        new_name,
+                    )
+                    return getattr(importlib.import_module(target, __name__), new_name)
+                # Silently forward non-Fast names to target (transparent alias behavior)
+                return getattr(importlib.import_module(target, __name__), name)
 
             return _getattr
 
