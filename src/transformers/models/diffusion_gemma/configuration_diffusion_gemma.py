@@ -47,6 +47,11 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
         Number of experts activated per token in MoE layers.
     moe_intermediate_size (`int`, *optional*):
         Intermediate (hidden) size of each expert's feed-forward network in MoE layers.
+    output_router_logits (`bool`, *optional*, defaults to `False`):
+        Whether or not to return the router logits of the MoE layers, used to compute the load balancing loss when
+        training the experts.
+    router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
+        The coefficient for the load balancing loss added to the main loss.
     """
 
     model_type = "diffusion_gemma_text"
@@ -108,6 +113,8 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
     num_experts: int | None = None
     top_k_experts: int | None = None
     moe_intermediate_size: int | None = None
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
 
     def __post_init__(self, **kwargs):
         if self.use_bidirectional_attention == "all":

@@ -85,10 +85,17 @@ class DiffusionGemmaTextConfig(Gemma4TextConfig):
         Number of experts activated per token in MoE layers.
     moe_intermediate_size (`int`, *optional*):
         Intermediate (hidden) size of each expert's feed-forward network in MoE layers.
+    output_router_logits (`bool`, *optional*, defaults to `False`):
+        Whether or not to return the router logits of the MoE layers, used to compute the load balancing loss when
+        training the experts.
+    router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
+        The coefficient for the load balancing loss added to the main loss.
     """
 
     model_type = "diffusion_gemma_text"
     final_logit_softcapping = 30.0
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
 
     base_model_pp_plan = {
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
@@ -436,7 +443,8 @@ class DiffusionGemmaTextRouter(Gemma4TextRouter):
         # Apply per-expert scale directly to the weights
         top_k_weights = top_k_weights * self.per_expert_scale[top_k_index]
 
-        return router_probabilities, top_k_weights, top_k_index
+        # The first element is recorded as `router_logits` for the load balancing loss
+        return expert_scores, top_k_weights, top_k_index
 
 
 class DiffusionGemmaTextExperts(Gemma4TextExperts):
@@ -1247,6 +1255,88 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
         return {"full_attention": full_mask, "sliding_attention": sliding_mask}
 
 
+def load_balancing_loss_func(
+    gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
+    num_experts: int | None = None,
+    top_k=2,
+    attention_mask: torch.Tensor | None = None,
+) -> torch.Tensor | int:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        gate_logits:
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
+            shape [batch_size X sequence_length, num_experts].
+        num_experts:
+            Number of experts
+        top_k:
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
+            parameter.
+        attention_mask (`torch.Tensor`, *optional*):
+            The attention_mask used in forward function
+            shape [batch_size X sequence_length] if not None.
+
+    Returns:
+        The auxiliary loss.
+    """
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
+
+    if isinstance(gate_logits, tuple):
+        compute_device = gate_logits[0].device
+        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+
+    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+
+    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+
+    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
+
+    if attention_mask is None:
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.mean(routing_weights, dim=0)
+    else:
+        batch_size, sequence_length = attention_mask.shape
+        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
+        expert_attention_mask = (
+            attention_mask[None, :, :, None, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
+            .reshape(-1, top_k, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
+            expert_attention_mask, dim=0
+        )
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
+        router_per_expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
+            router_per_expert_attention_mask, dim=0
+        )
+
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    return overall_loss * num_experts
+
+
 @auto_docstring
 @dataclass
 class DiffusionGemmaModelOutputWithPast(BaseModelOutputWithPast):
@@ -1254,9 +1344,13 @@ class DiffusionGemmaModelOutputWithPast(BaseModelOutputWithPast):
     encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Sequence of hidden states at the output of the last layer of the encoder. Only set when `input_ids` is
         provided, e.g. to compute an autoregressive loss on the encoder during training.
+    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.FloatTensor` (one for each decoder layer) of shape `(batch_size * canvas_length,
+        num_experts)`, i.e. the raw router logits used to compute the load balancing loss.
     """
 
     encoder_last_hidden_state: torch.FloatTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring
@@ -1265,14 +1359,21 @@ class DiffusionGemmaBlockDiffusionOutputWithPast(CausalLMOutputWithPast):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
         Language modeling loss.
+    aux_loss (`torch.FloatTensor`, *optional*, returned when `output_router_logits=True` is passed):
+        Load balancing loss for the MoE experts.
     logits (`torch.FloatTensor` of shape `(batch_size, canvas_length, config.text_config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Sequence of hidden states at the output of the last layer of the encoder. Only set when `input_ids` is
         provided, e.g. to compute an autoregressive loss on the encoder during training.
+    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.FloatTensor` (one for each decoder layer) of shape `(batch_size * canvas_length,
+        num_experts)`, i.e. the raw router logits used to compute the load balancing loss.
     """
 
+    aux_loss: torch.FloatTensor | None = None
     encoder_last_hidden_state: torch.FloatTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel, T5Gemma2Model):
@@ -1386,6 +1487,7 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel, T5Gemma2Model):
             attentions=decoder_outputs.attentions,
             past_key_values=past_key_values,
             encoder_last_hidden_state=encoder_last_hidden_state,
+            router_logits=getattr(decoder_outputs, "router_logits", None),
         )
 
 
@@ -1407,6 +1509,8 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
         self.model = DiffusionGemmaModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.final_logit_softcapping = config.text_config.final_logit_softcapping
+        self.num_experts = config.text_config.num_experts
+        self.num_experts_per_tok = config.text_config.top_k_experts
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1430,6 +1534,7 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
         self_conditioning_mask: torch.BoolTensor | None = None,
         decoder_attention_mask: torch.Tensor | dict | None = None,
         decoder_position_ids: torch.LongTensor | None = None,
+        output_router_logits: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> DiffusionGemmaBlockDiffusionOutputWithPast:
         r"""
@@ -1452,6 +1557,10 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
             The position IDs for the tokens in the canvas.
         """
 
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
+        )
+
         # 1: Call the model
         model_outputs = self.model(
             input_ids=input_ids,
@@ -1463,6 +1572,7 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
             self_conditioning_mask=self_conditioning_mask,
             decoder_attention_mask=decoder_attention_mask,
             decoder_position_ids=decoder_position_ids,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -1473,12 +1583,23 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
         logits = torch.tanh(logits)
         logits = logits * self.final_logit_softcapping
 
+        # 3. Load balancing loss over the decoder experts. The canvas is unpadded, so no attention mask is needed.
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                model_outputs.router_logits,
+                self.num_experts,
+                self.num_experts_per_tok,
+            )
+
         return DiffusionGemmaBlockDiffusionOutputWithPast(
             logits=logits,
+            aux_loss=aux_loss,
             hidden_states=model_outputs.hidden_states,
             attentions=model_outputs.attentions,
             past_key_values=model_outputs.past_key_values,
             encoder_last_hidden_state=model_outputs.encoder_last_hidden_state,
+            router_logits=model_outputs.router_logits,
         )
 
 

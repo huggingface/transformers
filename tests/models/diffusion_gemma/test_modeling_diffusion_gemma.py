@@ -249,6 +249,25 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         pass
 
     # Tests designed specifically for `DiffusionGemma`, excluding generation tests.
+    def test_output_router_logits(self):
+        """
+        Tests that `output_router_logits` surfaces the decoder router logits and the load balancing loss, and that
+        they are absent by default.
+        """
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+
+        outputs = model(**inputs)
+        self.assertIsNone(outputs.aux_loss)
+        self.assertIsNone(outputs.router_logits)
+
+        outputs = model(**inputs, output_router_logits=True)
+        self.assertIsNotNone(outputs.aux_loss)
+        self.assertGreater(outputs.aux_loss.item(), 0.0)
+        # one entry per decoder layer, each of shape `(batch_size * canvas_length, num_experts)`
+        self.assertEqual(len(outputs.router_logits), config.text_config.num_hidden_layers)
+        self.assertEqual(outputs.router_logits[0].shape[-1], config.text_config.num_experts)
+
     def test_tied_weights(self):
         """
         Tests that randomly initialized models have their weights properly tied.
