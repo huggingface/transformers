@@ -30,6 +30,7 @@ from transformers import (
 )
 from transformers.cache_utils import Cache
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig
+from transformers.models.mllama.modeling_mllama import MllamaCrossAttentionDecoderLayer
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -726,3 +727,51 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             expected_output,
             f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
         )
+
+
+@require_torch
+class MllamaCrossAttentionMaskTests(unittest.TestCase):
+    def test_full_text_row_mask_zeroes_cross_attention_before_residual(self):
+        config = MllamaTextConfig(
+            hidden_size=16,
+            intermediate_size=32,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+        )
+        layer = MllamaCrossAttentionDecoderLayer(config, layer_idx=0).to(torch_device)
+        layer.cross_attn_attn_gate.data.fill_(1.0)
+        layer.cross_attn_mlp_gate.data.fill_(0.0)
+
+        batch_size, seq_len, hidden_size = 1, 2, config.hidden_size
+        hidden_states = torch.zeros(batch_size, seq_len, hidden_size, device=torch_device)
+        cross_attention_states = torch.randn(batch_size, 4, hidden_size, device=torch_device)
+
+        cross_attention_mask = torch.zeros(batch_size, 1, seq_len, 4, device=torch_device)
+        attention_mask = torch.ones(batch_size, 1, seq_len, seq_len, device=torch_device)
+
+        # Row 0 can attend; row 1 is fully masked out from image tokens.
+        cross_attention_mask[:, :, 0, :] = 0
+        cross_attention_mask[:, :, 1, :] = torch.finfo(cross_attention_mask.dtype).min
+
+        full_text_row_masked_out_mask = torch.tensor([[[[1.0], [0.0]]]], device=torch_device)
+
+        def fake_cross_attn(*args, **kwargs):
+            return torch.full(
+                (batch_size, seq_len, hidden_size),
+                1000.0,
+                device=torch_device,
+            ), None
+
+        layer.cross_attn.forward = fake_cross_attn
+
+        output = layer(
+            hidden_states=hidden_states,
+            cross_attention_states=cross_attention_states,
+            cross_attention_mask=cross_attention_mask,
+            attention_mask=attention_mask,
+            full_text_row_masked_out_mask=full_text_row_masked_out_mask,
+        )[0]
+
+        expected_unmasked = 1000.0 * layer.cross_attn_attn_gate.tanh()
+        self.assertTrue(torch.allclose(output[0], torch.full_like(output[0], expected_unmasked.item())))
+        self.assertTrue(torch.allclose(output[1], torch.zeros_like(output[1])))
