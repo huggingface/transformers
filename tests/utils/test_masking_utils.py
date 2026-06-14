@@ -93,6 +93,28 @@ class MaskTest(unittest.TestCase):
 
         self.assertTrue((causal_mask == EXPECTED_PACKED_MASK).all())
 
+    def test_packed_sequence_mask_sdpa_with_2d_attention_mask(self):
+        # Packing must still be detected when a 2D all-ones attention_mask is passed alongside
+        # packed position_ids (rmpad training); before the fix this hit the is_causal fast path.
+        config = LlamaConfig()
+        config._attn_implementation = "sdpa"
+
+        batch_size = 2
+        sequence_length = 10
+
+        position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 0, 1, 2, 3]])
+        attention_mask = torch.ones(batch_size, sequence_length, dtype=torch.long)
+
+        causal_mask = create_causal_mask(
+            config=config,
+            inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
+            attention_mask=attention_mask,
+            past_key_values=None,
+            position_ids=position_ids,
+        )
+
+        self.assertTrue((causal_mask == EXPECTED_PACKED_MASK).all())
+
     def test_packed_sequence_mask_eager(self):
         config = LlamaConfig()
         config._attn_implementation = "eager"
