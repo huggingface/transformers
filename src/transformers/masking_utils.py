@@ -877,10 +877,17 @@ def _preprocess_mask_arguments(
         else:
             kv_length, kv_offset = attention_mask.shape[-1], 0
 
-    # We check the position_ids for potential packed sequence format (only if the 2D attention mask is explicitly None,
-    # and we don't have past_key_values, i.e. generally a training setup)
+    # We check the position_ids for potential packed sequence format. This is only safe when there is no padding to
+    # confuse the inference (the 2D attention mask is None or all-ones) and we have no past_key_values, i.e. generally
+    # a training setup. A 2D mask that contains padding is left to the standard padding path: its position_ids are
+    # non-contiguous and would otherwise be misread as packed-sequence boundaries (breaking the padding-free tests).
     packed_sequence_mask = None
-    if position_ids is not None and past_key_values is None and position_ids.shape[-1] == q_length:
+    if (
+        position_ids is not None
+        and past_key_values is None
+        and position_ids.shape[-1] == q_length
+        and (attention_mask is None or attention_mask.all())
+    ):
         batch_size = inputs_embeds.shape[0]
         # The position ids are sometimes just unsqueezed, without being expanded
         if batch_size != position_ids.shape[0]:
