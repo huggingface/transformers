@@ -24,6 +24,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import (
+    bidirectional_mask_function,
     create_bidirectional_mask,
     create_bidirectional_sliding_window_mask,
     create_causal_mask,
@@ -1088,6 +1089,14 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
                 Attention mask for the decoder KV cache. Used to specify padded/unpopulated encoder KV cached entries.
         """
 
+        if past_key_values is None:
+            raise ValueError(
+                "The diffusion mask requires `past_key_values` to construct the next attention mask correctly"
+            )
+
+        # DiT module doesn't need a sliding mask and has to attend fully to prev context and itself
+        # To enforce a full mask we pass `or_mask_function`, while keeping the functionality of
+        # `create_bidirectional_sliding_window_mask` to get correct the mask shape
         LAYER_TYPE_TO_MASK_MAPPING = {
             "full_attention": create_bidirectional_mask,
             "sliding_attention": create_bidirectional_sliding_window_mask,
@@ -1097,6 +1106,7 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
             "inputs_embeds": inputs_embeds,
             "attention_mask": decoder_attention_mask,
             "past_key_values": past_key_values,
+            "or_mask_function": bidirectional_mask_function,
             "additional_kv_length": config.canvas_length if past_key_values.is_compileable else 0,
         }
         mask_mapping = {}

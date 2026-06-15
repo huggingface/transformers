@@ -396,7 +396,7 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         canvas_length = 4
         concat_kv_length_full = prefill_length + canvas_length
         # -1 -> the DYNAMIC sliding window kv cache has len=window-1
-        concat_kv_length_sliding = sliding_window_length + canvas_length - 1
+        concat_kv_length_sliding = sliding_window_length + canvas_length + 1
         batch_size = 2
         left_padding_length = 2  # only applied on batch item 0
         expected_non_zero_full = (
@@ -405,7 +405,12 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         )
         expected_attention_mask_shape_full = (batch_size, 1, canvas_length, concat_kv_length_full)
         expected_non_zero_sliding = concat_kv_length_sliding * batch_size * canvas_length
-        expected_attention_mask_shape_sliding = (batch_size, 1, canvas_length, concat_kv_length_sliding)
+        expected_attention_mask_shape_sliding = (
+            batch_size,
+            1,
+            canvas_length,
+            sliding_window_length + canvas_length - 1,
+        )
         # Double-check test assumption that left-padding should be past the sliding window
         self.assertTrue(prefill_length - left_padding_length > sliding_window_length)
 
@@ -444,15 +449,19 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         original test, the mask is materialized (a materialized mask is needed at compile time)
         """
 
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
         prefill_length = 8
-        canvas_length = 4
-        static_cache_length = 16
+        canvas_length = config.canvas_length
+        total_input_length = prefill_length + canvas_length
+
+        # More than input so we don't hit sliding window being cropped yet
+        static_cache_length = total_input_length + 20
         concat_kv_length = static_cache_length + canvas_length
         batch_size = 2
-        expected_non_zero = prefill_length * canvas_length * batch_size
-        expected_attention_mask_shape = (batch_size, 1, canvas_length, static_cache_length)
+        expected_non_zero = total_input_length * canvas_length * batch_size
+        expected_attention_mask_shape = (batch_size, 1, canvas_length, concat_kv_length)
 
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
 
         # Apply prefill (smaller than sliding window)
@@ -461,11 +470,10 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         past_key_values = model.model.encoder(prefill_input_ids, past_key_values=past_key_values).past_key_values
 
         # Get the mask (correctly designed for the static cache)
-        decoder_attention_mask = torch.ones((batch_size, concat_kv_length), dtype=torch.bool, device=torch_device)
-        decoder_attention_mask[:, prefill_length:static_cache_length] = 0  # unfilled KV cache values
+        decoder_attention_mask = torch.ones((batch_size, total_input_length), dtype=torch.bool, device=torch_device)
         dummy_canvas = torch.ones((batch_size, canvas_length), dtype=torch.int32, device=torch_device)
         mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
-            config=config.text_config,
+            config=config,
             inputs_embeds=dummy_canvas.unsqueeze(-1),
             past_key_values=past_key_values,
             decoder_attention_mask=decoder_attention_mask,
@@ -481,26 +489,36 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         This is the most complex mask preparation test, including static caches, left-padding, and mask preparation
         beyond the sliding window length.
         """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
         prefill_length = 16
         sliding_window_length = 8
-        canvas_length = 4
-        static_cache_length = 32
-        concat_kv_length_full = static_cache_length + canvas_length
-        # No -1 -> the STATIC sliding window kv cache has len=window
+        canvas_length = config.canvas_length
+        total_input_length = prefill_length + canvas_length
+
+        # Max-cache-len is less than `total_input_length` to trigger going beyond sliding window
         concat_kv_length_sliding = sliding_window_length + canvas_length - 1
+        static_cache_length = total_input_length - 4
+        concat_kv_length_full = static_cache_length + canvas_length
         batch_size = 2
         left_padding_length = 2  # only applied on batch item 0
+
+        # Current query (`canvas`) attends to key (`prefill + itself`). Optionally, doesn't attend if pading present
         expected_non_zero_full = (
-            ((prefill_length - left_padding_length) * canvas_length)  # batch item 0
-            + (prefill_length * canvas_length)  # batch item 1
+            ((total_input_length - left_padding_length) * canvas_length)  # batch item 0
+            + (total_input_length * canvas_length)  # batch item 1
         )
-        expected_attention_mask_shape_full = (batch_size, 1, canvas_length, static_cache_length)
-        expected_non_zero_sliding = (sliding_window_length - 1) * batch_size * canvas_length
-        expected_attention_mask_shape_sliding = (batch_size, 1, canvas_length, concat_kv_length_sliding)
+        expected_attention_mask_shape_full = (batch_size, 1, canvas_length, concat_kv_length_full)
+        expected_non_zero_sliding = (sliding_window_length + canvas_length - 1) * batch_size * canvas_length
+        expected_attention_mask_shape_sliding = (
+            batch_size,
+            1,
+            canvas_length,
+            concat_kv_length_sliding + canvas_length,
+        )
         # Double-check test assumption that left-padding should be past the sliding window
         self.assertTrue(prefill_length - left_padding_length > sliding_window_length)
 
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         config.text_config.sliding_window = sliding_window_length
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
 
@@ -510,12 +528,11 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         past_key_values = model.model.encoder(prefill_input_ids, past_key_values=past_key_values).past_key_values
 
         # Get the mask (correctly designed for the static cache)
-        decoder_attention_mask = torch.ones((batch_size, concat_kv_length_full), dtype=torch.bool, device=torch_device)
+        decoder_attention_mask = torch.ones((batch_size, total_input_length), dtype=torch.bool, device=torch_device)
         decoder_attention_mask[0, :left_padding_length] = 0
-        decoder_attention_mask[:, prefill_length:static_cache_length] = 0  # unfilled KV cache values
         dummy_canvas = torch.ones((batch_size, canvas_length), dtype=torch.int32, device=torch_device)
         mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
-            config=config.text_config,
+            config=config,
             inputs_embeds=dummy_canvas.unsqueeze(-1),
             past_key_values=past_key_values,
             decoder_attention_mask=decoder_attention_mask,

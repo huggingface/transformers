@@ -30,6 +30,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_experts_implementation
 from ...masking_utils import (
+    bidirectional_mask_function,
     create_bidirectional_mask,
     create_bidirectional_sliding_window_mask,
     create_causal_mask,
@@ -1312,6 +1313,14 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
                 Attention mask for the decoder KV cache. Used to specify padded/unpopulated encoder KV cached entries.
         """
 
+        if past_key_values is None:
+            raise ValueError(
+                "The diffusion mask requires `past_key_values` to construct the next attention mask correctly"
+            )
+
+        # DiT module doesn't need a sliding mask and has to attend fully to prev context and itself
+        # To enforce a full mask we pass `or_mask_function`, while keeping the functionality of
+        # `create_bidirectional_sliding_window_mask` to get correct the mask shape
         LAYER_TYPE_TO_MASK_MAPPING = {
             "full_attention": create_bidirectional_mask,
             "sliding_attention": create_bidirectional_sliding_window_mask,
@@ -1321,6 +1330,7 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
             "inputs_embeds": inputs_embeds,
             "attention_mask": decoder_attention_mask,
             "past_key_values": past_key_values,
+            "or_mask_function": bidirectional_mask_function,
             "additional_kv_length": config.canvas_length if past_key_values.is_compileable else 0,
         }
         mask_mapping = {}
@@ -1356,6 +1366,7 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
 
     def __init__(self, config: DiffusionGemmaConfig):
         super().__init__(config)
+
         self.encoder = DiffusionGemmaEncoderModel(config)
         self.decoder = DiffusionGemmaDecoderModel(config)
 
@@ -1455,6 +1466,7 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
     next block diffusion step.
     """
 
+    base_model_prefix = "model"
     _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
     generation_config_class = DiffusionGemmaGenerationConfig
 
@@ -1467,6 +1479,12 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.encoder.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.encoder.language_model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring
