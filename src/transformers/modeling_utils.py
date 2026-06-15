@@ -4033,16 +4033,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 exclusive with `quantization_config` (for now) and `device_map`. When set, accelerate is not used for
                 device placement or dispatch. Launch with `torchrun --nproc_per_node=N script.py`.
 
-                Accepts `tp_size`, `tp_plan`, `fsdp_size`, `fsdp_plan`. When a size is specified without a
-                plan, the plan defaults to the model's predefined behavior: TP uses the model's predefined
-                tensor parallel sharding plan, FSDP wraps each transformer layer individually with FSDP2
-                (`fully_shard`). Both plans also accept a `dict` for manual control: `tp_plan` maps
-                parameter names to parallel styles (e.g. `{"model.layers.*.self_attn.q_proj": "colwise"}`),
-                `fsdp_plan` maps module names to wrap (e.g. `{"model.layers.0": {}, "model.layers.1": {}}`).
+                Accepts `tp_size`, `tp_plan`, `fsdp_size`, `fsdp_cpu_offload`, and
+                `fsdp_mixed_precision`. When a size is specified without a plan, the plan defaults to
+                the model's predefined behavior: TP uses the model's predefined tensor parallel
+                sharding plan, FSDP uses the model's ``base_model_fsdp_plan`` with FSDP2
+                (`fully_shard`). `tp_plan` can override the tensor parallel layout (e.g.
+                `{"model.layers.*.self_attn.q_proj": "colwise"}`).
 
                 Examples:
                     - TP-only: `DistributedConfig(tp_size=4)`
                     - FSDP-only: `DistributedConfig(fsdp_size=4)`
+                    - FSDP with mixed precision: `DistributedConfig(fsdp_size=4, fsdp_mixed_precision=True)`
                     - 2D parallel: `DistributedConfig(tp_size=2, fsdp_size=2)` on 4 GPUs
             device_mesh (`torch.distributed.DeviceMesh`, *optional*):
                 A torch device mesh. If not provided would default to world size. Used only for tensor parallel for now.
@@ -4351,6 +4352,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # `apply_tensor_parallel` see the shared-parameter graph and can route tied
             # entries (e.g. `lm_head` -> `embed_tokens`) correctly. `_finalize_model_loading`
             # re-runs `tie_weights` after the checkpoint is loaded to handle missing-key edge cases.
+            #TODO(3outeille): apply tied weights already done or later done?
             model.tie_weights()
             model = distribute_model(model, distributed_config, device_mesh)
         elif device_map is not None:

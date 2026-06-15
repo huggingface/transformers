@@ -445,10 +445,9 @@ class ModelUtilsTest(TestCasePlus):
             fake_mesh.ndim = 1
             fake_mesh.device_type = "cpu"
 
-            def fake_apply_fsdp(model, fsdp_mesh, fsdp_plan):
+            def fake_apply_fsdp(model, fsdp_mesh):
                 call_order.append("distribute")
                 self.assertIs(fsdp_mesh, fake_mesh)
-                self.assertIsNone(fsdp_plan)
                 return model
 
             def fake_load_pretrained_model(model, state_dict, checkpoint_files, load_config, expected_keys=None):

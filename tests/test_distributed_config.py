@@ -10,7 +10,8 @@ class TestDistributedConfig:
         assert dc.tp_size == 2
         assert dc.fsdp_size == 2
         assert dc.tp_plan is None
-        assert dc.fsdp_plan is None
+        assert dc.fsdp_cpu_offload is False
+        assert dc.fsdp_mixed_precision is False
 
     def test_tp_only_defaults_fsdp_to_1(self):
         dc = DistributedConfig(tp_size=4)
@@ -22,7 +23,8 @@ class TestDistributedConfig:
         dc = DistributedConfig(fsdp_size=4)
         assert dc.tp_size == 1
         assert dc.fsdp_size == 4
-        assert dc.fsdp_plan is None
+        assert dc.fsdp_cpu_offload is False
+        assert dc.fsdp_mixed_precision is False
         assert dc.tp_plan is None
 
     def test_empty_config(self):
@@ -30,7 +32,8 @@ class TestDistributedConfig:
         assert dc.tp_size is None
         assert dc.fsdp_size is None
         assert dc.tp_plan is None
-        assert dc.fsdp_plan is None
+        assert dc.fsdp_cpu_offload is False
+        assert dc.fsdp_mixed_precision is False
 
     def test_from_dict(self):
         dc = DistributedConfig.from_dict({"tp_size": 2, "fsdp_size": 4})
@@ -56,7 +59,8 @@ class TestDistributedConfig:
             "enable_sequence_parallel": False,
             "enable_expert_parallel": False,
             "fsdp_size": 4,
-            "fsdp_plan": None,
+            "fsdp_cpu_offload": False,
+            "fsdp_mixed_precision": False,
         }
 
     def test_to_dict_is_a_copy(self):
