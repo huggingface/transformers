@@ -62,23 +62,28 @@ class Tipsv2DptReassembleLayer(nn.Module):
 
 class Tipsv2DptReassembleStage(nn.Module):
     """
-    Reassembles TIPSv2 backbone token sequences into spatial feature maps at multiple resolutions.
+    This class reassembles the hidden states of the backbone into image-like feature representations at various
+    resolutions.
 
-    Each input is a token sequence `(B, 1 + num_register_tokens + N, D)`. The stage:
-    1. Slices the CLS token and drops register tokens, keeping the N patch tokens.
-    2. Applies an always-on "project" CLS-readout: concat(patches, CLS) → Linear(2D→D) → activation.
-    3. Reshapes to `(B, D, patch_height, patch_width)`.
-    4. Applies a per-stage 1×1 projection conv and spatial resize.
+    This happens in 3 stages:
+    1. Map the N + cls + register tokens to a set of N tokens.
+    2. Project the channel dimension of the hidden states according to `config.neck_hidden_sizes`.
+    3. Resizing the spatial dimensions (height, width).
+
+    Args:
+        config (`[ZoeDepthConfig]`):
+            Model configuration class defining the model architecture.
     """
 
     def __init__(self, config: Tipsv2DptConfig):
         super().__init__()
         self.num_register_tokens = config.backbone_config.num_register_tokens
-        hidden_size = config.backbone_config.hidden_size
-
         self.readout_projects = nn.ModuleList(
             [
-                nn.Sequential(nn.Linear(2 * hidden_size, hidden_size), ACT2FN[config.readout_act])
+                nn.Sequential(
+                    nn.Linear(2 * config.backbone_config.hidden_size, config.backbone_config.hidden_size),
+                    ACT2FN[config.readout_act],
+                )
                 for _ in config.neck_hidden_sizes
             ]
         )
@@ -95,10 +100,15 @@ class Tipsv2DptReassembleStage(nn.Module):
         patch_height: int,
         patch_width: int,
     ) -> list[torch.Tensor]:
+        """
+        Args:
+            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
+                List of hidden states from the backbone.
+        """
         out = []
         for stage_idx, hidden_state in enumerate(hidden_states):
-            cls_token = hidden_state[:, 0]  # (B, D)
-            patch_tokens = hidden_state[:, 1 + self.num_register_tokens :]  # (B, N, D)
+            cls_token = hidden_state[:, 0]
+            patch_tokens = hidden_state[:, 1 + self.num_register_tokens :]
             batch_size, num_patches, hidden_size = patch_tokens.shape
 
             readout = cls_token.unsqueeze(1).expand(-1, num_patches, -1)
@@ -114,12 +124,22 @@ class Tipsv2DptReassembleStage(nn.Module):
 
 
 class Tipsv2DptPreActResidualLayer(nn.Module):
+    """
+    ResidualConvUnit, pre-activate residual unit.
+
+    Args:
+        config (`[Tipsv2DptConfig]`):
+            Model configuration class defining the model architecture.
+    """
+
     def __init__(self, config: Tipsv2DptConfig):
         super().__init__()
+
         self.activation1 = nn.ReLU()
         self.convolution1 = nn.Conv2d(
             config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=3, stride=1, padding=1, bias=False
         )
+
         self.activation2 = nn.ReLU()
         self.convolution2 = nn.Conv2d(
             config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=3, stride=1, padding=1, bias=False
@@ -131,21 +151,31 @@ class Tipsv2DptPreActResidualLayer(nn.Module):
         hidden_state = self.convolution1(hidden_state)
         hidden_state = self.activation2(hidden_state)
         hidden_state = self.convolution2(hidden_state)
+
         return hidden_state + residual
 
 
 class Tipsv2DptFeatureFusionLayer(nn.Module):
+    """Feature fusion layer, merges feature maps from different stages.
+
+    Args:
+        config (`[Tipsv2DptConfig]`):
+            Model configuration class defining the model architecture.
+        align_corners (`bool`, *optional*, defaults to `True`):
+            The align_corner setting for bilinear upsample.
+    """
+
     def __init__(self, config: Tipsv2DptConfig, align_corners: bool = True, has_residual: bool = True):
         super().__init__()
+
         self.align_corners = align_corners
-        self.has_residual = has_residual
+
         self.projection = nn.Conv2d(config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=1, bias=True)
-        if has_residual:
-            self.residual_layer1 = Tipsv2DptPreActResidualLayer(config)
+        self.residual_layer1 = Tipsv2DptPreActResidualLayer(config) if has_residual else nn.Identity()
         self.residual_layer2 = Tipsv2DptPreActResidualLayer(config)
 
     def forward(self, hidden_state: torch.Tensor, residual: torch.Tensor | None = None) -> torch.Tensor:
-        if residual is not None and self.has_residual:
+        if residual is not None:
             if hidden_state.shape != residual.shape:
                 residual = nn.functional.interpolate(
                     residual, size=(hidden_state.shape[2], hidden_state.shape[3]), mode="bilinear", align_corners=False
@@ -157,6 +187,7 @@ class Tipsv2DptFeatureFusionLayer(nn.Module):
             hidden_state, scale_factor=2, mode="bilinear", align_corners=self.align_corners
         )
         hidden_state = self.projection(hidden_state)
+
         return hidden_state
 
 
@@ -170,11 +201,15 @@ class Tipsv2DptFeatureFusionStage(nn.Module):
             ]
         )
 
-    def forward(self, hidden_states: list[torch.Tensor]) -> list[torch.Tensor]:
+    def forward(self, hidden_states):
+        # reversing the hidden_states, we start from the last
+        hidden_states = hidden_states[::-1]
+
         fused_hidden_states = []
         fused_hidden_state = None
-        for hidden_state, layer in zip(reversed(hidden_states), self.layers):
+        for hidden_state, layer in zip(hidden_states, self.layers):
             if fused_hidden_state is None:
+                # first layer only uses the last hidden_state
                 fused_hidden_state = layer(hidden_state)
             else:
                 fused_hidden_state = layer(fused_hidden_state, hidden_state)
@@ -185,37 +220,50 @@ class Tipsv2DptFeatureFusionStage(nn.Module):
 
 class Tipsv2DptNeck(nn.Module):
     """
-    Neck module: reassemble → 3×3 channel-projection convs → feature fusion → trailing 3×3 project conv.
+    Tipsv2DptNeck. A neck is a module that is normally used between the backbone and the head. It takes a list of tensors as
+    input and produces another list of tensors as output. For Tipsv2Dpt, it includes 2 stages:
 
-    Returns a single spatial feature map `(B, fusion_hidden_size, H', W')`.
+    * Tipsv2DptReassembleStage
+    * Tipsv2DptFeatureFusionStage.
+
+    Args:
+        config (dict): config dict.
     """
 
-    def __init__(self, config: Tipsv2DptConfig):
+    def __init__(self, config):
         super().__init__()
+        self.config = config
+
         self.reassemble_stage = Tipsv2DptReassembleStage(config)
 
-        self.convs = nn.ModuleList(
-            [
-                nn.Conv2d(channel, config.fusion_hidden_size, kernel_size=3, padding=1, bias=False)
-                for channel in config.neck_hidden_sizes
-            ]
-        )
+        self.convs = nn.ModuleList()
+        for channel in config.neck_hidden_sizes:
+            self.convs.append(nn.Conv2d(channel, config.fusion_hidden_size, kernel_size=3, padding=1, bias=False))
 
+        # fusion
         self.fusion_stage = Tipsv2DptFeatureFusionStage(config)
 
-        # trailing project conv not present in DPTNeck — part of the original DPTHead
-        self.project = nn.Conv2d(config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=3, padding=1)
+    def forward(self, hidden_states: list[torch.Tensor], patch_height=None, patch_width=None) -> list[torch.Tensor]:
+        """
+        Args:
+            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
+                List of hidden states from the backbone.
+        """
+        if not isinstance(hidden_states, (tuple, list)):
+            raise TypeError("hidden_states should be a tuple or list of tensors")
 
-    def forward(
-        self,
-        hidden_states: list[torch.Tensor],
-        patch_height: int,
-        patch_width: int,
-    ) -> torch.Tensor:
-        hidden_states = self.reassemble_stage(hidden_states, patch_height=patch_height, patch_width=patch_width)
-        features = [self.convs[idx](feature) for idx, feature in enumerate(hidden_states)]
-        fused = self.fusion_stage(features)
-        return self.project(fused[-1])
+        if len(hidden_states) != len(self.config.neck_hidden_sizes):
+            raise ValueError("The number of hidden states should be equal to the number of neck hidden sizes.")
+
+        # postprocess hidden states
+        hidden_states = self.reassemble_stage(hidden_states, patch_height, patch_width)
+
+        features = [self.convs[i](feature) for i, feature in enumerate(hidden_states)]
+
+        # fusion blocks
+        output = self.fusion_stage(features)
+
+        return output
 
 
 @dataclass
@@ -261,12 +309,15 @@ class Tipsv2DptDecoder(nn.Module):
 
     def __init__(self, config: Tipsv2DptConfig, out_channels: int):
         super().__init__()
+        self.project = nn.Conv2d(config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=3, padding=1)
         self.head = nn.Linear(config.fusion_hidden_size, out_channels)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = hidden_state.permute(0, 2, 3, 1)  # (B, H, W, C)
-        hidden_state = self.head(hidden_state)  # (B, H, W, out_channels)
-        hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()  # (B, out_channels, H, W)
+        hidden_state = self.project(hidden_state)
+        # TODO: Check replace with conv2d and 1x1 kernel
+        hidden_state = hidden_state.permute(0, 2, 3, 1)
+        hidden_state = self.head(hidden_state)
+        hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
         return hidden_state
 
 
@@ -322,7 +373,7 @@ class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
         patch_width = width // self.config.backbone_config.patch_size
 
         depth_fused = self.depth_neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
-        depth_logits = self.depth_decoder(torch.relu(depth_fused))
+        depth_logits = self.depth_decoder(torch.relu(depth_fused[-1]))
         probs = torch.relu(depth_logits) + self.config.min_depth
         probs = probs / probs.sum(dim=1, keepdim=True)
         depth_bins = torch.linspace(
@@ -335,10 +386,10 @@ class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
         predicted_depth = (probs * depth_bins.view(1, -1, 1, 1)).sum(dim=1)
 
         normals_fused = self.normals_neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
-        normals = self.normals_decoder(normals_fused)
+        normals = self.normals_decoder(normals_fused[-1])
 
         seg_fused = self.segmentation_neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
-        seg_logits = self.segmentation_decoder(seg_fused)
+        seg_logits = self.segmentation_decoder(seg_fused[-1])
 
         return Tipsv2DptOutput(
             predicted_depth=predicted_depth,
@@ -382,7 +433,7 @@ class Tipsv2DptForDepthEstimation(Tipsv2DptPreTrainedModel):
         patch_width = width // self.config.backbone_config.patch_size
 
         fused = self.neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
-        logits = self.decoder(torch.relu(fused))  # (B, num_depth_bins, H', W')
+        logits = self.decoder(torch.relu(fused[-1]))  # (B, num_depth_bins, H', W')
 
         probs = torch.relu(logits) + self.config.min_depth
         probs = probs / probs.sum(dim=1, keepdim=True)
@@ -435,7 +486,7 @@ class Tipsv2DptForNormalEstimation(Tipsv2DptPreTrainedModel):
         patch_width = width // self.config.backbone_config.patch_size
 
         fused = self.neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
-        normals = self.decoder(fused)  # (B, 3, H', W') — unnormalized
+        normals = self.decoder(fused[-1])  # (B, 3, H', W') — unnormalized
 
         return Tipsv2DptNormalEstimatorOutput(
             normals=normals,
@@ -484,7 +535,7 @@ class Tipsv2DptForSemanticSegmentation(Tipsv2DptPreTrainedModel):
         patch_width = width // self.config.backbone_config.patch_size
 
         fused = self.neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
-        seg_logits = self.decoder(fused)
+        seg_logits = self.decoder(fused[-1])
 
         loss = None
         if labels is not None:

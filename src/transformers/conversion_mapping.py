@@ -1385,7 +1385,7 @@ def _build_checkpoint_conversion_mapping():
             r"neck.fusion_stage.layers.\1.residual_layer1.convolution2.",
         ),
         WeightRenaming(r"head\.convs", "neck.convs"),
-        WeightRenaming(r"head\.project", "neck.project"),
+        WeightRenaming(r"head\.project", "decoder.project"),
     ]
     mapping["Tipsv2DptModel"] = (
         _tipsv2_dpt_backbone_prefix
