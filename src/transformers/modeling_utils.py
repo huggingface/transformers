@@ -53,7 +53,7 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
-from .distributed.fsdp import is_fsdp_enabled
+from .distributed.fsdp import is_fsdp_enabled, verify_fsdp_plan
 from .distributed.sharding_utils import _dtensor_from_local_like
 from .distributed.tensor_parallel import (
     _get_parameter_tp_plan,
@@ -186,6 +186,7 @@ class LoadStateDictConfig:
     hf_quantizer: HfQuantizer | None = None
     device_mesh: "DeviceMeshLike | None" = None
     tp_plan: dict[str, str] | None = None
+    fsdp_plan: dict[str, str] | None = None
     weights_only: bool = True
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
     disable_mmap: bool | None = None
@@ -1473,6 +1474,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if hasattr(self.config, "distributed_config") and self.config.distributed_config.enable_expert_parallel:
             return self._ep_plan
         return self._tp_plan
+
+    @property
+    def fsdp_plan(self) -> dict[str, str]:
+        return self._fsdp_plan
 
     @property
     def pp_plan(self) -> dict[str, tuple[str, str]]:
@@ -4352,7 +4357,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # `apply_tensor_parallel` see the shared-parameter graph and can route tied
             # entries (e.g. `lm_head` -> `embed_tokens`) correctly. `_finalize_model_loading`
             # re-runs `tie_weights` after the checkpoint is loaded to handle missing-key edge cases.
-            #TODO(3outeille): apply tied weights already done or later done?
+            # TODO(3outeille): apply tied weights already done or later done?
             model.tie_weights()
             model = distribute_model(model, distributed_config, device_mesh)
         elif device_map is not None:
@@ -4375,6 +4380,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             hf_quantizer=hf_quantizer,
             device_mesh=device_mesh,
             tp_plan=active_tp_plan,
+            fsdp_plan=model.fsdp_plan,
             weights_only=weights_only,
             weight_mapping=weight_conversions,
             use_safetensors=use_safetensors,
@@ -4440,10 +4446,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         }
 
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
-        expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
+        expected_tp_plan_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
+        expected_fsdp_plan_keys = [name for name, _ in model.named_modules()]
 
         if logger.level >= logging.WARNING:
-            verify_tp_plan(expected_keys, load_config.tp_plan)
+            verify_tp_plan(expected_tp_plan_keys, load_config.tp_plan)
+            verify_fsdp_plan(expected_fsdp_plan_keys, load_config.fsdp_plan)
 
         # This offload index if for params explicitly on the "disk" in the device_map
         disk_offload_index = None
@@ -4461,7 +4469,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Warmup cuda to load the weights much faster on devices
         if load_config.device_map is not None and not is_hqq_or_quark:
-            expanded_device_map = expand_device_map(load_config.device_map, expected_keys)
+            expanded_device_map = expand_device_map(load_config.device_map, expected_tp_plan_keys)
             caching_allocator_warmup(model, expanded_device_map, load_config.hf_quantizer)
 
         error_msgs = []

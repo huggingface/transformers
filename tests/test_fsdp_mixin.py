@@ -220,9 +220,7 @@ def _gather_ddp_state_dict(model):
 def _fsdp_target_module_names(model) -> set[str]:
     """Return module names that should receive a ``fully_shard`` call (excluding root)."""
     tie_word_embeddings = getattr(model.config, "tie_word_embeddings", False)
-    adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(
-        model._fsdp_plan, tie_word_embeddings=tie_word_embeddings
-    )
+    adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(model._fsdp_plan, tie_word_embeddings=tie_word_embeddings)
     return {name for name, _, _ in expand_fsdp_plan(model, adapted_fsdp_plan)}
 
 

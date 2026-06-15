@@ -92,8 +92,7 @@ def is_norm_and_head_pair(modules: list[tuple[str, Any]]) -> bool:
     module_names = [name for name, _ in modules]
     has_final_norm = any(name == "norm" or name.endswith(".norm") for name in module_names)
     has_output_head = any(
-        name in {"lm_head", "embed_tokens"} or name.endswith((".lm_head", ".embed_tokens"))
-        for name in module_names
+        name in {"lm_head", "embed_tokens"} or name.endswith((".lm_head", ".embed_tokens")) for name in module_names
     )
     return has_final_norm and has_output_head
 
@@ -153,6 +152,32 @@ def expand_fsdp_plan(model, fsdp_plan: dict[str, str]) -> list[tuple[str, nn.Mod
     return shard_targets
 
 
+def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) -> None:
+    """
+    Verify the FSDP plan of the model, log a warning if plan keys were not applied or strategies are invalid.
+    """
+    if not fsdp_plan:
+        return
+
+    name_lookup = dict.fromkeys(module_names)
+    unused_rules: dict[str, str] = {}
+    invalid_strategies: dict[str, str] = {}
+
+    for key, strategy in fsdp_plan.items():
+        if strategy not in {"free_full_weight", "keep_full_weight"}:
+            invalid_strategies[key] = strategy
+            continue
+        if key not in name_lookup and not any(
+            replace_layer_number_by_wildcard(name) == key for name in name_lookup
+        ):
+            unused_rules[key] = strategy
+
+    if invalid_strategies:
+        logger.warning(f"The following FSDP entries have unknown strategies: {invalid_strategies}")
+    if unused_rules:
+        logger.warning(f"The following FSDP rules were not applied to any module: {unused_rules}")
+
+
 def apply_fully_shard_data_parallel(model, fsdp_mesh):
     """
     Apply FSDP2 (fully_shard) to a model.
@@ -174,9 +199,7 @@ def apply_fully_shard_data_parallel(model, fsdp_mesh):
     fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
     tie_word_embeddings = getattr(model.config, "tie_word_embeddings", False)
 
-    adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(
-        fsdp_plan, tie_word_embeddings=tie_word_embeddings
-    )
+    adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, tie_word_embeddings=tie_word_embeddings)
     shard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
 
     reshard_targets = []
