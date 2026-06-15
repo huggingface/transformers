@@ -152,7 +152,6 @@ class MtpLayerStack(PreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 past_key_values=dummy_cache_for_masking,
-                position_ids=position_ids,
             )
 
             last_hidden_states = mtp_layer(
