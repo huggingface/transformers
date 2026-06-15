@@ -26,7 +26,7 @@ from typing_extensions import Unpack
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
-from ...modeling_outputs import DepthEstimatorOutput, SemanticSegmenterOutput
+from ...modeling_outputs import DepthEstimatorOutput, NormalEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from .configuration_tipsv2_dpt import Tipsv2DptConfig
@@ -486,8 +486,9 @@ class Tipsv2DptForNormalEstimation(Tipsv2DptPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
+        labels: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Tipsv2DptNormalEstimatorOutput:
+    ) -> NormalEstimatorOutput:
         outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
         feature_maps = outputs.feature_maps
 
@@ -501,7 +502,12 @@ class Tipsv2DptForNormalEstimation(Tipsv2DptPreTrainedModel):
         fused = self.neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
         normals = self.decoder(fused[-1])  # (B, 3, H', W') — unnormalized
 
-        return Tipsv2DptNormalEstimatorOutput(
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not yet supported")
+
+        return NormalEstimatorOutput(
+            loss=loss,
             normals=normals,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
