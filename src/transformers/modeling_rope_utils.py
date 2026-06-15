@@ -994,7 +994,7 @@ class RotaryEmbeddingConfigMixin:
             logger.warning(
                 "`rope_parameters`'s partial_rotary_factor is None. This will default to 1.0 in the computation, "
                 "making this equivalent to the linear_scaling RoPE type. Provide a value in the range [0.0, 1.0) to "
-                "make use of the proportional RoPE funcitonality."
+                "make use of the proportional RoPE functionality."
             )
 
     @staticmethod
