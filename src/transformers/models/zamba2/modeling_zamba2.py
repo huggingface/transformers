@@ -687,13 +687,18 @@ class Zamba2MambaMixer(nn.Module):
         use_precomputed_state = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
         # Convolution sequence transformation
-        if use_precomputed_state:
+        if use_precomputed_state and seq_len == 1:
             conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)
             hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
             if self.use_conv_bias:
                 hidden_states += self.conv1d.bias
             hidden_states = self.act(hidden_states).to(dtype)[:, None, ...]         # [batch, 1, intermediate_size] : decoding
         else:
+            if use_precomputed_state:
+                # chunked prefill / speculative verify: prepend cached left context to the conv input
+                hidden_states = torch.cat(
+                    [cache_params.layers[self.layer_idx].conv_states[:, :, 1:], hidden_states], dim=-1
+                )
             if cache_params is not None:
                 conv_state = nn.functional.pad(
                     hidden_states,
@@ -701,7 +706,9 @@ class Zamba2MambaMixer(nn.Module):
                 )
                 conv_state = cache_params.update_conv_state(conv_state, self.layer_idx)
 
-            hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len].transpose(1, 2))
+            hidden_states = self.act(self.conv1d(hidden_states)[..., :hidden_states.shape[-1]].transpose(1, 2))
+            if use_precomputed_state:
+                hidden_states = hidden_states[:, -seq_len:, :]
             if attention_mask is not None:
                 dtype = hidden_states.dtype
                 # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
@@ -709,7 +716,7 @@ class Zamba2MambaMixer(nn.Module):
 
         hidden_states, B, C = torch.split(hidden_states, [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size], dim=-1)
         A = -torch.exp(self.A_log.float())                            # [num_heads]
-        if use_precomputed_state:
+        if use_precomputed_state and seq_len == 1:
             # Note: there is no need to pad parameter matrices here, as there is just one new token
             # for batched generation
             dt = dt[:, None, ...] if dt.ndim == 2 else dt[:, 0, :][:, None, ...]
@@ -810,7 +817,11 @@ class Zamba2MambaMixer(nn.Module):
             B_decay_contraction = B * decay_states.permute(0, 2, 3, 1)[..., None]
             # permute back B * decay states
             states = (B_decay_contraction.permute(0, 1, 3, 2, 4)[..., None]  * hidden_states.permute(0, 1, 3, 2, 4)[..., None, :]).sum(dim=3).permute(0, 1, 2, 4, 3)
-            previous_states = torch.zeros_like(states[:, :1])
+            previous_states = (
+                cache_params.layers[self.layer_idx].recurrent_states[:, None].to(dtype=states.dtype, device=states.device)
+                if use_precomputed_state
+                else torch.zeros_like(states[:, :1])
+            )
             states = torch.cat([previous_states, states], dim=1)
             decay_chunk = torch.exp(segment_sum(nn.functional.pad(A_cumsum[:, :, :, -1], (1, 0))))
 

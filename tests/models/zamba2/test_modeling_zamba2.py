@@ -262,6 +262,32 @@ class Zamba2ModelTester:
         result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
+    def create_and_check_zamba2_chunked_prefill(self, config, *args):
+        # A seq_len > 1 forward with a non-empty cache (chunked prefill / speculative decode
+        # verification) must match plain token-by-token decoding.
+        model = Zamba2Model(config=config).to(torch_device).eval()
+        L = 8
+        inputs_embeds = torch.randn(1, L, config.hidden_size, device=torch_device)
+
+        outputs_tbt = []
+        past = None
+        for t in range(L):
+            out = model(inputs_embeds=inputs_embeds[:, t : t + 1, :], past_key_values=past, use_cache=True)
+            past = out.past_key_values
+            outputs_tbt.append(out.last_hidden_state)
+        result_tbt = torch.cat(outputs_tbt, dim=1)
+
+        out_first = model(inputs_embeds=inputs_embeds[:, :1, :], use_cache=True)
+        out_rest = model(
+            inputs_embeds=inputs_embeds[:, 1:, :], past_key_values=out_first.past_key_values, use_cache=True
+        )
+        result_chunk = torch.cat([out_first.last_hidden_state, out_rest.last_hidden_state], dim=1)
+
+        self.parent.assertTrue(
+            torch.allclose(result_tbt, result_chunk, atol=1e-4, rtol=1e-4),
+            msg=f"Max diff: {(result_tbt - result_chunk).abs().max().item():.6f}",
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -363,6 +389,10 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+
+    def test_zamba2_chunked_prefill(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_zamba2_chunked_prefill(*config_and_inputs)
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
