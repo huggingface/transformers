@@ -213,7 +213,7 @@ if is_peft_available():
     from peft import PeftModel
 
 if is_accelerate_available():
-    from accelerate import Accelerator, skip_first_batches
+    from accelerate import Accelerator
     from accelerate.state import AcceleratorState
     from accelerate.utils import (
         DataLoaderConfiguration,
