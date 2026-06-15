@@ -615,9 +615,8 @@ class Tipsv2DptForSemanticSegmentation(Tipsv2DptPreTrainedModel):
     ) -> SemanticSegmenterOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth segmentation maps for computing the loss. Indices should be in
-            `[0, ..., config.num_labels - 1]`. Pixels with index `config.semantic_loss_ignore_index`
-            are ignored when computing the loss.
+            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
         """
         outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
         feature_maps = outputs.feature_maps
@@ -634,11 +633,14 @@ class Tipsv2DptForSemanticSegmentation(Tipsv2DptPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = nn.CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
             upsampled_logits = nn.functional.interpolate(
                 logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
             )
-            loss = loss_fct(upsampled_logits, labels)
+            loss = self.loss_function(
+                upsampled_logits,
+                labels,
+                ignore_index=self.config.semantic_loss_ignore_index,
+            )
 
         return SemanticSegmenterOutput(
             loss=loss,
