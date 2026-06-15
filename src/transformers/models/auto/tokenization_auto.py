@@ -775,6 +775,7 @@ class AutoTokenizer:
             if (
                 registered_class_name == "MistralCommonBackend"
                 and is_mistral_common_available()
+                and "fix_mistral_regex" not in kwargs
                 and _has_tekken_tokenizer_file(pretrained_model_name_or_path, **kwargs)
             ):
                 tokenizer_class = tokenizer_class_from_name("MistralCommonBackend")
@@ -815,7 +816,11 @@ class AutoTokenizer:
             )
         )
         # V5: Skip remote tokenizer for custom models with incorrect hub tokenizer class
-        if has_remote_code and config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
+        if (
+            has_remote_code
+            and config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
+            and trust_remote_code is not True
+        ):
             has_remote_code = False
             tokenizer_auto_map = None
 
@@ -878,9 +883,9 @@ class AutoTokenizer:
         if model_type is not None:
             tokenizer_class = TOKENIZER_MAPPING.get(type(config), TokenizersBackend)
             if tokenizer_class is not None:
-                if (
-                    getattr(tokenizer_class, "__name__", None) == "MistralCommonBackend"
-                    and not _has_tekken_tokenizer_file(pretrained_model_name_or_path, **kwargs)
+                if getattr(tokenizer_class, "__name__", None) == "MistralCommonBackend" and (
+                    "fix_mistral_regex" in kwargs
+                    or not _has_tekken_tokenizer_file(pretrained_model_name_or_path, **kwargs)
                 ):
                     tokenizer_class = TokenizersBackend
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
