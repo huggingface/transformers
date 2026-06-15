@@ -155,6 +155,8 @@ class Gemma4UnifiedTextConfig(PreTrainedConfig):
     attention_k_eq_v: bool = False
     num_kv_shared_layers: int = 0
     use_double_wide_mlp: bool = False
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
 
     def __post_init__(self, **kwargs):
         if self.use_bidirectional_attention == "all":

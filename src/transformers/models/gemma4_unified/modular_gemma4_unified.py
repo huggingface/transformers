@@ -55,6 +55,7 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4TextRotaryEmbedding,
     Gemma4TextScaledWordEmbedding,
     get_block_sequence_ids_for_mask,
+    load_balancing_loss_func,
 )
 from ..gemma4.processing_gemma4 import Gemma4Processor, Gemma4ProcessorKwargs
 from ..gemma4.video_processing_gemma4 import (
@@ -767,6 +768,7 @@ class Gemma4UnifiedForCausalLM(Gemma4ForCausalLM):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        output_router_logits: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedCausalLMOutputWithPast:
         r"""
@@ -786,6 +788,9 @@ class Gemma4UnifiedForCausalLM(Gemma4ForCausalLM):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "What is your favorite condiment?"
         ```"""
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs: Gemma4UnifiedTextModelOutputWithPast = self.model(
             input_ids=input_ids,
@@ -794,6 +799,7 @@ class Gemma4UnifiedForCausalLM(Gemma4ForCausalLM):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -810,13 +816,26 @@ class Gemma4UnifiedForCausalLM(Gemma4ForCausalLM):
         if labels is not None:
             loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.config.num_experts,
+                self.config.top_k_experts,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.config.router_aux_loss_coef * aux_loss.to(loss.device)
+
         return Gemma4UnifiedCausalLMOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             shared_kv_states=outputs.shared_kv_states,
+            router_logits=outputs.router_logits,
         )
 
 
