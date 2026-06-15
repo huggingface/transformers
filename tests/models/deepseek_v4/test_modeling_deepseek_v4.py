@@ -443,9 +443,9 @@ def _run_distributed_worker(test_name: str) -> int:
 
 
 @require_torch
-@require_torch_gpu
+@require_torch_accelerator
 @require_torch_n_accelerators(n=8)
-@require_torch_large_accelerator(memory=64)
+@require_torch_large_accelerator(memory=30)
 @require_cuda_capability_at_least(10, 0)
 @slow
 class DeepseekV4FlashIntegrationTest(unittest.TestCase):
@@ -472,6 +472,7 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
     def test_v4_flash_fp4_generation_distributed(self):
         self.assertEqual(_run_distributed_worker("fp4_generation"), 0, "torchrun worker failed; see stdout above")
 
+    @require_torch_gpu
     def test_v4_flash_fp4_generation_megamoe_distributed(self):
         self.assertEqual(
             _run_distributed_worker("fp4_generation_megamoe"), 0, "torchrun worker failed; see stdout above"
