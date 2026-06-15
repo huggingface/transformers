@@ -398,6 +398,7 @@ class Tipsv2DptBinRegressor(nn.Module):
     def __init__(self, config: Tipsv2DptConfig):
         super().__init__()
         self.min_depth = config.min_depth
+        self.max_depth = config.max_depth
         self.activation = nn.ReLU()
         depth_bins = torch.linspace(config.min_depth, config.max_depth, config.num_depth_bins)
         self.register_buffer("depth_bins", depth_bins, persistent=False)
@@ -423,6 +424,8 @@ class Tipsv2DptPreTrainedModel(PreTrainedModel):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
+        elif isinstance(module, Tipsv2DptBinRegressor):
+            module.depth_bins.copy_(torch.linspace(module.min_depth, module.max_depth, module.depth_bins.shape[0]))
 
 
 @auto_docstring(
