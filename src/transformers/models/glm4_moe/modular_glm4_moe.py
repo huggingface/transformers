@@ -46,7 +46,7 @@ class Glm4MoeConfig(PreTrainedConfig):
     first_k_dense_replace (`int`, *optional*, defaults to 1):
         Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
                                                         \--k dense layers--/
-    num_nextn_predict_layers (`int`, *optional*, defaults to 1):
+    num_mtp_layers (`int`, *optional*, defaults to 1):
         Number of Multi-Token Prediction (MTP) modules available to append after the base transformer model. When `0`,
         the model behaves as a standard decoder. When `>0`, each extra module can predict one additional future token at inference
         time (speculative decoding via `generate(..., use_mtp=True)`).
@@ -92,6 +92,7 @@ class Glm4MoeConfig(PreTrainedConfig):
     }
     attribute_map = {
         "num_local_experts": "n_routed_experts",
+        "num_mtp_layers": "num_nextn_predict_layers",
     }
 
     vocab_size: int = 151552
@@ -122,7 +123,7 @@ class Glm4MoeConfig(PreTrainedConfig):
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
     pad_token_id: int | None = None
-    num_nextn_predict_layers: int = 1
+    num_mtp_layers: int = 1
 
     def __post_init__(self, **kwargs):
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC

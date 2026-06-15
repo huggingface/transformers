@@ -1434,9 +1434,10 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         model_kwargs: dict[str, Any],
         logits_processor: Optional["LogitsProcessorList"] = None,
     ):
-        if not hasattr(main_model.config.get_text_config(), "num_nextn_predict_layers"):
+        self.num_mtp_layers = getattr(main_model.config.get_text_config(), "num_mtp_layers", None)
+        if self.num_mtp_layers is None:
             raise ValueError(
-                "Could not find `num_nextn_predict_layers` in the model config. This model probably has no associated "
+                "Could not find `num_mtp_layers` in the model config. This model probably has no associated "
                 "mtp weights."
             )
 
@@ -1444,7 +1445,6 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         self.device = next(x.device for x in main_model.base_model.layers[-1].parameters())  # type: ignore
         self.mtp_model = MtpLayerStack.from_pretrained(main_model, device_map={"": self.device})
 
-        self.num_mtp_layers = len(self.mtp_model.layers)
         # Artificially add the MTP layers to the cache
         if (cache := model_kwargs.get("past_key_values")) is not None:
             if len(cache) != main_model.config.get_text_config().num_hidden_layers + self.num_mtp_layers:

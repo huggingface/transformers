@@ -91,7 +91,7 @@ class YoutuConfig(DeepseekV3Config):
     norm_topk_prob = AttributeError()
     pretraining_tp = AttributeError()
     moe_intermediate_size = AttributeError()
-    num_nextn_predict_layers = AttributeError()
+    num_mtp_layers = AttributeError()
 
     def __post_init__(self, **kwargs):
         if self.initializer_range is None:
