@@ -260,7 +260,7 @@ Your custom `generate` method can relative import code from the `custom_generate
 from .utils import some_function
 ```
 
-The `custom_generate` argument also works locally with any directory that contains a `custom_generate` structure, which is the recommended workflow for developing your custom generation method.
+Only relative imports from the same-level `custom_generate` folder are supported. Parent/sibling folder imports are not valid. The `custom_generate` argument also works locally with any directory that contains a `custom_generate` structure, which is the recommended workflow for developing your custom generation method.
 
 ```py
 gen_out = model.generate(**inputs, custom_generate="path/to/local/dir", trust_remote_code=True)
