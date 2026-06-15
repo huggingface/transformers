@@ -1669,8 +1669,9 @@ class ContinuousBatchingConfig:
         decode_compile_config (`CompileConfig`, *optional*):
             CompileConfig for decode (fast) path. Default is None (uses generation_config fallback)
             The decode path handles batches has no dynamic KV length, so static shapes are a better fit.
-        use_default_compile_configs (`bool`, *optional*, defaults to `False`):
-            If True, a default compile config will be used for paths that are not explicitly set.
+        default_compile_level (`int`, *optional*, defaults to 0):
+            If this is >0 and no compile config is provided for varlen or decode path, a default compile config will be
+            provided. The level can go up to 3, and a higher level means more performance but longer warmup time.
         scheduler_type (`str`, *optional*, defaults to `"fifo"`):
             Scheduler type to use.
         safety_margin (`float`, *optional*):
@@ -1697,6 +1698,8 @@ class ContinuousBatchingConfig:
         cpu_group_timeout (`float`, *optional*, defaults to 300.0):
             The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None
             for no timeout. Default is 300 seconds.
+        use_default_compile_configs (`bool | None`, *optional*):
+            Deprecated in 5.11: please use default_compile_level instead.
     """
 
     # Size of each KV cache block
@@ -1740,12 +1743,13 @@ class ContinuousBatchingConfig:
     max_cached_graphs: int = 0
 
     # Compile configs for the two execution paths. If None, uses the compile_config from generation_config as fallback.
-    # The varlen path is used for prefill and when fast decode is unavailable. The decode path is used when
-    # max_blocks_per_request > 0 (fast decode with block table).
     varlen_compile_config: CompileConfig | None = None
     decode_compile_config: CompileConfig | None = None
-    # If this flag is set to True, a default compile config will be used for paths that are not explicitly set.
-    use_default_compile_configs: bool = False
+    # Compile level for the executions path, if no compile config is provided for the path. Default is 0 (no compile).
+    # Level 1: `mode=default, dynamic=True`
+    # Level 2: `mode=max-autotune-no-cudagraphs, dynamic=True`
+    # Level 3: `mode=max-autotune-no-cudagraphs, dynamic=False`
+    default_compile_level: int = 0
 
     # Scheduler type. FIFO by default. For all types available, checks SCHEDULER_MAPPING in scheduler.py
     scheduler_type: str = "fifo"
@@ -1790,6 +1794,9 @@ class ContinuousBatchingConfig:
     # long for almost all use cases.
     cpu_group_timeout: float | None = 300.0
 
+    # Deprecated arguments
+    use_default_compile_configs: bool | None = None
+
     def __post_init__(self):
         # Only turn off graph mixing support if TP is on
         graph_mixing_supported = os.environ.get("NCCL_GRAPH_MIXING_SUPPORT", "1") == "1"
@@ -1799,6 +1806,18 @@ class ContinuousBatchingConfig:
                 "Setting NCCL_GRAPH_MIXING_SUPPORT = 0 because disable_nccl_graph_mixing is True and WORLD_SIZE > 1."
             )
             os.environ.setdefault("NCCL_GRAPH_MIXING_SUPPORT", "0")
+        # Warn about deprecated arguments
+        if self.use_default_compile_configs is not None:  # Deprecated in 5.11
+            if self.use_default_compile_configs:
+                level_msg = "setting default_compile_level to 3. Consider using a lower level for faster warmup time."
+                self.default_compile_level = 3
+            else:
+                level_msg = "setting default_compile_level to 0."
+                self.default_compile_level = 0
+            logger.warning(
+                "use_default_compile_configs is deprecated: please use default_compile_level instead. For backwards "
+                f"compatibility, {level_msg}"
+            )
 
     @property
     def cuda_graph_booleans(self) -> tuple[bool, bool]:

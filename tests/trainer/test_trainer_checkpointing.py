@@ -662,6 +662,7 @@ class TrainerAutoBatchSizeTest(TestCasePlus, TrainerIntegrationCommon):
             run_glue.main()
 
     @require_deepspeed
+    @require_torch_non_multi_accelerator
     def test_auto_batch_size_with_deepspeed(self):
         train_dataset = RegressionDataset(length=128)
 

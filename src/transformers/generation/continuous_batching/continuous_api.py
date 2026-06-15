@@ -400,7 +400,12 @@ class ContinuousBatchProcessor:
         num_q_tokens, max_kv_read = self.model_runner.maybe_pad_inputs(num_q_tokens, max_kv_read, use_decode_fast_path)
 
         self.inputs_and_outputs.prepare_batch_tensors(
-            requests_in_batch, self.logit_processor, use_decode_fast_path, num_q_tokens, max_kv_read
+            requests_in_batch=requests_in_batch,
+            logits_processors=self.logit_processor,
+            use_decode_fast_path=use_decode_fast_path,
+            num_q_tokens=num_q_tokens,
+            max_kv_read=max_kv_read,
+            use_padding=self.model_runner.pad_inputs,
         )
         return True
 
