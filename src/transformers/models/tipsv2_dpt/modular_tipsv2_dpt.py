@@ -379,16 +379,15 @@ class Tipsv2DptOutput(ModelOutput):
 
 
 class Tipsv2DptDecoder(nn.Module):
-    """Channel-last linear head: `(B, fusion_hidden_size, H, W)` → `(B, out_channels, H, W)`."""
-
-    def __init__(self, config: Tipsv2DptConfig, out_channels: int):
+    def __init__(self, config: Tipsv2DptConfig, out_channels: int, activation: str | None = None):
         super().__init__()
         self.project = nn.Conv2d(config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=3, padding=1)
+        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
         self.head = nn.Linear(config.fusion_hidden_size, out_channels)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.project(hidden_state)
-        # TODO: Check replace with conv2d and 1x1 kernel
+        hidden_state = self.activation(hidden_state)
         hidden_state = hidden_state.permute(0, 2, 3, 1)
         hidden_state = self.head(hidden_state)
         hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
@@ -422,7 +421,7 @@ class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
         super().__init__(config)
         self.backbone = load_backbone(config)
         self.depth_neck = Tipsv2DptNeck(config)
-        self.depth_decoder = Tipsv2DptDecoder(config, out_channels=config.num_depth_bins)
+        self.depth_decoder = Tipsv2DptDecoder(config, out_channels=config.num_depth_bins, activation="relu")
         self.normals_neck = Tipsv2DptNeck(config)
         self.normals_decoder = Tipsv2DptDecoder(config, out_channels=3)
         self.segmentation_neck = Tipsv2DptNeck(config)
@@ -447,7 +446,8 @@ class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
         patch_width = width // self.config.backbone_config.patch_size
 
         depth_fused = self.depth_neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
-        depth_logits = self.depth_decoder(torch.relu(depth_fused[-1]))
+        depth_logits = self.depth_decoder(depth_fused[-1])
+
         probs = torch.relu(depth_logits) + self.config.min_depth
         probs = probs / probs.sum(dim=1, keepdim=True)
         depth_bins = torch.linspace(
@@ -486,7 +486,7 @@ class Tipsv2DptForDepthEstimation(Tipsv2DptPreTrainedModel):
         super().__init__(config)
         self.backbone = load_backbone(config)
         self.neck = Tipsv2DptNeck(config)
-        self.decoder = Tipsv2DptDecoder(config, out_channels=config.num_depth_bins)
+        self.decoder = Tipsv2DptDecoder(config, out_channels=config.num_depth_bins, activation="relu")
         self.post_init()
 
     def get_input_embeddings(self):
@@ -507,7 +507,7 @@ class Tipsv2DptForDepthEstimation(Tipsv2DptPreTrainedModel):
         patch_width = width // self.config.backbone_config.patch_size
 
         fused = self.neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
-        logits = self.decoder(torch.relu(fused[-1]))  # (B, num_depth_bins, H', W')
+        logits = self.decoder(fused[-1])
 
         probs = torch.relu(logits) + self.config.min_depth
         probs = probs / probs.sum(dim=1, keepdim=True)
@@ -518,7 +518,7 @@ class Tipsv2DptForDepthEstimation(Tipsv2DptPreTrainedModel):
             device=logits.device,
             dtype=logits.dtype,
         )
-        predicted_depth = (probs * depth_bins.view(1, -1, 1, 1)).sum(dim=1)  # (B, H', W')
+        predicted_depth = (probs * depth_bins.view(1, -1, 1, 1)).sum(dim=1)
 
         return DepthEstimatorOutput(
             predicted_depth=predicted_depth,
