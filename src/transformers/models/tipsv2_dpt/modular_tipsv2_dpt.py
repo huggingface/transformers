@@ -386,20 +386,22 @@ class Tipsv2DptDecoder(nn.Module):
         return hidden_state
 
 
-class Tipsv2DptBinRegressor(nn.Module):
+class Tipsv2DptFeaturesToDepth(nn.Module):
+    """Converts raw logits from the depth head into a depth map using depth bins."""
+
     def __init__(self, config: Tipsv2DptConfig):
         super().__init__()
         self.min_depth = config.min_depth
         self.max_depth = config.max_depth
         self.activation = nn.ReLU()
-        depth_bins = torch.linspace(config.min_depth, config.max_depth, config.num_depth_bins)
-        self.register_buffer("depth_bins", depth_bins, persistent=False)
+        bin_centers = torch.linspace(config.min_depth, config.max_depth, config.num_depth_bins)
+        self.register_buffer("bin_centers", bin_centers, persistent=False)
 
     def forward(self, depth_logits: torch.Tensor) -> torch.Tensor:
         probs = self.activation(depth_logits) + self.min_depth
         probs = probs / probs.sum(dim=1, keepdim=True)
-        bins = self.depth_bins.to(dtype=depth_logits.dtype)
-        return (probs * bins.view(1, -1, 1, 1)).sum(dim=1)
+        bin_centers = self.bin_centers.to(dtype=depth_logits.dtype)
+        return probs.permute(0, 2, 3, 1) @ bin_centers
 
 
 @auto_docstring
@@ -414,9 +416,9 @@ class Tipsv2DptPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
             init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
-        elif isinstance(module, Tipsv2DptBinRegressor):
-            depth_bins = torch.linspace(module.min_depth, module.max_depth, module.depth_bins.shape[0])
-            init.copy_(module.depth_bins, depth_bins)
+        elif isinstance(module, Tipsv2DptFeaturesToDepth):
+            bin_centers = torch.linspace(module.min_depth, module.max_depth, module.bin_centers.shape[0])
+            init.copy_(module.bin_centers, bin_centers)
 
 
 @auto_docstring(
@@ -433,7 +435,7 @@ class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
         self.depth_decoder = Tipsv2DptDecoder(
             config, out_channels=config.num_depth_bins, activation=config.depth_decoder_activation
         )
-        self.depth_bin_regressor = Tipsv2DptBinRegressor(config)
+        self.depth_bin_regressor = Tipsv2DptFeaturesToDepth(config)
         self.normals_neck = Tipsv2DptNeck(config)
         self.normals_decoder = Tipsv2DptDecoder(config, out_channels=3)
         self.segmentation_neck = Tipsv2DptNeck(config)
@@ -496,7 +498,7 @@ class Tipsv2DptForDepthEstimation(Tipsv2DptPreTrainedModel):
         self.decoder = Tipsv2DptDecoder(
             config, out_channels=config.num_depth_bins, activation=config.depth_decoder_activation
         )
-        self.bin_regressor = Tipsv2DptBinRegressor(config)
+        self.bin_regressor = Tipsv2DptFeaturesToDepth(config)
         self.post_init()
 
     def get_input_embeddings(self):
