@@ -218,7 +218,7 @@ class MtpLayerStack(PreTrainedModel):
         mtp_regex = re.compile("|".join(rf"({pattern})" for pattern in final_mtp_patterns))
 
         # Get the number of layers in the checkpoint
-        num_mtp_layers = main_model.config.get_text_config().num_nextn_predict_layers
+        num_mtp_layers = main_model.config.get_text_config().num_mtp_layers
         # Since we need to share some modules, let's not instantiate on meta device, but we still need the dtype context
         with local_torch_dtype(main_model.config.dtype, cls.__name__):
             mtp_model = cls(main_model, num_mtp_layers)
