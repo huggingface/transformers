@@ -205,6 +205,7 @@ By default, `num_blocks` and `max_batch_tokens` are inferred automatically from 
 | `scheduler` | | ✓ scheduling policy | ✓ TTFT |
 | CUDA graphs | ↑ graph storage | ✓ less dispatch overhead | ✓ |
 | Async batching | ↑ ~2× I/O buffers | ✓ overlaps CPU/GPU | |
+| Compilation | ↑ warmup-time only | ✓ faster forward passes | ✓ |
 | Decode fast path | ↑ block table per request | ✓ faster decode-only steps | ✓ |
 | CPU offloading | ↑ pinned CPU memory | ✓ skips some re-prefills | |
 | Prefix caching | ↓ shared KV blocks | ✓ skips redundant prefill | ✓ TTFT |
@@ -272,6 +273,25 @@ cb_config = ContinuousBatchingConfig(
     use_async_batching=True,
 )
 ```
+
+### Compilation
+
+`default_compile_level` applies `torch.compile` to the model's forward passes. Compilation trades a one-time warmup cost for faster forward passes during generation. Higher levels run more aggressive optimization, which improves throughput but lengthens warmup. Keep the level low for tests and benchmark iteration, and raise it for long-running serving workloads where the warmup cost is paid back over many requests.
+
+The level ranges from `0` to `3`. Level `0` is the default and skips compilation entirely.
+
+| Level | `mode` | `dynamic` | Trade-off |
+|---|---|---|---|
+| 0 | — | — | No compilation (default), fastest startup |
+| 1 | `default` | `True` | Modest speedup, short warmup |
+| 2 | `max-autotune-no-cudagraphs` | `True` | More speedup, longer warmup |
+| 3 | `max-autotune-no-cudagraphs` | `False` | Best throughput, longest warmup |
+
+```py
+cb_config = ContinuousBatchingConfig(default_compile_level=1)
+```
+
+The level supplies a default [`CompileConfig`] to the varlen and decode execution paths. It only applies to a path that has no explicit config, so `varlen_compile_config` and `decode_compile_config` take precedence when set. Under FlashAttention, the varlen path skips compilation because `max_seqlen_k` triggers frequent recompilation, so the level affects only the decode path in that case.
 
 ### Decode fast path
 
