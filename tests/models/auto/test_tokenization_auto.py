@@ -268,7 +268,7 @@ class AutoTokenizerTest(unittest.TestCase):
     @require_tokenizers
     @require_mistral_common
     def test_mistral_sentencepiece_models_use_tokenizers_backend(self):
-        """Legacy Mistral models with only tokenizer.model (no tekken.json) should keep
+        """Regression: legacy Mistral models with only tokenizer.model (no tekken.json) should keep
         using TokenizersBackend even when mistral-common is installed."""
         tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-beta")
         self.assertIsInstance(tokenizer, TokenizersBackend)
