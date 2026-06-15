@@ -415,7 +415,11 @@ class FalconH1Mixer(nn.Module):
                     dim=-1,
                 )
 
-                if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+                if (
+                    attention_mask is not None
+                    and attention_mask.shape[1] > 1
+                    and attention_mask.shape[1] == hidden_states.shape[1]
+                ):
                     # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
                     dtype = hidden_states.dtype
                     hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
@@ -654,7 +658,11 @@ class FalconH1Mixer(nn.Module):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
         dtype = hidden_states.dtype
-        if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+        if (
+            attention_mask is not None
+            and attention_mask.shape[1] > 1
+            and attention_mask.shape[1] == hidden_states.shape[1]
+        ):
             # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
             hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 

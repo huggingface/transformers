@@ -240,6 +240,44 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
 
         torch.testing.assert_close(under_test_first, ref_first, rtol=1e-4, atol=1e-4)
 
+    def test_left_padding_matches_unpadded_batch_size_one(self):
+        """
+        A single left-padded sequence (batch_size == 1) must yield the same hidden states for its
+        real tokens as the unpadded sequence. Qwen3.5's gated-delta-net layers zero padding tokens
+        via apply_mask_to_padding_states, which previously skipped masking when batch_size == 1,
+        letting padding tokens leak into the conv/SSM state and corrupt the real tokens' outputs.
+        Several linear-attention layers are stacked so the leak compounds well above tolerance when
+        the masking is skipped.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config._attn_implementation = "eager"
+        # GatedDeltaNet's fused norm-gate kernel only supports silu/swish/sigmoid.
+        config.hidden_act = "silu"
+        config.num_hidden_layers = 8
+        config.layer_types = ["linear_attention", "linear_attention", "linear_attention", "full_attention"] * 2
+        torch.manual_seed(0)
+        model = Qwen3_5TextModel._from_config(config)
+        model.to(torch_device)
+        model.eval()
+
+        seq = ids_tensor((1, 12), config.vocab_size).to(torch_device)
+        pad_len = 8
+        pad_id = config.pad_token_id if config.pad_token_id is not None else 0
+        padding = torch.full((1, pad_len), pad_id, dtype=seq.dtype, device=torch_device)
+        padded = torch.cat([padding, seq], dim=1)
+        attention_mask = torch.cat(
+            [torch.zeros(1, pad_len, dtype=torch.long, device=torch_device), torch.ones_like(seq)], dim=1
+        )
+        position_ids = (attention_mask.long().cumsum(dim=1) - 1).clamp(min=0)
+
+        with torch.no_grad():
+            unpadded_out = model(input_ids=seq, use_cache=False).last_hidden_state[:, -1, :]
+            padded_out = model(
+                input_ids=padded, attention_mask=attention_mask, position_ids=position_ids, use_cache=False
+            ).last_hidden_state[:, -1, :]
+
+        torch.testing.assert_close(padded_out, unpadded_out, rtol=1e-4, atol=1e-4)
+
 
 class Qwen3_5VisionText2TextModelTester:
     def __init__(

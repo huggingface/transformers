@@ -367,7 +367,11 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
     """
     # NOTE: attention mask is a 2D boolean tensor
-    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+    if (
+        attention_mask is not None
+        and attention_mask.shape[1] > 1
+        and attention_mask.shape[1] == hidden_states.shape[1]
+    ):
         dtype = hidden_states.dtype
         hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
@@ -847,7 +851,11 @@ class BambaMixer(nn.Module):
                 "`seq_idx` support requires fast path support. Please install `mamba_ssm` and `causal_conv1d`"
             )
         dtype = hidden_states.dtype
-        if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+        if (
+            attention_mask is not None
+            and attention_mask.shape[1] > 1
+            and attention_mask.shape[1] == hidden_states.shape[1]
+        ):
             # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
             hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
