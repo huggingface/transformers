@@ -715,6 +715,7 @@ class ParallelInterface(GeneralInterface):
 
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
+
 def select_parallel_plan(model) -> dict[str, str]:
     """
     Select the parallel plan to apply from explicit combo plans on the model.
