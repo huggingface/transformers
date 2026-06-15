@@ -139,7 +139,13 @@ class _LazyConfigMapping(OrderedDict[str, type[PreTrainedConfig]]):
         self._extra_content[key] = value
 
     def __reduce__(self):
-        return (self.__class__, (dict(self._mapping),))
+        return (self.__class__._from_pickle, (dict(self._mapping), dict(self._extra_content)))
+
+    @classmethod
+    def _from_pickle(cls, mapping, extra_content):
+        obj = cls(mapping)
+        obj._extra_content = extra_content
+        return obj
 
 
 CONFIG_MAPPING = _LazyConfigMapping(CONFIG_MAPPING_NAMES)
