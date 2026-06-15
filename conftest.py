@@ -27,10 +27,12 @@ import pytest
 from transformers.testing_utils import (
     HfDoctestModule,
     HfDocTestParser,
+    backend_device_count,
     is_torch_available,
     patch_psutil_cpu_memory,
     patch_testing_methods_to_collect_info,
     patch_torch_compile_force_graph,
+    torch_device,
 )
 from transformers.utils import enable_tf32
 from transformers.utils.network_logging import register_network_debug_plugin
@@ -40,9 +42,14 @@ from transformers.utils.network_logging import register_network_debug_plugin
 # owns a fraction. This causes `device_map="auto"` to overfill GPU+CPU with nothing offloaded to disk,
 # leading to GPU OOM at runtime. When CI_CPU_MEMORY_LIMIT_GB is set, cap psutil.virtual_memory so the
 # entire test session sees a realistic per-runner memory budget.
+# On multi-accelerator runners the budget scales linearly: each accelerator earns one full slot of CPU RAM
+# (e.g. 4 GPUs × 60 GB = 240 GB), because device_map="auto" can legitimately use more CPU RAM for
+# intermediate storage when more GPU devices are present.
 _cpu_memory_limit_gb = os.environ.get("CI_CPU_MEMORY_LIMIT_GB")
 if _cpu_memory_limit_gb is not None:
-    patch_psutil_cpu_memory(int(float(_cpu_memory_limit_gb) * 1024**3))
+    _limit_per_device = int(float(_cpu_memory_limit_gb) * 1024**3)
+    _num_accelerators = max(1, backend_device_count(torch_device)) if torch_device is not None else 1
+    patch_psutil_cpu_memory(_limit_per_device * _num_accelerators)
 
 
 NOT_DEVICE_TESTS = {
