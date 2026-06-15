@@ -75,9 +75,7 @@ def get_artifacts_links(workflow_run_id, token=None):
     if token is not None:
         headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
 
-    url = (
-        f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/artifacts?per_page=50"
-    )
+    url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/artifacts?per_page=50"
     result = requests.get(url, headers=headers).json()
     artifacts = {}
 
