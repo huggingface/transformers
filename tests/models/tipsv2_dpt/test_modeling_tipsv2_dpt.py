@@ -334,7 +334,9 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
         )
 
         expected_seg_logits = torch.tensor(EXPECTED_SEG_LOGITS.get_expectation(), device=torch_device)
-        torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_seg_logits, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            outputs.segmentation_logits[0, 0, :3, :3], expected_seg_logits, rtol=1e-3, atol=1e-3
+        )
 
         target_size = (height, width)
 

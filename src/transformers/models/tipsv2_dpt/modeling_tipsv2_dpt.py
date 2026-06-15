@@ -300,7 +300,7 @@ class Tipsv2DptOutput(ModelOutput):
 
     predicted_depth: torch.FloatTensor | None = None
     normals: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    segmentation_logits: torch.FloatTensor | None = None
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
@@ -402,13 +402,15 @@ class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
         normals_fused = self.normals_neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
         normals = self.normals_decoder(normals_fused[-1])
 
-        seg_fused = self.segmentation_neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
-        seg_logits = self.segmentation_decoder(seg_fused[-1])
+        segmentation_feature_maps_fused = self.segmentation_neck(
+            feature_maps, patch_height=patch_height, patch_width=patch_width
+        )
+        segmentation_logits = self.segmentation_decoder(segmentation_feature_maps_fused[-1])
 
         return Tipsv2DptOutput(
             predicted_depth=predicted_depth,
             normals=normals,
-            logits=seg_logits,
+            segmentation_logits=segmentation_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -562,20 +564,20 @@ class Tipsv2DptForSemanticSegmentation(Tipsv2DptPreTrainedModel):
         patch_height = height // patch_size_height
         patch_width = width // patch_size_width
 
-        fused = self.neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
-        seg_logits = self.decoder(fused[-1])
+        feature_maps_fused = self.neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
+        logits = self.decoder(feature_maps_fused[-1])
 
         loss = None
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
             upsampled_logits = nn.functional.interpolate(
-                seg_logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+                logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
             )
             loss = loss_fct(upsampled_logits, labels)
 
         return SemanticSegmenterOutput(
             loss=loss,
-            logits=seg_logits,
+            logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
