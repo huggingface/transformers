@@ -54,6 +54,7 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fa.md">فارسی</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_tr.md">Türkçe</a> |
     </p>
 </h4>
 
@@ -309,7 +310,7 @@ pipeline(
 
 ## استناد (Citation)
 
-اکنون می‌توانید برای کتابخانهٔ 🤗 Transformers به [مقالهٔ](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) منتشرشدهٔ آن استناد کنید.
+اکنون می‌توانید برای کتابخانهٔ 🤗 Transformers به [مقالهٔ](https://aclanthology.org/2020.emnlp-demos.6/) منتشرشدهٔ آن استناد کنید.
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
@@ -319,7 +320,7 @@ pipeline(
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://aclanthology.org/2020.emnlp-demos.6/",
     pages = "38--45"
 }
 ```

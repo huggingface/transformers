@@ -1565,6 +1565,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
 
         input_shape = inputs_embeds.size()[:-1]
         embed_pos = self.embed_positions(input_shape)
+        embed_pos = embed_pos.to(inputs_embeds.device)
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)

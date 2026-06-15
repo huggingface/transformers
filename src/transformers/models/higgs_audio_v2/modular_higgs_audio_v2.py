@@ -326,7 +326,7 @@ class HiggsAudioV2Model(LlamaModel):
                 else audio_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(
-                audio_token_mask[..., None].expand_as(inputs_embeds), audio_embeds.to(inputs_embeds.device)
+                audio_token_mask[..., None], audio_embeds.to(inputs_embeds.device)
             )
         elif audio_input_ids is not None:
             inputs_embeds = audio_embeds

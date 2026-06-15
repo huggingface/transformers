@@ -53,6 +53,7 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_tr.md">Türkçe</a> |
     </p>
 </h4>
 
@@ -311,7 +312,7 @@ Transformers 不僅僅是一個使用預訓練模型的工具包，它還是一�
 
 ## 引用
 
-現在我們有一篇可供您引用的關於 🤗 Transformers 函式庫的 [論文](https://www.aclweb.org/anthology/2020.emnlp-demos.6/)：
+現在我們有一篇可供您引用的關於 🤗 Transformers 函式庫的 [論文](https://aclanthology.org/2020.emnlp-demos.6/)：
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
@@ -321,7 +322,7 @@ Transformers 不僅僅是一個使用預訓練模型的工具包，它還是一�
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://aclanthology.org/2020.emnlp-demos.6/",
     pages = "38--45"
 }
 ```

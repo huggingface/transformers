@@ -53,6 +53,7 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
         <b>বাংলা</b> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_tr.md">Türkçe</a> |
     </p>
 </h4>
 
@@ -318,7 +319,7 @@ Transformers 100,000 স্টার উদযাপন করতে আমর�
 </details>
 
 ## সাইটেশন
-আমাদের [একটি পেপার](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) আছে যা আপনি 🤗 Transformers লাইব্রেরির জন্য রেফারেন্স হিসেবে ব্যবহার করতে পারেন।
+আমাদের [একটি পেপার](https://aclanthology.org/2020.emnlp-demos.6/) আছে যা আপনি 🤗 Transformers লাইব্রেরির জন্য রেফারেন্স হিসেবে ব্যবহার করতে পারেন।
 
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
@@ -329,7 +330,7 @@ Transformers 100,000 স্টার উদযাপন করতে আমর�
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://aclanthology.org/2020.emnlp-demos.6/",
     pages = "38--45"
 }
 ```

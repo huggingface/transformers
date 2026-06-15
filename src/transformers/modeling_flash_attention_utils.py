@@ -75,8 +75,10 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
     2: {
         "flash_attn_version": 2,
         "general_availability_check": is_flash_attn_2_available,
-        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn") is not None
-        and "flash-attn" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]],
+        "pkg_availability_check": lambda *args, **kwargs: (
+            importlib.util.find_spec("flash_attn") is not None
+            and "flash-attn" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])]
+        ),
         "supported_devices": (
             (is_torch_cuda_available, "cuda"),
             (is_torch_mlu_available, "mlu"),
@@ -94,16 +96,21 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
     3: {
         "flash_attn_version": 3,
         "general_availability_check": is_flash_attn_3_available,
-        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn_interface") is not None
-        and "flash-attn-3" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn_interface"]],
+        "pkg_availability_check": lambda *args, **kwargs: (
+            importlib.util.find_spec("flash_attn_interface") is not None
+            and "flash-attn-3"
+            in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn_interface", [])]
+        ),
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 8,  # Ampere
     },
     4: {
         "flash_attn_version": 4,
         "general_availability_check": is_flash_attn_4_available,
-        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn") is not None
-        and "flash-attn-4" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]],
+        "pkg_availability_check": lambda *args, **kwargs: (
+            importlib.util.find_spec("flash_attn") is not None
+            and "flash-attn-4" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])]
+        ),
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 9,  # Hopper
     },
@@ -183,6 +190,12 @@ def _lazy_imports(
             flash_attn_func = getattr(kernel, "flash_attn_func", None)
             flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
             flash_attn_with_kvcache = getattr(kernel, "flash_attn_with_kvcache", None)
+            # Block-sparse kernels (e.g. ``kernels-staging/msa``) expose ``sparse_atten_func`` rather than
+            # ``flash_attn_varlen_func``. ``load_and_register_attn_kernel`` already registered their dedicated
+            # wrapper into ``ALL_ATTENTION_FUNCTIONS``, so they dispatch through the attention interface and
+            # never touch the flash varlen globals -- preloading them here is a no-op, not an error.
+            if flash_attn_varlen_func is None and hasattr(kernel, "sparse_atten_func"):
+                return flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache, pad_input, unpad_input
             if flash_attn_varlen_func is None:
                 raise ValueError(
                     f"Could not find the currently requested flash attention implementation at `{implementation}`."
@@ -248,7 +261,9 @@ def lazy_import_flash_attention(
         _flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn = _lazy_imports(
             implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
         )
-        _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn)
+        # Block-sparse kernels register their own attention interface and expose no varlen fn to introspect;
+        # skip building the kwargs-support map (it is only consumed by the flash varlen path they never take).
+        _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn) if _flash_varlen_fn else None
 
     return (_flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn
 

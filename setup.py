@@ -104,7 +104,7 @@ _deps = [
     "pandas<2.3.0",  # `datasets` requires `pandas` while `pandas==2.3.0` has issues with CircleCI on 2025/06/05
     "packaging>=20.0",
     "parameterized>=0.9",  # older version of parameterized cause pytest collection to fail on .expand
-    "peft>=0.18.0",
+    "peft>=0.19.0",
     "phonemizer",
     "protobuf",
     "psutil",
@@ -152,7 +152,7 @@ _deps = [
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
-    "tqdm>=4.27",
+    "tqdm>=4.60",
     "typer",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
@@ -162,9 +162,6 @@ _deps = [
     "libcst",
     "rich",
     "ray[tune]>=2.7.0",
-    "opentelemetry-api",
-    "opentelemetry-exporter-otlp",
-    "opentelemetry-sdk",
 ]
 
 # This is a lookup table with items like: {"tokenizers": "tokenizers==0.9.4", "packaging": "packaging"}, i.e.
@@ -211,8 +208,6 @@ extras["benchmark"] = deps_list("optimum-benchmark")
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "rhoknp")
 if PYTHON_MINOR_VERSION < 14:
     extras["ja"] += deps_list("sudachipy", "sudachidict_core")
-# OpenTelemetry dependencies for metrics collection in continuous batching
-extras["open-telemetry"] = deps_list("opentelemetry-api", "opentelemetry-exporter-otlp", "opentelemetry-sdk")
 
 extras["testing"] = (
     deps_list(
@@ -330,7 +325,7 @@ if __name__ == "__main__":
 
     setup(
         name="transformers",
-        version="5.8.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+        version="5.13.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
         author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
         author_email="transformers@huggingface.co",
         description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",

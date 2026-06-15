@@ -19,7 +19,6 @@ import threading
 from abc import abstractmethod
 from collections.abc import Callable, Generator
 from contextlib import contextmanager, nullcontext
-from math import ceil
 from time import perf_counter
 from typing import Any
 
@@ -31,12 +30,11 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig, GenerationConfig
 from ...utils.logging import logging
-from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from ..logits_process import LogitsProcessorList
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .distributed import DistributedHelper
-from .initialization import resolve_continuous_batching_config
+from .initialization import resolve_continuous_batching_config, update_cb_config_after_cache_creation
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
@@ -129,8 +127,65 @@ class OutputRouter:
             loop.call_soon_threadsafe(_run_batch)
 
 
+class BackgroundThreadStatus:
+    """Tracks the status of the background thread locally and in its TP group. The status is an int that can only
+    increase, representing how soon the thread should stop."""
+
+    DONT_STOP = 0
+    FLUSH_AND_STOP = 1
+    HARD_STOP = 2
+    STOPPED = 3
+
+    def __init__(self) -> None:
+        self._local_status_lock = threading.Lock()
+        self._local_status = self.DONT_STOP
+        self._tp_status = self.DONT_STOP
+
+    def clear(self) -> None:
+        """Clear the local and TP statuses. This method should ONLY be called by the main thread itself BEFORE starting
+        the background thread."""
+        self._tp_status = self.DONT_STOP
+        with self._local_status_lock:
+            self._local_status = self.DONT_STOP
+
+    def request_stop(self, status: int, global_rank: int) -> None:
+        """Request the background thread to stop. This does not take effect immediately, only after the TP group has
+        communicated."""
+        if status not in [self.FLUSH_AND_STOP, self.HARD_STOP]:
+            raise ValueError(f"Invalid stop status {status} from rank {global_rank}")
+        with self._local_status_lock:
+            self._local_status = max(status, self._local_status, self._tp_status)
+        logger.info(
+            f"Rank {global_rank} requested background thread to stop with {status = }. Now {self._local_status = }"
+        )
+
+    def mark_as_stopped(self) -> None:
+        """Mark the background thread as stopped. This should be called by the main thread when the generation loop
+        finishes."""
+        with self._local_status_lock:
+            self._local_status = self.STOPPED
+
+    def update_with_tp_status(self, tp_status: int) -> None:
+        """Update the local and TP statuses with the new TP status."""
+        if tp_status < self._tp_status:
+            raise ValueError(f"TP communicated a lower stop status: {tp_status = }, {self._tp_status = }")
+        self._tp_status = tp_status
+        # We need to use the lock here because main thread might change the local status after the comm
+        with self._local_status_lock:
+            self._local_status = max(self._local_status, tp_status)
+
+    @property
+    def local_status(self) -> int:
+        """The locally requested status, possibly ahead of the value agreed upon by the TP group."""
+        return self._local_status
+
+    @property
+    def tp_status(self) -> int:
+        """The status last agreed upon by the TP group through a MAX-reduce operation."""
+        return self._tp_status
+
+
 # Continuous Batch Processor (Internal Logic)
-@attach_tracer()
 class ContinuousBatchProcessor:
     inputs_and_outputs: ContinuousBatchingIOs | ContinuousBatchingAsyncIOs
     scheduler: Scheduler
@@ -145,7 +200,7 @@ class ContinuousBatchProcessor:
         input_queue: queue.Queue | None,
         cancel_queue: queue.Queue | None,
         output_router: OutputRouter,
-        stop_event: threading.Event,
+        background_thread_status: BackgroundThreadStatus,
         model_device: torch.device,
         model_dtype: torch.dtype,
         scheduler: Scheduler,
@@ -162,7 +217,7 @@ class ContinuousBatchProcessor:
             input_queue: Queue for incoming requests. Is None if this process is not a TP driver.
             cancel_queue: Queue for cancellation request_ids. Is None if this process is not a TP driver.
             output_router: An [`OutputRouter`] object that routes outputs to handlers or the output queue.
-            stop_event: Event to signal processing should stop
+            background_thread_status: A [`BackgroundThreadStatus`] object to track the background thread status.
             model_device: Device for model inputs/outputs
             model_dtype: Data type for model inputs/outputs
             scheduler: The [`Scheduler`] to use
@@ -175,7 +230,7 @@ class ContinuousBatchProcessor:
         self.input_queue = input_queue
         self.cancel_queue = cancel_queue
         self.output_router = output_router
-        self.stop_event = stop_event
+        self.background_thread_status = background_thread_status
         self.model_device = model_device
         self.model_dtype = model_dtype
         self.scheduler = scheduler
@@ -187,34 +242,26 @@ class ContinuousBatchProcessor:
 
         # Get an integer seed for the TP group. Also work for no TP.
         self.distributed_helper.set_tp_seed(continuous_batching_config.seed, model_device)
-        self.driver_stopped = False  # will be set to True if the TP driver stops the generation loop
 
         # Retrieve the size of the sliding window if there is one
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
 
-        # Set up metrics collector
         self.max_batch_tokens = cache.max_batch_tokens
-        self.metrics = ContinuousBatchProcessorMetrics(cache.max_batch_tokens)
 
         # Setup inputs and outputs
-        use_cuda_graph_varlen, _ = self.cb_config.cuda_graph_booleans
         io_kwargs = {
             "cache": cache,
             "config": config,
+            "continuous_batching_config": continuous_batching_config,
             "device": model_device,
             "model_dtype": model_dtype,
-            "return_logprobs": self.return_logprobs,
             "logit_processor": self.logit_processor,
-            "use_cuda_graph_varlen": use_cuda_graph_varlen,
         }
         self.use_async_batching = self.cb_config.use_async_batching
 
         if self.use_async_batching:
-            # Since in async there are 2 IO pairs, there are also 2 graph buffers: we divide the max_cached_graphs by 2
-            io_kwargs["max_graphs"] = ceil(self.cb_config.max_cached_graphs / 2)
             self.inputs_and_outputs = ContinuousBatchingAsyncIOs(**io_kwargs)
         else:
-            io_kwargs["max_graphs"] = self.cb_config.max_cached_graphs
             self.inputs_and_outputs = ContinuousBatchingIOs(**io_kwargs)
 
         # Offloading manager: handles CPU offloading, soft reset, and restoration
@@ -255,34 +302,33 @@ class ContinuousBatchProcessor:
         self.scheduler.reset()
         self.inputs_and_outputs.reset()
         self.cache.free_all_requests()
-        self.metrics = ContinuousBatchProcessorMetrics(self.cache.max_batch_tokens)
-        self.driver_stopped = False
 
-    @traced
-    def _get_new_requests(self) -> bool:
-        """Pull new requests and cancellations from the queues and apply them to the scheduler. In the context of TP,
-        only the TP driver of the TP group does this, and broadcasts the new_states / cancellations to other TP ranks.
-        Returns a boolean indicating if the TP driver for this group has stopped."""
-        # The payload is filled for TP drivers only, it stays empty for other processes
-        payload = ([], [])
+    def _update_tp_group_state(self) -> bool:
+        """Communicates with the TP group to get A. the new requests and cancellations from the TP driver, and B. an
+        eventual stop signal from any process in the TP group. Returns True if the TP group is hard-stopping, False
+        otherwise"""
+        # First the TP driver retrieves new requests and cancellations from the queues
         if self.input_queue is not None and self.cancel_queue is not None:
             payload = (drain_queue(self.input_queue), drain_queue(self.cancel_queue))
-
-        # Cheap CPU-only comm to know if there is a payload to broadcast or if the driver is stopping
-        if self.stop_event.is_set():
-            signal = -1
         else:
-            signal = len(payload[0]) + len(payload[1])
-        signal = self.distributed_helper.tp_broadcast_int(signal)
+            payload = ([], [])
+        # And the size of the payload is inferred (always 0 for non-TP drivers)
+        payload_size = len(payload[0]) + len(payload[1])
 
-        # If the signal is 0, it means the driver has nothing to send: stop here
-        if signal == 0:
-            return False
-        # Else if it is strictly below 0, it means the driver is stopping: do the same
-        elif signal < 0:
+        # Cheap 2 ints broadcast of payload size (from rank 0) and requested stop status (all to all)
+        local_requested_status = self.background_thread_status.local_status
+        payload_size, tp_status = self.distributed_helper.tp_all_reduce_state(payload_size, local_requested_status)
+        # Update the local stop status with the new one
+        self.background_thread_status.update_with_tp_status(tp_status)
+
+        # Exit early if the TP group is hard-stopping
+        if self.background_thread_status.tp_status == BackgroundThreadStatus.HARD_STOP:
             return True
-        # Otherwise, the payload size is above 0, so there is a payload to broadcast and unpack (no-op for TP size 1)
-        new_states, cancellations = self.distributed_helper.tp_broadcast_object(payload)
+        # Same if there is no payload
+        if payload_size == 0:
+            return False
+        # Otherwise, distribute the payload of TP rank 0 to all other TP ranks
+        new_states, cancellations = self.distributed_helper.tp_broadcast_object_from_rank_0(payload)
 
         # All ranks apply the same updates in the same order.
         for state in new_states:
@@ -296,7 +342,6 @@ class ContinuousBatchProcessor:
             self.scheduler.set_request_cancellation(request_id)
         return False
 
-    @traced
     def _handle_request_error(self, error: Exception, state: RequestState) -> None:
         """Handle general request processing error."""
         state.status = RequestStatus.FAILED
@@ -308,25 +353,23 @@ class ContinuousBatchProcessor:
         else:
             state.generated_tokens = []
 
-        self.metrics.record_request_completion(state.created_time, state.request_id)
         self.output_router.deliver(state.to_generation_output())
 
-    @traced
     def prepare_next_batch(self) -> bool:
         """Prepare tensors and metadata for the next model forward pass. Returns True if there are requests to process,
         False otherwise."""
 
-        # Get new requests from the queue. If the driver signaled collective stop, surface it to the manager.
-        self.driver_stopped = self._get_new_requests()
-        if self.driver_stopped:
+        # Communicate with the TP driver to retrieve new requests, cancellations and an eventual stop signal
+        hard_stopping = self._update_tp_group_state()
+        if hard_stopping:
             return False
+
         cancelled_states = self.scheduler.clear_cancelled_requests()
         # Also free CPU-offloaded cache for cancelled states. This is CPU-only, so it isn't batched like D2H transfers
         for state in cancelled_states:
             self.offloading_manager.free_request_cpu_cache(state)
         if not self.scheduler.has_pending_requests():
             return False
-        self.metrics.record_queue_metrics(len(self.scheduler.active_requests), len(self.scheduler.waiting_requests))
 
         # Schedule the next batch of requests
         requests_in_batch, use_decode_fast_path, num_q_tokens, max_kv_read = self.scheduler.schedule_batch(
@@ -347,7 +390,6 @@ class ContinuousBatchProcessor:
         self.offloading_manager.restore_scheduled_requests(requests_in_batch)
 
         # Otherwise, we can continue with the non-empty batch and log in the dimensions before padding
-        self.metrics.record_batch_metrics(requests_in_batch)
         logger.debug(
             f"Scheduled: {len(requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, "
             f"Active: {len(self.scheduler.active_requests)}. cum Q: {num_q_tokens}. "
@@ -358,12 +400,15 @@ class ContinuousBatchProcessor:
         num_q_tokens, max_kv_read = self.model_runner.maybe_pad_inputs(num_q_tokens, max_kv_read, use_decode_fast_path)
 
         self.inputs_and_outputs.prepare_batch_tensors(
-            requests_in_batch, self.logit_processor, use_decode_fast_path, num_q_tokens, max_kv_read
+            requests_in_batch=requests_in_batch,
+            logits_processors=self.logit_processor,
+            use_decode_fast_path=use_decode_fast_path,
+            num_q_tokens=num_q_tokens,
+            max_kv_read=max_kv_read,
+            use_padding=self.model_runner.pad_inputs,
         )
-        self.metrics.record_kv_cache_memory_metrics(self.cache)
         return True
 
-    @traced
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
         requests_in_batch, new_tokens, logprobs = self.inputs_and_outputs.prepare_batch_update()
@@ -383,7 +428,6 @@ class ContinuousBatchProcessor:
             if future_state.has_new_token:
                 # If there is just one temporary token, it means prefill just ended
                 if state.generated_len() == 0:
-                    self.metrics.record_ttft_metric(state.created_time, state.request_id)
                     state.status = RequestStatus.DECODING
 
                 token = new_tokens[current_logits_index]
@@ -395,7 +439,6 @@ class ContinuousBatchProcessor:
                 # We mark the completed blocks as such
                 self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
                 if is_finished:
-                    self.metrics.record_request_completion(state.created_time, state.request_id)
                     self.scheduler.finish_request(state.request_id)
                     self.scheduler.block_new_requests = False
                 if state.streaming or state.status == RequestStatus.FINISHED:
@@ -414,15 +457,25 @@ class ContinuousBatchProcessor:
             state_to_fork = self.scheduler._requests_to_fork.pop()
             num_children = state_to_fork.num_children
             state_to_fork.num_children = 0
-            # Create the new request and add them to the scheduler
             new_request_ids = [f"{state_to_fork.request_id}__child#{i}" for i in range(num_children)]
+            # If there are not enough free blocks, some children are created as new pending requests rather than forked
+            num_to_fork = min(num_children, self.cache.compute_max_num_forks(state_to_fork.request_id))
+            num_to_schedule = num_children - num_to_fork
+            for _ in range(num_to_schedule):
+                new_request_id = new_request_ids.pop()
+                child_state = state_to_fork.create_equivalent_initial_request()
+                child_state.request_id = new_request_id
+                self.scheduler.add_waiting_request(child_state)
+            # Early stop if no forks can be done
+            if num_to_fork == 0:
+                continue
+            # Create the new request and add them to the scheduler
             for new_request_id in new_request_ids:
                 self.scheduler.active_requests[new_request_id] = state_to_fork.fork(new_request_id)
             # Fork the cache
             copy_src, copy_dst = self.cache.fork_request(state_to_fork.request_id, new_request_ids)
             copy_source.extend(copy_src)
             copy_destination.extend(copy_dst)
-            # FIXME: if fork cant be done, create a new pending request without forking instead of crashing everything
 
         # The copy induced by the fork is done in one go (if it's even needed)
         if copy_source:
@@ -433,12 +486,10 @@ class ContinuousBatchProcessor:
             with maybe_stream:
                 self.cache.copy_cache(copy_source, copy_destination)
 
-    @traced
     def has_pending_requests(self) -> bool:
         """Check if there are any active or waiting requests."""
         return self.scheduler.has_pending_requests()
 
-    @traced
     def handle_batch_error(self, error):
         """Handle errors during batch processing."""
         failed_future_states = self.inputs_and_outputs.prepare_batch_update()[0]
@@ -446,7 +497,6 @@ class ContinuousBatchProcessor:
             self._handle_request_error(error, future_state.state)
             self.scheduler.finish_request(future_state.state.request_id)
 
-    @traced
     def fail_all_requests(self, error: Exception) -> None:
         """Fail all active requests with the given error."""
 
@@ -464,7 +514,6 @@ class ContinuousBatchProcessor:
         # Clear the ordering queue
         self.scheduler.waiting_requests_order.clear()
 
-    @traced
     @torch.no_grad()
     def _generation_step(self, model: nn.Module) -> None:
         """Perform a single generation step."""
@@ -489,7 +538,6 @@ class ContinuousBatchProcessor:
 
 
 # Manager Class (User Interface)
-@attach_tracer()
 class ContinuousBatchingManager:
     """Manager for handling continuous batching of generation requests. It provides a user interface for submitting
     generation requests, retrieving results, and managing the background generation thread. This class should not be
@@ -514,44 +562,51 @@ class ContinuousBatchingManager:
             continuous_batching_config: Configuration for continuous batching parameters
             workload_hints: Workload hints for the continuous batching initialization (optional)
         """
-        # If needed, reload the paged version of the attention implementation (keep the original to restore it later)
-        self._original_attn_impl = None
-        self.switch_to_paged_attn(model)
-
-        # Internal arguments
-        self.model = model.eval()
-        self.generation_config = generation_config
-        self.warmed_up = False  # Set to True after warmup is completed. Useful for persistent managers.
-
+        # Accumulators for request handling
         self.input_queue = queue.Queue(maxsize=continuous_batching_config.max_queue_size)
         self.cancel_queue: queue.Queue[str] = queue.Queue()
-        self._has_new_requests = threading.Event()
-        self.output_router = OutputRouter()
-        self.stop_event = threading.Event()
-        self.batch_processor: ContinuousBatchProcessor | None = None
-        self._generation_thread = None
         self._request_counter = 0
         self._request_lock = threading.Lock()
-        self.fatal_error: Exception | None = None
+        self._has_new_requests = threading.Event()
 
-        # Infer if this process is the driver of its own TP group
-        self.distributed_helper = DistributedHelper(device_mesh=getattr(self.model, "_device_mesh", None))
+        # Processor-related attributes
+        self.background_thread_status = BackgroundThreadStatus()
+        self.output_router = OutputRouter()
+        self.batch_processor: ContinuousBatchProcessor | None = None
+        self._generation_thread = None
+
+        # Control flow attributes
+        self.fatal_error: Exception | None = None
+        self.warmed_up = False  # Set to True after warmup is completed. Useful for persistent managers.
+
+        # Model-related attributes
+        self._original_attn_impl = None  # needs to be set before the model is switched to paged attention
+        self.switch_to_paged_attn(model)
+        self.model = model.eval()
+
+        # Generation config related attributes
+        self.generation_config = generation_config
+        num_return_sequences = getattr(generation_config, "num_return_sequences", None)
+        self.num_return_sequences = num_return_sequences if num_return_sequences is not None else 1
+
+        # Initialize TP-related attributes
+        self.distributed_helper = DistributedHelper(
+            device_mesh=getattr(self.model, "_device_mesh", None),
+            cpu_group_timeout=continuous_batching_config.cpu_group_timeout,
+        )
         self.is_tp_driver = self.distributed_helper.is_tp_driver
         # If TP is on, check if NCCL graph mixing is disabled (helps with performance)
         if continuous_batching_config.disable_nccl_graph_mixing:
             self.distributed_helper.maybe_warn_nccl_graph_mixing()
 
-        # Generation config related arguments
-        num_return_sequences = getattr(generation_config, "num_return_sequences", None)
-        self.num_return_sequences = num_return_sequences if num_return_sequences is not None else 1
-
+        # Turn the classic logits processors into a CB-friendly version
         self.logit_processor = ContinuousBatchingLogitsProcessorList(
             logits_processor=self.model._get_logits_processor(generation_config),
             per_request_processors=continuous_batching_config.per_request_processors,
             drop_unsupported_processors=continuous_batching_config.drop_unsupported_processors,
         )
 
-        # Fully resolve the continuous batching config now that we have the model, the config and the logit processor.
+        # Fully resolve the continuous batching config now that we have the model, the config and the logit processor
         self.continuous_batching_config = resolve_continuous_batching_config(
             config=self.model.config,
             cb_config=continuous_batching_config,
@@ -567,21 +622,6 @@ class ContinuousBatchingManager:
             self._original_attn_impl = model.config._attn_implementation
             model.set_attn_implementation(f"paged|{model.config._attn_implementation}")
 
-    @traced
-    def start(self) -> None:
-        """Start the background generation thread."""
-        if self.is_running():
-            logger.warning("Manager thread is already running.")
-            return
-        self.stop_event.clear()
-        self.fatal_error = None
-        self._generation_thread = threading.Thread(target=self._run_generation_loop)
-        self._generation_thread.start()
-
-    def is_running(self) -> bool:
-        """Check if the background generation thread is running."""
-        return self._generation_thread is not None and self._generation_thread.is_alive()
-
     def warmup(self) -> None:
         """Pre-capture CUDA graphs for varlen and decode paths by running dummy batches. Initializes the batch
         processor if not already done."""
@@ -590,65 +630,95 @@ class ContinuousBatchingManager:
         self.batch_processor.warmup(self.model)
         self.warmed_up = True
 
-    # NOTE: don't forget to update `continuous_batching_context_manager` when changing this method's definition
-    def stop(self, block: bool = True, timeout: float | None = None, keep_for_next_session: bool = False) -> None:
-        """Signal the background thread to stop.
+    # --------------------------------------------- CONTROL FLOW METHODS --------------------------------------------- #
 
-        Args:
-            block: Whether to wait for the thread to stop
-            timeout: Maximum time to wait for the thread to stop
-            keep_for_next_session: Whether to cache this on the model for future use
-        """
+    def is_running(self) -> bool:
+        """Returns True if the background generation thread has been started and is still alive."""
+        return self._generation_thread is not None and self._generation_thread.is_alive()
+
+    def start(self) -> None:
+        """Start the background generation thread."""
+        if self.is_running():
+            logger.warning("Manager thread is already running.")
+            return None
+        self.background_thread_status.clear()
+        self.fatal_error = None
+        self._generation_thread = threading.Thread(target=self._run_generation_loop)
+        self._generation_thread.start()
+
+    def stop(
+        self,
+        block: bool = True,
+        timeout: float | None = None,
+        keep_for_next_session: bool = False,
+        hard_stop: bool = False,
+    ) -> None:
+        """Stop the background generation thread. If the `block` flag is set to True, then this method waits for the
+        thread to stop for a maximum time of `timeout` seconds (None means no timeout). If the `keep_for_next_session`
+        flag is set to True, then the manager is cached on the model for future use. If the `hard_stop` flag is set,
+        the background generation thread will be stopped immediately and pending requests will be failed."""
+
+        # We expect the batch processor to be initialized at this point. Warn otherwise.
         if self.batch_processor is None:
             logger.warning("\nBatch processor was not initialized.")
-        elif self.batch_processor.cache.use_prefix_sharing:
-            logger.info(
-                f"\nPrefix sharing was on. Total prefix length: {self.batch_processor.cache._total_prefix_length}"
-            )
 
+        # If the manager is not started, warn and return.
         if self._generation_thread is None:
-            suffix = " Hence the unstarted manager will not be kept for next session." if keep_for_next_session else ""
-            logger.warning("Manager not started." + suffix)
-            return
+            msg = "Manager not started."
+            if keep_for_next_session:
+                msg += " Hence the unstarted manager will not be kept for next session."
+            logger.warning(msg)
+            return None
 
+        # Signal the background thread to stop
         stop_trigger_time = perf_counter()
-        if not self.stop_event.is_set():
-            self.stop_event.set()
-            logger.info("Stopping continuous batching manager...")
-
+        stop_status = BackgroundThreadStatus.HARD_STOP if hard_stop else BackgroundThreadStatus.FLUSH_AND_STOP
+        self.background_thread_status.request_stop(stop_status, self.distributed_helper.global_rank)
+        # And maybe wait for that to happen
         if block:
             self.join(stop_trigger_time, timeout)
 
-        # If the manager is not being kept for next session, we clear the batch processor and destroy the CPU comm group
+        # If the manager is not being kept for next session, we clear the batch processor
         if not keep_for_next_session:
             self.batch_processor = None
-            self.distributed_helper.destroy_cpu_comm_group()
         # Otherwise, we keep the batch processor and cache the manager as a model attribute
         else:
             logger.info("Continuous batching manager will be kept for next session.")
             self.model._cached_continuous_batching_manager = self
+
+        # Restore the original attention implementation
+        if self._original_attn_impl is not None:
+            self.model.set_attn_implementation(self._original_attn_impl)
+            self._original_attn_impl = None
+
         # In all cases, a little cleanup is good
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-        # And we restore the original attention implementation
-        if self._original_attn_impl is not None:
-            self.model.set_attn_implementation(self._original_attn_impl)
 
     def join(self, stop_trigger_time: float, timeout: float | None = None) -> None:
-        """Wait for the background thread to finish.
+        """Wait for the background thread to finish. Wait can be capped using the timeout argument (in seconds)."""
+        # Early return if the thread is not running
+        if self._generation_thread is None:
+            return None
+        # Join (maybe w/ timeout) and check if the thread is still alive afterwards. If it is, then it means the thread
+        # is still running despite the stop signal, so we warn the user who might expect otherwise.
+        self._generation_thread.join(timeout=timeout)
+        if self._generation_thread.is_alive():
+            logger.warning(f"Generation thread did not exit after join timeout ({timeout}).")
+        else:
+            end = perf_counter()
+            logger.info(f"Background generation thread stopped after {end - stop_trigger_time:.2f}s.")
+            self._generation_thread = None
 
-        Args:
-            timeout: Maximum time to wait for the thread to stop
-        """
-        if self._generation_thread is not None:
-            self._generation_thread.join(timeout=timeout)
-            if self._generation_thread.is_alive():
-                logger.warning(f"Generation thread did not exit after join timeout ({timeout}).")
-            else:
-                end = perf_counter()
-                logger.info(f"Continuous Batching Manager stopped after {end - stop_trigger_time:.2f}s.")
-                self._generation_thread = None
+    def destroy(self) -> None:
+        """Terminate the manager and release distributed resources. Safe to call multiple times. After calling this,
+        the manager cannot be restarted."""
+        if self.is_running():
+            self.stop(block=True, keep_for_next_session=False)
+        self.distributed_helper.destroy_cpu_comm_group()
+
+    # ---------------------------- REQUEST SUBMISSION, CANCELLATION AND RETRIEVAL METHODS ---------------------------- #
 
     def add_request(
         self,
@@ -674,15 +744,19 @@ class ContinuousBatchingManager:
         Returns:
             str | None: The request ID if the process is a TP driver, None otherwise.
         """
+        # If this process is not a TP driver, request submission is a no-op
+        if not self.is_tp_driver:
+            return None
+        # If the manager is not accepting new requests, throw a warning and return None
+        if self.background_thread_status.local_status >= BackgroundThreadStatus.FLUSH_AND_STOP:
+            preview = f"{input_ids[:3]}"[:-1] + ", ..., " + f"{input_ids[-3:]}"[1:]
+            logger.warning(f"Background thread is stopping. Request with ids {preview} will be dropped.")
+            return None
+
         if request_id is None:
             with self._request_lock:
                 request_id = f"req_{self._request_counter}"
                 self._request_counter += 1
-
-        # If this process is not a TP driver, it does not enqueue new requests from this entry point
-        if not self.is_tp_driver:
-            return None  # this value should never be used anyway because non-TP drivers do not enqueue requests
-
         max_new_tokens = self.generation_config.max_new_tokens if max_new_tokens is None else max_new_tokens
         eos_token_id = self.generation_config.eos_token_id if eos_token_id is None else eos_token_id
 
@@ -711,16 +785,17 @@ class ContinuousBatchingManager:
         record_timestamps: bool = False,
         **logit_processor_kwargs: Any,
     ) -> list[str]:
+        """Utility function to batch `add_request` and return their IDs. Check its documentation for more details."""
         # Infer the request ids of all incoming requests
+        num_requests = len(inputs)
         with self._request_lock:
-            request_ids = [f"req_{i}" for i in range(self._request_counter, self._request_counter + len(inputs))]
-            self._request_counter += len(inputs)
+            request_ids = [f"req_{i}" for i in range(self._request_counter, self._request_counter + num_requests)]
+            self._request_counter += num_requests
         # If there is prefix sharing, we sort the inputs to maximize cache hits but keep the order of the requests
         ids_and_inputs = list(zip(request_ids, inputs))
         if self._use_prefix_sharing:
             ids_and_inputs = sorted(ids_and_inputs, key=lambda x: x[1], reverse=True)
-        # Look for an EOS token ID in the generation config and then in the model config. If no EOS is found, we set it
-        # to -1 to avoid looking for it in each add_request call
+        # EOS determination order: generation config -> model config -> -1 (no EOS)
         eos_token_id = self.generation_config.eos_token_id
         eos_token_id = self.model.config.eos_token_id if eos_token_id is None else eos_token_id
         eos_token_id = -1 if eos_token_id is None else eos_token_id
@@ -745,16 +820,10 @@ class ContinuousBatchingManager:
             self._has_new_requests.set()
 
     # TODO:handle benchmarking properly when updating / fixing the requeue logic
+    # TODO (remi-or) : this NEEDS to get fixed in a future PR -- it's quite wasteful
     def get_result(self, request_id: str | None = None, timeout: float | None = None) -> GenerationOutput | None:
-        """Retrieve one result from the output queue.
-
-        Args:
-            request_id: If set, only return results matching this ID (others are requeued).
-            timeout: Maximum time to wait for a result.
-
-        Returns:
-            Optional[GenerationOutput]: The result data or None if timeout.
-        """
+        """Retrieve one result from the output queue. If an ID is provided, returns the first matching request. If a
+        timeout is provided, returns None after the timeout (in seconds)."""
         if self._generation_thread is None and self.output_router.output_queue.empty():
             return None
         try:
@@ -789,11 +858,9 @@ class ContinuousBatchingManager:
     def register_result_handler(self, request_id: str, callback: Callable) -> None:
         """Register a callback for result delivery (streaming or non-streaming).
 
-        The callback is invoked on the event loop via ``call_soon_threadsafe``
-        each time a result is produced for this request. For streaming requests,
-        this happens on every token; for non-streaming, only on completion.
-
-        The handler is automatically cleaned up when the request finishes.
+        The callback is invoked on the event loop via ``call_soon_threadsafe`` each time a result is produced for this
+        request. For streaming requests, this happens on every token; for non-streaming, only on completion. The handler
+        is automatically cleaned up when the request finishes.
 
         Args:
             request_id (`str`): The request ID to receive outputs for.
@@ -810,7 +877,72 @@ class ContinuousBatchingManager:
         with self.output_router._lock:
             self.output_router.result_handlers[request_id] = (_auto_cleanup, loop)
 
-    @traced
+    # ---------------------------------------- BACKGROUND THREAD ONLY METHODS ---------------------------------------- #
+
+    @torch.no_grad()
+    def _run_generation_loop(self) -> None:
+        """Main processing loop running in the background thread."""
+        batch_processor = None
+
+        # Everything is inside this try / except / finally block so we can handle critical errors gracefully
+        try:
+            # Start the generation loop
+            batch_processor = self._create_batch_processor()
+            self.batch_processor = batch_processor  # register the batch processor for main thread access
+            self.current_batch = 0
+
+            # If using the async API, we bootstrap the first batch w/out update
+            if batch_processor.use_async_batching:
+                if not batch_processor.prepare_next_batch():
+                    raise RuntimeError("Failed to bootstrap the first batch.")
+                self._generation_step()
+                self.current_batch += 1
+
+            # The loop continues until a stop signal has been broadcasted in the TP group
+            while True:
+                requests_available = batch_processor.prepare_next_batch()  # this is where the TP group communicates
+
+                # This only happens if the TP group is not stopping (any kind of stop) so we can check the status after
+                if requests_available:
+                    self._generation_step()
+                    batch_processor.update_batch()
+                    self.current_batch += 1
+
+                # Stop the loop if the TP group is hard-stopping
+                elif self.background_thread_status.tp_status == BackgroundThreadStatus.HARD_STOP:
+                    break
+                # Stop the loop if the TP group is flushing and there are no pending requests
+                elif (
+                    self.background_thread_status.tp_status == BackgroundThreadStatus.FLUSH_AND_STOP
+                    and not batch_processor.has_pending_requests()
+                ):
+                    break
+
+                # Otherwise, we wait for new requests and re-enter the loop
+                else:
+                    self._has_new_requests.wait(timeout=0.1)  # wait for new requests instead of busy-spinning.
+                    self._has_new_requests.clear()
+
+            # In async mode, the last batch's results are still in flight: switch to the right IO pair and process them
+            # Also happens for a hard stop, since the results are already available on the device
+            if isinstance(batch_processor.inputs_and_outputs, ContinuousBatchingAsyncIOs):
+                batch_processor.inputs_and_outputs.current_pair = 1 - batch_processor.inputs_and_outputs.current_pair
+                batch_processor.update_batch()
+
+            # This should be a no-op unless a user asked for a hard stop
+            error = RuntimeError(
+                f"Generation loop finished before this request completed w/ {self.background_thread_status.tp_status = }"
+            )
+            self._fail_all_remaining_requests(error, batch_processor)
+
+        # All exceptions are caught here so we can shut down the thread and TP group as gracefully as possible
+        except Exception as e:
+            logger.error(f"Error in generation loop: {e}", exc_info=True)
+            self._handle_critical_error(e, batch_processor)
+        finally:
+            self.background_thread_status.mark_as_stopped()
+            logger.info("Generation loop finished and background thread exited successfully.")
+
     def _generation_step(self) -> None:
         """Perform a single generation step. This is mostly cuda graphed"""
         if self.batch_processor is None:
@@ -818,6 +950,13 @@ class ContinuousBatchingManager:
         self.batch_processor._generation_step(self.model)
 
     def _create_batch_processor(self) -> ContinuousBatchProcessor:
+        """Create a new batch processor. If an already initialized batch processor exists, it is reset and returned."""
+        # Early return if a batch processor exists already
+        batch_processor = getattr(self, "batch_processor", None)
+        if isinstance(batch_processor, ContinuousBatchProcessor):
+            batch_processor.reset()
+            return batch_processor
+
         # Create the PagedAttentionCache
         paged_attention_cache = PagedAttentionCache(
             config=self.model.config,
@@ -827,18 +966,32 @@ class ContinuousBatchingManager:
             tp_plan=getattr(self.model, "tp_plan", {}),
             dtype=self.model.dtype,
         )
-        self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing  # update the approximation
+        # Update the approximation now that we know if there is prefix sharing
+        self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing
+        # And update continuous batching config now that we have concrete values
+        update_cb_config_after_cache_creation(
+            cb_config=self.continuous_batching_config,
+            num_blocks=paged_attention_cache.num_blocks,
+            max_batch_tokens=paged_attention_cache.max_batch_tokens,
+            use_prefix_sharing=self._use_prefix_sharing,
+        )
 
         # Disable the decode path if the model has sliding window attention (TODO)
         if paged_attention_cache.num_sliding_attention_groups > 0:
             self.continuous_batching_config.max_blocks_per_request = 0
 
-        # Create the scheduler
+        # Retrieve the scheduler class
         scheduler_type = self.continuous_batching_config.scheduler_type
-        scheduler = SCHEDULER_MAPPING.get(scheduler_type, None)
-        if scheduler is None:
+        scheduler_cls = SCHEDULER_MAPPING.get(scheduler_type, None)
+        if scheduler_cls is None:
             logger.warning(f"Scheduler '{scheduler_type}' not found. Defaulting to FIFO.")
-            scheduler = FIFOScheduler
+            scheduler_cls = FIFOScheduler
+        # Instantiate the actual scheduler
+        scheduler = scheduler_cls(
+            cache=paged_attention_cache,
+            safety_margin=self.continuous_batching_config.safety_margin,
+            max_requests_per_batch=self.continuous_batching_config.max_requests_per_batch,
+        )
 
         # Create the batch processor
         batch_processor = ContinuousBatchProcessor(
@@ -850,75 +1003,30 @@ class ContinuousBatchingManager:
             input_queue=self.input_queue if self.is_tp_driver else None,
             cancel_queue=self.cancel_queue if self.is_tp_driver else None,
             output_router=self.output_router,
-            stop_event=self.stop_event,
+            background_thread_status=self.background_thread_status,
             model_device=self.model.device,
             model_dtype=self.model.dtype,
-            scheduler=scheduler(paged_attention_cache),
+            scheduler=scheduler,
             distributed_helper=self.distributed_helper,
         )
         return batch_processor
 
-    @torch.no_grad()
-    def _run_generation_loop(self) -> None:
-        """Main processing loop running in the background thread."""
-        try:
-            # Try to retrieve an already initialized batch processor
-            batch_processor = getattr(self, "batch_processor", None)
-            # If the batch processor already exists, we just reset it for a new generation loop
-            if isinstance(batch_processor, ContinuousBatchProcessor):
-                batch_processor.reset()
-            # Otherwise, we create a new batch processor
-            else:
-                batch_processor = self._create_batch_processor()
-
-            # Start the generation loop
-            self.batch_processor = batch_processor
-            self.current_batch = 0
-
-            # If using the async API, we bootstrap the first batch w/out update
-            if batch_processor.use_async_batching:
-                if not batch_processor.prepare_next_batch():
-                    raise RuntimeError("Failed to bootstrap the first batch.")
-                self._generation_step()
-                self.current_batch += 1
-
-            # The loop continues until the TP driver stops or there are no more pending requests
-            while (not batch_processor.driver_stopped) or batch_processor.has_pending_requests():
-                self._inner_generation_loop(batch_processor)
-                self.current_batch += 1
-
-            # In async mode, the last batch's results are still in flight - process them now
-            # We need to switch back to the pair that has the last batch's D2H pending
-            if isinstance(batch_processor.inputs_and_outputs, ContinuousBatchingAsyncIOs):
-                batch_processor.inputs_and_outputs.current_pair = 1 - batch_processor.inputs_and_outputs.current_pair
-                batch_processor.update_batch()
-
-        except Exception as e:
-            logger.error(f"Error in generation loop: {e}", exc_info=True)
-            self._handle_critical_error(e, batch_processor)
-        finally:
-            logger.info("Generation loop finished.")
-
-    @traced(span_name="generation_loop")
-    def _inner_generation_loop(self, batch_processor: ContinuousBatchProcessor) -> None:
-        # Loop body ends if there is no requests in the batch
-        if not batch_processor.prepare_next_batch():
-            # Wait for new requests instead of busy-spinning.
-            self._has_new_requests.wait(timeout=0.1)
-            self._has_new_requests.clear()
-            return
-        self._generation_step()
-        batch_processor.update_batch()
-
-    @traced
     def _handle_critical_error(self, error: Exception, batch_processor: ContinuousBatchProcessor | None) -> None:
         """Handle critical errors that terminate the generation loop."""
-        # Record so callers (e.g. the serving layer) can fail fast on subsequent requests
-        # instead of enqueuing into a worker that will never drain.
+        # Record the error so callers (e.g. the serving layer) can fail fast on subsequent requests
         self.fatal_error = error
-        # Signal stop
-        self.stop_event.set()
+        # Request a hard stop
+        self.background_thread_status.request_stop(
+            status=BackgroundThreadStatus.HARD_STOP, global_rank=self.distributed_helper.global_rank
+        )
+        # Communicate to other processes in the TP group that the group is stopping (they could have not crashed)
+        # Since the other processes need to reach the collective, it may take a few seconds to complete.
+        self.distributed_helper.tp_all_reduce_state(0, BackgroundThreadStatus.HARD_STOP)
+        # Fail all remaining requests
+        self._fail_all_remaining_requests(error, batch_processor)
 
+    def _fail_all_remaining_requests(self, error: Exception, batch_processor: ContinuousBatchProcessor | None) -> None:
+        """Fail all remaining requests in the input queue and active requests."""
         # Fail pending requests in input queue
         try:
             while True:
@@ -927,8 +1035,7 @@ class ContinuousBatchingManager:
                     batch_processor._handle_request_error(error, req_data)
         except queue.Empty:
             pass
-
-        # Fail active requests
+        # Fail active and waiting requests
         if batch_processor is not None:
             batch_processor.fail_all_requests(error)
 
@@ -1004,7 +1111,7 @@ class ContinuousMixin:
         """Destroy the cached continuous batching manager and free GPU resources."""
         cached_manager = getattr(self, "_cached_continuous_batching_manager", None)
         if isinstance(cached_manager, ContinuousBatchingManager):
-            cached_manager.stop(block=True, timeout=None, keep_for_next_session=False)
+            cached_manager.destroy()
             delattr(self, "_cached_continuous_batching_manager")
 
     @contextmanager
@@ -1043,9 +1150,10 @@ class ContinuousMixin:
             # This is a dummy log needed for the logs of stop to show. It won't show.
             logger.debug("Continuous batching loop finished")
             manager.stop(block=block, timeout=timeout, keep_for_next_session=persistent_manager)
+            if not persistent_manager:
+                manager.destroy()
 
     # TODO: support streaming
-    @traced
     @torch.no_grad()
     def generate_batch(
         self,
@@ -1093,7 +1201,14 @@ class ContinuousMixin:
         workload_hints = WorkloadHints(
             max_prompt_length=max(len(input_ids) for input_ids in inputs),
             max_generated_length=max_new_tokens if max_new_tokens is not None else 0,
+            num_requests=num_requests,
         )
+        if persistent_manager:
+            logger.warning(
+                "Since you passed `persistent_manager=True`, the manager will be kept alive after the generation is "
+                "finished. However, it was sized specifically for the requests passed in `generate_batch`. If you plan "
+                "to reuse the manager for a very different workload, you might want to create a new manager instead."
+            )
 
         # Prepare context managers for the main loop
         manager_cm = self.continuous_batching_context_manager(
