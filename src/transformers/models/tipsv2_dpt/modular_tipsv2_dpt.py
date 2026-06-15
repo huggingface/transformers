@@ -183,6 +183,8 @@ class Tipsv2DptConfig(PreTrainedConfig):
         Lower bound (metres) of the depth-bin range.
     max_depth (`float`, *optional*, defaults to 10.0):
         Upper bound (metres) of the depth-bin range.
+    depth_decoder_activation (`str`, *optional*, defaults to `"relu"`):
+        Activation function applied after the depth decoder projection layer.
     semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
         Label index to ignore in the cross-entropy loss for semantic segmentation.
 
@@ -208,6 +210,7 @@ class Tipsv2DptConfig(PreTrainedConfig):
     num_depth_bins: int = 256
     min_depth: float = 0.001
     max_depth: float = 10.0
+    depth_decoder_activation: str = "relu"
     semantic_loss_ignore_index: int = 255
 
     def __post_init__(self, **kwargs):
@@ -439,7 +442,9 @@ class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
         super().__init__(config)
         self.backbone = load_backbone(config)
         self.depth_neck = Tipsv2DptNeck(config)
-        self.depth_decoder = Tipsv2DptDecoder(config, out_channels=config.num_depth_bins, activation="relu")
+        self.depth_decoder = Tipsv2DptDecoder(
+            config, out_channels=config.num_depth_bins, activation=config.depth_decoder_activation
+        )
         self.depth_bin_regressor = Tipsv2DptBinRegressor(config)
         self.normals_neck = Tipsv2DptNeck(config)
         self.normals_decoder = Tipsv2DptDecoder(config, out_channels=3)
@@ -498,7 +503,9 @@ class Tipsv2DptForDepthEstimation(Tipsv2DptPreTrainedModel):
         super().__init__(config)
         self.backbone = load_backbone(config)
         self.neck = Tipsv2DptNeck(config)
-        self.decoder = Tipsv2DptDecoder(config, out_channels=config.num_depth_bins, activation="relu")
+        self.decoder = Tipsv2DptDecoder(
+            config, out_channels=config.num_depth_bins, activation=config.depth_decoder_activation
+        )
         self.bin_regressor = Tipsv2DptBinRegressor(config)
         self.post_init()
 

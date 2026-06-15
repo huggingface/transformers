@@ -365,7 +365,9 @@ class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
         super().__init__(config)
         self.backbone = load_backbone(config)
         self.depth_neck = Tipsv2DptNeck(config)
-        self.depth_decoder = Tipsv2DptDecoder(config, out_channels=config.num_depth_bins, activation="relu")
+        self.depth_decoder = Tipsv2DptDecoder(
+            config, out_channels=config.num_depth_bins, activation=config.depth_decoder_activation
+        )
         self.depth_bin_regressor = Tipsv2DptBinRegressor(config)
         self.normals_neck = Tipsv2DptNeck(config)
         self.normals_decoder = Tipsv2DptDecoder(config, out_channels=3)
@@ -424,7 +426,9 @@ class Tipsv2DptForDepthEstimation(Tipsv2DptPreTrainedModel):
         super().__init__(config)
         self.backbone = load_backbone(config)
         self.neck = Tipsv2DptNeck(config)
-        self.decoder = Tipsv2DptDecoder(config, out_channels=config.num_depth_bins, activation="relu")
+        self.decoder = Tipsv2DptDecoder(
+            config, out_channels=config.num_depth_bins, activation=config.depth_decoder_activation
+        )
         self.bin_regressor = Tipsv2DptBinRegressor(config)
         self.post_init()
 

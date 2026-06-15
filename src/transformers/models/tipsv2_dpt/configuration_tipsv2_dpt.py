@@ -58,6 +58,8 @@ class Tipsv2DptConfig(PreTrainedConfig):
         Lower bound (metres) of the depth-bin range.
     max_depth (`float`, *optional*, defaults to 10.0):
         Upper bound (metres) of the depth-bin range.
+    depth_decoder_activation (`str`, *optional*, defaults to `"relu"`):
+        Activation function applied after the depth decoder projection layer.
     semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
         Label index to ignore in the cross-entropy loss for semantic segmentation.
 
@@ -83,6 +85,7 @@ class Tipsv2DptConfig(PreTrainedConfig):
     num_depth_bins: int = 256
     min_depth: float = 0.001
     max_depth: float = 10.0
+    depth_decoder_activation: str = "relu"
     semantic_loss_ignore_index: int = 255
 
     def __post_init__(self, **kwargs):
