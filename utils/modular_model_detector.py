@@ -1239,6 +1239,17 @@ def compute_per_class_recommendations(
         else:
             break
 
+    # Rescue pass: for any class whose best score in the selected set lags the
+    # global best match by >= 0.2, pull in that global-best model as an extra parent.
+    for query_name, scores in class_model_scores.items():
+        if not scores:
+            continue
+        best_selected_score = max((scores.get(m, 0.0) for m in selected), default=0.0)
+        best_global_model = max(scores, key=scores.get)
+        best_global_score = scores[best_global_model]
+        if best_global_score - best_selected_score >= 0.2 and best_global_model not in selected:
+            selected.append(best_global_model)
+
     per_class: dict[str, dict] = {}
     for query_name, scores in class_model_scores.items():
         best_model = max(selected, key=lambda m: scores.get(m, 0.0))
@@ -1334,7 +1345,7 @@ def main():
                 ignore_models_set.add(_normalize(model_id))
 
     results = analyzer.analyze_file(
-        Path(modeling_file), top_k_per_item=12, allow_hub_fallback=True, use_jaccard=args.use_jaccard, dates=dates, ignore_models=ignore_models_set
+        Path(modeling_file), top_k_per_item=50, allow_hub_fallback=True, use_jaccard=args.use_jaccard, dates=dates, ignore_models=ignore_models_set
     )
 
     aggregate_scores: dict[str, float] = {}
@@ -1413,6 +1424,8 @@ def main():
                         relative_path, match_name = identifier.split(":", 1)
                     except ValueError:
                         continue
+                    if score <= 0.7:
+                        continue
                     model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
                     match_release = dates.get(model_id, "unknown release date")
                     full_path, line = _resolve_definition_location(relative_path, match_name)
@@ -1472,6 +1485,8 @@ def main():
                             relative_path, match_name = identifier.split(":", 1)
                         except ValueError:
                             continue
+                        if score <= 0.7:
+                            continue
                         model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
                         match_release = dates.get(model_id, "unknown release date")
                         full_path, line = _resolve_definition_location(relative_path, match_name)
@@ -1488,10 +1503,13 @@ def main():
                         if best_candidate_path == relative_path:
                             row_styles[-1] = ANSI_HIGHLIGHT_CANDIDATE
 
+                    embedding_scores = {ident: sc for ident, sc in data.get("embedding", [])}
                     for identifier in sorted(data.get("intersection", []))[:5]:
                         try:
                             relative_path, match_name = identifier.split(":", 1)
                         except ValueError:
+                            continue
+                        if embedding_scores.get(identifier, 0.0) <= 0.7:
                             continue
                         model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
                         match_release = dates.get(model_id, "unknown release date")
@@ -1557,10 +1575,21 @@ def main():
                     for class_name, score in classes:
                         rec = per_class_recs[class_name]
                         match_name = rec.get("match", "")
-                        pair = f"{class_name} → {match_name}" if match_name else class_name
+                        pair = f"{class_name} → {match_name} [{score:.4f}]" if match_name else f"{class_name} [{score:.4f}]"
                         all_scores = rec["all_scores"]
                         all_matches = rec.get("all_matches", {})
                         alts = [(m, s, all_matches.get(m, "")) for m, s in all_scores.items() if m != model_id]
+                        # Append the global top-1 embedding match if outside the selected-model set
+                        top_embedding = results.get(class_name, {}).get("embedding", [])
+                        if top_embedding:
+                            top_ident, top_sc = top_embedding[0]
+                            try:
+                                top_rel, top_mn = top_ident.split(":", 1)
+                                top_mid = Path(top_rel).parts[0] if Path(top_rel).parts else None
+                            except ValueError:
+                                top_mid = top_mn = None
+                            if top_mid and top_mid not in all_scores:
+                                alts.append((top_mid, top_sc, top_mn))
                         alt_str = (
                             "  alt: " + ", ".join(
                                 f"{m}:{mn} {s:.4f}" if mn else f"{m} {s:.4f}"
@@ -1568,7 +1597,7 @@ def main():
                             )
                             if alts else ""
                         )
-                        logging.info(f"    {pair:65s}  {score:.4f}{alt_str}")
+                        logging.info(f"    {pair:75s}{alt_str}")
                     logging.info("")
 
             if args.generate_prompt:
@@ -1601,7 +1630,7 @@ def generate_modular_prompt(
     selected_models: list[str] | None = None,
 ) -> str:
     """
-    Generate a prompt for an AI agent to create the modular file for a model.
+    Generate a prompt for an AI agent to write the modeling file for a model.
 
     Args:
         modeling_file: Path to the modeling file being analyzed.
@@ -1615,19 +1644,20 @@ def generate_modular_prompt(
         A string prompt ready to be fed to an AI agent.
     """
     model_name = modeling_file.stem.replace("modeling_", "")
-    modular_output_path = modeling_file.parent / f"modular_{model_name}.py"
 
     if per_class_recs and selected_models:
-        # Multi-model path: each class gets its own recommended parent.
+        # Multi-model path: each class gets its own recommended reference.
         parents_summary = ", ".join(f"`{m}`" for m in selected_models)
         class_lines: list[str] = []
         for query_name, data in results.items():
             if data.get("kind", "function") != "class":
                 continue
             rec = per_class_recs.get(query_name)
-            if rec:
+            if rec and rec["score"] > 0:
+                match_name = rec.get("match", "")
+                ref = f"`{rec['model']}.{match_name}`" if match_name else f"`{rec['model']}`"
                 class_lines.append(
-                    f"- `{query_name}` → inherit from `{rec['model']}` (score {rec['score']:.4f})"
+                    f"- `{query_name}` → base on {ref} (score {rec['score']:.4f})"
                 )
             else:
                 class_lines.append(
@@ -1636,15 +1666,16 @@ def generate_modular_prompt(
         class_list = "\n".join(class_lines) if class_lines else "(no classes found)"
 
         prompt = f"""\
-Create `{modular_output_path}` for the `{model_name}` model.
+Write `{modeling_file}` for the `{model_name}` model.
 
-Parent models selected for inheritance: {parents_summary}
+Reference models (closest matches per class): {parents_summary}
 
-For each class below, inherit from the indicated parent and only override what differs. \
-See `src/transformers/models/gemma/modular_gemma.py` as an example of the expected structure and style.
+For each class below, start from the indicated reference class and adapt it to exactly reproduce \
+the architecture of the original `{modeling_file.name}`. Only change what is necessary to match \
+the original model — do not simplify, restructure, or drop any logic that is specific to `{model_name}`.
 
-For classes marked "copy as-is", reproduce them exactly from `{modeling_file.name}` and also copy \
-any module-level helper functions they depend on.
+For classes marked "copy as-is", reproduce them exactly from the original `{modeling_file.name}` \
+and also copy any module-level helper functions they depend on.
 All classes must remain mutually compatible: method signatures, parameter names, and return types \
 must match what each side expects when they call into one another.
 
@@ -1652,7 +1683,7 @@ Matched classes:
 {class_list}
 """
     else:
-        # Fallback: single-model path (original behaviour).
+        # Fallback: single-model path.
         top_base = ordered_summary[0]["model_id"] if ordered_summary else None
         top_summary = ordered_summary[0] if ordered_summary else {}
         top_num_matched = int(top_summary.get("num_matched", 0)) if top_summary else 0
@@ -1665,21 +1696,35 @@ Matched classes:
             if data.get("kind", "function") != "class":
                 continue
             if query_name in top_matched_class_set and top_base is not None:
-                single_class_lines.append(f"- `{query_name}` → inherit from `{top_base}`")
+                # Find the specific matched class name in top_base
+                best_match_name = ""
+                best_score = float("-inf")
+                for identifier, score in data.get("embedding", []):
+                    try:
+                        relative_path, match_name = identifier.split(":", 1)
+                    except ValueError:
+                        continue
+                    mid = Path(relative_path).parts[0] if Path(relative_path).parts else None
+                    if mid == top_base and score > best_score:
+                        best_score = score
+                        best_match_name = match_name
+                ref = f"`{top_base}.{best_match_name}`" if best_match_name else f"`{top_base}`"
+                single_class_lines.append(f"- `{query_name}` → base on {ref} (score {best_score:.4f})")
                 continue
             best_score = float("-inf")
+            best_match_name = ""
             for identifier, score in data.get("embedding", []):
                 try:
-                    relative_path, _ = identifier.split(":", 1)
+                    relative_path, match_name = identifier.split(":", 1)
                 except ValueError:
                     continue
                 mid = Path(relative_path).parts[0] if Path(relative_path).parts else None
                 if mid == top_base and score > best_score:
                     best_score = score
+                    best_match_name = match_name
             if best_score > float("-inf"):
-                single_class_lines.append(
-                    f"- `{query_name}` → inherit from `{top_base}` (score {best_score:.4f})"
-                )
+                ref = f"`{top_base}.{best_match_name}`" if best_match_name else f"`{top_base}`"
+                single_class_lines.append(f"- `{query_name}` → base on {ref} (score {best_score:.4f})")
             else:
                 single_class_lines.append(
                     f"- `{query_name}` → copy as-is from `{modeling_file.name}` (no match in `{top_base}`)"
@@ -1687,17 +1732,17 @@ Matched classes:
         class_list = "\n".join(single_class_lines) if single_class_lines else "(no classes found)"
 
         prompt = f"""\
-Create `{modular_output_path}` for the `{model_name}` model.
+Write `{modeling_file}` for the `{model_name}` model.
 
-Top matched model for class inheritance:
-- `{top_base}`: {top_num_matched} matched classes ({top_pct:.1f}%), matched classes [{", ".join(top_matched_classes)}]
+Closest reference model: `{top_base}` ({top_num_matched} matched classes, {top_pct:.1f}%)
 
-For the matched classes listed above, inherit from `{top_base}` and only override what differs. \
-See `src/transformers/models/gemma/modular_gemma.py` as an example of the expected structure and style.
+For the matched classes below, start from the indicated reference class in `{top_base}` and adapt it \
+to exactly reproduce the architecture of the original `{modeling_file.name}`. Only change what is \
+necessary to match the original model — do not simplify, restructure, or drop any logic specific to `{model_name}`.
 
-For classes marked "copy as-is", reproduce them exactly from `{modeling_file.name}` without inheriting \
-from `{top_base}`. Also copy any module-level helper functions they depend on.
-The copied and inherited classes must remain mutually compatible: method signatures, parameter names, \
+For classes marked "copy as-is", reproduce them exactly from the original `{modeling_file.name}` \
+and also copy any module-level helper functions they depend on.
+All classes must remain mutually compatible: method signatures, parameter names, \
 and return types must match what each side expects when they call into one another.
 
 Matched classes:
