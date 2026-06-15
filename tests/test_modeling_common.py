@@ -1765,6 +1765,31 @@ class ModelTesterMixin:
         # Scenario - 3 with `use_reentrant=True` (old default behaviour, not recommended)
         self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True})
 
+    def test_load_balancing_loss(self):
+        """
+        Generative mixture-of-experts models that surface an `aux_loss` must return a non-zero load balancing loss
+        when `output_router_logits=True`. Models that do not support router logits or do not surface an `aux_loss`
+        are skipped.
+        """
+        if not self.all_generative_model_classes:
+            self.skipTest(reason="Model does not have generative classes")
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if not hasattr(config.get_text_config(), "output_router_logits"):
+            self.skipTest(reason="Model does not support `output_router_logits`")
+
+        checked = False
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config).to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            outputs = model(**inputs, output_router_logits=True)
+            if getattr(outputs, "aux_loss", None) is None:
+                continue
+            self.assertNotEqual(outputs.aux_loss.item(), 0.0)
+            checked = True
+        if not checked:
+            self.skipTest(reason="Model does not return an `aux_loss`")
+
     def _set_subconfig_attributes(self, config, attribute_name, value):
         """Helper function to recursively set a config attr to a given value"""
         for k in config.sub_configs:
