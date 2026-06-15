@@ -455,11 +455,11 @@ def build_3d_rope(
     )
 
     pos_f32 = ref_pos.float()
-    spatial_freqs = torch.einsum("bna,k->bnak", pos_f32, spatial_inv_freq)
+    spatial_freqs = pos_f32.unsqueeze(-1) * spatial_inv_freq
     spatial_freqs = spatial_freqs.reshape(B, N, n_spatial_total)
 
     uid_f32 = ref_space_uid.float()
-    uid_freqs = torch.einsum("bn,k->bnk", uid_f32, uid_inv_freq)
+    uid_freqs = uid_f32.unsqueeze(-1) * uid_inv_freq
 
     n_active = n_spatial_total + n_uid_pairs
     freqs = torch.cat([spatial_freqs, uid_freqs], dim=-1)
@@ -1387,9 +1387,9 @@ class ESMFold2DiffusionStructureHead(nn.Module):
             second_coords = second_coords - mean
 
         r = self._random_rotations(bsz, x.dtype, x.device)
-        x = torch.einsum("bmd,bds->bms", x, r)
+        x = x @ r
         if second_coords is not None:
-            second_coords = torch.einsum("bmd,bds->bms", second_coords, r)
+            second_coords = second_coords @ r
 
         t = torch.randn_like(x[:, 0:1, :])
         x = x + t
@@ -1406,7 +1406,7 @@ class ESMFold2DiffusionStructureHead(nn.Module):
         mu_gt = (x_gt * w).sum(dim=-2, keepdim=True) / denom
         x_c = x - mu
         xgt_c = x_gt - mu_gt
-        H = torch.einsum("bni,bnj->bij", w * xgt_c, x_c)
+        H = (w * xgt_c).transpose(-1, -2) @ x_c
         H32 = H.float()
         U, _, Vh = torch.linalg.svd(H32, driver="gesvd" if H32.is_cuda else None)
         det = torch.linalg.det(U @ Vh)
