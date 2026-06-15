@@ -33,6 +33,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
+    floats_tensor,
     ids_tensor,
     random_attention_mask,
 )
@@ -352,11 +353,8 @@ class ClvpModelForConditionalGenerationTester:
     def prepare_config_and_inputs(self):
         _, input_ids, attention_mask = self.clvp_encoder_tester.prepare_config_and_inputs()
 
-        ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
-        audio = ds.sort("id")[0]["audio"]
-        audio_sample = audio["array"]
-        sr = audio["sampling_rate"]
+        sr = 22050
+        audio_sample = floats_tensor([5 * sr], scale=1.0).cpu().numpy()
 
         feature_extractor = ClvpFeatureExtractor()
         input_features = feature_extractor(raw_speech=audio_sample, sampling_rate=sr, return_tensors="pt")[
@@ -396,7 +394,6 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
     test_resize_embeddings = False
     test_attention_outputs = False
-    test_torch_exportable = False  # decoding test inputs requires `torchcodec` (not installed in CI)
 
     def setUp(self):
         self.model_tester = ClvpModelForConditionalGenerationTester(self)

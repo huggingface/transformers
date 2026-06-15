@@ -127,19 +127,18 @@ def _pad_extra_bos_eos_tokens(
 
     modified_input_ids = input_ids
     if add_eos_token:
-        modified_input_ids = torch.zeros(
-            (input_ids.shape[0], input_ids.shape[1] + 1), dtype=input_ids.dtype, device=input_ids.device
+        # Locate the first pad per row — fall back to `seq_len` for rows without any pad —
+        # then build (B, T+1) by gathering input_ids with cols shifted by one past `first_pad`
+        # and writing `eos_token_id` at the `first_pad` column.
+        seq_len = input_ids.shape[1]
+        is_pad = input_ids == pad_token_id
+        first_pad = torch.where(
+            is_pad.any(1, keepdim=True), is_pad.int().argmax(1, keepdim=True), torch.tensor(seq_len)
         )
-        for i, each_input_id in enumerate(input_ids):
-            # locate where the valid tokens end and then add the eos token
-            if torch.isin(each_input_id, pad_token_id).sum():
-                pos = torch.where(each_input_id == pad_token_id)[0].min()
-                modified_input_ids[i] = torch.concatenate(
-                    [each_input_id[:pos], torch.tensor([eos_token_id], device=input_ids.device), each_input_id[pos:]]
-                )
-            else:
-                # if there are no pad tokens present, then add eos to the end
-                modified_input_ids[i] = torch.nn.functional.pad(each_input_id, (0, 1), value=eos_token_id)
+        col = torch.arange(seq_len + 1, device=input_ids.device)
+        src = torch.where(col < first_pad, col, (col - 1).clamp(min=0))
+        modified_input_ids = input_ids.gather(1, src).masked_fill(col == first_pad, eos_token_id)
+
         attention_mask = (
             torch.nn.functional.pad(attention_mask, (1, 0), value=1) if attention_mask is not None else attention_mask
         )
@@ -1295,23 +1294,21 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         decoder_fixing_codes = self.config.decoder_config.decoder_fixing_codes
         speech_ids = speech_ids[:, 1:]
 
-        stop_token_indices = torch.where(speech_ids == self.speech_decoder_model.config.eos_token_id, 1, 0)
-        speech_ids = torch.masked_fill(speech_ids, mask=stop_token_indices.bool(), value=decoder_fixing_codes[0])
+        # Per-row, replace [first_stop : T-3) with codes[0] and the trailing 3 positions
+        # with codes[1:]; rows without any stop token are left untouched. The original loop
+        # ran op1 then op2 with op2 overriding the last 3 positions, so the net rule per
+        # position is: replace iff has_stop AND col >= min(first_stop, T-3).
+        seq_len = speech_ids.shape[1]
+        is_stop = speech_ids == self.speech_decoder_model.config.eos_token_id
+        speech_ids = speech_ids.masked_fill(is_stop, decoder_fixing_codes[0])
 
-        for i, each_seq_stop_token_index in enumerate(stop_token_indices):
-            # This means that no stop tokens were found so the sentence was still being generated, in that case we don't need
-            # to apply any padding so just skip to the next sequence of tokens.
-            if each_seq_stop_token_index.sum() == 0:
-                continue
+        filler = torch.full((seq_len,), decoder_fixing_codes[0], device=speech_ids.device, dtype=speech_ids.dtype)
+        filler[-3:] = torch.tensor(decoder_fixing_codes[1:], device=speech_ids.device, dtype=speech_ids.dtype)
 
-            stm = each_seq_stop_token_index.argmax()
-            speech_ids[i, stm:] = decoder_fixing_codes[0]
-            if stm - 3 < speech_ids.shape[1]:
-                speech_ids[i, -3:] = torch.tensor(
-                    [decoder_fixing_codes[1:]], device=speech_ids.device, dtype=torch.long
-                )
-
-        return speech_ids
+        col = torch.arange(seq_len, device=speech_ids.device)
+        boundary = is_stop.int().argmax(1).clamp(max=max(0, seq_len - 3)).unsqueeze(1)
+        mask = is_stop.any(1, keepdim=True) & (col >= boundary)
+        return torch.where(mask, filler, speech_ids)
 
     @can_return_tuple
     @auto_docstring(
