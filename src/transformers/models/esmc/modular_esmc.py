@@ -123,26 +123,15 @@ class ESMCMLP(ModernBertMLP):
 class ESMCAttention(nn.Module):
     """Multi-head self-attention with QK LayerNorm and RoPE.
 
-    Args:
-        d_model: Model hidden dimension.
-        n_heads: Number of attention heads.
-        bias: Whether to use bias in linear layers.
-        qk_layernorm: Whether to apply LayerNorm to queries and keys before
-            computing attention scores.
+    All dims/flags are read from ``config`` (``d_model``/``n_heads``/
+    ``qk_layernorm``). ESMC is bias-free, so the linears carry no bias.
     """
 
-    def __init__(
-        self,
-        config: ESMCConfig,
-        d_model: int,
-        n_heads: int,
-        bias: bool = False,
-        qk_layernorm: bool = True,
-    ):
+    def __init__(self, config: ESMCConfig):
         super().__init__()
-        if bias:
-            raise ValueError("ESMC was trained with bias=False; bias=True is not supported.")
         self.config = config
+        d_model = config.d_model
+        n_heads = config.n_heads
         self.d_model = d_model
         self.n_heads = n_heads
         self.d_head = d_model // n_heads
@@ -158,12 +147,12 @@ class ESMCAttention(nn.Module):
         # :class:`ESMCLayer` (``attn_norm``); the published checkpoint's fused
         # ``attn.layernorm_qkv`` / ``attn.out_proj`` map onto these via
         # ``conversion_mapping.py``.
-        self.Wqkv = nn.Linear(d_model, d_model * 3, bias=bias)
-        self.Wo = nn.Linear(d_model, d_model, bias=bias)
+        self.Wqkv = nn.Linear(d_model, d_model * 3, bias=False)
+        self.Wo = nn.Linear(d_model, d_model, bias=False)
 
-        if qk_layernorm:
-            self.q_ln = nn.LayerNorm(d_model, bias=bias)
-            self.k_ln = nn.LayerNorm(d_model, bias=bias)
+        if config.qk_layernorm:
+            self.q_ln = nn.LayerNorm(d_model, bias=False)
+            self.k_ln = nn.LayerNorm(d_model, bias=False)
         else:
             self.q_ln = nn.Identity()
             self.k_ln = nn.Identity()
@@ -229,40 +218,23 @@ class ESMCAttention(nn.Module):
 class ESMCLayer(nn.Module):
     """Single transformer block: pre-norm attention + pre-norm FFN with residual scaling.
 
-    Args:
-        d_model: Hidden dimension.
-        n_heads: Number of attention heads.
-        use_flash_attn: Use Flash Attention 2 kernel if available.
-        bias: Whether linear layers include bias terms.
-        expansion_ratio: Hidden-dim expansion ratio for the FFN.
-        residue_scaling_factor: Scales residual connections to stabilise deep
-            networks (``1 / sqrt(n_layers / 36)`` is the ESM3 scheme).
-        qk_layernorm: Whether to apply QK LayerNorm in attention.
+    All dims/flags are read from ``config``. The ESM3 residue-scaling factor
+    (``sqrt(num_hidden_layers / 36)`` when ``config.scale_residue``) is derived
+    from the config here rather than threaded in.
     """
 
-    def __init__(
-        self,
-        config: ESMCConfig,
-        d_model: int,
-        n_heads: int,
-        bias: bool = False,
-        expansion_ratio: float = 8 / 3,
-        residue_scaling_factor: float = 1.0,
-        qk_layernorm: bool = True,
-    ):
+    def __init__(self, config: ESMCConfig):
         super().__init__()
-        if bias:
-            raise ValueError("ESMC was trained with bias=False; bias=True is not supported.")
-
+        d_model = config.d_model
         # Pre-norm layout (cf. ModernBERT): the LayerNorms that the published ESMC
         # checkpoint fuses into ``attn.layernorm_qkv`` / ``ffn`` live here as
         # ``attn_norm`` / ``mlp_norm`` (remapped in ``conversion_mapping.py``).
         self.attn_norm = nn.LayerNorm(d_model)
-        self.attn = ESMCAttention(config, d_model, n_heads, bias=bias, qk_layernorm=qk_layernorm)
+        self.attn = ESMCAttention(config)
         self.mlp_norm = nn.LayerNorm(d_model)
-        self.mlp = ESMCMLP(d_model, expansion_ratio)
+        self.mlp = ESMCMLP(d_model, config.expansion_ratio)
 
-        self.scaling_factor = residue_scaling_factor
+        self.scaling_factor = math.sqrt(config.n_layers / 36) if config.scale_residue else 1.0
 
     def forward(
         self,
@@ -299,47 +271,13 @@ class ESMCLayer(nn.Module):
 
 
 class ESMCEncoder(nn.Module):
-    """Stack of :class:`ESMCLayer` layers with a final LayerNorm.
+    """Stack of :class:`ESMCLayer` layers with a final LayerNorm. All dims/flags
+    are read from ``config``."""
 
-    Args:
-        d_model: Hidden dimension.
-        n_heads: Number of attention heads.
-        n_layers: Number of transformer blocks.
-        scale_residue: When ``True`` apply ESM3 residue scaling
-            ``sqrt(n_layers / 36)`` to each block.
-        bias: Bias flag forwarded to every sub-module.
-        qk_layernorm: QK LayerNorm flag forwarded to every block.
-        expansion_ratio: FFN expansion ratio.
-        use_flash_attn: Use Flash Attention 2 kernel when available.
-    """
-
-    def __init__(
-        self,
-        config: ESMCConfig,
-        d_model: int,
-        n_heads: int,
-        n_layers: int,
-        scale_residue: bool = True,
-        bias: bool = False,
-        qk_layernorm: bool = True,
-        expansion_ratio: float = 8 / 3,
-    ):
+    def __init__(self, config: ESMCConfig):
         super().__init__()
-        self.blocks = nn.ModuleList(
-            [
-                ESMCLayer(
-                    config,
-                    d_model,
-                    n_heads,
-                    residue_scaling_factor=math.sqrt(n_layers / 36) if scale_residue else 1.0,
-                    expansion_ratio=expansion_ratio,
-                    bias=bias,
-                    qk_layernorm=qk_layernorm,
-                )
-                for _ in range(n_layers)
-            ]
-        )
-        self.norm = nn.LayerNorm(d_model, bias=False)
+        self.blocks = nn.ModuleList([ESMCLayer(config) for _ in range(config.n_layers)])
+        self.norm = nn.LayerNorm(config.d_model, bias=False)
 
     def forward(
         self,
@@ -435,12 +373,7 @@ class ESMCModel(ESMCPreTrainedModel):
         super().__init__(config)
         self.embed = nn.Embedding(config.vocab_size, config.d_model)
         self.rotary_emb = ESMCRotaryEmbedding(config)
-        self.transformer = ESMCEncoder(
-            config,
-            config.d_model,
-            config.n_heads,
-            config.n_layers,
-        )
+        self.transformer = ESMCEncoder(config)
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Embedding:
@@ -493,7 +426,7 @@ class ESMCModel(ESMCPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # Collect per-layer hidden states only when the caller asks for them.
         layers_to_collect: list[int] = list(range(self.config.n_layers + 1)) if output_hidden_states else []
