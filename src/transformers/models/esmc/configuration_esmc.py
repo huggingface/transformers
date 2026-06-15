@@ -35,6 +35,14 @@ class ESMCConfig(PreTrainedConfig):
         Dropout ratio for the classification head.
     rope_theta (`float`, *optional*, defaults to 10000.0):
         The base period of the rotary position embeddings (RoPE).
+    expansion_ratio (`float`, *optional*, defaults to `8/3`):
+        Hidden-dim expansion ratio for the SwiGLU feed-forward network (the hidden
+        size is rounded up to a multiple of 256).
+    qk_layernorm (`bool`, *optional*, defaults to `True`):
+        Whether to apply LayerNorm to queries and keys before computing attention.
+    scale_residue (`bool`, *optional*, defaults to `True`):
+        Whether to apply ESM3 residual scaling (`1 / sqrt(num_hidden_layers / 36)`
+        per block) to stabilise deep networks.
 
     Examples:
 
@@ -68,6 +76,9 @@ class ESMCConfig(PreTrainedConfig):
     initializer_range: float | None = 0.02
     classifier_dropout: float | None = 0.1
     rope_theta: float | None = 10000.0
+    expansion_ratio: float | None = 8 / 3
+    qk_layernorm: bool | None = True
+    scale_residue: bool | None = True
     tie_word_embeddings: bool | None = False
 
 

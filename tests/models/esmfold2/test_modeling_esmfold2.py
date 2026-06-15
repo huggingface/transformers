@@ -70,7 +70,7 @@ def get_tiny_config(**overrides) -> "ESMFold2Config":
                 "n_uid_rope_pairs": 1,
             },
         },
-        "folding_trunk": {"n_layers": 1, "n_heads": 2},
+        "folding_trunk": {"n_layers": 1},
         "structure_head": {
             "diffusion_module": {
                 "c_atom": 16,
@@ -89,7 +89,7 @@ def get_tiny_config(**overrides) -> "ESMFold2Config":
             "num_pde_bins": 4,
             "num_pae_bins": 4,
             "distogram_bins": 8,
-            "folding_trunk": {"n_layers": 1, "n_heads": 2},
+            "folding_trunk": {"n_layers": 1},
         },
         "parcae": {"coda_n_layers": 1},
         "lm_encoder": {"n_layers": 1},
