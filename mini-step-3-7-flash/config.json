@@ -1,0 +1,82 @@
+{
+  "architectures": [
+    "Step3p7ForConditionalGeneration"
+  ],
+  "dtype": "float32",
+  "hidden_size": 128,
+  "image_token_id": 128001,
+  "max_position_embeddings": 512,
+  "model_type": "step3p7",
+  "projector_bias": false,
+  "text_config": {
+    "attention_dropout": 0.0,
+    "attention_other_setting": {
+      "head_dim": 32,
+      "num_attention_groups": 2,
+      "num_attention_heads": 4
+    },
+    "head_dim": 32,
+    "hidden_size": 128,
+    "intermediate_size": 256,
+    "layer_types": [
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention"
+    ],
+    "max_position_embeddings": 512,
+    "max_seq_len": 512,
+    "model_type": "step3p5",
+    "moe_intermediate_size": 64,
+    "moe_layers_enum": [
+      2,
+      3
+    ],
+    "moe_num_experts": 4,
+    "moe_router_activation": "sigmoid",
+    "moe_router_scaling_factor": 1.0,
+    "moe_top_k": 2,
+    "need_fp32_gate": true,
+    "norm_expert_weight": true,
+    "num_attention_groups": 2,
+    "num_attention_heads": 4,
+    "num_hidden_layers": 4,
+    "pad_token_id": 1,
+    "rms_norm_eps": 1e-05,
+    "rope_parameters": {
+      "rope_theta": 10000.0,
+      "rope_type": "default"
+    },
+    "rope_theta": 10000.0,
+    "share_expert_dim": 64,
+    "sliding_window": 64,
+    "swiglu_limits": null,
+    "swiglu_limits_shared": null,
+    "use_head_wise_attn_gate": true,
+    "use_moe_router_bias": true,
+    "use_rope_layers": null,
+    "vocab_size": 512,
+    "yarn_only_types": null
+  },
+  "transformers_version": "5.10.0.dev0",
+  "understand_projector_stride": 2,
+  "vision_config": {
+    "heads": 4,
+    "hidden_act": "quick_gelu",
+    "image_size": 56,
+    "layer_norm_eps": 1e-05,
+    "layers": 2,
+    "ls_init_value": 0.1,
+    "mlp_ratio": 4.0,
+    "model_type": "perception_encoder",
+    "num_channels": 3,
+    "patch_size": 14,
+    "ues_cls_token": false,
+    "use_abs_posemb": true,
+    "use_cls_token": false,
+    "use_ln_post": false,
+    "use_ln_pre": true,
+    "use_rope2d": true,
+    "width": 64
+  }
+}

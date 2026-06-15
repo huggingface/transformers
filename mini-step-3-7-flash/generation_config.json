@@ -1,0 +1,7 @@
+{
+  "_from_model_config": true,
+  "output_attentions": false,
+  "output_hidden_states": false,
+  "pad_token_id": 1,
+  "transformers_version": "5.10.0.dev0"
+}

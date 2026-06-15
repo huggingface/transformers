@@ -1,0 +1,2604 @@
+{
+  "module_path": "Step3p7ForConditionalGeneration",
+  "inputs": {
+    "args": [],
+    "kwargs": {
+      "input_ids": {
+        "shape": "torch.Size([1, 16])",
+        "dtype": "torch.int64"
+      },
+      "use_cache": "False"
+    }
+  },
+  "children": [
+    {
+      "module_path": "Step3p7ForConditionalGeneration.model",
+      "inputs": {
+        "kwargs": {
+          "input_ids": {
+            "shape": "torch.Size([1, 16])",
+            "dtype": "torch.int64"
+          },
+          "num_patches": "None",
+          "patch_pixel_values": "None",
+          "patch_newline_mask": "None",
+          "position_ids": "None",
+          "attention_mask": "None",
+          "past_key_values": "None",
+          "inputs_embeds": "None",
+          "use_cache": "False",
+          "output_attentions": "False",
+          "output_hidden_states": "False",
+          "return_dict": "None",
+          "cache_position": "None"
+        }
+      },
+      "children": [
+        {
+          "module_path": "Step3p7ForConditionalGeneration.model.language_model.embed_tokens",
+          "inputs": {
+            "args": [
+              {
+                "shape": "torch.Size([16])",
+                "dtype": "torch.int64"
+              }
+            ]
+          },
+          "outputs": {
+            "shape": "torch.Size([16, 128])",
+            "dtype": "torch.float32",
+            "mean": "tensor(4.7305e-04)",
+            "std": "tensor(1.9947e-02)",
+            "min": "tensor(-6.5568e-02)",
+            "max": "tensor(6.4957e-02)"
+          }
+        },
+        {
+          "module_path": "Step3p7ForConditionalGeneration.model.language_model",
+          "inputs": {
+            "kwargs": {
+              "input_ids": "None",
+              "position_ids": "None",
+              "attention_mask": "None",
+              "past_key_values": "None",
+              "inputs_embeds": {
+                "shape": "torch.Size([1, 16, 128])",
+                "dtype": "torch.float32",
+                "mean": "tensor(4.7305e-04)",
+                "std": "tensor(1.9947e-02)",
+                "min": "tensor(-6.5568e-02)",
+                "max": "tensor(6.4957e-02)"
+              },
+              "use_cache": "False",
+              "output_attentions": "False",
+              "output_hidden_states": "False",
+              "return_dict": "True",
+              "cache_position": "None",
+              "num_patches": "None",
+              "patch_pixel_values": "None",
+              "patch_newline_mask": "None"
+            }
+          },
+          "children": [
+            {
+              "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.0",
+              "inputs": {
+                "args": [
+                  {
+                    "shape": "torch.Size([1, 16, 128])",
+                    "dtype": "torch.float32",
+                    "mean": "tensor(4.7305e-04)",
+                    "std": "tensor(1.9947e-02)",
+                    "min": "tensor(-6.5568e-02)",
+                    "max": "tensor(6.4957e-02)"
+                  }
+                ],
+                "kwargs": {
+                  "attention_mask": "None",
+                  "position_ids": {
+                    "shape": "torch.Size([1, 16])",
+                    "dtype": "torch.int64"
+                  },
+                  "past_key_value": "None",
+                  "output_attentions": "False",
+                  "use_cache": "False",
+                  "cache_position": {
+                    "shape": "torch.Size([16])",
+                    "dtype": "torch.int64"
+                  },
+                  "num_patches": "None",
+                  "patch_pixel_values": "None",
+                  "patch_newline_mask": "None"
+                }
+              },
+              "children": [
+                {
+                  "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.0.input_layernorm",
+                  "inputs": {
+                    "args": [
+                      {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(4.7305e-04)",
+                        "std": "tensor(1.9947e-02)",
+                        "min": "tensor(-6.5568e-02)",
+                        "max": "tensor(6.4957e-02)"
+                      }
+                    ]
+                  },
+                  "outputs": {
+                    "shape": "torch.Size([1, 16, 128])",
+                    "dtype": "torch.float32",
+                    "mean": "tensor(4.6212e-02)",
+                    "std": "tensor(1.9751e+00)",
+                    "min": "tensor(-6.2530e+00)",
+                    "max": "tensor(6.4140e+00)"
+                  }
+                },
+                {
+                  "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.0.self_attn",
+                  "inputs": {
+                    "kwargs": {
+                      "hidden_states": {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(4.6212e-02)",
+                        "std": "tensor(1.9751e+00)",
+                        "min": "tensor(-6.2530e+00)",
+                        "max": "tensor(6.4140e+00)"
+                      },
+                      "attention_mask": "None",
+                      "position_ids": {
+                        "shape": "torch.Size([1, 16])",
+                        "dtype": "torch.int64"
+                      },
+                      "past_key_value": "None",
+                      "cache_position": {
+                        "shape": "torch.Size([16])",
+                        "dtype": "torch.int64"
+                      },
+                      "output_attentions": "False",
+                      "use_cache": "False",
+                      "num_patches": "None",
+                      "patch_pixel_values": "None",
+                      "patch_newline_mask": "None"
+                    }
+                  },
+                  "children": [
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.0.self_attn.q_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(4.6212e-02)",
+                            "std": "tensor(1.9751e+00)",
+                            "min": "tensor(-6.2530e+00)",
+                            "max": "tensor(6.4140e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-2.3519e-02)",
+                        "std": "tensor(4.4004e-01)",
+                        "min": "tensor(-1.4662e+00)",
+                        "max": "tensor(1.4641e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.0.self_attn.q_norm",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 4, 32])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(-2.3519e-02)",
+                            "std": "tensor(4.4004e-01)",
+                            "min": "tensor(-1.4662e+00)",
+                            "max": "tensor(1.4641e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 4, 32])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-1.0905e-01)",
+                        "std": "tensor(1.9975e+00)",
+                        "min": "tensor(-5.9718e+00)",
+                        "max": "tensor(6.9536e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.0.self_attn.k_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(4.6212e-02)",
+                            "std": "tensor(1.9751e+00)",
+                            "min": "tensor(-6.2530e+00)",
+                            "max": "tensor(6.4140e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(7.3618e-03)",
+                        "std": "tensor(4.3482e-01)",
+                        "min": "tensor(-1.2864e+00)",
+                        "max": "tensor(1.3453e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.0.self_attn.k_norm",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 2, 32])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(7.3618e-03)",
+                            "std": "tensor(4.3482e-01)",
+                            "min": "tensor(-1.2864e+00)",
+                            "max": "tensor(1.3453e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 2, 32])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(3.3840e-02)",
+                        "std": "tensor(2.0006e+00)",
+                        "min": "tensor(-6.1313e+00)",
+                        "max": "tensor(5.8917e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.0.self_attn.v_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(4.6212e-02)",
+                            "std": "tensor(1.9751e+00)",
+                            "min": "tensor(-6.2530e+00)",
+                            "max": "tensor(6.4140e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(1.0331e-03)",
+                        "std": "tensor(4.5051e-01)",
+                        "min": "tensor(-1.4301e+00)",
+                        "max": "tensor(1.4627e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.0.self_attn.g_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(4.6212e-02)",
+                            "std": "tensor(1.9751e+00)",
+                            "min": "tensor(-6.2530e+00)",
+                            "max": "tensor(6.4140e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 4])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(4.2372e-02)",
+                        "std": "tensor(4.1728e-01)",
+                        "min": "tensor(-8.7279e-01)",
+                        "max": "tensor(9.8197e-01)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.0.self_attn.rotary_emb",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(4.6212e-02)",
+                            "std": "tensor(1.9751e+00)",
+                            "min": "tensor(-6.2530e+00)",
+                            "max": "tensor(6.4140e+00)"
+                          },
+                          {
+                            "shape": "torch.Size([1, 16])",
+                            "dtype": "torch.int64"
+                          }
+                        ]
+                      },
+                      "outputs": [
+                        {
+                          "shape": "torch.Size([1, 16, 32])",
+                          "dtype": "torch.float32",
+                          "mean": "tensor(7.2696e-01)",
+                          "std": "tensor(5.4210e-01)",
+                          "min": "tensor(-9.9979e-01)",
+                          "max": "tensor(1.0000e+00)"
+                        },
+                        {
+                          "shape": "torch.Size([1, 16, 32])",
+                          "dtype": "torch.float32",
+                          "mean": "tensor(1.6823e-01)",
+                          "std": "tensor(3.8759e-01)",
+                          "min": "tensor(-9.9999e-01)",
+                          "max": "tensor(9.9995e-01)"
+                        }
+                      ]
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.0.self_attn.o_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(9.5035e-03)",
+                            "std": "tensor(1.8540e-01)",
+                            "min": "tensor(-7.2591e-01)",
+                            "max": "tensor(7.9768e-01)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-2.2031e-03)",
+                        "std": "tensor(3.9702e-02)",
+                        "min": "tensor(-1.5515e-01)",
+                        "max": "tensor(1.5592e-01)"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.0.post_attention_layernorm",
+                  "inputs": {
+                    "args": [
+                      {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-1.7300e-03)",
+                        "std": "tensor(4.3897e-02)",
+                        "min": "tensor(-1.5733e-01)",
+                        "max": "tensor(1.5896e-01)"
+                      }
+                    ]
+                  },
+                  "outputs": {
+                    "shape": "torch.Size([1, 16, 128])",
+                    "dtype": "torch.float32",
+                    "mean": "tensor(-7.4362e-02)",
+                    "std": "tensor(1.9936e+00)",
+                    "min": "tensor(-6.6895e+00)",
+                    "max": "tensor(7.1696e+00)"
+                  }
+                },
+                {
+                  "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.0.mlp",
+                  "inputs": {
+                    "args": [
+                      {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-7.4362e-02)",
+                        "std": "tensor(1.9936e+00)",
+                        "min": "tensor(-6.6895e+00)",
+                        "max": "tensor(7.1696e+00)"
+                      }
+                    ]
+                  },
+                  "children": [
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.0.mlp.up_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(-7.4362e-02)",
+                            "std": "tensor(1.9936e+00)",
+                            "min": "tensor(-6.6895e+00)",
+                            "max": "tensor(7.1696e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 256])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(2.9991e-02)",
+                        "std": "tensor(4.6115e-01)",
+                        "min": "tensor(-1.7187e+00)",
+                        "max": "tensor(1.6147e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.0.mlp.gate_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(-7.4362e-02)",
+                            "std": "tensor(1.9936e+00)",
+                            "min": "tensor(-6.6895e+00)",
+                            "max": "tensor(7.1696e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 256])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-1.4341e-03)",
+                        "std": "tensor(4.5988e-01)",
+                        "min": "tensor(-1.7641e+00)",
+                        "max": "tensor(1.8750e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.0.mlp.act_fn",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 256])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(-1.4341e-03)",
+                            "std": "tensor(4.5988e-01)",
+                            "min": "tensor(-1.7641e+00)",
+                            "max": "tensor(1.8750e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 256])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(4.9579e-02)",
+                        "std": "tensor(2.4177e-01)",
+                        "min": "tensor(-2.7845e-01)",
+                        "max": "tensor(1.6256e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.0.mlp.down_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 256])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(2.0458e-03)",
+                            "std": "tensor(1.1772e-01)",
+                            "min": "tensor(-1.5157e+00)",
+                            "max": "tensor(1.4047e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(1.5563e-03)",
+                        "std": "tensor(3.7820e-02)",
+                        "min": "tensor(-1.7901e-01)",
+                        "max": "tensor(1.5952e-01)"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.1",
+              "inputs": {
+                "args": [
+                  {
+                    "shape": "torch.Size([1, 16, 128])",
+                    "dtype": "torch.float32",
+                    "mean": "tensor(-1.7368e-04)",
+                    "std": "tensor(5.7498e-02)",
+                    "min": "tensor(-2.0130e-01)",
+                    "max": "tensor(1.9016e-01)"
+                  }
+                ],
+                "kwargs": {
+                  "attention_mask": "None",
+                  "position_ids": {
+                    "shape": "torch.Size([1, 16])",
+                    "dtype": "torch.int64"
+                  },
+                  "past_key_value": "None",
+                  "output_attentions": "False",
+                  "use_cache": "False",
+                  "cache_position": {
+                    "shape": "torch.Size([16])",
+                    "dtype": "torch.int64"
+                  },
+                  "num_patches": "None",
+                  "patch_pixel_values": "None",
+                  "patch_newline_mask": "None"
+                }
+              },
+              "children": [
+                {
+                  "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.1.input_layernorm",
+                  "inputs": {
+                    "args": [
+                      {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-1.7368e-04)",
+                        "std": "tensor(5.7498e-02)",
+                        "min": "tensor(-2.0130e-01)",
+                        "max": "tensor(1.9016e-01)"
+                      }
+                    ]
+                  },
+                  "outputs": {
+                    "shape": "torch.Size([1, 16, 128])",
+                    "dtype": "torch.float32",
+                    "mean": "tensor(-6.8618e-03)",
+                    "std": "tensor(1.9973e+00)",
+                    "min": "tensor(-6.5960e+00)",
+                    "max": "tensor(6.4808e+00)"
+                  }
+                },
+                {
+                  "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.1.self_attn",
+                  "inputs": {
+                    "kwargs": {
+                      "hidden_states": {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-6.8618e-03)",
+                        "std": "tensor(1.9973e+00)",
+                        "min": "tensor(-6.5960e+00)",
+                        "max": "tensor(6.4808e+00)"
+                      },
+                      "attention_mask": "None",
+                      "position_ids": {
+                        "shape": "torch.Size([1, 16])",
+                        "dtype": "torch.int64"
+                      },
+                      "past_key_value": "None",
+                      "cache_position": {
+                        "shape": "torch.Size([16])",
+                        "dtype": "torch.int64"
+                      },
+                      "output_attentions": "False",
+                      "use_cache": "False",
+                      "num_patches": "None",
+                      "patch_pixel_values": "None",
+                      "patch_newline_mask": "None"
+                    }
+                  },
+                  "children": [
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.1.self_attn.q_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(-6.8618e-03)",
+                            "std": "tensor(1.9973e+00)",
+                            "min": "tensor(-6.5960e+00)",
+                            "max": "tensor(6.4808e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-6.7955e-03)",
+                        "std": "tensor(4.4402e-01)",
+                        "min": "tensor(-1.5154e+00)",
+                        "max": "tensor(1.4220e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.1.self_attn.q_norm",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 4, 32])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(-6.7955e-03)",
+                            "std": "tensor(4.4402e-01)",
+                            "min": "tensor(-1.5154e+00)",
+                            "max": "tensor(1.4220e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 4, 32])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-3.2219e-02)",
+                        "std": "tensor(2.0002e+00)",
+                        "min": "tensor(-6.0259e+00)",
+                        "max": "tensor(5.7605e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.1.self_attn.k_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(-6.8618e-03)",
+                            "std": "tensor(1.9973e+00)",
+                            "min": "tensor(-6.5960e+00)",
+                            "max": "tensor(6.4808e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-7.3162e-03)",
+                        "std": "tensor(4.5479e-01)",
+                        "min": "tensor(-1.3432e+00)",
+                        "max": "tensor(1.7613e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.1.self_attn.k_norm",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 2, 32])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(-7.3162e-03)",
+                            "std": "tensor(4.5479e-01)",
+                            "min": "tensor(-1.3432e+00)",
+                            "max": "tensor(1.7613e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 2, 32])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-2.4891e-02)",
+                        "std": "tensor(2.0008e+00)",
+                        "min": "tensor(-5.9802e+00)",
+                        "max": "tensor(6.0388e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.1.self_attn.v_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(-6.8618e-03)",
+                            "std": "tensor(1.9973e+00)",
+                            "min": "tensor(-6.5960e+00)",
+                            "max": "tensor(6.4808e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(7.9725e-04)",
+                        "std": "tensor(4.3550e-01)",
+                        "min": "tensor(-1.4907e+00)",
+                        "max": "tensor(1.2108e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.1.self_attn.g_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(-6.8618e-03)",
+                            "std": "tensor(1.9973e+00)",
+                            "min": "tensor(-6.5960e+00)",
+                            "max": "tensor(6.4808e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 4])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(9.7388e-03)",
+                        "std": "tensor(4.3557e-01)",
+                        "min": "tensor(-8.3640e-01)",
+                        "max": "tensor(1.0225e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.1.self_attn.rotary_emb",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(-6.8618e-03)",
+                            "std": "tensor(1.9973e+00)",
+                            "min": "tensor(-6.5960e+00)",
+                            "max": "tensor(6.4808e+00)"
+                          },
+                          {
+                            "shape": "torch.Size([1, 16])",
+                            "dtype": "torch.int64"
+                          }
+                        ]
+                      },
+                      "outputs": [
+                        {
+                          "shape": "torch.Size([1, 16, 32])",
+                          "dtype": "torch.float32",
+                          "mean": "tensor(7.2696e-01)",
+                          "std": "tensor(5.4210e-01)",
+                          "min": "tensor(-9.9979e-01)",
+                          "max": "tensor(1.0000e+00)"
+                        },
+                        {
+                          "shape": "torch.Size([1, 16, 32])",
+                          "dtype": "torch.float32",
+                          "mean": "tensor(1.6823e-01)",
+                          "std": "tensor(3.8759e-01)",
+                          "min": "tensor(-9.9999e-01)",
+                          "max": "tensor(9.9995e-01)"
+                        }
+                      ]
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.1.self_attn.o_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(3.8024e-03)",
+                            "std": "tensor(1.8504e-01)",
+                            "min": "tensor(-8.4308e-01)",
+                            "max": "tensor(7.8215e-01)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(3.6244e-03)",
+                        "std": "tensor(4.1894e-02)",
+                        "min": "tensor(-1.3887e-01)",
+                        "max": "tensor(1.5031e-01)"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.1.post_attention_layernorm",
+                  "inputs": {
+                    "args": [
+                      {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(3.4508e-03)",
+                        "std": "tensor(7.1841e-02)",
+                        "min": "tensor(-2.4069e-01)",
+                        "max": "tensor(2.6117e-01)"
+                      }
+                    ]
+                  },
+                  "outputs": {
+                    "shape": "torch.Size([1, 16, 128])",
+                    "dtype": "torch.float32",
+                    "mean": "tensor(9.2785e-02)",
+                    "std": "tensor(1.9963e+00)",
+                    "min": "tensor(-6.9604e+00)",
+                    "max": "tensor(6.5911e+00)"
+                  }
+                },
+                {
+                  "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.1.mlp",
+                  "inputs": {
+                    "args": [
+                      {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(9.2785e-02)",
+                        "std": "tensor(1.9963e+00)",
+                        "min": "tensor(-6.9604e+00)",
+                        "max": "tensor(6.5911e+00)"
+                      }
+                    ]
+                  },
+                  "children": [
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.1.mlp.up_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(9.2785e-02)",
+                            "std": "tensor(1.9963e+00)",
+                            "min": "tensor(-6.9604e+00)",
+                            "max": "tensor(6.5911e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 256])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-1.6273e-02)",
+                        "std": "tensor(4.4708e-01)",
+                        "min": "tensor(-1.4762e+00)",
+                        "max": "tensor(1.4796e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.1.mlp.gate_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(9.2785e-02)",
+                            "std": "tensor(1.9963e+00)",
+                            "min": "tensor(-6.9604e+00)",
+                            "max": "tensor(6.5911e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 256])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-2.8654e-03)",
+                        "std": "tensor(4.5915e-01)",
+                        "min": "tensor(-2.2803e+00)",
+                        "max": "tensor(1.4692e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.1.mlp.act_fn",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 256])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(-2.8654e-03)",
+                            "std": "tensor(4.5915e-01)",
+                            "min": "tensor(-2.2803e+00)",
+                            "max": "tensor(1.4692e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 256])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(4.8757e-02)",
+                        "std": "tensor(2.3951e-01)",
+                        "min": "tensor(-2.7846e-01)",
+                        "max": "tensor(1.1943e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.1.mlp.down_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 256])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(-2.0377e-04)",
+                            "std": "tensor(1.0770e-01)",
+                            "min": "tensor(-7.5291e-01)",
+                            "max": "tensor(9.2271e-01)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(1.9909e-03)",
+                        "std": "tensor(3.4310e-02)",
+                        "min": "tensor(-1.0719e-01)",
+                        "max": "tensor(1.0430e-01)"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2",
+              "inputs": {
+                "args": [
+                  {
+                    "shape": "torch.Size([1, 16, 128])",
+                    "dtype": "torch.float32",
+                    "mean": "tensor(5.4417e-03)",
+                    "std": "tensor(7.9468e-02)",
+                    "min": "tensor(-2.5297e-01)",
+                    "max": "tensor(2.8281e-01)"
+                  }
+                ],
+                "kwargs": {
+                  "attention_mask": "None",
+                  "position_ids": {
+                    "shape": "torch.Size([1, 16])",
+                    "dtype": "torch.int64"
+                  },
+                  "past_key_value": "None",
+                  "output_attentions": "False",
+                  "use_cache": "False",
+                  "cache_position": {
+                    "shape": "torch.Size([16])",
+                    "dtype": "torch.int64"
+                  },
+                  "num_patches": "None",
+                  "patch_pixel_values": "None",
+                  "patch_newline_mask": "None"
+                }
+              },
+              "children": [
+                {
+                  "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.input_layernorm",
+                  "inputs": {
+                    "args": [
+                      {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(5.4417e-03)",
+                        "std": "tensor(7.9468e-02)",
+                        "min": "tensor(-2.5297e-01)",
+                        "max": "tensor(2.8281e-01)"
+                      }
+                    ]
+                  },
+                  "outputs": {
+                    "shape": "torch.Size([1, 16, 128])",
+                    "dtype": "torch.float32",
+                    "mean": "tensor(1.3594e-01)",
+                    "std": "tensor(1.9942e+00)",
+                    "min": "tensor(-6.0313e+00)",
+                    "max": "tensor(6.5269e+00)"
+                  }
+                },
+                {
+                  "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.self_attn",
+                  "inputs": {
+                    "kwargs": {
+                      "hidden_states": {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(1.3594e-01)",
+                        "std": "tensor(1.9942e+00)",
+                        "min": "tensor(-6.0313e+00)",
+                        "max": "tensor(6.5269e+00)"
+                      },
+                      "attention_mask": "None",
+                      "position_ids": {
+                        "shape": "torch.Size([1, 16])",
+                        "dtype": "torch.int64"
+                      },
+                      "past_key_value": "None",
+                      "cache_position": {
+                        "shape": "torch.Size([16])",
+                        "dtype": "torch.int64"
+                      },
+                      "output_attentions": "False",
+                      "use_cache": "False",
+                      "num_patches": "None",
+                      "patch_pixel_values": "None",
+                      "patch_newline_mask": "None"
+                    }
+                  },
+                  "children": [
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.self_attn.q_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.3594e-01)",
+                            "std": "tensor(1.9942e+00)",
+                            "min": "tensor(-6.0313e+00)",
+                            "max": "tensor(6.5269e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-2.4408e-03)",
+                        "std": "tensor(4.5584e-01)",
+                        "min": "tensor(-1.4659e+00)",
+                        "max": "tensor(1.3639e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.self_attn.q_norm",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 4, 32])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(-2.4408e-03)",
+                            "std": "tensor(4.5584e-01)",
+                            "min": "tensor(-1.4659e+00)",
+                            "max": "tensor(1.3639e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 4, 32])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(3.4910e-03)",
+                        "std": "tensor(2.0004e+00)",
+                        "min": "tensor(-5.6482e+00)",
+                        "max": "tensor(6.3150e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.self_attn.k_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.3594e-01)",
+                            "std": "tensor(1.9942e+00)",
+                            "min": "tensor(-6.0313e+00)",
+                            "max": "tensor(6.5269e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(1.6156e-02)",
+                        "std": "tensor(4.5866e-01)",
+                        "min": "tensor(-1.4977e+00)",
+                        "max": "tensor(1.6789e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.self_attn.k_norm",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 2, 32])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.6156e-02)",
+                            "std": "tensor(4.5866e-01)",
+                            "min": "tensor(-1.4977e+00)",
+                            "max": "tensor(1.6789e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 2, 32])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(6.8606e-02)",
+                        "std": "tensor(1.9997e+00)",
+                        "min": "tensor(-5.5673e+00)",
+                        "max": "tensor(6.7344e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.self_attn.v_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.3594e-01)",
+                            "std": "tensor(1.9942e+00)",
+                            "min": "tensor(-6.0313e+00)",
+                            "max": "tensor(6.5269e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-1.3120e-02)",
+                        "std": "tensor(4.6134e-01)",
+                        "min": "tensor(-1.5604e+00)",
+                        "max": "tensor(1.5721e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.self_attn.g_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.3594e-01)",
+                            "std": "tensor(1.9942e+00)",
+                            "min": "tensor(-6.0313e+00)",
+                            "max": "tensor(6.5269e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 4])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-1.5069e-02)",
+                        "std": "tensor(4.0690e-01)",
+                        "min": "tensor(-9.9558e-01)",
+                        "max": "tensor(8.1970e-01)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.self_attn.rotary_emb",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.3594e-01)",
+                            "std": "tensor(1.9942e+00)",
+                            "min": "tensor(-6.0313e+00)",
+                            "max": "tensor(6.5269e+00)"
+                          },
+                          {
+                            "shape": "torch.Size([1, 16])",
+                            "dtype": "torch.int64"
+                          }
+                        ]
+                      },
+                      "outputs": [
+                        {
+                          "shape": "torch.Size([1, 16, 32])",
+                          "dtype": "torch.float32",
+                          "mean": "tensor(7.2696e-01)",
+                          "std": "tensor(5.4210e-01)",
+                          "min": "tensor(-9.9979e-01)",
+                          "max": "tensor(1.0000e+00)"
+                        },
+                        {
+                          "shape": "torch.Size([1, 16, 32])",
+                          "dtype": "torch.float32",
+                          "mean": "tensor(1.6823e-01)",
+                          "std": "tensor(3.8759e-01)",
+                          "min": "tensor(-9.9999e-01)",
+                          "max": "tensor(9.9995e-01)"
+                        }
+                      ]
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.self_attn.o_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(-3.6699e-03)",
+                            "std": "tensor(2.1714e-01)",
+                            "min": "tensor(-8.3249e-01)",
+                            "max": "tensor(8.4303e-01)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-1.0548e-03)",
+                        "std": "tensor(5.0598e-02)",
+                        "min": "tensor(-1.6268e-01)",
+                        "max": "tensor(1.8779e-01)"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.post_attention_layernorm",
+                  "inputs": {
+                    "args": [
+                      {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(4.3869e-03)",
+                        "std": "tensor(9.4408e-02)",
+                        "min": "tensor(-3.8043e-01)",
+                        "max": "tensor(3.8470e-01)"
+                      }
+                    ]
+                  },
+                  "outputs": {
+                    "shape": "torch.Size([1, 16, 128])",
+                    "dtype": "torch.float32",
+                    "mean": "tensor(9.2836e-02)",
+                    "std": "tensor(1.9972e+00)",
+                    "min": "tensor(-6.2602e+00)",
+                    "max": "tensor(6.8136e+00)"
+                  }
+                },
+                {
+                  "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.share_expert",
+                  "inputs": {
+                    "args": [
+                      {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(9.2836e-02)",
+                        "std": "tensor(1.9972e+00)",
+                        "min": "tensor(-6.2602e+00)",
+                        "max": "tensor(6.8136e+00)"
+                      }
+                    ]
+                  },
+                  "children": [
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.share_expert.up_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(9.2836e-02)",
+                            "std": "tensor(1.9972e+00)",
+                            "min": "tensor(-6.2602e+00)",
+                            "max": "tensor(6.8136e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(4.1963e-02)",
+                        "std": "tensor(4.5754e-01)",
+                        "min": "tensor(-1.6204e+00)",
+                        "max": "tensor(1.2792e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.share_expert.gate_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(9.2836e-02)",
+                            "std": "tensor(1.9972e+00)",
+                            "min": "tensor(-6.2602e+00)",
+                            "max": "tensor(6.8136e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-2.4406e-02)",
+                        "std": "tensor(4.5548e-01)",
+                        "min": "tensor(-1.4058e+00)",
+                        "max": "tensor(1.2049e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.share_expert.act_fn",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(-2.4406e-02)",
+                            "std": "tensor(4.5548e-01)",
+                            "min": "tensor(-1.4058e+00)",
+                            "max": "tensor(1.2049e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(3.7534e-02)",
+                        "std": "tensor(2.2979e-01)",
+                        "min": "tensor(-2.7844e-01)",
+                        "max": "tensor(9.2709e-01)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.share_expert.down_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(-2.2064e-04)",
+                            "std": "tensor(1.0463e-01)",
+                            "min": "tensor(-8.0162e-01)",
+                            "max": "tensor(5.5453e-01)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(7.4711e-04)",
+                        "std": "tensor(1.7320e-02)",
+                        "min": "tensor(-6.3568e-02)",
+                        "max": "tensor(7.4426e-02)"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe",
+                  "inputs": {
+                    "args": [
+                      {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(9.2836e-02)",
+                        "std": "tensor(1.9972e+00)",
+                        "min": "tensor(-6.2602e+00)",
+                        "max": "tensor(6.8136e+00)"
+                      }
+                    ]
+                  },
+                  "children": [
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.up_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([12, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(8.1357e-02)",
+                            "std": "tensor(1.9979e+00)",
+                            "min": "tensor(-6.2602e+00)",
+                            "max": "tensor(6.3305e+00)"
+                          },
+                          "0"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([12, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.gate_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([12, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(8.1357e-02)",
+                            "std": "tensor(1.9979e+00)",
+                            "min": "tensor(-6.2602e+00)",
+                            "max": "tensor(6.3305e+00)"
+                          },
+                          "0"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([12, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.act_fn",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([12, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([12, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.down_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([12, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          },
+                          "0"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([12, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.up_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([8, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(6.8029e-02)",
+                            "std": "tensor(1.9986e+00)",
+                            "min": "tensor(-6.2602e+00)",
+                            "max": "tensor(6.8136e+00)"
+                          },
+                          "1"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([8, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.gate_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([8, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(6.8029e-02)",
+                            "std": "tensor(1.9986e+00)",
+                            "min": "tensor(-6.2602e+00)",
+                            "max": "tensor(6.8136e+00)"
+                          },
+                          "1"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([8, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.act_fn",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([8, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([8, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.down_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([8, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          },
+                          "1"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([8, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.up_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([4, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.8098e-01)",
+                            "std": "tensor(1.9926e+00)",
+                            "min": "tensor(-5.7090e+00)",
+                            "max": "tensor(5.7010e+00)"
+                          },
+                          "2"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([4, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.gate_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([4, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.8098e-01)",
+                            "std": "tensor(1.9926e+00)",
+                            "min": "tensor(-5.7090e+00)",
+                            "max": "tensor(5.7010e+00)"
+                          },
+                          "2"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([4, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.act_fn",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([4, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([4, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.down_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([4, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          },
+                          "2"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([4, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.up_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([8, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(9.0788e-02)",
+                            "std": "tensor(1.9977e+00)",
+                            "min": "tensor(-6.1947e+00)",
+                            "max": "tensor(6.8136e+00)"
+                          },
+                          "3"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([8, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.gate_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([8, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(9.0788e-02)",
+                            "std": "tensor(1.9977e+00)",
+                            "min": "tensor(-6.1947e+00)",
+                            "max": "tensor(6.8136e+00)"
+                          },
+                          "3"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([8, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.act_fn",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([8, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([8, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.down_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([8, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          },
+                          "3"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([8, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3",
+              "inputs": {
+                "args": [
+                  {
+                    "shape": "torch.Size([1, 16, 128])",
+                    "dtype": "torch.float32",
+                    "mean": "tensor(5.1340e-03)",
+                    "std": "tensor(9.5796e-02)",
+                    "min": "tensor(-3.7628e-01)",
+                    "max": "tensor(3.5724e-01)"
+                  }
+                ],
+                "kwargs": {
+                  "attention_mask": "None",
+                  "position_ids": {
+                    "shape": "torch.Size([1, 16])",
+                    "dtype": "torch.int64"
+                  },
+                  "past_key_value": "None",
+                  "output_attentions": "False",
+                  "use_cache": "False",
+                  "cache_position": {
+                    "shape": "torch.Size([16])",
+                    "dtype": "torch.int64"
+                  },
+                  "num_patches": "None",
+                  "patch_pixel_values": "None",
+                  "patch_newline_mask": "None"
+                }
+              },
+              "children": [
+                {
+                  "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.input_layernorm",
+                  "inputs": {
+                    "args": [
+                      {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(5.1340e-03)",
+                        "std": "tensor(9.5796e-02)",
+                        "min": "tensor(-3.7628e-01)",
+                        "max": "tensor(3.5724e-01)"
+                      }
+                    ]
+                  },
+                  "outputs": {
+                    "shape": "torch.Size([1, 16, 128])",
+                    "dtype": "torch.float32",
+                    "mean": "tensor(1.0446e-01)",
+                    "std": "tensor(1.9966e+00)",
+                    "min": "tensor(-6.3515e+00)",
+                    "max": "tensor(6.8793e+00)"
+                  }
+                },
+                {
+                  "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.self_attn",
+                  "inputs": {
+                    "kwargs": {
+                      "hidden_states": {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(1.0446e-01)",
+                        "std": "tensor(1.9966e+00)",
+                        "min": "tensor(-6.3515e+00)",
+                        "max": "tensor(6.8793e+00)"
+                      },
+                      "attention_mask": "None",
+                      "position_ids": {
+                        "shape": "torch.Size([1, 16])",
+                        "dtype": "torch.int64"
+                      },
+                      "past_key_value": "None",
+                      "cache_position": {
+                        "shape": "torch.Size([16])",
+                        "dtype": "torch.int64"
+                      },
+                      "output_attentions": "False",
+                      "use_cache": "False",
+                      "num_patches": "None",
+                      "patch_pixel_values": "None",
+                      "patch_newline_mask": "None"
+                    }
+                  },
+                  "children": [
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.self_attn.q_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.0446e-01)",
+                            "std": "tensor(1.9966e+00)",
+                            "min": "tensor(-6.3515e+00)",
+                            "max": "tensor(6.8793e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(5.1939e-03)",
+                        "std": "tensor(4.5249e-01)",
+                        "min": "tensor(-1.3459e+00)",
+                        "max": "tensor(1.8373e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.self_attn.q_norm",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 4, 32])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(5.1939e-03)",
+                            "std": "tensor(4.5249e-01)",
+                            "min": "tensor(-1.3459e+00)",
+                            "max": "tensor(1.8373e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 4, 32])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(2.6023e-02)",
+                        "std": "tensor(2.0003e+00)",
+                        "min": "tensor(-5.9153e+00)",
+                        "max": "tensor(7.0643e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.self_attn.k_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.0446e-01)",
+                            "std": "tensor(1.9966e+00)",
+                            "min": "tensor(-6.3515e+00)",
+                            "max": "tensor(6.8793e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(2.2339e-02)",
+                        "std": "tensor(4.3434e-01)",
+                        "min": "tensor(-1.2614e+00)",
+                        "max": "tensor(1.3318e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.self_attn.k_norm",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 2, 32])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(2.2339e-02)",
+                            "std": "tensor(4.3434e-01)",
+                            "min": "tensor(-1.2614e+00)",
+                            "max": "tensor(1.3318e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 2, 32])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(1.0642e-01)",
+                        "std": "tensor(1.9981e+00)",
+                        "min": "tensor(-5.4599e+00)",
+                        "max": "tensor(6.1780e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.self_attn.v_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.0446e-01)",
+                            "std": "tensor(1.9966e+00)",
+                            "min": "tensor(-6.3515e+00)",
+                            "max": "tensor(6.8793e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(2.7907e-02)",
+                        "std": "tensor(4.5124e-01)",
+                        "min": "tensor(-1.4821e+00)",
+                        "max": "tensor(1.5181e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.self_attn.g_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.0446e-01)",
+                            "std": "tensor(1.9966e+00)",
+                            "min": "tensor(-6.3515e+00)",
+                            "max": "tensor(6.8793e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 4])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-3.7658e-02)",
+                        "std": "tensor(5.1155e-01)",
+                        "min": "tensor(-1.4615e+00)",
+                        "max": "tensor(1.0417e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.self_attn.rotary_emb",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.0446e-01)",
+                            "std": "tensor(1.9966e+00)",
+                            "min": "tensor(-6.3515e+00)",
+                            "max": "tensor(6.8793e+00)"
+                          },
+                          {
+                            "shape": "torch.Size([1, 16])",
+                            "dtype": "torch.int64"
+                          }
+                        ]
+                      },
+                      "outputs": [
+                        {
+                          "shape": "torch.Size([1, 16, 32])",
+                          "dtype": "torch.float32",
+                          "mean": "tensor(7.2696e-01)",
+                          "std": "tensor(5.4210e-01)",
+                          "min": "tensor(-9.9979e-01)",
+                          "max": "tensor(1.0000e+00)"
+                        },
+                        {
+                          "shape": "torch.Size([1, 16, 32])",
+                          "dtype": "torch.float32",
+                          "mean": "tensor(1.6823e-01)",
+                          "std": "tensor(3.8759e-01)",
+                          "min": "tensor(-9.9999e-01)",
+                          "max": "tensor(9.9995e-01)"
+                        }
+                      ]
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.self_attn.o_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(-3.1745e-03)",
+                            "std": "tensor(2.0968e-01)",
+                            "min": "tensor(-8.5962e-01)",
+                            "max": "tensor(8.0182e-01)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(8.3624e-04)",
+                        "std": "tensor(4.4816e-02)",
+                        "min": "tensor(-1.6437e-01)",
+                        "max": "tensor(1.2785e-01)"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.post_attention_layernorm",
+                  "inputs": {
+                    "args": [
+                      {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(5.9702e-03)",
+                        "std": "tensor(1.0780e-01)",
+                        "min": "tensor(-4.6037e-01)",
+                        "max": "tensor(3.8914e-01)"
+                      }
+                    ]
+                  },
+                  "outputs": {
+                    "shape": "torch.Size([1, 16, 128])",
+                    "dtype": "torch.float32",
+                    "mean": "tensor(1.0888e-01)",
+                    "std": "tensor(1.9966e+00)",
+                    "min": "tensor(-6.6472e+00)",
+                    "max": "tensor(5.6187e+00)"
+                  }
+                },
+                {
+                  "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.share_expert",
+                  "inputs": {
+                    "args": [
+                      {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(1.0888e-01)",
+                        "std": "tensor(1.9966e+00)",
+                        "min": "tensor(-6.6472e+00)",
+                        "max": "tensor(5.6187e+00)"
+                      }
+                    ]
+                  },
+                  "children": [
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.share_expert.up_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.0888e-01)",
+                            "std": "tensor(1.9966e+00)",
+                            "min": "tensor(-6.6472e+00)",
+                            "max": "tensor(5.6187e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(-1.8435e-02)",
+                        "std": "tensor(4.5800e-01)",
+                        "min": "tensor(-1.9302e+00)",
+                        "max": "tensor(1.2662e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.share_expert.gate_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.0888e-01)",
+                            "std": "tensor(1.9966e+00)",
+                            "min": "tensor(-6.6472e+00)",
+                            "max": "tensor(5.6187e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(1.8059e-02)",
+                        "std": "tensor(4.3371e-01)",
+                        "min": "tensor(-1.4595e+00)",
+                        "max": "tensor(1.3926e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.share_expert.act_fn",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.8059e-02)",
+                            "std": "tensor(4.3371e-01)",
+                            "min": "tensor(-1.4595e+00)",
+                            "max": "tensor(1.3926e+00)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(5.4059e-02)",
+                        "std": "tensor(2.2664e-01)",
+                        "min": "tensor(-2.7748e-01)",
+                        "max": "tensor(1.1155e+00)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.share_expert.down_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([1, 16, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.0112e-03)",
+                            "std": "tensor(1.1118e-01)",
+                            "min": "tensor(-8.4347e-01)",
+                            "max": "tensor(6.0576e-01)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(1.7926e-04)",
+                        "std": "tensor(1.8200e-02)",
+                        "min": "tensor(-6.7225e-02)",
+                        "max": "tensor(6.4259e-02)"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe",
+                  "inputs": {
+                    "args": [
+                      {
+                        "shape": "torch.Size([1, 16, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(1.0888e-01)",
+                        "std": "tensor(1.9966e+00)",
+                        "min": "tensor(-6.6472e+00)",
+                        "max": "tensor(5.6187e+00)"
+                      }
+                    ]
+                  },
+                  "children": [
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.up_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([4, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.4590e-01)",
+                            "std": "tensor(1.9957e+00)",
+                            "min": "tensor(-5.3104e+00)",
+                            "max": "tensor(5.5681e+00)"
+                          },
+                          "0"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([4, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.gate_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([4, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.4590e-01)",
+                            "std": "tensor(1.9957e+00)",
+                            "min": "tensor(-5.3104e+00)",
+                            "max": "tensor(5.5681e+00)"
+                          },
+                          "0"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([4, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.act_fn",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([4, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([4, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.down_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([4, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          },
+                          "0"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([4, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.up_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([11, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.2051e-01)",
+                            "std": "tensor(1.9962e+00)",
+                            "min": "tensor(-6.6472e+00)",
+                            "max": "tensor(5.6187e+00)"
+                          },
+                          "1"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([11, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.gate_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([11, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.2051e-01)",
+                            "std": "tensor(1.9962e+00)",
+                            "min": "tensor(-6.6472e+00)",
+                            "max": "tensor(5.6187e+00)"
+                          },
+                          "1"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([11, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.act_fn",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([11, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([11, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.down_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([11, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          },
+                          "1"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([11, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.up_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([5, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(5.4237e-02)",
+                            "std": "tensor(1.9999e+00)",
+                            "min": "tensor(-5.9778e+00)",
+                            "max": "tensor(5.5971e+00)"
+                          },
+                          "2"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([5, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.gate_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([5, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(5.4237e-02)",
+                            "std": "tensor(1.9999e+00)",
+                            "min": "tensor(-5.9778e+00)",
+                            "max": "tensor(5.5971e+00)"
+                          },
+                          "2"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([5, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.act_fn",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([5, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([5, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.down_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([5, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          },
+                          "2"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([5, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.up_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([12, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.0865e-01)",
+                            "std": "tensor(1.9968e+00)",
+                            "min": "tensor(-6.6472e+00)",
+                            "max": "tensor(5.6187e+00)"
+                          },
+                          "3"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([12, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.gate_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([12, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(1.0865e-01)",
+                            "std": "tensor(1.9968e+00)",
+                            "min": "tensor(-6.6472e+00)",
+                            "max": "tensor(5.6187e+00)"
+                          },
+                          "3"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([12, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.act_fn",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([12, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([12, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.down_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([12, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          },
+                          "3"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([12, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "module_path": "Step3p7ForConditionalGeneration.model.language_model.norm",
+              "inputs": {
+                "args": [
+                  {
+                    "shape": "torch.Size([1, 16, 128])",
+                    "dtype": "torch.float32",
+                    "mean": "tensor(6.1495e-03)",
+                    "std": "tensor(1.0843e-01)",
+                    "min": "tensor(-4.5211e-01)",
+                    "max": "tensor(3.9841e-01)"
+                  }
+                ]
+              },
+              "outputs": {
+                "shape": "torch.Size([1, 16, 128])",
+                "dtype": "torch.float32",
+                "mean": "tensor(1.1075e-01)",
+                "std": "tensor(1.9965e+00)",
+                "min": "tensor(-6.5045e+00)",
+                "max": "tensor(5.7318e+00)"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "module_path": "Step3p7ForConditionalGeneration.lm_head",
+      "inputs": {
+        "args": [
+          {
+            "shape": "torch.Size([1, 16, 128])",
+            "dtype": "torch.float32",
+            "mean": "tensor(1.1075e-01)",
+            "std": "tensor(1.9965e+00)",
+            "min": "tensor(-6.5045e+00)",
+            "max": "tensor(5.7318e+00)"
+          }
+        ]
+      },
+      "outputs": {
+        "shape": "torch.Size([1, 16, 512])",
+        "dtype": "torch.float32",
+        "mean": "tensor(-6.8069e-03)",
+        "std": "tensor(4.5325e-01)",
+        "min": "tensor(-1.8110e+00)",
+        "max": "tensor(1.6207e+00)"
+      }
+    }
+  ]
+}
