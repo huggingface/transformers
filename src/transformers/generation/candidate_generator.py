@@ -1484,14 +1484,14 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         # right to take the new token as well. Say the main model just had token positions [2, 3] as input, the tensors
         # contains the data for position [0, 1, 2, 3, 4], i.e. full inputs + new drafted token from last position 3 that was processed.
         # We want to slice to get data for positions [3, 4] for the 1st mtp layer, i.e. same as main model, shifted by 1 to the right.
-        num_last_main_model_toks = n_last_matches + 1 if not self.is_main_model_prefill else input_ids.shape[1] - 1
-        mtp_input_ids = input_ids[:, -num_last_main_model_toks:]
-        mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_toks:]
-        mtp_attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_toks:]
+        num_last_main_model_tokens = n_last_matches + 1 if not self.is_main_model_prefill else input_ids.shape[1] - 1
+        mtp_input_ids = input_ids[:, -num_last_main_model_tokens:]
+        mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens:]
+        mtp_attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens:]
 
         # The hidden states have seq_len equal to the last main model's forward pass on all the candidates. We need the
         # last hidden states of only the last validated tokens
-        last_hidden_states = last_hidden_states[:, :num_last_main_model_toks].to(self.device)
+        last_hidden_states = last_hidden_states[:, :num_last_main_model_tokens].to(self.device)
 
         candidate_ids, candidate_logits = self.mtp_model(
             input_ids=mtp_input_ids,
@@ -1513,6 +1513,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         return candidate_ids, candidate_logits
 
     def update_candidate_strategy(self, *args, **kwargs):
+        # We never update the strategy
         return
 
 
