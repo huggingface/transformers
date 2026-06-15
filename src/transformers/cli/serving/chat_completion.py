@@ -57,6 +57,11 @@ if is_serve_available():
 
         reasoning_content: str | None = None
 
+    class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
+        generation_config: str
+        seed: int
+        chat_template_kwargs: dict
+
 
 from .utils import (
     BaseGenerateManager,
@@ -75,10 +80,7 @@ if TYPE_CHECKING:
     from transformers import GenerationConfig, PreTrainedModel, PreTrainedTokenizerFast, ProcessorMixin
 
 
-class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
-    generation_config: str
-    seed: int
-    chat_template_kwargs: dict
+# Note: TransformersCompletionCreateParamsStreaming is defined inside the conditional above to avoid NameError if serve is not available.
 
 
 # Fields accepted by the OpenAI schema but not yet supported.
