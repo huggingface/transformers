@@ -13,6 +13,8 @@
 # limitations under the License.
 import unittest
 
+import numpy as np
+
 from transformers import Florence2Processor
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available
@@ -233,3 +235,41 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "<OCR_WITH_REGION>": {"quad_boxes": [[100, 100, 200, 100, 200, 200, 100, 200]], "labels": ["Hello"]}
         }
         self.assertEqual(ocr_result, EXPECTED_OCR_RESULT)
+
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        "Tests that the helper used internally in vLLM works correctly"
+
+        # Overridden -> model needs nested image structure
+        processor = self.get_processor()
+
+        if processor.tokenizer.pad_token_id is None:
+            processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
+        image_inputs = []
+        for h, w in image_sizes:
+            image_inputs.append(np.random.randint(255, size=(h, w, 3), dtype=np.uint8))
+
+        image_token = getattr(self, "image_token", "")
+        text = [f"This is an image {image_token}"] * len(image_inputs)
+        inputs = processor(
+            text=text, images=image_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+        )
+
+        num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
+        self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
+
+        # Test with two images per single text
+        text = [f"These are two images {image_token}{image_token}"] * len(image_inputs)
+        inputs = processor(
+            text=text,
+            images=[[image, image] for image in image_inputs],
+            padding=True,
+            return_mm_token_type_ids=True,
+            return_tensors="pt",
+        )
+
+        num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes * 2)
+        self.assertEqual(sum(num_image_tokens_from_call), sum(num_image_tokens_from_helper["num_image_tokens"]))

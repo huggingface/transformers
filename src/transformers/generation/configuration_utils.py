@@ -21,8 +21,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-from huggingface_hub import create_repo
-
 from .. import __version__
 from ..utils import (
     GENERATION_CONFIG_NAME,
@@ -30,6 +28,7 @@ from ..utils import (
     PushToHubMixin,
     cached_file,
     extract_commit_hash,
+    hf_api,
     is_torch_available,
     logging,
 )
@@ -146,7 +145,7 @@ class GenerationConfig(PushToHubMixin):
         max_time (`float`, *optional*):
             The maximum amount of time you allow the computation to run for in seconds. generation will still finish
             the current pass after allocated time has been passed.
-        stop_strings (`str or list[str]`, *optional*):
+        stop_strings (`str` or `list[str]`, *optional*):
             A string or a list of strings that should terminate generation if the model outputs them.
 
         > Parameters that control the generation strategy used
@@ -575,6 +574,13 @@ class GenerationConfig(PushToHubMixin):
 
     @staticmethod
     def _get_default_generation_params() -> dict[str, Any]:
+        """
+        Defaults to be applied when unset by the model OR by the user, such that `model.generate()` works with minimal
+        paremeterization.
+
+        Pretrained checkpoints should set these as appropriate in their `generation_config.json`, to establish
+        a better default baseline. Be mindful that tests will often use these values.
+        """
         return {
             "max_length": 20,
             "min_length": 0,
@@ -871,7 +877,7 @@ class GenerationConfig(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         output_config_file = os.path.join(save_directory, config_file_name)
@@ -1193,7 +1199,9 @@ class GenerationConfig(PushToHubMixin):
             if isinstance(obj, dict):
                 return {key: convert_dataclass_to_dict(value) for key, value in obj.items()}
             elif is_dataclass(obj):
-                return obj.to_dict()
+                # Some of our dataclasses have a custom `to_dict()` method, and we prefer it
+                if hasattr(obj, "to_dict"):
+                    return obj.to_dict()
             else:
                 return obj
 
@@ -1625,6 +1633,8 @@ class ContinuousBatchingConfig:
             Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache. When `None`,
             resolved at runtime to 0.9 if there is no logit processing and 0.8 if there is, to leave headroom for
             vocabulary-sized temporary tensors.
+        max_requests_per_batch (`int`, *optional*):
+            Maximum number of requests per batch. Auto-inferred from workload hints when `None`, with fallback of 1024.
         max_blocks_per_request (`int`, *optional*):
             Maximum blocks per request, used in the `flash_attn_with_kvcache` fast decode path to dimension
             the block table. Setting this to 0 disables the fast decode path. Default is None (auto-inferred).
@@ -1652,10 +1662,13 @@ class ContinuousBatchingConfig:
         decode_compile_config (`CompileConfig`, *optional*):
             CompileConfig for decode (fast) path. Default is None (uses generation_config fallback)
             The decode path handles batches has no dynamic KV length, so static shapes are a better fit.
-        use_default_compile_configs (`bool`, *optional*, defaults to `False`):
-            If True, a default compile config will be used for paths that are not explicitly set.
+        default_compile_level (`int`, *optional*, defaults to 0):
+            If this is >0 and no compile config is provided for varlen or decode path, a default compile config will be
+            provided. The level can go up to 3, and a higher level means more performance but longer warmup time.
         scheduler_type (`str`, *optional*, defaults to `"fifo"`):
             Scheduler type to use.
+        safety_margin (`float`, *optional*):
+            Safety margin used to limit the amount of offloading. Defaults to None (use class default).
         return_logprobs (`bool`, *optional*, defaults to `False`):
             Whether to return log probabilities along with the generated tokens.
         seed (`int | None`, *optional*):
@@ -1675,6 +1688,11 @@ class ContinuousBatchingConfig:
             Remove unsupported logits processors instead of erroring. Default is True.
         disable_nccl_graph_mixing (`bool`, *optional*, defaults to `True`):
             Disable NCCL's safety net for parallel graph-captured comms. Never happens in CB and gives TP a perf boost.
+        cpu_group_timeout (`float`, *optional*, defaults to 300.0):
+            The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None
+            for no timeout. Default is 300 seconds.
+        use_default_compile_configs (`bool | None`, *optional*):
+            Deprecated in 5.11: please use default_compile_level instead.
     """
 
     # Size of each KV cache block
@@ -1688,6 +1706,10 @@ class ContinuousBatchingConfig:
     # The max percentage of free GPU memory (after the model is loaded) to use for the KV cache. If None, auto resolved
     # to 0.9 (no logit processing) or 0.8 (logit processing) to leave headroom for temporary tensors.
     max_memory_percent: float | None = None
+
+    # The maximum number of requests in a batch. Helps limiting the memory footprint of the logits, which scale with the
+    # vocabulary size.
+    max_requests_per_batch: int | None = None
 
     # This is only used in the flash_attn_with_kvcache fast decode path to dimension the block table. If it is set to 0,
     # the fast decode path will not be used. Auto-inferred from GPU memory when `None` (default).
@@ -1714,15 +1736,19 @@ class ContinuousBatchingConfig:
     max_cached_graphs: int = 0
 
     # Compile configs for the two execution paths. If None, uses the compile_config from generation_config as fallback.
-    # The varlen path is used for prefill and when fast decode is unavailable. The decode path is used when
-    # max_blocks_per_request > 0 (fast decode with block table).
     varlen_compile_config: CompileConfig | None = None
     decode_compile_config: CompileConfig | None = None
-    # If this flag is set to True, a default compile config will be used for paths that are not explicitly set.
-    use_default_compile_configs: bool = False
+    # Compile level for the executions path, if no compile config is provided for the path. Default is 0 (no compile).
+    # Level 1: `mode=default, dynamic=True`
+    # Level 2: `mode=max-autotune-no-cudagraphs, dynamic=True`
+    # Level 3: `mode=max-autotune-no-cudagraphs, dynamic=False`
+    default_compile_level: int = 0
 
     # Scheduler type. FIFO by default. For all types available, checks SCHEDULER_MAPPING in scheduler.py
     scheduler_type: str = "fifo"
+    # Safety margin: if the number of free blocks falls below (safety_margin * num_blocks), then new prefill requests
+    # will not be scheduled to prioritize decoding active requests. Defaults to None (use class default).
+    safety_margin: float | None = None
 
     # Whether to generate log probabilities, which is the log of the softmax of the processed logits. If True, the log
     # probabilities will be returned along with the generated tokens in the generation output.
@@ -1756,13 +1782,35 @@ class ContinuousBatchingConfig:
     # This is turned on by default because the above never happens in CB and this gives a nice perf boost.
     disable_nccl_graph_mixing: bool = True
 
+    # The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None for
+    # no timeout. Default is 300 seconds. This exists because dist has a gloo timeout of 30 minutes, which is way too
+    # long for almost all use cases.
+    cpu_group_timeout: float | None = 300.0
+
+    # Deprecated arguments
+    use_default_compile_configs: bool | None = None
+
     def __post_init__(self):
         # Only turn off graph mixing support if TP is on
-        if self.disable_nccl_graph_mixing and int(os.environ.get("WORLD_SIZE", "1")) > 1:
+        graph_mixing_supported = os.environ.get("NCCL_GRAPH_MIXING_SUPPORT", "1") == "1"
+        distributed = int(os.environ.get("WORLD_SIZE", "1")) > 1
+        if self.disable_nccl_graph_mixing and graph_mixing_supported and distributed:
             logger.warning(
                 "Setting NCCL_GRAPH_MIXING_SUPPORT = 0 because disable_nccl_graph_mixing is True and WORLD_SIZE > 1."
             )
             os.environ.setdefault("NCCL_GRAPH_MIXING_SUPPORT", "0")
+        # Warn about deprecated arguments
+        if self.use_default_compile_configs is not None:  # Deprecated in 5.11
+            if self.use_default_compile_configs:
+                level_msg = "setting default_compile_level to 3. Consider using a lower level for faster warmup time."
+                self.default_compile_level = 3
+            else:
+                level_msg = "setting default_compile_level to 0."
+                self.default_compile_level = 0
+            logger.warning(
+                "use_default_compile_configs is deprecated: please use default_compile_level instead. For backwards "
+                f"compatibility, {level_msg}"
+            )
 
     @property
     def cuda_graph_booleans(self) -> tuple[bool, bool]:

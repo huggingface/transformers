@@ -30,7 +30,7 @@ from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union
 
 import numpy as np
 import typing_extensions
-from huggingface_hub import create_repo, is_offline_mode
+from huggingface_hub import is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
@@ -57,6 +57,7 @@ from .utils import (
     cached_file,
     copy_func,
     direct_transformers_import,
+    hf_api,
     is_torch_available,
     list_repo_templates,
     logging,
@@ -872,11 +873,15 @@ class ProcessorMixin(PushToHubMixin):
         batch_replacement_offsets = []
         for batch_idx in range(len(text)):
             last = 0
+            offset = 0
             replacement_offsets = []
             expanded_sample = []
             for m in re.finditer(regex_special_mm_tokens, text[batch_idx]):
                 start, end = m.span()
                 expanded_sample.append(text[batch_idx][last:start])
+
+                # adjust spans using running offset if one sample has several MM data associated
+                start_with_offset = start + offset
 
                 mm_type = m.lastgroup
                 replacement_text = next(replacements_iters[mm_type])
@@ -884,12 +889,14 @@ class ProcessorMixin(PushToHubMixin):
                     {
                         "type": mm_type,
                         "span": (start, end),
-                        "new_span": (start, start + len(replacement_text)),
+                        "new_span": (start_with_offset, start_with_offset + len(replacement_text)),
                         "text": m.group(),
                         "replacement": replacement_text,
                     }
                 )
                 expanded_sample.append(replacement_text)
+                # update the offsets and the last position
+                offset += len(replacement_text) - (end - start)
                 last = end
 
             expanded_sample.append(text[batch_idx][last:])
@@ -940,15 +947,33 @@ class ProcessorMixin(PushToHubMixin):
     # These values are used to build `mm_token_type_ids`
     @property
     def image_token_ids(self) -> list[int | None]:
+        if _image_token_ids := getattr(self, "_image_token_ids", None):
+            return _image_token_ids
         return [getattr(self, "image_token_id", None)]
+
+    @image_token_ids.setter
+    def image_token_ids(self, value: list[int | None]):
+        setattr(self, "_image_token_ids", value)
 
     @property
     def video_token_ids(self) -> list[int | None]:
+        if _video_token_ids := getattr(self, "_video_token_ids", None):
+            return _video_token_ids
         return [getattr(self, "video_token_id", None)]
+
+    @video_token_ids.setter
+    def video_token_ids(self, value: list[int | None]):
+        setattr(self, "_video_token_ids", value)
 
     @property
     def audio_token_ids(self) -> list[int | None]:
+        if _audio_token_ids := getattr(self, "_audio_token_ids", None):
+            return _audio_token_ids
         return [getattr(self, "audio_token_id", None)]
+
+    @audio_token_ids.setter
+    def audio_token_ids(self, value: list[int | None]):
+        setattr(self, "_audio_token_ids", value)
 
     def check_argument_for_proper_class(self, argument_name, argument):
         """
@@ -1092,7 +1117,7 @@ class ProcessorMixin(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
@@ -1598,6 +1623,9 @@ class ProcessorMixin(PushToHubMixin):
                             f"Keyword argument {modality_key} was passed two times:\n"
                             f"in a dictionary for {modality} and as a **kwarg."
                         )
+                    # fall back to the flat kwarg when the modality dict is present but doesn't carry this key
+                    if kwarg_value == "__empty__" and modality_key in non_modality_kwargs:
+                        kwarg_value = kwargs[modality_key]
                 elif modality_key in kwargs:
                     # we get a modality_key instead of popping it because modality-specific processors
                     # can have overlapping kwargs
