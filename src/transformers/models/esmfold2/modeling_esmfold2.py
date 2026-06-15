@@ -263,6 +263,32 @@ def qk_norm(x: Tensor) -> Tensor:
     return F.rms_norm(x, (x.size(-1),))
 
 
+def _resolve_atom_config(config: ESMFold2Config, structure_prediction: bool):
+    """Resolve the SWA atom-stack hyperparameters for a given call site.
+
+    The atom transformer is the same architecture in two places: the inputs
+    embedder (``structure_prediction=False``) and the diffusion module
+    (``structure_prediction=True``). Its I/O dims and block/head counts come
+    from the call-site sub-config; the window, expansion ratio and 3D-RoPE
+    settings always come from ``config.inputs.atom_encoder`` — the diffusion
+    module reused those (its atom encoder was built with the same window/RoPE and
+    a fixed ``expansion_ratio=2``, which is ``AtomAttentionConfig``'s default).
+
+    Every module in the atom stack (attention/block/transformer/encoder/decoder)
+    takes only ``(config, structure_prediction)`` and derives its own dims from
+    this, so no scalar dims are threaded between them.
+
+    Returns ``(d_atom, d_token, n_blocks, n_heads, swa)`` where ``swa`` is the
+    ``AtomAttentionConfig`` carrying ``swa_window_size`` / ``expansion_ratio`` /
+    the RoPE settings.
+    """
+    swa = config.inputs.atom_encoder
+    if structure_prediction:
+        dm = config.structure_head.diffusion_module
+        return dm.c_atom, dm.c_token, dm.atom_num_blocks, dm.atom_num_heads, swa
+    return swa.d_atom, swa.d_token, swa.n_blocks, swa.n_heads, swa
+
+
 # ===========================================================================
 # ESMFold2SWA3DRoPEAttention
 # ===========================================================================
@@ -276,18 +302,20 @@ class ESMFold2SWA3DRoPEAttention(nn.Module):
     with the sliding window expressed as an additive attention mask. The custom
     flash-attention path (native bidirectional ``window_size``, plus varlen for
     packed inputs) is kept as an opt-in backend, selected when
-    ``_attn_implementation == "flash_attention_2"``. ``config`` is attached by
-    the parent ``ESMFold2Model`` after construction; it is ``None`` (→ ``sdpa``)
-    when the module is used standalone.
+    ``_attn_implementation == "flash_attention_2"``. The shared ``config`` is
+    passed in at construction, so ``set_attn_implementation()`` stays live (it
+    mutates the same object); dims/window are derived from
+    ``(config, structure_prediction)`` via :func:`_resolve_atom_config`.
     """
 
-    def __init__(self, d_model: int, n_heads: int, half_window: int = 64) -> None:
+    def __init__(self, config: ESMFold2Config, structure_prediction: bool = True) -> None:
         super().__init__()
-        self.config = None
+        d_model, _d_token, _n_blocks, n_heads, swa = _resolve_atom_config(config, structure_prediction)
+        self.config = config
         self.n_heads = n_heads
         self.head_dim = d_model // n_heads
         self.scale = self.head_dim**-0.5
-        self.half_window = half_window
+        self.half_window = swa.swa_window_size // 2
         # No grouped-query attention; identity repeat keeps the interface happy.
         self.num_key_value_groups = 1
         # Bidirectional encoder: never let the sdpa/flash interface default to
@@ -315,7 +343,7 @@ class ESMFold2SWA3DRoPEAttention(nn.Module):
         if q.dtype not in (torch.float16, torch.bfloat16):
             q, k, v = q.bfloat16(), k.bfloat16(), v.bfloat16()
 
-        attn_impl = self.config._attn_implementation if self.config is not None else "sdpa"
+        attn_impl = self.config._attn_implementation
         use_flash = attn_impl == "flash_attention_2" and is_flash_attn_2_available()
 
         if use_flash and len(attention_params) > 2:
@@ -400,19 +428,14 @@ class ESMFold2SWAAtomBlock(nn.Module):
     Creates adaln_modulation = Sequential(SiLU(), Linear) -> keys like adaln_modulation.1.weight
     """
 
-    def __init__(
-        self,
-        d_atom: int,
-        n_heads: int,
-        half_window: int = 64,
-        expansion_ratio: int = 2,
-    ) -> None:
+    def __init__(self, config: ESMFold2Config, structure_prediction: bool = True) -> None:
         super().__init__()
+        d_atom, _d_token, _n_blocks, _n_heads, swa = _resolve_atom_config(config, structure_prediction)
         # adaln-Zero gate; zero-init lives in ESMFold2PreTrainedModel._init_weights.
         self.adaln_modulation = nn.Sequential(nn.SiLU(), nn.Linear(d_atom, 6 * d_atom, bias=False))
 
-        self.attn = ESMFold2SWA3DRoPEAttention(d_atom, n_heads, half_window=half_window)
-        self.ffn = ESMFold2SwiGLUFFN(d_atom, expansion_ratio)
+        self.attn = ESMFold2SWA3DRoPEAttention(config, structure_prediction)
+        self.ffn = ESMFold2SwiGLUFFN(d_atom, swa.expansion_ratio)
 
     def forward(self, x: Tensor, c_l: Tensor, attention_params: tuple) -> Tensor:
         mod = self.adaln_modulation(c_l)
@@ -476,37 +499,17 @@ def build_3d_rope(
 class ESMFold2SWAAtomTransformer(nn.Module):
     """Stack of SWAAtomBlocks."""
 
-    def __init__(
-        self,
-        d_atom: int = 128,
-        n_blocks: int = 3,
-        n_heads: int = 4,
-        swa_window_size: int = 128,
-        expansion_ratio: int = 2,
-        spatial_rope_base_frequency: float = 20.0,
-        n_spatial_rope_pairs_per_axis: int = 2,
-        n_uid_rope_pairs: int = 10,
-        uid_rope_base_frequency: float = 10000.0,
-    ) -> None:
+    def __init__(self, config: ESMFold2Config, structure_prediction: bool = True) -> None:
         super().__init__()
-        self.swa_window_size = swa_window_size
+        d_atom, _d_token, n_blocks, n_heads, swa = _resolve_atom_config(config, structure_prediction)
+        self.swa_window_size = swa.swa_window_size
         self.head_dim = d_atom // n_heads
-        self.spatial_rope_base_frequency = spatial_rope_base_frequency
-        self.n_spatial_rope_pairs_per_axis = n_spatial_rope_pairs_per_axis
-        self.n_uid_rope_pairs = n_uid_rope_pairs
-        self.uid_rope_base_frequency = uid_rope_base_frequency
+        self.spatial_rope_base_frequency = swa.spatial_rope_base_frequency
+        self.n_spatial_rope_pairs_per_axis = swa.n_spatial_rope_pairs_per_axis
+        self.n_uid_rope_pairs = swa.n_uid_rope_pairs
+        self.uid_rope_base_frequency = swa.uid_rope_base_frequency
 
-        self.blocks = nn.ModuleList(
-            [
-                ESMFold2SWAAtomBlock(
-                    d_atom=d_atom,
-                    n_heads=n_heads,
-                    half_window=swa_window_size // 2,
-                    expansion_ratio=expansion_ratio,
-                )
-                for _ in range(n_blocks)
-            ]
-        )
+        self.blocks = nn.ModuleList([ESMFold2SWAAtomBlock(config, structure_prediction) for _ in range(n_blocks)])
 
     def _build_3d_rope(self, ref_pos: Tensor, ref_space_uid: Tensor) -> tuple[Tensor, Tensor]:
         return build_3d_rope(
@@ -579,30 +582,15 @@ def scatter_atom_to_token(
 class ESMFold2AtomEncoder(nn.Module):
     """SWA atom encoder with atom_linear, atom_norm, atom_to_token_linear, [coords_linear], atom_transformer.
 
-    Args:
-        d_atom: atom hidden dim
-        d_token: token dim for atom_to_token aggregation
-        n_blocks, n_heads, swa_window_size, expansion_ratio: transformer params
-        structure_prediction: if True, creates coords_linear and uses full d_token
-        spatial_rope_base_frequency, n_spatial_rope_pairs_per_axis,
-        n_uid_rope_pairs, uid_rope_base_frequency: 3D RoPE config
+    ``structure_prediction=True`` (diffusion module) adds ``coords_linear`` and
+    aggregates to the full ``d_token``; ``False`` (inputs embedder) omits coords
+    and aggregates to ``d_token // 2``. All dims/hyperparameters are read from
+    ``config`` via :func:`_resolve_atom_config`.
     """
 
-    def __init__(
-        self,
-        d_atom: int = 128,
-        d_token: int = 768,
-        n_blocks: int = 3,
-        n_heads: int = 4,
-        swa_window_size: int = 128,
-        expansion_ratio: int = 2,
-        structure_prediction: bool = True,
-        spatial_rope_base_frequency: float = 20.0,
-        n_spatial_rope_pairs_per_axis: int = 2,
-        n_uid_rope_pairs: int = 10,
-        uid_rope_base_frequency: float = 10000.0,
-    ) -> None:
+    def __init__(self, config: ESMFold2Config, structure_prediction: bool = True) -> None:
         super().__init__()
+        d_atom, d_token, _n_blocks, _n_heads, _swa = _resolve_atom_config(config, structure_prediction)
         self.d_atom = d_atom
         self.d_token = d_token
         self.structure_prediction = structure_prediction
@@ -613,17 +601,7 @@ class ESMFold2AtomEncoder(nn.Module):
         if structure_prediction:
             self.coords_linear = nn.Linear(6, d_atom, bias=False)
 
-        self.atom_transformer = ESMFold2SWAAtomTransformer(
-            d_atom=d_atom,
-            n_blocks=n_blocks,
-            n_heads=n_heads,
-            swa_window_size=swa_window_size,
-            expansion_ratio=expansion_ratio,
-            spatial_rope_base_frequency=spatial_rope_base_frequency,
-            n_spatial_rope_pairs_per_axis=n_spatial_rope_pairs_per_axis,
-            n_uid_rope_pairs=n_uid_rope_pairs,
-            uid_rope_base_frequency=uid_rope_base_frequency,
-        )
+        self.atom_transformer = ESMFold2SWAAtomTransformer(config, structure_prediction)
 
         # Output aggregation: d_token for structure prediction, d_token//2 for inputs
         out_dim = d_token if structure_prediction else d_token // 2
@@ -745,35 +723,18 @@ def gather_token_to_atom(token_features: Tensor, atom_to_token_idx: Tensor) -> T
 
 
 class ESMFold2AtomDecoder(nn.Module):
-    """SWA atom decoder with token_to_atom_linear, atom_transformer, norm, output_linear."""
+    """SWA atom decoder with token_to_atom_linear, atom_transformer, norm, output_linear.
 
-    def __init__(
-        self,
-        d_atom: int = 128,
-        d_token: int = 768,
-        n_blocks: int = 3,
-        n_heads: int = 4,
-        swa_window_size: int = 128,
-        expansion_ratio: int = 2,
-        spatial_rope_base_frequency: float = 20.0,
-        n_spatial_rope_pairs_per_axis: int = 2,
-        n_uid_rope_pairs: int = 10,
-        uid_rope_base_frequency: float = 10000.0,
-    ) -> None:
+    Only used inside the diffusion module, so its atom dims are always the
+    structure-prediction (diffusion) ones (:func:`_resolve_atom_config`).
+    """
+
+    def __init__(self, config: ESMFold2Config) -> None:
         super().__init__()
+        d_atom, d_token, _n_blocks, _n_heads, _swa = _resolve_atom_config(config, structure_prediction=True)
         self.token_to_atom_linear = nn.Linear(d_token, d_atom, bias=False)
 
-        self.atom_transformer = ESMFold2SWAAtomTransformer(
-            d_atom=d_atom,
-            n_blocks=n_blocks,
-            n_heads=n_heads,
-            swa_window_size=swa_window_size,
-            expansion_ratio=expansion_ratio,
-            spatial_rope_base_frequency=spatial_rope_base_frequency,
-            n_spatial_rope_pairs_per_axis=n_spatial_rope_pairs_per_axis,
-            n_uid_rope_pairs=n_uid_rope_pairs,
-            uid_rope_base_frequency=uid_rope_base_frequency,
-        )
+        self.atom_transformer = ESMFold2SWAAtomTransformer(config, structure_prediction=True)
 
         self.norm = ESMFold2LayerNorm(d_atom)
         self.output_linear = nn.Linear(d_atom, XYZ_DIMS, bias=False)
@@ -945,17 +906,15 @@ class ESMFold2ConditionedTransitionBlock(nn.Module):
 class ESMFold2DiffusionTransformer(nn.Module):
     """Diffusion denoising transformer with attention pair bias."""
 
-    def __init__(
-        self,
-        d_model: int,
-        d_pair: int,
-        num_heads: int,
-        num_blocks: int,
-        d_cond: int | None = None,
-        transition_multiplier: int = 2,
-    ) -> None:
+    def __init__(self, config: ESMFold2Config) -> None:
         super().__init__()
-        d_cond = d_cond or d_model
+        dm = config.structure_head.diffusion_module
+        d_model = dm.c_token
+        d_pair = dm.c_z
+        num_heads = dm.token_num_heads
+        num_blocks = dm.token_num_blocks
+        d_cond = dm.c_token
+        transition_multiplier = dm.transition_multiplier
 
         self.attn_blocks = nn.ModuleList(
             [
@@ -1023,36 +982,30 @@ class ESMFold2DiffusionTransformer(nn.Module):
 class ESMFold2DiffusionConditioning(nn.Module):
     """Conditions pair and single representations on noise timestep."""
 
-    def __init__(
-        self,
-        c_z: int = 256,
-        c_s: int = 768,
-        c_s_inputs: int = 451,
-        sigma_data: float = 16.0,
-        fourier_dim: int = 256,
-        transition_multiplier: int = 2,
-        layer_norm_eps: float = 1e-5,
-    ) -> None:
+    def __init__(self, config: ESMFold2Config) -> None:
         super().__init__()
-        self.sigma_data = float(sigma_data)
+        dm = config.structure_head.diffusion_module
+        c_z = dm.c_z
+        c_s = dm.c_token  # the conditioning's single output is sized to c_token
+        c_s_inputs = dm.c_s_inputs
+        fourier_dim = dm.fourier_dim
+        transition_multiplier = dm.transition_multiplier
+        # The norms/transitions use their default eps (1e-5), as before.
+        self.sigma_data = float(dm.sigma_data)
         self.c_z = c_z
         self.c_s = c_s
         self.c_s_inputs = c_s_inputs
 
-        self.z_input_norm = ESMFold2LayerNorm(2 * c_z, eps=layer_norm_eps)
+        self.z_input_norm = ESMFold2LayerNorm(2 * c_z)
         self.z_proj = nn.Linear(2 * c_z, c_z, bias=False)
-        self.z_transitions = nn.ModuleList(
-            [ESMFold2TransitionLayer(c_z, n=transition_multiplier, eps=layer_norm_eps) for _ in range(2)]
-        )
+        self.z_transitions = nn.ModuleList([ESMFold2TransitionLayer(c_z, n=transition_multiplier) for _ in range(2)])
 
-        self.s_input_norm = ESMFold2LayerNorm(c_s_inputs, eps=layer_norm_eps)
+        self.s_input_norm = ESMFold2LayerNorm(c_s_inputs)
         self.s_proj = nn.Linear(c_s_inputs, c_s, bias=False)
         self.fourier = ESMFold2FourierEmbedding(fourier_dim)
-        self.noise_norm = ESMFold2LayerNorm(fourier_dim, eps=layer_norm_eps)
+        self.noise_norm = ESMFold2LayerNorm(fourier_dim)
         self.noise_proj = nn.Linear(fourier_dim, c_s, bias=False)
-        self.s_transitions = nn.ModuleList(
-            [ESMFold2TransitionLayer(c_s, n=transition_multiplier, eps=layer_norm_eps) for _ in range(2)]
-        )
+        self.s_transitions = nn.ModuleList([ESMFold2TransitionLayer(c_s, n=transition_multiplier) for _ in range(2)])
 
     def forward(
         self,
@@ -1114,78 +1067,25 @@ class ESMFold2DiffusionConditioning(nn.Module):
 class ESMFold2DiffusionModule(nn.Module):
     """Diffusion denoising module for structure prediction."""
 
-    def __init__(
-        self,
-        c_atom: int = 128,
-        c_token: int = 768,
-        c_z: int = 256,
-        c_s_inputs: int = 451,
-        sigma_data: float = 16.0,
-        fourier_dim: int = 256,
-        atom_num_blocks: int = 3,
-        atom_num_heads: int = 4,
-        token_num_blocks: int = 12,
-        token_num_heads: int = 16,
-        transition_multiplier: int = 2,
-        swa_window_size: int = 128,
-        spatial_rope_base_frequency: float = 20.0,
-        n_spatial_rope_pairs_per_axis: int = 2,
-        n_uid_rope_pairs: int = 10,
-        uid_rope_base_frequency: float = 10000.0,
-    ) -> None:
+    def __init__(self, config: ESMFold2Config) -> None:
         super().__init__()
-        self.sigma_data = float(sigma_data)
+        dm = config.structure_head.diffusion_module
+        c_token = dm.c_token
+        self.sigma_data = float(dm.sigma_data)
 
-        self.conditioning = ESMFold2DiffusionConditioning(
-            c_z=c_z,
-            c_s=c_token,  # conditioning s output is c_token
-            c_s_inputs=c_s_inputs,
-            sigma_data=sigma_data,
-            fourier_dim=fourier_dim,
-            transition_multiplier=transition_multiplier,
-        )
+        self.conditioning = ESMFold2DiffusionConditioning(config)
 
         # Atom encoder (structure_prediction=True, with coords_linear)
-        self.atom_encoder = ESMFold2AtomEncoder(
-            d_atom=c_atom,
-            d_token=c_token,
-            n_blocks=atom_num_blocks,
-            n_heads=atom_num_heads,
-            swa_window_size=swa_window_size,
-            expansion_ratio=2,
-            structure_prediction=True,
-            spatial_rope_base_frequency=spatial_rope_base_frequency,
-            n_spatial_rope_pairs_per_axis=n_spatial_rope_pairs_per_axis,
-            n_uid_rope_pairs=n_uid_rope_pairs,
-            uid_rope_base_frequency=uid_rope_base_frequency,
-        )
+        self.atom_encoder = ESMFold2AtomEncoder(config, structure_prediction=True)
 
         # Atom decoder
-        self.atom_decoder = ESMFold2AtomDecoder(
-            d_atom=c_atom,
-            d_token=c_token,
-            n_blocks=atom_num_blocks,
-            n_heads=atom_num_heads,
-            swa_window_size=swa_window_size,
-            expansion_ratio=2,
-            spatial_rope_base_frequency=spatial_rope_base_frequency,
-            n_spatial_rope_pairs_per_axis=n_spatial_rope_pairs_per_axis,
-            n_uid_rope_pairs=n_uid_rope_pairs,
-            uid_rope_base_frequency=uid_rope_base_frequency,
-        )
+        self.atom_decoder = ESMFold2AtomDecoder(config)
 
         # zero-init lives in ESMFold2PreTrainedModel._init_weights.
         self.s_to_token = nn.Linear(c_token, c_token, bias=False)
 
         # Token transformer (ESMFold2DiffusionTransformer with pair bias)
-        self.token_transformer = ESMFold2DiffusionTransformer(
-            d_model=c_token,
-            d_pair=c_z,
-            num_heads=token_num_heads,
-            num_blocks=token_num_blocks,
-            d_cond=c_token,
-            transition_multiplier=transition_multiplier,
-        )
+        self.token_transformer = ESMFold2DiffusionTransformer(config)
 
         self.s_step_norm = ESMFold2LayerNorm(c_token)
         self.token_norm = ESMFold2LayerNorm(c_token)
@@ -1295,31 +1195,12 @@ class ESMFold2DiffusionStructureHead(nn.Module):
 
     def __init__(self, config: ESMFold2Config) -> None:
         super().__init__()
-        dm = config.structure_head.diffusion_module
-        swa_cfg = config.inputs.atom_encoder
         sh = config.structure_head
 
-        self.diffusion_module = ESMFold2DiffusionModule(
-            c_atom=dm.c_atom,
-            c_token=dm.c_token,
-            c_z=dm.c_z,
-            c_s_inputs=dm.c_s_inputs,
-            sigma_data=dm.sigma_data,
-            fourier_dim=dm.fourier_dim,
-            atom_num_blocks=dm.atom_num_blocks,
-            atom_num_heads=dm.atom_num_heads,
-            token_num_blocks=dm.token_num_blocks,
-            token_num_heads=dm.token_num_heads,
-            transition_multiplier=dm.transition_multiplier,
-            swa_window_size=swa_cfg.swa_window_size,
-            spatial_rope_base_frequency=swa_cfg.spatial_rope_base_frequency,
-            n_spatial_rope_pairs_per_axis=swa_cfg.n_spatial_rope_pairs_per_axis,
-            n_uid_rope_pairs=swa_cfg.n_uid_rope_pairs,
-            uid_rope_base_frequency=swa_cfg.uid_rope_base_frequency,
-        )
+        self.diffusion_module = ESMFold2DiffusionModule(config)
 
         # Sampling hyperparameters
-        self.sigma_data = dm.sigma_data
+        self.sigma_data = sh.diffusion_module.sigma_data
         self.gamma_0 = sh.gamma_0
         self.gamma_min = sh.gamma_min
         self.noise_scale = sh.noise_scale
@@ -1563,21 +1444,8 @@ class ESMFold2InputsEmbedder(nn.Module):
 
     def __init__(self, config: ESMFold2Config) -> None:
         super().__init__()
-        swa_cfg = config.inputs.atom_encoder
-
-        self.atom_attention_encoder = ESMFold2AtomEncoder(
-            d_atom=swa_cfg.d_atom,
-            d_token=swa_cfg.d_token,
-            n_blocks=swa_cfg.n_blocks,
-            n_heads=swa_cfg.n_heads,
-            swa_window_size=swa_cfg.swa_window_size,
-            expansion_ratio=swa_cfg.expansion_ratio,
-            structure_prediction=False,  # no coords_linear
-            spatial_rope_base_frequency=swa_cfg.spatial_rope_base_frequency,
-            n_spatial_rope_pairs_per_axis=swa_cfg.n_spatial_rope_pairs_per_axis,
-            n_uid_rope_pairs=swa_cfg.n_uid_rope_pairs,
-            uid_rope_base_frequency=swa_cfg.uid_rope_base_frequency,
-        )
+        # structure_prediction=False: no coords_linear, aggregates to d_token // 2.
+        self.atom_attention_encoder = ESMFold2AtomEncoder(config, structure_prediction=False)
 
     def forward(
         self,
@@ -2629,27 +2497,9 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
         self.distogram_head = nn.Linear(d_pair, config.structure_head.distogram_bins, bias=True)
         self.confidence_head = ESMFold2ConfidenceHead(config)
 
-        msa_cfg = config.msa_encoder
         self.msa_encoder = None
-        if msa_cfg.enabled:
-            self.msa_encoder = ESMFold2MSAEncoder(
-                d_msa=msa_cfg.d_msa,
-                d_pair=d_pair,
-                d_inputs=d_inputs,
-                d_hidden=msa_cfg.d_hidden,
-                n_layers=msa_cfg.n_layers,
-                n_heads_msa=msa_cfg.n_heads_msa,
-                msa_head_width=msa_cfg.msa_head_width,
-            )
-
-        # ESMFold2SWA3DRoPEAttention modules live deep in the atom encoders/decoders and
-        # are built from explicit dims, so give each a handle to the model config:
-        # their forward dispatches the plain-attention core through the v5
-        # attention interface (config._attn_implementation), staying live under
-        # set_attn_implementation() since the config object is shared.
-        for module in self.modules():
-            if isinstance(module, ESMFold2SWA3DRoPEAttention):
-                module.config = self.config
+        if config.msa_encoder.enabled:
+            self.msa_encoder = ESMFold2MSAEncoder(config)
 
         self.post_init()
 
@@ -2983,16 +2833,14 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
 class ESMFold2MSAEncoderBlock(nn.Module):
     """One MSA encoder block: OPM into pair, MSA pair-weighted averaging, triangle update."""
 
-    def __init__(
-        self,
-        d_msa: int,
-        d_pair: int,
-        d_hidden: int,
-        n_heads_msa: int,
-        msa_head_width: int,
-        is_final_block: bool = False,
-    ) -> None:
+    def __init__(self, config: ESMFold2Config, is_final_block: bool = False) -> None:
         super().__init__()
+        me = config.msa_encoder
+        d_msa = me.d_msa
+        d_pair = config.d_pair
+        d_hidden = me.d_hidden
+        n_heads_msa = me.n_heads_msa
+        msa_head_width = me.msa_head_width
         self.is_final_block = is_final_block
         self.outer_product_mean = ESMFold2OuterProductMean(d_msa, d_hidden, d_pair)
         if not is_final_block:
@@ -3032,31 +2880,17 @@ class ESMFold2MSAEncoderBlock(nn.Module):
 class ESMFold2MSAEncoder(nn.Module):
     """Stack of [`ESMFold2MSAEncoderBlock`] layers that conditions the pair on an MSA."""
 
-    def __init__(
-        self,
-        d_msa: int,
-        d_pair: int,
-        d_inputs: int,
-        d_hidden: int = 32,
-        n_layers: int = 4,
-        n_heads_msa: int = 8,
-        msa_head_width: int = 16,
-    ) -> None:
+    def __init__(self, config: ESMFold2Config) -> None:
         super().__init__()
+        me = config.msa_encoder
+        d_msa = me.d_msa
+        d_inputs = config.inputs.d_inputs
+        n_layers = me.n_layers
+        # 35 = NUM_RES_TYPES (33) one-hot + has_deletion + deletion_value.
         self.embed = nn.Linear(35, d_msa, bias=False)
         self.project_inputs = nn.Linear(d_inputs, d_msa, bias=False)
         self.blocks = nn.ModuleList(
-            [
-                ESMFold2MSAEncoderBlock(
-                    d_msa=d_msa,
-                    d_pair=d_pair,
-                    d_hidden=d_hidden,
-                    n_heads_msa=n_heads_msa,
-                    msa_head_width=msa_head_width,
-                    is_final_block=(i == n_layers - 1),
-                )
-                for i in range(n_layers)
-            ]
+            [ESMFold2MSAEncoderBlock(config, is_final_block=(i == n_layers - 1)) for i in range(n_layers)]
         )
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
