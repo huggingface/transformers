@@ -532,6 +532,34 @@ class CacheHardIntegrationTest(unittest.TestCase):
             model.generate(**inputs, max_new_tokens=2, cache_implementation="static")
         self.assertNotIn("cuda", cap.err.lower())
 
+    def test_static_cache_honors_max_cache_len(self):
+        """
+        `generation_config.max_cache_len` must size the auto-allocated `StaticCache` on the static path, so a cache
+        pinned to a worst-case length is reused across calls instead of reallocating (and recompiling). Without this,
+        the cache is sized to the current call's `max_length` only. Regression test for #46424.
+        """
+        # Llama has only full-attention layers, so the cache length is not capped by a sliding window.
+        model_repo = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_repo).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(model_repo)
+        inputs = tokenizer(["The quick brown fox"], return_tensors="pt").to(torch_device)
+
+        max_new_tokens = 5
+        # Deliberately ask for a cache much larger than the natural `max_length - 1` for this call.
+        natural_max_cache_len = inputs.input_ids.shape[-1] + max_new_tokens - 1
+        requested_max_cache_len = natural_max_cache_len + 64
+
+        out = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            cache_implementation="static",
+            max_cache_len=requested_max_cache_len,
+            return_dict_in_generate=True,
+        )
+        self.assertIsInstance(out.past_key_values, StaticCache)
+        self.assertEqual(out.past_key_values.max_cache_len, requested_max_cache_len)
+
     def test_chunked_prefill_initializes_static_cache_eagerly(self):
         """
         With chunked prefill the prefill runs inside a compiled region, where the static cache's lazy initialization
