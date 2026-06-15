@@ -143,7 +143,7 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["input_values", "audio_codes", "bandwidth", "return_dict"]
+            expected_arg_names = ["input_values", "audio_codes", "bandwidth"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_gradient_checkpointing_backward_compatibility(self):
