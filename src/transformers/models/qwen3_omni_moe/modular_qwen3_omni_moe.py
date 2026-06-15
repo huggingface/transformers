@@ -450,7 +450,6 @@ class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
 
     def __post_init__(self, **kwargs):
         self.sliding_window = self.sliding_window
-        self.mlp_only_layers = [] if self.mlp_only_layers is None else self.mlp_only_layers
         super().__post_init__(**kwargs)
 
 
@@ -1702,7 +1701,11 @@ class Qwen3OmniMoeTalkerModel(Qwen3VLMoeTextModel):
 class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
     _tied_weights_keys = {"codec_head": "model.codec_embedding.weight"}
     _tp_plan = {"codec_head": "colwise_allgather"}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _tp_ep_plan = {"codec_head": "colwise_allgather"}
+    _sp_ep_plan = {"lm_head": "colwise_loss_parallel"}
     _pp_plan = {"codec_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     config_class = Qwen3OmniMoeTalkerConfig
     base_model_prefix = "talker"
     _no_split_modules = ["Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration"]

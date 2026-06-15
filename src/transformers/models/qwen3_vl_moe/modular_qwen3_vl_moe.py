@@ -161,7 +161,6 @@ class Qwen3VLMoeTextConfig(Qwen3MoeConfig):
             self.num_key_value_heads = self.num_attention_heads
 
         self.head_dim = self.head_dim or self.hidden_size // self.num_attention_heads
-        self.mlp_only_layers = [] if self.mlp_only_layers is None else self.mlp_only_layers
         self.sliding_window = None
         super().__post_init__(**kwargs)
 
