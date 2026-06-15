@@ -104,7 +104,7 @@ _deps = [
     "pandas<2.3.0",  # `datasets` requires `pandas` while `pandas==2.3.0` has issues with CircleCI on 2025/06/05
     "packaging>=20.0",
     "parameterized>=0.9",  # older version of parameterized cause pytest collection to fail on .expand
-    "peft>=0.18.0",
+    "peft>=0.19.0",
     "phonemizer",
     "protobuf",
     "psutil",
@@ -325,7 +325,7 @@ if __name__ == "__main__":
 
     setup(
         name="transformers",
-        version="5.10.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+        version="5.13.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
         author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
         author_email="transformers@huggingface.co",
         description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",
