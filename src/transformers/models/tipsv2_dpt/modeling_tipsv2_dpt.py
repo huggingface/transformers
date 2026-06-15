@@ -32,6 +32,29 @@ from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return
 from .configuration_tipsv2_dpt import Tipsv2DptConfig
 
 
+@dataclass
+class Tipsv2DptOutput(ModelOutput):
+    r"""
+    Args:
+        predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
+            Soft-bin-expectation depth map at decoder resolution (metres).
+        normals (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
+            Raw normal map predictions (unnormalized).
+        segmentation_logits (`torch.FloatTensor` of shape `(batch_size, num_labels, height, width)`):
+            Segmentation logits at decoder resolution.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+            Hidden states of the backbone.
+        attentions (`tuple(torch.FloatTensor)`, *optional*):
+            Attention weights of the backbone.
+    """
+
+    predicted_depth: torch.FloatTensor | None = None
+    normals: torch.FloatTensor | None = None
+    segmentation_logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
 def _get_backbone_hidden_size(config):
     if config.backbone_config is not None and hasattr(config.backbone_config, "hidden_size"):
         return config.backbone_config.hidden_size
@@ -265,44 +288,6 @@ class Tipsv2DptNeck(nn.Module):
         output = self.fusion_stage(features)
 
         return output
-
-
-@dataclass
-class Tipsv2DptNormalEstimatorOutput(ModelOutput):
-    r"""
-    normals (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
-        Raw normal map predictions (unnormalized).
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-        Hidden states of the backbone.
-    attentions (`tuple(torch.FloatTensor)`, *optional*):
-        Attention weights of the backbone.
-    """
-
-    normals: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-
-
-@dataclass
-class Tipsv2DptOutput(ModelOutput):
-    r"""
-    predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
-        Soft-bin-expectation depth map at decoder resolution (metres).
-    normals (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
-        Raw normal map predictions (unnormalized).
-    logits (`torch.FloatTensor` of shape `(batch_size, num_labels, height, width)`):
-        Segmentation logits at decoder resolution.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-        Hidden states of the backbone.
-    attentions (`tuple(torch.FloatTensor)`, *optional*):
-        Attention weights of the backbone.
-    """
-
-    predicted_depth: torch.FloatTensor | None = None
-    normals: torch.FloatTensor | None = None
-    segmentation_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class Tipsv2DptDecoder(nn.Module):
