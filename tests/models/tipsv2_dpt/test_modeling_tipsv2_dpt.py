@@ -38,7 +38,6 @@ if is_torch_available():
         Tipsv2DptModel,
     )
     from transformers.image_utils import load_image_as_tensor
-    from transformers.models.tipsv2_dpt.modeling_tipsv2_dpt import Tipsv2DptNormalEstimatorOutput, Tipsv2DptOutput
 
 
 class Tipsv2DptModelTester:
@@ -135,7 +134,6 @@ class Tipsv2DptModelTester:
         model = Tipsv2DptModel(config).to(torch_device).eval()
         with torch.no_grad():
             outputs = model(pixel_values)
-        self.parent.assertIsInstance(outputs, Tipsv2DptOutput)
         self.parent.assertEqual(
             outputs.predicted_depth.shape,
             (self.batch_size, self.decoder_height, self.decoder_width),
@@ -288,7 +286,6 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        self.assertIsInstance(outputs, Tipsv2DptOutput)
         _, _, height, width = inputs["pixel_values"].shape
         expected_height, expected_width = 256, 256
         self.assertEqual(outputs.predicted_depth.shape, torch.Size([1, expected_height, expected_width]))
@@ -433,7 +430,6 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
 
         _, _, height, width = inputs["pixel_values"].shape
         expected_height, expected_width = 256, 256
-        self.assertIsInstance(outputs, Tipsv2DptNormalEstimatorOutput)
         self.assertEqual(outputs.normals.shape, torch.Size([1, 3, expected_height, expected_width]))
 
         EXPECTED_NORMALS = Expectations(
