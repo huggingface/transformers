@@ -203,6 +203,9 @@ def load_audio_as(
         audio_bytes = None
         if audio.startswith(("http://", "https://")):
             audio_bytes = _fetch_audio_bytes(audio, timeout=timeout)
+        elif isinstance(audio, str) and audio.startswith("data:audio"):
+            base64_data = audio.split(",", 1)[1]
+            audio_bytes = base64.b64decode(base64_data)
         elif os.path.isfile(audio):
             with open(audio, "rb") as audio_file:
                 audio_bytes = audio_file.read()
