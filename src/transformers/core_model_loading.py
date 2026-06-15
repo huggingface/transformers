@@ -1524,7 +1524,7 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
         # unanchored rename doubles the prefix on already-original keys, e.g. `encoder.layers` ->
         # `encoder.encoder.layers`), so there is nothing to revert. Native models built with `from_config`
         # carry canonical keys and are reverted normally below.
-        if type(model).__module__.startswith(TRANSFORMERS_DYNAMIC_MODULE_NAME):
+        if type(model).__module__.startswith(TRANSFORMERS_DYNAMIC_MODULE_NAME + "."):
             return state_dict
 
         from .conversion_mapping import get_model_conversion_mapping

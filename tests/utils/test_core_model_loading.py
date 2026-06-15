@@ -1016,7 +1016,7 @@ class TestRevertWeightConversionRemoteCode(unittest.TestCase):
 
     def test_revert_skips_trust_remote_code_model(self):
         register_checkpoint_conversion_mapping(
-            "test_remote_nonidempotent", [WeightRenaming("encoder.layers", "layers")]
+            "test_remote_nonidempotent", [WeightRenaming("encoder.layers", "layers")], overwrite=True
         )
         model = self._build_model("test_remote_nonidempotent", "transformers_modules.acme.modeling_acme")
         # Remote model: keys already in on-disk layout, so reverting would double the prefix -> must be skipped.
@@ -1026,7 +1026,7 @@ class TestRevertWeightConversionRemoteCode(unittest.TestCase):
 
     def test_revert_still_reverts_native_model(self):
         register_checkpoint_conversion_mapping(
-            "test_native_nonidempotent", [WeightRenaming("encoder.layers", "layers")]
+            "test_native_nonidempotent", [WeightRenaming("encoder.layers", "layers")], overwrite=True
         )
         model = self._build_model("test_native_nonidempotent", "transformers.models.fake.modeling_fake")
         # Native model (not in `transformers_modules`): canonical keys must still round-trip to disk layout.
