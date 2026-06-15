@@ -20,8 +20,8 @@ import importlib.util
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from ..utils.export_config import ExportConfigMixin
 from ..utils.import_utils import is_torch_available
+from .configs import ExportConfigMixin
 from .utils import decompose_for_generation
 
 
@@ -81,7 +81,7 @@ class HfExporter(ABC):
                 export, this means you need to include `past_key_values`, `cache_position`, etc.
                 If you only have generation-style inputs, use [`~HfExporter.export_for_generation`]
                 instead — it runs `model.generate` for you and exports each stage.
-            config ([`~transformers.utils.export_config.ExportConfigMixin`]):
+            config ([`~transformers.exporters.configs.ExportConfigMixin`]):
                 Backend-specific configuration.
 
         Returns:
@@ -116,7 +116,7 @@ class HfExporter(ABC):
                 (typically `input_ids` + `attention_mask`, plus any modality inputs like
                 `pixel_values` / `input_features` for multi-modal models). Per-stage forward
                 kwargs are captured internally.
-            config ([`~transformers.utils.export_config.ExportConfigMixin`] or `dict[str, ExportConfigMixin]`):
+            config ([`~transformers.exporters.configs.ExportConfigMixin`] or `dict[str, ExportConfigMixin]`):
                 Backend-specific configuration. Pass a single config to apply to every
                 component, or a `dict` keyed by component name (e.g. `"image_encoder"`,
                 `"language_model"`, `"lm_head"`, `"decode"`) to override per-component —

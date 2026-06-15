@@ -46,8 +46,8 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
-from ..utils.export_config import OnnxConfig
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
+from .configs import OnnxConfig
 from .exporter_dynamo import DynamoExporter
 from .utils import (
     apply_fx_node_fixes,
@@ -93,7 +93,7 @@ class OnnxExporter(DynamoExporter):
     >>> exporter = OnnxExporter()
     >>> onnx_program = exporter.export(model, inputs, config=OnnxConfig(dynamic=True))
     >>> outputs = onnx_program(**inputs)  # run in-memory
-    >>> exporter.export(model, inputs, config=OnnxConfig(f="model.onnx"))  # save to disk
+    >>> exporter.export(model, inputs, config=OnnxConfig(output_path="model.onnx"))  # save to disk
     ```
     """
 
@@ -105,9 +105,9 @@ class OnnxExporter(DynamoExporter):
         sample_inputs: dict[str, Any],
         config: OnnxConfig | dict[str, Any],
     ) -> ONNXProgram:
-        if type(config) is not OnnxConfig and isinstance(config, dict):
+        if isinstance(config, dict):
             config = OnnxConfig(**config)
-        else:
+        elif type(config) is not OnnxConfig:
             raise TypeError(f"Expected config to be an OnnxConfig or dict, got {type(config)}")
 
         with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("onnx"):
@@ -117,7 +117,7 @@ class OnnxExporter(DynamoExporter):
             onnx_program: ONNXProgram = torch.onnx.export(
                 exported_program,
                 args=(),
-                f=config.f,
+                f=config.output_path,
                 input_names=inputs_names,
                 output_names=outputs_names,
                 kwargs=copy.deepcopy(sample_inputs),

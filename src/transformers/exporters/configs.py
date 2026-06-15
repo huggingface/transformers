@@ -112,7 +112,7 @@ class OnnxConfig(DynamoConfig):
     `dynamic_shapes`, `prefer_deferred_runtime_asserts_over_guards`).
 
     Args:
-        f (`str` or `PathLike`, *optional*):
+        output_path (`str` or `PathLike`, *optional*):
             Output path for the `.onnx` file. When `None` (default) the
             exported model is kept in memory as an `ONNXProgram` and not
             written to disk.
@@ -137,7 +137,7 @@ class OnnxConfig(DynamoConfig):
 
     export_format: ExportFormat = ExportFormat.ONNX
 
-    f: str | PathLike | None = None
+    output_path: str | PathLike | None = None
     dynamic_shapes: dict[str, Any] | None = None
     opset_version: int | None = None
     external_data: bool = True

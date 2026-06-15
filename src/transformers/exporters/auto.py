@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 # Modifications Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,8 +17,8 @@
 from __future__ import annotations
 
 from ..utils import logging
-from ..utils.export_config import ExportConfigMixin, ExportFormat
 from .base import HfExporter
+from .configs import ExportConfigMixin, ExportFormat
 from .exporter_dynamo import DynamoConfig, DynamoExporter
 from .exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from .exporter_onnx import OnnxConfig, OnnxExporter

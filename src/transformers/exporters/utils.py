@@ -65,7 +65,7 @@ if is_torch_available():
 
 
 # ── Patch and fix registries ────────────────────────────────────────────────
-# Single contract across exporters: `_PATCHES[backend]` lists `(obj, attr, factory)` triples
+# Single contract across exporters: `_PATCHES[backend]` lists `(obj, attribute, factory)` triples
 # to install reversibly, and `_FX_NODE_FIXES[backend]` lists `(gm, node) -> bool` fixers to
 # apply in place. Each exporter populates its slot at module load (via `@register_patch` /
 # `@register_fx_node_fix` decorators, or direct list-append for cases that can't be expressed
@@ -77,33 +77,33 @@ _FX_PROGRAM_FIXES: dict[str, list[callable]] = {}
 
 
 @contextlib.contextmanager
-def patch_attr(obj: Any, attr: str, factory: Any):
-    """Swap `obj.attr` with `factory(original)` for the duration of the block."""
-    original = getattr(obj, attr)
-    setattr(obj, attr, factory(original))
+def patch_attribute(obj: Any, attribute: str, factory: Any):
+    """Swap `obj.<attribute>` with `factory(original)` for the duration of the block."""
+    original = getattr(obj, attribute)
+    setattr(obj, attribute, factory(original))
     try:
         yield
     finally:
-        setattr(obj, attr, original)
+        setattr(obj, attribute, original)
 
 
 @contextlib.contextmanager
-def patch_attrs(patches: list[tuple[Any, str, callable]]):
-    """Install `(obj, attr, factory)` patches for the duration of the block.
+def patch_attributes(patches: list[tuple[Any, str, callable]]):
+    """Install `(obj, attribute, factory)` patches for the duration of the block.
 
-    Plural form of `patch_attr` — each `factory(original)` returns the replacement
+    Plural form of `patch_attribute` — each `factory(original)` returns the replacement
     callable. Originals are restored on exit, even if the body raises.
     """
     with contextlib.ExitStack() as stack:
-        for obj, attr, factory in patches:
-            stack.enter_context(patch_attr(obj, attr, factory))
+        for obj, attribute, factory in patches:
+            stack.enter_context(patch_attribute(obj, attribute, factory))
         yield
 
 
 @contextlib.contextmanager
 def apply_patches(backend: str):
     """Install `_PATCHES[backend]` for the duration of the block."""
-    with patch_attrs(_PATCHES.get(backend, [])):
+    with patch_attributes(_PATCHES.get(backend, [])):
         yield
 
 
@@ -153,12 +153,11 @@ def register_patch(backend: str, *paths: str):
 
     def decorator(fn):
         for path in paths:
-            obj_path, _, attr = path.rpartition(".")
-            try:
-                obj = _resolve_dotted_path(obj_path)
-            except (ImportError, AttributeError):
+            obj_path, _, attribute = path.rpartition(".")
+            obj = _resolve_dotted_path(obj_path)
+            if obj is None:
                 continue
-            _PATCHES.setdefault(backend, []).append((obj, attr, fn))
+            _PATCHES.setdefault(backend, []).append((obj, attribute, fn))
         return fn
 
     return decorator
@@ -166,17 +165,21 @@ def register_patch(backend: str, *paths: str):
 
 def _resolve_dotted_path(path: str):
     """Resolve a dotted Python path to the actual object — importing submodules where
-    possible, falling back to `getattr` for class attributes (e.g. `torch.Tensor`)."""
+    possible, falling back to `getattr` for class attributes (e.g. `torch.Tensor`).
+    Returns `None` if the path can't be resolved (e.g. the backend isn't installed)."""
     import importlib
 
     parts = path.split(".")
-    obj = importlib.import_module(parts[0])
-    for part in parts[1:]:
-        try:
-            obj = importlib.import_module(f"{obj.__name__}.{part}")
-        except (ImportError, AttributeError):
-            obj = getattr(obj, part)
-    return obj
+    try:
+        obj = importlib.import_module(parts[0])
+        for part in parts[1:]:
+            try:
+                obj = importlib.import_module(f"{obj.__name__}.{part}")
+            except (ImportError, AttributeError):
+                obj = getattr(obj, part)
+        return obj
+    except (ImportError, AttributeError):
+        return None
 
 
 def apply_fx_node_fixes(backend: str, graph_module) -> None:
@@ -353,7 +356,7 @@ def prepare_for_export(
         model.set_experts_implementation("batched_mm")
 
     # set attention implementation to sdpa for export
-    if isinstance(model, PreTrainedModel) and model._can_set_attn_implementation():
+    if isinstance(model, PreTrainedModel):
         try:
             model.set_attn_implementation("sdpa")
         except Exception as e:
@@ -362,9 +365,10 @@ def prepare_for_export(
     # Idefics2/3's vision encoder uses boolean indexing to filter padding images, creating
     # an unbacked symbolic batch dim. SDPA's CPU kernel guards on Eq(batch, 1) when a mask
     # is provided, which fails with unbacked dims. Keep the vision part on eager.
+    # https://github.com/pytorch/pytorch/issues/180202#issuecomment-4505713716
+    # TODO: check if this is fixed in pytorch 2.13
     if (
         isinstance(model, PreTrainedModel)
-        and model._can_set_attn_implementation()
         and model.config.model_type in ("idefics2", "idefics3", "smolvlm")
         and model.device.type == "cpu"
     ):
@@ -372,29 +376,28 @@ def prepare_for_export(
 
     for module in model.modules():
         if hasattr(module, "config"):
-            # disable returning loss for every submodel
-            if hasattr(module.config, "return_loss"):
-                module.config.return_loss = False
             # disable mamba kernels for every submodel (mamba, jamba)
             if hasattr(module.config, "use_mamba_kernels"):
                 module.config.use_mamba_kernels = False
-        # Reset internal caches that are not part of past_key_values (e.g. DSA indexer in glm_moe_dsa)
-        if hasattr(module, "_cached_keys"):
-            module._cached_keys = None
 
     # Pre-compute data-dependent vision/audio tensors that use loops, .tolist(),
-    # repeat_interleave, or itertools.groupby — untraceable by torch.export.
+    # repeat_interleave, or itertools.groupby — untraceable by dynamo.
+    # TODO: use the collator API once it covers these cases.
     with torch.no_grad():
         _precompute_export_inputs(model, inputs)
 
     # Cast all input tensors to match the model's dtype and device (e.g. cache objects
     # created before the model was moved to bfloat16/CUDA by a backend preparation step).
-    try:
-        model_dtype = next(model.parameters()).dtype
-        model_device = next(model.parameters()).device
-        inputs = cast_leaf_tensors(inputs, dtype=model_dtype, device=model_device)
-    except StopIteration:
-        pass
+    # `PreTrainedModel` exposes `.dtype` / `.device` via `ModuleUtilsMixin`; for a plain
+    # `nn.Module` we fall back to the first parameter (and skip if there are none).
+    if isinstance(model, PreTrainedModel):
+        inputs = cast_leaf_tensors(inputs, dtype=model.dtype, device=model.device)
+    else:
+        try:
+            param = next(model.parameters())
+            inputs = cast_leaf_tensors(inputs, dtype=param.dtype, device=param.device)
+        except StopIteration:
+            pass
 
     return model, inputs
 

@@ -41,8 +41,8 @@ import operator
 from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
-from ..utils.export_config import ExecutorchConfig
 from ..utils.import_utils import is_executorch_available, is_torch_available
+from .configs import ExecutorchConfig
 from .exporter_dynamo import DynamoExporter
 from .utils import (
     apply_fx_node_fixes,
@@ -66,7 +66,7 @@ if is_executorch_available():
     from executorch.backends.cuda.cuda_backend import CudaBackend
     from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
     from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
-    from executorch.exir.capture._config import EdgeCompileConfig, ExecutorchBackendConfig
+    from executorch.exir.capture._config import EdgeCompileConfig
     from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
     from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
 
@@ -101,9 +101,9 @@ class ExecutorchExporter(DynamoExporter):
         config: ExecutorchConfig | dict[str, Any],
     ) -> ExecutorchProgramManager:
         """Export a model to ExecuTorch, applying backend preparation and torch op patches."""
-        if type(config) is not ExecutorchConfig and isinstance(config, dict):
+        if isinstance(config, dict):
             config = ExecutorchConfig(**config)
-        else:
+        elif type(config) is not ExecutorchConfig:
             raise TypeError(f"Expected config to be an ExecutorchConfig or dict, got {type(config)}")
 
         prepare_for_backend = _BACKEND_PREPARE.get(config.backend)
@@ -119,9 +119,7 @@ class ExecutorchExporter(DynamoExporter):
             edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
                 exported_program, partitioner=partitioner, compile_config=_get_edge_compile_config()
             )
-            executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
-                config=_get_executorch_backend_config()
-            )
+            executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch()
 
         return executorch_programs_manager
 
@@ -154,18 +152,6 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
     )
 
 
-def _get_executorch_backend_config() -> ExecutorchBackendConfig:
-    """Build the ``ExecutorchBackendConfig`` used for ``edge_program_manager.to_executorch``.
-
-    Currently no overrides from the upstream defaults. ``remove_view_copy=False`` was
-    tried to fix the ``_ViewSpec is incompatible with its base`` failure on depth_pro /
-    pvt / vitdet, but it kept ``view_copy`` ops that XNNPACK then partitioned as pass-
-    through and regressed more tests than it fixed — those three models go back into the
-    known-failing list until a per-model fix is found.
-    """
-    return ExecutorchBackendConfig()
-
-
 # ── Stage 1: Backend preparation ──────────────────────────────────────────────
 # Each prepare_for_* function receives the original model and sample inputs, applies backend-specific preparation,
 # and returns the modified model, the list of partitioners to apply, and the modified sample inputs. Common patterns include:
@@ -179,8 +165,7 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     """CPU inference via XNNPACK. Moves the model to CPU and uses the default XnnpackPartitioner."""
 
     model.requires_grad_(False)
-    device = getattr(model, "device", None) or next(model.parameters()).device
-    if device.type != "cpu":
+    if model.device.type != "cpu":
         model = model.to(device="cpu")
     partitioner = [XnnpackPartitioner()]
     return model, sample_inputs, partitioner
@@ -192,11 +177,10 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     Moves the model to CUDA and upcasts to bfloat16 — required by the CUDA backend.
     """
     model.requires_grad_(False)
-    dtype = next(model.parameters()).dtype
-    device = getattr(model, "device", None) or next(model.parameters()).device
-    if device.type != "cuda":
+    if model.device.type != "cuda":
         model = model.to(device="cuda")
-    if dtype != torch.bfloat16:
+    if model.dtype != torch.bfloat16:
+        logger.warning(f"ExecuTorch CUDA backend requires bfloat16; upcasting model from {model.dtype}.")
         model = model.to(dtype=torch.bfloat16)
     partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model.__class__.__name__)])]
     return model, sample_inputs, partitioner
@@ -392,9 +376,10 @@ def _patch_expand(original):
     """Force a contiguous copy after ``expand``.
 
     ``Tensor.expand`` produces a view with stride ``0`` along broadcast dims.
-    ExecuTorch's memory planner rejects ``stride == 0`` (``tensor.py:77``: "0 in
-    strides is not supported for ExecuTorch"). Materialise the broadcast so the
-    captured tensor has standard strides downstream.
+    ExecuTorch's memory planner rejects ``stride == 0`` (raises "0 in strides is not
+    supported for ExecuTorch"): see
+    https://github.com/pytorch/executorch/blob/main/exir/tensor.py
+    Materialise the broadcast so the captured tensor has standard strides downstream.
     """
 
     def patch(self, *sizes):
@@ -468,45 +453,6 @@ def _patch_remove_empty_tensors_from_cat(_original):
                 )
                 full_like.meta = cat_node.meta
                 cat_node.replace_all_uses_with(full_like)
-
-    return patch
-
-
-def _make_squeeze_define_node(original):
-    """Allow XNNPACK's squeeze/unsqueeze to serialize when output has multiple dynamic dims.
-
-    The original ``define_node`` rejects any reshape with >1 dynamic output dim, but
-    squeeze (removes a size-1 dim) and unsqueeze (adds a size-1 dim) don't change the
-    number of dynamic dimensions — they're not really reshapes. The check is triggered
-    when XNNPACK's ``conv1d_unsqueeze_pass`` wraps a conv1d in unsqueeze/conv2d/squeeze
-    and the surrounding tensor has multiple dynamic dims (typical of audio/speech models
-    where both batch and time are dynamic). Replace the strict check with a no-op when
-    the dynamic-dim count is preserved across the squeeze.
-    """
-    from executorch.backends.xnnpack.serialization.xnnpack_graph_schema import (  # type: ignore[import-not-found]
-        XNNStaticReshape,
-        XNode,
-    )
-    from executorch.backends.xnnpack.utils.utils import get_input_node
-    from torch.fx.experimental.symbolic_shapes import free_symbols
-
-    def patch(self, node, xnn_graph, vals_to_ids, debug_handle):
-        self.define_nodes_tensor_inputs_outputs(node, xnn_graph, vals_to_ids)
-        input_id = vals_to_ids[get_input_node(node, 0)]
-        output_id = vals_to_ids[node]
-        new_shape = [0 if free_symbols(dim) else dim for dim in node.meta["val"].shape]
-        xnn_graph.xnodes.append(
-            XNode(
-                xnode_union=XNNStaticReshape(
-                    num_dims=len(new_shape),
-                    new_shape=new_shape,
-                    input_id=input_id,
-                    output_id=output_id,
-                    flags=0,
-                ),
-                debug_handle=debug_handle,
-            )
-        )
 
     return patch
 
@@ -622,6 +568,45 @@ def _extend_sym_ops_allowlist(original):
     Trace-time-only ops don't need a runtime kernel; without this they still trip the verifier.
     """
     return original | {torch.sym_ite, torch.sym_not, torch.sym_int, torch.sym_sum, torch.sym_float}
+
+
+def _make_squeeze_define_node(original):
+    """Allow XNNPACK's squeeze/unsqueeze to serialize when output has multiple dynamic dims.
+
+    The original ``define_node`` rejects any reshape with >1 dynamic output dim, but
+    squeeze (removes a size-1 dim) and unsqueeze (adds a size-1 dim) don't change the
+    number of dynamic dimensions — they're not really reshapes. The check is triggered
+    when XNNPACK's ``conv1d_unsqueeze_pass`` wraps a conv1d in unsqueeze/conv2d/squeeze
+    and the surrounding tensor has multiple dynamic dims (typical of audio/speech models
+    where both batch and time are dynamic). Replace the strict check with a no-op when
+    the dynamic-dim count is preserved across the squeeze.
+    """
+    from executorch.backends.xnnpack.serialization.xnnpack_graph_schema import (  # type: ignore[import-not-found]
+        XNNStaticReshape,
+        XNode,
+    )
+    from executorch.backends.xnnpack.utils.utils import get_input_node
+    from torch.fx.experimental.symbolic_shapes import free_symbols
+
+    def patch(self, node, xnn_graph, vals_to_ids, debug_handle):
+        self.define_nodes_tensor_inputs_outputs(node, xnn_graph, vals_to_ids)
+        input_id = vals_to_ids[get_input_node(node, 0)]
+        output_id = vals_to_ids[node]
+        new_shape = [0 if free_symbols(dim) else dim for dim in node.meta["val"].shape]
+        xnn_graph.xnodes.append(
+            XNode(
+                xnode_union=XNNStaticReshape(
+                    num_dims=len(new_shape),
+                    new_shape=new_shape,
+                    input_id=input_id,
+                    output_id=output_id,
+                    flags=0,
+                ),
+                debug_handle=debug_handle,
+            )
+        )
+
+    return patch
 
 
 @register_patch("executorch", "executorch.backends.xnnpack.operators.node_visitor._node_visitor_dict")

@@ -25,16 +25,16 @@ models exportable. The export pipeline uses five sections, in execution order:
 2. **Model patches** (`_PATCHES["dynamo"]` via `apply_patches("dynamo")`): reversible
    class-attribute swaps applied during tracing to replace non-exportable model patterns
    (data-dependent loops, in-place ops, mask checks) with export-safe equivalents.
-   Modeling code itself is not updated because these patches are too model-specific. We
-   do strive to keep modeling code compliant where reasonable.
+   Modeling code itself is not updated because these patches are too model-specific.
 3. **Pytree registration** (`register_cache_pytrees_for_model`): flatten/unflatten
    hooks (via `torch.utils._pytree.register_pytree_node`) for Cache subclasses and
    custom containers so `torch.export` can trace through them.
 4. **Dynamic shapes** (`get_auto_dynamic_shapes`): automatic `Dim.AUTO` inference
    for all tensor and cache inputs when `DynamoConfig.dynamic=True`.
-5. **State cleanup** (`cleanup_state`): resets non-Cache stateful module attributes
-   that `torch.export` may have left as FakeTensors, so a follow-up eager forward
-   on the same module is safe.
+5. **Model state cleanup** (`reset_model_state`): non-Cache stateful module attributes
+   (`_STATEFUL_CACHE_ATTRS`) are saved on entry, set to `None` during the trace, and
+   restored on exit — so a previous eager forward doesn't leak into the trace and any
+   FakeTensors the trace planted are discarded before the next eager forward.
 """
 
 from __future__ import annotations
@@ -47,9 +47,9 @@ from contextlib import contextmanager
 from typing import Any
 
 from ..utils import logging
-from ..utils.export_config import DynamoConfig
 from ..utils.import_utils import is_detectron2_available, is_torch_available, torch_compilable_check
 from .base import HfExporter
+from .configs import DynamoConfig
 from .utils import apply_patches, prepare_for_export, register_patch
 
 
@@ -86,9 +86,9 @@ class DynamoExporter(HfExporter):
         sample_inputs: dict[str, Any],
         config: DynamoConfig | dict[str, Any],
     ) -> ExportedProgram:
-        if type(config) is not DynamoConfig and isinstance(config, dict):
+        if isinstance(config, dict):
             config = DynamoConfig(**config)
-        else:
+        elif not isinstance(config, DynamoConfig):
             raise TypeError(f"Expected config to be a DynamoConfig or dict, got {type(config)}")
 
         model, sample_inputs = prepare_for_export(model, sample_inputs)
@@ -98,7 +98,7 @@ class DynamoExporter(HfExporter):
             dynamic_shapes = get_auto_dynamic_shapes(sample_inputs)
 
         register_cache_pytrees_for_model(model)
-        with apply_patches("dynamo"), patch_forward_signature(model, sample_inputs):
+        with apply_patches("dynamo"), reset_model_state(model), patch_forward_signature(model, sample_inputs):
             exported_program: ExportedProgram = torch.export.export(
                 model,
                 args=(),
@@ -108,7 +108,6 @@ class DynamoExporter(HfExporter):
                 prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
             )
 
-        cleanup_state(model)
         return exported_program
 
 
@@ -573,14 +572,16 @@ def get_auto_dynamic_shapes(inputs: Any) -> Any:
     return None
 
 
-# ── Stage 5: State cleanup ──────────────────────────────────────────────────
-# torch.export traces forward with FakeTensors, which can leave non-Cache stateful
-# tensor attributes as FakeTensors after tracing. A subsequent eager forward on
-# the same module then hits shape/dtype mismatches when it reuses the stale state.
-# `cleanup_state` resets those attributes from a narrow allowlist.
+# ── Stage 5: Model state cleanup ────────────────────────────────────────────
+# `torch.export` traces forward with FakeTensors, which can leave non-Cache stateful
+# tensor attributes as FakeTensors after tracing — a follow-up eager forward then
+# hits shape/dtype mismatches when it reuses the stale state. We also want stale
+# eager-mode state cleared on entry so it doesn't leak into the trace.
+# `reset_model_state` brackets the `torch.export.export` call: it saves every
+# attribute in `_STATEFUL_CACHE_ATTRS` on every submodule, sets them to `None` for
+# the trace, and restores the originals on exit (finally semantics).
 #
-# To register a new stateful attribute: append its name to _STATEFUL_CACHE_ATTRS.
-
+# To register a new stateful attribute: append its name to `_STATEFUL_CACHE_ATTRS`.
 
 _STATEFUL_CACHE_ATTRS = (
     "_cached_keys",  # glm_moe_dsa DSA indexer
@@ -591,12 +592,23 @@ _STATEFUL_CACHE_ATTRS = (
 )
 
 
-def cleanup_state(model: torch.nn.Module) -> None:
-    """Reset stateful module attributes that ``torch.export`` may have populated with
-    FakeTensors during tracing, so a follow-up eager forward on the same module is safe.
-    Only attributes whose names are in `_STATEFUL_CACHE_ATTRS` are cleared.
+@contextmanager
+def reset_model_state(model: torch.nn.Module):
+    """Save each `_STATEFUL_CACHE_ATTRS` value, null it for the trace, restore on exit.
+
+    FakeTensors that `torch.export` plants into these attributes during the trace are
+    discarded by the restore.
     """
-    for module in model.modules():
-        for attr in _STATEFUL_CACHE_ATTRS:
-            if hasattr(module, attr):
-                setattr(module, attr, None)
+    originals = [
+        (module, attr, getattr(module, attr))
+        for module in model.modules()
+        for attr in _STATEFUL_CACHE_ATTRS
+        if hasattr(module, attr)
+    ]
+    for module, attr, _ in originals:
+        setattr(module, attr, None)
+    try:
+        yield
+    finally:
+        for module, attr, original in originals:
+            setattr(module, attr, original)
