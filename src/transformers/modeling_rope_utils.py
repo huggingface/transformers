@@ -107,7 +107,7 @@ def dynamic_rope_update(rope_forward):
             )
             # TODO joao: may break with compilation
             self.register_buffer(f"{prefix}inv_freq", inv_freq, persistent=False)
-            setattr(self, f"{layer_type}_max_seq_len_cached", seq_len)
+            setattr(self, f"{prefix}max_seq_len_cached", seq_len)
 
         if seq_len < self.original_max_seq_len and max_seq_len_cached > self.original_max_seq_len:  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
@@ -115,7 +115,7 @@ def dynamic_rope_update(rope_forward):
             original_inv_freq = original_inv_freq.to(device)
             self.register_buffer(f"{prefix}inv_freq", original_inv_freq, persistent=False)
             setattr(self, f"{prefix}original_inv_freq", original_inv_freq)
-            setattr(self, f"{layer_type}_max_seq_len_cached", self.original_max_seq_len)
+            setattr(self, f"{prefix}max_seq_len_cached", self.original_max_seq_len)
 
     @wraps(rope_forward)
     def wrapper(self, x, position_ids, layer_type=None):

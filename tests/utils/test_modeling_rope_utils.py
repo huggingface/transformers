@@ -321,6 +321,36 @@ class RopeTest(unittest.TestCase):
             torch.testing.assert_close(inv_freq, default_inv_freq / factor)
         torch.testing.assert_close(inv_freq, EXPECTED_INV_FREQ)
 
+    def test_dynamic_rope_resets_after_long_sequence(self):
+        config = LlamaConfig(
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            max_position_embeddings=8,
+            rope_parameters={"rope_type": "dynamic", "rope_theta": 10000.0, "factor": 4.0},
+        )
+        rotary_embedding = LlamaRotaryEmbedding(config)
+        original_inv_freq = rotary_embedding.original_inv_freq.clone()
+
+        long_position_ids = torch.arange(32).unsqueeze(0)
+        long_input = torch.zeros(1, 32, 2, 8)
+        rotary_embedding(long_input, long_position_ids)
+
+        self.assertEqual(int(rotary_embedding.max_seq_len_cached), 32)
+        self.assertFalse(hasattr(rotary_embedding, "None_max_seq_len_cached"))
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(rotary_embedding.inv_freq, original_inv_freq)
+
+        short_position_ids = torch.arange(4).unsqueeze(0)
+        short_input = torch.zeros(1, 4, 2, 8)
+        rotary_embedding(short_input, short_position_ids)
+
+        self.assertEqual(int(rotary_embedding.max_seq_len_cached), config.max_position_embeddings)
+        self.assertFalse(hasattr(rotary_embedding, "None_max_seq_len_cached"))
+        torch.testing.assert_close(rotary_embedding.inv_freq, original_inv_freq)
+
     def test_yarn_rope_numerically(self):
         # fmt: off
         EXPECTED_INV_FREQ = torch.tensor(
