@@ -359,6 +359,40 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
+    def test_beam_search_reorders_cache_params(self):
+        """Regression test: beam search must call reorder_cache on cache_params (not just past_key_values).
+        See: https://github.com/huggingface/transformers/issues/46612
+        """
+        from unittest.mock import patch
+
+        import torch
+
+        from transformers import DynamicCache
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.pad_token_id = 0
+        model = MambaForCausalLM(config).to(torch_device).eval()
+
+        input_ids = torch.ones((1, 5), dtype=torch.long, device=torch_device)
+        max_new_tokens = 3
+        reorder_calls = []
+
+        original_reorder = DynamicCache.reorder_cache
+
+        def spy_reorder(self, beam_idx):
+            reorder_calls.append(beam_idx)
+            return original_reorder(self, beam_idx)
+
+        with patch.object(DynamicCache, "reorder_cache", spy_reorder):
+            model.generate(input_ids, num_beams=2, max_new_tokens=max_new_tokens, do_sample=False)
+
+        self.assertEqual(
+            len(reorder_calls),
+            max_new_tokens,
+            "reorder_cache must be called once per generation step during beam search "
+            "(cache_params was silently skipped before the fix)",
+        )
+
 
 @slow
 @require_torch

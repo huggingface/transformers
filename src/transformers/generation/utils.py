@@ -3392,12 +3392,14 @@ class GenerationMixin(ContinuousMixin):
 
             # pluck the cache from the beam indices that will be used in the next iteration
             # NOTE: we need to check if `self._reorder_cache` exists for special models like RAG, RecurrentGemma etc.
-            if model_kwargs.get("past_key_values") is not None:
+            # NOTE: models may use non-standard cache keys (e.g. mamba uses `cache_params`), so we check all names.
+            cache_name = next((k for k in ALL_CACHE_NAMES if model_kwargs.get(k) is not None), None)
+            if cache_name is not None:
                 beam_idx = self._flatten_beam_dim(running_beam_indices[..., cur_len - decoder_prompt_len])
                 if hasattr(self, "_reorder_cache"):
-                    model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
+                    model_kwargs[cache_name] = self._reorder_cache(model_kwargs[cache_name], beam_idx)
                 else:
-                    model_kwargs["past_key_values"].reorder_cache(beam_idx)
+                    model_kwargs[cache_name].reorder_cache(beam_idx)
 
             cur_len = cur_len + 1
             is_early_stop_heuristic_unsatisfied = self._check_early_stop_heuristic(
