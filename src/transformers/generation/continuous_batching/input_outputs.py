@@ -613,7 +613,7 @@ class ContinuousBatchingAsyncIOs:
     between the two batches, which means twice as more VRAM is used for static input tensors and CUDA graph. If your GPU
     is large enough or you want to generate long sequences, this is a good trade-off to make.
 
-    Asynchronous batching works by creating two pairs of host - device inputs and ouputs:
+    Asynchronous batching works by creating two pairs of host - device inputs and outputs:
 
                                     inputs
                       ┌──────────┐ ────────► ┌────────────┐
