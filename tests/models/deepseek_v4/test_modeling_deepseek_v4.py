@@ -473,7 +473,9 @@ class DeepseekV4FlashIntegrationTest(unittest.TestCase):
         self.assertEqual(_run_distributed_worker("fp4_generation"), 0, "torchrun worker failed; see stdout above")
 
     def test_v4_flash_fp4_generation_megamoe_distributed(self):
-        self.assertEqual(_run_distributed_worker("fp4_generation_megamoe"), 0, "torchrun worker failed; see stdout above")
+        self.assertEqual(
+            _run_distributed_worker("fp4_generation_megamoe"), 0, "torchrun worker failed; see stdout above"
+        )
 
     def test_v4_flash_fp4_generation_device_map_auto(self):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
@@ -540,9 +542,7 @@ class DeepseekV4FlashBaseIntegrationTest(unittest.TestCase):
     def test_v4_flash_base_fp8_generation_distributed(self):
         # The worker drops ``deepgemm`` from its dispatch list when CUDA isn't
         # available (e.g. on XPU) — see ``_distributed_worker.py``.
-        self.assertEqual(
-            _run_distributed_worker("fp8_base_generation"), 0, "torchrun worker failed; see stdout above"
-        )
+        self.assertEqual(_run_distributed_worker("fp8_base_generation"), 0, "torchrun worker failed; see stdout above")
 
     def test_v4_flash_base_fp8_generation_device_map_auto(self):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)

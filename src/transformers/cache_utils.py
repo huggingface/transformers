@@ -1413,12 +1413,12 @@ class StaticCache(Cache):
                 # DeepSeek-V4 HCA: sliding-window K=V + compressor-state buffers (rolling
                 # source-token buffer + pre-allocated compressed-entry slots). Imported
                 # lazily to avoid `cache_utils` ↔ `models.deepseek_v4` import cycle.
-                from .models.deepseek_v4.modeling_deepseek_v4 import DeepseekV4HCAStaticCache
+                from .models.deepseek_v4.generation_deepseek_v4 import DeepseekV4HCAStaticCache
 
                 layer = DeepseekV4HCAStaticCache(config=config, max_cache_len=max_cache_len)
             elif layer_type == "compressed_sparse_attention":
                 # DeepSeek-V4 CSA: HCA static cache + indexer entry + overlap state.
-                from .models.deepseek_v4.modeling_deepseek_v4 import DeepseekV4CSAStaticCache
+                from .models.deepseek_v4.generation_deepseek_v4 import DeepseekV4CSAStaticCache
 
                 layer = DeepseekV4CSAStaticCache(config=config, max_cache_len=max_cache_len)
             elif layer_type in sliding_layer_types:
