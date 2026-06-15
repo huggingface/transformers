@@ -1201,6 +1201,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     # General model properties
     config_class: type[PreTrainedConfig] | None = None
+    generation_config_class: type[GenerationConfig] = GenerationConfig  # default, used with `GenerationMixin`
     _auto_class = None
     base_model_prefix: str = ""
     _is_stateful: bool = False
@@ -1363,7 +1364,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self.config._experts_implementation
         )
         if self.can_generate():
-            self.generation_config = GenerationConfig.from_model_config(config)
+            # `from_model_config` is a legacy behavior -- we shouldn't set generation flags in the model config
+            try:
+                self.generation_config = self.generation_config_class.from_model_config(config)
+            except NotImplementedError:
+                self.generation_config = self.generation_config_class()
 
         # for initialization of the loss
         loss_type = self.__class__.__name__
@@ -1570,8 +1575,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if isinstance(dtype, str):
             dtype = getattr(torch, dtype)
 
-        # Set the same `dtype` on all subconfigs to avoid dtype mismatch. When "auto" dtype
-        # with nested models, we can't dispatch different dtype per backbone module
+        # Keep the resolved `dtype` on the config so it matches the actual weights, the same way
+        # `from_pretrained` does. Also set it on all subconfigs to avoid dtype mismatch. When "auto"
+        # dtype with nested models, we can't dispatch different dtype per backbone module
+        config.dtype = dtype
         for sub_config_key in config.sub_configs:
             if (sub_config := getattr(config, sub_config_key)) is not None:
                 sub_config.dtype = dtype
@@ -1634,7 +1641,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     @classmethod
     def can_generate(cls) -> bool:
         """
-        Returns whether this model can generate sequences with `.generate()` from the `GenerationMixin`.
+        Returns whether this model can generate sequences with `.generate()`, from the `GenerationMixin`
+        or one with a similar interface.
 
         Under the hood, on classes where this function returns True, some generation-specific changes are triggered:
         for instance, the model instance will have a populated `generation_config` attribute.
@@ -1642,7 +1650,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Returns:
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
-        # Directly inherits `GenerationMixin` -> can generate
+        # Directly inherits `GenerationMixin` (or a class ending in the same substring) -> can generate
         if "GenerationMixin" in str(cls.__bases__):
             return True
         # The class inherits from a class that can generate (recursive check) -> can generate
@@ -1902,6 +1910,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             None to sdpa (to potentially eager).
         """
         is_paged, base_implementation = split_attention_implementation(attn_implementation)
+
+        # A kernel the model explicitly lists in `_compatible_flash_implementations` is vouched for by
+        # the model author, so authorize loading it even when it lives outside the `kernels-community` org.
+        if base_implementation in (getattr(self, "_compatible_flash_implementations", None) or []):
+            allow_all_kernels = True
 
         # Auto-correct model's default flash implementation if specified
         if attn_implementation is not None:
