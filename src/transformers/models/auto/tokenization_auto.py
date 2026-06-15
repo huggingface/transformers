@@ -33,7 +33,7 @@ from ...utils import (
     is_tokenizers_available,
     logging,
 )
-from ...utils.hub import cached_file
+from ...utils.hub import cached_file, has_file
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -60,6 +60,10 @@ logger = logging.get_logger(__name__)
 # V5: Simplified mapping - single tokenizer class per model type (always prefer tokenizers-based)
 REGISTERED_TOKENIZER_CLASSES: dict[str, type[Any]] = {}
 REGISTERED_FAST_ALIASES: dict[str, type[Any]] = {}
+
+TOKENIZER_BACKENDS = frozenset(
+    {"TokenizersBackend", "PreTrainedTokenizerFast", "PythonBackend", "MistralCommonBackend"}
+)
 
 TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
     [
@@ -416,6 +420,25 @@ def load_merges(merges_file):
     return merges
 
 
+def _has_tekken_tokenizer_file(
+    pretrained_model_name_or_path: str | os.PathLike[str],
+    **kwargs,
+) -> bool:
+    subfolder = kwargs.get("subfolder", "")
+    tekken_filename = os.path.join(subfolder, "tekken.json") if subfolder else "tekken.json"
+    try:
+        return has_file(
+            pretrained_model_name_or_path,
+            tekken_filename,
+            revision=kwargs.get("revision"),
+            token=kwargs.get("token"),
+            cache_dir=kwargs.get("cache_dir"),
+            local_files_only=kwargs.get("local_files_only", False),
+        )
+    except OSError:
+        return False
+
+
 def tokenizer_class_from_name(class_name: str) -> type[Any] | None:
     # Bloom tokenizer classes were removed but should map to the fast backend for BC
     if class_name in {"BloomTokenizer", "BloomTokenizerFast"}:
@@ -730,39 +753,32 @@ class AutoTokenizer:
             != (_hub_class.removesuffix("Fast"))
         ):
             registered_class_name = TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast")
-            if registered_class_name not in (
-                "TokenizersBackend",
-                "PythonBackend",
-                "PreTrainedTokenizerFast",
-                "MistralCommonBackend",
-            ):
-                # If the hub class is known incorrect for this model type, use the registered class; otherwise trust the hub.
-                class_name = (
-                    registered_class_name
-                    if (
-                        config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
-                        or config_model_name in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
-                    )
-                    else _hub_class
-                )
-                tokenizer_class = tokenizer_class_from_name(class_name)
-                if tokenizer_class is not None and tokenizer_class.__name__ not in (
-                    "TokenizersBackend",
-                    "PythonBackend",
-                    "PreTrainedTokenizerFast",
+
+            if registered_class_name in TOKENIZER_BACKENDS:
+                if (
+                    registered_class_name == "MistralCommonBackend"
+                    and is_mistral_common_available()
+                    and _has_tekken_tokenizer_file(pretrained_model_name_or_path, **kwargs)
                 ):
-                    return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                    class_name = "MistralCommonBackend"
+                elif registered_class_name in ("MistralCommonBackend", "PreTrainedTokenizerFast", "TokenizersBackend"):
+                    class_name = "TokenizersBackend"
+                else:
+                    class_name = registered_class_name
+                tokenizer_class = tokenizer_class_from_name(class_name) or TokenizersBackend
+                return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-            if registered_class_name == "MistralCommonBackend" and is_mistral_common_available():
-                tokenizer_class = tokenizer_class_from_name("MistralCommonBackend")
-                if tokenizer_class is not None:
-                    try:
-                        return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-                    except (ValueError, FileNotFoundError, OSError):
-                        logger.info("Falling back to TokenizersBackend as no mistral-common tokenizer file was found.")
-
-            if TokenizersBackend is not None:
-                return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            class_name = (
+                registered_class_name
+                if (
+                    config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
+                    or config_model_name in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
+                )
+                else _hub_class
+            )
+            tokenizer_class = tokenizer_class_from_name(class_name)
+            if tokenizer_class is not None:
+                return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
             raise ValueError(
                 f"Tokenizer class '{_hub_class}' specified in the tokenizer config was not found. "
@@ -856,6 +872,27 @@ class AutoTokenizer:
 
         model_type = config_class_to_model_type(type(config).__name__) or getattr(config, "model_type", None)
         if model_type is not None:
+            registered_class_name = TOKENIZER_MAPPING_NAMES.get(model_type)
+            if registered_class_name is not None:
+                registered_class_name = registered_class_name.removesuffix("Fast")
+                if registered_class_name in TOKENIZER_BACKENDS:
+                    if (
+                        registered_class_name == "MistralCommonBackend"
+                        and is_mistral_common_available()
+                        and _has_tekken_tokenizer_file(pretrained_model_name_or_path, **kwargs)
+                    ):
+                        class_name = "MistralCommonBackend"
+                    elif registered_class_name in (
+                        "MistralCommonBackend",
+                        "PreTrainedTokenizerFast",
+                        "TokenizersBackend",
+                    ):
+                        class_name = "TokenizersBackend"
+                    else:
+                        class_name = registered_class_name
+                    tokenizer_class = tokenizer_class_from_name(class_name) or TokenizersBackend
+                    return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
             tokenizer_class = TOKENIZER_MAPPING.get(type(config), TokenizersBackend)
             if tokenizer_class is not None:
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)

@@ -266,6 +266,15 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertGreater(len(tokenizer("Ministral")["input_ids"]), 0)
 
     @require_tokenizers
+    @require_mistral_common
+    def test_mistral_sentencepiece_models_use_tokenizers_backend(self):
+        """Legacy Mistral models with only tokenizer.model (no tekken.json) should keep
+        using TokenizersBackend even when mistral-common is installed."""
+        tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-beta")
+        self.assertIsInstance(tokenizer, TokenizersBackend)
+        self.assertGreater(len(tokenizer("zephyr")["input_ids"]), 0)
+
+    @require_tokenizers
     def test_do_lower_case(self):
         tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased", do_lower_case=False)
         sample = "Hello, world. How are you?"
