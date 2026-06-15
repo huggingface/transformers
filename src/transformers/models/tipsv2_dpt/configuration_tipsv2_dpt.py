@@ -36,30 +36,21 @@ logger = logging.get_logger(__name__)
 class Tipsv2DptConfig(PreTrainedConfig):
     r"""
     neck_hidden_sizes (`list[int]`, *optional*, defaults to `[96, 192, 384, 768]`):
-        Output channel counts for the four reassemble stages. Default corresponds to
-        `hidden_size // [8, 4, 2, 1]` for the b14 backbone (`hidden_size=768`). For
-        other variants scale proportionally: l14 → `[128, 256, 512, 1024]`,
-        so400m14 → `[144, 288, 576, 1152]`, g14 → `[192, 384, 768, 1536]`.
+        The hidden sizes to project to for the feature maps of the backbone.
     fusion_hidden_size (`int`, *optional*, defaults to 256):
-        Number of channels throughout the DPT feature-fusion neck.
+        The number of channels before fusion.
     reassemble_factors (`list[float]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
-        Up/down-sample factors applied at each reassemble stage (shallowest to
-        deepest). A factor > 1 uses a transposed convolution; a factor < 1 uses a
-        strided convolution; a factor of 1 is the identity.
+        The up/downsampling factors of the reassemble layers.
     readout_act (`str`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-        Activation applied after the CLS-token readout projection. The original
-        implementation uses the tanh-approximation variant of GELU; the default
-        `"gelu_pytorch_tanh"` matches that numerically.
+        Activation applied after the readout projection layer.
     num_depth_bins (`int`, *optional*, defaults to 256):
-        Number of depth bins used by the depth-estimation head. The head predicts a
-        probability distribution over `num_depth_bins` evenly-spaced values between
-        `min_depth` and `max_depth` and computes a soft-expectation depth.
+        The number of depth bins used by the depth-estimation head.
     min_depth (`float`, *optional*, defaults to 0.001):
-        Lower bound (metres) of the depth-bin range.
+        The minimum depth value (meters) for depth bin calculation.
     max_depth (`float`, *optional*, defaults to 10.0):
-        Upper bound (metres) of the depth-bin range.
+        The maximum depth value (meters) for depth bin calculation.
     depth_decoder_activation (`str`, *optional*, defaults to `"relu"`):
-        Activation function applied after the depth decoder projection layer.
+        Activation applied after the depth decoder projection layer.
     semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
         Label index to ignore in the cross-entropy loss for semantic segmentation.
 
@@ -78,9 +69,9 @@ class Tipsv2DptConfig(PreTrainedConfig):
     sub_configs = {"backbone_config": AutoConfig}
 
     backbone_config: dict | PreTrainedConfig | None = None
-    neck_hidden_sizes: list[int] | tuple[int, ...] = (96, 192, 384, 768)
+    neck_hidden_sizes: list[int] | None = None
     fusion_hidden_size: int = 256
-    reassemble_factors: list[int | float] | tuple[int | float, ...] = (4, 2, 1, 0.5)
+    reassemble_factors: list[float] | None = None
     readout_act: str = "gelu_pytorch_tanh"
     num_depth_bins: int = 256
     min_depth: float = 0.001
@@ -89,8 +80,13 @@ class Tipsv2DptConfig(PreTrainedConfig):
     semantic_loss_ignore_index: int = 255
 
     def __post_init__(self, **kwargs):
+        if self.neck_hidden_sizes is None:
+            self.neck_hidden_sizes = [96, 192, 384, 768]
+        if self.reassemble_factors is None:
+            self.reassemble_factors = [4, 2, 1, 0.5]
+
         # Use num_labels and label2id when set. Otherwise fall back to num_labels=num_seg_classes which
-        # is set on original configs.
+        # is set in the original configs.
         num_labels = kwargs.get("num_labels")
         label2id = kwargs.get("label2id")
         num_seg_classes = kwargs.pop("num_seg_classes", None)
