@@ -65,6 +65,7 @@ ALLOWED_LAYER_TYPES = (
     "chunked_attention",
     "compressed_sparse_attention",  # CSA, used in deepseek_v4
     "heavily_compressed_attention",  # HCA, used in deepseek_v4
+    "minimax_m3_sparse",  # lightning-index sparse attention, used in minimax_m3_vl
     "linear_attention",  # used in minimax
     "conv",  # used in LFMv2
     "mamba",
