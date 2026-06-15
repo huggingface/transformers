@@ -61,6 +61,8 @@ if is_torch_available():
     from torch.utils._sympy.numbers import IntInfinity
     from torch.utils._sympy.value_ranges import ValueRanges
 
+    from ..modeling_utils import PreTrainedModel
+
 
 if is_executorch_available():
     from executorch.backends.cuda.cuda_backend import CudaBackend
@@ -69,10 +71,6 @@ if is_executorch_available():
     from executorch.exir.capture._config import EdgeCompileConfig
     from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
     from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
-
-if TYPE_CHECKING:
-    if is_torch_available():
-        from ..modeling_utils import PreTrainedModel
 
 
 logger = logging.get_logger(__name__)
@@ -167,6 +165,9 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     model.requires_grad_(False)
     if model.device.type != "cpu":
         model = model.to(device="cpu")
+    # XNNPACK has no `_grouped_mm.out` kernel — force MoE experts to `batched_mm`.
+    if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
+        model.set_experts_implementation("batched_mm")
     partitioner = [XnnpackPartitioner()]
     return model, sample_inputs, partitioner
 
@@ -376,10 +377,10 @@ def _patch_expand(original):
     """Force a contiguous copy after ``expand``.
 
     ``Tensor.expand`` produces a view with stride ``0`` along broadcast dims.
-    ExecuTorch's memory planner rejects ``stride == 0`` (raises "0 in strides is not
-    supported for ExecuTorch"): see
-    https://github.com/pytorch/executorch/blob/main/exir/tensor.py
-    Materialise the broadcast so the captured tensor has standard strides downstream.
+    ExecuTorch's memory planner rejects ``stride == 0`` and raises "0 in strides is not
+    supported for ExecuTorch" — see ``TensorSpec.__init__`` in
+    https://github.com/pytorch/executorch/blob/v1.0.0/exir/tensor.py#L72. Materialise
+    the broadcast so the captured tensor has standard strides downstream.
     """
 
     def patch(self, *sizes):
@@ -637,8 +638,15 @@ def _patch_squeeze_node_visitors(original):
 # Program-level fixes need context the per-node walk doesn't have: `range_constraints`,
 # `graph_signature`, `state_dict`.
 
-_MAX_DIM_MULTIPLIER = 4  # upper bound = max(lower * multiplier, floor)
-_MAX_DIM_FLOOR = 1024  # minimum upper bound for any dynamic dim
+# Heuristic caps for `int_oo` dynamic-dim upper bounds, used by `_fix_range_constraints`.
+# ExecuTorch's XNNPACK memory planner pre-allocates buffers from the upper bound, so leaving
+# `int_oo` blows up memory; capping too tight rejects legitimate trace-time shapes (e.g. VLM
+# image-token counts). The pair below — 4x the observed lower/trace value, with a 1024 floor —
+# was tuned empirically on the export test suite to keep every passing trace under realistic
+# planner memory while still covering the largest sampled inputs. Bump together if a new model
+# hits a "bound too tight" error during ExecuTorch lowering.
+_MAX_DIM_MULTIPLIER = 4
+_MAX_DIM_FLOOR = 1024
 
 
 def _as_int(x, default: int = 0) -> int:
@@ -674,6 +682,7 @@ def _fix_range_constraints(exported_program: ExportedProgram) -> None:
             var_to_val = getattr(shape_env, "backed_var_to_val", None) or shape_env.var_to_val
             break  # all nodes share the same shape_env, so we only need one
 
+    unbounded = []
     for rd in range_dicts:
         for sym, vr in rd.items():
             if isinstance(vr.upper, IntInfinity):
@@ -681,6 +690,21 @@ def _fix_range_constraints(exported_program: ExportedProgram) -> None:
                 trace_val = _as_int(var_to_val.get(sym), 0)
                 upper = max(lower * _MAX_DIM_MULTIPLIER, trace_val * _MAX_DIM_MULTIPLIER, _MAX_DIM_FLOOR)
                 rd[sym] = ValueRanges(vr.lower, upper)
+                unbounded.append((str(sym), lower, upper))
+
+    if unbounded:
+        # dedupe across the two range_dicts since they share symbols
+        seen = {name: (lower, upper) for name, lower, upper in unbounded}
+        details = ", ".join(f"{name} → [{lower}, {upper}]" for name, (lower, upper) in seen.items())
+        logger.warning(
+            "ExecuTorch export: %d dynamic dim(s) had no upper bound (int_oo) and were capped "
+            "heuristically (%s). The XNNPACK memory planner pre-allocates from these bounds, so "
+            "loose caps mean wasted device memory. For best memory planning, pass explicit "
+            "`dynamic_shapes` with fine-grained `torch.export.Dim(name, min=..., max=...)` "
+            "covering the smallest and largest shapes you expect at runtime.",
+            len(seen),
+            details,
+        )
 
 
 @register_fx_program_fix("executorch")

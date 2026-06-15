@@ -316,7 +316,7 @@ def prepare_for_export(
 ) -> tuple[PreTrainedModel | torch.nn.Module, dict[str, Any]]:
     """Configure the model for export. Mutates both `model` and `inputs` in-place:
 
-    - Sets optimal attention/experts implementations.
+    - Sets `sdpa` attention.
     - Patches non-exportable module behaviours (mamba masks, classifier casts, …).
     - Strips label inputs (`labels`, `future_values`) — loss computation is unsupported.
     - Strips output flags (`use_cache`, `return_dict`, …) from inputs and bakes non-`None`
@@ -350,10 +350,6 @@ def prepare_for_export(
             value = inputs.pop(output_flag)
             if value is not None:
                 model.forward = functools.partial(model.forward, **{output_flag: value})
-
-    # set experts implementation to batched_mm for export
-    if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
-        model.set_experts_implementation("batched_mm")
 
     # set attention implementation to sdpa for export
     if isinstance(model, PreTrainedModel):

@@ -276,6 +276,19 @@ def _patch_randperm(original):
     return patch
 
 
+@register_patch("onnx", "torch.histc")
+def _patch_histc(original):
+    """Default `aten_histc` translation rejects integer inputs (`AssertionError: torch.histc
+    only works on float`), but transformers' MoE forward calls `histc` with int32 on CUDA
+    (see `grouped_mm_experts_forward`). Cast to float so the ONNX decomposition accepts it.
+    """
+
+    def patch(input, bins=100, min=0, max=0, *, out=None):
+        return original(input.float(), bins=bins, min=min, max=max, out=out)
+
+    return patch
+
+
 def _patch_cummax_or_cummin(original, *, mode: str):
     """Decompose cummax/cummin via triangular-mask reduction (O(N^2) memory)."""
 
@@ -719,12 +732,50 @@ def _aten_bincount(self: INT64, weights=None, minlength: int = 0) -> INT64:
     return op.ReduceSum(one_hot, op.Constant(value_ints=[0]), keepdims=0)
 
 
+def _aten_grouped_mm(mat_a: TReal, mat_b: TReal, offs: INT64, bias=None, out_dtype=None) -> TReal:
+    """ONNX implementation of `aten._grouped_mm.default`.
+
+    `_grouped_mm(mat_a: (M, K), mat_b: (G, K, N), offs: (G,))` computes `out[r] =
+    mat_a[r] @ mat_b[group(r)]` where rows are sorted by group and `offs` holds the
+    cumulative end index per group.
+
+    Per-group `Slice + MatMul + Concat`. `G` (number of experts) is static for any
+    concrete model, so unroll at translation time: emit one `Slice + MatMul` triple
+    per group and a final `Concat`. Avoids the `(M, K, N)` materialisation a naive
+    `weight[group_idx]` gather would emit — peak memory is `O(M·N + max(n_g)·K + K·N)`.
+    """
+    G = mat_b.shape[0]
+    if not isinstance(G, int):
+        raise ValueError(
+            "_aten_grouped_mm: number of experts (mat_b.shape[0]) must be static at translation time"
+        )
+
+    offs_i64 = op.Cast(offs, to=7)
+    axes_0 = op.Constant(value_ints=[0])
+    zero_1d = op.Constant(value_ints=[0])
+
+    outputs = []
+    prev_end = zero_1d
+    for g in range(G):
+        g_lo = op.Constant(value_ints=[g])
+        g_hi = op.Constant(value_ints=[g + 1])
+        end = op.Slice(offs_i64, g_lo, g_hi, axes_0)  # (1,) — offs[g]
+        a_g = op.Slice(mat_a, prev_end, end, axes_0)  # (n_g, K)
+        w_g = op.Squeeze(op.Slice(mat_b, g_lo, g_hi, axes_0), axes_0)  # (K, N)
+        outputs.append(op.MatMul(a_g, w_g))  # (n_g, N)
+        prev_end = end
+
+    return op.Concat(*outputs, axis=0)  # (M, N)
+
+
 _ONNX_TRANSLATION_TABLE: dict[Any, Any] = {}
 if is_onnxscript_available():
     _ONNX_TRANSLATION_TABLE.update(
         {
-            torch.ops.aten.index_put.default: _aten_index_put,
             torch.ops.aten.bincount.default: _aten_bincount,
+            torch.ops.aten.index_put.default: _aten_index_put,
+            torch.ops.aten._grouped_mm.default: _aten_grouped_mm,
+            torch.ops.transformers.grouped_mm_fallback.default: _aten_grouped_mm,
         }
     )
 
