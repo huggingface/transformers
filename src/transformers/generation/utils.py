@@ -606,9 +606,7 @@ class GenerationMixin(ContinuousMixin):
         # 6. Move the tensors the forward consumes onto the model device, right before the call.
         # It lets the caller intentionally keep inputs on a different device (e.g. Neuron/TPU) so
         # the generation loop's growing-tensor bookkeeping stays off-device.
-        input_tensor = model_inputs.get("inputs_embeds")
-        if input_tensor is None:
-            input_tensor = model_inputs.get(input_ids_key)
+        input_tensor = model_inputs.get("inputs_embeds", model_inputs[input_ids_key])  # input_ids is None for embeds
         if self.device.type != "meta" and input_tensor is not None and input_tensor.device != self.device:
             for key, value in model_inputs.items():
                 if isinstance(value, torch.Tensor):
