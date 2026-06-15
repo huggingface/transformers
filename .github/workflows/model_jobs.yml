@@ -46,6 +46,8 @@ env:
   # K8S instance-sharing makes each runner report the full machine's CPU RAM (~750 GB). Cap it to the
   # amount a dedicated A10 instance would see, so `device_map="auto"` produces a sane device map.
   CI_CPU_MEMORY_LIMIT_GB: 60
+  NO_COLOR: 1
+
 
 permissions:
   contents: read
