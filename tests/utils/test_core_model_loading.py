@@ -35,7 +35,6 @@ from transformers.core_model_loading import (
     PrefixChange,
     WeightConverter,
     WeightRenaming,
-    _forward_renaming_changes_any_key,
     build_glob_alternation,
     convert_and_load_state_dict_in_model,
     rename_source_key,
@@ -990,19 +989,17 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         self.assertTrue(compare_state_dicts(reversed_state_dict, state_dict))
 
 
-class TestRevertWeightConversionIdempotency(unittest.TestCase):
-    """`revert_weight_conversion` must not corrupt checkpoints saved without going through the conversion
-    engine (`_weight_conversions is None`), e.g. a `trust_remote_code` model whose remote `from_pretrained`
-    builds the state dict directly.
+class TestRevertWeightConversionRemoteCode(unittest.TestCase):
+    """`revert_weight_conversion` must not corrupt a `trust_remote_code` checkpoint on save.
 
-    The hardcoded conversion mappings describe disk(source) -> in-memory(target) renames; many are unanchored
-    substring renames whose reverse is not idempotent. Reverting one against keys that are *already* in the
-    on-disk layout doubles the affected prefix (`encoder.layers` -> `encoder.encoder.layers`) and silently
-    drops every affected weight on reload. The save path must skip reverting a never-applied conversion while
-    still reverting genuinely canonical (in-memory) keys.
+    A remote model keeps its weights in their original on-disk layout: its remote modeling code builds the
+    state dict directly, so `_weight_conversions is None` and the hardcoded native conversion mapping was
+    never applied. Reverting that mapping would re-apply a never-applied, non-idempotent rename and double the
+    affected prefix (`encoder.layers` -> `encoder.encoder.layers`), silently dropping every affected weight on
+    reload. Native models built with `from_config` carry canonical keys and must still be reverted.
     """
 
-    def _build_model(self, model_type):
+    def _build_model(self, model_type, module_name):
         config = PreTrainedConfig()
         config.model_type = model_type
 
@@ -1011,32 +1008,28 @@ class TestRevertWeightConversionIdempotency(unittest.TestCase):
                 super().__init__(config)
                 self.post_init()
 
-        return _Model(config)
+        model = _Model(config)
+        # Fake the namespace the discriminator keys off (set after construction so `post_init` still finds the
+        # real class source). Remote classes live under `transformers_modules`; native ones do not.
+        type(model).__module__ = module_name
+        return model
 
-    def test_forward_renaming_changes_any_key_detects_disk_layout(self):
-        forward = [WeightRenaming("encoder.layers", "layers")]
-        # Keys still in on-disk layout match the forward source pattern -> must not be reverted.
-        self.assertTrue(_forward_renaming_changes_any_key(forward, {"encoder.layers.0.weight": torch.zeros(1)}))
-        # Canonical (in-memory) keys do not match the forward source -> safe to revert.
-        self.assertFalse(_forward_renaming_changes_any_key(forward, {"layers.0.weight": torch.zeros(1)}))
-        # No renamings -> nothing to detect.
-        self.assertFalse(_forward_renaming_changes_any_key([], {"encoder.layers.0.weight": torch.zeros(1)}))
-
-    def test_revert_skips_non_idempotent_rename_on_disk_layout_keys(self):
-        register_checkpoint_conversion_mapping("test_nonidempotent_disk", [WeightRenaming("encoder.layers", "layers")])
-        model = self._build_model("test_nonidempotent_disk")
-        # `_weight_conversions is None` -> revert falls back to the hardcoded mapping. The keys are already in
-        # on-disk layout, so reverting would double the prefix; the guard must return them unchanged.
+    def test_revert_skips_trust_remote_code_model(self):
+        register_checkpoint_conversion_mapping(
+            "test_remote_nonidempotent", [WeightRenaming("encoder.layers", "layers")]
+        )
+        model = self._build_model("test_remote_nonidempotent", "transformers_modules.acme.modeling_acme")
+        # Remote model: keys already in on-disk layout, so reverting would double the prefix -> must be skipped.
         saved = revert_weight_conversion(model, {"encoder.layers.0.attn.weight": torch.zeros(1)})
         self.assertEqual(set(saved), {"encoder.layers.0.attn.weight"})
         self.assertNotIn("encoder.encoder.layers.0.attn.weight", saved)
 
-    def test_revert_still_reverts_canonical_layout_keys(self):
+    def test_revert_still_reverts_native_model(self):
         register_checkpoint_conversion_mapping(
-            "test_nonidempotent_canonical", [WeightRenaming("encoder.layers", "layers")]
+            "test_native_nonidempotent", [WeightRenaming("encoder.layers", "layers")]
         )
-        model = self._build_model("test_nonidempotent_canonical")
-        # Canonical in-memory keys (e.g. a model built with `from_config`) must still round-trip to disk layout.
+        model = self._build_model("test_native_nonidempotent", "transformers.models.fake.modeling_fake")
+        # Native model (not in `transformers_modules`): canonical keys must still round-trip to disk layout.
         saved = revert_weight_conversion(model, {"layers.0.attn.weight": torch.zeros(1)})
         self.assertEqual(set(saved), {"encoder.layers.0.attn.weight"})
 
