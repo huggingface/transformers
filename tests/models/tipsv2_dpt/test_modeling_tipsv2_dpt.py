@@ -145,7 +145,7 @@ class Tipsv2DptModelTester:
             (self.batch_size, 3, self.decoder_height, self.decoder_width),
         )
         self.parent.assertEqual(
-            outputs.logits.shape,
+            outputs.segmentation_logits.shape,
             (self.batch_size, self.num_labels, self.decoder_height, self.decoder_width),
         )
 
@@ -294,7 +294,8 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.predicted_depth.shape, torch.Size([1, expected_height, expected_width]))
         self.assertEqual(outputs.normals.shape, torch.Size([1, 3, expected_height, expected_width]))
         self.assertEqual(
-            outputs.logits.shape, torch.Size([1, model.config.num_labels, expected_height, expected_width])
+            outputs.segmentation_logits.shape,
+            torch.Size([1, model.config.num_labels, expected_height, expected_width]),
         )
 
         EXPECTED_DEPTH = Expectations(
