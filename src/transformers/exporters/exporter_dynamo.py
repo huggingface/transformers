@@ -84,8 +84,13 @@ class DynamoExporter(HfExporter):
         self,
         model: PreTrainedModel,
         sample_inputs: dict[str, Any],
-        config: DynamoConfig,
+        config: DynamoConfig | dict[str, Any],
     ) -> ExportedProgram:
+        if type(config) is not DynamoConfig and isinstance(config, dict):
+            config = DynamoConfig(**config)
+        else:
+            raise TypeError(f"Expected config to be a DynamoConfig or dict, got {type(config)}")
+
         model, sample_inputs = prepare_for_export(model, sample_inputs)
 
         dynamic_shapes = config.dynamic_shapes

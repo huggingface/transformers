@@ -103,8 +103,13 @@ class OnnxExporter(DynamoExporter):
         self,
         model: PreTrainedModel,
         sample_inputs: dict[str, Any],
-        config: OnnxConfig,
+        config: OnnxConfig | dict[str, Any],
     ) -> ONNXProgram:
+        if type(config) is not OnnxConfig and isinstance(config, dict):
+            config = OnnxConfig(**config)
+        else:
+            raise TypeError(f"Expected config to be an OnnxConfig or dict, got {type(config)}")
+
         with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("onnx"):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)

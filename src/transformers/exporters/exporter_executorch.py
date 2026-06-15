@@ -98,9 +98,14 @@ class ExecutorchExporter(DynamoExporter):
         self,
         model: PreTrainedModel,
         sample_inputs: dict[str, Any],
-        config: ExecutorchConfig,
+        config: ExecutorchConfig | dict[str, Any],
     ) -> ExecutorchProgramManager:
         """Export a model to ExecuTorch, applying backend preparation and torch op patches."""
+        if type(config) is not ExecutorchConfig and isinstance(config, dict):
+            config = ExecutorchConfig(**config)
+        else:
+            raise TypeError(f"Expected config to be an ExecutorchConfig or dict, got {type(config)}")
+
         prepare_for_backend = _BACKEND_PREPARE.get(config.backend)
         if prepare_for_backend is None:
             raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
