@@ -30,6 +30,7 @@ def get_jobs(workflow_run_id, token=None):
         pages_to_iterate_over = math.ceil((result["total_count"] - 50) / 50)
 
         for i in range(pages_to_iterate_over):
+            time.sleep(1)
             result = requests.get(url + f"&page={i + 2}", headers=headers).json()
             jobs.extend(result["jobs"])
 
@@ -56,6 +57,7 @@ def get_job_links(workflow_run_id, token=None):
         pages_to_iterate_over = math.ceil((result["total_count"] - 50) / 50)
 
         for i in range(pages_to_iterate_over):
+            time.sleep(1)
             result = requests.get(url + f"&page={i + 2}", headers=headers).json()
             job_links.update({job["name"]: job["html_url"] for job in result["jobs"]})
 
@@ -84,6 +86,7 @@ def get_artifacts_links(workflow_run_id, token=None):
         pages_to_iterate_over = math.ceil((result["total_count"] - 50) / 50)
 
         for i in range(pages_to_iterate_over):
+            time.sleep(1)
             result = requests.get(url + f"&page={i + 2}", headers=headers).json()
             artifacts.update({artifact["name"]: artifact["archive_download_url"] for artifact in result["artifacts"]})
 

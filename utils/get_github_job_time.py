@@ -1,5 +1,6 @@
 import argparse
 import math
+import time
 import traceback
 
 import dateutil.parser as date_parser
@@ -42,6 +43,7 @@ def get_job_time(workflow_run_id, token=None):
         pages_to_iterate_over = math.ceil((result["total_count"] - 50) / 50)
 
         for i in range(pages_to_iterate_over):
+            time.sleep(1)
             result = requests.get(url + f"&page={i + 2}", headers=headers).json()
             job_time.update({job["name"]: extract_time_from_single_job(job) for job in result["jobs"]})
 
