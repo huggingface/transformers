@@ -238,6 +238,7 @@ class _BaseAutoModelClass:
         elif has_local_code:
             model_class = _get_model_class(config, cls._model_mapping)
             text_config_class = config.sub_configs.get("text_config", None)
+            # getattr avoids AttributeError, as registered remote-code model classes may lack config_class
             if text_config_class is not None and getattr(model_class, "config_class", None) == text_config_class:
                 # TODO: Validate that copying the parent quantization config to the text sub-config preserves
                 # modules_to_not_convert and skip-module matching when composite-model module prefixes differ.
@@ -395,6 +396,7 @@ class _BaseAutoModelClass:
         elif has_local_code:
             model_class = _get_model_class(config, cls._model_mapping)
             text_config_class = config.sub_configs.get("text_config", None)
+            # getattr avoids AttributeError, as registered remote-code model classes may lack config_class
             if text_config_class is not None and getattr(model_class, "config_class", None) == text_config_class:
                 # TODO: Validate that copying the parent quantization config to the text sub-config preserves
                 # modules_to_not_convert and skip-module matching when composite-model module prefixes differ.
