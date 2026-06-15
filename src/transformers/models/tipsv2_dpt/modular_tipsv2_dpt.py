@@ -27,7 +27,7 @@ from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbo
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import DepthEstimatorOutput, NormalEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import ModelOutput, TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoConfig
 from ..depth_anything.modeling_depth_anything import DepthAnythingNeck, DepthAnythingPreActResidualLayer
 from ..dpt.modeling_dpt import DPTReassembleLayer
@@ -47,11 +47,20 @@ class Tipsv2DptOutput(ModelOutput):
     r"""
     Args:
         predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
-            Soft-bin-expectation depth map at decoder resolution (metres).
+            Predicted depth for each pixel.
         normals (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
             Raw normal map predictions (unnormalized).
-        segmentation_logits (`torch.FloatTensor` of shape `(batch_size, num_labels, height, width)`):
-            Segmentation logits at decoder resolution.
+        segmentation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels, height, width)`):
+            Classification scores for each pixel.
+
+            <Tip warning={true}>
+
+            The logits returned do not necessarily have the same size as the `pixel_values` passed as inputs. This is
+            to avoid doing two interpolations and lose some quality when a user needs to resize the logits to the
+            original image size as post-processing. You should always check your logits shape and resize as needed.
+
+            </Tip>
+
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):
             Hidden states of the backbone.
         attentions (`tuple(torch.FloatTensor)`, *optional*):
@@ -70,25 +79,23 @@ class Tipsv2DptImageProcessor(Tipsv2ImageProcessor):
     def post_process_depth_estimation(
         self,
         outputs,
-        target_sizes: list[tuple[int, int]] | None = None,
+        target_sizes: TensorType | list[tuple[int, int]] | None = None,
     ) -> list[dict[str, torch.Tensor]]:
         """
-        Converts the output of a depth estimation model into final depth predictions.
+        Converts the output of [`Tipsv2DptForDepthEstimation`] or [`Tipsv2DptOutput`] into final depth predictions.
 
         Args:
-            outputs:
-                Raw outputs of the model. Must have a `predicted_depth` attribute of shape
-                `(batch_size, height, width)`.
-            target_sizes (`list[tuple[int, int]]`, *optional*):
-                List of `(height, width)` tuples giving the desired output size for each image.
-                When provided, each depth map is resized with bilinear interpolation. If `None`,
-                predictions are returned at the decoder resolution.
+            outputs ([`DepthEstimatorOutput`] or [`Tipsv2DptOutput`]):
+                Raw outputs of the model.
+            target_sizes (`TensorType` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
+                (height, width) of each image in the batch. If left to None, predictions will not be resized.
 
         Returns:
-            `list[dict[str, torch.Tensor]]`: One dict per image with key `"predicted_depth"`,
-            mapping to a tensor of shape `(height, width)`.
+            `list[dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
+            predictions.
         """
-        predicted_depth = outputs.predicted_depth  # (B, H, W)
+        predicted_depth = outputs.predicted_depth
 
         if target_sizes is not None and len(predicted_depth) != len(target_sizes):
             raise ValueError(
@@ -108,26 +115,24 @@ class Tipsv2DptImageProcessor(Tipsv2ImageProcessor):
     def post_process_normal_estimation(
         self,
         outputs,
-        target_sizes: list[tuple[int, int]] | None = None,
+        target_sizes: TensorType | list[tuple[int, int]] | None = None,
     ) -> list[dict[str, torch.Tensor]]:
         """
-        Converts the output of a normal estimation model into L2-normalized surface normal maps.
+        Converts the output of [`Tipsv2DptForNormalEstimation`] or [`Tipsv2DptModel`] into L2-normalized surface normal maps.
 
         Args:
-            outputs:
-                Raw outputs of the model. Must have a `normals` attribute of shape
-                `(batch_size, 3, height, width)`.
-            target_sizes (`list[tuple[int, int]]`, *optional*):
-                List of `(height, width)` tuples giving the desired output size for each image.
-                When provided, each normal map is resized with bicubic interpolation and then
-                re-normalized. If `None`, predictions are returned at the decoder resolution.
+            outputs ([`NormalEstimatorOutput`] or [`Tipsv2DptOutput`]):
+                Raw outputs of the model.
+            target_sizes (`TensorType` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
+                (height, width) of each image in the batch. If left to None, predictions will not be resized.
 
         Returns:
-            `list[dict[str, torch.Tensor]]`: One dict per image with key `"normals"`,
-            mapping to an L2-normalized tensor of shape `(3, height, width)`.
+            `list[dict[str, torch.Tensor]]` of length `batch_size`. Each dict has a `"normals"` key
+            mapping to a tensor of shape `(3, height, width)` with L2-normalized unit vectors in
+            `[-1, 1]` per channel (XYZ surface normals).
         """
-        normals = outputs.normals  # (B, 3, H, W)
-        normals = nn.functional.normalize(normals, p=2, dim=1)
+        normals = nn.functional.normalize(outputs.normals, p=2, dim=1)
 
         if target_sizes is not None and len(normals) != len(target_sizes):
             raise ValueError(
@@ -147,23 +152,22 @@ class Tipsv2DptImageProcessor(Tipsv2ImageProcessor):
     def post_process_semantic_segmentation(
         self,
         outputs,
-        target_sizes: list[tuple[int, int]] | None = None,
+        target_sizes: TensorType | list[tuple[int, int]] | None = None,
     ) -> list[torch.Tensor]:
         """
-        Converts the output of a semantic segmentation model into semantic segmentation maps.
+        Converts the output of [`Tipsv2DptForSemanticSegmentation`] or [`Tipsv2DptModel`] into semantic segmentation maps.
 
         Args:
-            outputs:
-                Raw outputs of the model. Must have a `logits` attribute of shape
-                `(batch_size, num_labels, height, width)`.
-            target_sizes (`list[tuple[int, int]]`, *optional*):
-                List of `(height, width)` tuples giving the desired output size for each image.
-                When provided, logits are resized with bilinear interpolation before argmax.
-                If `None`, argmax is computed at the decoder resolution.
+            outputs ([`SemanticSegmenterOutput`] or [`Tipsv2DptOutput`]):
+                Raw outputs of the model.
+            target_sizes (`TensorType` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
+                (height, width) of each image in the batch. If left to None, predictions will not be resized.
 
         Returns:
-            `list[torch.Tensor]`: One tensor per image of shape `(height, width)` containing
-            the predicted class index for each pixel.
+            semantic_segmentation: `list[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
+            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
         try:
             logits = outputs.segmentation_logits  # DptOutput
@@ -282,12 +286,12 @@ class Tipsv2DptReassembleStage(ZoeDepthReassembleStage):
     resolutions.
 
     This happens in 3 stages:
-    1. Map the N + cls + register tokens to a set of N tokens.
+    1. Map the N + class + register tokens to a set of N tokens.
     2. Project the channel dimension of the hidden states according to `config.neck_hidden_sizes`.
     3. Resizing the spatial dimensions (height, width).
 
     Args:
-        config (`[ZoeDepthConfig]`):
+        config (`[Tipsv2DptConfig]`):
             Model configuration class defining the model architecture.
     """
 

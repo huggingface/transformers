@@ -40,8 +40,17 @@ class Tipsv2DptOutput(ModelOutput):
             Soft-bin-expectation depth map at decoder resolution (metres).
         normals (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
             Raw normal map predictions (unnormalized).
-        segmentation_logits (`torch.FloatTensor` of shape `(batch_size, num_labels, height, width)`):
-            Segmentation logits at decoder resolution.
+        segmentation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels, height, width)`):
+            Classification scores for each pixel.
+
+            <Tip warning={true}>
+
+            The logits returned do not necessarily have the same size as the `pixel_values` passed as inputs. This is
+            to avoid doing two interpolations and lose some quality when a user needs to resize the logits to the
+            original image size as post-processing. You should always check your logits shape and resize as needed.
+
+            </Tip>
+
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):
             Hidden states of the backbone.
         attentions (`tuple(torch.FloatTensor)`, *optional*):
@@ -90,12 +99,12 @@ class Tipsv2DptReassembleStage(nn.Module):
     resolutions.
 
     This happens in 3 stages:
-    1. Map the N + cls + register tokens to a set of N tokens.
+    1. Map the N + class + register tokens to a set of N tokens.
     2. Project the channel dimension of the hidden states according to `config.neck_hidden_sizes`.
     3. Resizing the spatial dimensions (height, width).
 
     Args:
-        config (`[ZoeDepthConfig]`):
+        config (`[Tipsv2DptConfig]`):
             Model configuration class defining the model architecture.
     """
 
