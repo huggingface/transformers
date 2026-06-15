@@ -3631,7 +3631,7 @@ class Qwen3OmniMoeCode2WavTransformerModel(Qwen3OmniMoePreTrainedModel):
         )
 
 
-class SnakeBeta(nn.Module):
+class Qwen3OmniMoeSnakeBeta(nn.Module):
     """
     A modified Snake function which uses separate parameters for the magnitude of the periodic components
     Shape:
@@ -3676,9 +3676,9 @@ class Qwen3OmniMoeCode2WavDecoderResidualUnit(nn.Module):
     def __init__(self, dim: int = 16, dilation: int = 1):
         super().__init__()
 
-        self.act1 = SnakeBeta(dim)
+        self.act1 = Qwen3OmniMoeSnakeBeta(dim)
         self.conv1 = Qwen3OmniMoeCausalConvNet(dim, dim, kernel_size=7, dilation=dilation)
-        self.act2 = SnakeBeta(dim)
+        self.act2 = Qwen3OmniMoeSnakeBeta(dim)
         self.conv2 = Qwen3OmniMoeCausalConvNet(dim, dim, kernel_size=1)
 
     def forward(self, hidden_state):
@@ -3699,7 +3699,7 @@ class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
         upsample_rate = config.upsample_rates[layer_idx]
 
         block = [
-            SnakeBeta(in_dim),
+            Qwen3OmniMoeSnakeBeta(in_dim),
             Qwen3OmniMoeCausalTransConvNet(in_dim, out_dim, 2 * upsample_rate, upsample_rate),
         ]
 
@@ -3745,7 +3745,7 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
             decoder.append(Qwen3OmniMoeCode2WavDecoderBlock(config, i))
         output_dim = config.decoder_dim // 2 ** len(config.upsample_rates)
         decoder += [
-            SnakeBeta(output_dim),
+            Qwen3OmniMoeSnakeBeta(output_dim),
             Qwen3OmniMoeCausalConvNet(output_dim, 1, 7),
         ]
         self.decoder = nn.ModuleList(decoder)

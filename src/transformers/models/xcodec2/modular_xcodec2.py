@@ -35,10 +35,10 @@ from ..clip.modeling_clip import CLIPMLP
 from ..dac.modeling_dac import DacEncoder, DacEncoderBlock, DacResidualUnit
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRotaryEmbedding, rotate_half
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
-    AntiAliasedActivation1d,
-    DownSample1d,
-    SnakeBeta,
-    UpSample1d,
+    Qwen2_5OmniAntiAliasedActivation1d,
+    Qwen2_5OmniDownSample1d,
+    Qwen2_5OmniSnakeBeta,
+    Qwen2_5OmniUpSample1d,
     kaiser_sinc_filter1d,
 )
 from ..voxtral.modeling_voxtral import VoxtralPreTrainedModel
@@ -140,11 +140,11 @@ class Xcodec2DecoderLayer(LlamaDecoderLayer):
     pass
 
 
-class Xcodec2SnakeBeta(SnakeBeta):
+class Xcodec2SnakeBeta(Qwen2_5OmniSnakeBeta):
     pass
 
 
-class Xcodec2DownSample1d(DownSample1d):
+class Xcodec2DownSample1d(Qwen2_5OmniDownSample1d):
     def forward(self, hidden_states):
         channels = hidden_states.shape[1]
         hidden_states = F.pad(hidden_states, (self.pad_left, self.pad_right), mode="replicate")
@@ -157,7 +157,7 @@ class Xcodec2DownSample1d(DownSample1d):
         return out
 
 
-class Xcodec2UpSample1d(UpSample1d):
+class Xcodec2UpSample1d(Qwen2_5OmniUpSample1d):
     def forward(self, hidden_states):
         channels = hidden_states.shape[1]
         hidden_states = F.pad(hidden_states, (self.pad, self.pad), mode="replicate")
@@ -171,7 +171,7 @@ class Xcodec2UpSample1d(UpSample1d):
         return hidden_states
 
 
-class Xcodec2AntiAliasedActivation1d(AntiAliasedActivation1d):
+class Xcodec2AntiAliasedActivation1d(Qwen2_5OmniAntiAliasedActivation1d):
     def __init__(
         self,
         activation,

@@ -407,7 +407,7 @@ class Xcodec2SnakeBeta(nn.Module):
         """
         Forward pass of the function.
         Applies the function to the input elementwise.
-        Xcodec2SnakeBeta ∶= x + 1/b * sin^2 (xa)
+        SnakeBeta ∶= x + 1/b * sin^2 (xa)
         """
         alpha = self.alpha.unsqueeze(0).unsqueeze(-1)  # line up with x to [B, C, T]
         beta = self.beta.unsqueeze(0).unsqueeze(-1)
