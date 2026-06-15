@@ -133,7 +133,10 @@ class Tipsv2DptImageProcessor(TorchvisionBackend):
             `list[torch.Tensor]`: One tensor per image of shape `(height, width)` containing
             the predicted class index for each pixel.
         """
-        logits = outputs.logits  # (B, num_labels, H, W)
+        try:
+            logits = outputs.segmentation_logits  # DptOutput
+        except AttributeError:
+            logits = outputs.logits  # SemanticSegmentorOutput
 
         if target_sizes is not None and len(logits) != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
