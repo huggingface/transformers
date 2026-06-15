@@ -2653,32 +2653,6 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
 
         self.post_init()
 
-    def apply_torch_compile(self, mode: str = "fixed_seqlen", dynamic: bool | None = None) -> None:
-        """Compile L²-heavy blocks. ``mode='fixed_seqlen'`` recompiles per L; ``'dynamic_seqlen'`` compiles once."""
-        import torch._dynamo
-
-        torch._dynamo.config.cache_size_limit = 512
-        torch._dynamo.config.accumulated_cache_size_limit = 512
-        # capture_scalar_outputs avoids graph breaks at .item() in atom-attention path.
-        torch._dynamo.config.capture_scalar_outputs = True
-
-        if dynamic is None:
-            dynamic = mode == "dynamic_seqlen"
-        kwargs: dict = {"dynamic": dynamic}
-
-        compile_targets = (
-            ESMFold2PairUpdateBlock,
-            ESMFold2DiffusionTransformer,
-            ESMFold2DiffusionModule,
-            ESMFold2MSAEncoderBlock,
-        )
-
-        def _maybe_compile(module: nn.Module) -> None:
-            if isinstance(module, compile_targets):
-                module.forward = torch.compile(module.forward, **kwargs)
-
-        self.apply(_maybe_compile)
-
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self.folding_trunk.set_chunk_size(chunk_size)
         if self.lm_encoder is not None:
