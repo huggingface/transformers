@@ -126,6 +126,10 @@ def load_audio_torchcodec(audio: str | np.ndarray, sampling_rate=16000, timeout=
     # Fetch bytes for URLs so we get retry logic; torchcodec does not surface ffmpeg network retries options
     if isinstance(audio, str) and audio.startswith(("http://", "https://")):
         audio = _fetch_audio_bytes(audio, timeout=timeout)
+    # For a data URI, the format is f"data:audio/{codec};base64,{data_in_base64}" so extract and decode the base64 data
+    elif isinstance(audio, str) and audio.startswith("data:audio"):
+        base64_data = audio.split(",", 1)[1]
+        audio = base64.b64decode(base64_data)
 
     # Set `num_channels` to `1` which is what most models expects and the default in librosa
     decoder = AudioDecoder(audio, sample_rate=sampling_rate, num_channels=1)
@@ -154,6 +158,10 @@ def load_audio_librosa(audio: str | np.ndarray, sampling_rate=16000, timeout=Non
     # Load audio from URL (e.g https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav)
     if audio.startswith("http://") or audio.startswith("https://"):
         audio = librosa.load(BytesIO(_fetch_audio_bytes(audio, timeout=timeout)), sr=sampling_rate)[0]
+    # For a data URI, the format is f"data:audio/{codec};base64,{data_in_base64}" so extract and decode the base64 data
+    elif isinstance(audio, str) and audio.startswith("data:audio"):
+        base64_data = audio.split(",", 1)[1]
+        audio = librosa.load(BytesIO(base64.b64decode(base64_data)), sr=sampling_rate)[0]
     elif os.path.isfile(audio):
         audio = librosa.load(audio, sr=sampling_rate)[0]
     return audio
