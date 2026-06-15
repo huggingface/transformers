@@ -956,7 +956,8 @@ def create_causal_mask(
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
         _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
     )
-    kv_length += additional_kv_length
+    if kv_length is not None:
+        kv_length += additional_kv_length
     if early_exit:
         return attention_mask
 
@@ -1069,7 +1070,8 @@ def create_bidirectional_mask(
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
         config, inputs_embeds, attention_mask, past_key_values, None, layer_idx, encoder_hidden_states
     )
-    kv_length += additional_kv_length
+    if kv_length is not None:
+        kv_length += additional_kv_length
     if early_exit:
         return attention_mask
 
@@ -1192,7 +1194,8 @@ def create_sliding_window_causal_mask(
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
         _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
     )
-    kv_length += additional_kv_length
+    if kv_length is not None:
+        kv_length += additional_kv_length
     if early_exit:
         return attention_mask
 
@@ -1305,7 +1308,8 @@ def create_bidirectional_sliding_window_mask(
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
         config, inputs_embeds, attention_mask, past_key_values, None, layer_idx, encoder_hidden_states
     )
-    kv_length += additional_kv_length
+    if kv_length is not None:
+        kv_length += additional_kv_length
     if early_exit:
         return attention_mask
 
@@ -1403,7 +1407,8 @@ def create_chunked_causal_mask(
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
         _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
     )
-    kv_length += additional_kv_length
+    if kv_length is not None:
+        kv_length += additional_kv_length
     if early_exit:
         return attention_mask
 

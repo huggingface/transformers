@@ -55,7 +55,6 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4TextDecoderLayer,
     Gemma4TextExperts,
     Gemma4TextMLP,
-    Gemma4TextModel,
     Gemma4TextRotaryEmbedding,
     Gemma4TextRouter,
     Gemma4TextScaledWordEmbedding,
