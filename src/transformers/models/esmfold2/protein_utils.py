@@ -24,7 +24,6 @@ from torch import Tensor
 
 MOL_TYPE_PROTEIN = 0
 PROTEIN_UNK_RES_TYPE = 22
-MSA_GAP_TOKEN_ID = 1
 
 PROTEIN_RESIDUE_TO_RES_TYPE: dict[str, int] = {
     "ALA": 2,
