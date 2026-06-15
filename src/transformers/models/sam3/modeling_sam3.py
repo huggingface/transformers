@@ -194,7 +194,7 @@ class Sam3ImageSegmentationOutput(ModelOutput):
     mask_decoder_attentions (`tuple[torch.FloatTensor]`, *optional*):
         Attention weights from mask decoder layers.
     auxiliary_outputs (`list[Dict]`, *optional*):
-       It is a list of dictionaries containing the two above keys (`logits` and
+        It is a list of dictionaries containing the two above keys (`logits` and
         `pred_boxes`) for each decoder layer.
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
         Total loss as a weighted sum of binary cross-entropy (IoU-adaptive), bounding box (L1 and GIoU),
@@ -2294,7 +2294,7 @@ class Sam3Model(Sam3PreTrainedModel):
         input_boxes_labels (`torch.LongTensor` of shape `(batch_size, num_boxes)`, *optional*):
             Labels for boxes: 1 (positive), 0 (negative).
         labels (`list[dict]` of len `(batch_size,)`, *optional*):
-        Labels for computing the bipartite matching loss. List of dicts, each dictionary containing the
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing the
         following keys:
         - 'boxes' (`torch.FloatTensor` of shape `(num_boxes, 4)`): bounding boxes in (x1, y1, x2, y2)
           format, normalized to [0, 1].
