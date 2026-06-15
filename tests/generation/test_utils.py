@@ -1252,6 +1252,50 @@ class GenerationTesterMixin:
             self._check_past_key_values_for_generate(batch_size, outputs.past_key_values, max_length, text_config)
 
     @pytest.mark.generate
+    def test_prepare_cache_for_generation_static_cache_config_max_cache_len(self):
+        """Regression test for #46424 -- cache_config.max_cache_len should size static caches."""
+        from transformers.generation.configuration_utils import GenerationMode
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._can_compile_fullgraph:
+                continue
+
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if config.is_encoder_decoder:
+                continue
+
+            model = model_class(config).to(torch_device).eval()
+            user_max_cache_len = 128
+            model.generation_config = GenerationConfig(
+                use_cache=True,
+                cache_implementation="static",
+                max_new_tokens=4,
+                num_beams=1,
+                num_return_sequences=1,
+                cache_config={"max_cache_len": user_max_cache_len},
+            )
+
+            input_ids = inputs_dict["input_ids"]
+            batch_size = input_ids.shape[0]
+            auto_max_cache_length = input_ids.shape[1] + 4 - 1
+            self.assertLess(auto_max_cache_length, user_max_cache_len)
+
+            model._prepare_cache_for_generation(
+                model.generation_config,
+                dict(inputs_dict),
+                GenerationMode.GREEDY_SEARCH,
+                batch_size,
+                auto_max_cache_length,
+            )
+
+            cache = model._cache
+            if isinstance(cache, EncoderDecoderCache):
+                cache = cache.self_attention_cache
+            self.assertIsInstance(cache, StaticCache)
+            self.assertEqual(cache.max_cache_len, user_max_cache_len)
+            break
+
+    @pytest.mark.generate
     def test_generate_continue_from_past_key_values(self):
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
         for model_class in self.all_generative_model_classes:
