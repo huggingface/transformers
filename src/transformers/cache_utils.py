@@ -66,6 +66,11 @@ class CacheLayerMixin(ABC):
     ) -> tuple[torch.Tensor, torch.Tensor]: ...
 
     @abstractmethod
+    def append(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]: ...
+
+    @abstractmethod
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]: ...
 
     @abstractmethod
@@ -143,6 +148,24 @@ class DynamicLayer(CacheLayerMixin):
         self.keys = torch.cat([self.keys, key_states], dim=-2)
         self.values = torch.cat([self.values, value_states], dim=-2)
         return self.keys, self.values
+
+    def append(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Append the key and value caches and return the full key-values. It doesn't modify
+        anything in-place in contrast to `self.update`, the tensors are concatenated and returned
+
+        Args:
+            key_states (`torch.Tensor`): The new key states to cache.
+            value_states (`torch.Tensor`): The new value states to cache.
+
+        Returns:
+            tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
+        """
+        keys = torch.cat([self.keys, key_states], dim=-2)
+        values = torch.cat([self.values, value_states], dim=-2)
+        return keys, values
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the mask"""
@@ -265,11 +288,6 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
         negative to remove `max_length` tokens.
         """
-        if self.get_seq_length() >= self.sliding_window:
-            raise ValueError(
-                "Cannot `crop` a `DynamicSlidingWindowLayer` after it has seen more tokens than its"
-                "sliding window (otherwise some states are lost)"
-            )
         super().crop(max_length)
         self.cumulative_length = self.keys.shape[-2]
 
@@ -445,6 +463,38 @@ class StaticLayer(CacheLayerMixin):
 
         return self.keys, self.values
 
+    def append(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Append the key and value caches and return the full key-values. It doesn't modify
+        anything in-place in contrast to `self.update`, the tensors are concatenated and returned
+
+        Args:
+            key_states (`torch.Tensor`): The new key states to cache.
+            value_states (`torch.Tensor`): The new value states to cache.
+
+        Returns:
+            tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
+        """
+        batch, num_heads, max_len, dim = self.keys.shape
+        new_length = key_states.shape[-2]
+        cache_position_new = torch.arange(new_length, device=self.device) + self.cumulative_length
+        cache_position_old = torch.arange(max_len, device=self.device)
+
+        # Allocate new key-value tensor to return concat outputs
+        keys = key_states.new_zeros(batch, num_heads, max_len + new_length, dim)
+        values = value_states.new_zeros(batch, num_heads, max_len + new_length, dim)
+
+        # Add existing cache, then new KV right after it, leaving trailing zeros on right-side
+        keys.index_copy_(2, cache_position_old, self.keys)
+        keys.index_copy_(2, cache_position_new, key_states)
+        values.index_copy_(2, cache_position_old, self.values)
+        values.index_copy_(2, cache_position_new, value_states)
+
+        # always (batch, num_heads, max_len + new_length, dim)
+        return keys, values
+
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
         kv_offset = 0
@@ -458,6 +508,12 @@ class StaticLayer(CacheLayerMixin):
     def get_max_cache_shape(self) -> int:
         """Return the maximum cache shape of the cache"""
         return self.max_cache_len
+
+    def crop(self, max_length: int):
+        """Crop the cache to the given length"""
+        self.keys[:, :, max_length:].zero_()
+        self.values[:, :, max_length:].zero_()
+        self.cumulative_length.fill_(max_length)
 
 
 class StaticSlidingWindowLayer(StaticLayer):
@@ -585,6 +641,13 @@ class StaticSlidingWindowLayer(StaticLayer):
     def reset(self):
         super().reset()
         self.cumulative_length_int = 0
+
+    def crop(self, max_length: int):
+        """Crop the cache to the given length"""
+        self.keys[:, :, max_length:].zero_()
+        self.values[:, :, max_length:].zero_()
+        self.cumulative_length.fill_(max_length)
+        self.cumulative_length_int = max_length
 
 
 class StaticIndexedLayer(StaticLayer):
@@ -714,6 +777,31 @@ class QuantizedLayer(DynamicLayer):
             self.keys = torch.tensor([], dtype=key_states.dtype, device=key_states.device)
             self.values = torch.tensor([], dtype=key_states.dtype, device=key_states.device)
         else:
+            self.keys = torch.cat([self.keys, key_states], dim=-2)
+            self.values = torch.cat([self.values, value_states], dim=-2)
+
+        return keys_to_return, values_to_return
+
+    def append(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Append the key and value caches and return the full key-values. It doesn't modify
+        anything in-place in contrast to `self.update`, the tensors are concatenated and returned
+
+        Args:
+            key_states (`torch.Tensor`): The new key states to cache.
+            value_states (`torch.Tensor`): The new value states to cache.
+
+        Returns:
+            tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
+        """
+        dequant_keys = self._dequantize(self._quantized_keys)
+        dequant_values = self._dequantize(self._quantized_values)
+        keys_to_return = torch.cat([dequant_keys, self.keys, key_states], dim=-2)
+        values_to_return = torch.cat([dequant_values, self.values, value_states], dim=-2)
+
+        if not (self.keys.dim() == 4 and self.keys.shape[-2] + 1 >= self.residual_length):
             self.keys = torch.cat([self.keys, key_states], dim=-2)
             self.values = torch.cat([self.values, value_states], dim=-2)
 
@@ -1134,6 +1222,41 @@ class Cache:
             self.prefetch(layer_idx + 1, self.only_non_sliding)
 
         keys, values = self.layers[layer_idx].update(key_states, value_states, *args, **kwargs)
+
+        if self.offloading:
+            self.offload(layer_idx, self.only_non_sliding)
+
+        return keys, values
+
+    def append(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, layer_idx: int, *args, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Concatenate key-value with existing caches and return the full key-values. It doesn't modify
+        anything in-place in contrast to `self.update`.
+
+        Parameters:
+            key_states (`torch.Tensor`):
+                The new key states to cache.
+            value_states (`torch.Tensor`):
+                The new value states to cache.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+
+        Return:
+            A tuple containing the concatenated key and value states.
+        """
+        # In this case, the `layers` were not provided, and we must append as much as `layer_idx`
+        if self.layer_class_to_replicate is not None:
+            while len(self.layers) <= layer_idx:
+                self.layers.append(self.layer_class_to_replicate())
+
+        if self.offloading:
+            # Wait for the stream to finish if needed, and start prefetching the next layer
+            torch.cuda.default_stream(key_states.device).wait_stream(self.prefetch_stream)
+            self.prefetch(layer_idx + 1, self.only_non_sliding)
+
+        keys, values = self.layers[layer_idx].append(key_states, value_states, *args, **kwargs)
 
         if self.offloading:
             self.offload(layer_idx, self.only_non_sliding)

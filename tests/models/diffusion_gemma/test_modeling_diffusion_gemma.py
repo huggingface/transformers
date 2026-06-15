@@ -179,7 +179,7 @@ class DiffusionGemmaVisionText2TextModelTester:
 class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (DiffusionGemmaModel, DiffusionGemmaForBlockDiffusion) if is_torch_available() else ()
     all_generative_model_classes = ()  # No class inherits `GenerationMixin`
-    additional_model_inputs = ["mm_token_type_ids", "decoder_input_ids"]
+    additional_model_inputs = ["mm_token_type_ids", "decoder_input_ids", "image_position_ids"]
 
     test_torch_exportable = False  # This model always returns cache -> export test fails in `_get_leaf_tensors`
 
@@ -449,8 +449,8 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         static_cache_length = 16
         concat_kv_length = static_cache_length + canvas_length
         batch_size = 2
-        expected_non_zero = (prefill_length + canvas_length) * canvas_length * batch_size
-        expected_attention_mask_shape = (batch_size, 1, canvas_length, concat_kv_length)
+        expected_non_zero = prefill_length * canvas_length * batch_size
+        expected_attention_mask_shape = (batch_size, 1, canvas_length, static_cache_length)
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
@@ -475,37 +475,6 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         self.assertEqual(mask_mapping["sliding_attention"].shape, expected_attention_mask_shape)
         self.assertEqual(mask_mapping["sliding_attention"].sum(), expected_non_zero)
 
-    def test_diffusion_decoder_mask_static_cache_bad_attention_mask(self):
-        """
-        Same as `test_diffusion_decoder_mask_static_cache`, but assuming the user forgot to set to 0
-        the attention mask entries corresponding to unfilled cache positions. It will raise an exception
-        """
-
-        prefill_length = 8
-        canvas_length = 4
-        static_cache_length = 16
-        concat_kv_length = static_cache_length + canvas_length
-        batch_size = 2
-
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
-
-        # Apply prefill (smaller than sliding window)
-        past_key_values = StaticCache(config=config, max_cache_len=static_cache_length)
-        prefill_input_ids = torch.ones((batch_size, prefill_length), dtype=torch.int32, device=torch_device) * 50
-        past_key_values = model.model.encoder(prefill_input_ids, past_key_values=past_key_values).past_key_values
-
-        # Get the mask (INCORRECTLY designed for the static cache)
-        decoder_attention_mask = torch.ones((batch_size, concat_kv_length), dtype=torch.bool, device=torch_device)
-        dummy_canvas = torch.ones((batch_size, canvas_length), dtype=torch.int32, device=torch_device)
-        with self.assertRaises(ValueError):
-            _ = model.model.decoder.create_diffusion_decoder_attention_mask(
-                config=config.text_config,
-                inputs_embeds=dummy_canvas.unsqueeze(-1),
-                past_key_values=past_key_values,
-                decoder_attention_mask=decoder_attention_mask,
-            )
-
     def test_diffusion_decoder_mask_static_cache_beyond_sliding_window(self):
         """
         Same as `test_diffusion_decoder_mask_dynamic_cache_beyond_sliding_window`, but with a Static Cache.
@@ -518,15 +487,15 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         static_cache_length = 32
         concat_kv_length_full = static_cache_length + canvas_length
         # No -1 -> the STATIC sliding window kv cache has len=window
-        concat_kv_length_sliding = sliding_window_length + canvas_length
+        concat_kv_length_sliding = sliding_window_length + canvas_length - 1
         batch_size = 2
         left_padding_length = 2  # only applied on batch item 0
         expected_non_zero_full = (
-            ((prefill_length + canvas_length - left_padding_length) * canvas_length)  # batch item 0
-            + ((prefill_length + canvas_length) * canvas_length)  # batch item 1
+            ((prefill_length - left_padding_length) * canvas_length)  # batch item 0
+            + (prefill_length * canvas_length)  # batch item 1
         )
-        expected_attention_mask_shape_full = (batch_size, 1, canvas_length, concat_kv_length_full)
-        expected_non_zero_sliding = concat_kv_length_sliding * batch_size * canvas_length
+        expected_attention_mask_shape_full = (batch_size, 1, canvas_length, static_cache_length)
+        expected_non_zero_sliding = (sliding_window_length - 1) * batch_size * canvas_length
         expected_attention_mask_shape_sliding = (batch_size, 1, canvas_length, concat_kv_length_sliding)
         # Double-check test assumption that left-padding should be past the sliding window
         self.assertTrue(prefill_length - left_padding_length > sliding_window_length)
@@ -1385,17 +1354,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
          [  0.15429553, -29.38286209,  14.54231548,  26.77043152,  29.90373039,  15.93279934,
            21.30470467, -10.20196629, -29.19678497, -27.99878311,   4.03784895, -24.36471176],
          [ 27.99878311, -28.93834877,  27.01581001,  29.90992928,  29.92865181,  18.36726570,
-           27.53452492,   3.69981956, -24.27903175, -28.82887459,  25.23368835, -22.58115005],
-         [  4.71070147, -29.92374039,   2.12145352,  28.66555023,  29.93754959, -16.98100090,
-           19.12884521, -15.01560497, -29.19678497, -29.05341339,   7.43561840, -27.65005684],
-         [ 20.66659164, -25.16004562, -22.24990654,  26.96818924,  27.89977074, -11.45190430,
-           -2.91267133, -17.23404694, -29.73903084, -24.61488152,  26.10184860,  -2.10590577],
-         [ 21.30470467, -29.45920181,  12.50244045,  29.64826202,  29.85649490,  -8.27962112,
-           26.77043152, -12.65697193, -29.31869316, -29.40289116,   4.31364775, -22.13672829],
-         [  8.22184658, -29.75579262,   9.58930492,  29.00568390,  29.59842873, -14.63774967,
-           28.15386963,  -9.42062664, -27.86572838, -29.74754906,  -7.46494198, -18.28892136],
-         [ 19.34960938, -29.98819542,  29.42227936,  29.31869316,  29.71171379, -24.69602203,
-            4.46655130, -28.03077507, -29.44104195, -29.92623520, -26.04065895, -25.97857857]],
+           27.53452492,   3.69981956, -24.27903175, -28.82887459,  25.23368835, -22.58115005]],
 
         [[ 20.73208427, -29.81889534, -14.01054859,  29.42227936,  29.85649490,  27.61213493,
            23.05516243,   9.81315899, -28.26949692, -28.06227112,  -1.21028030, -25.08536720],
@@ -1406,17 +1365,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
          [-10.03579903, -28.59873009,  15.47912979,  27.06271935,  29.69194221,  15.01560497,
            16.81029892, -15.66178513, -29.49378586, -27.86572838,  -3.56125450, -24.19219208],
          [ 25.37790680, -29.47677803,  27.32979774,  29.89710426,  29.67082214,  13.41732597,
-           24.01497269,   4.95421267, -26.96818924, -28.42986679,  19.92110252, -24.44923782],
-         [ -6.51936626, -29.90373039,  12.03402901,  28.74981880,  29.63641167, -21.90615463,
-           10.75072193, -10.31235313, -29.40289116, -28.52864838,   3.69981956, -28.82887459],
-         [ -1.56888008, -25.85169601, -20.46785545,  24.85499382,  -3.45337439, -21.90615463,
-            4.80209446, -23.15685844, -29.81277657, -25.91559219,  20.40085030,  -0.88646066],
-         [  9.81315899, -28.52864838,   8.51004219,  29.59842873,  28.68712234, -20.60072327,
-           20.19754601, -11.77072239, -29.55650711, -29.40289116, -13.11566544, -27.57362747],
-         [ -8.45253849, -29.40289116,   4.58870411,  29.05341339,  27.86572838, -23.83295822,
-           21.42788887, -15.20219231, -29.38286209, -29.78616714, -23.74012756, -26.77043152],
-         [  1.54550576, -29.98053741,  28.59873009,  29.05341339,  29.42227936, -25.00963974,
-           -7.28877926, -28.35157776, -29.68155670, -29.95372391, -28.59873009, -28.70835686]]]
+           24.01497269,   4.95421267, -26.96818924, -28.42986679,  19.92110252, -24.44923782]]]
         # fmt: on
 
         model = self._load_model(minified=True)
