@@ -508,7 +508,7 @@ class DiffusionGemmaTextRouter(nn.Module):
         hidden_states = hidden_states * self.scale * self.scalar_root_size
 
         expert_scores = self.proj(hidden_states)  # [B*S, E]
-        # TODO(joao): propagate fp32 to gemma4 and delete the modular overwrite in DiffusionGemma
+        # fp32 for numerical stability
         router_probabilities = nn.functional.softmax(expert_scores, dim=-1, dtype=torch.float32)
 
         # topk returns both values (probabilities) and indices directly
@@ -795,6 +795,7 @@ class DiffusionGemmaSelfConditioning(nn.Module):
         return self.post_norm(combined)
 
 
+@auto_docstring
 class DiffusionGemmaPreTrainedModel(PreTrainedModel):
     config: DiffusionGemmaConfig
     base_model_prefix = "model"
@@ -808,6 +809,7 @@ class DiffusionGemmaPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = None  # override
@@ -979,7 +981,6 @@ def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: tor
 class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
-    config: DiffusionGemmaConfig
     _can_record_outputs = {
         "router_logits": OutputRecorder(DiffusionGemmaTextRouter, index=0),
         "hidden_states": DiffusionGemmaEncoderTextLayer,
@@ -1174,7 +1175,6 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
     `DiffusionGemmaEncoderTextModel`, and they share all weights they have in common.
     """
 
-    config: DiffusionGemmaConfig
     input_modalities = ("text",)
     _can_record_outputs = {
         "router_logits": OutputRecorder(DiffusionGemmaTextRouter, index=0),
@@ -1208,7 +1208,7 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
+    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(
@@ -1356,7 +1356,6 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
 
     def __init__(self, config: DiffusionGemmaConfig):
         super().__init__(config)
-
         self.encoder = DiffusionGemmaEncoderModel(config)
         self.decoder = DiffusionGemmaDecoderModel(config)
 
@@ -1456,7 +1455,6 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
     next block diffusion step.
     """
 
-    base_model_prefix = "model"
     _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
     generation_config_class = DiffusionGemmaGenerationConfig
 
@@ -1469,12 +1467,6 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.encoder.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.encoder.language_model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring

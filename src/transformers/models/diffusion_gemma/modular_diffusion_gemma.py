@@ -55,6 +55,7 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4TextDecoderLayer,
     Gemma4TextExperts,
     Gemma4TextMLP,
+    Gemma4TextModel,
     Gemma4TextRotaryEmbedding,
     Gemma4TextRouter,
     Gemma4TextScaledWordEmbedding,
@@ -62,7 +63,7 @@ from ..gemma4.modeling_gemma4 import (
     eager_attention_forward,
     get_block_sequence_ids_for_mask,
 )
-from ..t5gemma2.modeling_t5gemma2 import T5Gemma2Model
+from ..t5gemma2.modeling_t5gemma2 import T5Gemma2Model, T5Gemma2PreTrainedModel
 from .generation_diffusion_gemma import DiffusionGemmaGenerationConfig, DiffusionGemmaGenerationMixin
 
 
@@ -411,28 +412,7 @@ class DiffusionGemmaText4MLP(Gemma4TextMLP):
 
 
 class DiffusionGemmaTextRouter(Gemma4TextRouter):
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        hidden_states = self.norm(hidden_states)
-        hidden_states = hidden_states * self.scale * self.scalar_root_size
-
-        expert_scores = self.proj(hidden_states)  # [B*S, E]
-        # TODO(joao): propagate fp32 to gemma4 and delete the modular overwrite in DiffusionGemma
-        router_probabilities = nn.functional.softmax(expert_scores, dim=-1, dtype=torch.float32)
-
-        # topk returns both values (probabilities) and indices directly
-        top_k_weights, top_k_index = torch.topk(
-            router_probabilities,
-            k=self.config.top_k_experts,
-            dim=-1,
-        )  # both [B*S, K]
-
-        # Normalize the top-k weights so they sum to 1 per token
-        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-
-        # Apply per-expert scale directly to the weights
-        top_k_weights = top_k_weights * self.per_expert_scale[top_k_index]
-
-        return router_probabilities, top_k_weights, top_k_index
+    pass
 
 
 class DiffusionGemmaTextExperts(Gemma4TextExperts):
@@ -637,27 +617,19 @@ class DiffusionGemmaSelfConditioning(nn.Module):
         return self.post_norm(combined)
 
 
-class DiffusionGemmaPreTrainedModel(PreTrainedModel):
-    config: DiffusionGemmaConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+class DiffusionGemmaPreTrainedModel(T5Gemma2PreTrainedModel):
     _no_split_modules = [
         "DiffusionGemmaDecoderTextLayer",
         "DiffusionGemmaEncoderTextLayer",
         "DiffusionGemmaVisionEncoderLayer",
     ]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
     _can_record_outputs = None  # override
-    input_modalities = ("image", "text")
+    _supports_flash_attn = True
+    _supports_flex_attn = True
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(module)
         if isinstance(module, DiffusionGemmaTextRotaryEmbedding):
             for layer_type, rope_init_fn in module.rope_init_fns.items():
                 rope_init_fn_kwargs = {"layer_type": layer_type}
@@ -702,6 +674,9 @@ class DiffusionGemmaPreTrainedModel(PreTrainedModel):
         elif module.__class__.__name__.endswith("Gemma4VisionModel") and module.config.standardize:
             init.zeros_(module.std_bias)
             init.ones_(module.std_scale)
+
+    def prepare_decoder_input_ids_from_labels(self, **kwargs):
+        raise NotImplementedError("Diffusion Gemma doesn't uses noise-init canvas as decoder inputs")
 
 
 class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
@@ -807,7 +782,6 @@ class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
     """
 )
 class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
-    config: DiffusionGemmaConfig
     _can_record_outputs = {
         "router_logits": OutputRecorder(DiffusionGemmaTextRouter, index=0),
         "hidden_states": DiffusionGemmaEncoderTextLayer,
@@ -978,7 +952,6 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
     `DiffusionGemmaEncoderTextModel`, and they share all weights they have in common.
     """
 
-    config: DiffusionGemmaConfig
     input_modalities = ("text",)
     _can_record_outputs = {
         "router_logits": OutputRecorder(DiffusionGemmaTextRouter, index=0),
@@ -1012,7 +985,7 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
+    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(
@@ -1159,14 +1132,9 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel, T5Gemma2Model):
 
     def __init__(self, config: DiffusionGemmaConfig):
         super().__init__(config)
-
         self.encoder = DiffusionGemmaEncoderModel(config)
         self.decoder = DiffusionGemmaDecoderModel(config)
 
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1247,7 +1215,6 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
     next block diffusion step.
     """
 
-    base_model_prefix = "model"
     _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
     generation_config_class = DiffusionGemmaGenerationConfig
 
@@ -1260,12 +1227,6 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.encoder.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.encoder.language_model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring

@@ -661,7 +661,6 @@ class DiffusionGemmaGenerationMixin:
                 generation_config=generation_config,
                 batch_size=batch_size,
                 max_length=max_length,
-                canvas_length=canvas_length,
             )
         if generation_config.eos_token_id is not None:
             eos_tensor = torch.tensor(generation_config.eos_token_id, device=input_ids.device)
@@ -876,7 +875,7 @@ class DiffusionGemmaGenerationMixin:
         return max_length, max_new_tokens
 
     def _prepare_cache_for_generation(
-        self, generation_config: DiffusionGemmaGenerationConfig, batch_size: int, max_length: int, canvas_length: int
+        self, generation_config: DiffusionGemmaGenerationConfig, batch_size: int, max_length: int
     ) -> Cache:
         """
         Prepares and returns the cache for generation, given the parameterization in `generation_config`.
