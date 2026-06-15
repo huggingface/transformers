@@ -58,6 +58,7 @@ from transformers.testing_utils import (
     SMALL_MODEL_IDENTIFIER,
     CaptureLogger,
     RequestCounter,
+    require_mistral_common,
     require_sentencepiece,
     require_tokenizers,
     slow,
@@ -235,6 +236,34 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
         self.assertTrue(tokenizer.is_fast)
         self.assertGreater(len(tokenizer("Voxtral")["input_ids"]), 0)
+
+    @require_tokenizers
+    @require_mistral_common
+    def test_mistral_common_backend_skips_incorrect_hub_tokenizer_class(self):
+        """Some Mistral checkpoint have tokenizer_class=LlamaTokenizer in its hub tokenizer_config.json.
+        When tekken.json is available, the wrong hub class should be ignored and MistralCommonBackend should be loaded."""
+        from transformers.tokenization_mistral_common import MistralCommonBackend
+
+        tokenizer = AutoTokenizer.from_pretrained("mistralai/Ministral-8B-Instruct-2410")
+        self.assertIsInstance(tokenizer, MistralCommonBackend)
+        self.assertGreater(len(tokenizer("Ministral")["input_ids"]), 0)
+
+    @require_tokenizers
+    def test_mistral_common_backend_skips_incorrect_hub_tokenizer_class_without_mistral_common(self):
+        """Some Mistral checkpoint have tokenizer_class=LlamaTokenizer in its hub tokenizer_config.json.
+        When mistral-common is unavailable and tokenizer.json exists, TokenizersBackend should be loaded."""
+        repo_id = "mistralai/Ministral-8B-Instruct-2410"
+        with (
+            mock.patch(
+                "transformers.models.auto.tokenization_auto.is_mistral_common_available",
+                return_value=False,
+            ),
+            mock.patch.dict(TOKENIZER_MAPPING_NAMES, {"ministral": "TokenizersBackend"}),
+        ):
+            tokenizer = AutoTokenizer.from_pretrained(repo_id)
+
+        self.assertIsInstance(tokenizer, TokenizersBackend)
+        self.assertGreater(len(tokenizer("Ministral")["input_ids"]), 0)
 
     @require_tokenizers
     def test_do_lower_case(self):

@@ -753,6 +753,14 @@ class AutoTokenizer:
                 ):
                     return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
+            if registered_class_name == "MistralCommonBackend" and is_mistral_common_available():
+                tokenizer_class = tokenizer_class_from_name("MistralCommonBackend")
+                if tokenizer_class is not None:
+                    try:
+                        return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                    except (ValueError, FileNotFoundError, OSError):
+                        logger.info("Falling back to TokenizersBackend as no mistral-common tokenizer file was found.")
+
             if TokenizersBackend is not None:
                 return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
