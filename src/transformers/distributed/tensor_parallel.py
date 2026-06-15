@@ -148,9 +148,9 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None) -> 
             unused_rules.pop(matched_key, None)
             unsharded_layers.discard(key)
 
-    if unused_rules:
+    if len(unused_rules) > 0:
         logger.warning(f"The following TP rules were not applied on any of the layers: {unused_rules}")
-    if unsharded_layers:
+    if len(unsharded_layers) > 0:
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
 
 
