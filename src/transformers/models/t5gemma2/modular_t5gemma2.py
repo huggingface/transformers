@@ -700,11 +700,12 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         else:
             special_image_mask = input_ids == image_token_id
 
-        image_tokens = inputs_embeds[special_image_mask]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
+        n_image_features = image_features.shape[0] * image_features.shape[1]
         torch_compilable_check(
-            image_tokens.numel() == image_features.numel(),
-            f"Image features and image tokens do not match: tokens: {image_tokens.numel()}, features: {image_features.numel()}.",
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+            f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}",
         )
         return special_image_mask
 

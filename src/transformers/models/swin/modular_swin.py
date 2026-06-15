@@ -1082,7 +1082,6 @@ class SwinBackbone(BackboneMixin, SwinPreTrainedModel):
         [1, 768, 7, 7]
         ```
         """
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
         # always_partition=True preserves shifted-window attention at all resolutions.
         # output_hidden_states_before_downsampling=True captures pre-downsampling feature maps per stage.
         outputs = self.swin(

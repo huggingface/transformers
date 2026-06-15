@@ -30,7 +30,7 @@ from contextlib import AbstractContextManager, ExitStack, nullcontext
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict, TypeVar
 
 import numpy as np
 
@@ -41,6 +41,10 @@ from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_prox
 if TYPE_CHECKING:
     import torch
     from torch import nn
+
+
+# Generic class or function
+T = TypeVar("T")
 
 
 logger = logging.get_logger(__name__)
@@ -1050,6 +1054,13 @@ def merge_with_config_defaults(func):
 def check_model_inputs(func):
     logger.warning_once("The `check_model_inputs` decorator is deprecated in favor of `merge_with_config_defaults`.")
     return merge_with_config_defaults(func)
+
+
+def no_inherit_decorator(obj: T) -> T:
+    """
+    Identity decorator that prevents the modular converter from propagating its decorators to specific files.
+    """
+    return obj
 
 
 class GeneralInterface(MutableMapping):
