@@ -406,10 +406,9 @@ class Wav2Vec2BertEncoder(nn.Module):
         else:
             relative_position_embeddings = None
 
-        if is_torchdynamo_compiling():
-            synced_gpus = False
-        else:
-            synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
+        synced_gpus = (
+            False if is_torchdynamo_compiling() else is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
+        )
 
         for i, layer in enumerate(self.layers):
             if output_hidden_states:

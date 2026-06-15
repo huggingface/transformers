@@ -11,17 +11,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...integrations import use_kernel_func_from_hub
-from ...modeling_utils import PreTrainedModel
+from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
@@ -30,10 +32,17 @@ from ...utils import (
     can_return_tuple,
 )
 from ...utils.generic import maybe_autocast
-from ..auto import AutoModel
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..clip.modeling_clip import CLIPMLP
 from ..dac.modeling_dac import DacEncoder, DacEncoderBlock, DacResidualUnit
-from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRotaryEmbedding, rotate_half
+from ..llama.configuration_llama import LlamaConfig
+from ..llama.modeling_llama import (
+    LlamaAttention,
+    LlamaDecoderLayer,
+    LlamaRotaryEmbedding,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
+)
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     Qwen2_5OmniAntiAliasedActivation1d,
     Qwen2_5OmniDownSample1d,
@@ -42,11 +51,84 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     kaiser_sinc_filter1d,
 )
 from ..voxtral.modeling_voxtral import VoxtralPreTrainedModel
-from .configuration_xcodec2 import Xcodec2Config
 
 
-@dataclass
+@auto_docstring(checkpoint="bezzam/xcodec2")
+@strict
+class Xcodec2Config(LlamaConfig):
+    r"""
+    downsampling_ratios (`list[int]`, *optional*, defaults to `[2, 2, 4, 4, 5]`):
+        Ratios for downsampling in the encoder.
+    semantic_model_config (`Union[Dict, Wav2Vec2BertConfig]`, *optional*):
+        An instance of the configuration object for the semantic (Wav2Vec2BertConfig) model.
+    quantization_dim (`int`, *optional*, defaults to 2048):
+        Dimension for the vector quantization codebook.
+    quantization_levels (`list[int]`, *optional*, defaults to `[4, 4, 4, 4, 4, 4, 4, 4]`):
+        Levels for the vector quantization codebook.
+
+    Example:
+
+    ```python
+    >>> from transformers import Xcodec2Config, Xcodec2Model
+
+    >>> # Initializing configuration
+    >>> configuration = Xcodec2Config()
+
+    >>> # Initializing a model (with random weights) from the configuration
+    >>> model = Xcodec2Model(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "xcodec2"
+    sub_configs = {"semantic_model_config": AutoConfig}
+
+    encoder_hidden_size: int = 48
+    downsampling_ratios: list[int] | tuple[int, ...] = (2, 2, 4, 4, 5)
+    semantic_model_config: dict | PreTrainedConfig | None = None
+    sampling_rate: int = 16000
+    activation_dropout: float = 0.1
+    quantization_dim: int = 2048
+    quantization_levels: list[int] | tuple[int, ...] = (4, 4, 4, 4, 4, 4, 4, 4)
+    hidden_size: int = 1024
+    intermediate_size: int = 4096
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 16
+    num_hidden_layers: int = 12
+    head_dim: int = 64
+    max_position_embeddings: int = 4096
+    vocab_size = AttributeError()
+    bos_token_id = AttributeError()
+    eos_token_id = AttributeError()
+    pretraining_tp = AttributeError()
+    mlp_bias = AttributeError()
+    use_cache = AttributeError()
+    base_model_tp_plan = AttributeError()
+    base_model_pp_plan = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.semantic_model_config, dict):
+            self.semantic_model_config["model_type"] = self.semantic_model_config.get("model_type", "wav2vec2-bert")
+            self.semantic_model_config = CONFIG_MAPPING[self.semantic_model_config["model_type"]](
+                **{"num_hidden_layers": 16, **self.semantic_model_config}
+            )
+        elif self.semantic_model_config is None:
+            self.semantic_model_config = CONFIG_MAPPING["wav2vec2-bert"](num_hidden_layers=16)
+
+        super().__post_init__(**kwargs)
+
+    @property
+    def hop_length(self) -> int:
+        return int(np.prod(self.downsampling_ratios))
+
+    @property
+    def n_fft(self) -> int:
+        return self.hop_length * 4
+
+
 @auto_docstring
+@dataclass
 class Xcodec2Output(ModelOutput):
     """
     Args:
@@ -68,8 +150,8 @@ class Xcodec2Output(ModelOutput):
     audio_codes_mask: torch.Tensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Xcodec2EncoderOutput(ModelOutput):
     """
     Args:
@@ -89,8 +171,8 @@ class Xcodec2EncoderOutput(ModelOutput):
     audio_codes_mask: torch.Tensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Xcodec2DecoderOutput(ModelOutput):
     """
     Args:
@@ -103,28 +185,6 @@ class Xcodec2DecoderOutput(ModelOutput):
     audio_values: torch.FloatTensor | None = None
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=2):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 2):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
 class Xcodec2RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
@@ -134,6 +194,51 @@ class Xcodec2MLP(CLIPMLP):
         super().__init__(config)
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+
+
+class Xcodec2Attention(LlamaAttention):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        # Xcodec2 uses position_ids of shape (1, num_attention_heads) so cos/sin have shape
+        # (batch, num_attention_heads, head_dim). unsqueeze_dim=2 broadcasts correctly against
+        # q/k of shape (batch, num_heads, seq_len, head_dim), unlike Llama's default of 1.
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=2)
+
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class Xcodec2DecoderLayer(LlamaDecoderLayer):
@@ -675,4 +780,4 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         )
 
 
-__all__ = ["Xcodec2Model", "Xcodec2PreTrainedModel"]
+__all__ = ["Xcodec2Config", "Xcodec2Model", "Xcodec2PreTrainedModel"]

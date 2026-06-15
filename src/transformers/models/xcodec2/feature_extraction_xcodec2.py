@@ -65,7 +65,8 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
 
-        # Acoustic encoder feature extraction (similar to DAC)
+        # Acoustic encoder feature extraction (similar to DAC). Defining sub feature extractor as workaround for
+        # padding audio with hop_length multiple, and relying on the parent class for padding the spectrogram.
         self.hop_length = hop_length
         self.acoustic_encoder_padder = SequenceFeatureExtractor(
             feature_size=1,
@@ -125,6 +126,9 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
                 Remaining dictionary of keyword arguments that will be passed to the tokenizer or the feature
                 extractor.
         """
+        if not is_torch_available():
+            raise ImportError("PyTorch is required for mel-filter bank feature extraction.")
+
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
@@ -137,9 +141,6 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
                 f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
-
-        if not is_torch_available():
-            raise ImportError("PyTorch is required for mel-filter bank feature extraction.")
 
         audio = make_list_of_audio(audio)
         for example in audio:
