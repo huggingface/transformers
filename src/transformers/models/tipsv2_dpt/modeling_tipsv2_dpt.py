@@ -23,6 +23,7 @@ import torch
 from torch import nn
 from typing_extensions import Unpack
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
 from ...modeling_outputs import DepthEstimatorOutput, SemanticSegmenterOutput
@@ -347,11 +348,10 @@ class Tipsv2DptPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module) -> None:
         super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
+            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
         elif isinstance(module, Tipsv2DptBinRegressor):
-            module.depth_bins.copy_(torch.linspace(module.min_depth, module.max_depth, module.depth_bins.shape[0]))
+            depth_bins = torch.linspace(module.min_depth, module.max_depth, module.depth_bins.shape[0])
+            init.copy_(module.depth_bins, depth_bins)
 
 
 @auto_docstring(
