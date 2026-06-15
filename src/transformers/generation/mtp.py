@@ -139,7 +139,11 @@ class MtpLayerStack(PreTrainedModel):
 
         # We create this dummy cache simply to create the masks correctly, since they rely on the sizes of layer 0 of
         # the cache. Note that it does not create any copy of data, it simply keep a ref to internal tensors
-        dummy_cache_for_masking = Cache(layers=past_key_values.layers[self.config.num_hidden_layers :])  # type: ignore
+        dummy_cache_for_masking = (
+            Cache(layers=past_key_values.layers[self.config.num_hidden_layers :])  # type: ignore
+            if past_key_values is not None
+            else None
+        )
 
         drafted_logits = []
         drafted_tokens = []
