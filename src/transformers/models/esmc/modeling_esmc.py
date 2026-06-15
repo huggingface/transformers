@@ -20,7 +20,7 @@
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -36,171 +36,98 @@ from ...modeling_outputs import (  # type: ignore[import]
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
+from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel  # type: ignore[import]
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple  # type: ignore[import]
+from ...utils.generic import maybe_autocast
 from .configuration_esmc import ESMCConfig
 
 
-# ---------------------------------------------------------------------------
-# Output dataclasses
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class ESMCMaskedLMOutput(MaskedLMOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
-            Masked language modelling loss. Returned when ``labels`` are provided.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, vocab_size)`):
-            Prediction scores of the language modelling head.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, d_model)`):
-            Final hidden states after layer normalisation.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of per-layer hidden states, each of shape ``(batch_size, sequence_length, d_model)``
-            (the embedding output plus one per encoder layer). Returned when ``output_hidden_states=True``.
-        attentions (`tuple(torch.FloatTensor)`, *optional*):
-            Per-layer attention weights of shape
-            ``(batch_size, num_heads, sequence_length, sequence_length)``.
-            Returned when ``output_attentions=True``.
-    """
-
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-
-
-@dataclass
-class ESMCTokenClassifierOutput(TokenClassifierOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
-            Token classification loss. Returned when ``labels`` are provided.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_labels)`):
-            Classification scores (before SoftMax).
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, d_model)`):
-            Final hidden states after layer normalisation.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of per-layer hidden states, each of shape ``(batch_size, sequence_length, d_model)``
-            (the embedding output plus one per encoder layer). Returned when ``output_hidden_states=True``.
-        attentions (`tuple(torch.FloatTensor)`, *optional*):
-            Per-layer attention weights of shape
-            ``(batch_size, num_heads, sequence_length, sequence_length)``.
-            Returned when ``output_attentions=True``.
-    """
-
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-
-
-@dataclass
-class ESMCSequenceClassifierOutput(SequenceClassifierOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
-            Sequence classification loss. Returned when ``labels`` are provided.
-        logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
-            Classification scores (before SoftMax).
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, d_model)`):
-            Final hidden states after layer normalisation.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of per-layer hidden states, each of shape ``(batch_size, sequence_length, d_model)``
-            (the embedding output plus one per encoder layer). Returned when ``output_hidden_states=True``.
-        attentions (`tuple(torch.FloatTensor)`, *optional*):
-            Per-layer attention weights of shape
-            ``(batch_size, num_heads, sequence_length, sequence_length)``.
-            Returned when ``output_attentions=True``.
-    """
-
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-
-
-# ---------------------------------------------------------------------------
-# Rotary position embedding helpers
-# ---------------------------------------------------------------------------
-
-
 class ESMCRotaryEmbedding(nn.Module):
-    """Rotary position embeddings (RoPE), config-driven, returning ``(cos, sin)``.
+    """Rotary position embeddings (RoPE), returning ``(cos, sin)``.
 
-    Follows the standard Transformers rotary convention (cf.
-    ``EsmRotaryEmbedding`` / ``LlamaRotaryEmbedding``): ``inv_freq`` is a
-    non-persistent fp32 buffer and ``forward`` builds full-head-dim ``cos`` /
-    ``sin`` in fp32 before casting to the input dtype.
+    Identical to :class:`~transformers.models.esm.modeling_esm.EsmRotaryEmbedding`
+    (``inv_freq = 1 / theta^(arange(0, dim, 2) / dim)`` with ``dim = d_model // n_heads``,
+    ``cos`` / ``sin`` built in fp32), with two ESMC-specific tweaks:
+
+    * ``inv_freq`` is a **non-persistent** buffer (recomputed from the config, never
+      stored in the checkpoint).
+    * ``_apply`` is overridden so ``inv_freq`` stays fp32 even when the module is cast
+      to bf16/fp16 (e.g. when ESMFold2 loads its bundled ESMC backbone in bf16).
+      ``nn.Module._apply`` would otherwise round the rotary frequencies to bf16, which
+      drifts the RoPE angles and is the dominant source of bf16 fork-vs-port divergence
+      in the ESMFold2 backbone.
     """
 
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: ESMCConfig, device=None):
         super().__init__()
+
         self.config = config
-        self.register_buffer("inv_freq", self._compute_inv_freq(config, device), persistent=False)
+        self.rope_type = {}
+
+        curr_inv_freq, curr_attention_scaling = self.compute_default_rope_parameters(self.config, device)
+        self.register_buffer("inv_freq", curr_inv_freq)
+        setattr(self, "attention_scaling", curr_attention_scaling)
+        inv_freq, _ = self.compute_default_rope_parameters(config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @staticmethod
-    def _compute_inv_freq(config: ESMCConfig, device=None) -> torch.Tensor:
-        dim = config.d_model // config.n_heads
-        return 1.0 / (
-            config.rope_theta
-            ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float32) / dim)
-        )
+    def compute_default_rope_parameters(
+        config: ESMCConfig | None = None,
+        device: Optional["torch.device"] = None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
 
-    def _apply(self, fn, recurse=True):
-        # Keep ``inv_freq`` in fp32 even when the module is cast to bf16/fp16 (e.g.
-        # when ESMFold2 loads its bundled ESMC backbone in bf16). ``super()._apply`` would
-        # round the rotary frequencies to bf16, which drifts the RoPE angles and is
-        # the dominant source of bf16 fork-vs-port divergence in the ESMFold2 backbone.
-        result = super()._apply(fn, recurse=recurse)
-        self.register_buffer(
-            "inv_freq", self._compute_inv_freq(self.config, device=self.inv_freq.device), persistent=False
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_theta
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
         )
-        return result
+        return inv_freq, attention_factor
 
     @torch.no_grad()
-    def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids, layer_type=None):
+        inv_freq = getattr(self, "inv_freq")
+        attention_scaling = getattr(self, "attention_scaling")
+
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
+
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # force fp32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
+
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-
-class ESMCLayerNormLinear(nn.Module):
-    """LayerNorm followed by a Linear projection (the fused QKV projection).
-
-    Parameters are named ``layer_norm_weight``, ``layer_norm_bias`` and
-    ``weight`` to match the published ESMC checkpoint layout. The LayerNorm runs
-    in the activation dtype (plain ``F.layer_norm``) exactly like the reference:
-    standalone bf16 → bf16 norm; inside ESMFold2 the backbone is wrapped in a
-    bf16 autocast (matching the fork's ``_lm_precision_context``), so the norm
-    then computes in fp32. A no-op in fp32.
-    """
-
-    def __init__(self, d_in: int, d_out: int, eps: float = 1e-5) -> None:
-        super().__init__()
-        self.d_in = d_in
-        self.eps = eps
-        self.layer_norm_weight = nn.Parameter(torch.ones(d_in))
-        self.layer_norm_bias = nn.Parameter(torch.zeros(d_in))
-        self.weight = nn.Parameter(torch.empty(d_out, d_in))
-        nn.init.normal_(self.weight, std=0.02)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = F.layer_norm(x, (self.d_in,), self.layer_norm_weight, self.layer_norm_bias, self.eps)
-        return F.linear(x, self.weight)
+    def _apply(self, fn, recurse=True):
+        result = super()._apply(fn, recurse=recurse)
+        inv_freq, _ = self.compute_default_rope_parameters(self.config, device=self.inv_freq.device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -213,53 +140,28 @@ def _swiglu_hidden_dim(expansion_ratio: float, d_model: int) -> int:
     return int(((expansion_ratio * d_model) + 255) // 256 * 256)
 
 
-class ESMCSwiGLUMLP(nn.Module):
-    """LayerNorm + SwiGLU feed-forward network.
+class ESMCMLP(nn.Module):
+    """SwiGLU feed-forward network, reusing :class:`ModernBertMLP`'s gated forward.
 
-    Parameters are named ``layer_norm_weight``, ``layer_norm_bias``,
-    ``fc1_weight`` and ``fc2_weight`` to match the published ESMC checkpoint
-    layout. ESMC was trained with ``bias=False``, so this network has no biases.
+    ``ModernBertMLP`` computes ``Wo(act(input) * gate)`` with ``input, gate =
+    Wi(x).chunk(2, dim=-1)`` — exactly ESMC's SwiGLU once ``act`` is SiLU. ESMC was
+    trained with ``bias=False`` and no MLP dropout, and rounds the hidden dim to a
+    multiple of 256. The pre-MLP LayerNorm lives in :class:`ESMCLayer` (``mlp_norm``);
+    the published checkpoint's ``ffn.fc1_weight`` / ``ffn.fc2_weight`` map onto
+    ``mlp.Wi`` / ``mlp.Wo`` via ``conversion_mapping.py``.
     """
 
-    def __init__(self, d_model: int, expansion_ratio: float, eps: float = 1e-5) -> None:
+    def __init__(self, d_model: int, expansion_ratio: float = 8 / 3) -> None:
         super().__init__()
         ffn_hidden_size = _swiglu_hidden_dim(expansion_ratio, d_model)
-        self.hidden_size = d_model
-        self.ffn_hidden_size = ffn_hidden_size
-        self.eps = eps
-        self.layer_norm_weight = nn.Parameter(torch.ones(d_model))
-        self.layer_norm_bias = nn.Parameter(torch.zeros(d_model))
-        self.fc1_weight = nn.Parameter(torch.empty(2 * ffn_hidden_size, d_model))
-        self.fc2_weight = nn.Parameter(torch.empty(d_model, ffn_hidden_size))
-        nn.init.normal_(self.fc1_weight, std=0.02)
-        nn.init.normal_(self.fc2_weight, std=0.02)
+        self.Wi = nn.Linear(d_model, 2 * ffn_hidden_size, bias=False)
+        self.act = nn.SiLU()
+        self.drop = nn.Identity()
+        self.Wo = nn.Linear(ffn_hidden_size, d_model, bias=False)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = F.layer_norm(
-            x,
-            (self.hidden_size,),
-            self.layer_norm_weight,
-            self.layer_norm_bias,
-            self.eps,
-        )
-        x = F.linear(x, self.fc1_weight)
-        x1, x2 = x.chunk(2, dim=-1)
-        x = F.silu(x1) * x2
-        return F.linear(x, self.fc2_weight)
-
-
-class ESMCGeluMLP(nn.Module):
-    """LayerNorm + GELU feed-forward network (the non-default ``ffn_type='gelu'``)."""
-
-    def __init__(self, d_model: int, expansion_ratio: float, bias: bool = False) -> None:
-        super().__init__()
-        hidden = int(expansion_ratio * d_model)
-        self.layer_norm = nn.LayerNorm(d_model)
-        self.fc1 = nn.Linear(d_model, hidden, bias=bias)
-        self.fc2 = nn.Linear(hidden, d_model, bias=bias)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.fc2(F.gelu(self.fc1(self.layer_norm(x))))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input, gate = self.Wi(hidden_states).chunk(2, dim=-1)
+        return self.Wo(self.drop(self.act(input) * gate))
 
 
 def rotate_half(x):
@@ -361,8 +263,13 @@ class ESMCAttention(nn.Module):
         # attention_mask is passed (unpadded inputs), silently masking causally.
         self.is_causal = False
 
-        self.layernorm_qkv = ESMCLayerNormLinear(d_model, d_model * 3)
-        self.out_proj = nn.Linear(d_model, d_model, bias=bias)
+        # Fused QKV projection (``Wqkv``) and output projection (``Wo``), matching
+        # ModernBERT's attention layout. The pre-attention LayerNorm lives in
+        # :class:`ESMCLayer` (``attn_norm``); the published checkpoint's fused
+        # ``attn.layernorm_qkv`` / ``attn.out_proj`` map onto these via
+        # ``conversion_mapping.py``.
+        self.Wqkv = nn.Linear(d_model, d_model * 3, bias=bias)
+        self.Wo = nn.Linear(d_model, d_model, bias=bias)
 
         if qk_layernorm:
             self.q_ln = nn.LayerNorm(d_model, bias=bias)
@@ -390,7 +297,7 @@ class ESMCAttention(nn.Module):
         ``eager`` interface so they are observable.
         """
         b, s, _ = hidden_states.shape
-        qkv = self.layernorm_qkv(hidden_states)
+        qkv = self.Wqkv(hidden_states)
         q, k, v = torch.chunk(qkv, 3, dim=-1)
         q = self.q_ln(q).to(q.dtype)
         k = self.k_ln(k).to(q.dtype)
@@ -421,7 +328,7 @@ class ESMCAttention(nn.Module):
             **kwargs,
         )
         attn_output = attn_output.reshape(b, s, -1)
-        return self.out_proj(attn_output), attn_weights
+        return self.Wo(attn_output), attn_weights
 
 
 # ---------------------------------------------------------------------------
@@ -441,7 +348,6 @@ class ESMCLayer(nn.Module):
         residue_scaling_factor: Scales residual connections to stabilise deep
             networks (``1 / sqrt(n_layers / 36)`` is the ESM3 scheme).
         qk_layernorm: Whether to apply QK LayerNorm in attention.
-        ffn_type: Feed-forward activation: ``"swiglu"`` or ``"gelu"``.
     """
 
     def __init__(
@@ -450,23 +356,21 @@ class ESMCLayer(nn.Module):
         d_model: int,
         n_heads: int,
         bias: bool = False,
-        expansion_ratio: float = 4.0,
+        expansion_ratio: float = 8 / 3,
         residue_scaling_factor: float = 1.0,
         qk_layernorm: bool = True,
-        ffn_type: str = "swiglu",
     ):
         super().__init__()
         if bias:
             raise ValueError("ESMC was trained with bias=False; bias=True is not supported.")
 
+        # Pre-norm layout (cf. ModernBERT): the LayerNorms that the published ESMC
+        # checkpoint fuses into ``attn.layernorm_qkv`` / ``ffn`` live here as
+        # ``attn_norm`` / ``mlp_norm`` (remapped in ``conversion_mapping.py``).
+        self.attn_norm = nn.LayerNorm(d_model)
         self.attn = ESMCAttention(config, d_model, n_heads, bias=bias, qk_layernorm=qk_layernorm)
-
-        if ffn_type == "swiglu":
-            self.ffn = ESMCSwiGLUMLP(d_model, expansion_ratio)
-        elif ffn_type == "gelu":
-            self.ffn = ESMCGeluMLP(d_model, expansion_ratio, bias)
-        else:
-            raise ValueError(f"Unknown ffn_type: {ffn_type!r}. Choose 'swiglu' or 'gelu'.")
+        self.mlp_norm = nn.LayerNorm(d_model)
+        self.mlp = ESMCMLP(d_model, expansion_ratio)
 
         self.scaling_factor = residue_scaling_factor
 
@@ -493,14 +397,14 @@ class ESMCLayer(nn.Module):
             ``(batch, num_heads, seq_len, seq_len)`` or ``None``.
         """
         attn_out, attn_weights = self.attn(
-            x,
+            self.attn_norm(x),
             attention_mask,
             position_embeddings=position_embeddings,
             output_attentions=output_attentions,
             **kwargs,
         )
         x = x + attn_out / self.scaling_factor
-        x = x + self.ffn(x) / self.scaling_factor
+        x = x + self.mlp(self.mlp_norm(x)) / self.scaling_factor
         return x, attn_weights
 
 
@@ -515,7 +419,6 @@ class ESMCEncoder(nn.Module):
             ``sqrt(n_layers / 36)`` to each block.
         bias: Bias flag forwarded to every sub-module.
         qk_layernorm: QK LayerNorm flag forwarded to every block.
-        ffn_type: FFN activation type (``"swiglu"`` or ``"gelu"``).
         expansion_ratio: FFN expansion ratio.
         use_flash_attn: Use Flash Attention 2 kernel when available.
     """
@@ -529,7 +432,6 @@ class ESMCEncoder(nn.Module):
         scale_residue: bool = True,
         bias: bool = False,
         qk_layernorm: bool = True,
-        ffn_type: str = "swiglu",
         expansion_ratio: float = 8 / 3,
     ):
         super().__init__()
@@ -543,7 +445,6 @@ class ESMCEncoder(nn.Module):
                     expansion_ratio=expansion_ratio,
                     bias=bias,
                     qk_layernorm=qk_layernorm,
-                    ffn_type=ffn_type,
                 )
                 for _ in range(n_layers)
             ]
@@ -625,21 +526,9 @@ class ESMCPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"\._extra_state$"]
 
     def _init_weights(self, module: nn.Module):
-        std = self.config.initializer_range
-        # The fused LN+projection modules are handled explicitly: the base
-        # `_init_weights` matches norms by class-name substring ("LayerNorm"),
-        # which would otherwise mis-initialize their (Linear) `weight` to ones.
-        if isinstance(module, ESMCLayerNormLinear):
-            init.ones_(module.layer_norm_weight)
-            init.zeros_(module.layer_norm_bias)
-            init.normal_(module.weight, mean=0.0, std=std)
-        elif isinstance(module, ESMCSwiGLUMLP):
-            init.ones_(module.layer_norm_weight)
-            init.zeros_(module.layer_norm_bias)
-            init.normal_(module.fc1_weight, mean=0.0, std=std)
-            init.normal_(module.fc2_weight, mean=0.0, std=std)
-        elif isinstance(module, ESMCRotaryEmbedding):
-            init.copy_(module.inv_freq, module._compute_inv_freq(module.config))
+        if isinstance(module, ESMCRotaryEmbedding):
+            inv_freq, _ = module.compute_default_rope_parameters(module.config)
+            init.copy_(module.inv_freq, inv_freq)
         else:
             # nn.Linear / nn.Embedding / nn.LayerNorm via the base initializer.
             super()._init_weights(module)
@@ -836,10 +725,9 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
         sequence_id: torch.Tensor | None = None,
         output_hidden_states: bool | None = None,
         output_attentions: bool | None = None,
-        return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple[torch.Tensor, ...] | ESMCMaskedLMOutput:
+    ) -> tuple[torch.Tensor, ...] | MaskedLMOutput:
         r"""
         sequence_id (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Integer chain-ID tensor forwarded to the encoder for chain-aware
@@ -865,8 +753,6 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
         torch.Size([1, 11, 64])
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         encoder_outputs = self.esmc(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -882,35 +768,21 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
         if labels is not None:
             loss = CrossEntropyLoss(ignore_index=-100)(logits.view(-1, self.config.vocab_size), labels.view(-1))
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    loss,
-                    logits,
-                    encoder_outputs.last_hidden_state,
-                    encoder_outputs.hidden_states,
-                    encoder_outputs.attentions,
-                ]
-                if v is not None
-            )
-
-        return ESMCMaskedLMOutput(
+        return MaskedLMOutput(
             loss=loss,
             logits=logits,
-            last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
 
 
-# ---------------------------------------------------------------------------
-# Classification heads
-# ---------------------------------------------------------------------------
-
-
 class ESMCClassificationHead(nn.Module):
-    """Dense classification head applied to the ``<cls>`` token representation."""
+    """Dense classification head applied to the ``<cls>`` token representation.
+
+    Identical to :class:`~transformers.models.esm.modeling_esm.EsmClassificationHead`
+    (``<cls>`` token -> dropout -> ``tanh(dense)`` -> dropout -> ``out_proj``); ESMC just
+    sources the dropout rate from ``classifier_dropout`` instead of ``hidden_dropout_prob``.
+    """
 
     def __init__(self, config: ESMCConfig):
         super().__init__()
@@ -918,12 +790,14 @@ class ESMCClassificationHead(nn.Module):
         self.dropout = nn.Dropout(config.classifier_dropout)
         self.out_proj = nn.Linear(config.d_model, config.num_labels)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        x = hidden_states[:, 0, :]  # <cls> token
+    def forward(self, features, **kwargs):
+        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
         x = self.dropout(x)
-        x = torch.tanh(self.dense(x))
+        x = self.dense(x)
+        x = torch.tanh(x)
         x = self.dropout(x)
-        return self.out_proj(x)
+        x = self.out_proj(x)
+        return x
 
 
 # ---------------------------------------------------------------------------
@@ -948,10 +822,9 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         output_hidden_states: bool | None = None,
         output_attentions: bool | None = None,
-        return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple[torch.Tensor, ...] | ESMCSequenceClassifierOutput:
+    ) -> tuple[torch.Tensor, ...] | SequenceClassifierOutput:
         r"""
         output_attentions (`bool`, *optional*):
             Whether to return per-block attention weights. Forwarded to the
@@ -961,8 +834,6 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
             ``[0, config.num_labels - 1]``.  For regression pass a float
             tensor of shape ``(batch_size,)``.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         encoder_outputs = self.esmc(
             input_ids,
             attention_mask=attention_mask,
@@ -995,23 +866,9 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss = BCEWithLogitsLoss()(logits, labels)
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    loss,
-                    logits,
-                    encoder_outputs.last_hidden_state,
-                    encoder_outputs.hidden_states,
-                    encoder_outputs.attentions,
-                ]
-                if v is not None
-            )
-
-        return ESMCSequenceClassifierOutput(
+        return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -1040,10 +897,9 @@ class ESMCForTokenClassification(ESMCPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         output_hidden_states: bool | None = None,
         output_attentions: bool | None = None,
-        return_dict: bool | None = None,
         labels: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple[torch.Tensor, ...] | ESMCTokenClassifierOutput:
+    ) -> tuple[torch.Tensor, ...] | TokenClassifierOutput:
         r"""
         output_attentions (`bool`, *optional*):
             Whether to return per-block attention weights. Forwarded to the
@@ -1052,8 +908,6 @@ class ESMCForTokenClassification(ESMCPreTrainedModel):
             Per-token labels.  Indices must be in ``[0, config.num_labels - 1]``.
             Positions with index ``-100`` are ignored in the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         encoder_outputs = self.esmc(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1071,23 +925,9 @@ class ESMCForTokenClassification(ESMCPreTrainedModel):
                 logits.view(-1, self.num_labels), labels.to(logits.device).view(-1)
             )
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    loss,
-                    logits,
-                    encoder_outputs.last_hidden_state,
-                    encoder_outputs.hidden_states,
-                    encoder_outputs.attentions,
-                ]
-                if v is not None
-            )
-
-        return ESMCTokenClassifierOutput(
+        return TokenClassifierOutput(
             loss=loss,
             logits=logits,
-            last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
