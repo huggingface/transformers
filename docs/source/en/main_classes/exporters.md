@@ -30,12 +30,12 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 ## DynamoConfig
 
-[[autodoc]] utils.export_config.DynamoConfig
+[[autodoc]] exporters.configs.DynamoConfig
 
 ## OnnxConfig
 
-[[autodoc]] utils.export_config.OnnxConfig
+[[autodoc]] exporters.configs.OnnxConfig
 
 ## ExecutorchConfig
 
-[[autodoc]] utils.export_config.ExecutorchConfig
+[[autodoc]] exporters.configs.ExecutorchConfig

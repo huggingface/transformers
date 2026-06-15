@@ -70,19 +70,19 @@ Switch between runtimes by swapping the exporter class — nothing else changes.
 <hfoption id="Dynamo">
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
->>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.exporters import DynamoExporter, DynamoConfig
 
->>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
->>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
->>> inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
 
->>> exporter = DynamoExporter()
->>> config = DynamoConfig(dynamic=True)
->>> exported = exporter.export(model, inputs, config=config)
+exporter = DynamoExporter()
+config = DynamoConfig(dynamic=True)
+exported = exporter.export(model, inputs, config=config)
 
->>> # run the exported graph directly
->>> outputs = exported.module()(**inputs)
+# run the exported graph directly
+outputs = exported.module()(**inputs)
 ```
 
 </hfoption>
@@ -90,7 +90,7 @@ Switch between runtimes by swapping the exporter class — nothing else changes.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
+from transformers.exporters import OnnxExporter, OnnxConfig
 
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
@@ -115,7 +115,7 @@ outputs = session.run(None, ort_inputs)
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
+from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
@@ -136,92 +136,33 @@ et_program.save("model.pte")
 
 Set `dynamic=True` on any config to export with symbolic input shapes. All tensor dimensions
 are automatically marked as dynamic, so the exported graph accepts inputs of any size at
-runtime without retracing.
+runtime without retracing — see the quick-start example above.
 
-<hfoptions id="dynamic-shapes">
-<hfoption id="Dynamo">
-
-```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
->>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
-
->>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
->>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
->>> inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt"))
-
->>> exporter = DynamoExporter()
->>> config = DynamoConfig(dynamic=True)
->>> exported = exporter.export(model, inputs, config=config)
-
->>> # works with any batch size or sequence length
->>> outputs = exported.module()(**dict(tokenizer("A single input", return_tensors="pt")))
->>> outputs = exported.module()(**dict(tokenizer(["One", "Two", "Three"], padding=True, return_tensors="pt")))
-```
-
-</hfoption>
-<hfoption id="ONNX">
-
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
-
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt"))
-
-exporter = OnnxExporter()
-config = OnnxConfig(dynamic=True)
-onnx_program = exporter.export(model, inputs, config=config)
-
-# works with any batch size or sequence length
-onnx_program(**dict(tokenizer("A single input", return_tensors="pt")))
-onnx_program(**dict(tokenizer(["One", "Two", "Three"], padding=True, return_tensors="pt")))
-```
-
-</hfoption>
-<hfoption id="ExecuTorch">
-
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
-
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt"))
-
-exporter = ExecutorchExporter()
-config = ExecutorchConfig(backend="xnnpack", dynamic=True)
-et_program = exporter.export(model, inputs, config=config)
-```
-
-</hfoption>
-</hfoptions>
-
-For fine-grained control over which dimensions are dynamic, pass explicit `dynamic_shapes` instead.
-This is passed directly to `torch.export.export` — see the
+For fine-grained control over which dimensions are dynamic, pass explicit `dynamic_shapes`
+instead. This is forwarded directly to `torch.export.export` — see the
 [torch.export documentation](https://pytorch.org/docs/stable/export.html) for the expected format.
 
 <hfoptions id="explicit-dynamic-shapes">
 <hfoption id="Dynamo">
 
 ```python
->>> import torch
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
->>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.exporters import DynamoExporter, DynamoConfig
 
->>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
->>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
->>> inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt"))
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt"))
 
->>> batch = torch.export.Dim("batch", min=1, max=32)
->>> seq = torch.export.Dim("seq", min=1, max=2048)
+batch = torch.export.Dim("batch", min=1, max=32)
+seq = torch.export.Dim("seq", min=1, max=2048)
 
->>> exporter = DynamoExporter()
->>> config = DynamoConfig(
-...     dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
-...     prefer_deferred_runtime_asserts_over_guards=True,
-... )
->>> exported = exporter.export(model, inputs, config=config)
+exporter = DynamoExporter()
+config = DynamoConfig(
+    dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
+    prefer_deferred_runtime_asserts_over_guards=True,
+)
+exported = exporter.export(model, inputs, config=config)
 ```
 
 </hfoption>
@@ -230,7 +171,7 @@ This is passed directly to `torch.export.export` — see the
 ```python
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
+from transformers.exporters import OnnxExporter, OnnxConfig
 
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
@@ -253,7 +194,7 @@ onnx_program = exporter.export(model, inputs, config=config)
 ```python
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
+from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
@@ -293,19 +234,19 @@ and append a new attribute name there if needed.
 <hfoption id="Dynamo">
 
 ```python
->>> from transformers import AutoModelForImageTextToText, AutoProcessor
->>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
+from transformers import AutoModelForImageTextToText, AutoProcessor
+from transformers.exporters import DynamoExporter, DynamoConfig
 
->>> model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
->>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
->>> messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"}, {"type": "text", "text": "Describe this image."}]}]
->>> text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
->>> inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
+model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
+processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
+messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"}, {"type": "text", "text": "Describe this image."}]}]
+text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
 
->>> exporter = DynamoExporter()
->>> config = DynamoConfig(dynamic=True)
->>> components = exporter.export_for_generation(model, inputs, config=config)
->>> # components = {"image_encoder": ExportedProgram, "language_model": ExportedProgram, "lm_head": ExportedProgram, "decode": ExportedProgram}
+exporter = DynamoExporter()
+config = DynamoConfig(dynamic=True)
+components = exporter.export_for_generation(model, inputs, config=config)
+# components = {"image_encoder": ExportedProgram, "language_model": ExportedProgram, "lm_head": ExportedProgram, "decode": ExportedProgram}
 ```
 
 </hfoption>
@@ -313,7 +254,7 @@ and append a new attribute name there if needed.
 
 ```python
 from transformers import AutoModelForImageTextToText, AutoProcessor
-from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
+from transformers.exporters import OnnxExporter, OnnxConfig
 
 model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
@@ -332,7 +273,7 @@ components = exporter.export_for_generation(model, inputs, config=config)
 
 ```python
 from transformers import AutoModelForImageTextToText, AutoProcessor
-from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
+from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 
 model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
@@ -491,11 +432,11 @@ arbitrary skipping, and new entries should reference a specific upstream bug.
 
 ### Configuration
 
-[[autodoc]] transformers.utils.export_config.DynamoConfig
+[[autodoc]] transformers.exporters.configs.DynamoConfig
 
-[[autodoc]] transformers.utils.export_config.OnnxConfig
+[[autodoc]] transformers.exporters.configs.OnnxConfig
 
-[[autodoc]] transformers.utils.export_config.ExecutorchConfig
+[[autodoc]] transformers.exporters.configs.ExecutorchConfig
 
 ### Utilities
 
