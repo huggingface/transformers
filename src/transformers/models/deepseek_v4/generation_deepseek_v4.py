@@ -11,9 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Static caches for DeepSeek-V4 generation. Pre-allocates every compressor
-buffer up front so ``cache_implementation="static"`` and
-``torch.compile(fullgraph=True)`` work without re-tracing as the cache fills.
+"""Static caches for DeepSeek-V4 generation. All compressor buffers are
+pre-allocated so `cache_implementation="static"` runs under
+`torch.compile(fullgraph=True)` without re-tracing.
 """
 
 from __future__ import annotations
@@ -33,17 +33,13 @@ if TYPE_CHECKING:
 
 @dataclass
 class _CompressorState:
-    """Per-compressor state in a static cache: rolling buffer, compressed entries,
-    optional overlap slice, and a position counter. HCA uses one entry
-    (``"compressor"``); CSA adds ``"indexer"`` at different widths. Tensors are
-    allocated lazily so device and dtype match the live model.
+    """All buffers and counters one named compressor needs. Tensors are filled
+    in by `lazy_initialization` so they pick up the model's device and dtype.
     """
 
     buffer_dim: int
     compressed_dim: int
-    # Width of the per-window Ca slice persisted across CSA forwards. HCA's
-    # non-overlapping windows leave this at 0.
-    overlap_dim: int = 0
+    overlap_dim: int = 0  # CSA only; HCA has non-overlapping windows
     buffer_kv: torch.Tensor | None = None
     buffer_gate: torch.Tensor | None = None
     compressed_kv: torch.Tensor | None = None
@@ -53,18 +49,14 @@ class _CompressorState:
 
 
 class DeepseekV4HCAStaticCache(StaticSlidingWindowLayer):
-    r"""HCA cache backed by pre-allocated tensors, so the whole forward stays
-    dynamo-traceable. Holds the sliding-window K=V buffers from the parent class
-    plus, per named compressor:
+    r"""Static HCA cache: sliding-window K=V buffers from the parent class plus,
+    per named compressor, a rolling source-token buffer
+    `(B, compress_rate, head_dim)` and compressed-entry storage
+    `(B, ceil(max_cache_len / compress_rate), head_dim)`.
 
-      * a rolling source-token buffer ``(B, compress_rate, head_dim)``, zero-padded
-        on the left until the first window closes;
-      * compressed-entry storage ``(B, ceil(max_cache_len / compress_rate), head_dim)``;
-      * a counter for how many source tokens have been written.
-
-    Each decode step writes a candidate compressed entry into the open window's
-    slot, overwriting until the window closes and the entry becomes final.
-    Attention masks out un-closed slots, so the intermediate writes are never read.
+    Each decode step writes a candidate entry into the open window's slot and
+    overwrites it until that window closes. Attention masks out un-closed slots,
+    so the intermediate writes don't reach any query.
     """
 
     def __init__(self, config: DeepseekV4Config, max_cache_len: int):
@@ -75,13 +67,13 @@ class DeepseekV4HCAStaticCache(StaticSlidingWindowLayer):
         # Ceil so the final partial window has a slot reserved.
         self._max_compressed_entries = (max_cache_len + self.compress_rate - 1) // self.compress_rate
         # HCA has just one compressor entry. CSA's subclass overwrites this dict
-        # to add ``"indexer"`` with different feature widths.
+        # to add `"indexer"` with different feature widths.
         self.compressors: dict[str, _CompressorState] = {
             "compressor": _CompressorState(buffer_dim=config.head_dim, compressed_dim=config.head_dim),
         }
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
-        """Allocate every compressor's tensors on the first call."""
+        """Allocate the per-compressor buffers on the first update."""
         super().lazy_initialization(key_states, value_states)
         batch, dtype, device = key_states.shape[0], self.dtype, self.device
         for state in self.compressors.values():
@@ -109,16 +101,17 @@ class DeepseekV4HCAStaticCache(StaticSlidingWindowLayer):
     def store_compression_weights(
         self, name: str, kv: torch.Tensor, gate: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, int]:
-        """Append ``(kv, gate)`` to the named compressor's rolling buffer and
-        return ``(chunk_kv, chunk_gate, first_window_position)`` where the chunk
-        is the longest window-aligned prefix ready to compress.
+        """Append `(kv, gate)` to the named compressor's rolling buffer and
+        return `(chunk_kv, chunk_gate, first_window_position)` — the chunk is
+        the longest window-aligned prefix ready to compress.
 
-        Decode (one token) shifts the buffer left by one and appends; the full
-        buffer is returned so the compressor can emit a candidate even before
-        the first window closes (the zero padding on the left handles that).
-        Prefill (many tokens) concatenates the buffer's real tail with ``kv``,
-        slices off the window-aligned prefix, and refreshes the buffer with
-        the last ``compress_rate`` tokens of the stream.
+        For a single-token call (decode) the buffer is shifted left by one and
+        the new token appended; the whole buffer comes back so the compressor
+        can emit a candidate even before the first window fills (left slots are
+        zero). For a multi-token call (prefill) the buffer's real tail is
+        concatenated with `kv`, the longest window-aligned prefix is sliced
+        off, and the buffer is refreshed with the stream's last `compress_rate`
+        tokens.
         """
         state = self.compressors[name]
         new_n = kv.shape[1]
@@ -156,13 +149,10 @@ class DeepseekV4HCAStaticCache(StaticSlidingWindowLayer):
 
     def update_compressor_states(self, name: str, compressed: torch.Tensor) -> torch.Tensor:
         """Write the new compressed entries into the named compressor's storage
-        and return the full storage tensor.
-
-        Decode writes one candidate per step into the open window's slot,
-        overwriting until that window closes. Prefill writes ``n_new`` entries
-        in a contiguous run starting at the first newly-closed window's slot.
-        Attention's ``causal_threshold = (position_ids + 1) // compress_rate``
-        mask hides un-closed slots, so candidate writes don't affect output.
+        and return the full storage tensor. Decode writes one candidate per step
+        into the open window's slot; prefill writes a contiguous run starting at
+        the first newly-closed window's slot. Attention's causal mask hides
+        un-closed slots, so candidate writes don't leak into the output.
         """
         state = self.compressors[name]
         n_new = compressed.shape[1]
@@ -192,17 +182,17 @@ class DeepseekV4HCAStaticCache(StaticSlidingWindowLayer):
 
 
 class DeepseekV4CSAStaticCache(DeepseekV4HCAStaticCache):
-    r"""CSA cache. Adds an ``"indexer"`` compressor and per-compressor overlap
-    state on top of HCA's single ``"compressor"``.
+    r"""Static CSA cache. Adds an `"indexer"` compressor and per-compressor
+    overlap state on top of HCA's single `"compressor"`.
 
-    Feature widths follow the two-series window scheme: ``kv_proj`` / ``gate_proj``
-    emit ``2 * head_dim`` per token (Ca + Cb halves) and the softmax-gated combine
-    produces ``head_dim``-wide compressed entries. The indexer mirrors this at
-    ``index_head_dim``.
+    Feature widths reflect the two-series window scheme: `kv_proj` /
+    `gate_proj` emit `2 * head_dim` per token (Ca and Cb halves) and the
+    softmax-gated combine produces `head_dim`-wide entries. The indexer
+    follows the same shape at `index_head_dim`.
 
-    Overlap state holds the previous window's Ca slice for the gating combine.
-    It starts as zeros, which matches the dynamic cache's first-call ``None``
-    because the consumer assigns into the slot rather than adding to it.
+    Overlap state carries the previous window's Ca slice into the next
+    gating combine. Starting at zeros matches the dynamic cache's first-call
+    `None`, since the consumer assigns into the slot rather than adding.
     """
 
     def __init__(self, config: DeepseekV4Config, max_cache_len: int):
@@ -218,10 +208,9 @@ class DeepseekV4CSAStaticCache(DeepseekV4HCAStaticCache):
     def update_overlap_state(
         self, name: str, chunk_kv: torch.Tensor, chunk_gate: torch.Tensor, head_dim: int
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Return the previously saved Ca slice (zeros on the first call) and
-        stash the current chunk's last-window Ca for the next call. Only
-        ``:head_dim`` is kept; Cb has already been folded into the previous
-        compressed entry by the gating combine.
+        """Return the saved Ca slice (zeros on the first call) and stash this
+        chunk's last-window Ca for the next call. Only the `:head_dim` slice
+        is kept; Cb has already been folded into the previous compressed entry.
         """
         state = self.compressors[name]
         prior_kv = state.overlap_kv.clone()
