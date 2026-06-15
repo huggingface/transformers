@@ -611,6 +611,62 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(parameters, parameters1)
         self.check_trainer_state_are_the_same(state, state1)
 
+    def test_mid_epoch_resume_restores_rng_before_first_fetch(self):
+        """Regression for #39215: stochastic __getitem__ must match after mid-epoch resume."""
+        batch_size = 2
+        dataset_size = 64
+
+        class StochasticDataset(torch.utils.data.Dataset):
+            def __init__(self):
+                self.draws = []
+
+            def __len__(self):
+                return dataset_size
+
+            def __getitem__(self, idx):
+                draw = torch.rand(4)
+                self.draws.append(draw)
+                return {"x": torch.full((4,), float(idx)) + draw}
+
+        class TinyModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.w = nn.Parameter(torch.ones(4))
+
+            def forward(self, x, **kwargs):
+                return {"loss": (x * self.w).sum() ** 2 * 1e-4}
+
+        def run_training(output_dir, max_steps, resume_from=None):
+            set_seed(7)
+            dataset = StochasticDataset()
+            args = TrainingArguments(
+                output_dir=output_dir,
+                max_steps=max_steps,
+                per_device_train_batch_size=batch_size,
+                save_strategy="steps",
+                save_steps=4,
+                seed=7,
+                report_to=[],
+                use_cpu=True,
+                logging_strategy="no",
+                disable_tqdm=True,
+                dataloader_num_workers=0,
+            )
+            trainer = Trainer(model=TinyModel(), args=args, train_dataset=dataset)
+            trainer.train(resume_from_checkpoint=resume_from)
+            return dataset.draws
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            full_draws = run_training(os.path.join(tmp_dir, "full"), max_steps=8)
+            resumed_draws = run_training(
+                os.path.join(tmp_dir, "resume"),
+                max_steps=8,
+                resume_from=os.path.join(tmp_dir, "full", "checkpoint-4"),
+            )
+
+        for full_draw, resumed_draw in zip(full_draws[8:], resumed_draws[8:]):
+            self.assertTrue(torch.equal(full_draw, resumed_draw))
+
 
 # ---------------------------------------------------------------------------
 # Auto batch size finder tests

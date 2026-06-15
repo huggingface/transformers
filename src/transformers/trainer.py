@@ -1684,7 +1684,6 @@ class Trainer:
         num_update_steps_trained = 0
         if epoch == epochs_trained and resume_from_checkpoint is not None:
             if steps_trained_in_current_epoch > 0 and not self.args.ignore_data_skip:
-                train_dataloader = skip_first_batches(train_dataloader, steps_trained_in_current_epoch)
                 step = steps_trained_in_current_epoch - 1
                 num_update_steps_trained = steps_trained_in_current_epoch // self.args.gradient_accumulation_steps
                 rng_to_sync = True
@@ -1694,6 +1693,16 @@ class Trainer:
         if hasattr(train_dataloader, "set_epoch"):
             train_dataloader.set_epoch(epoch)
         epoch_iterator = iter(train_dataloader)
+
+        # Mid-epoch resume: materialize skipped micro-batches, then restore the checkpoint
+        # RNG stream before the first real training fetch. `skip_first_batches` cannot be used
+        # here because it still runs `__getitem__` for discarded batches inside the first
+        # `next(epoch_iterator)`, which advances the global RNG between restore and fetch.
+        if rng_to_sync:
+            for _ in range(steps_trained_in_current_epoch):
+                next(epoch_iterator)
+            self._load_rng_state(resume_from_checkpoint)
+            rng_to_sync = False
 
         # We chunkify the epoch iterator into gradient accumulation steps `n` batches
         remainder = steps_in_epoch % self.args.gradient_accumulation_steps
@@ -1707,10 +1716,6 @@ class Trainer:
             num_batches = (
                 self.args.gradient_accumulation_steps if update_step != (num_update_steps_per_epoch - 1) else remainder
             )
-            if rng_to_sync:
-                self._load_rng_state(resume_from_checkpoint)
-                rng_to_sync = False
-
             batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches, self.args.device)
 
             # This is used to correctly scale the loss when the last accumulation step has fewer batches.
