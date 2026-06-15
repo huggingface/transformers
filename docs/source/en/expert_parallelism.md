@@ -39,30 +39,9 @@ model = AutoModelForCausalLM.from_pretrained(
 ```
 
 > [!TIP]
-> With `enable_expert_parallel=True`, Transformers selects a **complete** parallel plan from the model config: `base_model_tp_ep_plan` when `enable_sequence_parallel=False` (typical inference with [tensor parallelism](./perf_infer_gpu_multi)), or `base_model_sp_ep_plan` when `enable_sequence_parallel=True` (typical training with FSDP). Each combo plan is a single dict that covers both dense layers and MoE experts.
+> Expert parallelism automatically enables [tensor parallelism](./perf_infer_gpu_multi) for attention layers.
 
-At load time, `select_parallel_plan` picks the plan for the active flag combination. Expert weights use `grouped_gemm` (shard along the expert dimension), `ep_router` routes tokens to local experts, and `moe_experts_allreduce` combines partial outputs. For MoE without expert parallelism, `moe_tp_gate_up_colwise` / `moe_tp_down_rowwise` shard within each expert instead. Weight sharding is declared per parameter in the config; the experts module entry only configures forward communication.
-
-**Training (SP + EP + FSDP):**
-
-```py
-distributed_config = DistributedConfig(
-    tp_size=8,
-    fsdp_size=4,
-    enable_sequence_parallel=True,
-    enable_expert_parallel=True,
-)
-```
-
-**Inference (TP + EP):**
-
-```py
-distributed_config = DistributedConfig(
-    tp_size=8,
-    fsdp_size=1,
-    enable_expert_parallel=True,
-)
-```
+This argument switches to the `ep_plan` (expert parallel plan) defined in each MoE model's config file. The [`GroupedGemmParallel`] class splits expert weights so each device loads only its local experts. The `ep_router` routes tokens to experts and an all-reduce operation combines their outputs.
 
 Launch your inference script with [torchrun](https://pytorch.org/docs/stable/elastic/run.html) and specify how many devices to use. The number of devices must evenly divide the total number of experts.
 
