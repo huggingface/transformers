@@ -66,6 +66,15 @@ def _fetch_audio_bytes(url: str, timeout: float | None = 10.0) -> bytes:
     return response.content
 
 
+def _decode_base64_audio(audio: str) -> bytes:
+    """Decode base64 audio data from a string formatted as 'data:audio/$CODEC;base64,$DATA_IN_BASE64'."""
+    splitted = audio.split(";base64,", 1)
+    if len(splitted) != 2:
+        raise ValueError(f"Expected format 'data:audio/$CODEC;base64,$DATA_IN_BASE64' but got: {audio[:30]}...")
+    _, base64_data = splitted
+    return base64.b64decode(base64_data)
+
+
 def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np.ndarray:
     """
     Loads `audio` to an np.ndarray object.
@@ -128,8 +137,7 @@ def load_audio_torchcodec(audio: str | np.ndarray, sampling_rate=16000, timeout=
         audio = _fetch_audio_bytes(audio, timeout=timeout)
     # For a data URI, the format is f"data:audio/{codec};base64,{data_in_base64}" so extract and decode the base64 data
     elif isinstance(audio, str) and audio.startswith("data:audio"):
-        base64_data = audio.split(",", 1)[1]
-        audio = base64.b64decode(base64_data)
+        audio = _decode_base64_audio(audio)
 
     # Set `num_channels` to `1` which is what most models expects and the default in librosa
     decoder = AudioDecoder(audio, sample_rate=sampling_rate, num_channels=1)
@@ -156,12 +164,12 @@ def load_audio_librosa(audio: str | np.ndarray, sampling_rate=16000, timeout=Non
     requires_backends(load_audio_librosa, ["librosa"])
 
     # Load audio from URL (e.g https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav)
-    if audio.startswith("http://") or audio.startswith("https://"):
+    if isinstance(audio, str) and (audio.startswith("http://") or audio.startswith("https://")):
         audio = librosa.load(BytesIO(_fetch_audio_bytes(audio, timeout=timeout)), sr=sampling_rate)[0]
     # For a data URI, the format is f"data:audio/{codec};base64,{data_in_base64}" so extract and decode the base64 data
     elif isinstance(audio, str) and audio.startswith("data:audio"):
-        base64_data = audio.split(",", 1)[1]
-        audio = librosa.load(BytesIO(base64.b64decode(base64_data)), sr=sampling_rate)[0]
+        audio_bytes = _decode_base64_audio(audio)
+        audio = librosa.load(BytesIO(audio_bytes), sr=sampling_rate)[0]
     elif os.path.isfile(audio):
         audio = librosa.load(audio, sr=sampling_rate)[0]
     return audio
@@ -204,8 +212,7 @@ def load_audio_as(
         if audio.startswith(("http://", "https://")):
             audio_bytes = _fetch_audio_bytes(audio, timeout=timeout)
         elif isinstance(audio, str) and audio.startswith("data:audio"):
-            base64_data = audio.split(",", 1)[1]
-            audio_bytes = base64.b64decode(base64_data)
+            audio_bytes = _decode_base64_audio(audio)
         elif os.path.isfile(audio):
             with open(audio, "rb") as audio_file:
                 audio_bytes = audio_file.read()
