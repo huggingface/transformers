@@ -70,8 +70,8 @@ class DeepseekV4HCAStaticCache(StaticSlidingWindowLayer):
     def __init__(self, config: DeepseekV4Config, max_cache_len: int):
         super().__init__(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
         self.config = config
-        self.compress_rate = config.compress_rates["heavily_compressed_attention"]
         self.head_dim = config.head_dim
+        self.compress_rate = config.compress_rates["heavily_compressed_attention"]
         # Ceil so the final partial window has a slot reserved.
         self._max_compressed_entries = (max_cache_len + self.compress_rate - 1) // self.compress_rate
         # HCA has just one compressor entry. CSA's subclass overwrites this dict
