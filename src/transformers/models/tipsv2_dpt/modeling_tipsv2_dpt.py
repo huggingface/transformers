@@ -440,6 +440,7 @@ class Tipsv2DptForDepthEstimation(Tipsv2DptPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
+        labels: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> DepthEstimatorOutput:
         outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
@@ -456,7 +457,12 @@ class Tipsv2DptForDepthEstimation(Tipsv2DptPreTrainedModel):
         logits = self.decoder(fused[-1])
         predicted_depth = self.bin_regressor(logits)
 
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not yet supported")
+
         return DepthEstimatorOutput(
+            loss=loss,
             predicted_depth=predicted_depth,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
