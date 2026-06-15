@@ -48,6 +48,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "pooling_kernel_size",
     ],  # Used as meta data for other attributes/properties
     "MiniCPMV4_6Config": ["drop_vision_last_layer"],
+    "MiniMaxM3VLTextConfig": ["rotary_dim", "router_jitter_noise"],
     "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
     "HYV3Config": ["output_router_logits"],
     "NougatConfig": ["decoder", "encoder"],

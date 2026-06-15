@@ -584,6 +584,7 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         """Tests `generate` calls with common flags"""
         config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+        model.generation_config.eos_token_id = None  # force generation up to `max_new_tokens`
 
         generation_outputs = model.generate(
             **model_inputs, max_new_tokens=16, max_denoising_steps=2, **generate_kwargs
@@ -596,6 +597,7 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         """Same as `test_generate`, but only with text inputs (no images)"""
         config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+        model.generation_config.eos_token_id = None  # force generation up to `max_new_tokens`
 
         generation_outputs = model.generate(model_inputs["input_ids"], max_new_tokens=16, max_denoising_steps=2)
 
@@ -610,7 +612,8 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
 
-        generation_config = DiffusionGemmaGenerationConfig(max_new_tokens=16, max_denoising_steps=2)
+        # force `eos_token_id = None` to not stop before reaching `max_new_tokens`
+        generation_config = DiffusionGemmaGenerationConfig(eos_token_id=None, max_new_tokens=16, max_denoising_steps=2)
         generation_outputs = model.generate(**model_inputs, generation_config=generation_config)
 
         expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 16)
@@ -624,7 +627,8 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
 
-        generation_config = DiffusionGemmaGenerationConfig(max_new_tokens=16, max_denoising_steps=2)
+        # force `eos_token_id = None` to not stop before reaching `max_new_tokens`
+        generation_config = DiffusionGemmaGenerationConfig(eos_token_id=None, max_new_tokens=16, max_denoising_steps=2)
         generation_outputs = model.generate(**model_inputs, generation_config=generation_config, max_new_tokens=32)
 
         expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 32)
@@ -637,6 +641,7 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         """
         config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+        model.generation_config.eos_token_id = None  # force generation up to `max_new_tokens`
 
         # 1st generate call, without KV cache
         generation_1_outputs = model.generate(**model_inputs, max_new_tokens=16, max_denoising_steps=2)
@@ -671,6 +676,7 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         config.text_config.sliding_window = 16
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+        model.generation_config.eos_token_id = None  # force generation up to `max_new_tokens`
 
         generation_outputs = model.generate(
             **model_inputs, max_new_tokens=32, max_denoising_steps=2, cache_implementation=cache_implementation

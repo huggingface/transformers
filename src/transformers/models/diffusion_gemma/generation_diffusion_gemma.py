@@ -45,7 +45,7 @@ from ...generation.configuration_utils import (
 )
 from ...generation.streamers import BaseStreamer
 from ...modeling_outputs import ModelOutput
-from ...utils import auto_docstring, logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -55,7 +55,7 @@ logger = logging.get_logger(__name__)
 class DiffusionGemmaGenerationConfig(GenerationConfig):
     # no-format
     """
-    A GenerationConfig class with paremeterization custom to DiffusionGemma `generate`.
+    A GenerationConfig class with parameterization customized for [`DiffusionGemmaGenerationMixin.generate`].
 
     Args:
         > Parameters that control the length of the output
@@ -104,6 +104,8 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
 
         > Special tokens that can be used at generation time
 
+        bos_token_id (`int`, *optional*):
+            The id of the *beginning-of-sequence* token.
         pad_token_id (`int`, *optional*):
             The id of the *padding* token.
         eos_token_id (`Union[int, list[int]]`, *optional*):
@@ -133,6 +135,7 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
         self.cache_config: dict[str, Any] | None = kwargs.pop("cache_config", None)
 
         # Special tokens that can be used at generation time
+        self.bos_token_id: int | None = kwargs.pop("bos_token_id", None)
         self.pad_token_id: int | None = kwargs.pop("pad_token_id", None)
         self.eos_token_id: list[int] | int | None = kwargs.pop("eos_token_id", None)
 
@@ -224,8 +227,6 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
             "t_max": 0.8,
             "stability_threshold": 1,
             "confidence_threshold": 0.005,
-            "eos_token_id": [1, 106, 50],
-            "pad_token_id": 0,
         }
 
     # Overriding GenerationMixin-related functions that are not relevant to DiffusionGemma.
@@ -238,7 +239,6 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
         raise NotImplementedError("DiffusionGemmaGenerationConfig does not support `from_model_config`")
 
 
-@auto_docstring
 @dataclass
 class DiffusionGemmaGenerationOutput(ModelOutput):
     """
@@ -342,6 +342,7 @@ class EntropyBoundSampler:
     renoises non-accepted tokens.
 
     Here is a rough sketch of how the sampler loop works:
+    ```
               +-----------------------+
               | Canvas initialization |
               | x_T ∈ U(V)            |
@@ -365,6 +366,7 @@ class EntropyBoundSampler:
     |                                       +-------------------------+
     +---------------------------------------| Next canvas x_{t-1}     |
                                             +-------------------------+
+    ```
 
     Args:
         config (`EntropyBoundSamplerConfig`):
@@ -555,6 +557,7 @@ class DiffusionGemmaGenerationMixin:
 
         It contains an outer loop doing autoregressive generation of canvases (blocks of tokens), and an inner
         loop doing diffusion on each canvas. The algorithm works roughly as follows:
+        ```
         1. Autoregressive canvas generation loop:
             a. Encode all previous tokens using the encoder, to get the KV cache.
             b. Prepare data for the new denoising loop
@@ -569,6 +572,7 @@ class DiffusionGemmaGenerationMixin:
             e. Check if any autoregressive stopping criteria are met, and break the outer loop if all sequences have
                met them. Replaces generated tokens in finished sequences by pad.
             f. Prepare tensors for the next block
+        ```
 
         Parameters:
             input_ids (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
@@ -600,9 +604,10 @@ class DiffusionGemmaGenerationMixin:
                 used with AR LLMs.
             kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
-                forwarded to the `forward` function of the model.
+                forwarded to the `forward` function of the model. For instance, you can set the starting canvas with
+                `decoder_input_ids`.
 
-        Returns:
+        Return:
             [`DiffusionGemmaGenerationOutput`]: a `ModelOutput` instance containing the generated text (`sequences`),
             as well as other optional outputs.
 
@@ -612,11 +617,11 @@ class DiffusionGemmaGenerationMixin:
         >>> from transformers import DiffusionGemmaForBlockDiffusion, AutoProcessor, TextDiffusionStreamer
 
         >>> model = DiffusionGemmaForBlockDiffusion.from_pretrained(
-        ...     "CHECKPOINT", device_map="auto",
+        ...     "google/diffusiongemma-26B-A4B-it", device_map="auto",
         >>> )
 
         >>> chat = [{"role": "user", "content": "Why is the sky blue?"},]
-        >>> processor = AutoProcessor.from_pretrained("CHECKPOINT")
+        >>> processor = AutoProcessor.from_pretrained("google/diffusiongemma-26B-A4B-it")
         >>> input_ids = processor.apply_chat_template(chat, tokenize=True, return_tensors="pt")
 
         >>> streamer = TextDiffusionStreamer(tokenizer=processor.tokenizer)
@@ -655,6 +660,7 @@ class DiffusionGemmaGenerationMixin:
         device = input_ids.device
         canvas_length = self.config.canvas_length
         current_canvas = None
+        eos_tensor = None
         finished_sequences = torch.zeros(batch_size, dtype=torch.bool, device=device)
         decoder_forward_passes = torch.zeros(batch_size, dtype=torch.int, device=device)
         if past_key_values is None:
