@@ -69,9 +69,9 @@ class Tipsv2DptConfig(PreTrainedConfig):
     sub_configs = {"backbone_config": AutoConfig}
 
     backbone_config: dict | PreTrainedConfig | None = None
-    neck_hidden_sizes: list[int] | None = None
+    neck_hidden_sizes: list[int] | tuple[int, ...] | None = None
     fusion_hidden_size: int = 256
-    reassemble_factors: list[float] | None = None
+    reassemble_factors: list[int | float] | tuple[int | float, ...] | None = None
     readout_act: str = "gelu_pytorch_tanh"
     num_depth_bins: int = 256
     min_depth: float = 0.001
