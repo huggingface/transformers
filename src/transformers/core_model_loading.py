@@ -1508,6 +1508,38 @@ def convert_and_load_state_dict_in_model(
     return loading_info, disk_offload_index
 
 
+def _forward_renaming_changes_any_key(
+    forward_conversions: list[WeightTransform], state_dict: dict[str, torch.Tensor]
+) -> bool:
+    """Whether the forward (disk -> in-memory) renamings would rename any key in `state_dict`.
+
+    `revert_weight_conversion` fabricates a mapping from the hardcoded table only when the model was not loaded
+    through the conversion engine (`_weight_conversions is None`). Reverting that mapping is correct only when
+    the in-memory keys are already in the canonical (post-load) layout. When the keys are still in their original
+    on-disk layout - e.g. a `trust_remote_code` model whose remote `from_pretrained` builds the state dict
+    directly - the forward renamings still match them, and reverting is a no-op-that-corrupts: the reverse of an
+    unanchored rename is not idempotent on already-original keys (it doubles the prefix, e.g. `encoder.layers` ->
+    `encoder.encoder.layers`). A `True` result means the keys are still in disk layout and must not be reverted.
+
+    Args:
+        forward_conversions (`list[WeightTransform]`):
+            The forward (disk -> in-memory) conversions fabricated from the hardcoded mapping.
+        state_dict (`dict[str, torch.Tensor]`):
+            The state dict being saved.
+
+    Returns:
+        `bool`: `True` if any key would be renamed by the forward renamings (keys still in disk layout).
+    """
+    forward_renamings = [transform for transform in forward_conversions if isinstance(transform, WeightRenaming)]
+    if not forward_renamings:
+        return False
+    for source_key in state_dict:
+        renamed_key, _ = rename_source_key(source_key, forward_renamings, [])
+        if renamed_key != source_key:
+            return True
+    return False
+
+
 def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]):
     """
     Revert the conversion mapping that was used to load the model with `from_pretrained`, or the default one
@@ -1527,6 +1559,15 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
         # was there or not during load)
         weight_conversions = [x for x in weight_conversions if not isinstance(x, PrefixChange)]
         weight_conversions = weight_conversions if len(weight_conversions) > 0 else None
+
+        # The fabricated mapping describes disk(source) -> in-memory(target). Reverting it is only correct when
+        # the in-memory keys are already in the canonical (post-load) layout. If applying the forward renamings
+        # would still rename a key, the keys are in their original on-disk layout (e.g. a `trust_remote_code`
+        # model whose remote `from_pretrained` builds the state dict directly), and reverting a never-applied,
+        # non-idempotent rename would double the affected prefix (`encoder.layers` -> `encoder.encoder.layers`)
+        # and silently corrupt the checkpoint, so there is nothing to revert.
+        if weight_conversions is not None and _forward_renaming_changes_any_key(weight_conversions, state_dict):
+            return state_dict
 
     # We did not find any operations to perform -> quick escape
     if weight_conversions is None:
