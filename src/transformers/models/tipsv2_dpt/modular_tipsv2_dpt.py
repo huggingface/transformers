@@ -461,8 +461,11 @@ class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
         feature_maps = outputs.feature_maps
 
         _, _, height, width = pixel_values.shape
-        patch_height = height // self.config.backbone_config.patch_size
-        patch_width = width // self.config.backbone_config.patch_size
+        patch_size = self.config.backbone_config.patch_size
+        patch_size_height = patch_size if isinstance(patch_size, int) else patch_size[0]
+        patch_size_width = patch_size if isinstance(patch_size, int) else patch_size[1]
+        patch_height = height // patch_size_height
+        patch_width = width // patch_size_width
 
         depth_fused = self.depth_neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
         depth_logits = self.depth_decoder(depth_fused[-1])
@@ -513,8 +516,11 @@ class Tipsv2DptForDepthEstimation(Tipsv2DptPreTrainedModel):
         feature_maps = outputs.feature_maps
 
         _, _, height, width = pixel_values.shape
-        patch_height = height // self.config.backbone_config.patch_size
-        patch_width = width // self.config.backbone_config.patch_size
+        patch_size = self.config.backbone_config.patch_size
+        patch_size_height = patch_size if isinstance(patch_size, int) else patch_size[0]
+        patch_size_width = patch_size if isinstance(patch_size, int) else patch_size[1]
+        patch_height = height // patch_size_height
+        patch_width = width // patch_size_width
 
         fused = self.neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
         logits = self.decoder(fused[-1])
@@ -556,8 +562,11 @@ class Tipsv2DptForNormalEstimation(Tipsv2DptPreTrainedModel):
         feature_maps = outputs.feature_maps
 
         _, _, height, width = pixel_values.shape
-        patch_height = height // self.config.backbone_config.patch_size
-        patch_width = width // self.config.backbone_config.patch_size
+        patch_size = self.config.backbone_config.patch_size
+        patch_size_height = patch_size if isinstance(patch_size, int) else patch_size[0]
+        patch_size_width = patch_size if isinstance(patch_size, int) else patch_size[1]
+        patch_height = height // patch_size_height
+        patch_width = width // patch_size_width
 
         fused = self.neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
         normals = self.decoder(fused[-1])  # (B, 3, H', W') — unnormalized
@@ -605,8 +614,11 @@ class Tipsv2DptForSemanticSegmentation(Tipsv2DptPreTrainedModel):
         feature_maps = outputs.feature_maps
 
         _, _, height, width = pixel_values.shape
-        patch_height = height // self.config.backbone_config.patch_size
-        patch_width = width // self.config.backbone_config.patch_size
+        patch_size = self.config.backbone_config.patch_size
+        patch_size_height = patch_size if isinstance(patch_size, int) else patch_size[0]
+        patch_size_width = patch_size if isinstance(patch_size, int) else patch_size[1]
+        patch_height = height // patch_size_height
+        patch_width = width // patch_size_width
 
         fused = self.neck(feature_maps, patch_height=patch_height, patch_width=patch_width)
         seg_logits = self.decoder(fused[-1])
