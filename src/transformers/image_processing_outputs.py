@@ -24,7 +24,6 @@ class SemanticSegmentationPostProcessorOutput(BatchFeature):
     """
     Output of a semantic segmentation post-processing step.
 
-    This class is derived from a python dictionary and can be used as a dictionary.
 
     Attributes:
         segmentation (`torch.LongTensor` of shape `(height, width)`):
