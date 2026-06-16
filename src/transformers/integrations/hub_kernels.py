@@ -100,162 +100,178 @@ try:
                 )
             return lambda func: func
 
-    _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository | dict[Mode, LayerRepository]]] = {
-        "MultiScaleDeformableAttention": {
-            "cuda": LayerRepository(
-                repo_id="kernels-community/deformable-detr",
-                layer_name="MultiScaleDeformableAttention",
-            )
-        },
-        "Llama4TextMoe": {
-            "cuda": LayerRepository(
-                repo_id="kernels-community/moe",
-                layer_name="Llama4TextMoe",
-            )
-        },
-        "RMSNorm": {
-            "cuda": {
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/liger_kernels",
-                    layer_name="LigerRMSNorm",
-                    # revision="pure-layer-test",
-                ),
-            },
-            "rocm": {
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/liger_kernels",
-                    layer_name="LigerRMSNorm",
-                )
-            },
-            "xpu": {
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/rmsnorm",
-                    layer_name="RMSNorm",
-                )
-            },
-            "mps": {
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/mlx_rmsnorm",
-                    layer_name="RMSNorm",
-                )
-            },
-            "npu": {
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/liger_kernels",
-                    layer_name="LigerRMSNorm",
-                )
-            },
-        },
-        "MLP": {
-            "cuda": LayerRepository(
-                repo_id="medmekk/triton-llama-mlp",
-                layer_name="TritonLlamaMLP",
-            )
-        },
-        "MegaBlocksMoeMLP": {
-            "cuda": {
-                Mode.TRAINING: LayerRepository(
-                    repo_id="kernels-community/megablocks",
-                    layer_name="MegaBlocksMoeMLP",
-                ),
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/megablocks",
-                    layer_name="MegaBlocksMoeMLP",
-                ),
-            },
-            "rocm": {
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="ahadnagy/megablocks",
-                    layer_name="MegaBlocksMoeMLP",
-                )
-            },
-            "xpu": {
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/megablocks",
-                    layer_name="MegaBlocksMoeMLP",
-                )
-            },
-            "cpu": {
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/megablocks",
-                    layer_name="CPUMegaBlocksMoeMLP",
-                )
-            },
-        },
-        "FastGELU": {
-            "cuda": {
-                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation",
-                    layer_name="FastGELU",
-                    version=1,
-                )
-            }
-        },
-        "QuickGELU": {
-            "cuda": {
-                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation",
-                    layer_name="QuickGELU",
-                    version=1,
-                )
-            }
-        },
-        "NewGELU": {
-            "cuda": {
-                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation",
-                    layer_name="NewGELU",
-                    version=1,
-                )
-            }
-        },
-        "SiLU": {
-            "cuda": {
-                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation", layer_name="Silu", version=1
-                )
-            }
-        },
-        "GeLU": {
-            "cuda": {
-                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation", layer_name="Gelu", version=1
-                )
-            }
-        },
-        "GeluTanh": {
-            "cuda": {
-                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation", layer_name="GeluTanh", version=1
-                )
-            }
-        },
-    }
+    # The default kernel mapping is built lazily (see `get_kernel_mapping_transformers`) so that simply
+    # importing transformers (or `transformers.pipeline`) does not instantiate any `LayerRepository` /
+    # `FuncRepository`. This keeps the `kernels` library decoupled from normal transformers usage: the
+    # repositories are only constructed when the user explicitly opts in via `use_kernels=True`.
+    _KERNEL_MAPPING_CACHE: "dict | None" = None
 
-    # Add function kernel mappings if FuncRepository is available
-    if FuncRepository is not None:
-        _KERNEL_MAPPING["rotary_pos_emb"] = {
-            "xpu": {
-                Mode.INFERENCE: FuncRepository(
-                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+    def _build_kernel_mapping() -> dict:
+        kernel_mapping: dict[str, dict[Device | str, LayerRepository | dict[Mode, LayerRepository]]] = {
+            "MultiScaleDeformableAttention": {
+                "cuda": LayerRepository(
+                    repo_id="kernels-community/deformable-detr",
+                    layer_name="MultiScaleDeformableAttention",
                 )
             },
-            "cuda": {
-                Mode.TRAINING: FuncRepository(
-                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
-                ),
-                Mode.INFERENCE: FuncRepository(
-                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
-                ),
+            "Llama4TextMoe": {
+                "cuda": LayerRepository(
+                    repo_id="kernels-community/moe",
+                    layer_name="Llama4TextMoe",
+                )
+            },
+            "RMSNorm": {
+                "cuda": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/liger_kernels",
+                        layer_name="LigerRMSNorm",
+                        # revision="pure-layer-test",
+                    ),
+                },
+                "rocm": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/liger_kernels",
+                        layer_name="LigerRMSNorm",
+                    )
+                },
+                "xpu": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/rmsnorm",
+                        layer_name="RMSNorm",
+                    )
+                },
+                "mps": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mlx_rmsnorm",
+                        layer_name="RMSNorm",
+                    )
+                },
+                "npu": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/liger_kernels",
+                        layer_name="LigerRMSNorm",
+                    )
+                },
+            },
+            "MLP": {
+                "cuda": LayerRepository(
+                    repo_id="medmekk/triton-llama-mlp",
+                    layer_name="TritonLlamaMLP",
+                )
+            },
+            "MegaBlocksMoeMLP": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/megablocks",
+                        layer_name="MegaBlocksMoeMLP",
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/megablocks",
+                        layer_name="MegaBlocksMoeMLP",
+                    ),
+                },
+                "rocm": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="ahadnagy/megablocks",
+                        layer_name="MegaBlocksMoeMLP",
+                    )
+                },
+                "xpu": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/megablocks",
+                        layer_name="MegaBlocksMoeMLP",
+                    )
+                },
+                "cpu": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/megablocks",
+                        layer_name="CPUMegaBlocksMoeMLP",
+                    )
+                },
+            },
+            "FastGELU": {
+                "cuda": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation",
+                        layer_name="FastGELU",
+                        version=1,
+                    )
+                }
+            },
+            "QuickGELU": {
+                "cuda": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation",
+                        layer_name="QuickGELU",
+                        version=1,
+                    )
+                }
+            },
+            "NewGELU": {
+                "cuda": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation",
+                        layer_name="NewGELU",
+                        version=1,
+                    )
+                }
+            },
+            "SiLU": {
+                "cuda": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation", layer_name="Silu", version=1
+                    )
+                }
+            },
+            "GeLU": {
+                "cuda": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation", layer_name="Gelu", version=1
+                    )
+                }
+            },
+            "GeluTanh": {
+                "cuda": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation", layer_name="GeluTanh", version=1
+                    )
+                }
             },
         }
+
+        # Add function kernel mappings if FuncRepository is available
+        if FuncRepository is not None:
+            kernel_mapping["rotary_pos_emb"] = {
+                "xpu": {
+                    Mode.INFERENCE: FuncRepository(
+                        repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                    )
+                },
+                "cuda": {
+                    Mode.TRAINING: FuncRepository(
+                        repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                    ),
+                    Mode.INFERENCE: FuncRepository(
+                        repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                    ),
+                },
+            }
+
+        return kernel_mapping
+
+    def get_kernel_mapping_transformers() -> dict:
+        """Return the default transformers kernel mapping, building it lazily on first use."""
+        global _KERNEL_MAPPING_CACHE
+        if _KERNEL_MAPPING_CACHE is None:
+            _KERNEL_MAPPING_CACHE = _build_kernel_mapping()
+        return _KERNEL_MAPPING_CACHE
 
     def has_key(d, key):
         return key in d or any(isinstance(v, dict) and has_key(v, key) for v in d.values())
 
     def register_kernel_mapping_transformers(mapping=None):
         if mapping is None:
-            mapping = _KERNEL_MAPPING
+            mapping = get_kernel_mapping_transformers()
         if has_key(mapping, "xpu") and not is_kernels_available(MIN_VERSION="0.10.2"):
             raise ImportError(
                 "kernels uses an incompatible version. Please install the latest version with `pip install -U kernels`."
