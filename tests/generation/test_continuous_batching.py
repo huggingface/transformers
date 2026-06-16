@@ -44,7 +44,7 @@ from transformers.generation.continuous_batching.continuous_api import OutputRou
 from transformers.generation.continuous_batching.distributed import DistributedHelper
 from transformers.generation.continuous_batching.input_outputs import build_attention_mask
 from transformers.generation.continuous_batching.offloading_manager import OffloadingManager
-from transformers.generation.continuous_batching.requests import GenerationOutput, RequestStatus
+from transformers.generation.continuous_batching.requests import GenerationOutput, RequestState, RequestStatus
 from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_flash_attn,
@@ -130,7 +130,7 @@ def with_flush_memory(func):
         generation_config = kwargs.get("generation_config")
         if isinstance(cb_config, ContinuousBatchingConfig):
             flush_compile = (
-                cb_config.use_default_compile_configs
+                cb_config.default_compile_level > 0
                 or cb_config.varlen_compile_config is not None
                 or cb_config.decode_compile_config is not None
             )
@@ -209,6 +209,54 @@ def regular_generate(
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
+    def test_generation_outputs_are_snapshots(self):
+        state = RequestState(
+            request_id="r", initial_tokens=[10, 11], max_new_tokens=3, streaming=True, record_timestamps=True
+        )
+        state._status = RequestStatus.DECODING
+
+        self.assertFalse(state.update_and_check_completion(101, -1.01))
+        first_output = state.to_generation_output()
+        self.assertEqual(first_output.generated_tokens, [101])
+        self.assertEqual(first_output.logprobs, [-1.01])
+        self.assertEqual(len(first_output.timestamps), 1)
+
+        self.assertFalse(state.update_and_check_completion(102, -1.02))
+        second_output = state.to_generation_output()
+
+        self.assertEqual(first_output.generated_tokens, [101])
+        self.assertEqual(first_output.logprobs, [-1.01])
+        self.assertEqual(len(first_output.timestamps), 1)
+        self.assertEqual(second_output.generated_tokens, [101, 102])
+        self.assertEqual(second_output.logprobs, [-1.01, -1.02])
+        self.assertEqual(len(second_output.timestamps), 2)
+
+    def test_streaming_output_after_soft_reset_does_not_shorten_generation(self):
+        state = RequestState(request_id="r", initial_tokens=[10, 11], max_new_tokens=5, streaming=True)
+        state._status = RequestStatus.DECODING
+        for token_id in [101, 102]:
+            self.assertFalse(state.update_and_check_completion(token_id, None))
+
+        reset_state = state.create_equivalent_initial_request()
+        reset_state._status = RequestStatus.DECODING
+        reset_state.streaming = True
+
+        accepted_tokens = []
+        streamed_tokens = []
+        for token_id in [103, 104, 105, 106]:
+            previous_tokens = reset_state.generated_tokens[:]
+            is_finished = reset_state.update_and_check_completion(token_id, None)
+            if reset_state.generated_tokens != previous_tokens:
+                accepted_tokens.append(token_id)
+            streamed_tokens.append(reset_state.to_generation_output().generated_tokens)
+            if is_finished:
+                break
+
+        self.assertEqual(accepted_tokens, [103, 104, 105])
+        self.assertEqual(streamed_tokens, [[101, 102, 103], [101, 102, 103, 104], [101, 102, 103, 104, 105]])
+        self.assertEqual(reset_state.generated_tokens, [103, 104, 105])
+        self.assertEqual(reset_state.initial_tokens, [10, 11, 101, 102])
+
     @parameterized.expand(
         [
             (None, None, "0"),
@@ -594,7 +642,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         # If the config turns on compile, change the generation config to use the default mode instead of
         # max-autotune-no-cudagraphs which can change the kernels between generate_batch and generate
-        if continuous_batching_config.use_default_compile_configs:
+        if continuous_batching_config.default_compile_level > 0:
             fullgraph = not is_flash_attention_requested(requested_attention_implementation=attn_implementation)
             compile_config = CompileConfig(mode="default", fullgraph=fullgraph, dynamic=True)
             continuous_batching_config.varlen_compile_config = compile_config
@@ -693,7 +741,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         continuous_batching_config = ContinuousBatchingConfig(
             allow_block_sharing=allow_block_sharing,
             use_cuda_graph=use_cuda_graph,
-            use_default_compile_configs=False,
+            default_compile_level=0,
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -711,7 +759,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
             use_cuda_graph=use_cuda_graph,
-            use_default_compile_configs=True,
+            default_compile_level=1,
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -733,7 +781,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     @slow
     def test_continuous_batching_diverse_models(self, model_id: str, use_cuda_graph: bool, use_compile: bool) -> None:
         continuous_batching_config = ContinuousBatchingConfig(
-            use_cuda_graph=use_cuda_graph, use_default_compile_configs=use_compile
+            use_cuda_graph=use_cuda_graph, default_compile_level=1 if use_compile else 0
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -763,7 +811,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             use_cuda_graph=False,
             allow_block_sharing=False,
             use_async_batching=False,
-            use_default_compile_configs=False,
+            default_compile_level=0,
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -774,7 +822,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     def test_continuous_batching_long_generate(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
-            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, use_default_compile_configs=True
+            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, default_compile_level=1
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -1128,7 +1176,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
                 allow_block_sharing=True,
                 use_cuda_graph=use_cuda_graph,
                 use_async_batching=True,
-                use_default_compile_configs=use_compile,
+                default_compile_level=1 if use_compile else 0,
             ),
             attn_implementation=attn_implementation,
         )
@@ -1178,6 +1226,36 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             text_fa2 = tokenizer.decode(out_fa2.generated_tokens, skip_special_tokens=True)
             text_fa3 = tokenizer.decode(out_fa3.generated_tokens, skip_special_tokens=True)
             self.assertEqual(text_fa2, text_fa3, f"Mismatch:\nFA2: {text_fa2}\nFA3: {text_fa3}")
+
+    @slow
+    @require_kernels
+    def test_decode_fast_path_wide_batch_parity(self) -> None:
+        """Decode-fast-path output must match varlen when more requests decode concurrently than
+        `max_blocks_per_request` (regression test for the `pad_to_pow2` cap truncating the decode batch)."""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        tokenizer, model = get_tokenizer_and_model(
+            model_id, "paged|kernels-community/flash-attn3", torch_device, torch.bfloat16
+        )
+        # 12 requests but only 4 blocks per request: the decode batch is wider than max_blocks_per_request
+        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES * 4, tokenizer, for_continuous_batching=True)
+        gen_config = GenerationConfig(do_sample=False, max_new_tokens=20)
+        # CUDA graphs enable input padding, which is where the truncation happened
+        cb_config = ContinuousBatchingConfig(block_size=256, num_blocks=64, use_cuda_graph=True)
+
+        cb_config.max_blocks_per_request = 0  # varlen reference
+        outputs_varlen = model.generate_batch(
+            inputs=input_ids, generation_config=gen_config, continuous_batching_config=cb_config
+        )
+        cb_config.max_blocks_per_request = 4  # decode fast path, narrower than the batch
+        outputs_fast = model.generate_batch(
+            inputs=input_ids, generation_config=gen_config, continuous_batching_config=cb_config
+        )
+
+        self.assertEqual(len(outputs_varlen), len(outputs_fast))
+        for (_, out_varlen), (_, out_fast) in zip(outputs_varlen.items(), outputs_fast.items()):
+            text_varlen = tokenizer.decode(out_varlen.generated_tokens, skip_special_tokens=True)
+            text_fast = tokenizer.decode(out_fast.generated_tokens, skip_special_tokens=True)
+            self.assertEqual(text_varlen, text_fast, f"Mismatch:\nvarlen: {text_varlen}\nfast: {text_fast}")
 
     @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
     @slow
