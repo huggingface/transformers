@@ -46,7 +46,7 @@ if is_torch_available():
     from torch.nn.parallel import DistributedDataParallel as DDP
 
     from transformers.distributed import DistributedConfig
-    from transformers.distributed.tensor_parallel import replace_layer_number_by_wildcard
+    from transformers.distributed.fsdp import _resolve_tied_embed_lm_head_plan, expand_fsdp_plan
     from transformers.distributed.utils import (
         gather_full_state_dict,
         load_optimizer_distributed,
@@ -217,63 +217,11 @@ def _gather_ddp_state_dict(model):
     return {k: v.clone().detach().cpu() for k, v in model.module.state_dict().items()}
 
 
-def _resolve_fsdp_plan_paths(model):
-    """Expand model._fsdp_plan into (paths, strategy) entries.
-
-    Wildcard keys are expanded via ``replace_layer_number_by_wildcard``. When
-    weights are tied, the standalone embed_tokens entry is skipped and any
-    ``"lm_head"`` keep entry is rewritten to the tied source path (the keep
-    group will wrap the shared parameter once).
-    """
-    plan = model._fsdp_plan
-
-    input_embed = model.get_input_embeddings()
-    output_embed = model.get_output_embeddings()
-    weights_tied = (
-        input_embed is not None
-        and output_embed is not None
-        and hasattr(input_embed, "weight")
-        and hasattr(output_embed, "weight")
-        and input_embed.weight is output_embed.weight
-    )
-    tied_source = None
-    if weights_tied:
-        for name, mod in model.named_modules():
-            if mod is input_embed:
-                tied_source = name
-                break
-
-    name_to_module = dict(model.named_modules())
-    entries: list[tuple[list[str], str]] = []
-    for key, strategy in plan.items():
-        if weights_tied and key == tied_source:
-            continue
-        if weights_tied and key == "lm_head" and strategy == "keep_full_weight":
-            entries.append(([tied_source], strategy))
-            continue
-
-        if key in name_to_module:
-            entries.append(([key], strategy))
-            continue
-        matched = [name for name in name_to_module if replace_layer_number_by_wildcard(name) == key]
-        if matched:
-            entries.append((matched, strategy))
-    return entries
-
-
-def _build_manual_fsdp_plan(config, device, policy_options=None):
-    """Build a manual FSDP2 plan by expanding model._fsdp_plan."""
-    policy_options = policy_options or []
-    set_seed(SEED)
-    model = AutoModelForCausalLM.from_config(config).to(device)
-
-    module_plan: dict[str, list[str]] = {}
-    for paths, strategy in _resolve_fsdp_plan_paths(model):
-        for path in paths:
-            module_plan[path] = [strategy, *policy_options]
-
-    del model
-    return {"modules": module_plan}
+def _fsdp_target_module_names(model) -> set[str]:
+    """Return module names that should receive a ``fully_shard`` call (excluding root)."""
+    tie_word_embeddings = getattr(model.config, "tie_word_embeddings", False)
+    adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(model._fsdp_plan, tie_word_embeddings=tie_word_embeddings)
+    return {name for name, _, _ in expand_fsdp_plan(model, adapted_fsdp_plan)}
 
 
 def _save_init_pretrained(rank, config, dtype):
@@ -347,11 +295,16 @@ def train_fsdp2(
     dtype,
     init_model_dir,
     checkpoint_step,
-    fsdp_plan,
+    fsdp_cpu_offload=False,
+    fsdp_mixed_precision=False,
 ):
     # -- Phase 1: Pre-checkpoint run -- train only the first `checkpoint_step` steps, then save
     _set_determinism(SEED)
-    distributed_config = DistributedConfig(fsdp_size=dist.get_world_size(), fsdp_plan=fsdp_plan)
+    distributed_config = DistributedConfig(
+        fsdp_size=dist.get_world_size(),
+        fsdp_cpu_offload=fsdp_cpu_offload,
+        fsdp_mixed_precision=fsdp_mixed_precision,
+    )
     pre_ckpt_model = AutoModelForCausalLM.from_pretrained(
         init_model_dir, torch_dtype=dtype, distributed_config=distributed_config
     )
@@ -481,7 +434,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
 
 def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_word_embeddings):
     """
-    Verify that apply_fully_shard_data_parallel(fsdp_plan=None) wraps exactly the right modules.
+    Verify that apply_fully_shard_data_parallel wraps exactly the right modules.
 
     Expected FSDP targets:
     UNTIED                              TIED
@@ -510,9 +463,7 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
     # Expected FSDP targets come from model._fsdp_plan: every resolved path gets a
     # fully_shard call (keep_full_weight entries are bundled into one group, but each
     # member still appears as an FSDP-wrapped module in named_modules), plus the root.
-    expected_targets = {""}
-    for paths, _strategy in _resolve_fsdp_plan_paths(model):
-        expected_targets.update(paths)
+    expected_targets = {""} | _fsdp_target_module_names(model)
 
     actual_targets = {name for name, module in model.named_modules() if type(module).__name__.startswith("FSDP")}
 
@@ -534,9 +485,9 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
 
 
 def _test_fsdp2_plan_vs_ddp_impl(
-    rank, config_class, config_dict, tie_word_embeddings, plan_mode, policy_options=None, dtype=None
+    rank, config_class, config_dict, tie_word_embeddings, policy_options=None, dtype=None
 ):
-    """Validate DDP-vs-FSDP2 trace matching for either auto or manual plan mode."""
+    """Validate DDP-vs-FSDP2 trace matching using the model's declared FSDP plan."""
     init_test_logger()
 
     if dtype is None:
@@ -551,17 +502,9 @@ def _test_fsdp2_plan_vs_ddp_impl(
     config = config_class.from_dict(config_dict)
     config.tie_word_embeddings = tie_word_embeddings
 
-    if plan_mode == "auto":
-        fsdp_plan = {
-            "cpu_offload": "cpu_offload" in policy_options,
-            "mixed_precision": "mixed_precision" in policy_options,
-        }
-        test_label = f"FSDP2(auto{'+policies' if policy_options else ''})"
-    elif plan_mode == "manual":
-        fsdp_plan = _build_manual_fsdp_plan(config, device, policy_options=policy_options)
-        test_label = f"FSDP2(manual{'+policies' if policy_options else ''})"
-    else:
-        raise ValueError(f"Unsupported plan_mode '{plan_mode}'. Expected 'auto' or 'manual'.")
+    fsdp_cpu_offload = "cpu_offload" in policy_options
+    fsdp_mixed_precision = "mixed_precision" in policy_options
+    test_label = f"FSDP2{'+policies' if policy_options else ''}"
 
     checkpoint_step = NUM_STEPS // 2
     init_model_dir, init_tmpdir_obj = _save_init_pretrained(rank, config, dtype)
@@ -576,7 +519,8 @@ def _test_fsdp2_plan_vs_ddp_impl(
             dtype,
             init_model_dir=init_model_dir,
             checkpoint_step=checkpoint_step,
-            fsdp_plan=fsdp_plan,
+            fsdp_cpu_offload=fsdp_cpu_offload,
+            fsdp_mixed_precision=fsdp_mixed_precision,
         )
     finally:
         if rank == 0 and init_tmpdir_obj is not None:
@@ -757,28 +701,10 @@ class FSDPTesterMixin(ABC):
 
     @is_fsdp_test
     @require_fsdp
-    def test_fsdp2_auto_plan_vs_ddp_untied(self):
-        self._run_fsdp2_distributed_test(
-            "test_fsdp2_auto_plan_vs_ddp_untied", _test_fsdp2_plan_vs_ddp_impl, False, "auto"
-        )
+    def test_fsdp2_plan_vs_ddp_untied(self):
+        self._run_fsdp2_distributed_test("test_fsdp2_plan_vs_ddp_untied", _test_fsdp2_plan_vs_ddp_impl, False)
 
     @is_fsdp_test
     @require_fsdp
-    def test_fsdp2_auto_plan_vs_ddp_tied(self):
-        self._run_fsdp2_distributed_test(
-            "test_fsdp2_auto_plan_vs_ddp_tied", _test_fsdp2_plan_vs_ddp_impl, True, "auto"
-        )
-
-    @is_fsdp_test
-    @require_fsdp
-    def test_fsdp2_manual_plan_vs_ddp_untied(self):
-        self._run_fsdp2_distributed_test(
-            "test_fsdp2_manual_plan_vs_ddp_untied", _test_fsdp2_plan_vs_ddp_impl, False, "manual"
-        )
-
-    @is_fsdp_test
-    @require_fsdp
-    def test_fsdp2_manual_plan_vs_ddp_tied(self):
-        self._run_fsdp2_distributed_test(
-            "test_fsdp2_manual_plan_vs_ddp_tied", _test_fsdp2_plan_vs_ddp_impl, True, "manual"
-        )
+    def test_fsdp2_plan_vs_ddp_tied(self):
+        self._run_fsdp2_distributed_test("test_fsdp2_plan_vs_ddp_tied", _test_fsdp2_plan_vs_ddp_impl, True)
