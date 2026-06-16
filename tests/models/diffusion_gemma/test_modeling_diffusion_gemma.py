@@ -514,7 +514,7 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
             batch_size,
             1,
             canvas_length,
-            concat_kv_length_sliding + canvas_length,
+            concat_kv_length_sliding + 1,
         )
         # Double-check test assumption that left-padding should be past the sliding window
         self.assertTrue(prefill_length - left_padding_length > sliding_window_length)

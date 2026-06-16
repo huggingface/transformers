@@ -1026,9 +1026,6 @@ class DiffusionGemmaGenerationMixin:
         )
         raw_logits = decoder_outputs.logits
 
-        # Crop cache to delete curr denoising step, we won't need it
-        # past_key_values.crop(input_ids.shape[-1])
-
         # 1.c.ii Select new canvas tokens from the output logits.
         processed_logits = logits_processor(input_ids, raw_logits, cur_step=cur_step)
         probs = torch.softmax(processed_logits, dim=-1, dtype=torch.float32)

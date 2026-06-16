@@ -624,7 +624,7 @@ class DiffusionGemmaPreTrainedModel(T5Gemma2PreTrainedModel):
         "DiffusionGemmaEncoderTextLayer",
         "DiffusionGemmaVisionEncoderLayer",
     ]
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
     _can_record_outputs = None  # override
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -1110,16 +1110,30 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
             "full_attention": create_bidirectional_mask,
             "sliding_attention": create_bidirectional_sliding_window_mask,
         }
+        additional_kv_length = config.canvas_length if past_key_values.is_compileable else 0
         mask_kwargs = {
             "config": config.get_text_config(),
             "inputs_embeds": inputs_embeds,
             "attention_mask": decoder_attention_mask,
             "past_key_values": past_key_values,
             "or_mask_function": bidirectional_mask_function,
-            "additional_kv_length": config.canvas_length if past_key_values.is_compileable else 0,
         }
         mask_mapping = {}
         for layer_pattern in set(config.get_text_config().layer_types):
+            # DiffusionGemma decoder doesn't calls `append` on cache and always expects
+            # `max-len + query` length, and passes `additional_kv_length` to account for it
+            mask_kwargs["additional_kv_length"] = additional_kv_length
+
+            # `StaticSlidingLayer` concatenates new key with cache when cache is full instead
+            # of rolling back. Thus the final length is `window+query-1`, not fixed-length
+            # `sliding_window`. Adding another `query_length` will result on mask shape mismatch
+            # see - cache_utils.py::L592-595 for more details
+            if layer_pattern == "sliding_attention" and past_key_values.is_compileable:
+                layer_idx = past_key_values.is_sliding.index(True)
+                sliding_layer = past_key_values.layers[layer_idx]
+                if sliding_layer.cumulative_length_int >= sliding_layer.max_cache_len:
+                    mask_kwargs["additional_kv_length"] = 1
+
             mask_mapping[layer_pattern] = LAYER_TYPE_TO_MASK_MAPPING[layer_pattern](**mask_kwargs)
 
         return mask_mapping
