@@ -98,6 +98,7 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
+    base_model_fsdp_plan = AttributeError()
 
     attribute_map = {"num_local_experts": "num_experts"}
 
@@ -369,7 +370,9 @@ class DeepseekV32Model(DeepseekV3Model):
 
 
 class DeepseekV32ForCausalLM(DeepseekV3ForCausalLM):
-    pass
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _sp_plan = AttributeError()
+    _fsdp_plan = AttributeError()
 
 
 __all__ = [

@@ -533,6 +533,18 @@ class DeepseekOcr2VisionEncoderConfig(Qwen2Config):
     ```"""
 
     base_config_key = "encoder_config"
+    # Default tensor parallel plan for base model `DeepseekOcr2VisionEncoder`
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_sp_plan = AttributeError()
+    base_model_fsdp_plan = AttributeError()
 
 
 @auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
@@ -600,6 +612,8 @@ class DeepseekOcr2TextConfig(DeepseekV2Config):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
+    base_model_sp_plan = AttributeError()
+    base_model_fsdp_plan = AttributeError()
 
     # Remove unused attributes inherited from DeepseekV2Config
     first_k_dense_replace = AttributeError()

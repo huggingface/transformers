@@ -90,13 +90,17 @@ class GlmMoeDsaConfig(DeepseekV32Config):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise_allreduce",
     }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     base_model_fsdp_plan = {
         "embed_tokens": "free_full_weight",
         "layers.*": "free_full_weight",
-        "norm": "keep_full_weight"
+        "norm": "keep_full_weight",
     }
-    
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
@@ -352,7 +356,9 @@ class GlmMoeDsaModel(DeepseekV32Model):
 
 
 class GlmMoeDsaForCausalLM(DeepseekV32ForCausalLM):
-    pass
+    _tp_plan = {"lm_head": "colwise_allgather"}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
 
 __all__ = [
