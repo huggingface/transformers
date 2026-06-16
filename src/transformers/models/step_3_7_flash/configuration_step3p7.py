@@ -28,12 +28,17 @@ class StepRoboticsVisionEncoderConfig(PretrainedConfig):
         **kwargs,
     ):
         self.width = width
+        self.hidden_size = width
         self.layers = layers
+        self.num_hidden_layers = layers
         self.heads = heads
+        self.num_attention_heads = heads
         self.num_channels = num_channels
         self.patch_size = patch_size
         self.image_size = image_size
         self.mlp_ratio = mlp_ratio
+        self.intermediate_size = int(width * mlp_ratio)
+        self.attention_dropout = 0.0
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         if use_cls_token is None:
