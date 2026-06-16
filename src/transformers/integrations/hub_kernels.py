@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib.metadata
 import os
 import re
 import sys
@@ -21,13 +20,11 @@ from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING
 
-from packaging import version as pkg_version
-
 from ..conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
 from ..monkey_patching import register_patch_mapping
 from ..utils import ENV_VARS_TRUE_VALUES, logging
 from ..utils.generic import is_flash_attention_requested
-from ..utils.import_utils import is_kernels_available, is_torch_available
+from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION, is_kernels_available, is_torch_available
 from .flash_attention import flash_attention_forward
 
 
@@ -43,9 +40,17 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
-try:
+
+_MISSING_KERNELS_MESSAGE = (
+    "`kernels` is either not installed or uses an incompatible version. Please install a compatible version "
+    f"({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
+)
+
+
+if is_kernels_available():
     from kernels import (
         Device,
+        FuncRepository,
         LayerRepository,
         LocalLayerRepository,
         Mode,
@@ -58,23 +63,9 @@ try:
     from kernels import (
         use_kernel_forward_from_hub as _kernels_use_kernel_forward_from_hub,
     )
-
-    # Try to import FuncRepository, fallback if not available
-    try:
-        from kernels import FuncRepository
-    except ImportError:
-        FuncRepository = None
-
-    # Try to import use_kernel_func_from_hub, fallback if not available
-    try:
-        from kernels import use_kernel_func_from_hub as _kernels_use_kernel_func_from_hub
-
-        _has_use_kernel_func_from_hub = True
-    except ImportError:
-        _has_use_kernel_func_from_hub = False
+    from kernels import use_kernel_func_from_hub as _kernels_use_kernel_func_from_hub
 
     _TRANSFORMERS_USE_HUB_KERNELS = os.environ.get("USE_HUB_KERNELS", "YES").upper()
-    _kernels_available = True
     _kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
 
     def use_kernel_forward_from_hub(layer_name: str):
@@ -87,18 +78,12 @@ try:
             return lambda cls: cls
 
     def use_kernel_func_from_hub(func_name: str):
-        if _kernels_enabled and _has_use_kernel_func_from_hub:
+        if _kernels_enabled:
             return _kernels_use_kernel_func_from_hub(func_name)
         else:
-            if not _has_use_kernel_func_from_hub:
-                logger.warning_once(
-                    "use_kernel_func_from_hub is not available in the installed kernels version. "
-                    "Please upgrade kernels to use this feature."
-                )
-            else:
-                logger.warning_once(
-                    f"kernels hub usage is disabled through the environment USE_HUB_KERNELS={_TRANSFORMERS_USE_HUB_KERNELS}"
-                )
+            logger.warning_once(
+                f"kernels hub usage is disabled through the environment USE_HUB_KERNELS={_TRANSFORMERS_USE_HUB_KERNELS}"
+            )
             return lambda func: func
 
     _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository | dict[Mode, LayerRepository]]] = {
@@ -292,28 +277,27 @@ try:
         },
     }
 
-    # Add function kernel mappings if FuncRepository is available
-    if FuncRepository is not None:
-        _FUNCTION_KERNEL_MAPPING = {
-            "rotary_pos_emb": {
-                "xpu": {
-                    Mode.INFERENCE: FuncRepository(
-                        repo_id="kernels-community/rotary", func_name="apply_rotary_transformers", version=1
-                    )
-                },
-                "cuda": FuncRepository(
+    # Add function kernel mappings
+    _FUNCTION_KERNEL_MAPPING = {
+        "rotary_pos_emb": {
+            "xpu": {
+                Mode.INFERENCE: FuncRepository(
                     repo_id="kernels-community/rotary", func_name="apply_rotary_transformers", version=1
+                )
+            },
+            "cuda": FuncRepository(
+                repo_id="kernels-community/rotary", func_name="apply_rotary_transformers", version=1
+            ),
+        },
+        "ForCausalLMLoss": {
+            "cuda": {
+                Mode.TRAINING | Mode.TORCH_COMPILE: FuncRepository(
+                    repo_id="kernels-community/liger-kernels", func_name="LigerForCausalLMLoss", version=2
                 ),
             },
-            "ForCausalLMLoss": {
-                "cuda": {
-                    Mode.TRAINING | Mode.TORCH_COMPILE: FuncRepository(
-                        repo_id="kernels-community/liger-kernels", func_name="LigerForCausalLMLoss", version=2
-                    ),
-                },
-            },
-        }
-        _KERNEL_MAPPING = _KERNEL_MAPPING | _FUNCTION_KERNEL_MAPPING
+        },
+    }
+    _KERNEL_MAPPING = _KERNEL_MAPPING | _FUNCTION_KERNEL_MAPPING
 
     def has_key(d, key):
         return key in d or any(isinstance(v, dict) and has_key(v, key) for v in d.values())
@@ -321,15 +305,9 @@ try:
     def register_kernel_mapping_transformers(mapping=None):
         if mapping is None:
             mapping = _KERNEL_MAPPING
-        if has_key(mapping, "xpu") and not is_kernels_available(MIN_VERSION="0.10.2"):
-            raise ImportError(
-                "kernels uses an incompatible version. Please install the latest version with `pip install -U kernels`."
-            )
         register_kernel_mapping(mapping)
 
-
-except ImportError:
-    _kernels_available = False
+else:
     _kernels_enabled = False
 
     # Stub to make decorators int transformers work when `kernels`
@@ -353,6 +331,10 @@ except ImportError:
     class LocalLayerRepository:
         def __init__(self, *args, **kwargs):
             raise RuntimeError("LocalLayerRepository requires `kernels` to be installed. Run `pip install kernels`.")
+
+    class FuncRepository:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("FuncRepository requires `kernels` to be installed. Run `pip install kernels`.")
 
     def replace_kernel_forward_from_hub(*args, **kwargs):
         raise RuntimeError(
@@ -410,11 +392,8 @@ def load_and_register_attn_kernel(
     actual_attn_name = attn_implementation.split("|")[1] if "|" in attn_implementation else attn_implementation
     if not is_kernel(actual_attn_name):
         return None
-    if not _kernels_available:
-        raise ImportError(
-            "`kernels` is either not installed or uses an incompatible version. "
-            "Please install the latest version with `pip install -U kernels`."
-        )
+    if not is_kernels_available():
+        raise ImportError(_MISSING_KERNELS_MESSAGE)
 
     # Extract repo_id and kernel_name from the string
     if ":" in actual_attn_name:
@@ -466,7 +445,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
         logger.warning_once(f"Kernel {kernel_name} not found in _HUB_KERNEL_MAPPING")
         mapping[kernel_name] = None
         return None
-    if _kernels_available:
+    if is_kernels_available():
         try:
             repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
             revision = _HUB_KERNEL_MAPPING[kernel_name].get("revision", None)
@@ -519,27 +498,13 @@ def get_kernel(
 ) -> ModuleType:
     from .. import __version__
 
-    if not _kernels_available:
-        raise ImportError(
-            "`kernels` is either not installed or uses an incompatible version. Please install the latest version "
-            "with `pip install -U kernels`."
-        )
-
-    repo_parent = kernel_name.split("/")[0]
-    # all `kernels-community` repos are trusted by default!
-    if repo_parent != "kernels-community" and not allow_all_kernels:
-        raise ValueError(
-            "You need to specify `allow_all_kernels=True` to use kernels outside of the `kernels-community` repository"
-        )
+    if not is_kernels_available():
+        raise ImportError(_MISSING_KERNELS_MESSAGE)
 
     user_agent = {"framework": "transformers", "version": __version__, "repo_id": kernel_name}
-    kernels_version = importlib.metadata.version("kernels")
-    if pkg_version.parse(kernels_version) >= pkg_version.parse("0.14.0"):
-        return get_kernel_hub(kernel_name, revision=revision, version=version, user_agent=user_agent, trust_remote_code=allow_all_kernels)
-    elif pkg_version.parse(kernels_version) >= pkg_version.parse("0.10.4"):
-        return get_kernel_hub(kernel_name, revision=revision, version=version, user_agent=user_agent)
-    else:
-        return get_kernel_hub(kernel_name, revision=revision, version=version)
+    return get_kernel_hub(
+        kernel_name, revision=revision, version=version, user_agent=user_agent, trust_remote_code=allow_all_kernels
+    )
 
 
 def use_kernelized_func(module_names: list[Callable] | Callable):
@@ -658,17 +623,21 @@ def register_kernel_replacements_and_fusions(
 
         hub_repo = next(iter(hub_repo.values()))
 
-        # Infer version or revision, either as explicitly passed or default to v1
+        # Infer metadata (revision/version/trust_remote_code)
         if isinstance(hub_repo, tuple):
-            repo_str, revision_or_version = hub_repo
-            revision = revision_or_version.get("revision", None)
-            version = revision_or_version.get("version", None)
-            final_repo = (repo_str, {"version": version}) if version is not None else (repo_str, {"revision": revision})
+            repo_str, metadata = hub_repo
+
+            revision = metadata.get("revision", None)
+            version = metadata.get("version", None)
+            trust_remote_code = metadata.get("trust_remote_code", False) or ALLOW_ALL_KERNELS
+            metadata = {"version": version} if version is not None else {"revision": revision}
+            metadata |= {"trust_remote_code": trust_remote_code}
+
+            final_repo = (repo_str, metadata)
         else:
             repo_str = hub_repo
-            revision = None
-            version = 1
-            final_repo = repo_str
+            metadata = {"version": 1, "trust_remote_code": ALLOW_ALL_KERNELS}
+            final_repo = (repo_str, metadata)
 
         repo_id, _, layer_name_in_repo = repo_str.partition(":")
         if not repo_id or not layer_name_in_repo:
@@ -685,9 +654,7 @@ def register_kernel_replacements_and_fusions(
             repo = LayerRepository(
                 repo_id=repo_id,
                 layer_name=layer_name_in_repo,
-                revision=revision,
-                version=version,
-                trust_remote_code=ALLOW_ALL_KERNELS,
+                **metadata,
             )
 
         kernel_cls = repo.load()

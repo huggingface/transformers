@@ -295,8 +295,8 @@ class TestHubKernels(TestCasePlus):
         kernel_config = KernelConfig(
             {
                 "RMSNorm": (
-                    "michaelbenayoun/dummy-rmsnorm-kernel-with-init:CustomRMSNorm",
-                    {"revision": "e3838bb094e030df59739fd22edacb6ce3ffcf75"},
+                    "AntonV/dummy-rmsnorm-kernel-with-init:CustomRMSNorm",
+                    {"version": 0, "trust_remote_code": True},
                 )
             }
         )
@@ -313,7 +313,7 @@ class TestHubKernels(TestCasePlus):
         del baseline
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, use_kernels=True, kernel_config=kernel_config, allow_all_kernels=True, device_map=torch_device
+            model_id, use_kernels=True, kernel_config=kernel_config, device_map=torch_device
         )
         model.eval()
         with torch.no_grad():
@@ -514,7 +514,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
             # Test that an untrusted kernel will raise an error without the flag
             with self.assertRaisesRegex(
                 ValueError,
-                "You need to specify `allow_all_kernels=True` to use kernels outside of the `kernels-community` repository",
+                "Kernel repository 'untrusted/flash_attention_2' could not verify publisher trust status. Set trust_remote_code=True to allow loading kernels from untrusted sources.",
             ):
                 _ = LlamaModel.from_pretrained(tmpdirname, attn_implementation=untrusted_kernel)
 
