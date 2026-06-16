@@ -118,6 +118,18 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
+
+def _get_dist_world_size() -> int:
+    if (
+        dist.is_available()
+        and hasattr(dist, "is_initialized")
+        and dist.is_initialized()
+        and hasattr(dist, "get_world_size")
+    ):
+        return dist.get_world_size()
+    return 1
+
+
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
@@ -2165,7 +2177,7 @@ class GenerationMixin(ContinuousMixin):
             "assistant_model": assistant_model,
             "streamer": streamer,
         }
-        world_size = dist.get_world_size() if dist.is_available() and dist.is_initialized() else 1
+        world_size = _get_dist_world_size()
         generation_mode_kwargs["synced_gpus"] = (
             (is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)) and world_size > 1
             if synced_gpus is None
@@ -2612,7 +2624,8 @@ class GenerationMixin(ContinuousMixin):
             # The following logic allows an early break if all peers finished generating their sequence
             this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0, device=device)
             # send 0.0 if we finished, 1.0 otherwise
-            dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
+            if hasattr(dist, "all_reduce") and hasattr(dist, "ReduceOp"):
+                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
             # did all peers finish? the reduced sum will be 0.0 then
             if this_peer_finished_flag.item() == 0.0:
                 return False
