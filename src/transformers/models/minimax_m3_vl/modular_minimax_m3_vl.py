@@ -93,6 +93,17 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
 
     model_type = "minimax_m3_vl_text"
     base_config_key = "text_config"
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise_gather_output",
+        "layers.*.self_attn.k_proj": "colwise_gather_output",
+        "layers.*.self_attn.v_proj": "colwise_gather_output",
+        "layers.*.self_attn.o_proj": "rowwise_split_input",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
+    base_model_sp_plan = AttributeError()
+    base_model_fsdp_plan = AttributeError()
     base_model_ep_plan = {
         "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
@@ -100,6 +111,14 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj_scale_inv": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    attribute_map = {
+        "num_experts": "num_local_experts",
     }
 
     hidden_size: int = 6144
@@ -711,6 +730,9 @@ class MiniMaxM3VLTextModel(MiniMaxM2Model):
 class MiniMaxM3VLForCausalLM(MiniMaxM2ForCausalLM):
     config: MiniMaxM3VLTextConfig
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _sp_plan = AttributeError()
+    _fsdp_plan = AttributeError()
 
     def __init__(self, config: MiniMaxM3VLTextConfig):
         super().__init__(config)

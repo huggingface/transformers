@@ -210,6 +210,12 @@ def _get_torch_distributed_world_size() -> int:
     return torch.distributed.get_world_size()
 
 
+def _get_torch_distributed_rank() -> int:
+    if not _is_torch_distributed_initialized() or not hasattr(torch.distributed, "get_rank"):
+        return 0
+    return torch.distributed.get_rank()
+
+
 def is_local_dist_rank_0():
     return _is_torch_distributed_initialized() and int(os.environ.get("LOCAL_RANK", "-1")) == 0
 
@@ -3435,9 +3441,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         os.makedirs(save_directory, exist_ok=True)
         save_on_this_rank = is_main_process
-        if torch.distributed.is_initialized() and getattr(self, "device_mesh", None) is not None:
+        if _is_torch_distributed_initialized() and getattr(self, "device_mesh", None) is not None:
             # DTensor gather materializes a full plain state dict only on global rank 0.
-            save_on_this_rank = save_on_this_rank and torch.distributed.get_rank() == 0
+            save_on_this_rank = save_on_this_rank and _get_torch_distributed_rank() == 0
         save_directory_path = os.fspath(save_directory)
 
         if push_to_hub and save_on_this_rank:
@@ -3514,7 +3520,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 model_to_save.config.distributed_config = distributed_config
 
         if distributed_checkpoint:
-            if torch.distributed.is_initialized() and getattr(self, "device_mesh", None) is None:
+            if _is_torch_distributed_initialized() and getattr(self, "device_mesh", None) is None:
                 raise ValueError(
                     "save_pretrained(distributed_checkpoint=True) requires the model to have been "
                     "initialized with a distributed_config (device_mesh is None)."

@@ -89,11 +89,36 @@ class DiffusionGemmaTextConfig(Gemma4TextConfig):
 
     model_type = "diffusion_gemma_text"
     final_logit_softcapping = 30.0
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.experts.gate_up_proj": "packed_colwise",
+        "layers.*.experts.down_proj": "rowwise",
+        "layers.*.experts": "moe_tp_experts",
+    }
+    base_model_ep_plan = {
+        # EP plan for google/gemma-4-26B-A4B-it: do not tp in attention (num_global_key_value_heads=2 too small to partition)
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.router": "ep_router",
+        "layers.*.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.experts.down_proj": "grouped_gemm",
+        "layers.*.experts": "moe_tp_experts",
+    }
 
     base_model_pp_plan = {
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_fsdp_plan = AttributeError()
 
     enable_moe_block = AttributeError()
     attention_k_eq_v = AttributeError()
