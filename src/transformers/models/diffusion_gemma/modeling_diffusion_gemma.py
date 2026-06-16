@@ -801,7 +801,7 @@ class DiffusionGemmaSelfConditioning(nn.Module):
 class DiffusionGemmaPreTrainedModel(PreTrainedModel):
     config: DiffusionGemmaConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = False
+    supports_gradient_checkpointing = True
     _no_split_modules = [
         "DiffusionGemmaDecoderTextLayer",
         "DiffusionGemmaEncoderTextLayer",
@@ -1402,7 +1402,6 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
 
     def __init__(self, config: DiffusionGemmaConfig):
         super().__init__(config)
-
         self.encoder = DiffusionGemmaEncoderModel(config)
         self.decoder = DiffusionGemmaDecoderModel(config)
 
@@ -1511,7 +1510,6 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
     next block diffusion step.
     """
 
-    base_model_prefix = "model"
     _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
     generation_config_class = DiffusionGemmaGenerationConfig
 
@@ -1524,12 +1522,6 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.encoder.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.encoder.language_model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring
