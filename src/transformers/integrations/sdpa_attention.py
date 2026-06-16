@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 
 from ..utils import is_torch_npu_available, is_torch_xpu_available, logging
 from ..utils.import_utils import is_torch_greater_or_equal
@@ -11,6 +12,10 @@ _is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_de
 _is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
 _is_torch_xpu_available = is_torch_xpu_available()
 _is_torch_npu_available = is_torch_npu_available()
+
+
+_is_torch_greater_or_equal_than_2_11 = is_torch_greater_or_equal("2.11", accept_dev=True)
+_is_torch_greater_or_equal_than_2_12 = is_torch_greater_or_equal("2.12", accept_dev=True)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -35,6 +40,69 @@ def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor) -> b
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8
     return _is_torch_greater_or_equal_than_2_5 and attention_mask is None
+
+
+def _apply_mps_fixes(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    is_causal: bool,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None, int | None]:
+    """
+    Apply workarounds for known MPS SDPA bugs in PyTorch.
+
+    Returns (query, key, value, attention_mask, original_v_head_dim).
+    original_v_head_dim is None if no value padding was applied.
+
+    Fixes:
+    1. pytorch/pytorch#174861 (fixed in PyTorch 2.11): silent correctness bug in
+       bidirectional attention on MPS. Workaround: provide a zeros attention mask
+       to force sdpa_general_mps instead of broken sdpa_vector_2pass_mps.
+    2. pytorch/pytorch#176767 (fixed in PyTorch 2.12): corrupted output when
+       value head dim != query head dim on MPS. Workaround: pad value to match.
+    """
+    original_v_head_dim = None
+
+    # Fix 2 (applied first): value head dim mismatch (pytorch/pytorch#176767)
+    if not _is_torch_greater_or_equal_than_2_12:
+        q_head_dim = query.shape[-1]
+        v_head_dim = value.shape[-1]
+        if v_head_dim != q_head_dim:
+            if v_head_dim < q_head_dim:
+                original_v_head_dim = v_head_dim
+                value = F.pad(value, (0, q_head_dim - v_head_dim))
+            else:
+                # v_head_dim > q_head_dim: F.pad with a negative width would
+                # silently crop the tensor, and the post-SDPA slice at
+                # [..., :original_v_head_dim] would then ask for more dims
+                # than the output has. Log a warning and skip the workaround.
+                logger.warning_once(
+                    "MPS SDPA value head dim (%d) > query head dim (%d) on PyTorch < 2.12 — "
+                    "skipping value padding workaround for pytorch/pytorch#176767. "
+                    "Output may still be incorrect on MPS.",
+                    v_head_dim,
+                    q_head_dim,
+                )
+
+    # Fix 1: bidirectional attention correctness (pytorch/pytorch#174861)
+    # Version gate: >= 2.8.0 (bug introduced) AND < 2.11.0 (bug fixed).
+    # Only synthesize a zero additive mask when no mask was provided. Existing
+    # bool/additive masks carry real masking semantics and must not be replaced.
+    if _is_torch_greater_or_equal_than_2_8 and not _is_torch_greater_or_equal_than_2_11:
+        if attention_mask is None and not is_causal and query.dtype != torch.float32:
+            logger.warning_once(
+                "Detected MPS SDPA bug in PyTorch < 2.11.0 on MPS device. "
+                "Applying workaround for bidirectional attention correctness. "
+                "Upgrade PyTorch to >= 2.11.0 to disable this workaround."
+            )
+            attention_mask = torch.zeros(
+                (query.shape[0], 1, query.shape[2], key.shape[2]),
+                dtype=query.dtype,
+                device=query.device,
+            )
+
+    return query, key, value, attention_mask, original_v_head_dim
 
 
 def sdpa_attention_forward(
@@ -89,6 +157,13 @@ def sdpa_attention_forward(
             # Convert to boolean type, making sdpa to force call FlashAttentionScore to improve performance.
             attention_mask = torch.logical_not(attention_mask.bool()).to(query.device)
 
+    # Apply MPS-specific workarounds for upstream PyTorch bugs
+    original_v_head_dim = None
+    if query.device.type == "mps":
+        query, key, value, attention_mask, original_v_head_dim = _apply_mps_fixes(
+            query, key, value, attention_mask, is_causal
+        )
+
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,
         key,
@@ -100,5 +175,9 @@ def sdpa_attention_forward(
         **sdpa_kwargs,
     )
     attn_output = attn_output.transpose(1, 2).contiguous()
+
+    # Slice back original v head dim if we padded (MPS workaround)
+    if original_v_head_dim is not None:
+        attn_output = attn_output[..., :original_v_head_dim]
 
     return attn_output, None
