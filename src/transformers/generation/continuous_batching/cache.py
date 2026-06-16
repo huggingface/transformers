@@ -206,6 +206,10 @@ class PagedAttentionCache:
             config.hidden_size + q_bytes_per_token + 2 * page_size,  # hidden state + Q + new K and V
         )
 
+        # If somehow the max memory percent is not yet resolved, resolve it conservatively
+        if continuous_batching_config.max_memory_percent is None:
+            resolve_max_memory_percent(cb_config=continuous_batching_config, has_logit_processors=True)
+
         memory_handler = PagedAttentionMemoryHandler(
             continuous_batching_config=continuous_batching_config,
             page_size=page_size,
@@ -215,14 +219,9 @@ class PagedAttentionCache:
             num_attention_masks=num_attention_masks,
         )
 
-        # If somehow the max memory percent is not yet resolved, resolve it conservatively
-        if continuous_batching_config.max_memory_percent is None:
-            resolve_max_memory_percent(cb_config=continuous_batching_config, has_logit_processors=True)
-
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
             num_blocks=continuous_batching_config.num_blocks,
             max_batch_tokens=continuous_batching_config.max_batch_tokens,
-            max_memory_percent=continuous_batching_config.max_memory_percent,
             cache_dtype=self.dtype,
         )
 
@@ -579,8 +578,10 @@ class PagedAttentionMemoryHandler:
 
     _activation_dtype = torch.bfloat16
     _input_dtype = torch.int32
-    _upper_bound_max_batch_tokens = 1024
     _upper_bound_num_blocks = 4096
+
+    _min_max_batch_tokens = 256
+    _default_max_batch_tokens = 8192
 
     def __init__(
         self,
@@ -594,6 +595,7 @@ class PagedAttentionMemoryHandler:
         """Initialize the memory handler. `activation_peaks` is a list of `(Δcn, Δcm)` pairs giving the activation memory
         contributions proportional to N (pages) and M (batch tokens) for each peak. Memory must satisfy the constraint
         at every peak, so we solve each polynomial independently and take the most restrictive result."""
+        self.cb_config = continuous_batching_config
         self.block_size = continuous_batching_config.block_size
         self.page_size = page_size
         self.num_groups = num_groups
@@ -608,20 +610,133 @@ class PagedAttentionMemoryHandler:
         # This account for the set of 2 IOs if async batching is used
         self.io_multiplier = 2 if continuous_batching_config.use_async_batching else 1
 
-    @staticmethod
-    def get_available_memory(max_memory_percent: float = 1.0) -> int:
-        """Calculate available GPU memory for cache allocation, accounting for already allocated tensors."""
+    def get_available_memory(self) -> int:
+        """Calculate available GPU memory for cache allocation in bytes, accouting for the maximum memory percent limit
+        fixed by the continuous batching config."""
         _, total, reserved, allocated = get_device_and_memory_breakdown()
         available_memory = total - max(allocated, reserved)
-        available_memory = int(available_memory * max_memory_percent)
+        available_memory = int(available_memory * self.cb_config.max_memory_percent)
+        logger.info(f"Memory available for cache allocation: {available_memory // 1024**2} MB")
         return available_memory
+
+    def infer_num_blocks_and_max_batch_tokens(
+        self,
+        max_batch_tokens: int | None = None,
+        num_blocks: int | None = None,
+        cache_dtype: torch.dtype = torch.float16,
+    ) -> tuple[int, int]:
+        """Infers max_batch_tokens and num_blocks based on the available memory and the size of the activation peaks.
+        If neither value is provided, we use a default value of 8192 for max_batch_tokens, apply bounds depending on the
+        available VRAM, and solve for num_blocks. If one value is provided, the other is found using a linear solve."""
+        available = self.get_available_memory()
+
+        # If both values are provided, just make sure they make sense
+        if num_blocks is not None and max_batch_tokens is not None:
+            return self._check_footprint(max_batch_tokens, num_blocks, available, cache_dtype)
+
+        # If one or more value is provided, solve for the other
+        if num_blocks is not None or max_batch_tokens is not None:
+            max_batch_tokens, num_blocks = self._solve_for_peaks(
+                max_batch_tokens, num_blocks, available, cache_dtype, cache_fill_per_batch=None)
+            return self._check_footprint(max_batch_tokens, num_blocks, available, cache_dtype)
+
+        # If no value is provided, use the default value for max_batch_tokens w/ VRAM-based upper bound
+        upper_bound_vram, _ = self._solve_for_peaks(
+            max_batch_tokens=None,
+            num_blocks=None,
+            available=available,
+            cache_dtype=cache_dtype,
+            cache_fill_per_batch=0.1,  # each cache must fill 10% of the cache at most
+        )
+        max_batch_tokens = min(self._default_max_batch_tokens, upper_bound_vram)
+        max_batch_tokens = max(max_batch_tokens, self._min_max_batch_tokens)
+        # Then solve with that value
+        max_batch_tokens, num_blocks = self._solve_for_peaks(
+            max_batch_tokens, num_blocks, available, cache_dtype, cache_fill_per_batch=None
+        )
+        return self._check_footprint(max_batch_tokens, num_blocks, available, cache_dtype)
+
+    def _solve_for_peaks(
+        self,
+        max_batch_tokens: int | None,
+        num_blocks: int | None,
+        available: int,
+        cache_dtype: torch.dtype,
+        cache_fill_per_batch: float | None,
+    ) -> tuple[int, int]:
+        """Returns max_batch_tokens and num_blocks so that their memory footprint is within the available memory for all
+        activation peaks. If neither value is given, a value must be provided for cache_fill_per_batch: this means we
+        solve for both varibles by saying each batch fill a certain percentage of the cache (eg, if cache_fill_per_batch
+        is 0.01, each batch will fill 1% of the cache)."""
+        solutions = []
+        for peak in self.activation_peaks:
+            m_batch_tokens, n_blocks = self._solve_for_peak(
+                peak, max_batch_tokens, num_blocks, available, cache_dtype, cache_fill_per_batch
+            )
+            solutions.append((m_batch_tokens, n_blocks))
+        return max(solutions, key=lambda m, n: n)  # returns the solution with the highest num_blocks
+
+    def _solve_for_peak(
+        self,
+        peak: tuple[int, int],
+        max_batch_tokens: int | None,
+        num_blocks: int | None,
+        available: int,
+        cache_dtype: torch.dtype,
+        m: float | None,
+    ) -> tuple[int, int]:
+        """Returns a couple of `(max_batch_tokens, num_blocks)` that satisfy the memory constraint for the given
+        activation peak."""
+        cm, cn, cmn, cmm = self._equation_coefficients(peak, cache_dtype)
+
+        # If neither variable is defined, use a quadratic solver
+        if num_blocks is None and max_batch_tokens is None:
+            # Substitute M = m·N → (coeff_nm·m + coeff_mm·m²)·N² + (coeff_n + coeff_m·m)·N − avail = 0
+            if m is None:
+                raise ValueError("m must be provided if num_blocks and max_batch_tokens are None")
+            num_pages = self._solve_quadratic(cmn * m + cmm * m**2, cn + cm * m, -available)
+            max_batch_tokens = int(num_pages * m)
+
+        # Otherwise, use a linear solver
+        elif num_blocks is None:
+            # M given → linear in N: (coeff_n + coeff_nm·M)·N = avail − coeff_m·M − coeff_mm·M²
+            M = max_batch_tokens
+            num_pages = floor((available - cm * M - cmm * M**2) / (cn + cmn * M))
+
+        elif max_batch_tokens is None:
+            # N given → quadratic in M: coeff_mm·M² + (coeff_m + coeff_nm·N)·M + (coeff_n·N − avail) = 0
+            N = num_blocks * self.block_size
+            M = self._solve_quadratic(cmm, cm + cmn * N, cn * N - available)
+
+        return max_batch_tokens, num_blocks
+
+    def _check_footprint(
+        self, max_batch_tokens: int, num_blocks: int, available: int, cache_dtype: torch.dtype
+    ) -> tuple[int, int]:
+        """Checks if the footprint of the cache is within the available memory."""
+        memory_footprint = self.compute_memory_footprint(max_batch_tokens, num_blocks, cache_dtype)
+        if memory_footprint > available:
+            raise MemoryError(f"Memory footprint {memory_footprint} is more than available memory {available}")
+        return max_batch_tokens, num_blocks
+
+    def _solve_quadratic(self, a: float, b: float, c: float) -> int:
+        """Largest positive root of a·x² + b·x + c = 0. Falls back to linear when a == 0. Rounded down."""
+        if a == 0:
+            return -c / b
+        discriminant = b**2 - 4 * a * c
+        if discriminant < 0:
+            raise ValueError(f"No real solution (discriminant = {discriminant})")
+        root = (-b + sqrt(discriminant)) / (2 * a)
+        if root < 0:
+            raise ValueError(f"No positive solution (root = {root})")
+        return int(floor(root))
 
     # Formatting is disabled because of comment indentation, which improves readability.
     # fmt: off
     def _equation_coefficients(
         self, peak: tuple[int, int], cache_dtype: torch.dtype
     ) -> tuple[int, int, int, int]:
-        """Returns `(coeff_n, coeff_m, coeff_nm, coeff_mm)` for the memory polynomial of a single activation peak.
+        """Returns `(coeff_m, coeff_n, coeff_mn, coeff_mm)` for the memory polynomial of a single activation peak.
         `peak = (Δcn, Δcm)` is the peak-specific activation contribution; the rest of the coefficients are shared
         across peaks. Each addend is annotated with the tensor it corresponds to in
         `ContinuousBatchingIOs._setup_static_tensors` (or the forward pass, for activation terms).
@@ -650,101 +765,22 @@ class PagedAttentionMemoryHandler:
         )
         # TODO: the above could be refined by introducing the max_requests_per_batch, but then there is a min() and this
         # is no longer a simple polynomial. Could be worth checking into.
-        # -- N·M terms: cost per (page × batch token) --------------------------------------
-        coeff_nm = k * self.num_attention_masks * a    # attention_mask: [1, 1, M, N + M] (N·M part only)
+        # -- M·N terms: cost per (page × batch token) --------------------------------------
+        coeff_mn = k * self.num_attention_masks * a    # attention_mask: [1, 1, M, N + M] (N·M part only)
         # -- M² terms: cost per (batch token squared) --------------------------------------
         coeff_mm = k * self.num_attention_masks * a    # attention_mask: [1, 1, M, N + M] (M² part only)
 
-        return coeff_n, coeff_m, coeff_nm, coeff_mm
+        return coeff_m, coeff_n, coeff_mn, coeff_mm
     # fmt: on
 
-    @staticmethod
-    def _solve_quadratic(a: float, b: float, c: float) -> float:
-        """Largest positive root of a·x² + b·x + c = 0. Falls back to linear when a == 0."""
-        if a == 0:
-            return -c / b
-        discriminant = b**2 - 4 * a * c
-        if discriminant < 0:
-            raise ValueError(f"No real solution (discriminant = {discriminant})")
-        root = (-b + sqrt(discriminant)) / (2 * a)
-        if root < 0:
-            raise ValueError(f"No positive solution (root = {root})")
-        return root
-
-    def _solve_for_peak(
-        self,
-        peak: tuple[int, int],
-        available: int,
-        num_blocks: int | None,
-        max_batch_tokens: int | None,
-        cache_dtype: torch.dtype,
-    ) -> tuple[int, int]:
-        """Solve for `(num_blocks, max_batch_tokens)` against one activation peak's memory polynomial. Clamps to upper
-        bounds. Either input may be None; whichever is None is solved for."""
-        cn, cm, cnm, cmm = self._equation_coefficients(peak, cache_dtype)
-
-        if num_blocks is None and max_batch_tokens is None:
-            # Substitute M = m·N → (coeff_nm·m + coeff_mm·m²)·N² + (coeff_n + coeff_m·m)·N − avail = 0
-            m = 0.01
-            num_pages = self._solve_quadratic(cnm * m + cmm * m**2, cn + cm * m, -available)
-            max_batch_tokens = int(num_pages * m)
-            if max_batch_tokens > self._upper_bound_max_batch_tokens:
-                max_batch_tokens = self._upper_bound_max_batch_tokens
-                # If max_batch_tokens is clamped, we recompute num_blocks below to get a higher value
-                num_blocks = None
-            else:
-                num_blocks = min(floor(num_pages) // self.block_size, self._upper_bound_num_blocks)
-
-        if num_blocks is None:
-            # M given → linear in N: (coeff_n + coeff_nm·M)·N = avail − coeff_m·M − coeff_mm·M²
-            M = max_batch_tokens
-            num_pages = floor((available - cm * M - cmm * M**2) / (cn + cnm * M))
-            num_blocks = min(num_pages // self.block_size, self._upper_bound_num_blocks)
-        elif max_batch_tokens is None:
-            # N given → quadratic in M: coeff_mm·M² + (coeff_m + coeff_nm·N)·M + (coeff_n·N − avail) = 0
-            N = num_blocks * self.block_size
-            M = self._solve_quadratic(cmm, cm + cnm * N, cn * N - available)
-            max_batch_tokens = min(floor(M), self._upper_bound_max_batch_tokens)
-
-        return num_blocks, max_batch_tokens
-
-    def infer_num_blocks_and_max_batch_tokens(
-        self,
-        num_blocks: int | None = None,
-        max_batch_tokens: int | None = None,
-        max_memory_percent: float = 0.9,
-        cache_dtype: torch.dtype = torch.float16,
-    ) -> tuple[int, int]:
-        """Solve for the missing variable(s) in the memory polynomial (see ``_equation_coefficients``). There is one
-        polynomial per activation peak; we solve each independently and take the most restrictive (smallest) result.
-        When both `N` and `M` are unknown, assumes `M = m·N` (m = 0.01, i.e. one batch fills ~1 % of the cache) and
-        solves the resulting quadratic in N.
-        """
-        available = self.get_available_memory(max_memory_percent)
-        logger.info(f"Cache memory: {available}")
-        # Solve each peak independently, then take the element-wise min (tightest constraint wins)
-        acc_num_blocks = float("inf")
-        acc_max_batch_tokens = float("inf")
-        for peak in self.activation_peaks:
-            n_blocks, m_batch_tokens = self._solve_for_peak(peak, available, num_blocks, max_batch_tokens, cache_dtype)
-            acc_num_blocks = min(acc_num_blocks, n_blocks)
-            acc_max_batch_tokens = min(acc_max_batch_tokens, m_batch_tokens)
-        # Now update the value (cannot update in loop, it would overwrite the user-passed values)
-        num_blocks, max_batch_tokens = acc_num_blocks, acc_max_batch_tokens
-        # Validate
-        memory_footprint = self.compute_memory_footprint(num_blocks, max_batch_tokens, cache_dtype)
-        if memory_footprint > available:
-            raise MemoryError(f"Memory footprint {memory_footprint} is more than available memory {available}")
-        return num_blocks, max_batch_tokens
-
-    def compute_memory_footprint(self, num_blocks: int, max_batch_tokens: int, cache_dtype: torch.dtype) -> int:
+    def compute_memory_footprint(self, max_batch_tokens: int, num_blocks: int, cache_dtype: torch.dtype) -> int:
         """Evaluate the memory polynomial at concrete (N, M) values, taking the max across activation peaks."""
-        N = num_blocks * self.block_size
         M = max_batch_tokens
+        N = num_blocks * self.block_size
 
         max_memory_footprint = 0
         for peak in self.activation_peaks:
-            cn, cm, cnm, cmm = self._equation_coefficients(peak, cache_dtype)
-            memory_footprint = cn * N + cm * M + cnm * N * M + cmm * M * M
+            cm, cn, cmn, cmm = self._equation_coefficients(peak, cache_dtype)
+            memory_footprint = cn * N + cm * M + cmn * N * M + cmm * M * M
             max_memory_footprint = max(max_memory_footprint, memory_footprint)
         return max_memory_footprint
