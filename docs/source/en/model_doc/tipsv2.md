@@ -40,7 +40,7 @@ The original code can be found [here](https://github.com/google-deepmind/tips).
 You can find all the original TIPSv2 checkpoints under the [TIPSv2](https://huggingface.co/collections/google/tipsv2) collection.
 
 > [!TIP]
-> Check out [TIPSv2 DPT](./tipsv2_dpt) for depth estimation, normal estimation, and semantic segmentation on top of a TIPSv2 backbone.
+> See [TIPSv2 DPT](./tipsv2_dpt) for depth estimation, normal estimation, and semantic segmentation on top of the TIPSv2 vision backbone.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -145,8 +145,7 @@ with torch.no_grad():
     outputs = backbone(**inputs)
 
 # feature_maps is a tuple of tensors, one per requested stage
-patch_features = outputs.feature_maps[-1]  # (batch, hidden_size, height, width)
-# shape: (1, 768, 32, 32) for tipsv2-b14 with a 448x448 input
+patch_features = outputs.feature_maps[-1] # (batch_size, hidden_size, height, width) tensor
 ```
 
 </hfoption>
@@ -176,9 +175,9 @@ inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 with torch.no_grad():
     outputs = model(**inputs)
 
-sequence = outputs.last_hidden_state  # (batch, 1 + num_register_tokens + num_patches, hidden_size)
-cls_token_1 = sequence[:, 0]
-cls_token_2 = sequence[:, 1 : 1 + model.config.num_register_tokens]
+sequence = outputs.last_hidden_state # (batch_size, 1 + config.num_register_tokens + num_patches, hidden_size)
+cls_token_1 = sequence[:, 0] # (batch_size, hidden_size)
+cls_token_2 = sequence[:, 1 : 1 + model.config.num_register_tokens] # (batch_size, hidden_size)
 ```
 
 </hfoption>
