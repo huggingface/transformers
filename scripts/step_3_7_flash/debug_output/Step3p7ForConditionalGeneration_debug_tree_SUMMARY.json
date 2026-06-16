@@ -19,9 +19,10 @@
             "shape": "torch.Size([1, 16])",
             "dtype": "torch.int64"
           },
-          "num_patches": "None",
+          "pixel_values": "None",
           "patch_pixel_values": "None",
-          "patch_newline_mask": "None",
+          "num_patches": "None",
+          "image_embeds": "None",
           "position_ids": "None",
           "attention_mask": "None",
           "past_key_values": "None",
@@ -47,10 +48,10 @@
           "outputs": {
             "shape": "torch.Size([16, 128])",
             "dtype": "torch.float32",
-            "mean": "tensor(4.7305e-04)",
-            "std": "tensor(1.9947e-02)",
-            "min": "tensor(-6.5568e-02)",
-            "max": "tensor(6.4957e-02)"
+            "mean": "tensor(3.9865e-04)",
+            "std": "tensor(1.9635e-02)",
+            "min": "tensor(-5.6339e-02)",
+            "max": "tensor(6.2488e-02)"
           }
         },
         {
@@ -64,19 +65,16 @@
               "inputs_embeds": {
                 "shape": "torch.Size([1, 16, 128])",
                 "dtype": "torch.float32",
-                "mean": "tensor(4.7305e-04)",
-                "std": "tensor(1.9947e-02)",
-                "min": "tensor(-6.5568e-02)",
-                "max": "tensor(6.4957e-02)"
+                "mean": "tensor(3.9865e-04)",
+                "std": "tensor(1.9635e-02)",
+                "min": "tensor(-5.6339e-02)",
+                "max": "tensor(6.2488e-02)"
               },
               "use_cache": "False",
               "output_attentions": "False",
               "output_hidden_states": "False",
               "return_dict": "True",
-              "cache_position": "None",
-              "num_patches": "None",
-              "patch_pixel_values": "None",
-              "patch_newline_mask": "None"
+              "cache_position": "None"
             }
           },
           "children": [
@@ -87,10 +85,10 @@
                   {
                     "shape": "torch.Size([1, 16, 128])",
                     "dtype": "torch.float32",
-                    "mean": "tensor(4.7305e-04)",
-                    "std": "tensor(1.9947e-02)",
-                    "min": "tensor(-6.5568e-02)",
-                    "max": "tensor(6.4957e-02)"
+                    "mean": "tensor(3.9865e-04)",
+                    "std": "tensor(1.9635e-02)",
+                    "min": "tensor(-5.6339e-02)",
+                    "max": "tensor(6.2488e-02)"
                   }
                 ],
                 "kwargs": {
@@ -105,10 +103,7 @@
                   "cache_position": {
                     "shape": "torch.Size([16])",
                     "dtype": "torch.int64"
-                  },
-                  "num_patches": "None",
-                  "patch_pixel_values": "None",
-                  "patch_newline_mask": "None"
+                  }
                 }
               },
               "children": [
@@ -119,20 +114,20 @@
                       {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(4.7305e-04)",
-                        "std": "tensor(1.9947e-02)",
-                        "min": "tensor(-6.5568e-02)",
-                        "max": "tensor(6.4957e-02)"
+                        "mean": "tensor(3.9865e-04)",
+                        "std": "tensor(1.9635e-02)",
+                        "min": "tensor(-5.6339e-02)",
+                        "max": "tensor(6.2488e-02)"
                       }
                     ]
                   },
                   "outputs": {
                     "shape": "torch.Size([1, 16, 128])",
                     "dtype": "torch.float32",
-                    "mean": "tensor(4.6212e-02)",
-                    "std": "tensor(1.9751e+00)",
-                    "min": "tensor(-6.2530e+00)",
-                    "max": "tensor(6.4140e+00)"
+                    "mean": "tensor(3.9956e-02)",
+                    "std": "tensor(1.9742e+00)",
+                    "min": "tensor(-5.7376e+00)",
+                    "max": "tensor(6.6377e+00)"
                   }
                 },
                 {
@@ -142,10 +137,10 @@
                       "hidden_states": {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(4.6212e-02)",
-                        "std": "tensor(1.9751e+00)",
-                        "min": "tensor(-6.2530e+00)",
-                        "max": "tensor(6.4140e+00)"
+                        "mean": "tensor(3.9956e-02)",
+                        "std": "tensor(1.9742e+00)",
+                        "min": "tensor(-5.7376e+00)",
+                        "max": "tensor(6.6377e+00)"
                       },
                       "attention_mask": "None",
                       "position_ids": {
@@ -158,10 +153,7 @@
                         "dtype": "torch.int64"
                       },
                       "output_attentions": "False",
-                      "use_cache": "False",
-                      "num_patches": "None",
-                      "patch_pixel_values": "None",
-                      "patch_newline_mask": "None"
+                      "use_cache": "False"
                     }
                   },
                   "children": [
@@ -172,20 +164,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(4.6212e-02)",
-                            "std": "tensor(1.9751e+00)",
-                            "min": "tensor(-6.2530e+00)",
-                            "max": "tensor(6.4140e+00)"
+                            "mean": "tensor(3.9956e-02)",
+                            "std": "tensor(1.9742e+00)",
+                            "min": "tensor(-5.7376e+00)",
+                            "max": "tensor(6.6377e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-2.3519e-02)",
-                        "std": "tensor(4.4004e-01)",
-                        "min": "tensor(-1.4662e+00)",
-                        "max": "tensor(1.4641e+00)"
+                        "mean": "tensor(9.9226e-04)",
+                        "std": "tensor(4.6034e-01)",
+                        "min": "tensor(-1.7240e+00)",
+                        "max": "tensor(1.6381e+00)"
                       }
                     },
                     {
@@ -195,20 +187,20 @@
                           {
                             "shape": "torch.Size([1, 16, 4, 32])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(-2.3519e-02)",
-                            "std": "tensor(4.4004e-01)",
-                            "min": "tensor(-1.4662e+00)",
-                            "max": "tensor(1.4641e+00)"
+                            "mean": "tensor(9.9226e-04)",
+                            "std": "tensor(4.6034e-01)",
+                            "min": "tensor(-1.7240e+00)",
+                            "max": "tensor(1.6381e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 4, 32])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-1.0905e-01)",
-                        "std": "tensor(1.9975e+00)",
-                        "min": "tensor(-5.9718e+00)",
-                        "max": "tensor(6.9536e+00)"
+                        "mean": "tensor(6.2221e-03)",
+                        "std": "tensor(2.0004e+00)",
+                        "min": "tensor(-6.7456e+00)",
+                        "max": "tensor(6.9171e+00)"
                       }
                     },
                     {
@@ -218,20 +210,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(4.6212e-02)",
-                            "std": "tensor(1.9751e+00)",
-                            "min": "tensor(-6.2530e+00)",
-                            "max": "tensor(6.4140e+00)"
+                            "mean": "tensor(3.9956e-02)",
+                            "std": "tensor(1.9742e+00)",
+                            "min": "tensor(-5.7376e+00)",
+                            "max": "tensor(6.6377e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 64])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(7.3618e-03)",
-                        "std": "tensor(4.3482e-01)",
-                        "min": "tensor(-1.2864e+00)",
-                        "max": "tensor(1.3453e+00)"
+                        "mean": "tensor(2.4065e-02)",
+                        "std": "tensor(4.4307e-01)",
+                        "min": "tensor(-1.4087e+00)",
+                        "max": "tensor(1.4738e+00)"
                       }
                     },
                     {
@@ -241,20 +233,20 @@
                           {
                             "shape": "torch.Size([1, 16, 2, 32])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(7.3618e-03)",
-                            "std": "tensor(4.3482e-01)",
-                            "min": "tensor(-1.2864e+00)",
-                            "max": "tensor(1.3453e+00)"
+                            "mean": "tensor(2.4065e-02)",
+                            "std": "tensor(4.4307e-01)",
+                            "min": "tensor(-1.4087e+00)",
+                            "max": "tensor(1.4738e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 2, 32])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(3.3840e-02)",
-                        "std": "tensor(2.0006e+00)",
-                        "min": "tensor(-6.1313e+00)",
-                        "max": "tensor(5.8917e+00)"
+                        "mean": "tensor(1.1488e-01)",
+                        "std": "tensor(1.9976e+00)",
+                        "min": "tensor(-5.7733e+00)",
+                        "max": "tensor(6.7786e+00)"
                       }
                     },
                     {
@@ -264,20 +256,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(4.6212e-02)",
-                            "std": "tensor(1.9751e+00)",
-                            "min": "tensor(-6.2530e+00)",
-                            "max": "tensor(6.4140e+00)"
+                            "mean": "tensor(3.9956e-02)",
+                            "std": "tensor(1.9742e+00)",
+                            "min": "tensor(-5.7376e+00)",
+                            "max": "tensor(6.6377e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 64])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(1.0331e-03)",
-                        "std": "tensor(4.5051e-01)",
-                        "min": "tensor(-1.4301e+00)",
-                        "max": "tensor(1.4627e+00)"
+                        "mean": "tensor(1.5792e-03)",
+                        "std": "tensor(4.2590e-01)",
+                        "min": "tensor(-1.3284e+00)",
+                        "max": "tensor(1.4061e+00)"
                       }
                     },
                     {
@@ -287,20 +279,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(4.6212e-02)",
-                            "std": "tensor(1.9751e+00)",
-                            "min": "tensor(-6.2530e+00)",
-                            "max": "tensor(6.4140e+00)"
+                            "mean": "tensor(3.9956e-02)",
+                            "std": "tensor(1.9742e+00)",
+                            "min": "tensor(-5.7376e+00)",
+                            "max": "tensor(6.6377e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 4])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(4.2372e-02)",
-                        "std": "tensor(4.1728e-01)",
-                        "min": "tensor(-8.7279e-01)",
-                        "max": "tensor(9.8197e-01)"
+                        "mean": "tensor(-2.6630e-02)",
+                        "std": "tensor(4.3650e-01)",
+                        "min": "tensor(-1.0348e+00)",
+                        "max": "tensor(1.2828e+00)"
                       }
                     },
                     {
@@ -310,10 +302,10 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(4.6212e-02)",
-                            "std": "tensor(1.9751e+00)",
-                            "min": "tensor(-6.2530e+00)",
-                            "max": "tensor(6.4140e+00)"
+                            "mean": "tensor(3.9956e-02)",
+                            "std": "tensor(1.9742e+00)",
+                            "min": "tensor(-5.7376e+00)",
+                            "max": "tensor(6.6377e+00)"
                           },
                           {
                             "shape": "torch.Size([1, 16])",
@@ -347,20 +339,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(9.5035e-03)",
-                            "std": "tensor(1.8540e-01)",
-                            "min": "tensor(-7.2591e-01)",
-                            "max": "tensor(7.9768e-01)"
+                            "mean": "tensor(-3.7967e-03)",
+                            "std": "tensor(1.7785e-01)",
+                            "min": "tensor(-6.2439e-01)",
+                            "max": "tensor(7.3262e-01)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-2.2031e-03)",
-                        "std": "tensor(3.9702e-02)",
-                        "min": "tensor(-1.5515e-01)",
-                        "max": "tensor(1.5592e-01)"
+                        "mean": "tensor(-2.6671e-04)",
+                        "std": "tensor(4.0919e-02)",
+                        "min": "tensor(-1.8100e-01)",
+                        "max": "tensor(1.5624e-01)"
                       }
                     }
                   ]
@@ -372,20 +364,20 @@
                       {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-1.7300e-03)",
-                        "std": "tensor(4.3897e-02)",
-                        "min": "tensor(-1.5733e-01)",
-                        "max": "tensor(1.5896e-01)"
+                        "mean": "tensor(1.3194e-04)",
+                        "std": "tensor(4.4867e-02)",
+                        "min": "tensor(-1.7009e-01)",
+                        "max": "tensor(1.4223e-01)"
                       }
                     ]
                   },
                   "outputs": {
                     "shape": "torch.Size([1, 16, 128])",
                     "dtype": "torch.float32",
-                    "mean": "tensor(-7.4362e-02)",
-                    "std": "tensor(1.9936e+00)",
-                    "min": "tensor(-6.6895e+00)",
-                    "max": "tensor(7.1696e+00)"
+                    "mean": "tensor(6.7120e-03)",
+                    "std": "tensor(1.9951e+00)",
+                    "min": "tensor(-6.5350e+00)",
+                    "max": "tensor(5.7676e+00)"
                   }
                 },
                 {
@@ -395,10 +387,10 @@
                       {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-7.4362e-02)",
-                        "std": "tensor(1.9936e+00)",
-                        "min": "tensor(-6.6895e+00)",
-                        "max": "tensor(7.1696e+00)"
+                        "mean": "tensor(6.7120e-03)",
+                        "std": "tensor(1.9951e+00)",
+                        "min": "tensor(-6.5350e+00)",
+                        "max": "tensor(5.7676e+00)"
                       }
                     ]
                   },
@@ -410,20 +402,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(-7.4362e-02)",
-                            "std": "tensor(1.9936e+00)",
-                            "min": "tensor(-6.6895e+00)",
-                            "max": "tensor(7.1696e+00)"
+                            "mean": "tensor(6.7120e-03)",
+                            "std": "tensor(1.9951e+00)",
+                            "min": "tensor(-6.5350e+00)",
+                            "max": "tensor(5.7676e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 256])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(2.9991e-02)",
-                        "std": "tensor(4.6115e-01)",
-                        "min": "tensor(-1.7187e+00)",
-                        "max": "tensor(1.6147e+00)"
+                        "mean": "tensor(-3.5928e-03)",
+                        "std": "tensor(4.5571e-01)",
+                        "min": "tensor(-1.5639e+00)",
+                        "max": "tensor(1.5506e+00)"
                       }
                     },
                     {
@@ -433,20 +425,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(-7.4362e-02)",
-                            "std": "tensor(1.9936e+00)",
-                            "min": "tensor(-6.6895e+00)",
-                            "max": "tensor(7.1696e+00)"
+                            "mean": "tensor(6.7120e-03)",
+                            "std": "tensor(1.9951e+00)",
+                            "min": "tensor(-6.5350e+00)",
+                            "max": "tensor(5.7676e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 256])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-1.4341e-03)",
-                        "std": "tensor(4.5988e-01)",
-                        "min": "tensor(-1.7641e+00)",
-                        "max": "tensor(1.8750e+00)"
+                        "mean": "tensor(-9.9424e-03)",
+                        "std": "tensor(4.5380e-01)",
+                        "min": "tensor(-1.8383e+00)",
+                        "max": "tensor(1.5561e+00)"
                       }
                     },
                     {
@@ -456,20 +448,20 @@
                           {
                             "shape": "torch.Size([1, 16, 256])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(-1.4341e-03)",
-                            "std": "tensor(4.5988e-01)",
-                            "min": "tensor(-1.7641e+00)",
-                            "max": "tensor(1.8750e+00)"
+                            "mean": "tensor(-9.9424e-03)",
+                            "std": "tensor(4.5380e-01)",
+                            "min": "tensor(-1.8383e+00)",
+                            "max": "tensor(1.5561e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 256])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(4.9579e-02)",
-                        "std": "tensor(2.4177e-01)",
-                        "min": "tensor(-2.7845e-01)",
-                        "max": "tensor(1.6256e+00)"
+                        "mean": "tensor(4.4133e-02)",
+                        "std": "tensor(2.3214e-01)",
+                        "min": "tensor(-2.7846e-01)",
+                        "max": "tensor(1.2850e+00)"
                       }
                     },
                     {
@@ -479,20 +471,20 @@
                           {
                             "shape": "torch.Size([1, 16, 256])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(2.0458e-03)",
-                            "std": "tensor(1.1772e-01)",
-                            "min": "tensor(-1.5157e+00)",
-                            "max": "tensor(1.4047e+00)"
+                            "mean": "tensor(1.4968e-03)",
+                            "std": "tensor(1.0759e-01)",
+                            "min": "tensor(-7.7071e-01)",
+                            "max": "tensor(6.5668e-01)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(1.5563e-03)",
-                        "std": "tensor(3.7820e-02)",
-                        "min": "tensor(-1.7901e-01)",
-                        "max": "tensor(1.5952e-01)"
+                        "mean": "tensor(-1.6518e-03)",
+                        "std": "tensor(3.4142e-02)",
+                        "min": "tensor(-1.1479e-01)",
+                        "max": "tensor(1.1747e-01)"
                       }
                     }
                   ]
@@ -506,10 +498,10 @@
                   {
                     "shape": "torch.Size([1, 16, 128])",
                     "dtype": "torch.float32",
-                    "mean": "tensor(-1.7368e-04)",
-                    "std": "tensor(5.7498e-02)",
-                    "min": "tensor(-2.0130e-01)",
-                    "max": "tensor(1.9016e-01)"
+                    "mean": "tensor(-1.5198e-03)",
+                    "std": "tensor(5.6976e-02)",
+                    "min": "tensor(-2.0209e-01)",
+                    "max": "tensor(1.9329e-01)"
                   }
                 ],
                 "kwargs": {
@@ -524,10 +516,7 @@
                   "cache_position": {
                     "shape": "torch.Size([16])",
                     "dtype": "torch.int64"
-                  },
-                  "num_patches": "None",
-                  "patch_pixel_values": "None",
-                  "patch_newline_mask": "None"
+                  }
                 }
               },
               "children": [
@@ -538,20 +527,20 @@
                       {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-1.7368e-04)",
-                        "std": "tensor(5.7498e-02)",
-                        "min": "tensor(-2.0130e-01)",
-                        "max": "tensor(1.9016e-01)"
+                        "mean": "tensor(-1.5198e-03)",
+                        "std": "tensor(5.6976e-02)",
+                        "min": "tensor(-2.0209e-01)",
+                        "max": "tensor(1.9329e-01)"
                       }
                     ]
                   },
                   "outputs": {
                     "shape": "torch.Size([1, 16, 128])",
                     "dtype": "torch.float32",
-                    "mean": "tensor(-6.8618e-03)",
-                    "std": "tensor(1.9973e+00)",
-                    "min": "tensor(-6.5960e+00)",
-                    "max": "tensor(6.4808e+00)"
+                    "mean": "tensor(-5.6105e-02)",
+                    "std": "tensor(1.9965e+00)",
+                    "min": "tensor(-7.3343e+00)",
+                    "max": "tensor(7.2796e+00)"
                   }
                 },
                 {
@@ -561,10 +550,10 @@
                       "hidden_states": {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-6.8618e-03)",
-                        "std": "tensor(1.9973e+00)",
-                        "min": "tensor(-6.5960e+00)",
-                        "max": "tensor(6.4808e+00)"
+                        "mean": "tensor(-5.6105e-02)",
+                        "std": "tensor(1.9965e+00)",
+                        "min": "tensor(-7.3343e+00)",
+                        "max": "tensor(7.2796e+00)"
                       },
                       "attention_mask": "None",
                       "position_ids": {
@@ -577,10 +566,7 @@
                         "dtype": "torch.int64"
                       },
                       "output_attentions": "False",
-                      "use_cache": "False",
-                      "num_patches": "None",
-                      "patch_pixel_values": "None",
-                      "patch_newline_mask": "None"
+                      "use_cache": "False"
                     }
                   },
                   "children": [
@@ -591,20 +577,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(-6.8618e-03)",
-                            "std": "tensor(1.9973e+00)",
-                            "min": "tensor(-6.5960e+00)",
-                            "max": "tensor(6.4808e+00)"
+                            "mean": "tensor(-5.6105e-02)",
+                            "std": "tensor(1.9965e+00)",
+                            "min": "tensor(-7.3343e+00)",
+                            "max": "tensor(7.2796e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-6.7955e-03)",
-                        "std": "tensor(4.4402e-01)",
-                        "min": "tensor(-1.5154e+00)",
-                        "max": "tensor(1.4220e+00)"
+                        "mean": "tensor(6.2089e-03)",
+                        "std": "tensor(4.4956e-01)",
+                        "min": "tensor(-1.3176e+00)",
+                        "max": "tensor(1.5680e+00)"
                       }
                     },
                     {
@@ -614,20 +600,20 @@
                           {
                             "shape": "torch.Size([1, 16, 4, 32])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(-6.7955e-03)",
-                            "std": "tensor(4.4402e-01)",
-                            "min": "tensor(-1.5154e+00)",
-                            "max": "tensor(1.4220e+00)"
+                            "mean": "tensor(6.2089e-03)",
+                            "std": "tensor(4.4956e-01)",
+                            "min": "tensor(-1.3176e+00)",
+                            "max": "tensor(1.5680e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 4, 32])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-3.2219e-02)",
-                        "std": "tensor(2.0002e+00)",
-                        "min": "tensor(-6.0259e+00)",
-                        "max": "tensor(5.7605e+00)"
+                        "mean": "tensor(2.1553e-02)",
+                        "std": "tensor(2.0003e+00)",
+                        "min": "tensor(-6.5161e+00)",
+                        "max": "tensor(6.0932e+00)"
                       }
                     },
                     {
@@ -637,20 +623,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(-6.8618e-03)",
-                            "std": "tensor(1.9973e+00)",
-                            "min": "tensor(-6.5960e+00)",
-                            "max": "tensor(6.4808e+00)"
+                            "mean": "tensor(-5.6105e-02)",
+                            "std": "tensor(1.9965e+00)",
+                            "min": "tensor(-7.3343e+00)",
+                            "max": "tensor(7.2796e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 64])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-7.3162e-03)",
-                        "std": "tensor(4.5479e-01)",
-                        "min": "tensor(-1.3432e+00)",
-                        "max": "tensor(1.7613e+00)"
+                        "mean": "tensor(-1.2188e-02)",
+                        "std": "tensor(4.6303e-01)",
+                        "min": "tensor(-1.6216e+00)",
+                        "max": "tensor(1.3704e+00)"
                       }
                     },
                     {
@@ -660,20 +646,20 @@
                           {
                             "shape": "torch.Size([1, 16, 2, 32])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(-7.3162e-03)",
-                            "std": "tensor(4.5479e-01)",
-                            "min": "tensor(-1.3432e+00)",
-                            "max": "tensor(1.7613e+00)"
+                            "mean": "tensor(-1.2188e-02)",
+                            "std": "tensor(4.6303e-01)",
+                            "min": "tensor(-1.6216e+00)",
+                            "max": "tensor(1.3704e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 2, 32])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-2.4891e-02)",
-                        "std": "tensor(2.0008e+00)",
-                        "min": "tensor(-5.9802e+00)",
-                        "max": "tensor(6.0388e+00)"
+                        "mean": "tensor(-6.2196e-02)",
+                        "std": "tensor(2.0000e+00)",
+                        "min": "tensor(-6.0599e+00)",
+                        "max": "tensor(5.9527e+00)"
                       }
                     },
                     {
@@ -683,20 +669,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(-6.8618e-03)",
-                            "std": "tensor(1.9973e+00)",
-                            "min": "tensor(-6.5960e+00)",
-                            "max": "tensor(6.4808e+00)"
+                            "mean": "tensor(-5.6105e-02)",
+                            "std": "tensor(1.9965e+00)",
+                            "min": "tensor(-7.3343e+00)",
+                            "max": "tensor(7.2796e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 64])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(7.9725e-04)",
-                        "std": "tensor(4.3550e-01)",
-                        "min": "tensor(-1.4907e+00)",
-                        "max": "tensor(1.2108e+00)"
+                        "mean": "tensor(1.2417e-02)",
+                        "std": "tensor(4.5538e-01)",
+                        "min": "tensor(-1.2560e+00)",
+                        "max": "tensor(1.4856e+00)"
                       }
                     },
                     {
@@ -706,20 +692,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(-6.8618e-03)",
-                            "std": "tensor(1.9973e+00)",
-                            "min": "tensor(-6.5960e+00)",
-                            "max": "tensor(6.4808e+00)"
+                            "mean": "tensor(-5.6105e-02)",
+                            "std": "tensor(1.9965e+00)",
+                            "min": "tensor(-7.3343e+00)",
+                            "max": "tensor(7.2796e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 4])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(9.7388e-03)",
-                        "std": "tensor(4.3557e-01)",
-                        "min": "tensor(-8.3640e-01)",
-                        "max": "tensor(1.0225e+00)"
+                        "mean": "tensor(5.3771e-02)",
+                        "std": "tensor(5.1467e-01)",
+                        "min": "tensor(-1.0619e+00)",
+                        "max": "tensor(1.0581e+00)"
                       }
                     },
                     {
@@ -729,10 +715,10 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(-6.8618e-03)",
-                            "std": "tensor(1.9973e+00)",
-                            "min": "tensor(-6.5960e+00)",
-                            "max": "tensor(6.4808e+00)"
+                            "mean": "tensor(-5.6105e-02)",
+                            "std": "tensor(1.9965e+00)",
+                            "min": "tensor(-7.3343e+00)",
+                            "max": "tensor(7.2796e+00)"
                           },
                           {
                             "shape": "torch.Size([1, 16])",
@@ -766,20 +752,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(3.8024e-03)",
-                            "std": "tensor(1.8504e-01)",
-                            "min": "tensor(-8.4308e-01)",
-                            "max": "tensor(7.8215e-01)"
+                            "mean": "tensor(1.3661e-02)",
+                            "std": "tensor(2.1517e-01)",
+                            "min": "tensor(-7.2528e-01)",
+                            "max": "tensor(9.5256e-01)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(3.6244e-03)",
-                        "std": "tensor(4.1894e-02)",
-                        "min": "tensor(-1.3887e-01)",
-                        "max": "tensor(1.5031e-01)"
+                        "mean": "tensor(1.6130e-04)",
+                        "std": "tensor(4.6791e-02)",
+                        "min": "tensor(-2.1365e-01)",
+                        "max": "tensor(1.7634e-01)"
                       }
                     }
                   ]
@@ -791,20 +777,20 @@
                       {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(3.4508e-03)",
-                        "std": "tensor(7.1841e-02)",
-                        "min": "tensor(-2.4069e-01)",
-                        "max": "tensor(2.6117e-01)"
+                        "mean": "tensor(-1.3585e-03)",
+                        "std": "tensor(7.3955e-02)",
+                        "min": "tensor(-3.1487e-01)",
+                        "max": "tensor(2.2544e-01)"
                       }
                     ]
                   },
                   "outputs": {
                     "shape": "torch.Size([1, 16, 128])",
                     "dtype": "torch.float32",
-                    "mean": "tensor(9.2785e-02)",
-                    "std": "tensor(1.9963e+00)",
-                    "min": "tensor(-6.9604e+00)",
-                    "max": "tensor(6.5911e+00)"
+                    "mean": "tensor(-3.7328e-02)",
+                    "std": "tensor(1.9983e+00)",
+                    "min": "tensor(-8.1388e+00)",
+                    "max": "tensor(6.7195e+00)"
                   }
                 },
                 {
@@ -814,10 +800,10 @@
                       {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(9.2785e-02)",
-                        "std": "tensor(1.9963e+00)",
-                        "min": "tensor(-6.9604e+00)",
-                        "max": "tensor(6.5911e+00)"
+                        "mean": "tensor(-3.7328e-02)",
+                        "std": "tensor(1.9983e+00)",
+                        "min": "tensor(-8.1388e+00)",
+                        "max": "tensor(6.7195e+00)"
                       }
                     ]
                   },
@@ -829,20 +815,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(9.2785e-02)",
-                            "std": "tensor(1.9963e+00)",
-                            "min": "tensor(-6.9604e+00)",
-                            "max": "tensor(6.5911e+00)"
+                            "mean": "tensor(-3.7328e-02)",
+                            "std": "tensor(1.9983e+00)",
+                            "min": "tensor(-8.1388e+00)",
+                            "max": "tensor(6.7195e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 256])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-1.6273e-02)",
-                        "std": "tensor(4.4708e-01)",
-                        "min": "tensor(-1.4762e+00)",
-                        "max": "tensor(1.4796e+00)"
+                        "mean": "tensor(-5.4464e-03)",
+                        "std": "tensor(4.3957e-01)",
+                        "min": "tensor(-1.4761e+00)",
+                        "max": "tensor(1.6474e+00)"
                       }
                     },
                     {
@@ -852,20 +838,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(9.2785e-02)",
-                            "std": "tensor(1.9963e+00)",
-                            "min": "tensor(-6.9604e+00)",
-                            "max": "tensor(6.5911e+00)"
+                            "mean": "tensor(-3.7328e-02)",
+                            "std": "tensor(1.9983e+00)",
+                            "min": "tensor(-8.1388e+00)",
+                            "max": "tensor(6.7195e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 256])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-2.8654e-03)",
-                        "std": "tensor(4.5915e-01)",
-                        "min": "tensor(-2.2803e+00)",
-                        "max": "tensor(1.4692e+00)"
+                        "mean": "tensor(1.5786e-02)",
+                        "std": "tensor(4.5918e-01)",
+                        "min": "tensor(-1.8274e+00)",
+                        "max": "tensor(1.6266e+00)"
                       }
                     },
                     {
@@ -875,20 +861,20 @@
                           {
                             "shape": "torch.Size([1, 16, 256])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(-2.8654e-03)",
-                            "std": "tensor(4.5915e-01)",
-                            "min": "tensor(-2.2803e+00)",
-                            "max": "tensor(1.4692e+00)"
+                            "mean": "tensor(1.5786e-02)",
+                            "std": "tensor(4.5918e-01)",
+                            "min": "tensor(-1.8274e+00)",
+                            "max": "tensor(1.6266e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 256])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(4.8757e-02)",
-                        "std": "tensor(2.3951e-01)",
+                        "mean": "tensor(5.8194e-02)",
+                        "std": "tensor(2.4136e-01)",
                         "min": "tensor(-2.7846e-01)",
-                        "max": "tensor(1.1943e+00)"
+                        "max": "tensor(1.3593e+00)"
                       }
                     },
                     {
@@ -898,20 +884,20 @@
                           {
                             "shape": "torch.Size([1, 16, 256])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(-2.0377e-04)",
-                            "std": "tensor(1.0770e-01)",
-                            "min": "tensor(-7.5291e-01)",
-                            "max": "tensor(9.2271e-01)"
+                            "mean": "tensor(7.9577e-05)",
+                            "std": "tensor(1.0982e-01)",
+                            "min": "tensor(-1.1680e+00)",
+                            "max": "tensor(9.5962e-01)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(1.9909e-03)",
-                        "std": "tensor(3.4310e-02)",
-                        "min": "tensor(-1.0719e-01)",
-                        "max": "tensor(1.0430e-01)"
+                        "mean": "tensor(1.3603e-03)",
+                        "std": "tensor(3.4130e-02)",
+                        "min": "tensor(-1.2379e-01)",
+                        "max": "tensor(1.1422e-01)"
                       }
                     }
                   ]
@@ -925,10 +911,10 @@
                   {
                     "shape": "torch.Size([1, 16, 128])",
                     "dtype": "torch.float32",
-                    "mean": "tensor(5.4417e-03)",
-                    "std": "tensor(7.9468e-02)",
-                    "min": "tensor(-2.5297e-01)",
-                    "max": "tensor(2.8281e-01)"
+                    "mean": "tensor(1.7475e-06)",
+                    "std": "tensor(8.1326e-02)",
+                    "min": "tensor(-3.5234e-01)",
+                    "max": "tensor(2.5700e-01)"
                   }
                 ],
                 "kwargs": {
@@ -943,10 +929,7 @@
                   "cache_position": {
                     "shape": "torch.Size([16])",
                     "dtype": "torch.int64"
-                  },
-                  "num_patches": "None",
-                  "patch_pixel_values": "None",
-                  "patch_newline_mask": "None"
+                  }
                 }
               },
               "children": [
@@ -957,20 +940,20 @@
                       {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(5.4417e-03)",
-                        "std": "tensor(7.9468e-02)",
-                        "min": "tensor(-2.5297e-01)",
-                        "max": "tensor(2.8281e-01)"
+                        "mean": "tensor(1.7475e-06)",
+                        "std": "tensor(8.1326e-02)",
+                        "min": "tensor(-3.5234e-01)",
+                        "max": "tensor(2.5700e-01)"
                       }
                     ]
                   },
                   "outputs": {
                     "shape": "torch.Size([1, 16, 128])",
                     "dtype": "torch.float32",
-                    "mean": "tensor(1.3594e-01)",
-                    "std": "tensor(1.9942e+00)",
-                    "min": "tensor(-6.0313e+00)",
-                    "max": "tensor(6.5269e+00)"
+                    "mean": "tensor(4.9694e-04)",
+                    "std": "tensor(1.9989e+00)",
+                    "min": "tensor(-8.2563e+00)",
+                    "max": "tensor(5.9818e+00)"
                   }
                 },
                 {
@@ -980,10 +963,10 @@
                       "hidden_states": {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(1.3594e-01)",
-                        "std": "tensor(1.9942e+00)",
-                        "min": "tensor(-6.0313e+00)",
-                        "max": "tensor(6.5269e+00)"
+                        "mean": "tensor(4.9694e-04)",
+                        "std": "tensor(1.9989e+00)",
+                        "min": "tensor(-8.2563e+00)",
+                        "max": "tensor(5.9818e+00)"
                       },
                       "attention_mask": "None",
                       "position_ids": {
@@ -996,10 +979,7 @@
                         "dtype": "torch.int64"
                       },
                       "output_attentions": "False",
-                      "use_cache": "False",
-                      "num_patches": "None",
-                      "patch_pixel_values": "None",
-                      "patch_newline_mask": "None"
+                      "use_cache": "False"
                     }
                   },
                   "children": [
@@ -1010,20 +990,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.3594e-01)",
-                            "std": "tensor(1.9942e+00)",
-                            "min": "tensor(-6.0313e+00)",
-                            "max": "tensor(6.5269e+00)"
+                            "mean": "tensor(4.9694e-04)",
+                            "std": "tensor(1.9989e+00)",
+                            "min": "tensor(-8.2563e+00)",
+                            "max": "tensor(5.9818e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-2.4408e-03)",
-                        "std": "tensor(4.5584e-01)",
-                        "min": "tensor(-1.4659e+00)",
-                        "max": "tensor(1.3639e+00)"
+                        "mean": "tensor(2.0541e-02)",
+                        "std": "tensor(4.6363e-01)",
+                        "min": "tensor(-1.3386e+00)",
+                        "max": "tensor(1.6251e+00)"
                       }
                     },
                     {
@@ -1033,20 +1013,20 @@
                           {
                             "shape": "torch.Size([1, 16, 4, 32])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(-2.4408e-03)",
-                            "std": "tensor(4.5584e-01)",
-                            "min": "tensor(-1.4659e+00)",
-                            "max": "tensor(1.3639e+00)"
+                            "mean": "tensor(2.0541e-02)",
+                            "std": "tensor(4.6363e-01)",
+                            "min": "tensor(-1.3386e+00)",
+                            "max": "tensor(1.6251e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 4, 32])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(3.4910e-03)",
-                        "std": "tensor(2.0004e+00)",
-                        "min": "tensor(-5.6482e+00)",
-                        "max": "tensor(6.3150e+00)"
+                        "mean": "tensor(8.6196e-02)",
+                        "std": "tensor(1.9986e+00)",
+                        "min": "tensor(-5.3588e+00)",
+                        "max": "tensor(6.0039e+00)"
                       }
                     },
                     {
@@ -1056,20 +1036,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.3594e-01)",
-                            "std": "tensor(1.9942e+00)",
-                            "min": "tensor(-6.0313e+00)",
-                            "max": "tensor(6.5269e+00)"
+                            "mean": "tensor(4.9694e-04)",
+                            "std": "tensor(1.9989e+00)",
+                            "min": "tensor(-8.2563e+00)",
+                            "max": "tensor(5.9818e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 64])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(1.6156e-02)",
-                        "std": "tensor(4.5866e-01)",
-                        "min": "tensor(-1.4977e+00)",
-                        "max": "tensor(1.6789e+00)"
+                        "mean": "tensor(-5.9029e-02)",
+                        "std": "tensor(4.3761e-01)",
+                        "min": "tensor(-1.4273e+00)",
+                        "max": "tensor(1.2901e+00)"
                       }
                     },
                     {
@@ -1079,20 +1059,20 @@
                           {
                             "shape": "torch.Size([1, 16, 2, 32])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.6156e-02)",
-                            "std": "tensor(4.5866e-01)",
-                            "min": "tensor(-1.4977e+00)",
-                            "max": "tensor(1.6789e+00)"
+                            "mean": "tensor(-5.9029e-02)",
+                            "std": "tensor(4.3761e-01)",
+                            "min": "tensor(-1.4273e+00)",
+                            "max": "tensor(1.2901e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 2, 32])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(6.8606e-02)",
-                        "std": "tensor(1.9997e+00)",
-                        "min": "tensor(-5.5673e+00)",
-                        "max": "tensor(6.7344e+00)"
+                        "mean": "tensor(-2.6543e-01)",
+                        "std": "tensor(1.9832e+00)",
+                        "min": "tensor(-5.7770e+00)",
+                        "max": "tensor(5.8610e+00)"
                       }
                     },
                     {
@@ -1102,20 +1082,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.3594e-01)",
-                            "std": "tensor(1.9942e+00)",
-                            "min": "tensor(-6.0313e+00)",
-                            "max": "tensor(6.5269e+00)"
+                            "mean": "tensor(4.9694e-04)",
+                            "std": "tensor(1.9989e+00)",
+                            "min": "tensor(-8.2563e+00)",
+                            "max": "tensor(5.9818e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 64])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-1.3120e-02)",
-                        "std": "tensor(4.6134e-01)",
-                        "min": "tensor(-1.5604e+00)",
-                        "max": "tensor(1.5721e+00)"
+                        "mean": "tensor(5.6596e-03)",
+                        "std": "tensor(4.4939e-01)",
+                        "min": "tensor(-1.4741e+00)",
+                        "max": "tensor(1.4552e+00)"
                       }
                     },
                     {
@@ -1125,20 +1105,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.3594e-01)",
-                            "std": "tensor(1.9942e+00)",
-                            "min": "tensor(-6.0313e+00)",
-                            "max": "tensor(6.5269e+00)"
+                            "mean": "tensor(4.9694e-04)",
+                            "std": "tensor(1.9989e+00)",
+                            "min": "tensor(-8.2563e+00)",
+                            "max": "tensor(5.9818e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 4])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-1.5069e-02)",
-                        "std": "tensor(4.0690e-01)",
-                        "min": "tensor(-9.9558e-01)",
-                        "max": "tensor(8.1970e-01)"
+                        "mean": "tensor(-1.0285e-01)",
+                        "std": "tensor(3.5737e-01)",
+                        "min": "tensor(-7.7715e-01)",
+                        "max": "tensor(7.7190e-01)"
                       }
                     },
                     {
@@ -1148,10 +1128,10 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.3594e-01)",
-                            "std": "tensor(1.9942e+00)",
-                            "min": "tensor(-6.0313e+00)",
-                            "max": "tensor(6.5269e+00)"
+                            "mean": "tensor(4.9694e-04)",
+                            "std": "tensor(1.9989e+00)",
+                            "min": "tensor(-8.2563e+00)",
+                            "max": "tensor(5.9818e+00)"
                           },
                           {
                             "shape": "torch.Size([1, 16])",
@@ -1185,20 +1165,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(-3.6699e-03)",
-                            "std": "tensor(2.1714e-01)",
-                            "min": "tensor(-8.3249e-01)",
-                            "max": "tensor(8.4303e-01)"
+                            "mean": "tensor(-6.5923e-03)",
+                            "std": "tensor(1.9210e-01)",
+                            "min": "tensor(-8.6206e-01)",
+                            "max": "tensor(6.8571e-01)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-1.0548e-03)",
-                        "std": "tensor(5.0598e-02)",
-                        "min": "tensor(-1.6268e-01)",
-                        "max": "tensor(1.8779e-01)"
+                        "mean": "tensor(1.7348e-03)",
+                        "std": "tensor(4.2925e-02)",
+                        "min": "tensor(-1.5730e-01)",
+                        "max": "tensor(1.5924e-01)"
                       }
                     }
                   ]
@@ -1210,20 +1190,20 @@
                       {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(4.3869e-03)",
-                        "std": "tensor(9.4408e-02)",
-                        "min": "tensor(-3.8043e-01)",
-                        "max": "tensor(3.8470e-01)"
+                        "mean": "tensor(1.7365e-03)",
+                        "std": "tensor(9.1043e-02)",
+                        "min": "tensor(-3.1838e-01)",
+                        "max": "tensor(3.4148e-01)"
                       }
                     ]
                   },
                   "outputs": {
                     "shape": "torch.Size([1, 16, 128])",
                     "dtype": "torch.float32",
-                    "mean": "tensor(9.2836e-02)",
-                    "std": "tensor(1.9972e+00)",
-                    "min": "tensor(-6.2602e+00)",
-                    "max": "tensor(6.8136e+00)"
+                    "mean": "tensor(4.3015e-02)",
+                    "std": "tensor(1.9988e+00)",
+                    "min": "tensor(-6.5264e+00)",
+                    "max": "tensor(6.3218e+00)"
                   }
                 },
                 {
@@ -1233,10 +1213,10 @@
                       {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(9.2836e-02)",
-                        "std": "tensor(1.9972e+00)",
-                        "min": "tensor(-6.2602e+00)",
-                        "max": "tensor(6.8136e+00)"
+                        "mean": "tensor(4.3015e-02)",
+                        "std": "tensor(1.9988e+00)",
+                        "min": "tensor(-6.5264e+00)",
+                        "max": "tensor(6.3218e+00)"
                       }
                     ]
                   },
@@ -1248,20 +1228,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(9.2836e-02)",
-                            "std": "tensor(1.9972e+00)",
-                            "min": "tensor(-6.2602e+00)",
-                            "max": "tensor(6.8136e+00)"
+                            "mean": "tensor(4.3015e-02)",
+                            "std": "tensor(1.9988e+00)",
+                            "min": "tensor(-6.5264e+00)",
+                            "max": "tensor(6.3218e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 64])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(4.1963e-02)",
-                        "std": "tensor(4.5754e-01)",
-                        "min": "tensor(-1.6204e+00)",
-                        "max": "tensor(1.2792e+00)"
+                        "mean": "tensor(-3.1695e-02)",
+                        "std": "tensor(4.5848e-01)",
+                        "min": "tensor(-1.6417e+00)",
+                        "max": "tensor(1.4520e+00)"
                       }
                     },
                     {
@@ -1271,20 +1251,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(9.2836e-02)",
-                            "std": "tensor(1.9972e+00)",
-                            "min": "tensor(-6.2602e+00)",
-                            "max": "tensor(6.8136e+00)"
+                            "mean": "tensor(4.3015e-02)",
+                            "std": "tensor(1.9988e+00)",
+                            "min": "tensor(-6.5264e+00)",
+                            "max": "tensor(6.3218e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 64])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-2.4406e-02)",
-                        "std": "tensor(4.5548e-01)",
-                        "min": "tensor(-1.4058e+00)",
-                        "max": "tensor(1.2049e+00)"
+                        "mean": "tensor(-1.6523e-02)",
+                        "std": "tensor(4.2060e-01)",
+                        "min": "tensor(-1.3839e+00)",
+                        "max": "tensor(1.3254e+00)"
                       }
                     },
                     {
@@ -1294,20 +1274,20 @@
                           {
                             "shape": "torch.Size([1, 16, 64])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(-2.4406e-02)",
-                            "std": "tensor(4.5548e-01)",
-                            "min": "tensor(-1.4058e+00)",
-                            "max": "tensor(1.2049e+00)"
+                            "mean": "tensor(-1.6523e-02)",
+                            "std": "tensor(4.2060e-01)",
+                            "min": "tensor(-1.3839e+00)",
+                            "max": "tensor(1.3254e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 64])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(3.7534e-02)",
-                        "std": "tensor(2.2979e-01)",
-                        "min": "tensor(-2.7844e-01)",
-                        "max": "tensor(9.2709e-01)"
+                        "mean": "tensor(3.4142e-02)",
+                        "std": "tensor(2.1352e-01)",
+                        "min": "tensor(-2.7843e-01)",
+                        "max": "tensor(1.0472e+00)"
                       }
                     },
                     {
@@ -1317,20 +1297,20 @@
                           {
                             "shape": "torch.Size([1, 16, 64])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(-2.2064e-04)",
-                            "std": "tensor(1.0463e-01)",
-                            "min": "tensor(-8.0162e-01)",
-                            "max": "tensor(5.5453e-01)"
+                            "mean": "tensor(-4.8438e-03)",
+                            "std": "tensor(9.3080e-02)",
+                            "min": "tensor(-7.0268e-01)",
+                            "max": "tensor(4.5559e-01)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(7.4711e-04)",
-                        "std": "tensor(1.7320e-02)",
-                        "min": "tensor(-6.3568e-02)",
-                        "max": "tensor(7.4426e-02)"
+                        "mean": "tensor(-5.7817e-05)",
+                        "std": "tensor(1.4711e-02)",
+                        "min": "tensor(-6.2957e-02)",
+                        "max": "tensor(5.6218e-02)"
                       }
                     }
                   ]
@@ -1342,10 +1322,10 @@
                       {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(9.2836e-02)",
-                        "std": "tensor(1.9972e+00)",
-                        "min": "tensor(-6.2602e+00)",
-                        "max": "tensor(6.8136e+00)"
+                        "mean": "tensor(4.3015e-02)",
+                        "std": "tensor(1.9988e+00)",
+                        "min": "tensor(-6.5264e+00)",
+                        "max": "tensor(6.3218e+00)"
                       }
                     ]
                   },
@@ -1355,18 +1335,18 @@
                       "inputs": {
                         "args": [
                           {
-                            "shape": "torch.Size([12, 128])",
+                            "shape": "torch.Size([9, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(8.1357e-02)",
-                            "std": "tensor(1.9979e+00)",
-                            "min": "tensor(-6.2602e+00)",
-                            "max": "tensor(6.3305e+00)"
+                            "mean": "tensor(7.2774e-02)",
+                            "std": "tensor(1.9982e+00)",
+                            "min": "tensor(-6.5264e+00)",
+                            "max": "tensor(5.9004e+00)"
                           },
                           "0"
                         ]
                       },
                       "outputs": {
-                        "shape": "torch.Size([12, 64])",
+                        "shape": "torch.Size([9, 64])",
                         "dtype": "torch.float32",
                         "mean": "tensor(0.)",
                         "std": "tensor(0.)",
@@ -1379,18 +1359,18 @@
                       "inputs": {
                         "args": [
                           {
-                            "shape": "torch.Size([12, 128])",
+                            "shape": "torch.Size([9, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(8.1357e-02)",
-                            "std": "tensor(1.9979e+00)",
-                            "min": "tensor(-6.2602e+00)",
-                            "max": "tensor(6.3305e+00)"
+                            "mean": "tensor(7.2774e-02)",
+                            "std": "tensor(1.9982e+00)",
+                            "min": "tensor(-6.5264e+00)",
+                            "max": "tensor(5.9004e+00)"
                           },
                           "0"
                         ]
                       },
                       "outputs": {
-                        "shape": "torch.Size([12, 64])",
+                        "shape": "torch.Size([9, 64])",
                         "dtype": "torch.float32",
                         "mean": "tensor(0.)",
                         "std": "tensor(0.)",
@@ -1403,7 +1383,7 @@
                       "inputs": {
                         "args": [
                           {
-                            "shape": "torch.Size([12, 64])",
+                            "shape": "torch.Size([9, 64])",
                             "dtype": "torch.float32",
                             "mean": "tensor(0.)",
                             "std": "tensor(0.)",
@@ -1413,7 +1393,7 @@
                         ]
                       },
                       "outputs": {
-                        "shape": "torch.Size([12, 64])",
+                        "shape": "torch.Size([9, 64])",
                         "dtype": "torch.float32",
                         "mean": "tensor(0.)",
                         "std": "tensor(0.)",
@@ -1426,7 +1406,7 @@
                       "inputs": {
                         "args": [
                           {
-                            "shape": "torch.Size([12, 64])",
+                            "shape": "torch.Size([9, 64])",
                             "dtype": "torch.float32",
                             "mean": "tensor(0.)",
                             "std": "tensor(0.)",
@@ -1437,7 +1417,7 @@
                         ]
                       },
                       "outputs": {
-                        "shape": "torch.Size([12, 128])",
+                        "shape": "torch.Size([9, 128])",
                         "dtype": "torch.float32",
                         "mean": "tensor(0.)",
                         "std": "tensor(0.)",
@@ -1450,18 +1430,18 @@
                       "inputs": {
                         "args": [
                           {
-                            "shape": "torch.Size([8, 128])",
+                            "shape": "torch.Size([13, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(6.8029e-02)",
-                            "std": "tensor(1.9986e+00)",
-                            "min": "tensor(-6.2602e+00)",
-                            "max": "tensor(6.8136e+00)"
+                            "mean": "tensor(1.4848e-02)",
+                            "std": "tensor(1.9993e+00)",
+                            "min": "tensor(-5.7234e+00)",
+                            "max": "tensor(6.3218e+00)"
                           },
                           "1"
                         ]
                       },
                       "outputs": {
-                        "shape": "torch.Size([8, 64])",
+                        "shape": "torch.Size([13, 64])",
                         "dtype": "torch.float32",
                         "mean": "tensor(0.)",
                         "std": "tensor(0.)",
@@ -1474,18 +1454,18 @@
                       "inputs": {
                         "args": [
                           {
-                            "shape": "torch.Size([8, 128])",
+                            "shape": "torch.Size([13, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(6.8029e-02)",
-                            "std": "tensor(1.9986e+00)",
-                            "min": "tensor(-6.2602e+00)",
-                            "max": "tensor(6.8136e+00)"
+                            "mean": "tensor(1.4848e-02)",
+                            "std": "tensor(1.9993e+00)",
+                            "min": "tensor(-5.7234e+00)",
+                            "max": "tensor(6.3218e+00)"
                           },
                           "1"
                         ]
                       },
                       "outputs": {
-                        "shape": "torch.Size([8, 64])",
+                        "shape": "torch.Size([13, 64])",
                         "dtype": "torch.float32",
                         "mean": "tensor(0.)",
                         "std": "tensor(0.)",
@@ -1498,7 +1478,7 @@
                       "inputs": {
                         "args": [
                           {
-                            "shape": "torch.Size([8, 64])",
+                            "shape": "torch.Size([13, 64])",
                             "dtype": "torch.float32",
                             "mean": "tensor(0.)",
                             "std": "tensor(0.)",
@@ -1508,7 +1488,7 @@
                         ]
                       },
                       "outputs": {
-                        "shape": "torch.Size([8, 64])",
+                        "shape": "torch.Size([13, 64])",
                         "dtype": "torch.float32",
                         "mean": "tensor(0.)",
                         "std": "tensor(0.)",
@@ -1521,7 +1501,7 @@
                       "inputs": {
                         "args": [
                           {
-                            "shape": "torch.Size([8, 64])",
+                            "shape": "torch.Size([13, 64])",
                             "dtype": "torch.float32",
                             "mean": "tensor(0.)",
                             "std": "tensor(0.)",
@@ -1532,7 +1512,102 @@
                         ]
                       },
                       "outputs": {
-                        "shape": "torch.Size([8, 128])",
+                        "shape": "torch.Size([13, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.up_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([6, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(9.7750e-02)",
+                            "std": "tensor(1.9977e+00)",
+                            "min": "tensor(-6.5264e+00)",
+                            "max": "tensor(6.2617e+00)"
+                          },
+                          "2"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([6, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.gate_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([6, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(9.7750e-02)",
+                            "std": "tensor(1.9977e+00)",
+                            "min": "tensor(-6.5264e+00)",
+                            "max": "tensor(6.2617e+00)"
+                          },
+                          "2"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([6, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.act_fn",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([6, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([6, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.down_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([6, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          },
+                          "2"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([6, 128])",
                         "dtype": "torch.float32",
                         "mean": "tensor(0.)",
                         "std": "tensor(0.)",
@@ -1547,12 +1622,12 @@
                           {
                             "shape": "torch.Size([4, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.8098e-01)",
-                            "std": "tensor(1.9926e+00)",
-                            "min": "tensor(-5.7090e+00)",
-                            "max": "tensor(5.7010e+00)"
+                            "mean": "tensor(-1.4502e-02)",
+                            "std": "tensor(2.0007e+00)",
+                            "min": "tensor(-6.4377e+00)",
+                            "max": "tensor(6.3218e+00)"
                           },
-                          "2"
+                          "3"
                         ]
                       },
                       "outputs": {
@@ -1571,12 +1646,12 @@
                           {
                             "shape": "torch.Size([4, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.8098e-01)",
-                            "std": "tensor(1.9926e+00)",
-                            "min": "tensor(-5.7090e+00)",
-                            "max": "tensor(5.7010e+00)"
+                            "mean": "tensor(-1.4502e-02)",
+                            "std": "tensor(2.0007e+00)",
+                            "min": "tensor(-6.4377e+00)",
+                            "max": "tensor(6.3218e+00)"
                           },
-                          "2"
+                          "3"
                         ]
                       },
                       "outputs": {
@@ -1623,106 +1698,11 @@
                             "min": "tensor(0.)",
                             "max": "tensor(0.)"
                           },
-                          "2"
+                          "3"
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([4, 128])",
-                        "dtype": "torch.float32",
-                        "mean": "tensor(0.)",
-                        "std": "tensor(0.)",
-                        "min": "tensor(0.)",
-                        "max": "tensor(0.)"
-                      }
-                    },
-                    {
-                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.up_proj",
-                      "inputs": {
-                        "args": [
-                          {
-                            "shape": "torch.Size([8, 128])",
-                            "dtype": "torch.float32",
-                            "mean": "tensor(9.0788e-02)",
-                            "std": "tensor(1.9977e+00)",
-                            "min": "tensor(-6.1947e+00)",
-                            "max": "tensor(6.8136e+00)"
-                          },
-                          "3"
-                        ]
-                      },
-                      "outputs": {
-                        "shape": "torch.Size([8, 64])",
-                        "dtype": "torch.float32",
-                        "mean": "tensor(0.)",
-                        "std": "tensor(0.)",
-                        "min": "tensor(0.)",
-                        "max": "tensor(0.)"
-                      }
-                    },
-                    {
-                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.gate_proj",
-                      "inputs": {
-                        "args": [
-                          {
-                            "shape": "torch.Size([8, 128])",
-                            "dtype": "torch.float32",
-                            "mean": "tensor(9.0788e-02)",
-                            "std": "tensor(1.9977e+00)",
-                            "min": "tensor(-6.1947e+00)",
-                            "max": "tensor(6.8136e+00)"
-                          },
-                          "3"
-                        ]
-                      },
-                      "outputs": {
-                        "shape": "torch.Size([8, 64])",
-                        "dtype": "torch.float32",
-                        "mean": "tensor(0.)",
-                        "std": "tensor(0.)",
-                        "min": "tensor(0.)",
-                        "max": "tensor(0.)"
-                      }
-                    },
-                    {
-                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.act_fn",
-                      "inputs": {
-                        "args": [
-                          {
-                            "shape": "torch.Size([8, 64])",
-                            "dtype": "torch.float32",
-                            "mean": "tensor(0.)",
-                            "std": "tensor(0.)",
-                            "min": "tensor(0.)",
-                            "max": "tensor(0.)"
-                          }
-                        ]
-                      },
-                      "outputs": {
-                        "shape": "torch.Size([8, 64])",
-                        "dtype": "torch.float32",
-                        "mean": "tensor(0.)",
-                        "std": "tensor(0.)",
-                        "min": "tensor(0.)",
-                        "max": "tensor(0.)"
-                      }
-                    },
-                    {
-                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.2.moe.down_proj",
-                      "inputs": {
-                        "args": [
-                          {
-                            "shape": "torch.Size([8, 64])",
-                            "dtype": "torch.float32",
-                            "mean": "tensor(0.)",
-                            "std": "tensor(0.)",
-                            "min": "tensor(0.)",
-                            "max": "tensor(0.)"
-                          },
-                          "3"
-                        ]
-                      },
-                      "outputs": {
-                        "shape": "torch.Size([8, 128])",
                         "dtype": "torch.float32",
                         "mean": "tensor(0.)",
                         "std": "tensor(0.)",
@@ -1741,10 +1721,10 @@
                   {
                     "shape": "torch.Size([1, 16, 128])",
                     "dtype": "torch.float32",
-                    "mean": "tensor(5.1340e-03)",
-                    "std": "tensor(9.5796e-02)",
-                    "min": "tensor(-3.7628e-01)",
-                    "max": "tensor(3.5724e-01)"
+                    "mean": "tensor(1.6787e-03)",
+                    "std": "tensor(9.2156e-02)",
+                    "min": "tensor(-3.0780e-01)",
+                    "max": "tensor(3.5956e-01)"
                   }
                 ],
                 "kwargs": {
@@ -1759,10 +1739,7 @@
                   "cache_position": {
                     "shape": "torch.Size([16])",
                     "dtype": "torch.int64"
-                  },
-                  "num_patches": "None",
-                  "patch_pixel_values": "None",
-                  "patch_newline_mask": "None"
+                  }
                 }
               },
               "children": [
@@ -1773,20 +1750,20 @@
                       {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(5.1340e-03)",
-                        "std": "tensor(9.5796e-02)",
-                        "min": "tensor(-3.7628e-01)",
-                        "max": "tensor(3.5724e-01)"
+                        "mean": "tensor(1.6787e-03)",
+                        "std": "tensor(9.2156e-02)",
+                        "min": "tensor(-3.0780e-01)",
+                        "max": "tensor(3.5956e-01)"
                       }
                     ]
                   },
                   "outputs": {
                     "shape": "torch.Size([1, 16, 128])",
                     "dtype": "torch.float32",
-                    "mean": "tensor(1.0446e-01)",
-                    "std": "tensor(1.9966e+00)",
-                    "min": "tensor(-6.3515e+00)",
-                    "max": "tensor(6.8793e+00)"
+                    "mean": "tensor(4.0652e-02)",
+                    "std": "tensor(1.9989e+00)",
+                    "min": "tensor(-6.4429e+00)",
+                    "max": "tensor(6.5786e+00)"
                   }
                 },
                 {
@@ -1796,10 +1773,10 @@
                       "hidden_states": {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(1.0446e-01)",
-                        "std": "tensor(1.9966e+00)",
-                        "min": "tensor(-6.3515e+00)",
-                        "max": "tensor(6.8793e+00)"
+                        "mean": "tensor(4.0652e-02)",
+                        "std": "tensor(1.9989e+00)",
+                        "min": "tensor(-6.4429e+00)",
+                        "max": "tensor(6.5786e+00)"
                       },
                       "attention_mask": "None",
                       "position_ids": {
@@ -1812,10 +1789,7 @@
                         "dtype": "torch.int64"
                       },
                       "output_attentions": "False",
-                      "use_cache": "False",
-                      "num_patches": "None",
-                      "patch_pixel_values": "None",
-                      "patch_newline_mask": "None"
+                      "use_cache": "False"
                     }
                   },
                   "children": [
@@ -1826,20 +1800,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.0446e-01)",
-                            "std": "tensor(1.9966e+00)",
-                            "min": "tensor(-6.3515e+00)",
-                            "max": "tensor(6.8793e+00)"
+                            "mean": "tensor(4.0652e-02)",
+                            "std": "tensor(1.9989e+00)",
+                            "min": "tensor(-6.4429e+00)",
+                            "max": "tensor(6.5786e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(5.1939e-03)",
-                        "std": "tensor(4.5249e-01)",
-                        "min": "tensor(-1.3459e+00)",
-                        "max": "tensor(1.8373e+00)"
+                        "mean": "tensor(-2.5817e-02)",
+                        "std": "tensor(4.4795e-01)",
+                        "min": "tensor(-1.8578e+00)",
+                        "max": "tensor(1.7869e+00)"
                       }
                     },
                     {
@@ -1849,20 +1823,20 @@
                           {
                             "shape": "torch.Size([1, 16, 4, 32])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(5.1939e-03)",
-                            "std": "tensor(4.5249e-01)",
-                            "min": "tensor(-1.3459e+00)",
-                            "max": "tensor(1.8373e+00)"
+                            "mean": "tensor(-2.5817e-02)",
+                            "std": "tensor(4.4795e-01)",
+                            "min": "tensor(-1.8578e+00)",
+                            "max": "tensor(1.7869e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 4, 32])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(2.6023e-02)",
-                        "std": "tensor(2.0003e+00)",
-                        "min": "tensor(-5.9153e+00)",
-                        "max": "tensor(7.0643e+00)"
+                        "mean": "tensor(-1.2004e-01)",
+                        "std": "tensor(1.9968e+00)",
+                        "min": "tensor(-6.7225e+00)",
+                        "max": "tensor(6.8405e+00)"
                       }
                     },
                     {
@@ -1872,20 +1846,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.0446e-01)",
-                            "std": "tensor(1.9966e+00)",
-                            "min": "tensor(-6.3515e+00)",
-                            "max": "tensor(6.8793e+00)"
+                            "mean": "tensor(4.0652e-02)",
+                            "std": "tensor(1.9989e+00)",
+                            "min": "tensor(-6.4429e+00)",
+                            "max": "tensor(6.5786e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 64])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(2.2339e-02)",
-                        "std": "tensor(4.3434e-01)",
-                        "min": "tensor(-1.2614e+00)",
-                        "max": "tensor(1.3318e+00)"
+                        "mean": "tensor(-1.2649e-02)",
+                        "std": "tensor(4.6300e-01)",
+                        "min": "tensor(-1.3952e+00)",
+                        "max": "tensor(1.4151e+00)"
                       }
                     },
                     {
@@ -1895,20 +1869,20 @@
                           {
                             "shape": "torch.Size([1, 16, 2, 32])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(2.2339e-02)",
-                            "std": "tensor(4.3434e-01)",
-                            "min": "tensor(-1.2614e+00)",
-                            "max": "tensor(1.3318e+00)"
+                            "mean": "tensor(-1.2649e-02)",
+                            "std": "tensor(4.6300e-01)",
+                            "min": "tensor(-1.3952e+00)",
+                            "max": "tensor(1.4151e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 2, 32])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(1.0642e-01)",
-                        "std": "tensor(1.9981e+00)",
-                        "min": "tensor(-5.4599e+00)",
-                        "max": "tensor(6.1780e+00)"
+                        "mean": "tensor(-6.2632e-02)",
+                        "std": "tensor(1.9999e+00)",
+                        "min": "tensor(-5.8636e+00)",
+                        "max": "tensor(6.3300e+00)"
                       }
                     },
                     {
@@ -1918,20 +1892,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.0446e-01)",
-                            "std": "tensor(1.9966e+00)",
-                            "min": "tensor(-6.3515e+00)",
-                            "max": "tensor(6.8793e+00)"
+                            "mean": "tensor(4.0652e-02)",
+                            "std": "tensor(1.9989e+00)",
+                            "min": "tensor(-6.4429e+00)",
+                            "max": "tensor(6.5786e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 64])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(2.7907e-02)",
-                        "std": "tensor(4.5124e-01)",
-                        "min": "tensor(-1.4821e+00)",
-                        "max": "tensor(1.5181e+00)"
+                        "mean": "tensor(-4.7468e-02)",
+                        "std": "tensor(4.5652e-01)",
+                        "min": "tensor(-1.6342e+00)",
+                        "max": "tensor(1.4335e+00)"
                       }
                     },
                     {
@@ -1941,20 +1915,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.0446e-01)",
-                            "std": "tensor(1.9966e+00)",
-                            "min": "tensor(-6.3515e+00)",
-                            "max": "tensor(6.8793e+00)"
+                            "mean": "tensor(4.0652e-02)",
+                            "std": "tensor(1.9989e+00)",
+                            "min": "tensor(-6.4429e+00)",
+                            "max": "tensor(6.5786e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 4])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-3.7658e-02)",
-                        "std": "tensor(5.1155e-01)",
-                        "min": "tensor(-1.4615e+00)",
-                        "max": "tensor(1.0417e+00)"
+                        "mean": "tensor(9.5525e-02)",
+                        "std": "tensor(4.5865e-01)",
+                        "min": "tensor(-1.2267e+00)",
+                        "max": "tensor(1.2378e+00)"
                       }
                     },
                     {
@@ -1964,10 +1938,10 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.0446e-01)",
-                            "std": "tensor(1.9966e+00)",
-                            "min": "tensor(-6.3515e+00)",
-                            "max": "tensor(6.8793e+00)"
+                            "mean": "tensor(4.0652e-02)",
+                            "std": "tensor(1.9989e+00)",
+                            "min": "tensor(-6.4429e+00)",
+                            "max": "tensor(6.5786e+00)"
                           },
                           {
                             "shape": "torch.Size([1, 16])",
@@ -2001,20 +1975,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(-3.1745e-03)",
-                            "std": "tensor(2.0968e-01)",
-                            "min": "tensor(-8.5962e-01)",
-                            "max": "tensor(8.0182e-01)"
+                            "mean": "tensor(-3.3728e-02)",
+                            "std": "tensor(2.2411e-01)",
+                            "min": "tensor(-8.3351e-01)",
+                            "max": "tensor(8.4281e-01)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(8.3624e-04)",
-                        "std": "tensor(4.4816e-02)",
-                        "min": "tensor(-1.6437e-01)",
-                        "max": "tensor(1.2785e-01)"
+                        "mean": "tensor(7.7215e-04)",
+                        "std": "tensor(5.1384e-02)",
+                        "min": "tensor(-1.6895e-01)",
+                        "max": "tensor(1.7117e-01)"
                       }
                     }
                   ]
@@ -2026,20 +2000,20 @@
                       {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(5.9702e-03)",
-                        "std": "tensor(1.0780e-01)",
-                        "min": "tensor(-4.6037e-01)",
-                        "max": "tensor(3.8914e-01)"
+                        "mean": "tensor(2.4509e-03)",
+                        "std": "tensor(1.0533e-01)",
+                        "min": "tensor(-3.6578e-01)",
+                        "max": "tensor(3.3087e-01)"
                       }
                     ]
                   },
                   "outputs": {
                     "shape": "torch.Size([1, 16, 128])",
                     "dtype": "torch.float32",
-                    "mean": "tensor(1.0888e-01)",
-                    "std": "tensor(1.9966e+00)",
-                    "min": "tensor(-6.6472e+00)",
-                    "max": "tensor(5.6187e+00)"
+                    "mean": "tensor(5.0909e-02)",
+                    "std": "tensor(1.9989e+00)",
+                    "min": "tensor(-6.6840e+00)",
+                    "max": "tensor(7.2429e+00)"
                   }
                 },
                 {
@@ -2049,10 +2023,10 @@
                       {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(1.0888e-01)",
-                        "std": "tensor(1.9966e+00)",
-                        "min": "tensor(-6.6472e+00)",
-                        "max": "tensor(5.6187e+00)"
+                        "mean": "tensor(5.0909e-02)",
+                        "std": "tensor(1.9989e+00)",
+                        "min": "tensor(-6.6840e+00)",
+                        "max": "tensor(7.2429e+00)"
                       }
                     ]
                   },
@@ -2064,20 +2038,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.0888e-01)",
-                            "std": "tensor(1.9966e+00)",
-                            "min": "tensor(-6.6472e+00)",
-                            "max": "tensor(5.6187e+00)"
+                            "mean": "tensor(5.0909e-02)",
+                            "std": "tensor(1.9989e+00)",
+                            "min": "tensor(-6.6840e+00)",
+                            "max": "tensor(7.2429e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 64])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(-1.8435e-02)",
-                        "std": "tensor(4.5800e-01)",
-                        "min": "tensor(-1.9302e+00)",
-                        "max": "tensor(1.2662e+00)"
+                        "mean": "tensor(4.3319e-03)",
+                        "std": "tensor(4.2926e-01)",
+                        "min": "tensor(-1.3284e+00)",
+                        "max": "tensor(1.3440e+00)"
                       }
                     },
                     {
@@ -2087,20 +2061,20 @@
                           {
                             "shape": "torch.Size([1, 16, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.0888e-01)",
-                            "std": "tensor(1.9966e+00)",
-                            "min": "tensor(-6.6472e+00)",
-                            "max": "tensor(5.6187e+00)"
+                            "mean": "tensor(5.0909e-02)",
+                            "std": "tensor(1.9989e+00)",
+                            "min": "tensor(-6.6840e+00)",
+                            "max": "tensor(7.2429e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 64])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(1.8059e-02)",
-                        "std": "tensor(4.3371e-01)",
-                        "min": "tensor(-1.4595e+00)",
-                        "max": "tensor(1.3926e+00)"
+                        "mean": "tensor(-2.5974e-02)",
+                        "std": "tensor(4.5630e-01)",
+                        "min": "tensor(-1.8317e+00)",
+                        "max": "tensor(1.4827e+00)"
                       }
                     },
                     {
@@ -2110,20 +2084,20 @@
                           {
                             "shape": "torch.Size([1, 16, 64])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.8059e-02)",
-                            "std": "tensor(4.3371e-01)",
-                            "min": "tensor(-1.4595e+00)",
-                            "max": "tensor(1.3926e+00)"
+                            "mean": "tensor(-2.5974e-02)",
+                            "std": "tensor(4.5630e-01)",
+                            "min": "tensor(-1.8317e+00)",
+                            "max": "tensor(1.4827e+00)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 64])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(5.4059e-02)",
-                        "std": "tensor(2.2664e-01)",
-                        "min": "tensor(-2.7748e-01)",
-                        "max": "tensor(1.1155e+00)"
+                        "mean": "tensor(3.6446e-02)",
+                        "std": "tensor(2.2688e-01)",
+                        "min": "tensor(-2.7838e-01)",
+                        "max": "tensor(1.2084e+00)"
                       }
                     },
                     {
@@ -2133,20 +2107,20 @@
                           {
                             "shape": "torch.Size([1, 16, 64])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.0112e-03)",
-                            "std": "tensor(1.1118e-01)",
-                            "min": "tensor(-8.4347e-01)",
-                            "max": "tensor(6.0576e-01)"
+                            "mean": "tensor(-1.4955e-03)",
+                            "std": "tensor(9.3421e-02)",
+                            "min": "tensor(-5.1641e-01)",
+                            "max": "tensor(5.0145e-01)"
                           }
                         ]
                       },
                       "outputs": {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(1.7926e-04)",
-                        "std": "tensor(1.8200e-02)",
-                        "min": "tensor(-6.7225e-02)",
-                        "max": "tensor(6.4259e-02)"
+                        "mean": "tensor(2.8836e-04)",
+                        "std": "tensor(1.4732e-02)",
+                        "min": "tensor(-4.5632e-02)",
+                        "max": "tensor(5.8177e-02)"
                       }
                     }
                   ]
@@ -2158,10 +2132,10 @@
                       {
                         "shape": "torch.Size([1, 16, 128])",
                         "dtype": "torch.float32",
-                        "mean": "tensor(1.0888e-01)",
-                        "std": "tensor(1.9966e+00)",
-                        "min": "tensor(-6.6472e+00)",
-                        "max": "tensor(5.6187e+00)"
+                        "mean": "tensor(5.0909e-02)",
+                        "std": "tensor(1.9989e+00)",
+                        "min": "tensor(-6.6840e+00)",
+                        "max": "tensor(7.2429e+00)"
                       }
                     ]
                   },
@@ -2171,109 +2145,14 @@
                       "inputs": {
                         "args": [
                           {
-                            "shape": "torch.Size([4, 128])",
-                            "dtype": "torch.float32",
-                            "mean": "tensor(1.4590e-01)",
-                            "std": "tensor(1.9957e+00)",
-                            "min": "tensor(-5.3104e+00)",
-                            "max": "tensor(5.5681e+00)"
-                          },
-                          "0"
-                        ]
-                      },
-                      "outputs": {
-                        "shape": "torch.Size([4, 64])",
-                        "dtype": "torch.float32",
-                        "mean": "tensor(0.)",
-                        "std": "tensor(0.)",
-                        "min": "tensor(0.)",
-                        "max": "tensor(0.)"
-                      }
-                    },
-                    {
-                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.gate_proj",
-                      "inputs": {
-                        "args": [
-                          {
-                            "shape": "torch.Size([4, 128])",
-                            "dtype": "torch.float32",
-                            "mean": "tensor(1.4590e-01)",
-                            "std": "tensor(1.9957e+00)",
-                            "min": "tensor(-5.3104e+00)",
-                            "max": "tensor(5.5681e+00)"
-                          },
-                          "0"
-                        ]
-                      },
-                      "outputs": {
-                        "shape": "torch.Size([4, 64])",
-                        "dtype": "torch.float32",
-                        "mean": "tensor(0.)",
-                        "std": "tensor(0.)",
-                        "min": "tensor(0.)",
-                        "max": "tensor(0.)"
-                      }
-                    },
-                    {
-                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.act_fn",
-                      "inputs": {
-                        "args": [
-                          {
-                            "shape": "torch.Size([4, 64])",
-                            "dtype": "torch.float32",
-                            "mean": "tensor(0.)",
-                            "std": "tensor(0.)",
-                            "min": "tensor(0.)",
-                            "max": "tensor(0.)"
-                          }
-                        ]
-                      },
-                      "outputs": {
-                        "shape": "torch.Size([4, 64])",
-                        "dtype": "torch.float32",
-                        "mean": "tensor(0.)",
-                        "std": "tensor(0.)",
-                        "min": "tensor(0.)",
-                        "max": "tensor(0.)"
-                      }
-                    },
-                    {
-                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.down_proj",
-                      "inputs": {
-                        "args": [
-                          {
-                            "shape": "torch.Size([4, 64])",
-                            "dtype": "torch.float32",
-                            "mean": "tensor(0.)",
-                            "std": "tensor(0.)",
-                            "min": "tensor(0.)",
-                            "max": "tensor(0.)"
-                          },
-                          "0"
-                        ]
-                      },
-                      "outputs": {
-                        "shape": "torch.Size([4, 128])",
-                        "dtype": "torch.float32",
-                        "mean": "tensor(0.)",
-                        "std": "tensor(0.)",
-                        "min": "tensor(0.)",
-                        "max": "tensor(0.)"
-                      }
-                    },
-                    {
-                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.up_proj",
-                      "inputs": {
-                        "args": [
-                          {
                             "shape": "torch.Size([11, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.2051e-01)",
-                            "std": "tensor(1.9962e+00)",
-                            "min": "tensor(-6.6472e+00)",
-                            "max": "tensor(5.6187e+00)"
+                            "mean": "tensor(1.0549e-01)",
+                            "std": "tensor(1.9970e+00)",
+                            "min": "tensor(-6.6840e+00)",
+                            "max": "tensor(5.6337e+00)"
                           },
-                          "1"
+                          "0"
                         ]
                       },
                       "outputs": {
@@ -2292,12 +2171,12 @@
                           {
                             "shape": "torch.Size([11, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.2051e-01)",
-                            "std": "tensor(1.9962e+00)",
-                            "min": "tensor(-6.6472e+00)",
-                            "max": "tensor(5.6187e+00)"
+                            "mean": "tensor(1.0549e-01)",
+                            "std": "tensor(1.9970e+00)",
+                            "min": "tensor(-6.6840e+00)",
+                            "max": "tensor(5.6337e+00)"
                           },
-                          "1"
+                          "0"
                         ]
                       },
                       "outputs": {
@@ -2344,7 +2223,7 @@
                             "min": "tensor(0.)",
                             "max": "tensor(0.)"
                           },
-                          "1"
+                          "0"
                         ]
                       },
                       "outputs": {
@@ -2363,12 +2242,12 @@
                           {
                             "shape": "torch.Size([5, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(5.4237e-02)",
-                            "std": "tensor(1.9999e+00)",
-                            "min": "tensor(-5.9778e+00)",
-                            "max": "tensor(5.5971e+00)"
+                            "mean": "tensor(-3.5901e-02)",
+                            "std": "tensor(2.0003e+00)",
+                            "min": "tensor(-5.6038e+00)",
+                            "max": "tensor(7.2429e+00)"
                           },
-                          "2"
+                          "1"
                         ]
                       },
                       "outputs": {
@@ -2387,12 +2266,12 @@
                           {
                             "shape": "torch.Size([5, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(5.4237e-02)",
-                            "std": "tensor(1.9999e+00)",
-                            "min": "tensor(-5.9778e+00)",
-                            "max": "tensor(5.5971e+00)"
+                            "mean": "tensor(-3.5901e-02)",
+                            "std": "tensor(2.0003e+00)",
+                            "min": "tensor(-5.6038e+00)",
+                            "max": "tensor(7.2429e+00)"
                           },
-                          "2"
+                          "1"
                         ]
                       },
                       "outputs": {
@@ -2439,7 +2318,7 @@
                             "min": "tensor(0.)",
                             "max": "tensor(0.)"
                           },
-                          "2"
+                          "1"
                         ]
                       },
                       "outputs": {
@@ -2456,18 +2335,18 @@
                       "inputs": {
                         "args": [
                           {
-                            "shape": "torch.Size([12, 128])",
+                            "shape": "torch.Size([3, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.0865e-01)",
-                            "std": "tensor(1.9968e+00)",
-                            "min": "tensor(-6.6472e+00)",
-                            "max": "tensor(5.6187e+00)"
+                            "mean": "tensor(5.4172e-02)",
+                            "std": "tensor(2.0009e+00)",
+                            "min": "tensor(-6.6840e+00)",
+                            "max": "tensor(5.6337e+00)"
                           },
-                          "3"
+                          "2"
                         ]
                       },
                       "outputs": {
-                        "shape": "torch.Size([12, 64])",
+                        "shape": "torch.Size([3, 64])",
                         "dtype": "torch.float32",
                         "mean": "tensor(0.)",
                         "std": "tensor(0.)",
@@ -2480,18 +2359,18 @@
                       "inputs": {
                         "args": [
                           {
-                            "shape": "torch.Size([12, 128])",
+                            "shape": "torch.Size([3, 128])",
                             "dtype": "torch.float32",
-                            "mean": "tensor(1.0865e-01)",
-                            "std": "tensor(1.9968e+00)",
-                            "min": "tensor(-6.6472e+00)",
-                            "max": "tensor(5.6187e+00)"
+                            "mean": "tensor(5.4172e-02)",
+                            "std": "tensor(2.0009e+00)",
+                            "min": "tensor(-6.6840e+00)",
+                            "max": "tensor(5.6337e+00)"
                           },
-                          "3"
+                          "2"
                         ]
                       },
                       "outputs": {
-                        "shape": "torch.Size([12, 64])",
+                        "shape": "torch.Size([3, 64])",
                         "dtype": "torch.float32",
                         "mean": "tensor(0.)",
                         "std": "tensor(0.)",
@@ -2504,7 +2383,7 @@
                       "inputs": {
                         "args": [
                           {
-                            "shape": "torch.Size([12, 64])",
+                            "shape": "torch.Size([3, 64])",
                             "dtype": "torch.float32",
                             "mean": "tensor(0.)",
                             "std": "tensor(0.)",
@@ -2514,7 +2393,7 @@
                         ]
                       },
                       "outputs": {
-                        "shape": "torch.Size([12, 64])",
+                        "shape": "torch.Size([3, 64])",
                         "dtype": "torch.float32",
                         "mean": "tensor(0.)",
                         "std": "tensor(0.)",
@@ -2527,7 +2406,102 @@
                       "inputs": {
                         "args": [
                           {
-                            "shape": "torch.Size([12, 64])",
+                            "shape": "torch.Size([3, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          },
+                          "2"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([3, 128])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.up_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([13, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(3.7360e-02)",
+                            "std": "tensor(1.9994e+00)",
+                            "min": "tensor(-5.9620e+00)",
+                            "max": "tensor(7.2429e+00)"
+                          },
+                          "3"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([13, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.gate_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([13, 128])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(3.7360e-02)",
+                            "std": "tensor(1.9994e+00)",
+                            "min": "tensor(-5.9620e+00)",
+                            "max": "tensor(7.2429e+00)"
+                          },
+                          "3"
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([13, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.act_fn",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([13, 64])",
+                            "dtype": "torch.float32",
+                            "mean": "tensor(0.)",
+                            "std": "tensor(0.)",
+                            "min": "tensor(0.)",
+                            "max": "tensor(0.)"
+                          }
+                        ]
+                      },
+                      "outputs": {
+                        "shape": "torch.Size([13, 64])",
+                        "dtype": "torch.float32",
+                        "mean": "tensor(0.)",
+                        "std": "tensor(0.)",
+                        "min": "tensor(0.)",
+                        "max": "tensor(0.)"
+                      }
+                    },
+                    {
+                      "module_path": "Step3p7ForConditionalGeneration.model.language_model.layers.3.moe.down_proj",
+                      "inputs": {
+                        "args": [
+                          {
+                            "shape": "torch.Size([13, 64])",
                             "dtype": "torch.float32",
                             "mean": "tensor(0.)",
                             "std": "tensor(0.)",
@@ -2538,7 +2512,7 @@
                         ]
                       },
                       "outputs": {
-                        "shape": "torch.Size([12, 128])",
+                        "shape": "torch.Size([13, 128])",
                         "dtype": "torch.float32",
                         "mean": "tensor(0.)",
                         "std": "tensor(0.)",
@@ -2557,20 +2531,20 @@
                   {
                     "shape": "torch.Size([1, 16, 128])",
                     "dtype": "torch.float32",
-                    "mean": "tensor(6.1495e-03)",
-                    "std": "tensor(1.0843e-01)",
-                    "min": "tensor(-4.5211e-01)",
-                    "max": "tensor(3.9841e-01)"
+                    "mean": "tensor(2.7392e-03)",
+                    "std": "tensor(1.0588e-01)",
+                    "min": "tensor(-3.4734e-01)",
+                    "max": "tensor(3.4683e-01)"
                   }
                 ]
               },
               "outputs": {
                 "shape": "torch.Size([1, 16, 128])",
                 "dtype": "torch.float32",
-                "mean": "tensor(1.1075e-01)",
-                "std": "tensor(1.9965e+00)",
-                "min": "tensor(-6.5045e+00)",
-                "max": "tensor(5.7318e+00)"
+                "mean": "tensor(5.6168e-02)",
+                "std": "tensor(1.9988e+00)",
+                "min": "tensor(-6.8869e+00)",
+                "max": "tensor(7.3992e+00)"
               }
             }
           ]
@@ -2584,20 +2558,20 @@
           {
             "shape": "torch.Size([1, 16, 128])",
             "dtype": "torch.float32",
-            "mean": "tensor(1.1075e-01)",
-            "std": "tensor(1.9965e+00)",
-            "min": "tensor(-6.5045e+00)",
-            "max": "tensor(5.7318e+00)"
+            "mean": "tensor(5.6168e-02)",
+            "std": "tensor(1.9988e+00)",
+            "min": "tensor(-6.8869e+00)",
+            "max": "tensor(7.3992e+00)"
           }
         ]
       },
       "outputs": {
         "shape": "torch.Size([1, 16, 512])",
         "dtype": "torch.float32",
-        "mean": "tensor(-6.8069e-03)",
-        "std": "tensor(4.5325e-01)",
-        "min": "tensor(-1.8110e+00)",
-        "max": "tensor(1.6207e+00)"
+        "mean": "tensor(-3.6809e-03)",
+        "std": "tensor(4.5400e-01)",
+        "min": "tensor(-1.8630e+00)",
+        "max": "tensor(1.5500e+00)"
       }
     }
   ]
