@@ -53,7 +53,7 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
-from .distributed.fsdp import is_fsdp_enabled
+from .distributed.fsdp import is_fsdp_enabled, verify_fsdp_plan
 from .distributed.sharding_utils import _dtensor_from_local_like
 from .distributed.tensor_parallel import (
     _get_parameter_tp_plan,
@@ -186,6 +186,7 @@ class LoadStateDictConfig:
     hf_quantizer: HfQuantizer | None = None
     device_mesh: "DeviceMeshLike | None" = None
     tp_plan: dict[str, str] | None = None
+    fsdp_plan: dict[str, str] | None = None
     weights_only: bool = True
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
     disable_mmap: bool | None = None
@@ -1395,10 +1396,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # before the instance attribute shadows them — task-head plans live on the head class.
         cls_tp_plan = getattr(self, "_tp_plan", None) or {}
         cls_sp_plan = getattr(self, "_sp_plan", None) or {}
+        cls_tp_ep_plan = getattr(self, "_tp_ep_plan", None) or {}
+        cls_sp_ep_plan = getattr(self, "_sp_ep_plan", None) or {}
         cls_fsdp_plan = getattr(self, "_fsdp_plan", None) or {}
         self._tp_plan = dict(cls_tp_plan)
         self._sp_plan = dict(cls_sp_plan)
-        self._ep_plan = {}
+        self._tp_ep_plan = dict(cls_tp_ep_plan)
+        self._sp_ep_plan = dict(cls_sp_ep_plan)
         self._pp_plan = {}
         self._fsdp_plan = dict(cls_fsdp_plan)
         # If current model is a base model, attach `base_model_*_plan` from config
@@ -1406,7 +1410,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
             self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
             self._sp_plan = self.config.base_model_sp_plan.copy() if self.config.base_model_sp_plan is not None else {}
-            self._ep_plan = self.config.base_model_ep_plan.copy() if self.config.base_model_ep_plan is not None else {}
+            self._tp_ep_plan = (
+                self.config.base_model_tp_ep_plan.copy() if self.config.base_model_tp_ep_plan is not None else {}
+            )
+            self._sp_ep_plan = (
+                self.config.base_model_sp_ep_plan.copy() if self.config.base_model_sp_ep_plan is not None else {}
+            )
             self._fsdp_plan = (
                 self.config.base_model_fsdp_plan.copy() if self.config.base_model_fsdp_plan is not None else {}
             )
@@ -1428,12 +1437,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # This works because the way the `__init__` and `post_init` are called on all submodules is depth-first in the graph
         for name, module in self.named_children():
             # Parallel plans
-            if plan := getattr(module, "_ep_plan", None):
-                self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_tp_plan", None):
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_sp_plan", None):
                 self._sp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_tp_ep_plan", None):
+                self._tp_ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_sp_ep_plan", None):
+                self._sp_ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_pp_plan", None):
                 self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_fsdp_plan", None):
@@ -1467,12 +1478,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     @property
     def tp_plan(self) -> dict[str, str]:
-        """
-        The full tp plan for the model's modules
-        """
-        if hasattr(self.config, "distributed_config") and self.config.distributed_config.enable_expert_parallel:
-            return self._ep_plan
         return self._tp_plan
+
+    @property
+    def fsdp_plan(self) -> dict[str, str]:
+        return self._fsdp_plan
 
     @property
     def pp_plan(self) -> dict[str, tuple[str, str]]:
@@ -4351,16 +4361,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # `apply_tensor_parallel` see the shared-parameter graph and can route tied
             # entries (e.g. `lm_head` -> `embed_tokens`) correctly. `_finalize_model_loading`
             # re-runs `tie_weights` after the checkpoint is loaded to handle missing-key edge cases.
+            # TODO(3outeille): there is 3 times calls of tie_weight (once here, once in apply_fully_shard_data_parallel, once at the end of from_pretrained)
             model.tie_weights()
             model = distribute_model(model, distributed_config, device_mesh)
         elif device_map is not None:
             # Expand device_map if it was passed as a `str`, i.e. `device_map="auto"`
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
 
-        # Finalize model weight initialization
-        active_tp_plan = (
-            getattr(model, "_tp_plan", None) if getattr(distributed_config, "tp_size", None) is not None else None
-        )
         load_config = LoadStateDictConfig(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             ignore_mismatched_sizes=ignore_mismatched_sizes,
@@ -4372,7 +4379,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             dtype_plan=dtype_plan,
             hf_quantizer=hf_quantizer,
             device_mesh=device_mesh,
-            tp_plan=active_tp_plan,
+            tp_plan=model.tp_plan,
+            fsdp_plan=model.fsdp_plan,
             weights_only=weights_only,
             weight_mapping=weight_conversions,
             use_safetensors=use_safetensors,
@@ -4438,10 +4446,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         }
 
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
-        expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
+        expected_tp_plan_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
+        expected_fsdp_plan_keys = [name for name, _ in model.named_modules()]
 
         if logger.level >= logging.WARNING:
-            verify_tp_plan(expected_keys, load_config.tp_plan)
+            verify_tp_plan(expected_tp_plan_keys, load_config.tp_plan)
+            verify_fsdp_plan(expected_fsdp_plan_keys, load_config.fsdp_plan)
 
         # This offload index if for params explicitly on the "disk" in the device_map
         disk_offload_index = None
@@ -4459,7 +4469,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Warmup cuda to load the weights much faster on devices
         if load_config.device_map is not None and not is_hqq_or_quark:
-            expanded_device_map = expand_device_map(load_config.device_map, expected_keys)
+            expanded_device_map = expand_device_map(load_config.device_map, expected_tp_plan_keys)
             caching_allocator_warmup(model, expanded_device_map, load_config.hf_quantizer)
 
         error_msgs = []

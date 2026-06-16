@@ -92,6 +92,25 @@ class LagunaConfig(Qwen2MoeConfig):
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise_allreduce",
     }
+    base_model_tp_ep_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.g_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.self_attn.q_norm": "activation_seq_dim_2",
+        "layers.*.self_attn.k_norm": "activation_seq_dim_2",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise_allreduce",
+    }
 
     vocab_size: int = 100352
     intermediate_size: int = 8192

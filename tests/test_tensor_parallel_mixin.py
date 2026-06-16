@@ -108,22 +108,24 @@ def _init_distributed(tp: int, max_retries: int = 5, backend: str = "gloo"):
 def _load_distributed_and_reference_models(model_path, model_class, mode: str):
     """Load a distributed model and an unsharded reference model for comparison."""
     tp_size = dist.get_world_size()
-    if mode == "ep":
+    if mode in ("ep", "tp_ep"):
         distributed_config = DistributedConfig(tp_size=tp_size, enable_expert_parallel=True)
-    elif mode == "sp":
-        distributed_config = DistributedConfig(tp_size=tp_size, enable_sequence_parallel=True)
+    elif mode in ("sp", "sp_ep"):
+        distributed_config = DistributedConfig(
+            tp_size=tp_size, enable_sequence_parallel=True, enable_expert_parallel=(mode == "sp_ep")
+        )
     else:
         distributed_config = DistributedConfig(tp_size=tp_size, enable_sequence_parallel=False)
 
     from_pretrained_kwargs = {"distributed_config": distributed_config}
-    if mode != "ep":
+    if mode not in ("ep", "tp_ep"):
         from_pretrained_kwargs["attn_implementation"] = "sdpa"
 
     model_dist = model_class.from_pretrained(model_path, **from_pretrained_kwargs)
     dist.barrier()
 
     device = model_dist.device
-    if mode == "ep":
+    if mode in ("ep", "tp_ep"):
         model_ref = model_class.from_pretrained(model_path)
     else:
         model_ref = model_class.from_pretrained(model_path, attn_implementation="sdpa")
@@ -134,7 +136,7 @@ def _load_distributed_and_reference_models(model_path, model_class, mode: str):
 
 def _test_forward_impl(_rank, model_path, model_class, atol, rtol, mode: str):
     """Compare distributed and reference model forward outputs for the given mode."""
-    assert mode in ("tp", "sp", "ep")
+    assert mode in ("tp", "sp", "ep", "tp_ep", "sp_ep")
     set_seed(0)
 
     model_dist, model_ref, device = _load_distributed_and_reference_models(model_path, model_class, mode)
@@ -149,7 +151,7 @@ def _test_forward_impl(_rank, model_path, model_class, atol, rtol, mode: str):
     with torch.no_grad():
         logits_ref = model_ref(input_ids).logits
         logits_dist = model_dist(input_ids).logits
-        if mode != "ep":
+        if mode in ("tp", "sp", "sp_ep"):
             logits_dist = _to_local(logits_dist)
 
     diff = (logits_ref - logits_dist).abs()
@@ -187,11 +189,11 @@ def _get_packed_grad_shard(grad, world_size, rank, dim):
 
 def _test_backward_impl(rank, model_path, model_class, atol, rtol, mode: str):
     """Compare distributed and reference model backward passes for the given mode."""
-    assert mode in ("tp", "sp", "ep")
+    assert mode in ("tp", "sp", "ep", "tp_ep", "sp_ep")
     set_seed(0)
 
     model_dist, model_ref, device = _load_distributed_and_reference_models(model_path, model_class, mode)
-    applied_plan = getattr(model_dist, f"_{mode}_plan", None) or {}
+    applied_plan = getattr(model_dist, "tp_plan", None) or getattr(model_dist, f"_{mode}_plan", None) or {}
     model_dist.train()
     model_ref.train()
 
@@ -207,10 +209,10 @@ def _test_backward_impl(rank, model_path, model_class, atol, rtol, mode: str):
     loss_dist = model_dist(input_ids, labels=labels, use_cache=False).loss
     loss_dist.backward()
 
-    if mode == "ep":
-        loss_dist_value = loss_dist
-    else:
+    if mode in ("tp", "sp", "sp_ep"):
         loss_dist_value = _to_local(loss_dist)
+    else:
+        loss_dist_value = loss_dist
 
     assert torch.allclose(loss_ref, loss_dist_value, atol=atol, rtol=rtol), (
         f"{mode.upper()} and reference model losses differ. "
@@ -252,7 +254,7 @@ def _test_backward_impl(rank, model_path, model_class, atol, rtol, mode: str):
 
 def _test_generation_impl(_rank, model_path, model_class, atol, rtol, mode: str, max_new_tokens):
     """Compare distributed and reference model generation outputs for the given mode."""
-    assert mode in ("tp", "ep")
+    assert mode in ("tp", "ep", "tp_ep")
     set_seed(0)
 
     model_dist, model_ref, device = _load_distributed_and_reference_models(model_path, model_class, mode)
@@ -277,10 +279,10 @@ def _test_generation_impl(_rank, model_path, model_class, atol, rtol, mode: str,
 
     # Compare logits/scores at each generation step
     scores = torch.stack(output.scores)
-    if mode == "ep":
-        scores_dist = torch.stack(output_dist.scores)
-    else:
+    if mode in ("tp", "sp"):
         scores_dist = torch.stack([_to_local(s) for s in output_dist.scores])
+    else:
+        scores_dist = torch.stack(output_dist.scores)
 
     diff = (scores - scores_dist).abs()
     assert torch.allclose(scores, scores_dist, atol=atol, rtol=rtol), (
@@ -289,7 +291,7 @@ def _test_generation_impl(_rank, model_path, model_class, atol, rtol, mode: str,
     )
 
     # Compare generated token sequences
-    sequences_dist = output_dist.sequences if mode == "ep" else _to_local(output_dist.sequences)
+    sequences_dist = _to_local(output_dist.sequences) if mode in ("tp", "sp") else output_dist.sequences
     assert torch.equal(output.sequences, sequences_dist), (
         f"{mode.upper()} and reference model generated different token sequences. "
         f"Reference: {output.sequences.tolist()} | {mode.upper()}: {sequences_dist.tolist()}"
@@ -298,15 +300,20 @@ def _test_generation_impl(_rank, model_path, model_class, atol, rtol, mode: str,
     dist.barrier()
 
 
-def _test_generation_quantized_impl(_rank, model_path, model_class, max_new_tokens):
+def _test_generation_quantized_impl(_rank, model_path, model_class, max_new_tokens, mode: str = "tp"):
     """Implementation for comparing TP+quantized and non-TP quantized generation (sequence equality)."""
+    assert mode in ("tp", "tp_ep")
     set_seed(0)
 
     quantization_config = TorchAoConfig(Float8WeightOnlyConfig())
 
+    distributed_config = DistributedConfig(
+        tp_size=dist.get_world_size(),
+        enable_expert_parallel=(mode == "tp_ep"),
+    )
     model_tp = model_class.from_pretrained(
         model_path,
-        distributed_config=DistributedConfig(tp_size=dist.get_world_size()),
+        distributed_config=distributed_config,
         quantization_config=quantization_config,
     )
     dist.barrier()
@@ -369,7 +376,9 @@ class TensorParallelTesterMixin(ABC):
     Distributed test modes:
       - "tp": _tp_plan, enable_sequence_parallel=False — inference-style TP.
       - "sp": _sp_plan with per-layer MLP entries — training-style sequence parallel.
-      - "ep": _ep_plan, enable_expert_parallel=True — expert parallel on MoE weights.
+      - "ep": _ep_plan, enable_expert_parallel=True — expert parallel on MoE weights (legacy EP-only path).
+      - "tp_ep": _tp_plan ∪ _ep_plan — inference TP dense + EP MoE.
+      - "sp_ep": _sp_plan ∪ _ep_plan — training SP dense + EP MoE.
     """
 
     # ============================================================
@@ -462,6 +471,16 @@ class TensorParallelTesterMixin(ABC):
             self.skipTest("Model does not have a sequence parallel plan (base_model_sp_plan)")
         elif mode == "ep" and not self._has_ep_plan():
             self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")
+        elif mode == "tp_ep":
+            if not self._has_tp_plan():
+                self.skipTest("Model does not have a tensor parallel plan (base_model_tp_plan)")
+            if not self._has_ep_plan():
+                self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")
+        elif mode == "sp_ep":
+            if not self._has_sp_plan():
+                self.skipTest("Model does not have a sequence parallel plan (base_model_sp_plan)")
+            if not self._has_ep_plan():
+                self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")
 
         # # Skip encoder-decoder models (TP not supported)
         # if getattr(self, "is_encoder_decoder", False):
@@ -610,5 +629,100 @@ class TensorParallelTesterMixin(ABC):
 
         self.skipTest("Quantization is not currently supported with distributed training (dtensor)")
 
-    # TODO(3outeille): add test_tp_ep_forward, test_tp_ep_backward, test_tp_ep_generation, test_tp_ep_generation_quantized
-    # TODO(3outeille): add test_sp_ep_forward, test_sp_ep_backward
+    @is_tensor_parallel_test
+    def test_tp_ep_forward(self):
+        """Inference TP + EP forward (_tp_plan ∪ _ep_plan)."""
+        self._skip_if_mode_not_supported("tp_ep")
+        config = self.model_tester.get_config()
+        model_class = self._get_model_class()
+        atol = self.tensor_parallel_atol
+        rtol = self.tensor_parallel_rtol
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
+            model = model_class(config)
+            self._assert_mixed_mlp_layers(model, config)
+            model.save_pretrained(tmp_dir, save_original_format=True)
+            _init_distributed(tp=self.tensor_parallel_size)(_test_forward_impl)(
+                tmp_dir, model_class, atol, rtol, "tp_ep"
+            )
+
+    @is_tensor_parallel_test
+    def test_tp_ep_backward(self):
+        """Inference TP + EP backward (_tp_plan ∪ _ep_plan)."""
+        self._skip_if_mode_not_supported("tp_ep")
+        config = self.model_tester.get_config()
+        model_class = self._get_model_class()
+        atol = self.tensor_parallel_atol
+        rtol = self.tensor_parallel_rtol
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
+            model = model_class(config)
+            self._assert_mixed_mlp_layers(model, config)
+            model.save_pretrained(tmp_dir, save_original_format=True)
+            _init_distributed(tp=self.tensor_parallel_size)(_test_backward_impl)(
+                tmp_dir, model_class, atol, rtol, "tp_ep"
+            )
+
+    @is_tensor_parallel_test
+    def test_sp_ep_forward(self):
+        """Training SP + EP forward (_sp_plan ∪ _ep_plan)."""
+        self._skip_if_mode_not_supported("sp_ep")
+        config = self.model_tester.get_config()
+        model_class = self._get_model_class()
+        atol = self.tensor_parallel_atol
+        rtol = self.tensor_parallel_rtol
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
+            model = model_class(config)
+            self._assert_mixed_mlp_layers(model, config)
+            model.save_pretrained(tmp_dir, save_original_format=True)
+            _init_distributed(tp=self.tensor_parallel_size)(_test_forward_impl)(
+                tmp_dir, model_class, atol, rtol, "sp_ep"
+            )
+
+    @is_tensor_parallel_test
+    def test_sp_ep_backward(self):
+        """Training SP + EP backward (_sp_plan ∪ _ep_plan)."""
+        self._skip_if_mode_not_supported("sp_ep")
+        config = self.model_tester.get_config()
+        model_class = self._get_model_class()
+        atol = self.tensor_parallel_atol
+        rtol = self.tensor_parallel_rtol
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
+            model = model_class(config)
+            self._assert_mixed_mlp_layers(model, config)
+            model.save_pretrained(tmp_dir, save_original_format=True)
+            _init_distributed(tp=self.tensor_parallel_size)(_test_backward_impl)(
+                tmp_dir, model_class, atol, rtol, "sp_ep"
+            )
+
+    @is_tensor_parallel_test
+    def test_tp_ep_generation(self):
+        """Inference TP + EP generation (_tp_plan ∪ _ep_plan)."""
+        self._skip_if_mode_not_supported("tp_ep")
+        config = self.model_tester.get_config()
+        model_class = self._get_model_class()
+        atol = self.tensor_parallel_atol
+        rtol = self.tensor_parallel_rtol
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
+            model = model_class(config)
+            model.save_pretrained(tmp_dir, save_original_format=True)
+            _init_distributed(tp=self.tensor_parallel_size)(_test_generation_impl)(
+                tmp_dir, model_class, atol, rtol, "tp_ep", 25
+            )
+
+    @is_tensor_parallel_test
+    def test_tp_ep_generation_quantized(self):
+        self._skip_if_mode_not_supported("tp_ep")
+
+        if not is_torchao_available():
+            self.skipTest("Test requires torchao")
+
+        self.skipTest("Quantization is not currently supported with distributed training (dtensor)")

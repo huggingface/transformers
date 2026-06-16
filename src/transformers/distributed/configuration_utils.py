@@ -32,11 +32,21 @@ class DistributedConfig:
         tp_size (`int`, *optional*):
             Number of devices for tensor parallelism. If `None` and `fsdp_size` is set, defaults to 1.
         tp_plan (`dict`, *optional*):
-            Tensor parallel sharding plan. Leave as `None` to use the model's default plan.
+            Tensor parallel sharding plan. Leave as `None` to select the model's SP/TP and EP plan
+            (see ``select_parallel_plan``). Set explicitly to override.
+        enable_sequence_parallel (`bool`, *optional*, defaults to `False`):
+            Select ``base_model_sp_plan`` (dense-only) or ``base_model_sp_ep_plan`` (with EP).
+        enable_expert_parallel (`bool`, *optional*, defaults to `False`):
+            Select ``base_model_tp_ep_plan`` or ``base_model_sp_ep_plan`` when combined with SP flag.
         fsdp_size (`int`, *optional*):
             Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.
         fsdp_plan (`dict`, *optional*):
             FSDP wrapping plan. Leave as `None` to wrap each transformer layer + root.
+
+    Typical flag combinations (plan is fixed at ``from_pretrained``, not on ``train()``/``eval()``):
+
+    * Training: ``enable_sequence_parallel=True``, ``enable_expert_parallel=True``, ``fsdp_size > 1``
+    * Inference: ``enable_sequence_parallel=False``, ``enable_expert_parallel=True``, ``fsdp_size=1``
     """
 
     tp_size: int | None = None

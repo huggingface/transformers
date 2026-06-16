@@ -249,6 +249,8 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3VLMoeForConditionalGeneration):
     _tp_plan = {"lm_head": "colwise_allgather"}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
     _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _tp_ep_plan = {"lm_head": "colwise_allgather"}
+    _sp_ep_plan = {"lm_head": "colwise_loss_parallel"}
 
     def forward(self, **super_kwargs):
         r"""

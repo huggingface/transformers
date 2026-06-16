@@ -223,6 +223,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
     """PI0 model with action projection heads and flow matching."""
 
     _tp_plan = {"action_out_proj": "colwise_allgather"}
+    _tp_ep_plan = {"action_out_proj": "colwise_allgather"}
 
     def __init__(self, config: PI0Config):
         super().__init__(config)

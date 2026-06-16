@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import contextlib
+import functools
 import re
 
 from ..utils import logging
@@ -28,6 +29,8 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
     import torch.distributed as dist
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
+
+    from .sharding_utils import _find_strided_shard_placement_from_fused_params
 
     # Cache this result has it's a C FFI call which can be pretty time-consuming
     _torch_distributed_available = torch.distributed.is_available()
@@ -56,18 +59,18 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     The `is_weight` is important because for weights, we want to support `.weights` and `.bias` cases seamlessly! but
     not parent classes for `post_init` calls
     """
-    # Try exact (indexed) keys before wildcard ones, so a per-layer override wins over a
-    # generic rule.
-    # e.g. for param "layers.0.mlp.experts.gate_up_proj", an indexed plan key
-    # "layers.0.mlp.experts.gate_up_proj" is matched here, before collapsing to the generic
-    # "layers.*.mlp.experts.gate_up_proj".
+    # Lookup order (most -> least specific):
+    # 1. exact param key -> layers.1.mlp.experts.gate_up_proj
     if parameter_name in tp_plan:
         return tp_plan[parameter_name]
-    elif is_weight and "." in parameter_name and (module_name := parameter_name.rsplit(".", 1)[0]) in tp_plan:
-        return tp_plan[module_name]
     generic_param_name = replace_layer_number_by_wildcard(parameter_name)
+    # 2. wildcard param key -> layers.*.mlp.experts.gate_up_proj
     if generic_param_name in tp_plan:
         return tp_plan[generic_param_name]
+    # 3. parent module (indexed) -> layers.1.mlp.experts
+    elif is_weight and "." in parameter_name and (module_name := parameter_name.rsplit(".", 1)[0]) in tp_plan:
+        return tp_plan[module_name]
+    # 4. parent module (wildcard) -> layers.*.mlp.experts
     elif is_weight and "." in generic_param_name and (module_name := generic_param_name.rsplit(".", 1)[0]) in tp_plan:
         return tp_plan[module_name]
     return None
@@ -101,20 +104,35 @@ class TensorParallelLayer:
         return module
 
 
-def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
-    """
-    Verify the TP plan of the model, log a warning if the layers that were not sharded and the rules that were not applied.
+def _matching_weight_plan_key(generic_key: str, weight_plan: dict[str, str]) -> str | None:
+    """Return the weight_plan entry that covers a wildcarded parameter name, or None."""
+    if generic_key in weight_plan:
+        return generic_key
+    # To avoid stripping .gate_up_proj for MoE
+    if generic_key.endswith(".weight"):
+        param_name = generic_key.removesuffix(".weight")
+    elif generic_key.endswith(".bias"):
+        param_name = generic_key.removesuffix(".bias")
+    else:
+        param_name = generic_key
+    if param_name != generic_key and param_name in weight_plan:
+        return param_name
+    if "." in param_name and (parent := param_name.rsplit(".", 1)[0]) in weight_plan:
+        return parent
+    return None
 
-    Only weight-sharding rules (colwise, rowwise, vocab, grouped_gemm, moe_tp_gate_up_*,
-    moe_tp_down_*, packed_colwise) are checked. Module/forward entries (PrepareModuleInput,
-    SequenceParallel, moe_experts_allreduce, ep_router) set up communication hooks rather
-    than weight sharding, so they are excluded.
-    """
 
+def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None) -> None:
+    """
+    Verify the TP plan of the model, log a warning if the layers that were not sharded and the rules
+    that were not applied.
+
+    Only weight-sharding rules (colwise, rowwise, …) that override shard_param are checked. Comm-only entries
+    (activation, ep_router, moe_experts_allreduce, …) are excluded.
+    """
     if tp_plan is None:
         return
 
-    # Keep only weight-sharding rules — forward-comm entries don't shard weights.
     weight_plan = {
         k: v
         for k, v in tp_plan.items()
@@ -126,14 +144,8 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
     unused_rules = weight_plan.copy()
 
     for key in generic_keys:
-        param_name = key.rsplit(".", 1)[0] if "." in key else key
-        generic_param_name = re.sub(r"\d+", "*", param_name)
-
-        if generic_param_name in weight_plan:
-            unused_rules.pop(generic_param_name, None)
-            unsharded_layers.discard(key)
-        elif "." in generic_param_name and (parent_param_name := generic_param_name.rsplit(".", 1)[0]) in weight_plan:
-            unused_rules.pop(parent_param_name, None)
+        if (matched_key := _matching_weight_plan_key(key, weight_plan)) is not None:
+            unused_rules.pop(matched_key, None)
             unsharded_layers.discard(key)
 
     if len(unused_rules) > 0:
@@ -318,81 +330,33 @@ class PrepareModuleInput(TensorParallelLayer):
 # =============================================================================
 
 
-# TODO(3outeille): this can be removed once we merge sp + ep / tp + ep plans.
-# no more strided shard on gate_up_proj because we will be using grouped_gemm.
 def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tensor) -> torch.Tensor:
     """Stitch a local grad back onto the original DTensor parameter.
 
-    During forward we replace the DTensor param with a detached plain-tensor
-    leaf (see _swap_dtensor_params_for_local) because grouped_mm / fused
-    ops don't accept DTensor inputs. That swap breaks the autograd link between
-    the local leaf's grad and the DTensor param's .grad, so this tensor hook
-    runs on the leaf and copies/accumulates the grad onto the original DTensor.
-
-    NOTE: An autograd-aware param.to_local() swap would let backward stitch
-    the grad automatically, but DTensor's backward path then redistributes the
-    resulting grad — and that redistribute does not currently support
-    _StridedShard placements (used by MoEExpertsParallel / PackedColwiseParallel).
+    Used when the forward swap detaches the local leaf (``_StridedShard`` params) because
+    DTensor backward redistribute does not support that placement as a source.
     """
     tensor_meta = original_param._spec.tensor_meta
     detached_grad = local_grad.detach()
-    grad_dtensor = DTensor.from_local(
-        detached_grad,
-        original_param.device_mesh,
-        original_param.placements,
-        run_check=False,
-        shape=tensor_meta.shape,
-        stride=tensor_meta.stride,
-    )
     with torch.no_grad():
-        existing_grad = original_param.grad
-        if existing_grad is None:
-            original_param.grad = grad_dtensor
-        elif isinstance(existing_grad, DTensor):
-            existing_grad._local_tensor.add_(detached_grad)
+        if original_param.grad is None:
+            original_param.grad = DTensor.from_local(
+                detached_grad,
+                original_param.device_mesh,
+                original_param.placements,
+                run_check=False,
+                shape=tensor_meta.shape,
+                stride=tensor_meta.stride,
+            )
+        elif isinstance(original_param.grad, DTensor):
+            original_param.grad._local_tensor.add_(detached_grad)
         else:
-            existing_grad.add_(detached_grad)
+            original_param.grad.add_(detached_grad)
     return local_grad
 
 
-@contextlib.contextmanager
-def _swap_dtensor_params_for_local(module):
-    """Temporarily replace DTensor params with local-shard Parameters for forward.
-
-    grouped_mm / fused kernels don't accept DTensor inputs, so each DTensor
-    param is swapped for a detached local Parameter. A tensor hook
-    (_accumulate_local_param_grad) on the local leaf copies the backward
-    grad back onto the original DTensor.
-
-    The original DTensor params are restored on exit (even on exception) so
-    save_pretrained / state-dict still see sharded params.
-    """
-    shadows = {}
-    for name, param in list(module.named_parameters(recurse=False)):
-        if not isinstance(param, DTensor):
-            continue
-        shadows[name] = param
-        local = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
-        if param.requires_grad:
-            local.register_hook(lambda g, p=param: _accumulate_local_param_grad(p, g))
-        module._parameters.pop(name)
-        setattr(module, name, local)
-    try:
-        yield
-    finally:
-        for name, param in shadows.items():
-            if hasattr(module, name):
-                delattr(module, name)
-            module.register_parameter(name, param)
-
-
 class PackedColwiseParallel(TensorParallelLayer):
-    """Column-wise parallel style for fused linear weights packed along the output dimension.
-
-    Unlike the plain ColwiseParallel, the packed forward swaps params to local leaves
-    (_swap_dtensor_params_for_local) rather than relying on DTensor dispatch, so its
-    redistributes stay synchronous.
-    """
+    """Column-wise parallel style for fused linear weights packed along the output dimension."""
 
     def __init__(
         self,
@@ -427,8 +391,28 @@ class PackedColwiseParallel(TensorParallelLayer):
         input_tensor = input_tensor.to_local()
         return (input_tensor,) + args[1:], kwargs
 
+    @contextlib.contextmanager
     def context_around_forward(self, module):
-        return _swap_dtensor_params_for_local(module)
+        # grouped_mm etc needs plain tensors, so swap the params
+        to_swap_params = [
+            (name, param) for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)
+        ]
+        for name, param in to_swap_params:
+            del module._parameters[name]
+            if _find_strided_shard_placement_from_fused_params(param.placements) is not None:
+                local = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
+                if param.requires_grad:
+                    local.register_hook(functools.partial(_accumulate_local_param_grad, param))
+            else:
+                local = param.to_local()
+            setattr(module, name, local)
+        try:
+            yield
+        finally:
+            for name, param in to_swap_params:
+                # restore the original DTensor params
+                delattr(module, name)
+                module.register_parameter(name, param)
 
     def transform_output_post_forward(self, module, output, mesh):
         if output is None or self.use_local_output:
@@ -536,8 +520,29 @@ class MoEExpertsParallel(TensorParallelLayer):
         module.forward = tp_forward
         return module
 
+    @contextlib.contextmanager
     def context_around_forward(self, module):
-        return _swap_dtensor_params_for_local(module)
+        # grouped_mm experts forward needs plain tensors, so swap the params
+        to_swap_params = [
+            (name, param) for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)
+        ]
+        for name, param in to_swap_params:
+            del module._parameters[name]
+            # Happens only when train in TP only (experts dont use grouped_gemm but rely on moe_tp_gate_up_colwise)
+            if _find_strided_shard_placement_from_fused_params(param.placements) is not None:
+                local = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
+                if param.requires_grad:
+                    local.register_hook(functools.partial(_accumulate_local_param_grad, param))
+            else:
+                local = param.to_local()
+            setattr(module, name, local)
+        try:
+            yield
+        finally:
+            # restore the original DTensor params
+            for name, param in to_swap_params:
+                delattr(module, name)
+                module.register_parameter(name, param)
 
     def transform_output_post_forward(self, module, output, mesh):
         if output is None:
@@ -622,16 +627,23 @@ class EpRouterParallel(TensorParallelLayer):
 class ParallelInterface(GeneralInterface):
     """Registry of named TP styles. Configs and modeling files reference these by string name.
 
-    Adding a new entry here is the supported way to introduce a new TP style.
-    Users can also override or extend at runtime via ALL_PARALLEL_STYLES["my_style"] = ....
+    Styles are split into the three parallelism groups they belong to (TENSOR_/SEQUENCE_/
+    EXPERT_PARALLEL_STYLES); _global_mapping is the union of all three. Keeping them separate
+    lets other code reason about a group as a whole — e.g. SEQUENCE_PARALLEL_STYLES is reused to
+    validate that a user-provided tp_plan actually shards the sequence dimension when
+    enable_sequence_parallel=True.
+
+    Adding a new entry under one of the three groups is the supported way to introduce a new TP
+    style. Users can also override or extend at runtime via ALL_PARALLEL_STYLES["my_style"] = ....
 
     Naming convention: {kind}[_{comm}][_{extra}]. The _{comm} suffix is dropped only when
-    comm is "none" (no collective). All entries are eager instances; the dict literal lives
-    behind a torch-availability guard so this module remains importable without torch.
+    comm is "none" (no collective). All entries are eager instances, so the dicts live behind a
+    torch-availability guard and are empty when torch is unavailable (this module stays
+    importable; styles are only ever looked up inside apply_tensor_parallel, which needs torch).
     """
 
-    _global_mapping = (
-        {
+    if is_torch_available() and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
+        TENSOR_PARALLEL_STYLES = {
             # Column-parallel
             "colwise": ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
             "colwise_allgather": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
@@ -639,22 +651,21 @@ class ParallelInterface(GeneralInterface):
                 input_layouts=Shard(1), output_layouts=Shard(-1), use_local_output=False
             ),
             "packed_colwise": PackedColwiseParallel(input_layouts=Replicate()),
-            # MoE expert weight sharding — param-level (no forward hook). The matching
-            # forward comm is declared separately via "moe_experts_allreduce" on the
-            # experts module. gate_up is packed (gate||up) along dim -2
-            # (Qwen3/Mixtral: [E, 2*inter, hidden]).
-            "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),  # EP — expert dim
-            "moe_tp_gate_up_colwise": MoEParamShard(_StridedShard(dim=-2, split_factor=2)),  # TP — packed gate/up
-            "moe_tp_down_rowwise": MoEParamShard(Shard(-1)),  # TP — down_proj input dim
+            # MoE intra-expert weight sharding — param-level (no forward hook). The matching forward
+            # comm is declared separately via "moe_experts_allreduce" on the experts module. gate_up
+            # is packed (gate||up) along dim -2 (Qwen3/Mixtral: [E, 2*inter, hidden]).
+            "moe_tp_gate_up_colwise": MoEParamShard(_StridedShard(dim=-2, split_factor=2)),  # packed gate/up
+            "moe_tp_down_rowwise": MoEParamShard(Shard(-1)),  # down_proj input dim
             # Row-parallel
             "rowwise_allreduce": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
-            "rowwise_reduce_scatter": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Shard(1)),
             # Vocab / embedding (rowwise sharding on vocab dim)
             "vocab_allreduce": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
+        }
+        SEQUENCE_PARALLEL_STYLES = {
+            "rowwise_reduce_scatter": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Shard(1)),
             "vocab_reduce_scatter": RowwiseParallel(input_layouts=Replicate(), output_layouts=Shard(1)),
-            # Activation / norm (sequence-parallel passthrough)
-            # use_local_output=True: torch defaults to False here, but downstream modeling
-            # code expects plain tensors, not DTensors.
+            # Activation / norm (sequence-parallel passthrough). use_local_output=True: torch defaults
+            # to False here, but downstream modeling code expects plain tensors, not DTensors.
             "activation": SequenceParallel(use_local_output=True),
             "activation_seq_dim_2": SequenceParallel(sequence_dim=2, use_local_output=True),
             # Module-level prepare-input (allgather seq-sharded input → replicate, to local).
@@ -664,24 +675,59 @@ class ParallelInterface(GeneralInterface):
                 input_kwarg="hidden_states", input_layout=Shard(1), desired_layout=Replicate()
             ),
             "module_allgather_split": PrepareModuleInputOutput(),
-            # MoE expert forward comm (no weight sharding — that is declared per-param via
-            # the "grouped_gemm" / "moe_*" styles above on gate_up_proj / down_proj). This
-            # entry only installs the forward hook that all-reduces the partial per-rank
-            # expert outputs. Used for both TP and EP.
+        }
+        EXPERT_PARALLEL_STYLES = {
+            "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),  # expert dim
+            # Experts' forward comm (no weight sharding — that is declared per-param via "grouped_gemm"
+            # / "moe_tp_*"). Installs the forward hook that all-reduces partial per-rank expert outputs.
+            # Reused by dense TP-MoE as well as EP.
             "moe_experts_allreduce": MoEExpertsParallel(output_layouts=Replicate()),
             "moe_identity_expert": MoeIdentityParallel(),
             # EP router — forward-only slicing of router outputs to local experts.
             "ep_router": EpRouterParallel(),
         }
-        if is_torch_available() and is_torch_greater_or_equal("2.5") and _torch_distributed_available
-        else {}
-    )
+    else:
+        TENSOR_PARALLEL_STYLES = SEQUENCE_PARALLEL_STYLES = EXPERT_PARALLEL_STYLES = {}
+
+    _global_mapping = {**TENSOR_PARALLEL_STYLES, **SEQUENCE_PARALLEL_STYLES, **EXPERT_PARALLEL_STYLES}
 
 
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
-def apply_tensor_parallel(model, tp_mesh, tp_plan):
+def select_parallel_plan(model) -> dict[str, str]:
+    """
+    Select the parallel plan to apply from explicit combo plans on the model.
+    """
+    distributed_config = model.config.distributed_config
+    user_tp_plan = distributed_config.tp_plan
+    if user_tp_plan is not None:
+        return dict(user_tp_plan)
+
+    sp = distributed_config.enable_sequence_parallel
+    ep = distributed_config.enable_expert_parallel
+    if sp and ep:
+        plan_attr = "_sp_ep_plan"
+    elif sp:
+        plan_attr = "_sp_plan"
+    elif ep:
+        plan_attr = "_tp_ep_plan"
+    else:
+        plan_attr = "_tp_plan"
+    config_attr = f"base_model{plan_attr}"
+
+    plan = getattr(model, plan_attr, None) or {}
+    if not plan:
+        raise ValueError(
+            f"Model {model.config.model_type!r} has no {config_attr} (model.{plan_attr} is empty) but "
+            f"DistributedConfig requested enable_sequence_parallel={sp}, enable_expert_parallel={ep}. "
+            f"Add {config_attr} to the model config, set DistributedConfig.tp_plan explicitly, "
+            f"or change the flags."
+        )
+    return dict(plan)
+
+
+def apply_tensor_parallel(model, tp_mesh):
     """Apply tensor parallelism by looking each style up by string name.
 
     A single named_modules() walk shards each module's direct params (param-keyed plan
@@ -689,38 +735,44 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
     install_forward). Plus the cross-cutting setup: tie-weights handling, SP position_ids
     injection, and loss_parallel activation.
     """
-    distributed_config = getattr(model.config, "distributed_config", None)
-    sp_requested = getattr(distributed_config, "enable_sequence_parallel", False)
-    sp_supported = getattr(model.config, "base_model_sp_plan", None) is not None
-    enable_sp = sp_requested and sp_supported
-    enable_ep = getattr(distributed_config, "enable_expert_parallel", False)
+    enable_sp = bool(getattr(model.config.distributed_config, "enable_sequence_parallel", False))
+    enable_ep = bool(getattr(model.config.distributed_config, "enable_expert_parallel", False))
 
-    if tp_plan is None:
-        if enable_sp:
-            tp_plan = dict(model._sp_plan or {})
-        elif enable_ep:
-            tp_plan = dict(model._ep_plan or {})
-        else:
-            tp_plan = dict(model._tp_plan or {})
+    # case when enable_sequence_parallel=True and tp_plan!=None (but tp_plan has no sequence parallel styles keys) raise an error
+    user_tp_plan = model.config.distributed_config.tp_plan
+    if (
+        enable_sp
+        and user_tp_plan is not None  # user provided tp_plan manually
+        and not any(style in ParallelInterface.SEQUENCE_PARALLEL_STYLES for style in user_tp_plan.values())
+    ):
+        raise ValueError(
+            "enable_sequence_parallel=True but the provided tp_plan shards no sequence dimension "
+            f"(none of {sorted(ParallelInterface.SEQUENCE_PARALLEL_STYLES)}). Provide a sequence-parallel plan "
+            "(e.g. 'vocab_reduce_scatter' on the embedding) or set enable_sequence_parallel=False. "
+            f"tp_plan: {user_tp_plan}"
+        )
+
+    model.tp_plan = dict(select_parallel_plan(model))
+    logger.info(f"TP plan has been resolved: {model.tp_plan}")
 
     # tie_weights() replaces lm_head.weight with embed_tokens.weight after TP is applied.
     # If embed_tokens isn't in the plan, sharding lm_head as a DTensor causes tie to
     # clobber it with a plain tensor (and forward then mixes DTensor/Tensor). Skip
     # lm_head TP in that case so both ends stay plain and the tie is a real alias.
     if getattr(model.config, "tie_word_embeddings", False):
-        tied_source_in_plan = any(k.endswith("embed_tokens") for k in tp_plan)
+        tied_source_in_plan = any(k.endswith("embed_tokens") for k in model.tp_plan)
         if not tied_source_in_plan:
-            tp_plan.pop("lm_head", None)
+            model.tp_plan.pop("lm_head", None)
 
     for name, module in model.named_modules():
         # Shard each parameter directly on the module using the specified style.
         for p_name, _ in list(module.named_parameters(recurse=False)):
             full = f"{name}.{p_name}" if name else p_name
-            style_name = _get_parameter_tp_plan(parameter_name=full, tp_plan=tp_plan, is_weight=True)
+            style_name = _get_parameter_tp_plan(parameter_name=full, tp_plan=model.tp_plan, is_weight=True)
             if style_name is not None and style_name in ALL_PARALLEL_STYLES:
                 ALL_PARALLEL_STYLES[style_name].shard_param(module, p_name, tp_mesh)
         # Install forward hooks for modules as needed by the plan.
-        style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=tp_plan, is_weight=False)
+        style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=model.tp_plan, is_weight=False)
         if style_name is not None and style_name in ALL_PARALLEL_STYLES:
             if style_name == "moe_experts_allreduce":
                 ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh, is_expert_parallel=enable_ep)
@@ -749,7 +801,7 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
     # loss_parallel patches F.cross_entropy to work with Shard(-1) logits.
     # It must be active during both forward and backward, so we enable it
     # once rather than as a context manager.
-    has_loss_parallel = any(v == "colwise_loss_parallel" for v in tp_plan.values())
+    has_loss_parallel = any(v == "colwise_loss_parallel" for v in model.tp_plan.values())
     if has_loss_parallel:
         from torch.distributed.tensor.parallel import loss_parallel
 

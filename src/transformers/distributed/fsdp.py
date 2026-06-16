@@ -198,6 +198,30 @@ def _resolve_plan_key(name_to_module: dict, key: str):
     return [(name, mod) for name, mod in name_to_module.items() if replace_layer_number_by_wildcard(name) == key]
 
 
+def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) -> None:
+    """
+    Verify the FSDP plan of the model, log a warning if plan keys were not applied or strategies are invalid.
+    """
+    if not fsdp_plan:
+        return
+
+    name_to_module = dict.fromkeys(module_names)
+    unused_rules: dict[str, str] = {}
+    invalid_strategies: dict[str, str] = {}
+
+    for key, strategy in fsdp_plan.items():
+        if strategy not in {"free_full_weight", "keep_full_weight"}:
+            invalid_strategies[key] = strategy
+            continue
+        if not _resolve_plan_key(name_to_module, key):
+            unused_rules[key] = strategy
+
+    if invalid_strategies:
+        logger.warning(f"The following FSDP entries have unknown strategies: {invalid_strategies}")
+    if unused_rules:
+        logger.warning(f"The following FSDP rules were not applied to any module: {unused_rules}")
+
+
 def _iter_plan_targets(model, plan, is_weights_tied: bool, tied_source: str | None):
     """Yield ``(name, module, strategy)`` for every module the plan applies to.
 
