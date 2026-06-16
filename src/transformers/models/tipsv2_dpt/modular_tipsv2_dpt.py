@@ -24,12 +24,13 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbone
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_outputs import DepthEstimatorOutput, NormalEstimatorOutput, SemanticSegmenterOutput
+from ...modeling_outputs import DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoConfig
 from ..depth_anything.modeling_depth_anything import DepthAnythingNeck, DepthAnythingPreActResidualLayer
 from ..dpt.modeling_dpt import DPTReassembleLayer
+from ..sapiens2.modeling_sapiens2 import Sapiens2NormalEstimatorOutput
 from ..tipsv2.image_processing_tipsv2 import Tipsv2ImageProcessor
 from ..zoedepth.modeling_zoedepth import (
     ZoeDepthFeatureFusionLayer,
@@ -71,6 +72,10 @@ class Tipsv2DptOutput(ModelOutput):
     segmentation_logits: torch.FloatTensor | None = None
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
+class Tipsv2DptNormalEstimatorOutput(Sapiens2NormalEstimatorOutput):
+    pass
 
 
 @auto_docstring
@@ -120,7 +125,7 @@ class Tipsv2DptImageProcessor(Tipsv2ImageProcessor):
         Converts the output of [`Tipsv2DptForNormalEstimation`] or [`Tipsv2DptModel`] into L2-normalized surface normal maps.
 
         Args:
-            outputs ([`NormalEstimatorOutput`] or [`Tipsv2DptOutput`]):
+            outputs (`Tipsv2DptNormalEstimatorOutput` or `Tipsv2DptOutput`):
                 Raw outputs of the model.
             target_sizes (`TensorType` or `list[tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
@@ -562,7 +567,7 @@ class Tipsv2DptForNormalEstimation(Tipsv2DptPreTrainedModel):
         pixel_values: torch.FloatTensor,
         labels: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> NormalEstimatorOutput:
+    ) -> Tipsv2DptNormalEstimatorOutput:
         outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
         feature_maps = outputs.feature_maps
 
@@ -580,7 +585,7 @@ class Tipsv2DptForNormalEstimation(Tipsv2DptPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not yet supported")
 
-        return NormalEstimatorOutput(
+        return Tipsv2DptNormalEstimatorOutput(
             loss=loss,
             normals=normals,
             hidden_states=outputs.hidden_states,

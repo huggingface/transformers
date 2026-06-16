@@ -27,7 +27,7 @@ from typing_extensions import Unpack
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
-from ...modeling_outputs import DepthEstimatorOutput, NormalEstimatorOutput, SemanticSegmenterOutput
+from ...modeling_outputs import DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from .configuration_tipsv2_dpt import Tipsv2DptConfig
@@ -61,6 +61,33 @@ class Tipsv2DptOutput(ModelOutput):
     predicted_depth: torch.FloatTensor | None = None
     normals: torch.FloatTensor | None = None
     segmentation_logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of normal estimation models.
+    """
+)
+@dataclass
+class Tipsv2DptNormalEstimatorOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Normal estimation loss.
+    normals (`torch.FloatTensor` of shape `(batch_size, num_labels, height, width)`):
+        Raw normal map predictions as output by the model (unnormalized).
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage)
+        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
+        each layer plus the initial embedding outputs.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax.
+    """
+
+    loss: torch.FloatTensor | None = None
+    normals: torch.FloatTensor | None = None
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
@@ -493,7 +520,7 @@ class Tipsv2DptForNormalEstimation(Tipsv2DptPreTrainedModel):
         pixel_values: torch.FloatTensor,
         labels: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> NormalEstimatorOutput:
+    ) -> Tipsv2DptNormalEstimatorOutput:
         outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
         feature_maps = outputs.feature_maps
 
@@ -511,7 +538,7 @@ class Tipsv2DptForNormalEstimation(Tipsv2DptPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not yet supported")
 
-        return NormalEstimatorOutput(
+        return Tipsv2DptNormalEstimatorOutput(
             loss=loss,
             normals=normals,
             hidden_states=outputs.hidden_states,

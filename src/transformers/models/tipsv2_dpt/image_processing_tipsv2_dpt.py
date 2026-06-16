@@ -81,7 +81,7 @@ class Tipsv2DptImageProcessor(TorchvisionBackend):
         Converts the output of [`Tipsv2DptForNormalEstimation`] or [`Tipsv2DptModel`] into L2-normalized surface normal maps.
 
         Args:
-            outputs ([`NormalEstimatorOutput`] or [`Tipsv2DptOutput`]):
+            outputs (`Tipsv2DptNormalEstimatorOutput` or `Tipsv2DptOutput`):
                 Raw outputs of the model.
             target_sizes (`TensorType` or `list[tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size

@@ -24,7 +24,8 @@ if is_torch_available():
     import torch
 
     from transformers import Tipsv2DptImageProcessor
-    from transformers.modeling_outputs import DepthEstimatorOutput, NormalEstimatorOutput, SemanticSegmenterOutput
+    from transformers.modeling_outputs import DepthEstimatorOutput, SemanticSegmenterOutput
+    from transformers.models.tipsv2_dpt.modeling_tipsv2_dpt import Tipsv2DptNormalEstimatorOutput
 
 
 class Tipsv2DptImageProcessingTester:
@@ -136,7 +137,7 @@ class Tipsv2DptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         batch_size = 2
         height = width = 16
-        outputs = NormalEstimatorOutput(normals=torch.randn(batch_size, 3, height, width))
+        outputs = Tipsv2DptNormalEstimatorOutput(normals=torch.randn(batch_size, 3, height, width))
 
         # without target_sizes: spatial dims match normals, values are L2-normalized
         result = image_processor.post_process_normal_estimation(outputs)
