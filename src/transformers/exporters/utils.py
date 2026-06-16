@@ -26,7 +26,7 @@ Organised into five sections (search for the `# ── Name ──` banners):
 - **Public tensor utilities** — `get_leaf_tensors`, `duplicate_leaf_tensors`,
   `cast_leaf_tensors`, and `prepare_for_export` (sets attention/experts impl,
   patches non-exportable patterns, strips output flags).
-- **Export input preparers** — `@register_export_input_preparer(model_type)`
+- **Export input preparers** — `@register_export_input_preparer(marker)`
   registry that precomputes the per-encoder kwargs (`cu_seqlens`, `position_ids`,
   audio chunks, …) the model would otherwise need data-dependent ops for.
 - **Decomposition** — `decompose_prefill_decode` (split a generative forward
@@ -359,7 +359,7 @@ def prepare_for_export(
     # repeat_interleave, or itertools.groupby — untraceable by dynamo.
     # TODO: use the collator API once it covers these cases.
     with torch.no_grad():
-        _precompute_export_inputs(model, inputs)
+        precompute_export_inputs(model, inputs)
 
     # Cast all input tensors to match the model's dtype and device (e.g. cache objects
     # created before the model was moved to bfloat16/CUDA by a backend preparation step).
@@ -392,39 +392,23 @@ def _find_submodule_attr(model: torch.nn.Module, name: str) -> Any | None:
     return None
 
 
-_EXPORT_INPUT_PREPARERS: dict[str, callable] = {}
+_EXPORT_INPUT_PREPARERS: dict[tuple[str, ...], callable] = {}
 
 
-def register_export_input_preparer(*model_types: str):
-    """Register `fn(model, inputs) -> None` as the export-input preparer for these model_types."""
+def register_export_input_preparer(*markers: str):
+    """Register `fn(model, inputs) -> None`. Dispatched when every `marker` is a key in
+    `inputs` with a non-`None` value — no model_type list to maintain. Use multiple
+    markers to narrow the match when a single kwarg is too ambiguous (e.g.
+    `("input_features", "feature_lens")` for omni audio encoders)."""
 
     def decorator(fn):
-        for mt in model_types:
-            _EXPORT_INPUT_PREPARERS[mt] = fn
+        _EXPORT_INPUT_PREPARERS[markers] = fn
         return fn
 
     return decorator
 
 
-@register_export_input_preparer(
-    "qwen2_vl_vision",
-    "qwen2_5_vl_vision",
-    "qwen3_vl_vision",
-    "qwen3_vl_moe_vision",
-    "qwen3_5_vision",
-    "qwen3_5_moe_vision",
-    "qwen2_5_omni_vision_encoder",
-    "qwen3_omni_moe_vision_encoder",
-    "glm4v_vision",
-    "glm4v_moe_vision",
-    "glm46v",
-    "glm_image_vision",
-    "glm_ocr_vision",
-    "paddleocr_vl_vision",
-    "video_llama_3_vision",
-    "ernie4_5_vl_moe_vision",
-    "exaone4_5_vision",
-)
+@register_export_input_preparer("grid_thw")
 def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
     """Precompute helpers driven by `grid_thw`: `cu_seqlens`, `position_ids`, plus optional
     `window_index`/`cu_window_seqlens` (XNet-style window attn) and
@@ -434,10 +418,7 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
     (`window_size`+`patch_size` for window attention, `num_grid_per_side` for bilinear),
     so a model that doesn't use that feature won't get its kwarg injected.
     """
-    grid_thw = inputs.get("grid_thw")
-    if grid_thw is None:
-        return
-
+    grid_thw = inputs["grid_thw"]
     spatial_merge_size = _find_submodule_attr(model, "spatial_merge_size")
     if spatial_merge_size is None:
         # Video-Llama-3 carries per-image merge sizes as an input tensor; PaddleOCR-VL has
@@ -461,87 +442,73 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
         )
 
 
-@register_export_input_preparer("minicpmv4_6_vision")
+@register_export_input_preparer("target_sizes")
 def _prepare_navit_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
     """NaViT-style packed encoders carry per-image `(h, w)` as `target_sizes` instead of `grid_thw`.
     Synthesise `grid_thw = [1, h, w]` and run the nearest-position-id / window-index /
     merged-shape helpers so the per-image Python loops move outside the traced graph."""
-    target_sizes = inputs.get("target_sizes")
-    if target_sizes is None:
-        return
-    device = target_sizes.device
-
+    target_sizes = inputs["target_sizes"]
     num_patches_per_side = _find_submodule_attr(model, "num_patches_per_side")
     if num_patches_per_side is not None:
-        inputs["position_ids"] = get_vision_nearest_position_ids(target_sizes, num_patches_per_side).to(device)
+        inputs["position_ids"] = get_vision_nearest_position_ids(target_sizes, num_patches_per_side)
 
     window_kernel_size = _find_submodule_attr(model, "window_kernel_size")
     if window_kernel_size is not None:
         grid_thw = torch.nn.functional.pad(target_sizes, (1, 0), value=1)
-        window_index, cu_window_seqlens = get_vision_window_index(
+        inputs["window_index"], inputs["cu_window_seqlens"] = get_vision_window_index(
             grid_thw, spatial_merge_size=1, window_size=window_kernel_size[0], patch_size=1
         )
-        inputs["window_index"] = window_index.to(device)
-        inputs["cu_window_seqlens"] = cu_window_seqlens.to(device)
         inputs["merged_shape"] = get_vision_merged_shape(target_sizes, window_kernel_size)
 
 
-@register_export_input_preparer("qwen2_5_omni_audio_encoder")
-def _prepare_qwen2_5_omni_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Replace `input_features`/`feature_lens` with the precomputed `padded_feature`, `chunk_lengths`,
-    `cu_seqlens`, `valid_indices`, `pool_indices` — so the encoder's `.split(.tolist(), dim=0)` and
-    related data-dependent ops happen outside the traced graph."""
-    from ..models.qwen2_5_omni.modeling_qwen2_5_omni import (
-        chunk_and_pad_features,
-        get_audio_cu_seqlens,
-        get_pool_indices,
-        get_valid_indices,
-    )
+@register_export_input_preparer("input_features", "feature_lens")
+def _prepare_omni_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+    """Replace `input_features`/`feature_lens` with precomputed `padded_feature`, `chunk_lengths`,
+    `cu_seqlens`, `valid_indices` (+ `pool_indices` on Qwen2.5-Omni) so the encoder's
+    `.split(.tolist(), dim=0)` and related data-dependent ops happen outside the traced graph.
 
-    if "input_features" not in inputs or "feature_lens" not in inputs:
-        return
+    Qwen3-Omni-MoE threads `n_window_infer` into `get_audio_cu_seqlens`; Qwen2.5-Omni doesn't,
+    and additionally emits `pool_indices`.
+    """
+    feature_lens = inputs["feature_lens"]
+    input_features = inputs["input_features"]
 
-    feature_lens = inputs.pop("feature_lens")
-    input_features = inputs.pop("input_features")
+    if hasattr(model, "n_window_infer"):
+        from ..models.qwen3_omni_moe.modeling_qwen3_omni_moe import (
+            chunk_and_pad_features,
+            get_audio_cu_seqlens,
+            get_valid_indices,
+        )
 
-    padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, model.n_window)
-    inputs["padded_feature"] = padded_feature
-    inputs["chunk_lengths"] = chunk_lengths
-    inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths)
-    inputs["valid_indices"] = get_valid_indices(chunk_lengths)
-    inputs["pool_indices"] = get_pool_indices(feature_lens)
+        padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, model.n_window)
+        inputs["padded_feature"] = padded_feature
+        inputs["chunk_lengths"] = chunk_lengths
+        inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths, feature_lens, model.n_window_infer, model.n_window)
+        inputs["valid_indices"] = get_valid_indices(chunk_lengths)
+    else:
+        from ..models.qwen2_5_omni.modeling_qwen2_5_omni import (
+            chunk_and_pad_features,
+            get_audio_cu_seqlens,
+            get_pool_indices,
+            get_valid_indices,
+        )
 
-
-@register_export_input_preparer("qwen3_omni_moe_audio_encoder")
-def _prepare_qwen3_omni_moe_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Same shape as `_prepare_qwen2_5_omni_audio_inputs` but `get_audio_cu_seqlens` takes
-    `(chunk_lengths, feature_lens, n_window_infer, n_window)` instead of `(chunk_lengths,)`,
-    and there is no `get_pool_indices`."""
-    from ..models.qwen3_omni_moe.modeling_qwen3_omni_moe import (
-        chunk_and_pad_features,
-        get_audio_cu_seqlens,
-        get_valid_indices,
-    )
-
-    if "input_features" not in inputs or "feature_lens" not in inputs:
-        return
-
-    feature_lens = inputs.pop("feature_lens")
-    input_features = inputs.pop("input_features")
-
-    padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, model.n_window)
-    inputs["padded_feature"] = padded_feature
-    inputs["chunk_lengths"] = chunk_lengths
-    inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths, feature_lens, model.n_window_infer, model.n_window)
-    inputs["valid_indices"] = get_valid_indices(chunk_lengths)
+        padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, model.n_window)
+        inputs["padded_feature"] = padded_feature
+        inputs["chunk_lengths"] = chunk_lengths
+        inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths)
+        inputs["valid_indices"] = get_valid_indices(chunk_lengths)
+        inputs["pool_indices"] = get_pool_indices(feature_lens)
 
 
-def _precompute_export_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+def precompute_export_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
     """Inject precomputed tensors for data-dependent ops the model would otherwise hit during tracing.
 
     Two layers:
     - Outer LLM rope index (`get_rope_index`) — generic `hasattr` probe; covers Qwen-VL / GLM-4V etc.
-    - Per-encoder preparer dispatched by `config.model_type` (see `register_export_input_preparer`).
+    - Per-encoder preparer dispatched by marker kwargs present in `inputs` (e.g. `grid_thw`,
+      `target_sizes`, `(input_features, feature_lens)`) — see `register_export_input_preparer`.
+      A preparer fires only when every one of its markers is present in `inputs`.
     """
     # Outer-model: LLM rope index. Self-detecting via `hasattr` since model_type at this level
     # varies (qwen2_vl vs qwen2_5_omni_thinker vs ...) and the get_rope_index signature is stable.
@@ -555,10 +522,11 @@ def _precompute_export_inputs(model: torch.nn.Module, inputs: dict[str, Any]) ->
             position_ids, _ = model.get_rope_index(**rope_inputs)
             inputs["position_ids"] = position_ids
 
-    # Encoder-level: dispatch by model_type.
-    model_type = getattr(getattr(model, "config", None), "model_type", None)
-    if preparer := _EXPORT_INPUT_PREPARERS.get(model_type):
-        preparer(model, inputs)
+    # Encoder-level: dispatch by marker kwargs (preparer fires when every marker is in `inputs`
+    # with a non-`None` value).
+    for markers, preparer in _EXPORT_INPUT_PREPARERS.items():
+        if all(inputs.get(m) is not None for m in markers):
+            preparer(model, inputs)
 
 
 # ── Decomposition ─────────────────────────────────────────────────────────────
