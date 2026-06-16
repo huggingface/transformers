@@ -19,7 +19,6 @@
 # limitations under the License.
 
 
-import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -461,6 +460,9 @@ class InstructBlipVideoQFormerMultiHeadAttention(nn.Module):
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.scaling = self.attention_head_size**-0.5
+        self.is_causal = False
+        self.attention_dropout = config.attention_probs_dropout_prob
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
         if is_cross_attention:
@@ -469,26 +471,6 @@ class InstructBlipVideoQFormerMultiHeadAttention(nn.Module):
         else:
             self.key = nn.Linear(config.hidden_size, self.all_head_size)
             self.value = nn.Linear(config.hidden_size, self.all_head_size)
-
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.save_attention = False
-
-    def save_attn_gradients(self, attn_gradients):
-        self.attn_gradients = attn_gradients
-
-    def get_attn_gradients(self):
-        return self.attn_gradients
-
-    def save_attention_map(self, attention_map):
-        self.attention_map = attention_map
-
-    def get_attention_map(self):
-        return self.attention_map
-
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
 
     def forward(
         self,
@@ -503,46 +485,37 @@ class InstructBlipVideoQFormerMultiHeadAttention(nn.Module):
         # such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
 
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
+
         if is_cross_attention:
-            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
-            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
+            current_states = encoder_hidden_states
             attention_mask = encoder_attention_mask
         else:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
+            current_states = hidden_states
 
-        mixed_query_layer = self.query(hidden_states)
+        kv_shape = (*current_states.shape[:-1], -1, self.attention_head_size)
+        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_layer = self.key(current_states).view(kv_shape).transpose(1, 2)
+        value_layer = self.value(current_states).view(kv_shape).transpose(1, 2)
 
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        attention_scores_dtype = attention_scores.dtype
-
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-            attention_scores = attention_scores + attention_mask
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores).to(attention_scores_dtype)
-
-        if is_cross_attention and self.save_attention:
-            self.save_attention_map(attention_probs)
-            attention_probs.register_hook(self.save_attn_gradients)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs_dropped = self.dropout(attention_probs)
-
-        context_layer = torch.matmul(attention_probs_dropped, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
-
-        return context_layer, attention_probs
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        return attn_output, attn_weights
 
 
 class InstructBlipVideoQFormerSelfOutput(nn.Module):
@@ -740,10 +713,10 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
     instruction as input.
     """
 
-    _supports_attention_backend = False  # adds position on attn weights before last matmul
-    _supports_flash_attn = False
-    _supports_sdpa = False
-    _supports_flex_attn = False
+    _supports_attention_backend = True
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
 
     _can_record_outputs = {
         "hidden_states": InstructBlipVideoQFormerLayer,
@@ -807,9 +780,12 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
         )
 
         if encoder_attention_mask is not None:
+            # Cross-attention queries only come from the query tokens (first `query_length` positions), while
+            # `embedding_output` also contains the text tokens.
+            query_embedding_output = embedding_output[:, :query_length, :] if query_length > 0 else embedding_output
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,
-                inputs_embeds=embedding_output,
+                inputs_embeds=query_embedding_output,
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
             )
