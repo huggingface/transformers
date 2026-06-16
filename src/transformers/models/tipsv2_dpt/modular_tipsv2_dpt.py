@@ -239,10 +239,20 @@ class Tipsv2DptConfig(PreTrainedConfig):
     semantic_loss_ignore_index: int = 255
 
     def __post_init__(self, **kwargs):
-        if self.neck_hidden_sizes is None:
-            self.neck_hidden_sizes = [96, 192, 384, 768]
-        if self.reassemble_factors is None:
-            self.reassemble_factors = [4, 2, 1, 0.5]
+        # Backwards compatibility: the original remote configs use different field names. Map them to the
+        # field names used here. Each of these fields is optional and may be absent from a given config.
+        REMOTE_TO_CONFIG_KEYS = {
+            "channels": "fusion_hidden_size",
+            "post_process_channels": "neck_hidden_sizes",
+        }
+        for remote_key, config_key in REMOTE_TO_CONFIG_KEYS.items():
+            if remote_key in kwargs:
+                setattr(self, config_key, kwargs.pop(remote_key))
+
+        # `block_indices` map to the backbone `out_indices` (1-based indices that include the embedding
+        # output, hence the +1 offset).
+        block_indices = kwargs.pop("block_indices", [3, 6, 9, 12])
+        out_indices = [block_index + 1 for block_index in block_indices]
 
         # Use num_labels and label2id when set. Otherwise fall back to num_labels=num_seg_classes which
         # is set in the original configs.
@@ -267,11 +277,19 @@ class Tipsv2DptConfig(PreTrainedConfig):
         if num_labels is None and label2id is None and num_seg_classes is not None:
             kwargs["num_labels"] = num_seg_classes
 
+        for unused_key in ("readout_type", "backbone_repo", "embed_dim"):
+            kwargs.pop(unused_key, None)
+
+        if self.neck_hidden_sizes is None:
+            self.neck_hidden_sizes = [96, 192, 384, 768]
+        if self.reassemble_factors is None:
+            self.reassemble_factors = [4, 2, 1, 0.5]
+
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=self.backbone_config,
             default_config_type="tipsv2_vision_model",
             default_config_kwargs={
-                "out_indices": [3, 6, 9, 12],
+                "out_indices": out_indices,
                 "apply_layernorm": True,
                 "reshape_hidden_states": False,
             },
