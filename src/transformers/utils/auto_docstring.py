@@ -4333,7 +4333,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             source_args_dict = get_args_doc_from_source(ModelOutputArgs)
             doc_class = cls.__doc__ if cls.__doc__ else ""
             documented_kwargs = parse_docstring(doc_class)[0]
-            for param_name, param_type_annotation in ([] if _is_python_dataclass(cls) else cls.__annotations__.items()):
+            for param_name, param_type_annotation in [] if _is_python_dataclass(cls) else cls.__annotations__.items():
                 param_type, optional = process_type_annotation(param_type_annotation, param_name)
 
                 # Check for default value
