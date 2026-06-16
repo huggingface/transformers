@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import functools
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -25,7 +26,7 @@ from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import logging
-from ..utils.import_utils import is_kernels_available
+from ..utils.import_utils import is_kernels_available, is_torchdynamo_compiling
 from .deepgemm import (
     deepgemm_fp8_fp4_experts_forward,
     deepgemm_fp8_fp4_linear,
@@ -42,7 +43,17 @@ logger = logging.get_logger(__name__)
 _FP8_DTYPE = torch.float8_e4m3fn
 _FP8_MIN = torch.finfo(_FP8_DTYPE).min
 _FP8_MAX = torch.finfo(_FP8_DTYPE).max
-_UE8M0_SF_DTYPE = torch.float8_e8m0fnu
+
+
+@functools.cache
+def _get_ue8m0_dtype() -> torch.dtype:
+    """Return ``torch.float8_e8m0fnu`` or raise a clear error on torch without FP8 support."""
+    if not hasattr(torch, "float8_e8m0fnu"):
+        raise RuntimeError(
+            "scale_fmt='ue8m0' requires torch.float8_e8m0fnu, which is only available in "
+            f"PyTorch >= 2.7 (found {torch.__version__}). Upgrade torch to use UE8M0 FP8 checkpoints."
+        )
+    return torch.float8_e8m0fnu
 
 
 def _first_attr(obj, *names):
@@ -57,7 +68,6 @@ class FineGrainedFP8:
     """Entry points exposed by the `kernels-community/finegrained-fp8` Triton kernel."""
 
     matmul: Callable
-    act_quant: Callable
     batched_matmul: Callable
     grouped_matmul: Callable
 
@@ -70,10 +80,11 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
     Raises `ImportError` if the `kernels` package is missing, or the kernel or required
     symbols cannot be found.
     """
-    if not is_kernels_available():
-        raise ImportError(
-            "finegrained-fp8 kernel requires the `kernels` package. Install it with `pip install -U kernels`."
-        )
+    if not is_torchdynamo_compiling():
+        if not is_kernels_available():
+            raise ImportError(
+                "finegrained-fp8 kernel requires the `kernels` package. Install it with `pip install -U kernels`."
+            )
 
     kernel = lazy_load_kernel("finegrained-fp8")
     if kernel is None:
@@ -82,18 +93,16 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
             "has a build matching the current torch/CUDA."
         )
 
-    matmul = getattr(kernel, "w8a8_fp8_matmul", None)
-    act_quant = getattr(kernel, "fp8_act_quant", None)
-    batched_matmul = getattr(kernel, "w8a8_fp8_matmul_batched", None)
-    grouped_matmul = getattr(kernel, "w8a8_fp8_matmul_grouped", None)
+    matmul = getattr(kernel, "matmul", None)
+    batched_matmul = getattr(kernel, "matmul_batched", None)
+    grouped_matmul = getattr(kernel, "matmul_grouped", None)
 
     missing = [
         name
         for name, attr in [
-            ("w8a8_fp8_matmul", matmul),
-            ("fp8_act_quant", act_quant),
-            ("w8a8_fp8_matmul_batched", batched_matmul),
-            ("w8a8_fp8_matmul_grouped", grouped_matmul),
+            ("matmul", matmul),
+            ("matmul_batched", batched_matmul),
+            ("matmul_grouped", grouped_matmul),
         ]
         if attr is None
     ]
@@ -105,10 +114,21 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
 
     return FineGrainedFP8(
         matmul=matmul,
-        act_quant=act_quant,
         batched_matmul=batched_matmul,
         grouped_matmul=grouped_matmul,
     )
+
+
+@torch._dynamo.allow_in_graph
+def _populate_finegrained_fp8_kernel() -> None:
+    _ = _load_finegrained_fp8_kernel()
+    return None
+
+
+def load_finegrained_fp8_kernel() -> FineGrainedFP8:
+    if is_torchdynamo_compiling():
+        _populate_finegrained_fp8_kernel()
+    return _load_finegrained_fp8_kernel()
 
 
 def _cdiv(a: int, b: int) -> int:
@@ -151,36 +171,25 @@ def finegrained_fp8_linear(
     block_size: list[int] | None = None,
     bias: torch.Tensor | None = None,
     activation_scale: torch.Tensor | None = None,
-    output_dtype: torch.dtype = torch.bfloat16,
+    output_dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
-    """End-to-end Triton FP8 linear: per-token (or static per-tensor) act-quant + matmul + bias.
+    """Triton FP8/FP4 linear: fused act-quant + matmul, then optional bias add.
 
-    Triton has no FP4 path — caller must guard FP4 weights before reaching here.
+    ``activation_scale=None`` → dynamic per-K-block scales (inline); set it for
+    static per-tensor quant. ``weight_scale_inv`` accepts fp32 or UE8M0; the
+    dispatcher routes FP4 (``int8``-packed) weights automatically.
     """
-    finegrained_fp8 = _load_finegrained_fp8_kernel()
-
-    if activation_scale is not None:
-        scale = activation_scale.to(torch.float32)
-        qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-    else:
-        gran_k = block_size[1] if block_size is not None else input.shape[-1]
-        qinput, scale = finegrained_fp8.act_quant(input, gran_k)
-
-    # Triton's autotuner can't key on `float8_e8m0fnu` (UE8M0 SFs) — always cast
-    # to fp32 at the kernel boundary. No-op for fp32 SFs; cheap for UE8M0 since
-    # scales are 1/gran_k the size of the weight.
+    finegrained_fp8 = load_finegrained_fp8_kernel()
     output = finegrained_fp8.matmul(
-        qinput,
+        input,
         weight,
-        scale,
-        weight_scale_inv.float(),
+        weight_scale_inv,
         block_size,
         output_dtype,
+        activation_scale=activation_scale,
     )
-
     if bias is not None:
         output.add_(bias)
-
     return output
 
 
@@ -191,17 +200,16 @@ def fp8_linear(
     block_size: list[int] | None = None,
     bias: torch.Tensor | None = None,
     activation_scale: torch.Tensor | None = None,
-    output_dtype: torch.dtype = torch.bfloat16,
+    output_dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
     """End-to-end FP8/FP4 linear used by `FP8Linear` and the eager `FP8Experts` loop.
 
-    Dispatch order:
-      1. DeepGEMM full pipeline (`deepgemm_fp8_fp4_linear`) — handles both FP8 (`float8_e4m3fn`)
-         and FP4 (`int8`-packed e2m1) weights, paired with the matching activation cast inside.
-         3-6x faster than Triton on FP8; required for FP4 and for UE8M0 (`float8_e8m0fnu`) SFs.
-      2. Triton finegrained-fp8 fallback (FP8 weights + float SFs) — applies on `ImportError` from
-         the DeepGEMM path or for static activations (DeepGEMM is dynamic-only). Raises if FP4
-         weights or UE8M0 SFs reach this branch since Triton can't handle them.
+    Dispatch order — both backends handle FP8 and FP4 weights with fp32 or UE8M0 scales:
+      1. DeepGEMM (`deepgemm_fp8_fp4_linear`) — 3-6× faster on the shapes it supports.
+         Preferred for FP4, UE8M0 SFs, and 128×128 block FP8.
+      2. Triton finegrained-fp8 fallback — used when DeepGEMM is unavailable, when the
+         caller passes ``activation_scale`` (DeepGEMM is dynamic-only), or for any
+         shape DeepGEMM declined.
 
     Args:
         input: (..., K) bf16/fp16 activations.
@@ -215,18 +223,27 @@ def fp8_linear(
             for dynamic (per-token) quant.
         output_dtype: desired output dtype.
     """
-    # Triton handles FP8 weights + either fp32 or UE8M0 SFs (it casts the SF to fp32 at the
-    # kernel boundary — see comment in :func:`finegrained_fp8_linear`). Only FP4 (int8) weights
-    # genuinely require the DeepGEMM path. Static activation (per-tensor scalar) is Triton-only:
-    # DeepGEMM's kernel expects per-row SFs and rejects scalar SFs at its host-side check.
-    deepgemm_required = weight.dtype == torch.int8
-    deepgemm_compatible = activation_scale is None and (
-        deepgemm_required
-        or weight_scale_inv.dtype == torch.float8_e8m0fnu
-        or (block_size is not None and block_size[0] == block_size[1] == 128)
+    # DeepGEMM is CUDA-only, dynamic-only, SM90+ only, FP4/FP8-block-128-only.
+    # ``TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1`` forces the Triton fallback for this single
+    # dispatcher (the experts ``"deepgemm"`` impl is unaffected — use ``set_experts_implementation``
+    # for that). Used by the FP8 MoE batched_mm / grouped_mm paths to avoid a still-unexplained
+    # DeepGEMM-vs-Triton interaction that degrades end-to-end generation on B200 (per-row kernel
+    # outputs still measure bit-perfect, but final tokens drift; not reproducible with the
+    # DeepGEMM linear off). Also temporarily skipped under ``torch.compile`` — DeepGEMM's
+    # per-token cast calls ``pack_ue8m0_to_int`` which has data-dependent bit-twiddling that
+    # dynamo can't guard. TODO: remove the ``is_torchdynamo_compiling`` gate once the upstream
+    # ``pack_ue8m0_to_int`` is rewritten to be FakeTensor-friendly; the Triton fallback is
+    # dynamo-friendly today via its ``@triton_op`` registration.
+    deepgemm_preferred = (
+        activation_scale is None
+        and weight.device.type == "cuda"
+        and torch.cuda.get_device_properties().major >= 9
+        and (weight.dtype == torch.int8 or (block_size is not None and block_size[0] == block_size[1] == 128))
+        and os.environ.get("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", "0") != "1"
+        and not is_torchdynamo_compiling()
     )
 
-    if deepgemm_compatible:
+    if deepgemm_preferred:
         try:
             return deepgemm_fp8_fp4_linear(
                 input,
@@ -241,19 +258,6 @@ def fp8_linear(
             # Forward the original reason so the user knows whether DeepGEMM is unavailable
             # (env/build issue) or refused this specific input (e.g. multi-device on SM100).
             logger.warning_once(f"DeepGEMM unavailable for this call, falling back to Triton. Reason: {e}")
-
-    if deepgemm_required:
-        if activation_scale is not None:
-            raise RuntimeError(
-                "Static (per-tensor) activation quantization is not supported with FP4 weights — "
-                "DeepGEMM expects per-row SFs and the Triton fallback has no FP4 path. "
-                "Use dynamic activation quantization instead."
-            )
-        raise RuntimeError(
-            "FP4 weights require the DeepGEMM path; the Triton fallback handles FP8 weights only. "
-            "Make sure your system is compatible with the DeepGEMM path: SM100+ GPU, CUDA runtime "
-            "12.9+, PyTorch ≥2.6, and the `kernels` package installed."
-        )
 
     return finegrained_fp8_linear(input, weight, weight_scale_inv, block_size, bias, activation_scale, output_dtype)
 
@@ -279,7 +283,7 @@ class FP8Linear(nn.Linear):
             # If block size is None, it means that we are doing per-tensor quantization
             self.weight_scale_inv = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
         else:
-            sf_dtype = _UE8M0_SF_DTYPE if scale_fmt == "ue8m0" else torch.float32
+            sf_dtype = _get_ue8m0_dtype() if scale_fmt == "ue8m0" else torch.float32
             scale_out_features = (out_features + self.block_size[0] - 1) // self.block_size[0]
             scale_in_features = (in_features + self.block_size[1] - 1) // self.block_size[1]
             self.weight_scale_inv = nn.Parameter(torch.empty(scale_out_features, scale_in_features, dtype=sf_dtype))
@@ -368,14 +372,14 @@ class FP8GroupedLinear(FP8Linear):
         tokens_per_expert = torch.full((self.n_groups,), tokens_per_group, device=x.device, dtype=torch.int32)
         offsets = torch.arange(1, self.n_groups + 1, device=x.device, dtype=torch.int32) * tokens_per_group
 
-        finegrained_fp8 = _load_finegrained_fp8_kernel()
+        finegrained_fp8 = load_finegrained_fp8_kernel()
         y = finegrained_fp8.grouped_matmul(
             x,
             w,
-            scale_inv.float(),
+            scale_inv,
+            offsets=offsets,
             tokens_per_expert=tokens_per_expert,
             block_size=self.block_size,
-            offsets=offsets,
         )
         y = y.reshape(self.n_groups, *input_shape, -1).movedim(0, -2)
         if self.has_bias:
@@ -395,14 +399,7 @@ def fp8_batched_mm_experts_forward(
             "Use the default eager dispatch or switch to activation_scheme='dynamic'."
         )
 
-    weight_up = self.gate_up_proj if self.has_gate else self.up_proj
-    if weight_up.dtype == torch.int8:
-        raise NotImplementedError(
-            "'batched_mm' experts dispatch is Triton-only and does not support FP4 (int8-packed) "
-            "expert weights. Use experts_implementation='deepgemm' instead."
-        )
-
-    finegrained_fp8 = _load_finegrained_fp8_kernel()
+    finegrained_fp8 = load_finegrained_fp8_kernel()
 
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
@@ -414,11 +411,10 @@ def fp8_batched_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
-    # Clamp EP sentinels so per-token weight indexing stays in-bounds. Routing weights are already
-    # zero at sentinel slots (RouterParallel masks them at dispatch), so the weighted mul drops
-    # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
-    # Out-of-place to avoid mutating the caller's routing tensor (a contiguous `reshape(-1)` aliases it).
-    expert_ids = expert_ids.clamp(0, self.num_experts - 1)
+    # EP sentinel handling: leave `expert_ids` unclamped — the batched kernel early-returns on
+    # `expert_id >= NUM_EXPERTS`, leaving sentinel output rows uninitialized. The post-mask below
+    # zeroes them before the per-token reduction so `uninit * 0 = NaN` can't poison the sum.
+    sentinel_mask = (expert_ids >= self.num_experts).unsqueeze(-1)
 
     weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
     weight_scale_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
@@ -429,7 +425,7 @@ def fp8_batched_mm_experts_forward(
     proj_out = finegrained_fp8.batched_matmul(
         selected_hidden_states,
         weight_up,
-        weight_scale_up.float(),
+        weight_scale_up,
         block_size=self.block_size,
         expert_ids=expert_ids,
     )  # (S, 2 * intermediate_dim) or (S, intermediate_dim) depending on gating
@@ -446,13 +442,17 @@ def fp8_batched_mm_experts_forward(
     proj_out = finegrained_fp8.batched_matmul(
         proj_out,
         weight_down,
-        weight_scale_down.float(),
+        weight_scale_down,
         block_size=self.block_size,
         expert_ids=expert_ids,
     )  # (S, hidden_dim)
 
     # Apply routing weights
     weighted_out = proj_out * sample_weights.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
+
+    # Post-mask sentinel rows: kernel left them uninitialized, so zero them out
+    # before the reduction below (uninit may be NaN; NaN * 0 = NaN).
+    weighted_out.masked_fill_(sentinel_mask, 0.0)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
     # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
@@ -473,14 +473,7 @@ def fp8_grouped_mm_experts_forward(
             "Use the default eager dispatch or switch to activation_scheme='dynamic'."
         )
 
-    weight_up = self.gate_up_proj if self.has_gate else self.up_proj
-    if weight_up.dtype == torch.int8:
-        raise NotImplementedError(
-            "'grouped_mm' experts dispatch is Triton-only and does not support FP4 (int8-packed) "
-            "expert weights. Use experts_implementation='deepgemm' instead."
-        )
-
-    finegrained_fp8 = _load_finegrained_fp8_kernel()
+    finegrained_fp8 = load_finegrained_fp8_kernel()
 
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
@@ -520,10 +513,10 @@ def fp8_grouped_mm_experts_forward(
     proj_out = finegrained_fp8.grouped_matmul(
         selected_hidden_states_g,
         weight_up,
-        weight_scale_up.float(),
+        weight_scale_up,
+        offsets=offsets,
         tokens_per_expert=tokens_per_expert,
         block_size=self.block_size,
-        offsets=offsets,
     )  # (S, 2 * intermediate_dim)
 
     # Apply gating or activation
@@ -538,10 +531,10 @@ def fp8_grouped_mm_experts_forward(
     proj_out = finegrained_fp8.grouped_matmul(
         proj_out,
         weight_down,
-        weight_scale_down.float(),
+        weight_scale_down,
+        offsets=offsets,
         tokens_per_expert=tokens_per_expert,
         block_size=self.block_size,
-        offsets=offsets,
     )  # (S, hidden_dim)
 
     # Apply routing weights
@@ -600,6 +593,8 @@ class FP8Experts(nn.Module):
         self.activation_scheme = activation_scheme
         self.num_experts = _first_attr(config, "num_local_experts", "num_experts")
         self.intermediate_dim = _first_attr(config, "moe_intermediate_size", "intermediate_size")
+        self.swiglu_alpha = getattr(config, "swiglu_alpha", None)
+        self.swiglu_limit = getattr(config, "swiglu_limit", None)
         self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
         self.limit = getattr(config, "swiglu_limit", None)
 
@@ -608,7 +603,7 @@ class FP8Experts(nn.Module):
         #   - weight is `int8`, K dim halved (2 e2m1 values per byte).
         #   - per-row SF at gran_k=32 (no block-wise SF; `block_size` ignored).
         is_fp4 = getattr(config, "expert_dtype", "fp8") == "fp4"
-        sf_dtype = _UE8M0_SF_DTYPE if scale_fmt == "ue8m0" else torch.float32
+        sf_dtype = _get_ue8m0_dtype() if scale_fmt == "ue8m0" else torch.float32
         if is_fp4:
             alloc_kwargs = {
                 "weight_dtype": torch.int8,
@@ -647,7 +642,13 @@ class FP8Experts(nn.Module):
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
-        if self.limit is not None:
+        if self.swiglu_alpha is not None:
+            # Clamped SwiGLU-OAI gate (same math as the model's non-quantized experts).
+            gate = gate.clamp(max=self.swiglu_limit)
+            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+            glu = gate * torch.sigmoid(gate * self.swiglu_alpha)
+            return (up + 1.0) * glu
+        elif self.limit is not None:
             gate = gate.clamp(max=self.limit)
             up = up.clamp(min=-self.limit, max=self.limit)
         return self.act_fn(gate) * up
@@ -866,8 +867,8 @@ class Fp8Quantize(ConversionOps):
         # matches the parameter allocation in `FP8Linear`/`FP8Experts`.
         if self.hf_quantizer.quantization_config.scale_fmt == "ue8m0":
             inv_scales = torch.pow(2.0, torch.ceil(torch.log2(inv_scales.clamp(min=torch.finfo(torch.float32).tiny))))
-            inv_scales = inv_scales.to(_UE8M0_SF_DTYPE)
-        scale_key = key.rsplit(".", 1)[0] + ".weight_scale_inv" if key.endswith("weight") else key + "_scale_inv"
+            inv_scales = inv_scales.to(_get_ue8m0_dtype())
+        scale_key = key.rsplit(".", 1)[0] + ".weight_scale_inv" if key.endswith(".weight") else key + "_scale_inv"
         return {key: quantized, scale_key: inv_scales}
 
     def convert(self, input_dict: torch.Tensor, **kwargs) -> dict[str, torch.Tensor]:
@@ -965,10 +966,16 @@ class Fp8Dequantize(ConversionOps):
             output_dtype = (
                 scales.dtype if scales.dtype.is_floating_point and scales.element_size() >= 2 else torch.bfloat16
             )
-
+        # MXFP8 checkpoints ship E8M0 exponents stored as ``torch.uint8`` (one byte per
+        # block) — the actual scale is `2 ** (byte - 127)`. Interpreting the raw bytes
+        # as scalar multipliers would be silently wrong, so unpack to fp32 here.
+        if scales.dtype == torch.uint8:
+            s_fp32 = (scales.to(torch.float32) - 127.0).exp2()
+        else:
+            s_fp32 = scales.to(torch.float32)
         original_shape = quantized_fp32.shape
         q = quantized_fp32.reshape(-1, scale_rows, block_m, scale_cols, block_n)
-        s = scales.to(torch.float32).reshape(-1, scale_rows, scale_cols).unsqueeze(-1).unsqueeze(2)
+        s = s_fp32.reshape(-1, scale_rows, scale_cols).unsqueeze(-1).unsqueeze(2)
         return (q * s).to(output_dtype).reshape(original_shape)
 
     def _get_target_dtype(self, model: torch.nn.Module | None, full_layer_name: str | None) -> torch.dtype | None:
@@ -1030,3 +1037,29 @@ class Fp8Dequantize(ConversionOps):
         # checkpoint preserves the FP8 format (weight + per-block ``weight_scale_inv``)
         # whether the in-memory state stayed quantized or was dequantized for compute.
         return Fp8Quantize(self.hf_quantizer)
+
+
+class Fp8DecodeScale(ConversionOps):
+    """Decode MXFP8 ``ue8m0`` per-block scales (stored as ``uint8`` exponents) into the
+    float32 multiplicative scales the FP8 compute path expects.
+
+    Native MXFP8 loading (``dequantize=False``) keeps weights in ``float8_e4m3fn`` and only
+    needs the sibling ``*.weight_scale_inv`` tensors turned from raw E8M0 bytes into real
+    scales (``2 ** (byte - 127)``). Prepended to each weight converter, this op runs before
+    any merge/concat collapses the per-expert structure: it rewrites only the ``uint8`` scale
+    entries and passes weights (and already-float scales) through untouched.
+    """
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    @staticmethod
+    def _decode(tensor: torch.Tensor) -> torch.Tensor:
+        # E8M0 stores one exponent byte per block; the real scale is ``2 ** (byte - 127)``.
+        return (tensor.to(torch.float32) - 127.0).exp2() if tensor.dtype == torch.uint8 else tensor
+
+    def convert(self, input_dict: dict[str, list[torch.Tensor] | torch.Tensor], **kwargs):
+        return {
+            key: [self._decode(t) for t in value] if isinstance(value, list) else self._decode(value)
+            for key, value in input_dict.items()
+        }

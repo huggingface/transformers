@@ -243,11 +243,9 @@ class PPOCRV6SmallRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
             check_hidden_states_output(inputs_dict.copy(), config, model_class)
 
 
-# TODO: vasqu
 @require_torch
 @require_vision
 @slow
-@unittest.skip(reason="PP-OCRv6_small_rec_safetensors weights have not been uploaded yet.")
 class PPOCRV6SmallRecModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/PP-OCRv6_small_rec_safetensors"
@@ -266,7 +264,7 @@ class PPOCRV6SmallRecModelIntegrationTest(unittest.TestCase):
 
         results = self.image_processor.post_process_text_recognition(outputs)
         expected_text = "绿洲仕格维花园公寓"
-        expected_score = 0.9837473630905151
+        expected_score = 0.9993069767951965
 
         self.assertEqual(results[0]["text"], expected_text)
         torch.testing.assert_close(results[0]["score"], expected_score, rtol=2e-2, atol=2e-2)

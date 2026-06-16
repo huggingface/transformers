@@ -24,6 +24,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...cache_utils import Cache
+from ...integrations import use_kernel_func_from_hub
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import logging
@@ -85,6 +86,7 @@ class OlmoRotaryEmbedding(LlamaRotaryEmbedding):
         return cos, sin
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 

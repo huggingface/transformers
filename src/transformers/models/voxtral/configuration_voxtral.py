@@ -110,7 +110,6 @@ class VoxtralConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     audio_token_id: int | None = None
     projector_hidden_act: str = "gelu"
-    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
