@@ -442,6 +442,9 @@ class Xcodec2ISTFTHead(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         stft_pred = self.linear(hidden_states).transpose(1, 2)
         magnitude, phase = stft_pred.chunk(2, dim=1)
+        # Cast to float32: complex exponential and irfft are not supported for fp16 (ComplexHalf)
+        magnitude = magnitude.float()
+        phase = phase.float()
         # Clamp like original: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/codec_decoder_vocos.py#L138
         magnitude = torch.exp(magnitude).clamp(max=1e2)
         spectrogram_complex = magnitude * torch.exp(1j * phase)
