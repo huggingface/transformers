@@ -685,10 +685,10 @@ def is_kenlm_available() -> bool:
 def is_kernels_available(MIN_VERSION: str = KERNELS_MIN_VERSION, MAX_VERSION: str = KERNELS_MAX_VERSION) -> bool:
     is_available, kernels_version = _is_package_available("kernels", return_version=True)
     viable_version = False
-    if (extracted_version := version.parse(kernels_version)) != "N/A":
-        viable_version = extracted_version >= version.parse(MIN_VERSION) and extracted_version < version.parse(
-            MAX_VERSION
-        )
+    if kernels_version != "N/A":
+        viable_version = version.parse(kernels_version) >= version.parse(MIN_VERSION) and version.parse(
+            kernels_version
+        ) < version.parse(MAX_VERSION)
     return is_available and viable_version
 
 
