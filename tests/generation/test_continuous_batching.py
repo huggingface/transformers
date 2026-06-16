@@ -44,7 +44,7 @@ from transformers.generation.continuous_batching.continuous_api import OutputRou
 from transformers.generation.continuous_batching.distributed import DistributedHelper
 from transformers.generation.continuous_batching.input_outputs import build_attention_mask
 from transformers.generation.continuous_batching.offloading_manager import OffloadingManager
-from transformers.generation.continuous_batching.requests import GenerationOutput, RequestStatus
+from transformers.generation.continuous_batching.requests import GenerationOutput, RequestState, RequestStatus
 from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_flash_attn,
@@ -209,6 +209,54 @@ def regular_generate(
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
+    def test_generation_outputs_are_snapshots(self):
+        state = RequestState(
+            request_id="r", initial_tokens=[10, 11], max_new_tokens=3, streaming=True, record_timestamps=True
+        )
+        state._status = RequestStatus.DECODING
+
+        self.assertFalse(state.update_and_check_completion(101, -1.01))
+        first_output = state.to_generation_output()
+        self.assertEqual(first_output.generated_tokens, [101])
+        self.assertEqual(first_output.logprobs, [-1.01])
+        self.assertEqual(len(first_output.timestamps), 1)
+
+        self.assertFalse(state.update_and_check_completion(102, -1.02))
+        second_output = state.to_generation_output()
+
+        self.assertEqual(first_output.generated_tokens, [101])
+        self.assertEqual(first_output.logprobs, [-1.01])
+        self.assertEqual(len(first_output.timestamps), 1)
+        self.assertEqual(second_output.generated_tokens, [101, 102])
+        self.assertEqual(second_output.logprobs, [-1.01, -1.02])
+        self.assertEqual(len(second_output.timestamps), 2)
+
+    def test_streaming_output_after_soft_reset_does_not_shorten_generation(self):
+        state = RequestState(request_id="r", initial_tokens=[10, 11], max_new_tokens=5, streaming=True)
+        state._status = RequestStatus.DECODING
+        for token_id in [101, 102]:
+            self.assertFalse(state.update_and_check_completion(token_id, None))
+
+        reset_state = state.create_equivalent_initial_request()
+        reset_state._status = RequestStatus.DECODING
+        reset_state.streaming = True
+
+        accepted_tokens = []
+        streamed_tokens = []
+        for token_id in [103, 104, 105, 106]:
+            previous_tokens = reset_state.generated_tokens[:]
+            is_finished = reset_state.update_and_check_completion(token_id, None)
+            if reset_state.generated_tokens != previous_tokens:
+                accepted_tokens.append(token_id)
+            streamed_tokens.append(reset_state.to_generation_output().generated_tokens)
+            if is_finished:
+                break
+
+        self.assertEqual(accepted_tokens, [103, 104, 105])
+        self.assertEqual(streamed_tokens, [[101, 102, 103], [101, 102, 103, 104], [101, 102, 103, 104, 105]])
+        self.assertEqual(reset_state.generated_tokens, [103, 104, 105])
+        self.assertEqual(reset_state.initial_tokens, [10, 11, 101, 102])
+
     @parameterized.expand(
         [
             (None, None, "0"),
