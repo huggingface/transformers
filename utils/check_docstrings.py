@@ -104,7 +104,6 @@ class DecoratedItem:
     # Name fields – used to match the item against the corresponding modular_*.py source
     name: str = ""  # class or function name
     class_name: str | None = None  # enclosing class name (None for top-level items)
-    base_class_names: list[str] = None  # direct base class names from AST (class items only)
 
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
@@ -1518,14 +1517,6 @@ def _build_ast_indexes(source: str, tree: ast.Module | None = None) -> list[Deco
                             continue
                         arg_names.append(attr_name)
 
-        base_class_names = []
-        if isinstance(node, ast.ClassDef):
-            for _base in node.bases:
-                if isinstance(_base, ast.Name):
-                    base_class_names.append(_base.id)
-                elif isinstance(_base, ast.Attribute):
-                    base_class_names.append(_base.attr)
-
         decorated_items.append(
             DecoratedItem(
                 decorator_line=decorator_line,
@@ -1541,7 +1532,6 @@ def _build_ast_indexes(source: str, tree: ast.Module | None = None) -> list[Deco
                 is_config=is_config,
                 name=node.name,
                 class_name=parent_class_name,
-                base_class_names=base_class_names,
             )
         )
 
