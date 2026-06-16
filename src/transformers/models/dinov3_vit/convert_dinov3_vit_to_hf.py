@@ -280,8 +280,9 @@ def convert_and_test_dinov3_checkpoint(args):
     model.load_state_dict(converted_state_dict, strict=True)
     model = model.eval()
 
-    transform = get_transform()
-    image_processor = get_image_processor()
+    resize_size = 256 if model_name.startswith("eupe_") else 224
+    transform = get_transform(resize_size)
+    image_processor = get_image_processor(resize_size)
     image = prepare_img()
 
     # check preprocessing
