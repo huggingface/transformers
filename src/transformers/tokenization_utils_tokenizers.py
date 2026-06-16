@@ -147,6 +147,15 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             local_kwargs["post_processor"] = tok_from_file.post_processor
             local_kwargs["tokenizer_padding"] = tok_from_file.padding
             local_kwargs["tokenizer_truncation"] = tok_from_file.truncation
+            # Preserve the pre-tokenizer and decoder defined in tokenizer.json. Tokenizer classes with a
+            # custom __init__ rebuild the backend from vocab/merges and hardcode their own processing
+            # pipeline (e.g. LlamaTokenizer assumes a SentencePiece Metaspace pre-tokenizer). For models
+            # that reuse such a class with a different scheme -- e.g. byte-level BPE models like Llama 3 /
+            # DeepSeek declaring tokenizer_class="LlamaTokenizerFast" -- this would drop spaces/newlines on
+            # encode and emit raw byte tokens (Ġ/Ċ) on decode. Forwarding the serialized pre-tokenizer and
+            # decoder ensures the reconstructed tokenizer matches the tokenizer.json.
+            local_kwargs["pre_tokenizer"] = tok_from_file.pre_tokenizer
+            local_kwargs["decoder"] = tok_from_file.decoder
             # Preserve truncation and padding baked into tokenizer.json so that classes
             # with a custom __init__ that rebuild the backend tokenizer from scratch
             # can still access these settings.
@@ -419,6 +428,13 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         self._add_eos_token = kwargs.get("add_eos_token", False)
         if post_processor := kwargs.pop("post_processor", None):  # most reliable way to get the post-processor
             self._tokenizer.post_processor = post_processor
+        # Honor the pre-tokenizer and decoder serialized in tokenizer.json over the ones a custom
+        # __init__ may have hardcoded (see convert_to_native_format). Required for byte-level BPE
+        # models that reuse a SentencePiece-style tokenizer class (e.g. Llama 3 / DeepSeek).
+        if (pre_tokenizer := kwargs.pop("pre_tokenizer", None)) is not None:
+            self._tokenizer.pre_tokenizer = pre_tokenizer
+        if (decoder := kwargs.pop("decoder", None)) is not None:
+            self._tokenizer.decoder = decoder
         self._should_update_post_processor = explicit_bos_eos_in_kwargs or self._tokenizer.post_processor is None
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
