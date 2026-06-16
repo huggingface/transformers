@@ -132,7 +132,7 @@ class Tipsv2DptReassembleStage(nn.Module):
     3. Resizing the spatial dimensions (height, width).
 
     Args:
-        config (`[Tipsv2DptConfig]`):
+        config ([`Tipsv2DptConfig`]):
             Model configuration class defining the model architecture.
     """
 

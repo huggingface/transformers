@@ -86,17 +86,17 @@ class Tipsv2DptImageProcessor(Tipsv2ImageProcessor):
         target_sizes: TensorType | list[tuple[int, int]] | None = None,
     ) -> list[dict[str, torch.Tensor]]:
         """
-        Converts the output of [`Tipsv2DptForDepthEstimation`] or [`Tipsv2DptOutput`] into final depth predictions.
+        Converts the output of [`Tipsv2DptForDepthEstimation`] or [`Tipsv2DptModel`] into final depth predictions.
 
         Args:
-            outputs ([`DepthEstimatorOutput`] or [`Tipsv2DptOutput`]):
+            outputs ([`DepthEstimatorOutput`] or `Tipsv2DptOutput`):
                 Raw outputs of the model.
-            target_sizes (`TensorType` or `list[tuple[int, int]]`, *optional*):
+            target_sizes ([`TensorType`] or `list[tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
 
         Returns:
-            `list[dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
+            `list[dict[str, torch.Tensor]]`: A list of dictionaries of tensors representing the processed depth
             predictions.
         """
         predicted_depth = outputs.predicted_depth
@@ -127,7 +127,7 @@ class Tipsv2DptImageProcessor(Tipsv2ImageProcessor):
         Args:
             outputs (`Tipsv2DptNormalEstimatorOutput` or `Tipsv2DptOutput`):
                 Raw outputs of the model.
-            target_sizes (`TensorType` or `list[tuple[int, int]]`, *optional*):
+            target_sizes ([`TensorType`] or `list[tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
 
@@ -162,9 +162,9 @@ class Tipsv2DptImageProcessor(Tipsv2ImageProcessor):
         Converts the output of [`Tipsv2DptForSemanticSegmentation`] or [`Tipsv2DptModel`] into semantic segmentation maps.
 
         Args:
-            outputs ([`SemanticSegmenterOutput`] or [`Tipsv2DptOutput`]):
+            outputs ([`SemanticSegmenterOutput`] or `Tipsv2DptOutput`):
                 Raw outputs of the model.
-            target_sizes (`TensorType` or `list[tuple[int, int]]`, *optional*):
+            target_sizes [([`TensorType`] or `list[tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
 
@@ -295,7 +295,7 @@ class Tipsv2DptReassembleStage(ZoeDepthReassembleStage):
     3. Resizing the spatial dimensions (height, width).
 
     Args:
-        config (`[Tipsv2DptConfig]`):
+        config ([`Tipsv2DptConfig`]):
             Model configuration class defining the model architecture.
     """
 
