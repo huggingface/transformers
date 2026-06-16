@@ -795,6 +795,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("solar_open", "SolarOpenForCausalLM"),
         ("stablelm", "StableLmForCausalLM"),
         ("starcoder2", "Starcoder2ForCausalLM"),
+        ("susono", "SusonoForCausalLM"),
         ("trocr", "TrOCRForCausalLM"),
         ("vaultgemma", "VaultGemmaForCausalLM"),
         ("whisper", "WhisperForCausalLM"),

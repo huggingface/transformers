@@ -1,0 +1,1692 @@
+# Copyright 2025 The Susono Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Susono model implementation.
+
+Susono extends Qwen3-Next with:
+  - Engram: conditional N-gram hash-based memory (arXiv:2601.07372)
+  - mHC: Manifold-Constrained Hyper-Connections (arXiv:2512.24880)
+
+Architecture overview:
+  embed_tokens
+    └─ for each layer L:
+         [MHC-Lite] width_connection: n streams → x_in + closure  [n,B,S,D]→[B,S,D]
+         [Engram, optional] x_in += engram_memory(input_ids, x_in)
+         x_out = SusonoDecoderLayer(x_in, ...)                      [B,S,D]→[B,S,D]
+         [MHC-Lite] depth_connection via closure → update n streams[B,S,D]→[n,B,S,D]
+    [mHC] final aggregate → [B,S,D]
+  norm → lm_head
+"""
+
+import itertools
+import math
+import unicodedata
+from collections.abc import Callable
+from typing import Any, List, Optional
+
+import torch
+import torch.nn.functional as F
+from torch import nn, Tensor
+
+from ... import initialization as init
+from ...activations import ACT2FN
+from ...cache_utils import Cache
+from ...generation import GenerationMixin
+from ...integrations import use_experts_implementation, use_kernelized_func
+from ...masking_utils import create_causal_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import (
+    GenericForQuestionAnswering,
+    GenericForSequenceClassification,
+    GenericForTokenClassification,
+    GradientCheckpointingLayer,
+)
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
+from ...utils.output_capturing import OutputRecorder, capture_outputs
+from .configuration_susono import SusonoConfig
+
+
+if is_causal_conv1d_available():
+    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+else:
+    causal_conv1d_update, causal_conv1d_fn = None, None
+
+if is_flash_linear_attention_available():
+    from fla.modules import FusedRMSNormGated
+    from fla.ops.gated_delta_rule import chunk_gated_delta_rule, fused_recurrent_gated_delta_rule
+else:
+    chunk_gated_delta_rule, fused_recurrent_gated_delta_rule = None, None
+    FusedRMSNormGated = None
+
+logger = logging.get_logger(__name__)
+
+
+# Engram: Conditional Memory via Scalable N-gram Lookup
+# Adapted from Megatron-LM engram_module.py for HuggingFace [B, S, D] format.
+# Reference: arXiv:2601.07372
+
+class SusonoCompressedTokenizer(nn.Module):
+    """Maps raw token IDs to a compressed vocabulary via NFKC normalisation.
+
+    The lookup table is a fixed integer buffer (not a learnable parameter).
+    Call `from_vocab` to build a non-trivial mapping from a token string dict.
+
+    Args:
+        base_vocab_size: Total number of tokens in the original vocabulary.
+        seed: Unused, kept for interface symmetry.
+    """
+
+    def __init__(self, base_vocab_size: int, seed: int = 0) -> None:
+        super().__init__()
+        self.base_vocab_size = base_vocab_size
+        # Default: identity mapping (overridden by from_vocab for real compression)
+        mapping = torch.arange(base_vocab_size, dtype=torch.long)
+        self.register_buffer("mapping", mapping)
+
+    @classmethod
+    def from_vocab(
+        cls,
+        vocab: dict,
+        base_vocab_size: int,
+        seed: int = 0,
+    ) -> "SusonoCompressedTokenizer":
+        """Build a SusonoCompressedTokenizer from a {token_id: token_string} dict.
+
+        Normalisation pipeline: NFKC → NFD → strip combining marks → lower-case.
+        Two token IDs that map to the same normalised form share a compressed ID,
+        reducing the effective vocabulary size by ~23%.
+        """
+        obj = cls(base_vocab_size, seed)
+        norm_to_cid: dict = {}
+        mapping = torch.arange(base_vocab_size, dtype=torch.long)
+        for tid, text in vocab.items():
+            if not isinstance(text, str) or tid >= base_vocab_size:
+                continue
+            norm = unicodedata.normalize("NFKC", text)
+            norm = unicodedata.normalize("NFD", norm)
+            norm = "".join(c for c in norm if unicodedata.category(c) != "Mn")
+            norm = norm.lower()
+            if norm not in norm_to_cid:
+                norm_to_cid[norm] = tid
+            mapping[tid] = norm_to_cid[norm]
+        obj.mapping = mapping
+        return obj
+
+    def forward(self, token_ids: Tensor) -> Tensor:
+        """Compress token IDs using the normalisation lookup table.
+
+        Args:
+            token_ids: Integer tensor of shape [B, S].
+
+        Returns:
+            Compressed token IDs of shape [B, S].
+        """
+        return self.mapping[token_ids]
+
+
+class SusonoNgramHashMapping(nn.Module):
+    """Deterministic N-gram hashing using XOR-mix hash functions.
+
+    For each N-gram order k (2 ≤ k ≤ max_ngram_size) and each hash head h:
+        hash = XOR_i( t_i * m_{k,h,i} )
+        index = (hash % prime_k) + head_offset_k_h
+
+    Multipliers are seeded from (layer_id, k, h) for cross-layer independence.
+
+    Args:
+        config: SusonoConfig instance.
+        layer_id: 0-indexed transformer layer ID (used to seed hashes).
+    """
+
+    _DEFAULT_PRIMES = {2: 999983, 3: 1999993, 4: 3999971}
+
+    def __init__(self, config: SusonoConfig, layer_id: int) -> None:
+        super().__init__()
+        self.config = config
+        self.layer_id = layer_id
+
+        self.primes: List[int] = [
+            config.engram_n_embed_per_ngram
+            for k in range(2, config.engram_max_ngram_size + 1)
+        ]
+        # Total rows per order = prime_k × n_head_per_ngram
+        self.vocab_sizes: List[int] = [p * config.engram_n_head_per_ngram for p in self.primes]
+        offsets = [0]
+        for vs in self.vocab_sizes[:-1]:
+            offsets.append(offsets[-1] + vs)
+        self.register_buffer("offsets", torch.tensor(offsets, dtype=torch.long))
+
+        multipliers = self._build_multipliers(config, layer_id)
+        self.register_buffer("multipliers", multipliers)
+
+    @staticmethod
+    def _build_multipliers(config: SusonoConfig, layer_id: int) -> Tensor:
+        """Generate deterministic odd multipliers for each (ngram_order, head, position)."""
+        num_orders = config.engram_max_ngram_size - 1
+        shape = (num_orders, config.engram_n_head_per_ngram, config.engram_max_ngram_size)
+        gen = torch.Generator()
+        gen.manual_seed(config.engram_seed * 10007 + layer_id * 1009)
+        mults = torch.randint(1, 2**31, shape, generator=gen, dtype=torch.long)
+        mults = mults * 2 + 1  # ensure odd (invertible mod 2^32)
+        return mults
+
+    def forward(self, compressed_ids: Tensor) -> Tensor:
+        """Compute N-gram hash indices for all orders and heads.
+
+        Args:
+            compressed_ids: Compressed token IDs of shape [B, S].
+
+        Returns:
+            Hash indices of shape [B, S, total_heads] where
+            total_heads = (max_ngram_size - 1) * n_head_per_ngram.
+        """
+        B, S = compressed_ids.shape
+        device = compressed_ids.device
+        all_indices = []
+
+        for order_idx, k in enumerate(range(2, self.config.engram_max_ngram_size + 1)):
+            prime = self.primes[order_idx]
+            offset = self.offsets[order_idx]
+
+            # Build k-gram sequences: [B, S, k] (pad with last token for causal alignment)
+            last_tok = compressed_ids[:, -1:]  # [B, 1]
+            ngrams = torch.stack(
+                [
+                    torch.cat([compressed_ids[:, i:], last_tok.expand(-1, i)], dim=1)[:, :S]
+                    for i in range(k)
+                ],
+                dim=-1,
+            )  # [B, S, k]
+
+            # Hash multipliers for this order: [n_head, k]
+            mults = self.multipliers[order_idx, :, :k]
+
+            # XOR-mix: [B, S, n_head, k] → XOR cascade → [B, S, n_head]
+            products = ngrams.unsqueeze(2) * mults.unsqueeze(0).unsqueeze(0)
+            hash_val = products[..., 0]
+            for pos in range(1, k):
+                hash_val = hash_val ^ products[..., pos]
+
+            # Offset into flat MultiHeadEmbedding table
+            head_offset = offset + torch.arange(
+                self.config.engram_n_head_per_ngram, device=device
+            ) * prime
+            indices = (hash_val % prime) + head_offset  # [B, S, n_head]
+            all_indices.append(indices)
+
+        return torch.cat(all_indices, dim=-1)  # [B, S, total_heads]
+
+
+class SusonoMultiHeadEmbedding(nn.Module):
+    """Flat embedding table covering all N-gram orders and hash heads.
+
+    Layout (row dimension):
+        [head_0_ngram2 | head_1_ngram2 | … | head_0_ngram3 | …]
+
+    Args:
+        total_rows: Sum of (prime_k × n_head) for each N-gram order k.
+        embed_dim: Embedding dimension per row.
+    """
+
+    def __init__(self, total_rows: int, embed_dim: int) -> None:
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.table = nn.Embedding(total_rows, embed_dim)
+        nn.init.normal_(self.table.weight, std=0.02)
+
+    def forward(self, indices: Tensor) -> Tensor:
+        """Look up embeddings.
+
+        Args:
+            indices: Shape [B, S, total_heads].
+
+        Returns:
+            Shape [B, S, total_heads, embed_dim].
+        """
+        return self.table(indices)
+
+
+class SusonoShortConv(nn.Module):
+    """1-D depthwise convolution along the sequence dimension.
+
+    Fuses adjacent N-gram embeddings to capture local sequential patterns.
+
+    Args:
+        channels: Number of channels (= embed_dim after head averaging).
+        kernel_size: Convolution window (default 4, matching Engram paper).
+    """
+
+    def __init__(self, channels: int, kernel_size: int = 4) -> None:
+        super().__init__()
+        self.conv = nn.Conv1d(
+            channels,
+            channels,
+            kernel_size=kernel_size,
+            padding=kernel_size - 1,
+            groups=channels,  # depthwise
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Apply causal short convolution.
+
+        Args:
+            x: Shape [B, S, C].
+
+        Returns:
+            Shape [B, S, C].
+        """
+        x = x.permute(0, 2, 1)  # [B, C, S]
+        x = self.conv(x)
+        ks = self.conv.kernel_size[0]
+        if ks > 1:
+            x = x[..., : -(ks - 1)]  # trim right padding to preserve length S
+        return x.permute(0, 2, 1)  # [B, S, C]
+
+
+class SusonoEngramModule(nn.Module):
+    """Engram conditional memory module (HuggingFace batch-first variant).
+
+    Retrieves static N-gram memory and fuses it with current hidden states
+    via context-aware gating. Designed to be called from SusonoModel.forward
+    at selected layers before the standard decoder layer function.
+
+    Pipeline:
+        token_ids → SusonoCompressedTokenizer → SusonoNgramHashMapping
+                  → SusonoMultiHeadEmbedding → head_proj → SusonoShortConv
+                  → sigmoid(gate_proj(hidden_states)) · emb → out_proj
+                  → memory increment (add to hidden_states)
+
+    Args:
+        config: SusonoConfig.
+        layer_id: 0-indexed transformer layer where this module is inserted.
+    """
+
+    def __init__(self, config: SusonoConfig, layer_id: int) -> None:
+        super().__init__()
+        self.config = config
+        self.layer_id = layer_id
+        hidden_size = config.hidden_size
+
+        self.tokenizer = SusonoCompressedTokenizer(config.engram_base_vocab_size, config.engram_seed)
+        self.ngram_hash = SusonoNgramHashMapping(config, layer_id)
+
+        total_rows = sum(self.ngram_hash.vocab_sizes)
+        self.multi_head_emb = SusonoMultiHeadEmbedding(total_rows, config.engram_embed_dim)
+
+        num_total_heads = (config.engram_max_ngram_size - 1) * config.engram_n_head_per_ngram
+        self.short_conv = SusonoShortConv(channels=config.engram_embed_dim, kernel_size=4)
+
+        # Collapse all heads into a single embedding vector
+        self.head_proj = nn.Linear(
+            num_total_heads * config.engram_embed_dim,
+            config.engram_embed_dim,
+            bias=False,
+        )
+
+        # Context-aware gate: hidden_states → gate weights
+        self.gate_proj = nn.Linear(hidden_size, config.engram_embed_dim, bias=False)
+
+        # Output projection; zero-init so Engram starts as identity residual
+        self.out_proj = nn.Linear(config.engram_embed_dim, hidden_size, bias=False)
+        nn.init.zeros_(self.out_proj.weight)
+
+    def forward(self, input_ids: Tensor, hidden_states: Tensor) -> Tensor:
+        """Compute Engram memory increment.
+
+        Args:
+            input_ids:     Token IDs [B, S].
+            hidden_states: Current hidden states [B, S, D].
+
+        Returns:
+            Memory increment [B, S, D] to be added to hidden_states.
+        """
+        B, S, _ = hidden_states.shape
+
+        # 1. Compress vocabulary
+        compressed = self.tokenizer(input_ids)  # [B, S]
+
+        # 2. N-gram hash indices
+        indices = self.ngram_hash(compressed)  # [B, S, total_heads]
+
+        # 3. Multi-head embedding lookup
+        emb = self.multi_head_emb(indices)  # [B, S, total_heads, n_embed]
+
+        # 4. Flatten heads and project to single embedding
+        emb = self.head_proj(emb.view(B, S, -1))  # [B, S, n_embed]
+
+        # 5. Short convolution for local sequential fusion
+        emb = self.short_conv(emb)  # [B, S, n_embed]
+
+        # 6. Context-aware gating from hidden states
+        gate = torch.sigmoid(self.gate_proj(hidden_states))  # [B, S, n_embed]
+        emb = gate * emb  # [B, S, n_embed]
+
+        # 7. Project back to hidden size
+        return self.out_proj(emb)  # [B, S, D]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# mHC-Lite: Manifold-Constrained Hyper-Connections Lite (MHC-Lite)
+# Adapted from MHC-Lite for HuggingFace [B, S, D] format.
+# X tensor convention: [n, B, S, D] (n = num_streams).
+# Reference: MHC-Lite https://arxiv.org/abs/2601.05732
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Module-level cache for permutation matrices (shared across SusonoMHC instances)
+_susono_perm_mats_cache: dict = {}
+
+
+def _get_susono_perm_mats(n: int, device: torch.device) -> Tensor:
+    """Return all n! permutation matrices [n!, n, n], cached per (n, device).
+
+    The identity permutation is always first (index 0).
+    """
+    key = (n, str(device))
+    if key not in _susono_perm_mats_cache:
+        perms = list(itertools.permutations(range(n)))
+        idx = torch.tensor(perms, dtype=torch.long)
+        eye = torch.eye(n, dtype=torch.float32)
+        _susono_perm_mats_cache[key] = eye[idx].to(device)   # [n!, n, n]
+    return _susono_perm_mats_cache[key]
+
+
+class SusonoMHC(nn.Module):
+    """MHC-Lite: Manifold-Constrained Hyper-Connections via permutation matrices.
+
+    More memory and compute efficient than Sinkhorn-Knopp based mHC:
+    - H_res is a learnable convex combination of all n! permutation matrices,
+      which spans the Birkhoff polytope without iterative projection.
+    - alpha (H_pre) and beta (H_post) are input-dependent (static + dynamic).
+
+    Multi-stream state tensor X has shape [n, B, S, D].
+
+    Forward pass at each layer boundary:
+        normed        = RMSNorm(concat(X streams))          [B, S, n*D]
+        alpha_pre     = sigmoid(scale * normed @ W + b)     [B, S, n]
+        res_coeff     = softmax(scale * normed @ W + b)     [B, S, n!]
+        H_res         = Σ_r res_coeff[r] * P_r              [B, S, n, n]
+        x_in          = Σ_s alpha_pre[s] * X[s]             [B, S, D]
+        new_residuals = H_res @ X                           [B, S, n, D]
+        x_out         = TransformerLayer(x_in)              [B, S, D]
+        beta          = sigmoid(scale * normed @ W + b) * 2 [B, S, n]
+        X_new         = beta ⊗ x_out + new_residuals        [n, B, S, D]
+
+    Args:
+        hidden_size:          Dimension D of each residual stream.
+        num_streams:          Number of parallel residual streams n.
+        layer_index:          Layer index for initialisation heuristic.
+        sinkhorn_iterations:  Unused; retained for API backward compatibility.
+    """
+
+    def __init__(
+        self,
+        hidden_size: int,
+        num_streams: int,
+        layer_index: int = 0,
+        sinkhorn_iterations: int = 20,   # unused, kept for API compat
+    ) -> None:
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.num_streams = num_streams
+        n = num_streams
+        num_perms = math.factorial(n)
+        self.num_perms = num_perms
+
+        # Which stream to favour at initialisation
+        init_idx = layer_index % n
+
+        # Normalise all streams concatenated: [B, S, n*D] → [B, S, n*D]
+        # SusonoRMSNorm is defined later in this file but __init__ is called at
+        # instance-creation time, by which point SusonoRMSNorm is already defined.
+        self.norm = SusonoRMSNorm(hidden_size * n)
+
+        # ------------------------------------------------------------------
+        # Width-connection parameters
+        #   static_alpha[:n]   → H_pre   (sigmoid gate per stream)
+        #   static_alpha[n:]   → H_res   (softmax over n! permutation weights)
+        # ------------------------------------------------------------------
+        init_alpha_pre = torch.ones(n) * -1.0
+        init_alpha_pre[init_idx] = 1.0
+        init_alpha_res = torch.ones(num_perms) * -8.0
+        init_alpha_res[0] = 0.0    # identity permutation dominates at init
+        self.static_alpha = nn.Parameter(torch.cat([init_alpha_pre, init_alpha_res]))
+
+        # Dynamic (input-dependent) component: [n*D] → [n + n!]
+        self.dynamic_alpha_fn = nn.Parameter(
+            torch.zeros(hidden_size * n, n + num_perms)
+        )
+        self.pre_branch_scale = nn.Parameter(torch.ones(1) * 1e-2)
+        self.residual_scale   = nn.Parameter(torch.ones(1) * 1e-2)
+
+        # ------------------------------------------------------------------
+        # Depth-connection parameters (beta / H_post)
+        # ------------------------------------------------------------------
+        init_beta = torch.ones(n) * -1.0
+        init_beta[init_idx] = 1.0
+        self.static_beta = nn.Parameter(init_beta)
+
+        # Dynamic component: [n*D] → [n]
+        self.dynamic_beta_fn = nn.Parameter(torch.zeros(hidden_size * n, n))
+        self.h_post_scale = nn.Parameter(torch.ones(1) * 1e-2)
+
+    def _get_norm(self, device):
+        return self.norm.to(device)
+
+    def forward(self, X: Tensor):
+        """Width connection: returns (branch_input, add_residual closure).
+
+        Usage::
+
+            x_in, add_residual = mhc(X)           # [B,S,D], closure
+            x_out = decoder_layer(x_in, ...)       # [B,S,D]
+            X = add_residual(x_out)                # [n,B,S,D]
+
+        Args:
+            X: Multi-stream hidden states [n, B, S, D].
+
+        Returns:
+            branch_input:  Aggregated layer input [B, S, D].
+            add_residual:  Closure ``(x_out: [B,S,D]) → [n,B,S,D]``.
+        """
+        n, B, S, D = X.shape
+
+        # Rearrange to [B, S, n, D] and flatten streams for normalisation
+        X_bsd = X.permute(1, 2, 0, 3)              # [B, S, n, D]
+        normed = X_bsd.reshape(B, S, n * D)         # [B, S, n*D]
+        normed = self._get_norm(X.device)(normed)   # [B, S, n*D]
+
+        # ---- Width weights (alpha) ----------------------------------------
+        wc = normed @ self.dynamic_alpha_fn          # [B, S, n + n!]
+        dynamic_pre = wc[..., :n]                    # [B, S, n]
+        dynamic_res = wc[..., n:]                    # [B, S, n!]
+
+        # H_pre: input-gated per-stream weights (sigmoid ∈ (0, 1))
+        alpha_pre = torch.sigmoid(
+            self.pre_branch_scale * dynamic_pre + self.static_alpha[:n]
+        )                                            # [B, S, n]
+
+        # H_res: convex combination of permutation matrices (no Sinkhorn)
+        res_coeff = torch.softmax(
+            self.residual_scale * dynamic_res + self.static_alpha[n:], dim=-1
+        )                                            # [B, S, n!]
+        perms = _get_susono_perm_mats(n, X.device)    # [n!, n, n]
+        H_res = torch.einsum('...r, rij -> ...ij', res_coeff, perms.to(res_coeff.dtype))    # [B, S, n, n]
+
+        # Apply H_res: new_residuals[b,s,i,:] = Σ_j H_res[b,s,i,j] * X[b,s,j,:]
+        new_residuals = torch.einsum(
+            '...ij, ...jd -> ...id', H_res, X_bsd
+        )                                            # [B, S, n, D]
+
+        # Branch input: gated weighted sum over streams
+        branch_input = (alpha_pre.unsqueeze(-1) * X_bsd).sum(dim=-2)  # [B, S, D]
+
+        # ---- Depth weights (beta) ----------------------------------------
+        dc = normed @ self.dynamic_beta_fn           # [B, S, n]
+        beta = torch.sigmoid(
+            self.h_post_scale * dc + self.static_beta
+        ) * 2                                        # [B, S, n]  (range [0, 2])
+
+        def add_residual(x_out: Tensor) -> Tensor:
+            # x_out: [B, S, D]; beta: [B, S, n]; new_residuals: [B, S, n, D]
+            output = (
+                beta.unsqueeze(-1) * x_out.unsqueeze(-2) + new_residuals
+            )                                        # [B, S, n, D]
+            return output.permute(2, 0, 1, 3)        # [n, B, S, D]
+
+        return branch_input, add_residual
+
+    # ------------------------------------------------------------------
+    # Legacy interface kept for callers using aggregate/distribute pattern
+    # ------------------------------------------------------------------
+
+    def aggregate_streams(self, X: Tensor) -> Tensor:
+        """[Legacy] Aggregate n streams → single branch input."""
+        branch_input, add_residual = self.forward(X)
+        self._cached_add_residual = add_residual
+        return branch_input
+
+    def distribute_output(self, X: Tensor, x_out: Tensor) -> Tensor:
+        """[Legacy] Update n streams using cached depth-connection closure."""
+        add_residual = self._cached_add_residual
+        self._cached_add_residual = None
+        return add_residual(x_out)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Base transformer components (adapted from Qwen3-Next for SusonoConfig)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class SusonoRMSNormGated(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6, **kwargs):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states, gate):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = self.weight * hidden_states.to(input_dtype)
+        hidden_states = hidden_states * F.silu(gate.to(torch.float32))
+        return hidden_states.to(input_dtype)
+
+
+class SusonoDynamicCache:
+    """Dynamic cache for hybrid full-attention + linear attention (GatedDeltaNet) layers.
+
+    Attention layers use key_cache / value_cache tensors [B, H, S, D].
+    Linear attention layers use conv_states and recurrent_states.
+    """
+
+    is_compileable = False
+
+    def __init__(self, config: SusonoConfig):
+        super().__init__()
+        self.layer_types = config.layer_types
+        self.transformer_layers = [
+            i for i in range(config.num_hidden_layers) if self.layer_types[i] == "full_attention"
+        ]
+        self.last_linear_layer = (
+            len(self.layer_types) - 1 - self.layer_types[::-1].index("linear_attention")
+        )
+        self.conv_states = [None for _ in range(config.num_hidden_layers)]
+        self.recurrent_states = [None for _ in range(config.num_hidden_layers)]
+        self.key_cache = [None for _ in range(config.num_hidden_layers)]
+        self.value_cache = [None for _ in range(config.num_hidden_layers)]
+
+    def __len__(self):
+        return len(self.layer_types)
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: dict[str, Any] | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if self.key_cache[layer_idx] is None:
+            self.key_cache[layer_idx] = key_states
+            self.value_cache[layer_idx] = value_states
+        else:
+            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=2)
+            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=2)
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        for layer_idx in range(len(self.key_cache)):
+            if self.key_cache[layer_idx] is not None:
+                device = self.key_cache[layer_idx].device
+                beam_idx = beam_idx.to(device)
+                self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx)
+                self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx)
+            if self.conv_states[layer_idx] is not None:
+                device = self.conv_states[layer_idx].device
+                beam_idx = beam_idx.to(device)
+                self.conv_states[layer_idx] = self.conv_states[layer_idx].index_select(0, beam_idx)
+                self.recurrent_states[layer_idx] = self.recurrent_states[layer_idx].index_select(0, beam_idx)
+
+    def get_seq_length(self, layer_idx: int | None = 0) -> int:
+        layer_idx = self.transformer_layers[0] if layer_idx not in self.transformer_layers else layer_idx
+        if len(self.key_cache) <= layer_idx or self.key_cache[layer_idx] is None:
+            return 0
+        return self.key_cache[layer_idx].shape[-2]
+
+    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+        kv_offset = 0
+        query_length = cache_position.shape[0]
+        past_seen_tokens = self.get_seq_length(layer_idx)
+        kv_length = query_length + past_seen_tokens
+        return kv_length, kv_offset
+
+    @property
+    def has_previous_state(self):
+        return self.conv_states[self.last_linear_layer] is not None
+
+
+class SusonoRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor
+
+    def __init__(self, config: SusonoConfig, device=None):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+        self.config = config
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: SusonoConfig | None = None,
+        device: Optional["torch.device"] = None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        base = config.rope_parameters["rope_theta"]
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+        attention_factor = 1.0
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+class SusonoRMSNorm(nn.Module):
+    def __init__(self, dim: int, eps: float = 1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.zeros(dim))
+
+    def _norm(self, x):
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+
+    def forward(self, x):
+        output = self._norm(x.float())
+        output = output * (1.0 + self.weight.float())
+        return output.type_as(x)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.eps}"
+
+
+def rotate_half(x):
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    rotary_dim = cos.shape[-1]
+    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
+    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
+    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
+    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
+    q_embed = torch.cat([q_embed, q_pass], dim=-1)
+    k_embed = torch.cat([k_embed, k_pass], dim=-1)
+    return q_embed, k_embed
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
+
+
+@use_kernelized_func(apply_rotary_pos_emb)
+class SusonoAttention(nn.Module):
+    """Multi-headed attention with gated query projection and QK-norm."""
+
+    def __init__(self, config: SusonoConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+        self.use_output_gate = getattr(config, 'attention_output_gate', False)
+        q_out_dim = config.num_attention_heads * self.head_dim * (2 if self.use_output_gate else 1)
+        self.q_proj = nn.Linear(
+            config.hidden_size, q_out_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+        if getattr(config, 'qk_layernorm', False):
+            self.q_norm = SusonoRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.k_norm = SusonoRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        else:
+            self.q_norm = None
+            self.k_norm = None
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        if self.use_output_gate:
+            query_states, gate = torch.chunk(
+                self.q_proj(hidden_states).view(*input_shape, -1, self.head_dim * 2), 2, dim=-1
+            )
+            gate = gate.reshape(*input_shape, -1)
+        else:
+            query_states = self.q_proj(hidden_states).view(hidden_shape)
+            gate = None
+        if self.q_norm is not None:
+            query_states = self.q_norm(query_states.view(hidden_shape))
+        query_states = query_states.transpose(1, 2)
+
+        key_states = self.k_proj(hidden_states).view(hidden_shape)
+        if self.k_norm is not None:
+            key_states = self.k_norm(key_states)
+        key_states = key_states.transpose(1, 2)
+
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_values is not None:
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        if gate is not None:
+            attn_output = attn_output * torch.sigmoid(gate)
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+def apply_mask_to_padding_states(hidden_states, attention_mask):
+    # seq_len > 1 のときのみマスク適用（単一トークン生成ステップではパディング不要）
+    if attention_mask is not None and attention_mask.shape[1] > 1:
+        dtype = hidden_states.dtype
+        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+    return hidden_states
+
+
+is_fast_path_available = all(
+    (causal_conv1d_fn, causal_conv1d_update, chunk_gated_delta_rule, fused_recurrent_gated_delta_rule)
+)
+
+
+def torch_causal_conv1d_update(hidden_states, conv_state, weight, bias=None, activation=None):
+    _, hidden_size, seq_len = hidden_states.shape
+    state_len = conv_state.shape[-1]
+    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
+    conv_state.copy_(hidden_states_new[:, :, -state_len:])
+    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
+    out = F.silu(out[:, :, -seq_len:])
+    return out.to(hidden_states.dtype)
+
+
+def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
+    inv_norm = torch.rsqrt((x * x).sum(dim=dim, keepdim=True) + eps)
+    return x * inv_norm
+
+
+def torch_chunk_gated_delta_rule(
+    query, key, value, g, beta, chunk_size=64, initial_state=None,
+    output_final_state=False, use_qk_l2norm_in_kernel=False,
+):
+    initial_dtype = query.dtype
+    if use_qk_l2norm_in_kernel:
+        query = l2norm(query, dim=-1, eps=1e-6)
+        key = l2norm(key, dim=-1, eps=1e-6)
+    query, key, value, beta, g = [
+        x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, beta, g)
+    ]
+    batch_size, num_heads, sequence_length, k_head_dim = key.shape
+    v_head_dim = value.shape[-1]
+    pad_size = (chunk_size - sequence_length % chunk_size) % chunk_size
+    query = F.pad(query, (0, 0, 0, pad_size))
+    key = F.pad(key, (0, 0, 0, pad_size))
+    value = F.pad(value, (0, 0, 0, pad_size))
+    beta = F.pad(beta, (0, pad_size))
+    g = F.pad(g, (0, pad_size))
+    total_sequence_length = sequence_length + pad_size
+    scale = 1 / (query.shape[-1] ** 0.5)
+    query = query * scale
+    v_beta = value * beta.unsqueeze(-1)
+    k_beta = key * beta.unsqueeze(-1)
+    query, key, value, k_beta, v_beta = [
+        x.reshape(x.shape[0], x.shape[1], -1, chunk_size, x.shape[-1])
+        for x in (query, key, value, k_beta, v_beta)
+    ]
+    g = g.reshape(g.shape[0], g.shape[1], -1, chunk_size)
+    mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=0)
+    g = g.cumsum(dim=-1)
+    decay_mask = ((g.unsqueeze(-1) - g.unsqueeze(-2)).tril().exp().float()).tril()
+    attn = -((k_beta @ key.transpose(-1, -2)) * decay_mask).masked_fill(mask, 0)
+    for i in range(1, chunk_size):
+        row = attn[..., i, :i].clone()
+        sub = attn[..., :i, :i].clone()
+        attn[..., i, :i] = row + (row.unsqueeze(-1) * sub).sum(-2)
+    attn = attn + torch.eye(chunk_size, dtype=attn.dtype, device=attn.device)
+    value = attn @ v_beta
+    k_cumdecay = attn @ (k_beta * g.exp().unsqueeze(-1))
+    last_recurrent_state = (
+        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim).to(value)
+        if initial_state is None else initial_state.to(value)
+    )
+    core_attn_out = torch.zeros_like(value)
+    mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=1)
+    for i in range(0, total_sequence_length // chunk_size):
+        q_i, k_i, v_i = query[:, :, i], key[:, :, i], value[:, :, i]
+        attn = (q_i @ k_i.transpose(-1, -2) * decay_mask[:, :, i]).masked_fill_(mask, 0)
+        v_prime = (k_cumdecay[:, :, i]) @ last_recurrent_state
+        v_new = v_i - v_prime
+        attn_inter = (q_i * g[:, :, i, :, None].exp()) @ last_recurrent_state
+        core_attn_out[:, :, i] = attn_inter + attn @ v_new
+        last_recurrent_state = (
+            last_recurrent_state * g[:, :, i, -1, None, None].exp()
+            + (k_i * (g[:, :, i, -1, None] - g[:, :, i]).exp()[..., None]).transpose(-1, -2) @ v_new
+        )
+    if not output_final_state:
+        last_recurrent_state = None
+    core_attn_out = core_attn_out.reshape(
+        core_attn_out.shape[0], core_attn_out.shape[1], -1, core_attn_out.shape[-1]
+    )
+    core_attn_out = core_attn_out[:, :, :sequence_length]
+    core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
+    return core_attn_out, last_recurrent_state
+
+
+def torch_recurrent_gated_delta_rule(
+    query, key, value, g, beta, initial_state, output_final_state, use_qk_l2norm_in_kernel=False
+):
+    initial_dtype = query.dtype
+    if use_qk_l2norm_in_kernel:
+        query = l2norm(query, dim=-1, eps=1e-6)
+        key = l2norm(key, dim=-1, eps=1e-6)
+    query, key, value, beta, g = [
+        x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, beta, g)
+    ]
+    batch_size, num_heads, sequence_length, k_head_dim = key.shape
+    v_head_dim = value.shape[-1]
+    scale = 1 / (query.shape[-1] ** 0.5)
+    query = query * scale
+    core_attn_out = torch.zeros(batch_size, num_heads, sequence_length, v_head_dim).to(value)
+    last_recurrent_state = (
+        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim).to(value)
+        if initial_state is None else initial_state.to(value)
+    )
+    for i in range(sequence_length):
+        q_t, k_t, v_t = query[:, :, i], key[:, :, i], value[:, :, i]
+        g_t = g[:, :, i].exp().unsqueeze(-1).unsqueeze(-1)
+        beta_t = beta[:, :, i].unsqueeze(-1)
+        last_recurrent_state = last_recurrent_state * g_t
+        kv_mem = (last_recurrent_state * k_t.unsqueeze(-1)).sum(dim=-2)
+        delta = (v_t - kv_mem) * beta_t
+        last_recurrent_state = last_recurrent_state + k_t.unsqueeze(-1) * delta.unsqueeze(-2)
+        core_attn_out[:, :, i] = (last_recurrent_state * q_t.unsqueeze(-1)).sum(dim=-2)
+    if not output_final_state:
+        last_recurrent_state = None
+    core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
+    return core_attn_out, last_recurrent_state
+
+
+class SusonoGatedDeltaNet(nn.Module):
+    """GatedDeltaNet linear attention layer."""
+
+    def __init__(self, config: SusonoConfig, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.num_v_heads = config.linear_num_value_heads
+        self.num_k_heads = config.linear_num_key_heads
+        self.head_k_dim = config.linear_key_head_dim
+        self.head_v_dim = config.linear_value_head_dim
+        self.key_dim = self.head_k_dim * self.num_k_heads
+        self.value_dim = self.head_v_dim * self.num_v_heads
+        self.conv_kernel_size = config.linear_conv_kernel_dim
+        self.layer_idx = layer_idx
+        self.activation = config.hidden_act
+        self.act = ACT2FN[config.hidden_act]
+        self.layer_norm_epsilon = config.rms_norm_eps
+
+        self.conv_dim = self.key_dim * 2 + self.value_dim
+        self.conv1d = nn.Conv1d(
+            in_channels=self.conv_dim,
+            out_channels=self.conv_dim,
+            bias=False,
+            kernel_size=self.conv_kernel_size,
+            groups=self.conv_dim,
+            padding=self.conv_kernel_size - 1,
+        )
+        projection_size_qkvz = self.key_dim * 2 + self.value_dim * 2
+        projection_size_ba = self.num_v_heads * 2
+        self.in_proj_qkvz = nn.Linear(self.hidden_size, projection_size_qkvz, bias=False)
+        self.in_proj_ba = nn.Linear(self.hidden_size, projection_size_ba, bias=False)
+        self.dt_bias = nn.Parameter(torch.ones(self.num_v_heads))
+        A = torch.empty(self.num_v_heads).uniform_(0, 16)
+        self.A_log = nn.Parameter(torch.log(A))
+        self.norm = (
+            SusonoRMSNormGated(self.head_v_dim, eps=self.layer_norm_epsilon)
+            if FusedRMSNormGated is None
+            else FusedRMSNormGated(
+                self.head_v_dim,
+                eps=self.layer_norm_epsilon,
+                activation=self.activation,
+                device=torch.cuda.current_device(),
+                dtype=config.dtype if config.dtype is not None else torch.get_default_dtype(),
+            )
+        )
+        self.out_proj = nn.Linear(self.value_dim, self.hidden_size, bias=False)
+        self.causal_conv1d_fn = causal_conv1d_fn
+        self.causal_conv1d_update = causal_conv1d_update or torch_causal_conv1d_update
+        self.chunk_gated_delta_rule = chunk_gated_delta_rule or torch_chunk_gated_delta_rule
+        self.recurrent_gated_delta_rule = fused_recurrent_gated_delta_rule or torch_recurrent_gated_delta_rule
+
+        if not is_fast_path_available:
+            logger.warning_once(
+                "The fast path is not available because one of the required libraries is not installed. "
+                "Falling back to torch implementation. See flash-linear-attention and causal-conv1d."
+            )
+
+    def fix_query_key_value_ordering(self, mixed_qkvz, mixed_ba):
+        new_tensor_shape_qkvz = mixed_qkvz.size()[:-1] + (
+            self.num_k_heads,
+            2 * self.head_k_dim + 2 * self.head_v_dim * self.num_v_heads // self.num_k_heads,
+        )
+        new_tensor_shape_ba = mixed_ba.size()[:-1] + (self.num_k_heads, 2 * self.num_v_heads // self.num_k_heads)
+        mixed_qkvz = mixed_qkvz.view(*new_tensor_shape_qkvz)
+        mixed_ba = mixed_ba.view(*new_tensor_shape_ba)
+        split_arg_list_qkvz = [
+            self.head_k_dim,
+            self.head_k_dim,
+            (self.num_v_heads // self.num_k_heads * self.head_v_dim),
+            (self.num_v_heads // self.num_k_heads * self.head_v_dim),
+        ]
+        split_arg_list_ba = [self.num_v_heads // self.num_k_heads, self.num_v_heads // self.num_k_heads]
+        query, key, value, z = torch.split(mixed_qkvz, split_arg_list_qkvz, dim=3)
+        b, a = torch.split(mixed_ba, split_arg_list_ba, dim=3)
+        value = value.reshape(value.size(0), value.size(1), -1, self.head_v_dim)
+        z = z.reshape(z.size(0), z.size(1), -1, self.head_v_dim)
+        b = b.reshape(b.size(0), b.size(1), self.num_v_heads)
+        a = a.reshape(a.size(0), a.size(1), self.num_v_heads)
+        return query, key, value, z, b, a
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cache_params: SusonoDynamicCache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+    ):
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+        batch_size, seq_len, _ = hidden_states.shape
+        use_precomputed_states = (
+            cache_params is not None
+            and cache_params.has_previous_state
+            and seq_len == 1
+            and cache_position is not None
+        )
+        if cache_params is not None:
+            conv_state = cache_params.conv_states[self.layer_idx]
+            recurrent_state = cache_params.recurrent_states[self.layer_idx]
+
+        projected_states_qkvz = self.in_proj_qkvz(hidden_states)
+        projected_states_ba = self.in_proj_ba(hidden_states)
+        query, key, value, z, b, a = self.fix_query_key_value_ordering(projected_states_qkvz, projected_states_ba)
+        query, key, value = (x.reshape(x.shape[0], x.shape[1], -1) for x in (query, key, value))
+        mixed_qkv = torch.cat((query, key, value), dim=-1)
+        mixed_qkv = mixed_qkv.transpose(1, 2)
+
+        if use_precomputed_states:
+            mixed_qkv = self.causal_conv1d_update(
+                mixed_qkv, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias, self.activation
+            )
+        else:
+            if cache_params is not None:
+                conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
+                cache_params.conv_states[self.layer_idx] = conv_state
+            if self.causal_conv1d_fn is not None:
+                mixed_qkv = self.causal_conv1d_fn(
+                    x=mixed_qkv, weight=self.conv1d.weight.squeeze(1),
+                    bias=self.conv1d.bias, activation=self.activation, seq_idx=None,
+                )
+            else:
+                mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, :seq_len])
+
+        mixed_qkv = mixed_qkv.transpose(1, 2)
+        query, key, value = torch.split(mixed_qkv, [self.key_dim, self.key_dim, self.value_dim], dim=-1)
+        query = query.reshape(query.shape[0], query.shape[1], -1, self.head_k_dim)
+        key = key.reshape(key.shape[0], key.shape[1], -1, self.head_k_dim)
+        value = value.reshape(value.shape[0], value.shape[1], -1, self.head_v_dim)
+
+        beta = b.sigmoid()
+        g = -self.A_log.float().exp() * F.softplus(a.float() + self.dt_bias)
+        if self.num_v_heads // self.num_k_heads > 1:
+            query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
+            key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
+
+        if not use_precomputed_states:
+            core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
+                query, key, value, g=g, beta=beta,
+                initial_state=None, output_final_state=cache_params is not None,
+                use_qk_l2norm_in_kernel=True,
+            )
+        else:
+            core_attn_out, last_recurrent_state = self.recurrent_gated_delta_rule(
+                query, key, value, g=g, beta=beta,
+                initial_state=recurrent_state, output_final_state=cache_params is not None,
+                use_qk_l2norm_in_kernel=True,
+            )
+
+        if cache_params is not None:
+            cache_params.recurrent_states[self.layer_idx] = last_recurrent_state
+
+        z_shape_og = z.shape
+        core_attn_out = core_attn_out.reshape(-1, core_attn_out.shape[-1])
+        z = z.reshape(-1, z.shape[-1])
+        core_attn_out = self.norm(core_attn_out, z)
+        core_attn_out = core_attn_out.reshape(z_shape_og)
+        core_attn_out = core_attn_out.reshape(core_attn_out.shape[0], core_attn_out.shape[1], -1)
+        return self.out_proj(core_attn_out)
+
+
+class SusonoGELUMLP(nn.Module):
+    """Dense GELU MLP for full-attention layers. Matches Megatron swiglu=False (fc1/fc2)."""
+
+    def __init__(self, config, intermediate_size=None):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.fc1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.fc2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN["gelu"]
+
+    def forward(self, x):
+        return self.fc2(self.act_fn(self.fc1(x)))
+
+
+class SusonoMLP(nn.Module):
+    def __init__(self, config, intermediate_size=None):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+
+
+@use_experts_implementation
+class SusonoExperts(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.num_experts = config.num_experts
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.moe_intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states, top_k_index, top_k_weights):
+        final_hidden_states = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+        return final_hidden_states
+
+
+class SusonoTopKRouter(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_experts
+        self.norm_topk_prob = config.norm_topk_prob
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states, self.weight)
+        router_logits = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
+        if self.norm_topk_prob:
+            router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
+        router_top_value = router_top_value.to(router_logits.dtype)
+        return router_logits, router_top_value, router_indices
+
+
+class SusonoSparseMoeBlock(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.gate = SusonoTopKRouter(config)
+        self.experts = SusonoExperts(config)
+        self.shared_expert = SusonoMLP(config, intermediate_size=config.shared_expert_intermediate_size)
+        self.shared_expert_gate = torch.nn.Linear(config.hidden_size, 1, bias=True)
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
+        shared_expert_output = self.shared_expert(hidden_states_reshaped)
+        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
+        expert_output = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
+        shared_expert_output = F.sigmoid(self.shared_expert_gate(hidden_states_reshaped)) * shared_expert_output
+        expert_output += shared_expert_output
+        expert_output = expert_output.reshape(batch_size, sequence_length, hidden_dim)
+        return expert_output
+
+
+class SusonoDecoderLayer(GradientCheckpointingLayer):
+    """Single Susono transformer layer.
+
+    Supports both full (softmax) attention and linear (GatedDeltaNet) attention.
+    MoE or dense MLP feed-forward blocks, controlled by config.
+
+    Note: Engram memory and mHC multi-stream management are handled externally
+    by SusonoModel.forward to keep this layer self-contained and composable.
+    """
+
+    def __init__(self, config: SusonoConfig, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.layer_type = config.layer_types[layer_idx]
+
+        if self.layer_type == "linear_attention":
+            self.linear_attn = SusonoGatedDeltaNet(config, layer_idx)
+        elif self.layer_type == "full_attention":
+            self.self_attn = SusonoAttention(config, layer_idx)
+
+        # Qwen3-Next equivalent: MLP type decision is independent of attention type.
+        # All layers (both linear_attention and full_attention) use MoE when
+        # decoder_sparse_step criterion matches.
+        if (layer_idx not in config.mlp_only_layers) and (
+            config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
+        ):
+            self.mlp = SusonoSparseMoeBlock(config)
+        else:
+            self.mlp = SusonoMLP(config, intermediate_size=config.intermediate_size)
+
+        self.input_layernorm = SusonoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = SusonoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> torch.FloatTensor:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+
+        if self.layer_type == "linear_attention":
+            hidden_states = self.linear_attn(
+                hidden_states=hidden_states,
+                cache_params=past_key_values,
+                cache_position=cache_position,
+                attention_mask=attention_mask,
+            )
+        elif self.layer_type == "full_attention":
+            hidden_states, _ = self.self_attn(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
+
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        if isinstance(hidden_states, tuple):
+            hidden_states, _ = hidden_states
+        hidden_states = residual + hidden_states
+
+        return hidden_states
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Top-level model classes
+# ──────────────────────────────────────────────────────────────────────────────
+
+class SusonoPreTrainedModel(PreTrainedModel):
+    config_class = SusonoConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["SusonoDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(SusonoTopKRouter, index=0),
+        "hidden_states": SusonoDecoderLayer,
+        "attentions": SusonoAttention,
+    }
+    _is_stateful = True
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, SusonoGatedDeltaNet):
+            init.ones_(module.dt_bias)
+            init.copy_(module.A_log, torch.empty_like(module.A_log).uniform_(0, 16).log_())
+        elif isinstance(module, SusonoRMSNorm):
+            init.zeros_(module.weight)
+        elif isinstance(module, SusonoExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, SusonoSparseMoeBlock):
+            init.normal_(module.gate.weight, mean=0.0, std=self.config.initializer_range)
+            if module.shared_expert_gate.bias is not None:
+                bias_init = getattr(self.config, 'moe_shared_expert_gate_bias_init', 0.0)
+                init.constant_(module.shared_expert_gate.bias, bias_init)
+
+
+def load_balancing_loss_func(
+    gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
+    num_experts: int | None = None,
+    top_k=2,
+    attention_mask: torch.Tensor | None = None,
+) -> torch.Tensor | int:
+    """Auxiliary load-balancing loss (Switch Transformer, eq. 4–6)."""
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
+    compute_device = gate_logits[0].device
+    concatenated_gate_logits = torch.cat(
+        [layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0
+    )
+    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
+
+    if attention_mask is None:
+        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
+        router_prob_per_expert = torch.mean(routing_weights, dim=0)
+    else:
+        batch_size, sequence_length = attention_mask.shape
+        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+        expert_attention_mask = (
+            attention_mask[None, :, :, None, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
+            .reshape(-1, top_k, num_experts)
+            .to(compute_device)
+        )
+        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
+            expert_attention_mask, dim=0
+        )
+        router_per_expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(compute_device)
+        )
+        router_prob_per_expert = torch.sum(
+            routing_weights * router_per_expert_attention_mask, dim=0
+        ) / torch.sum(router_per_expert_attention_mask, dim=0)
+
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    return overall_loss * num_experts
+
+
+class SusonoModel(SusonoPreTrainedModel):
+    """Susono transformer model with Engram memory and mHC multi-stream residuals.
+
+    mHC multi-stream flow (when use_mhc=True):
+        X  [n, B, S, D]  — n parallel residual streams, all initialised from
+                           the token embeddings at the start of each forward pass.
+        For each layer L:
+            x_in = aggregate(X)           # [n,B,S,D] → [B,S,D]
+            [Engram] x_in += engram(ids, x_in)  # if L in engram_layer_ids
+            x_out = SusonoDecoderLayer(x_in)
+            X = distribute(X, x_out)      # update n streams
+        hidden_states = final_aggregate(X)
+
+    When use_mhc=False, the model is functionally equivalent to Qwen3-Next
+    (with Engram optionally added to selected layers).
+    """
+
+    def __init__(self, config: SusonoConfig):
+        super().__init__(config)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
+        self.layers = nn.ModuleList(
+            [SusonoDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = SusonoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = SusonoRotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
+
+        # ── mHC: one connection module per layer ──────────────────────
+        if config.use_mhc:
+            self.mhc_modules = nn.ModuleList([
+                SusonoMHC(
+                    hidden_size=config.hidden_size,
+                    num_streams=config.mhc_num_streams,
+                    layer_index=layer_idx,
+                    sinkhorn_iterations=config.mhc_sinkhorn_iterations,
+                )
+                for layer_idx in range(config.num_hidden_layers)
+            ])
+            # Final stream aggregation: Linear(n*D, D) matching Megatron's stream_proj.
+            # Initialised as equal-weight average (same as Megatron's init).
+            n = config.mhc_num_streams
+            D = config.hidden_size
+            self.stream_proj = nn.Linear(n * D, D, bias=False)
+            with torch.no_grad():
+                w = torch.zeros(D, n * D)
+                for s in range(n):
+                    w[:, s * D:(s + 1) * D] = torch.eye(D) / n
+                self.stream_proj.weight.copy_(w)
+
+        # ── Engram: one module per selected layer ─────────────────────
+        if config.use_engram:
+            self.engram_modules = nn.ModuleList([
+                SusonoEngramModule(config, layer_id=layer_id)
+                for layer_id in config.engram_layer_ids
+            ])
+            # Mapping: layer_idx → index in self.engram_modules
+            self._engram_layer_map: dict[int, int] = {
+                layer_id: idx for idx, layer_id in enumerate(config.engram_layer_ids)
+            }
+
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("Specify exactly one of input_ids or inputs_embeds.")
+
+        # Engram requires input_ids; disable silently when only embeds are given
+        engram_active = self.config.use_engram and input_ids is not None
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = SusonoDynamicCache(config=self.config)
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
+        linear_attn_mask = self._update_linear_attn_mask(attention_mask, cache_position)
+
+        position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
+
+        # ── Initialise hidden states ──────────────────────────────────
+        hidden_states = inputs_embeds  # [B, S, D]
+
+        if self.config.use_mhc:
+            # n parallel residual streams, all starting from token embeddings
+            # X: [n, B, S, D]
+            X = hidden_states.unsqueeze(0).expand(
+                self.config.mhc_num_streams, -1, -1, -1
+            ).clone()
+
+        # ── Layer loop ────────────────────────────────────────────────
+        for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_mask = linear_attn_mask if decoder_layer.layer_type == "linear_attention" else causal_mask
+
+            # mHC: width connection — get branch input and depth-connection closure
+            if self.config.use_mhc:
+                x_in, add_residual = self.mhc_modules[layer_idx](X)  # [B,S,D], closure
+            else:
+                x_in = hidden_states  # [B, S, D]
+
+            # Engram: inject conditional N-gram memory at selected layers
+            if engram_active and layer_idx in self._engram_layer_map:
+                engram_idx = self._engram_layer_map[layer_idx]
+                x_in = x_in + self.engram_modules[engram_idx](input_ids, x_in)
+
+            # Standard transformer layer
+            x_out = decoder_layer(
+                x_in,
+                position_embeddings=position_embeddings,
+                attention_mask=layer_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                **kwargs,
+            )
+
+            # mHC: depth connection — update n streams via closure
+            if self.config.use_mhc:
+                X = add_residual(x_out)   # [n, B, S, D]
+            else:
+                hidden_states = x_out
+
+        # ── Final aggregation (mHC) ───────────────────────────────────
+        if self.config.use_mhc:
+            # X: [n, B, S, D] → [B, S, n*D] → stream_proj → [B, S, D]
+            # Matches Megatron's stream_proj Linear(n*D, D).
+            n_s, B_s, S_s, D_s = X.shape
+            X_flat = X.permute(1, 2, 0, 3).reshape(B_s, S_s, n_s * D_s)
+            hidden_states = self.stream_proj(X_flat)
+
+        hidden_states = self.norm(hidden_states)
+
+        return MoeModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
+
+    def _update_linear_attn_mask(self, attention_mask, cache_position):
+        linear_attn_mask = attention_mask
+        if cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1)):
+            linear_attn_mask = None
+        return linear_attn_mask
+
+
+@auto_docstring
+class SusonoForCausalLM(SusonoPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+
+    def __init__(self, config: SusonoConfig):
+        super().__init__(config)
+        self.model = SusonoModel(config)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.router_aux_loss_coef = config.router_aux_loss_coef
+        self.num_experts = config.num_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: SusonoDynamicCache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_router_logits: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeCausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing masked language modeling loss. Indices in `[0, ..., config.vocab_size]`
+            or -100 (ignored). Loss is computed only for non-masked tokens.
+        """
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
+
+        outputs: MoeModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_router_logits=output_router_logits,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
+
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)
+
+        return MoeCausalLMOutputWithPast(
+            loss=loss,
+            aux_loss=aux_loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
+        )
+
+
+class SusonoForSequenceClassification(GenericForSequenceClassification, SusonoPreTrainedModel):
+    pass
+
+
+class SusonoForTokenClassification(GenericForTokenClassification, SusonoPreTrainedModel):
+    pass
+
+
+class SusonoForQuestionAnswering(GenericForQuestionAnswering, SusonoPreTrainedModel):
+    base_model_prefix = "transformer"
+
+
+__all__ = [
+    "SusonoForCausalLM",
+    "SusonoForQuestionAnswering",
+    "SusonoForSequenceClassification",
+    "SusonoForTokenClassification",
+    "SusonoModel",
+    "SusonoPreTrainedModel",
+]

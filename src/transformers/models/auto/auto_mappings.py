@@ -592,6 +592,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("starcoder2", "Starcoder2Config"),
         ("superglue", "SuperGlueConfig"),
         ("superpoint", "SuperPointConfig"),
+        ("susono", "SusonoConfig"),
         ("swiftformer", "SwiftFormerConfig"),
         ("swin", "SwinConfig"),
         ("swin2sr", "Swin2SRConfig"),

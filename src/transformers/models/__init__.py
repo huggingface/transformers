@@ -424,6 +424,7 @@ if TYPE_CHECKING:
     from .starcoder2 import *
     from .superglue import *
     from .superpoint import *
+    from .susono import *
     from .swiftformer import *
     from .swin import *
     from .swin2sr import *
