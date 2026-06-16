@@ -111,22 +111,22 @@ class MultiHeadAttention(nn.Module):
 
     def forward(
         self,
-        value,
-        key,
-        query,
+        v,
+        k,
+        q,
         layer_past=None,
         attention_mask=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        input_shape = query.shape[:-1]
+        input_shape = q.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query = self.Wq(query).view(hidden_shape).transpose(1, 2)
-        key = self.Wk(key).view(hidden_shape).transpose(1, 2)
-        value = self.Wv(value).view(hidden_shape).transpose(1, 2)
+        query_states = self.Wq(q).view(hidden_shape).transpose(1, 2)
+        key_states = self.Wk(k).view(hidden_shape).transpose(1, 2)
+        value_states = self.Wv(v).view(hidden_shape).transpose(1, 2)
 
         if layer_past is not None:
-            key, value = layer_past.update(key, value, self.layer_idx)
+            key_states, value_states = layer_past.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -134,9 +134,9 @@ class MultiHeadAttention(nn.Module):
 
         attn_output, attn_weights = attention_interface(
             self,
-            query,
-            key,
-            value,
+            query_states,
+            key_states,
+            value_states,
             attention_mask,
             dropout=0.0,
             scaling=self.scaling,
@@ -278,7 +278,6 @@ class CTRLModel(CTRLPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         if input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             inputs_embeds = self.w(input_ids)
         elif inputs_embeds is None:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
