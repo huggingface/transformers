@@ -165,6 +165,34 @@ class LagunaModelTest(CausalLMModelTest, unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             LagunaConfig(**cfg_kwargs)
 
+    def _model_with_gating(self, gating):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        cfg_kwargs = config.to_dict()
+        cfg_kwargs["gating"] = gating
+        config = LagunaConfig(**cfg_kwargs)
+        model = self.model_tester.base_model_class(config).to(torch_device).eval()
+        return config, inputs_dict, model
+
+    @parameterized.expand([(True,), ("per-head",)])
+    def test_gating_per_head_shape(self, gating):
+        """`gating=True` / `"per-head"`: one gate per head (g_proj out = num_heads)."""
+        _, _, model = self._model_with_gating(gating)
+        for layer in model.layers:
+            self.assertTrue(layer.self_attn.gate_per_head)
+            self.assertEqual(layer.self_attn.g_proj.out_features, layer.self_attn.num_heads)
+
+    def test_gating_per_element_shape_and_forward(self):
+        """`gating="per-element"`: one gate per (head, head_dim) channel."""
+        config, inputs_dict, model = self._model_with_gating("per-element")
+        for layer in model.layers:
+            self.assertFalse(layer.self_attn.gate_per_head)
+            self.assertEqual(
+                layer.self_attn.g_proj.out_features,
+                layer.self_attn.num_heads * config.head_dim,
+            )
+        with torch.no_grad():
+            model(input_ids=inputs_dict["input_ids"].to(torch_device))
+
 
 @require_torch
 class LagunaIntegrationTest(unittest.TestCase):
