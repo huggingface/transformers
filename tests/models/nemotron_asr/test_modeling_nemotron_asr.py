@@ -295,6 +295,28 @@ class NemotronAsrForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_streaming_state(*config_and_inputs)
 
+    def test_streaming_generate_requires_num_lookahead_tokens(self):
+        """Streaming `generate` (input_features passed as a generator) must be given `num_lookahead_tokens`
+        explicitly. It sets both the attention right context used in every forward and the exact mel-chunk
+        sizes the encoder consumes, so silently falling back to the model default could mismatch the chunks
+        the processor produced and corrupt the transcript. The guard raises before the generator is consumed.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = NemotronAsrForRNNT(config=config).to(torch_device).eval()
+
+        consumed = False
+
+        def input_features_generator():
+            nonlocal consumed
+            consumed = True
+            yield floats_tensor([self.model_tester.batch_size, 9, config.encoder_config.num_mel_bins])
+
+        with self.assertRaisesRegex(ValueError, "must be passed explicitly"):
+            model.generate(input_features=input_features_generator())
+        # The guard must fire before the stream is touched, otherwise a chunk-size mismatch (not the missing
+        # argument) is what gets reported.
+        self.assertFalse(consumed, "streaming `generate` consumed the stream before validating num_lookahead_tokens")
+
     @unittest.skip(reason="NemotronAsrForRNNT does not use inputs_embeds")
     def test_model_get_set_embeddings(self):
         pass
@@ -413,6 +435,31 @@ class NemotronAsrForRNNTIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     @slow
+    def test_processor_set_num_lookahead_tokens(self):
+        """`set_num_lookahead_tokens` is the only way to select the right attention context: it re-derives
+        every streaming chunk-size property and the `num_lookahead_tokens` emitted by `__call__`. Unsupported
+        values are rejected, and `streaming_latency_ms` is no longer accepted by `__call__`."""
+        import inspect
+
+        processor = self.processor
+        subsampling = processor._subsampling_factor
+
+        # The latency knob is gone — `set_num_lookahead_tokens` is the only entry point.
+        self.assertNotIn("streaming_latency_ms", inspect.signature(processor.__call__).parameters)
+
+        sample = self._load_datasamples(1)[0]
+        for right in processor.supported_num_lookahead_tokens:
+            processor.set_num_lookahead_tokens(right)
+            self.assertEqual(processor.default_num_lookahead_tokens, right)
+            self.assertEqual(processor.num_mel_frames_first_audio_chunk, 1 + subsampling * right)
+            self.assertEqual(processor.num_mel_frames_per_audio_chunk, subsampling * (right + 1))
+            inputs = processor(sample, sampling_rate=processor.feature_extractor.sampling_rate)
+            self.assertEqual(inputs["num_lookahead_tokens"], right)
+
+        with self.assertRaises(ValueError):
+            processor.set_num_lookahead_tokens(max(processor.supported_num_lookahead_tokens) + 1)
+
+    @slow
     def test_rnnt_model_integration(self):
         # NeMo `nvidia/nemotron-speech-streaming-en-0.6b` reference; HF matches it exactly.
         # reproducer: https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb#file-reproducer_single_rnnt-py
@@ -470,25 +517,29 @@ class NemotronAsrForRNNTIntegrationTest(unittest.TestCase):
         audio = load_audio(OBAMA_AUDIO_URL, sampling_rate=self.processor.feature_extractor.sampling_rate)
         model = NemotronAsrForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
 
+        # Select the streaming right attention context (lookahead, in subsampled encoder frames). This sizes
+        # the mel chunks below (49 then 56 frames) and must be passed to `generate` so the forward matches.
+        self.processor.set_num_lookahead_tokens(6)
+
         inputs = self.processor(audio, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
 
         def input_features_generator():
-            start_idx, first_chunk_size, chunk_size = 0, 49, 56
-            chunk = first_chunk_size
+            start_idx = 0
+            chunk = self.processor.num_mel_frames_first_audio_chunk
             input_length = inputs.input_features.shape[1]
             while start_idx < input_length:
                 end_idx = min(start_idx + chunk, input_length)
                 yield inputs.input_features[:, start_idx:end_idx, :]
                 start_idx = end_idx
-                chunk = chunk_size
+                chunk = self.processor.num_mel_frames_per_audio_chunk
 
         streamer = TextIteratorStreamer(
             self.processor.tokenizer, skip_special_tokens=True, clean_up_tokenization_spaces=True
         )
         generate_kwargs = {
             "input_features": input_features_generator(),
-            "att_context_size": [70, 6],
+            "num_lookahead_tokens": self.processor.default_num_lookahead_tokens,
             "streamer": streamer,
         }
         thread = Thread(target=model.generate, kwargs=generate_kwargs)

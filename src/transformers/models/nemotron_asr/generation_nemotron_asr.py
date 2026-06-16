@@ -216,10 +216,22 @@ class NemotronAsrGenerationMixin(ParakeetRNNTGenerationMixin):
         if self._streaming:
             self._stream_exhausted = False
             # Resolve the right attention context (lookahead) once; it sets the required mel-chunk sizes
-            # and the chunked_limited attention mask used for every chunk of this stream.
+            # and the chunked_limited attention mask used for every chunk of this stream. It must be passed
+            # explicitly: it governs both the attention right context in every forward and the exact mel-chunk
+            # sizes the encoder consumes, so falling back to the config default could silently mismatch the
+            # chunks the processor produced (`processor.set_num_lookahead_tokens(...)`) and corrupt the
+            # transcript. Validate it before touching the stream so the missing argument — not a downstream
+            # chunk-size mismatch — is what gets reported.
             num_lookahead_tokens = kwargs.pop("num_lookahead_tokens", None)
-            resolved = self.encoder._resolve_attn_context(num_lookahead_tokens)
-            self._streaming_num_lookahead_tokens = resolved[1] if resolved is not None else num_lookahead_tokens
+            if num_lookahead_tokens is None:
+                raise ValueError(
+                    "Streaming `generate` (when `input_features` is a generator of mel chunks) requires "
+                    "`num_lookahead_tokens`: it must be passed explicitly. It must match the right attention context "
+                    "used to size the chunks (e.g. `processor.set_num_lookahead_tokens(...)`, then pass the same "
+                    "`num_lookahead_tokens=...` here). Supported values: "
+                    f"{list(self.config.encoder_config.supported_num_lookahead_tokens)}."
+                )
+            self._streaming_num_lookahead_tokens = self.encoder._resolve_attn_context(num_lookahead_tokens)[1]
         try:
             # Parakeet's generate() runs the decoding loop and assembles sequences + per-step durations.
             outputs = super().generate(inputs=inputs, generation_config=generation_config, **kwargs)

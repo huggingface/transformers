@@ -65,7 +65,7 @@ print(processor.decode(output.sequences, skip_special_tokens=True))
 > [!NOTE]
 > This is an experimental feature and the API is subject to change.
 
-For real-time transcription, each chunk of raw audio is passed straight to the processor with `is_streaming=True` and `is_first_audio_chunk=...` as it arrives; the processor runs the per-chunk STFT (`center=True` for the first chunk, `center=False` afterwards) so the features reproduce, frame-for-frame, a single full-utterance pass. The processor exposes the exact chunk sizes the cache-aware encoder requires for the model's default lookahead. To select a target streaming latency instead, see [TODO].
+For real-time transcription, each chunk of raw audio is passed straight to the processor with `is_streaming=True` and `is_first_audio_chunk=...` as it arrives; the processor runs the per-chunk STFT (`center=True` for the first chunk, `center=False` afterwards) so the features reproduce, frame-for-frame, a single full-utterance pass. The processor exposes the exact chunk sizes the cache-aware encoder requires for a given lookahead. Call `processor.set_num_lookahead_tokens(...)` to pick the right attention context (lookahead, in subsampled encoder frames) — this re-derives the chunk-size properties below — and pass the same `num_lookahead_tokens` to `generate` so the forward matches the chunk sizes (streaming `generate` raises if it is omitted).
 
 ```python
 from threading import Thread
@@ -77,6 +77,10 @@ from transformers.audio_utils import load_audio
 model_id = "nvidia/nemotron-speech-streaming-en-0.6b"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForRNNT.from_pretrained(model_id, device_map="auto")
+
+# Select the streaming right attention context (lookahead). Higher = better accuracy but more latency.
+# This sizes the chunks the processor emits; the same value is passed to `generate` below.
+processor.set_num_lookahead_tokens(6)
 
 sampling_rate = processor.feature_extractor.sampling_rate
 audio = load_audio(
@@ -121,6 +125,7 @@ def input_features_generator():
 streamer = TextIteratorStreamer(processor.tokenizer, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 generate_kwargs = {
     "input_features": input_features_generator(),
+    "num_lookahead_tokens": processor.default_num_lookahead_tokens,
     "streamer": streamer,
 }
 thread = Thread(target=model.generate, kwargs=generate_kwargs)

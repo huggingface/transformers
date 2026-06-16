@@ -212,8 +212,8 @@ def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=
 
     feature_extractor = NemotronAsrFeatureExtractor(**converted_feature_extractor_config)
     # Carry the model's supported right attention contexts onto the processor so it can validate
-    # `streaming_latency_ms` and emit `num_lookahead_tokens`. NeMo stores a single [left, right] pair, a list
-    # of pairs (multi-lookahead), or [-1, -1] for full (offline) context.
+    # `set_num_lookahead_tokens` and emit `num_lookahead_tokens`. NeMo stores a single [left, right] pair, a
+    # list of pairs (multi-lookahead), or [-1, -1] for full (offline) context.
     att_context_size = nemo_config["encoder"].get("att_context_size")
     supported_num_lookahead_tokens = default_num_lookahead_tokens = None
     if att_context_size is not None and att_context_size not in ([-1, -1], [[-1, -1]]):
