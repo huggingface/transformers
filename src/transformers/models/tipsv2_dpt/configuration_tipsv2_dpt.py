@@ -92,7 +92,7 @@ class Tipsv2DptConfig(PreTrainedConfig):
 
         # `block_indices` map to the backbone `out_indices` (1-based indices that include the embedding
         # output, hence the +1 offset).
-        block_indices = kwargs.pop("block_indices", [3, 6, 9, 12])
+        block_indices = kwargs.pop("block_indices", [2, 5, 8, 11])
         out_indices = [block_index + 1 for block_index in block_indices]
 
         # Use num_labels and label2id when set. Otherwise fall back to num_labels=num_seg_classes which
