@@ -43,22 +43,36 @@
     "num_hidden_layers": 4,
     "pad_token_id": 1,
     "rms_norm_eps": 1e-05,
-    "rope_parameters": {
-      "rope_theta": 10000.0,
-      "rope_type": "default"
-    },
+    "rope_parameters": null,
     "rope_theta": 10000.0,
     "share_expert_dim": 64,
     "sliding_window": 64,
-    "swiglu_limits": null,
-    "swiglu_limits_shared": null,
+    "swiglu_limits": [
+      null,
+      null,
+      1.0,
+      1.0
+    ],
+    "swiglu_limits_shared": [
+      null,
+      null,
+      1.0,
+      1.0
+    ],
     "use_head_wise_attn_gate": true,
     "use_moe_router_bias": true,
-    "use_rope_layers": null,
+    "use_rope_layers": [
+      true,
+      true,
+      true,
+      true
+    ],
     "vocab_size": 512,
-    "yarn_only_types": null
+    "yarn_only_types": [
+      "full_attention"
+    ]
   },
-  "transformers_version": "5.10.0.dev0",
+  "transformers_version": "5.13.0.dev0",
   "understand_projector_stride": 2,
   "vision_config": {
     "heads": 4,
