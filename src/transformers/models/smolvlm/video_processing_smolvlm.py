@@ -191,18 +191,16 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
             return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return a pixel mask.
         """
-        if video.ndim != 5:
-            raise ValueError(f"The input video must be batched but got ndim={video.ndim}")
-
         original_size = video.size()[-2:]
+        num_frames = video.shape[1] if video.ndim == 5 else video.shape[0]
         padding_height = padded_size[0] - original_size[0]
         padding_width = padded_size[1] - original_size[1]
-        padding_frame = max_num_frames - video.shape[1]
+        padding_frame = max_num_frames - num_frames
         if padding_width < 0 or padding_height < 0 or padding_frame < 0:
             raise ValueError(
                 f"Padding dimensions are negative. Please make sure that the padded size is larger than the "
-                f"original size. Got padded number of frames {padding_frame} and size: {padded_size}, "
-                f"original number of frames {video.shape[1]} and size: {original_size}."
+                f"original size. Got padded max number of frames {max_num_frames} and padded size: {padded_size}, "
+                f"original number of frames {num_frames} and size: {original_size}."
             )
         if original_size != padded_size or padding_frame > 0:
             padding = [0, padding_width, 0, padding_height, 0, 0, 0, padding_frame]
