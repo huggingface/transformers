@@ -316,6 +316,11 @@ per-submodule kwargs via hooks on each encoder / projector / language model if t
 multi-modal). That's why it works for any architecture — decoder-only, SSM, encoder-decoder,
 multi-modal — without per-model glue. `export_for_generation` is a one-liner over it.
 
+The capture runs the model eagerly on `inputs`, so pass **small but representative** values —
+one short prompt, a single small image, a few audio frames. The exported program isn't tied
+to those sizes (dynamic shapes still flow through), but smaller capture inputs make
+`decompose_for_generation` cheaper and keep symbolic-shape inference tractable.
+
 Call `decompose_for_generation` directly when you want to do something between decomposing
 and exporting — run an eager forward for verification, swap a submodule's inputs, skip a stage:
 

@@ -619,11 +619,10 @@ def get_auto_dynamic_shapes(inputs: Any) -> Any:
 # To register a new stateful attribute: append its name to `_STATEFUL_CACHE_ATTRS`.
 
 _STATEFUL_CACHE_ATTRS = (
-    "_cached_keys",  # glm_moe_dsa DSA indexer
     "_cached_decode_position_ids",  # glm_image (m-rope decode position ids)
     "_prefill_len",  # glm_image (m-rope prefill length)
-    "cached_rotary_positional_embedding",  # wav2vec2_bert, seamless_m4t
-    "cached_sequence_length",  # wav2vec2_bert, seamless_m4t
+    "cached_rotary_positional_embedding",  # wav2vec2_bert, seamless_m4t, clvp
+    "cached_sequence_length",  # wav2vec2_bert, seamless_m4t, clvp
 )
 
 

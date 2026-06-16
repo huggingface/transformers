@@ -229,12 +229,18 @@ def _patch_split(original):
 
 @register_patch("executorch", "torch.chunk", "torch.Tensor.chunk")
 def _patch_chunk(original):
-    """Narrow-based chunk (delegates to split patch)."""
+    """`torch.chunk` decomposes through `aten.split_copy.Tensor`, which AOT inductor for the
+    ExecuTorch CUDA backend can't lower (`split_copy.Tensor is missing a c-shim implementation`).
+    Same root cause as `_patch_split`; route `chunk` through the already-patched `torch.split`
+    so it ends up as a sequence of `narrow`s instead. XNNPACK lowers `chunk` natively, so we
+    only swap when the input lives on CUDA.
+    """
 
     def patch(input, chunks, dim=0):
+        if input.device.type != "cuda":
+            return original(input, chunks, dim)
         total = input.size(dim)
         chunk_size = (total + chunks - 1) // chunks
-        # Call through torch.split which is already patched
         return torch.split(input, chunk_size, dim)
 
     return patch
