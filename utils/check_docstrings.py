@@ -104,6 +104,7 @@ class DecoratedItem:
     # Name fields – used to match the item against the corresponding modular_*.py source
     name: str = ""  # class or function name
     class_name: str | None = None  # enclosing class name (None for top-level items)
+    base_class_names: list[str] = None  # direct base class names from AST (class items only)
 
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
@@ -1131,25 +1132,6 @@ def _propagate_fixes_to_modular(
             if arg not in ordered:
                 ordered[arg] = info
 
-        # Strip entries whose description is identical to what auto would generate.
-        # Leaving them in creates a cycle: make fix-repo re-injects them into the
-        # generated file on every run.
-        if gen_item.is_model_output:
-            _propagate_source_doc = get_args_doc_from_source([ModelOutputArgs])
-        elif gen_item.is_config:
-            _propagate_source_doc = get_args_doc_from_source([ConfigArgs])
-        elif gen_item.is_processor:
-            _propagate_source_doc = get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs])
-        else:
-            _propagate_source_doc = get_args_doc_from_source([ModelArgs, ImageProcessorArgs])
-        for arg in [
-            a for a, info in list(ordered.items())
-            if a in _propagate_source_doc
-            and a not in ALWAYS_OVERRIDE
-            and _is_redundant_with_source(info, _propagate_source_doc[a])
-        ]:
-            del ordered[arg]
-
         # Prefer the modular's remaining section (its Example/Returns are modular-specific).
         # Fall back to the generated remaining only when the modular has none.
         remaining = mod_remaining or gen_remaining
@@ -1536,6 +1518,14 @@ def _build_ast_indexes(source: str, tree: ast.Module | None = None) -> list[Deco
                             continue
                         arg_names.append(attr_name)
 
+        base_class_names = []
+        if isinstance(node, ast.ClassDef):
+            for _base in node.bases:
+                if isinstance(_base, ast.Name):
+                    base_class_names.append(_base.id)
+                elif isinstance(_base, ast.Attribute):
+                    base_class_names.append(_base.attr)
+
         decorated_items.append(
             DecoratedItem(
                 decorator_line=decorator_line,
@@ -1551,6 +1541,7 @@ def _build_ast_indexes(source: str, tree: ast.Module | None = None) -> list[Deco
                 is_config=is_config,
                 name=node.name,
                 class_name=parent_class_name,
+                base_class_names=base_class_names,
             )
         )
 
