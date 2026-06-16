@@ -831,6 +831,8 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
         )
 
         if encoder_attention_mask is not None:
+            # Cross-attention queries only come from the query tokens (first `query_length` positions), while
+            # `embedding_output` also contains the text tokens.
             query_embedding_output = embedding_output[:, :query_length, :] if query_length > 0 else embedding_output
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,

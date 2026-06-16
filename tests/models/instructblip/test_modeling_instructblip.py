@@ -575,6 +575,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_fp32_ln(self):
+        # Overridden to additionally pass `qformer_input_ids`, which InstructBLIP's Q-Former requires.
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
@@ -626,6 +627,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_from_config(self):
+        # Overridden to additionally pass `qformer_input_ids`, which InstructBLIP's Q-Former requires.
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
