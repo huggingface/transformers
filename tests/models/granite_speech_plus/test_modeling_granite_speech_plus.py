@@ -36,6 +36,8 @@ if is_torch_available():
 if is_datasets_available():
     from datasets import load_dataset
 
+a = 1
+
 
 class GraniteSpeechPlusForConditionalGenerationModelTester(GraniteSpeechModelTester):
     """
