@@ -15,10 +15,9 @@
 FastAPI app factory.
 """
 
-from __future__ import annotations
-
 import uuid
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 
 from ...utils import logging
 from ...utils.import_utils import is_serve_available
@@ -29,6 +28,7 @@ if is_serve_available():
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse, StreamingResponse
 
+if TYPE_CHECKING:
     from .chat_completion import ChatCompletionHandler
     from .completion import CompletionHandler
     from .response import ResponseHandler
@@ -43,13 +43,13 @@ logger = logging.get_logger(__name__)
 
 def build_server(
     model_manager: ModelManager,
-    chat_handler: ChatCompletionHandler,
-    completion_handler: CompletionHandler,
-    response_handler: ResponseHandler,
-    transcription_handler: TranscriptionHandler,
+    chat_handler: "ChatCompletionHandler",
+    completion_handler: "CompletionHandler",
+    response_handler: "ResponseHandler",
+    transcription_handler: "TranscriptionHandler",
     generation_state: GenerationState,
     enable_cors: bool = False,
-) -> FastAPI:
+) -> "FastAPI":
     """Build and return a configured FastAPI application.
 
     Args:
