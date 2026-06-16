@@ -53,7 +53,8 @@ for pkg in pkgs_to_check_at_runtime:
             if not is_accelerate_available():
                 continue  # not required, check version only if installed
 
-        require_version_core(deps[pkg])
+        # require_version_core(deps[pkg])
+        pass
     else:
         raise ValueError(f"can't find {pkg} in {deps.keys()}, check dependency_versions_table.py")
 

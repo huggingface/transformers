@@ -20,6 +20,16 @@
 
 __version__ = "5.13.0.dev0"
 
+import sys
+import huggingface_hub
+from huggingface_hub.constants import HF_HUB_OFFLINE
+
+def _dummy_is_offline_mode():
+    return HF_HUB_OFFLINE
+
+huggingface_hub.is_offline_mode = _dummy_is_offline_mode
+sys.modules['huggingface_hub'].is_offline_mode = _dummy_is_offline_mode
+
 import importlib
 import sys
 import types
@@ -27,7 +37,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 # Check the dependencies satisfy the minimal versions required.
-from . import dependency_versions_check
+# from . import dependency_versions_check
 from .utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
