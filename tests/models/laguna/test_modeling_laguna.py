@@ -18,7 +18,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, require_torch_accelerator, slow, torch_device
 
 
 if is_torch_available():
@@ -26,6 +26,7 @@ if is_torch_available():
 
     from transformers import (
         LagunaConfig,
+        LagunaForCausalLM,
         LagunaModel,
     )
 
@@ -165,43 +166,80 @@ class LagunaModelTest(CausalLMModelTest, unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             LagunaConfig(**cfg_kwargs)
 
-    def _model_with_gating(self, gating):
+    @parameterized.expand([(True,), ("per-head",), ("per-element",)])
+    def test_gating_variations(self, gating):
+        """Checking whether each flavor option is properly propagated"""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        cfg_kwargs = config.to_dict()
-        cfg_kwargs["gating"] = gating
-        config = LagunaConfig(**cfg_kwargs)
+        config.gating = gating
+        # We only check the underlying base class for simplicity
         model = self.model_tester.base_model_class(config).to(torch_device).eval()
-        return config, inputs_dict, model
 
-    @parameterized.expand([(True,), ("per-head",)])
-    def test_gating_per_head_shape(self, gating):
-        """`gating=True` / `"per-head"`: one gate per head (g_proj out = num_heads)."""
-        _, _, model = self._model_with_gating(gating)
         for layer in model.layers:
-            self.assertTrue(layer.self_attn.gate_per_head)
-            self.assertEqual(layer.self_attn.g_proj.out_features, layer.self_attn.num_heads)
+            if gating == "per-element":
+                self.assertFalse(layer.self_attn.gate_per_head)
+            else:
+                self.assertTrue(layer.self_attn.gate_per_head)
 
-    def test_gating_per_element_shape_and_forward(self):
-        """`gating="per-element"`: one gate per (head, head_dim) channel."""
-        config, inputs_dict, model = self._model_with_gating("per-element")
-        for layer in model.layers:
-            self.assertFalse(layer.self_attn.gate_per_head)
-            self.assertEqual(
-                layer.self_attn.g_proj.out_features,
-                layer.self_attn.num_heads * config.head_dim,
+            expected_shape = (
+                layer.self_attn.num_heads if gating != "per-element" else layer.self_attn.num_heads * config.head_dim
             )
+            self.assertEqual(layer.self_attn.g_proj.out_features, expected_shape)
+
         with torch.no_grad():
             model(input_ids=inputs_dict["input_ids"].to(torch_device))
 
+    def test_per_element_gating_end_to_end(self):
+        """End-to-end check of the per-element gating path: greedy generation is
+        deterministic, and the gate measurably affects the logits."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.gating = "per-element"
+        torch.manual_seed(0)
+        model = LagunaForCausalLM(config).to(torch_device).eval()
+        input_ids = inputs_dict["input_ids"].to(torch_device)
 
-@require_torch
+        # Generation runs end-to-end through the per-element path and is deterministic.
+        with torch.no_grad():
+            gen1 = model.generate(input_ids, max_new_tokens=8, min_new_tokens=8, do_sample=False)
+            gen2 = model.generate(input_ids, max_new_tokens=8, min_new_tokens=8, do_sample=False)
+        self.assertEqual(gen1.shape[1], input_ids.shape[1] + 8)
+        self.assertTrue(torch.equal(gen1, gen2))
+
+        # The gate is actually applied: zeroing g_proj collapses softplus(g_proj(x))
+        # to the constant softplus(0)=ln(2), which changes the logits.
+        with torch.no_grad():
+            logits = model(input_ids).logits
+            for layer in model.model.layers:
+                torch.nn.init.zeros_(layer.self_attn.g_proj.weight)
+            logits_gate_collapsed = model(input_ids).logits
+        self.assertFalse(torch.allclose(logits, logits_gate_collapsed))
+
+
+@slow
+@require_torch_accelerator
 class LagunaIntegrationTest(unittest.TestCase):
-    """Slow integration tests — need a public Hub checkpoint.
+    def test_per_element_gating_logits(self):
+        """Logits of a small per-element-gating Laguna checkpoint, batched with padding."""
+        model_id = "poolside/Laguna-tiny-per-element"
+        dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
+        attention_mask = dummy_input.ne(0).to(torch.long)
 
-    TODO: replace the placeholder id once the Laguna model card is published.
-    """
+        model = LagunaForCausalLM.from_pretrained(model_id, dtype="auto", device_map="auto")
 
-    @slow
-    @unittest.skip("public Laguna checkpoint not yet published")
-    def test_logits_and_generation(self):
-        pass
+        expected_left = Expectations(
+            {
+                ("cuda", 8): [[0.0033, 0.0581, -0.1718], [-0.0559, -0.1834, 0.0085], [-0.0235, -0.0824, -0.0569]],
+            }
+        )  # fmt: skip
+        expected_right = Expectations(
+            {
+                ("cuda", 8): [[0.0132, -0.0518, -0.1204], [-0.0231, -0.0547, 0.0684], [-0.1406, -0.2664, -0.1904]],
+            }
+        )  # fmt: skip
+        expected_left = torch.tensor(expected_left.get_expectation(), device=torch_device)
+        expected_right = torch.tensor(expected_right.get_expectation(), device=torch_device)
+
+        with torch.no_grad():
+            logits = model(dummy_input, attention_mask=attention_mask).logits.float()
+
+        torch.testing.assert_close(logits[0, -3:, -3:], expected_left, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[1, -3:, -3:], expected_right, atol=1e-3, rtol=1e-3)
