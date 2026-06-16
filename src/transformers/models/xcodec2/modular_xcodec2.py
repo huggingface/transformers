@@ -358,6 +358,7 @@ class Xcodec2FiniteScalarQuantization(nn.Module):
         self.register_buffer("codebook", codebook, persistent=False)
 
     def _compute_buffers(self, device=None):
+        """Compute the levels, basis, and codebook buffers for the FSQ quantizer."""
         levels = torch.tensor(self.quantization_levels, dtype=torch.int32, device=device)
         basis = torch.cumprod(
             torch.tensor([1] + self.quantization_levels[:-1], device=device), dim=0, dtype=torch.int32
@@ -401,6 +402,7 @@ class Xcodec2FiniteScalarQuantization(nn.Module):
         return (hidden_states + shift).tanh() * half_range - offset
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        # NOTE: could rerwite to pass tensor to a decorator such that device type is handled internally
         original_dtype = hidden_states.dtype
         device_type = (
             hidden_states.device.type
@@ -434,8 +436,7 @@ class Xcodec2ISTFTHead(nn.Module):
         self.linear = nn.Linear(config.hidden_size, config.n_fft + 2)
         self.n_fft = config.n_fft
         self.hop_length = config.hop_length
-        self.win_length = config.n_fft
-        self.padding = (self.win_length - self.hop_length) // 2
+        self.padding = (self.n_fft - self.hop_length) // 2
         window = torch.hann_window(config.n_fft)
         self.register_buffer("window", window, persistent=False)
 
@@ -446,15 +447,16 @@ class Xcodec2ISTFTHead(nn.Module):
         magnitude = torch.exp(magnitude).clamp(max=1e2)
         spectrogram_complex = magnitude * torch.exp(1j * phase)
 
-        # Back to audio (ISTFT with "same" padding)
+        # Back to audio (ISTFT with manual "same" padding: torch.istft lacks a native same-padding mode,
+        # so we use irfft + fold with explicit pre-computed padding to replicate it)
         time_frames = torch.fft.irfft(spectrogram_complex, self.n_fft, dim=1, norm="backward")
         time_frames = time_frames * self.window[None, :, None]
         num_frames = spectrogram_complex.shape[-1]
-        output_size = (num_frames - 1) * self.hop_length + self.win_length
+        output_size = (num_frames - 1) * self.hop_length + self.n_fft
         audio = F.fold(
             time_frames,
             output_size=(1, output_size),
-            kernel_size=(1, self.win_length),
+            kernel_size=(1, self.n_fft),
             stride=(1, self.hop_length),
         )[:, 0, 0, self.padding : -self.padding]
 
@@ -462,7 +464,7 @@ class Xcodec2ISTFTHead(nn.Module):
         window_envelope = F.fold(
             self.window.square().expand(1, num_frames, -1).transpose(1, 2),
             output_size=(1, output_size),
-            kernel_size=(1, self.win_length),
+            kernel_size=(1, self.n_fft),
             stride=(1, self.hop_length),
         ).squeeze()[self.padding : -self.padding]
         # Clamp as expected by original: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/codec_decoder_vocos.py#L82
@@ -522,7 +524,8 @@ class Xcodec2Decoder(nn.Module):
         # Transformer: (batch, time, hidden)
         # position_ids uses num_attention_heads so that RoPE produces cos/sin of shape (batch, num_heads, head_dim),
         # which broadcasts correctly against q/k of shape (batch, num_heads, seq_len, head_dim) via unsqueeze_dim=2
-        # in `apply_rotary_pos_emb`
+        # in `apply_rotary_pos_emb`. NOTE: this is non-standard and could be unsafe under tensor parallelism
+        # (TP shards see only a subset of heads), but TP is not used for this model in practice.
         hidden_states = hidden_states.transpose(1, 2)
         position_ids = torch.arange(self.num_attention_heads, device=hidden_states.device).unsqueeze(0)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -587,7 +590,7 @@ class Xcodec2SemanticAdapter(nn.Module):
 class Xcodec2PreTrainedModel(VoxtralPreTrainedModel):
     base_model_prefix = "xcodec2"
     main_input_name = "audio"
-    input_modalities = "audio"
+    input_modalities = ("audio",)
     _can_record_outputs = {
         "hidden_states": Xcodec2DecoderLayer,
         "attentions": Xcodec2DecoderLayer,

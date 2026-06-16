@@ -23,6 +23,7 @@ from datasets import Audio, load_dataset
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, floats_tensor
 from transformers import AutoFeatureExtractor, Xcodec2Config, Xcodec2Model
+from transformers.audio_utils import compute_rmse
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
@@ -202,33 +203,17 @@ class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
-# Copied from transformers.tests.encodec.test_modeling_encodec.normalize
-def normalize(arr):
-    norm = np.linalg.norm(arr)
-    normalized_arr = arr / norm
-    return normalized_arr
-
-
-# Copied from transformers.tests.encodec.test_modeling_encodec.compute_rmse
-def compute_rmse(arr1, arr2):
-    arr1_np = arr1.cpu().numpy().squeeze()
-    arr2_np = arr2.cpu().numpy().squeeze()
-    max_length = min(arr1.shape[-1], arr2.shape[-1])
-    arr1_np = arr1_np[..., :max_length]
-    arr2_np = arr2_np[..., :max_length]
-    arr1_normalized = normalize(arr1_np)
-    arr2_normalized = normalize(arr2_np)
-    return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
-
-
 @slow
 @require_torch
 class Xcodec2IntegrationTest(unittest.TestCase):
+    def setUp(self):
+        self.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/xcodec2"
+
     def test_integration(self):
         """
         reproducer: https://gist.github.com/ebezzam/3b79481b5d48d8e35c4ecc582aee0cb3#file-reproducer_single-py
         """
-        results_path = Path(__file__).parent.parent.parent / "fixtures/xcodec2/expected_results_single.json"
+        results_path = self.fixtures_path / "expected_results_single.json"
         with open(results_path, "r") as f:
             raw_data = json.load(f)
         exp_code = torch.tensor(raw_data["audio_codes"])
@@ -270,7 +255,7 @@ class Xcodec2IntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/ebezzam/3b79481b5d48d8e35c4ecc582aee0cb3#file-reproducer_batch-py
         NOTE (ebezzam): PyPI model does not support batch inference but we compare against its per-sample results
         """
-        results_path = Path(__file__).parent.parent.parent / "fixtures/xcodec2/expected_results_batch.json"
+        results_path = self.fixtures_path / "expected_results_batch.json"
         with open(results_path, "r") as f:
             raw_data = json.load(f)
         num_samples = len(raw_data["audio_codes"])

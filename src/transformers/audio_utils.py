@@ -1213,6 +1213,40 @@ def amplitude_to_db(
     return spectrogram
 
 
+def normalize_waveform(arr: np.ndarray) -> np.ndarray:
+    """
+    Normalizes an array by dividing by its L2 norm.
+
+    Args:
+        arr (`np.ndarray`): Input array.
+
+    Returns:
+        `np.ndarray`: L2-normalized array.
+    """
+    norm = np.linalg.norm(arr)
+    return arr / norm
+
+
+def compute_rmse(arr1: "torch.Tensor", arr2: "torch.Tensor") -> np.ndarray:
+    """
+    Computes the root mean square error (RMSE) between two audio tensors after L2 normalization.
+    Tensors are truncated to the shorter length before comparison.
+
+    Args:
+        arr1 (`torch.Tensor`): First audio tensor.
+        arr2 (`torch.Tensor`): Second audio tensor.
+
+    Returns:
+        `np.ndarray`: RMSE between the normalized arrays.
+    """
+    arr1_np = arr1.cpu().numpy().squeeze()
+    arr2_np = arr2.cpu().numpy().squeeze()
+    max_length = min(arr1.shape[-1], arr2.shape[-1])
+    arr1_np = arr1_np[..., :max_length]
+    arr2_np = arr2_np[..., :max_length]
+    return np.sqrt(((normalize_waveform(arr1_np) - normalize_waveform(arr2_np)) ** 2).mean())
+
+
 def amplitude_to_db_batch(
     spectrogram: np.ndarray, reference: float = 1.0, min_value: float = 1e-5, db_range: float | None = None
 ) -> np.ndarray:

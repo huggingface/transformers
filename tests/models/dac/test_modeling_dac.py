@@ -21,6 +21,7 @@ from datasets import Audio, load_dataset
 from parameterized import parameterized
 
 from transformers import AutoProcessor, DacConfig, DacModel
+from transformers.audio_utils import compute_rmse
 from transformers.testing_utils import (
     is_torch_available,
     require_deterministic_for_xpu,
@@ -280,25 +281,6 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertIsInstance(quantized_latents, torch.Tensor)
         self.assertEqual(quantized_latents.shape[0], latents.shape[0])
         self.assertEqual(quantized_latents.shape[1], latents.shape[1])
-
-
-# Copied from transformers.tests.encodec.test_modeling_encodec.normalize
-def normalize(arr):
-    norm = np.linalg.norm(arr)
-    normalized_arr = arr / norm
-    return normalized_arr
-
-
-# Copied from transformers.tests.encodec.test_modeling_encodec.compute_rmse
-def compute_rmse(arr1, arr2):
-    arr1_np = arr1.cpu().numpy().squeeze()
-    arr2_np = arr2.cpu().numpy().squeeze()
-    max_length = min(arr1.shape[-1], arr2.shape[-1])
-    arr1_np = arr1_np[..., :max_length]
-    arr2_np = arr2_np[..., :max_length]
-    arr1_normalized = normalize(arr1_np)
-    arr2_normalized = normalize(arr2_np)
-    return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
 
 
 """

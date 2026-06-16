@@ -23,6 +23,7 @@ from datasets import Audio, load_dataset
 from parameterized import parameterized
 
 from transformers import AutoProcessor, EncodecConfig
+from transformers.audio_utils import compute_rmse
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
@@ -316,23 +317,6 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_model_forward_with_normalization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_normalization()
         self.model_tester.create_and_check_model_forward(config, inputs_dict)
-
-
-def normalize(arr):
-    norm = np.linalg.norm(arr)
-    normalized_arr = arr / norm
-    return normalized_arr
-
-
-def compute_rmse(arr1, arr2):
-    arr1_np = arr1.cpu().numpy().squeeze()
-    arr2_np = arr2.cpu().numpy().squeeze()
-    max_length = min(arr1.shape[-1], arr2.shape[-1])
-    arr1_np = arr1_np[..., :max_length]
-    arr2_np = arr2_np[..., :max_length]
-    arr1_normalized = normalize(arr1_np)
-    arr2_normalized = normalize(arr2_np)
-    return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
 
 
 """
