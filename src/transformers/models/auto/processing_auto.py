@@ -68,7 +68,6 @@ else:
             ("parakeet_tdt", "ParakeetProcessor"),
             ("qwen3_5", "Qwen3VLProcessor"),
             ("qwen3_5_moe", "Qwen3VLProcessor"),
-            ("qwen3_asr", "Qwen3ASRProcessor"),
             ("qwen3_vl_moe", "Qwen3VLProcessor"),
             ("sam3_lite_text", "Sam3Processor"),
             ("sew", "Wav2Vec2Processor"),

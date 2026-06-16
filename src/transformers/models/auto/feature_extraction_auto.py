@@ -56,7 +56,6 @@ MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("pe_audio_video", "PeAudioFeatureExtractor"),
         ("qwen2_5_omni", "WhisperFeatureExtractor"),
         ("qwen2_audio", "WhisperFeatureExtractor"),
-        ("qwen3_asr", "Qwen3ASRFeatureExtractor"),
         ("qwen3_omni_moe", "WhisperFeatureExtractor"),
         ("seamless_m4t_v2", "SeamlessM4TFeatureExtractor"),
         ("sew", "Wav2Vec2FeatureExtractor"),

@@ -276,6 +276,7 @@ class Qwen3ASRModel(AudioFlamingo3Model):
     """
 )
 class Qwen3ASRForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _keep_in_fp32_modules_strict = AttributeError()
 
     def forward(
