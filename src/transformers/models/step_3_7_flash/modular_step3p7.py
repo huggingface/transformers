@@ -25,6 +25,8 @@ from PIL import Image
 
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
+from transformers.conversion_mapping import register_checkpoint_conversion_mapping
+from transformers.core_model_loading import Chunk, WeightConverter
 from transformers.generation import GenerationMixin
 from transformers.masking_utils import (
     create_causal_mask,
@@ -40,8 +42,8 @@ from transformers.utils import TransformersKwargs, can_return_tuple, logging
 
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MLP, DeepseekV3MoE
 from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, StepRoboticsVisionEncoderConfig
-from ..mimi.modeling_mimi import MimiLayerScale, MimiMLP
-from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLAttention, MiniMaxM3VLModel, MiniMaxM3VLTextModel, MiniMaxM3VLDecoderLayer, MiniMaxM3VLRotaryEmbedding, MiniMaxM3VLCausalLMOutputWithPast, MiniMaxM3VLDenseMLP, MiniMaxM3VLRMSNorm, rotate_half, apply_rotary_pos_emb, repeat_kv, eager_attention_forward
+from ..mimi.modeling_mimi import MimiLayerScale
+from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLAttention, MiniMaxM3VLModel, MiniMaxM3VLTextModel, MiniMaxM3VLDecoderLayer, MiniMaxM3VLRotaryEmbedding, MiniMaxM3VLCausalLMOutputWithPast, MiniMaxM3VLDenseMLP, MiniMaxM3VLRMSNorm, MiniMaxM3VLVisionMLP, MiniMaxM3VLVisionAttention, MiniMaxM3VLVisionEncoderLayer, rotate_half, apply_rotary_pos_emb, repeat_kv, eager_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -138,6 +140,24 @@ class Step3p7VisionRope2D(nn.Module):
         k = (k * freqs.cos() + self._rotate_half(k) * freqs.sin()).to(dtype)
         return q, k
 
+    def get_cos_sin(
+        self, grid_hw: tuple[int, int], device: torch.device | None = None, dtype: torch.dtype | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return (cos, sin) shaped (seq_len, head_dim) for the given grid, for use as position_embeddings."""
+        if grid_hw[0] != self.max_grid_height or grid_hw[1] != self.max_grid_width:
+            rows = torch.arange(grid_hw[0], device=device or self.freqs_cache.device).view(-1, 1)
+            cols = torch.arange(grid_hw[1], device=device or self.freqs_cache.device).view(1, -1)
+            positions = (rows * self.max_grid_width + cols).reshape(-1).to(torch.long)
+            freqs = self.freqs_cache.index_select(2, positions)
+        else:
+            freqs = self.freqs_cache
+        freqs = freqs.squeeze(0).squeeze(0)  # (seq_len, head_dim)
+        if device is not None:
+            freqs = freqs.to(device=device)
+        if dtype is not None:
+            freqs = freqs.to(dtype=dtype)
+        return freqs.cos(), freqs.sin()
+
 
 class Step3p7VisionLayerScale(MimiLayerScale):
     """Per-channel residual scaling used when ls_init_value is set."""
@@ -147,159 +167,93 @@ class Step3p7VisionLayerScale(MimiLayerScale):
         self.scale = nn.Parameter(torch.full((dim,), init_values))
 
 
-class Step3p7VisionMLP(MimiMLP):
-    """Feed-forward network used inside each vision transformer block."""
-
-    def __init__(self, hidden_size: int, intermediate_size: int, hidden_act: str):
-        nn.Module.__init__(self)
-        self.activation_fn = ACT2FN[hidden_act]
-        self.fc1 = nn.Linear(hidden_size, intermediate_size, bias=True)
-        self.fc2 = nn.Linear(intermediate_size, hidden_size, bias=True)
+class Step3p7VisionMLP(MiniMaxM3VLVisionMLP):
+    pass
 
 
-class Step3p7VisionAttention(nn.Module):
-    """Multi-head self attention with optional 2D RoPE."""
+class Step3p7VisionAttention(MiniMaxM3VLVisionAttention):
+    def __init__(self, config: StepRoboticsVisionEncoderConfig):
+        super().__init__(config)
 
-    def __init__(
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+        # Split fused in_proj_{weight,bias} from original checkpoints into separate q/k/v projections
+        for suffix, proj_names in [
+            ("in_proj_weight", ("q_proj.weight", "k_proj.weight", "v_proj.weight")),
+            ("in_proj_bias", ("q_proj.bias", "k_proj.bias", "v_proj.bias")),
+        ]:
+            fused_key = prefix + suffix
+            if fused_key in state_dict:
+                fused = state_dict.pop(fused_key)
+                for chunk, name in zip(fused.chunk(3, dim=0), proj_names):
+                    state_dict[prefix + name] = chunk
+        nn.Module._load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
+
+    def forward(
         self,
-        hidden_size: int,
-        num_heads: int,
-        max_grid_height: int,
-        max_grid_width: int,
-        use_cls_token: bool = False,
-        use_rope2d: bool = True,
-        rope_theta: int | float = 10000,
-        rope_max_freq: int = 10,
-        rope_num_freqs: int = 1,
-        rope_theta_rescale_factor: float = 1.0,
-        rope_freqs_for: Literal["lang", "pixel", "constant"] = "lang",
-    ):
-        super().__init__()
-        if hidden_size % num_heads != 0:
-            raise ValueError(f"hidden_size ({hidden_size}) must be divisible by num_heads ({num_heads}).")
-        self.num_heads = num_heads
-        self.head_dim = hidden_size // num_heads
-        self.scale = self.head_dim**-0.5
-        self.in_proj_weight = nn.Parameter(torch.zeros(hidden_size * 3, hidden_size))
-        self.in_proj_bias = nn.Parameter(torch.zeros(hidden_size * 3))
-        self.out_proj = nn.Linear(hidden_size, hidden_size, bias=True)
-        self.rope = None
-        if use_rope2d:
-            self.rope = Step3p7VisionRope2D(
-                dim=self.head_dim,
-                max_grid_height=max_grid_height,
-                max_grid_width=max_grid_width,
-                use_cls_token=use_cls_token,
-                theta=rope_theta,
-                max_freq=rope_max_freq,
-                num_freqs=rope_num_freqs,
-                theta_rescale_factor=rope_theta_rescale_factor,
-            )
-
-    def forward(self, hidden_states: torch.Tensor, grid_hw: tuple[int, int]) -> torch.Tensor:
-        bsz, seq_len, _ = hidden_states.shape
-        qkv = F.linear(hidden_states, self.in_proj_weight, self.in_proj_bias)
-        q, k, v = qkv.chunk(3, dim=-1)
-        q = q.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        k = k.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        if self.rope is not None:
-            q, k = self.rope(q, k, grid_hw=grid_hw)
-        v = v.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        attn_output = F.scaled_dot_product_attention(q, k, v, is_causal=False, scale=self.scale)
-        attn_output = attn_output.transpose(1, 2).reshape(bsz, seq_len, self.num_heads * self.head_dim)
-        return self.out_proj(attn_output)
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+        queries = self.q_proj(hidden_states).view(hidden_shape)
+        keys = self.k_proj(hidden_states).view(hidden_shape)
+        values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        cos, sin = position_embeddings
+        # expand (seq_len, head_dim) → (1, seq_len, 1, head_dim) for broadcasting
+        cos, sin = cos[None, :, None, :], sin[None, :, None, :]
+        # pair-wise (interleaved) rotation — distinct from the block-split used in the text decoder
+        queries = (queries * cos + Step3p7VisionRope2D._rotate_half(queries) * sin).to(queries.dtype)
+        keys = (keys * cos + Step3p7VisionRope2D._rotate_half(keys) * sin).to(keys.dtype)
+        queries, keys = queries.transpose(1, 2), keys.transpose(1, 2)
+        attn_output = F.scaled_dot_product_attention(queries, keys, values, scale=self.scale)
+        attn_output = attn_output.transpose(1, 2).reshape(*input_shape, -1).contiguous()
+        return self.out_proj(attn_output), None
 
 
-class Step3p7VisionBlock(nn.Module):
-    """A single Vision Transformer block (self-attention + MLP)."""
+class Step3p7VisionBlock(MiniMaxM3VLVisionEncoderLayer):
+    def __init__(self, config: StepRoboticsVisionEncoderConfig):
+        super().__init__(config)
+        self.self_attn = Step3p7VisionAttention(config)
+        self.mlp = Step3p7VisionMLP(config)
+        self.ls_1 = Step3p7VisionLayerScale(config.hidden_size, config.ls_init_value)
+        self.ls_2 = Step3p7VisionLayerScale(config.hidden_size, config.ls_init_value)
 
-    def __init__(
-        self,
-        hidden_size: int,
-        num_heads: int,
-        mlp_ratio: float,
-        hidden_act: str,
-        layer_norm_eps: float,
-        ls_init_value: float | None = None,
-        max_grid_height: int | None = None,
-        max_grid_width: int | None = None,
-        use_cls_token: bool = False,
-        use_rope2d: bool = True,
-        rope_kwargs: dict | None = None,
-    ):
-        super().__init__()
-        rope_kwargs = rope_kwargs or {}
-        self.attn = Step3p7VisionAttention(
-            hidden_size,
-            num_heads,
-            max_grid_height=max_grid_height,
-            max_grid_width=max_grid_width,
-            use_cls_token=use_cls_token,
-            use_rope2d=use_rope2d,
-            **rope_kwargs,
-        )
-        self.ln_1 = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
-        self.ln_2 = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
-        intermediate = int(hidden_size * mlp_ratio)
-        self.mlp = Step3p7VisionMLP(hidden_size, intermediate, hidden_act)
-        self.ls_1 = Step3p7VisionLayerScale(hidden_size, ls_init_value)
-        self.ls_2 = Step3p7VisionLayerScale(hidden_size, ls_init_value)
-
-    def forward(self, hidden_states: torch.Tensor, grid_hw: tuple[int, int]) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None = None, **kwargs) -> torch.Tensor:
         residual = hidden_states
-        hidden_states = self.ln_1(hidden_states)
-        hidden_states = self.attn(hidden_states, grid_hw=grid_hw)
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, _ = self.self_attn(hidden_states=hidden_states, attention_mask=attention_mask, **kwargs)
         hidden_states = residual + self.ls_1(hidden_states)
         residual = hidden_states
-        hidden_states = self.ln_2(hidden_states)
+        hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + self.ls_2(hidden_states)
         return hidden_states
 
 
 class EncoderVisionTransformer(nn.Module):
-    """Stack of vision encoder blocks."""
+    """Stack of vision encoder blocks; holds the shared 2-D RoPE."""
 
-    def __init__(
-        self,
-        embed_dim: int,
-        depth: int,
-        num_heads: int,
-        mlp_ratio: float,
-        hidden_act: str,
-        layer_norm_eps: float,
-        ls_init_value: float | None = None,
-        max_grid_height: int | None = None,
-        max_grid_width: int | None = None,
-        use_cls_token: bool = False,
-        use_rope2d: bool = True,
-        rope_kwargs: dict | None = None,
-    ):
+    def __init__(self, config: StepRoboticsVisionEncoderConfig):
         super().__init__()
-        self.layers = depth
-        rope_kwargs = rope_kwargs or {}
-        self.resblocks = nn.ModuleList(
-            [
-                Step3p7VisionBlock(
-                    embed_dim,
-                    num_heads,
-                    mlp_ratio,
-                    hidden_act,
-                    layer_norm_eps,
-                    max_grid_height=max_grid_height,
-                    max_grid_width=max_grid_width,
-                    use_cls_token=use_cls_token,
-                    use_rope2d=use_rope2d,
-                    ls_init_value=ls_init_value,
-                    rope_kwargs=rope_kwargs,
-                )
-                for _ in range(depth)
-            ]
+        self.resblocks = nn.ModuleList([Step3p7VisionBlock(config) for _ in range(config.num_hidden_layers)])
+        head_dim = config.hidden_size // config.num_attention_heads
+        grid = config.image_size // config.patch_size
+        self.rope = Step3p7VisionRope2D(
+            dim=head_dim,
+            max_grid_height=grid,
+            max_grid_width=grid,
+            theta=getattr(config, "rope_theta", 10000),
+            max_freq=getattr(config, "rope_max_freq", 10),
+            num_freqs=getattr(config, "rope_num_freqs", 1),
+            theta_rescale_factor=getattr(config, "rope_theta_rescale_factor", 1.0),
         )
 
     def forward(self, hidden_states: torch.Tensor, grid_hw: tuple[int, int]) -> torch.Tensor:
+        cos, sin = self.rope.get_cos_sin(grid_hw, device=hidden_states.device, dtype=hidden_states.dtype)
         for block in self.resblocks:
-            hidden_states = block(hidden_states, grid_hw=grid_hw)
+            hidden_states = block(hidden_states, attention_mask=None, position_embeddings=(cos, sin))
         return hidden_states
 
 
@@ -307,20 +261,9 @@ class StepRoboticsVisionEncoder(nn.Module):
     def __init__(self, config: StepRoboticsVisionEncoderConfig):
         super().__init__()
         self.config = config
-        self.hidden_size = config.width
-        self.num_heads = config.heads
-        self.num_hidden_layers = config.layers
+        self.hidden_size = config.hidden_size
         self.patch_size = config.patch_size
         self.image_size = config.image_size
-        self.use_cls_token = getattr(config, "use_cls_token", False)
-        self.use_rope2d = getattr(config, "use_rope2d", True)
-        self.use_abs_posemb = getattr(config, "use_abs_posemb", True)
-        self.layer_norm_eps = config.layer_norm_eps
-        self.mlp_ratio = getattr(config, "mlp_ratio", 8960 / 1536)
-        self.ls_init_value = getattr(config, "ls_init_value", None)
-        self.hidden_act = config.hidden_act
-        self.use_ln_pre = getattr(config, "use_ln_pre", False)
-        self.use_ln_post = getattr(config, "use_ln_post", True)
 
         self.conv1 = nn.Conv2d(
             in_channels=config.num_channels,
@@ -329,47 +272,14 @@ class StepRoboticsVisionEncoder(nn.Module):
             stride=self.patch_size,
             bias=False,
         )
-        self.ln_pre = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps) if self.use_ln_pre else nn.Identity()
-        self.ln_post = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps) if self.use_ln_post else nn.Identity()
+        self.ln_pre = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
-        grid_size = self.image_size // self.patch_size
-        self.base_grid = (grid_size, grid_size)
-
-        if self.use_cls_token:
-            self.class_embedding = nn.Parameter(torch.randn(self.hidden_size) * (self.hidden_size**-0.5))
-        else:
-            self.class_embedding = None
-
-        if self.use_abs_posemb:
-            self.posemb_grid_size = self.image_size // self.patch_size
-            self.positional_embedding = nn.Parameter(
-                (self.hidden_size**-0.5)
-                * torch.randn(
-                    int(self.use_cls_token) + self.posemb_grid_size**2,
-                    self.hidden_size,
-                )
-            )
-
-        self.transformer = EncoderVisionTransformer(
-            embed_dim=self.hidden_size,
-            depth=self.num_hidden_layers,
-            num_heads=self.num_heads,
-            mlp_ratio=self.mlp_ratio,
-            hidden_act=self.hidden_act,
-            layer_norm_eps=self.layer_norm_eps,
-            ls_init_value=self.ls_init_value,
-            max_grid_height=self.base_grid[0],
-            max_grid_width=self.base_grid[1],
-            use_cls_token=self.use_cls_token,
-            use_rope2d=self.use_rope2d,
-            rope_kwargs={
-                "rope_theta": getattr(config, "rope_theta", 10000),
-                "rope_max_freq": getattr(config, "rope_max_freq", 10),
-                "rope_num_freqs": getattr(config, "rope_num_freqs", 1),
-                "rope_theta_rescale_factor": getattr(config, "rope_theta_rescale_factor", 1.0),
-                "rope_freqs_for": getattr(config, "rope_freqs_for", "lang"),
-            },
+        self.posemb_grid_size = self.image_size // self.patch_size
+        self.positional_embedding = nn.Parameter(
+            (self.hidden_size**-0.5) * torch.randn(self.posemb_grid_size**2, self.hidden_size)
         )
+
+        self.transformer = EncoderVisionTransformer(config)
         self.vit_downsampler1 = nn.Conv2d(self.hidden_size, self.hidden_size * 2, kernel_size=3, stride=2, padding=1)
         self.vit_downsampler2 = nn.Conv2d(
             self.hidden_size * 2, self.hidden_size * 4, kernel_size=3, stride=2, padding=1
@@ -379,35 +289,20 @@ class StepRoboticsVisionEncoder(nn.Module):
         if self.posemb_grid_size == grid_h and self.posemb_grid_size == grid_w:
             return self.positional_embedding[None, ...]
         pos_embed = self.positional_embedding
-        if self.use_cls_token:
-            cls_token_embed, pos_embed = pos_embed[:1], pos_embed[1:]
         pos_embed = (
             pos_embed.reshape(1, self.posemb_grid_size, self.posemb_grid_size, -1).permute(0, 3, 1, 2).contiguous()
         )
         pos_embed = F.interpolate(pos_embed, size=(grid_h, grid_w), mode="bilinear", align_corners=False)
-        pos_embed = pos_embed.permute(0, 2, 3, 1).reshape(-1, self.hidden_size)
-        if self.use_cls_token:
-            pos_embed = torch.cat([cls_token_embed, pos_embed], dim=0)
-        return pos_embed[None, ...]
+        return pos_embed.permute(0, 2, 3, 1).reshape(1, -1, self.hidden_size)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        bsz, _, height, width = pixel_values.shape
+        _, _, height, width = pixel_values.shape
         grid_h, grid_w = height // self.patch_size, width // self.patch_size
         hidden_state = self.conv1(pixel_values)
         hidden_state = hidden_state.flatten(2).transpose(1, 2)
-        if self.use_cls_token:
-            cls_token = self.class_embedding.view(1, 1, -1).expand(bsz, -1, -1)
-            hidden_state = torch.cat([cls_token, hidden_state], dim=1)
-        if self.use_abs_posemb:
-            pos_emb = self.sample_abs_posemb(grid_h, grid_w)
-            hidden_state = hidden_state + pos_emb
+        hidden_state = hidden_state + self.sample_abs_posemb(grid_h, grid_w)
         hidden_state = self.ln_pre(hidden_state)
-        hidden_state = self.transformer(hidden_state, grid_hw=(grid_h, grid_w))
-        if self.use_ln_post:
-            hidden_state = self.ln_post(hidden_state)
-        if self.use_cls_token:
-            hidden_state = hidden_state[:, 1:, :]
-        return hidden_state
+        return self.transformer(hidden_state, grid_hw=(grid_h, grid_w))
 
 
 # Text model
@@ -428,8 +323,22 @@ class Step3p7PreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
 
+    _vision_attn_converters = [
+        WeightConverter(
+            source_patterns=["self_attn.in_proj_weight"],
+            target_patterns=["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+            operations=[Chunk(dim=0)],
+        ),
+        WeightConverter(
+            source_patterns=["self_attn.in_proj_bias"],
+            target_patterns=["self_attn.q_proj.bias", "self_attn.k_proj.bias", "self_attn.v_proj.bias"],
+            operations=[Chunk(dim=0)],
+        ),
+    ]
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        register_checkpoint_conversion_mapping(cls.__name__, cls._vision_attn_converters, overwrite=True)
         key_mapping = getattr(cls, "_checkpoint_conversion_mapping", None)
         if key_mapping is not None and kwargs.get("key_mapping") is None:
             kwargs["key_mapping"] = copy.deepcopy(key_mapping)
@@ -444,6 +353,22 @@ class Step3p7RotaryEmbedding(MiniMaxM3VLRotaryEmbedding):
         if getattr(config, "rope_parameters", None) is None:
             config.rope_parameters = {"rope_type": "default", "rope_theta": config.rope_theta}
         super().__init__(config, device=device)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: "Step3p7TextConfig | None" = None,
+        device=None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        base = config.rope_parameters["rope_theta"]
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+        attention_factor = 1.0
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
 
 
@@ -513,7 +438,7 @@ class MoELinear(nn.Module):
         return x
 
 
-class Step3p7MoEMLP(DeepseekV3MoE):
+class Step3p7MoE(DeepseekV3MoE):
     def __init__(self, config, swiglu_limit=None):
         nn.Module.__init__(self)
         self.num_experts = config.moe_num_experts
@@ -521,17 +446,9 @@ class Step3p7MoEMLP(DeepseekV3MoE):
         self.hidden_size = config.hidden_size
         self.moe_intermediate_size = config.moe_intermediate_size
 
-        self.use_moe_router_bias = config.use_moe_router_bias
-        if self.use_moe_router_bias:
-            self.router_bias = nn.Parameter(
-                torch.zeros(config.moe_num_experts, dtype=torch.float32), requires_grad=False
-            )
-            self.custom_routing_function = self.router_bias_func
-        elif config.moe_router_activation == "sigmoid":
-            self.custom_routing_function = sigmoid_routing_function
-        else:
-            self.custom_routing_function = None
-        self.need_fp32_gate = config.need_fp32_gate
+        self.router_bias = nn.Parameter(
+            torch.zeros(config.moe_num_experts, dtype=torch.float32), requires_grad=False
+        )
         self.routed_scaling_factor = getattr(config, "moe_router_scaling_factor", 1.0)
 
         # gating
@@ -566,22 +483,11 @@ class Step3p7MoEMLP(DeepseekV3MoE):
     def forward(self, hidden_states):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
-        if self.need_fp32_gate:
-            router_logits = torch.matmul(
-                hidden_states.to(torch.float32),
-                self.gate.weight.t().to(torch.float32),
-            )
-        else:
-            router_logits = self.gate(hidden_states)
-
-        if self.custom_routing_function:
-            routing_weights, selected_experts = self.custom_routing_function(
-                router_logits, self.top_k, renormalize=True
-            )
-        else:
-            routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-            routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-
+        router_logits = torch.matmul(
+            hidden_states.to(torch.float32),
+            self.gate.weight.t().to(torch.float32),
+        )
+        routing_weights, selected_experts = self.router_bias_func(router_logits, self.top_k, renormalize=True)
         routing_weights = routing_weights * self.routed_scaling_factor
 
         final_hidden_states = torch.zeros(
@@ -611,14 +517,10 @@ class Step3p7Attention(MiniMaxM3VLAttention):
         self.num_attention_heads = config.num_attention_heads
         self.num_key_value_heads = config.num_attention_groups
 
-        layer_types = getattr(config, "layer_types", [])
-        if layer_types:
-            enable_sliding_window = layer_types[self.layer_idx] == "sliding_attention"
-        else:
-            enable_sliding_window = self.layer_idx % 2 == 0
+        enable_sliding_window = config.layer_types[self.layer_idx] == "sliding_attention"
 
         yarn_only_types = getattr(config, "yarn_only_types", None)
-        if yarn_only_types and layer_types[self.layer_idx] not in yarn_only_types:
+        if yarn_only_types and config.layer_types[self.layer_idx] not in yarn_only_types:
             config.rope_parameters = None
         else:
             config.rope_parameters = getattr(config, "rope_scaling", None)
@@ -649,14 +551,7 @@ class Step3p7Attention(MiniMaxM3VLAttention):
         self.q_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
-        self.use_head_wise_attn_gate = config.use_head_wise_attn_gate
-        if self.use_head_wise_attn_gate:
-            self.g_proj = nn.Linear(config.hidden_size, self.num_attention_heads, bias=False)
-
-        self.use_rope = True
-        use_rope_layers = getattr(config, "use_rope_layers", None)
-        if use_rope_layers:
-            self.use_rope = use_rope_layers[self.layer_idx]
+        self.g_proj = nn.Linear(config.hidden_size, self.num_attention_heads, bias=False)
 
     def forward(
         self,
@@ -673,8 +568,7 @@ class Step3p7Attention(MiniMaxM3VLAttention):
         query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        if self.use_head_wise_attn_gate:
-            gate_states = self.g_proj(hidden_states)
+        gate_states = self.g_proj(hidden_states)
         cos, sin = self.rotary_emb(hidden_states, position_ids)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -699,12 +593,10 @@ class Step3p7Attention(MiniMaxM3VLAttention):
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1)
-        if self.use_head_wise_attn_gate:
-            output = (
-                attn_output.view(*attn_output.shape[:-1], self.num_attention_heads, self.head_dim)
-                * gate_states.unsqueeze(-1).sigmoid()
-            )
-            attn_output = output.view(*attn_output.shape)
+        attn_output = (
+            attn_output.view(*attn_output.shape[:-1], self.num_attention_heads, self.head_dim)
+            * gate_states.unsqueeze(-1).sigmoid()
+        ).view(*attn_output.shape)
         attn_output = self.o_proj(attn_output)
 
         return attn_output, attn_weights
@@ -716,11 +608,7 @@ class Step3p7DecoderLayer(MiniMaxM3VLDecoderLayer):
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
         self.self_attn = Step3p7Attention(config, layer_idx)
-        layer_types = getattr(config, "layer_types", None) or []
-        if layer_types:
-            self.attention_type = layer_types[layer_idx]
-        else:
-            self.attention_type = "sliding_attention" if layer_idx % 2 == 0 else "full_attention"
+        self.attention_type = config.layer_types[layer_idx]
 
         moe_layers_enum = getattr(config, "moe_layers_enum", None)
         if moe_layers_enum is not None:
@@ -750,7 +638,7 @@ class Step3p7DecoderLayer(MiniMaxM3VLDecoderLayer):
         else:
             swiglu_limit = None
         if self.is_moe_layer:
-            self.moe = Step3p7MoEMLP(config, swiglu_limit=swiglu_limit)
+            self.moe = Step3p7MoE(config, swiglu_limit=swiglu_limit)
             self.share_expert = Step3p7MLP(
                 config, intermediate_size=config.share_expert_dim, swiglu_limit=swiglu_limit_shared
             )
@@ -1094,6 +982,9 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         ".ls_2.gamma": ".ls_2.scale",
         ".mlp.c_fc.": ".mlp.fc1.",
         ".mlp.c_proj.": ".mlp.fc2.",
+        r"\.attn\.": ".self_attn.",
+        r"\.ln_1\.": ".layer_norm1.",
+        r"\.ln_2\.": ".layer_norm2.",
     }
     _tied_weights_keys = ["lm_head.weight"]
     config: Step3p7Config
