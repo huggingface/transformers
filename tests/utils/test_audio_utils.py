@@ -12,16 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
+import io
 import unittest
+import wave
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 
 from transformers.audio_utils import (
+    _is_video_bytes,
+    _is_video_source,
+    _resolve_audio_source,
     amplitude_to_db,
     amplitude_to_db_batch,
     chroma_filter_bank,
     hertz_to_mel,
+    load_audio,
     mel_filter_bank,
     mel_to_hertz,
     power_to_db,
@@ -1749,3 +1757,89 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         )
 
         self.assertTrue(np.allclose(original_chroma, utils_chroma))
+
+
+def _wav_bytes(num_samples: int = 1600, sampling_rate: int = 16000) -> bytes:
+    """Build a minimal in-memory mono 16-bit WAV (silence) without extra dependencies."""
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sampling_rate)
+        wav.writeframes(b"\x00\x00" * num_samples)
+    return buf.getvalue()
+
+
+# ISO base-media-file ('ftyp' box at bytes 4:8) — enough to look like an mp4 container.
+_FAKE_MP4 = bytes.fromhex("0000001c66747970") + b"mp42" + b"\x00" * 32
+
+
+class LoadAudioTester(unittest.TestCase):
+    """Regression tests for base64 / data-URI handling and video detection in ``load_audio``.
+
+    Each of these fails on `main`: base64 sources were silently returned undecoded, and
+    base64/data-URI video sources bypassed the "needs torchcodec" guard.
+    """
+
+    def test_is_video_source_string_detection(self):
+        # paths / URLs by extension (case-insensitive, ignoring query strings)
+        self.assertTrue(_is_video_source("clip.mp4"))
+        self.assertTrue(_is_video_source("http://host/clip.MOV?token=abc"))
+        # data URI by media type
+        self.assertTrue(_is_video_source("data:video/mp4;base64,AAAA"))
+        # audio sources must not be flagged
+        self.assertFalse(_is_video_source("song.wav"))
+        self.assertFalse(_is_video_source("data:audio/wav;base64,AAAA"))
+        # raw base64 has no hint at the string level
+        self.assertFalse(_is_video_source("AAAAAAAA"))
+
+    def test_is_video_bytes_magic_detection(self):
+        self.assertTrue(_is_video_bytes(_FAKE_MP4))  # mp4 (ftyp)
+        self.assertTrue(_is_video_bytes(b"\x1a\x45\xdf\xa3" + b"\x00" * 16))  # mkv/webm (EBML)
+        # WAV is RIFF....WAVE and must NOT be mistaken for an AVI (RIFF....AVI )
+        self.assertFalse(_is_video_bytes(_wav_bytes()))
+        self.assertFalse(_is_video_bytes(b"short"))
+
+    def test_resolve_audio_source_decodes_base64_and_data_uris(self):
+        payload = b"\x00\x01\x02\x03binary-payload"
+        b64 = base64.b64encode(payload).decode()
+        # raw base64 -> bytes
+        self.assertEqual(_resolve_audio_source(b64), payload)
+        # data URI prefix stripped regardless of media type (audio/video/...)
+        self.assertEqual(_resolve_audio_source(f"data:audio/wav;base64,{b64}"), payload)
+        self.assertEqual(_resolve_audio_source(f"data:video/mp4;base64,{b64}"), payload)
+
+    @require_librosa
+    def test_load_audio_decodes_base64_data_uri(self):
+        uri = "data:audio/wav;base64," + base64.b64encode(_wav_bytes(1600)).decode()
+        with patch("transformers.audio_utils.is_torchcodec_available", return_value=False):
+            audio = load_audio(uri, sampling_rate=16000)
+        # On main this returned the URI string unchanged instead of decoding it.
+        self.assertIsInstance(audio, np.ndarray)
+        self.assertEqual(audio.shape, (1600,))
+
+    @require_librosa
+    def test_load_audio_decodes_raw_base64(self):
+        raw = base64.b64encode(_wav_bytes(1600)).decode()
+        with patch("transformers.audio_utils.is_torchcodec_available", return_value=False):
+            audio = load_audio(raw, sampling_rate=16000)
+        self.assertIsInstance(audio, np.ndarray)
+        self.assertEqual(audio.shape, (1600,))
+
+    @require_librosa
+    def test_load_audio_base64_video_data_uri_raises_helpful(self):
+        uri = "data:video/mp4;base64," + base64.b64encode(_FAKE_MP4).decode()
+        with patch("transformers.audio_utils.is_torchcodec_available", return_value=False):
+            with self.assertRaises(RuntimeError) as cm:
+                load_audio(uri)
+        # On main this slipped past the extension-only guard and failed cryptically (or not at all).
+        self.assertIn("torchcodec", str(cm.exception))
+
+    @require_librosa
+    def test_load_audio_raw_base64_video_raises_helpful(self):
+        raw = base64.b64encode(_FAKE_MP4).decode()
+        with patch("transformers.audio_utils.is_torchcodec_available", return_value=False):
+            with self.assertRaises(RuntimeError) as cm:
+                load_audio(raw)
+        # On main this surfaced as librosa's "Format not recognised" with no actionable hint.
+        self.assertIn("torchcodec", str(cm.exception))

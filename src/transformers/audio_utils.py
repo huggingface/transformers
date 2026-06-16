@@ -66,6 +66,67 @@ def _fetch_audio_bytes(url: str, timeout: float | None = 10.0) -> bytes:
     return response.content
 
 
+# Video containers librosa cannot decode; loading audio from these requires torchcodec.
+VIDEO_CONTAINER_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".wmv")
+_VIDEO_NEEDS_TORCHCODEC = (
+    "librosa cannot decode video containers. "
+    "Install torchcodec>=0.3.0 (`pip install torchcodec`) to load audio from video files."
+)
+
+
+def _is_video_source(audio: str) -> bool:
+    """Whether `audio` points to a video container (which librosa cannot decode).
+
+    Detects both plain paths/URLs (by extension) and `data:video/...` base64 URIs (by media
+    type). Raw base64 without a media-type prefix cannot be classified here — see
+    :func:`_is_video_bytes`, which sniffs the decoded bytes instead.
+    """
+    if audio.startswith("data:"):
+        media_type = audio[len("data:") :].split(";", 1)[0].split(",", 1)[0]
+        return media_type.startswith("video/")
+    return audio.rsplit("?", 1)[0].lower().endswith(VIDEO_CONTAINER_EXTENSIONS)
+
+
+def _is_video_bytes(data: bytes) -> bool:
+    """Whether `data` is a video container, sniffed from its leading magic bytes.
+
+    Catches raw base64 sources that carry no media-type hint for :func:`_is_video_source`.
+    Covers the containers in :data:`VIDEO_CONTAINER_EXTENSIONS`. Note ``RIFF....WAVE`` (audio)
+    is deliberately excluded — only ``RIFF....AVI `` matches.
+    """
+    if len(data) < 12:
+        return False
+    return (
+        data[4:8] in (b"ftyp", b"moov", b"mdat")  # ISO base media: mp4 / mov
+        or data[:4] == b"\x1a\x45\xdf\xa3"  # EBML: mkv / webm
+        or data[:3] == b"FLV"  # flv
+        or (data[:4] == b"RIFF" and data[8:12] == b"AVI ")  # avi (not wav)
+        or data[:4] == b"\x30\x26\xb2\x75"  # ASF: wmv
+    )
+
+
+def _resolve_audio_source(audio: str, timeout: float | None = None) -> "str | bytes":
+    """Resolve an audio source string to a local file path or raw bytes for a decoder.
+
+    Accepts `http(s)://` URLs (fetched with retry), local file paths (returned unchanged),
+    and base64 strings (optionally wrapped as a `data:...` URI).
+    """
+    if audio.startswith(("http://", "https://")):
+        return _fetch_audio_bytes(audio, timeout=timeout)
+    if os.path.isfile(audio):
+        return audio
+    # Not a URL or a local path — assume base64, optionally wrapped as a `data:<media-type>;base64,` URI
+    if audio.startswith("data:"):
+        audio = audio.split(",", 1)[1]
+    try:
+        return base64.b64decode(audio)
+    except Exception as e:
+        raise ValueError(
+            "Incorrect audio source. Must be a valid URL starting with `http://` or `https://`, "
+            f"a valid path to an audio file, or a base64 encoded string. Got {audio}. Failed with {e}"
+        )
+
+
 def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np.ndarray:
     """
     Loads `audio` to an np.ndarray object.
@@ -88,12 +149,9 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np
         # needed. Do not raise any errors if not installed or versions do not match
         if is_torchcodec_available() and version.parse("0.3.0") <= TORCHCODEC_VERSION:
             audio = load_audio_torchcodec(audio, sampling_rate=sampling_rate, timeout=timeout)
-        elif audio.rsplit("?", 1)[0].lower().endswith((".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".wmv")):
-            raise RuntimeError(
-                f"The audio source appears to be a video file ('{audio.split('/')[-1]}'). "
-                "librosa cannot decode video containers. "
-                "Install torchcodec>=0.3.0 (`pip install torchcodec`) to load audio from video files."
-            )
+        elif _is_video_source(audio):
+            source = "a base64-encoded video" if audio.startswith("data:") else f"'{audio.split('/')[-1]}'"
+            raise RuntimeError(f"The audio source appears to be a video file ({source}). {_VIDEO_NEEDS_TORCHCODEC}")
         else:
             audio = load_audio_librosa(audio, sampling_rate=sampling_rate, timeout=timeout)
     elif not isinstance(audio, np.ndarray):
@@ -123,9 +181,9 @@ def load_audio_torchcodec(audio: str | np.ndarray, sampling_rate=16000, timeout=
     requires_backends(load_audio_torchcodec, ["torchcodec"])
     from torchcodec.decoders import AudioDecoder
 
-    # Fetch bytes for URLs so we get retry logic; torchcodec does not surface ffmpeg network retries options
-    if isinstance(audio, str) and audio.startswith(("http://", "https://")):
-        audio = _fetch_audio_bytes(audio, timeout=timeout)
+    # Resolve to a file path or raw bytes (fetching URLs ourselves so we get retry logic;
+    # torchcodec does not surface ffmpeg network retries options). AudioDecoder accepts both.
+    audio = _resolve_audio_source(audio, timeout=timeout)
 
     # Set `num_channels` to `1` which is what most models expects and the default in librosa
     decoder = AudioDecoder(audio, sample_rate=sampling_rate, num_channels=1)
@@ -151,11 +209,17 @@ def load_audio_librosa(audio: str | np.ndarray, sampling_rate=16000, timeout=Non
     """
     requires_backends(load_audio_librosa, ["librosa"])
 
-    # Load audio from URL (e.g https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav)
-    if audio.startswith("http://") or audio.startswith("https://"):
-        audio = librosa.load(BytesIO(_fetch_audio_bytes(audio, timeout=timeout)), sr=sampling_rate)[0]
-    elif os.path.isfile(audio):
-        audio = librosa.load(audio, sr=sampling_rate)[0]
+    # Resolve to a file path or raw bytes (e.g. URL like
+    # https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav).
+    # `librosa.load` reads a path directly but needs a file-like for in-memory bytes.
+    audio = _resolve_audio_source(audio, timeout=timeout)
+    if isinstance(audio, bytes):
+        # Raw base64 carries no media-type hint for the dispatcher's string check, so sniff the
+        # decoded bytes here to surface the helpful error instead of librosa's cryptic one.
+        if _is_video_bytes(audio):
+            raise RuntimeError(f"The decoded audio source appears to be a video container. {_VIDEO_NEEDS_TORCHCODEC}")
+        audio = BytesIO(audio)
+    audio = librosa.load(audio, sr=sampling_rate)[0]
     return audio
 
 
