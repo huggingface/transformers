@@ -133,7 +133,9 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np
 
     Args:
         audio (`str` or `np.ndarray`):
-            The audio to be loaded to the numpy array format.
+            The audio to be loaded to the numpy array format. If a `str`, it can be an `http(s)://`
+            URL, a local file path, or a base64-encoded string (optionally wrapped as a
+            `data:<media-type>;base64,` URI).
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate to be used when loading the audio. It should be same as the
             sampling rate the model you will be using further was trained with.
