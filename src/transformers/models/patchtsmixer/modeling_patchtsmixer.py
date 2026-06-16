@@ -1138,7 +1138,7 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        output_hidden_states: bool | None = False,
+        output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | PatchTSMixerEncoderOutput:
@@ -1157,6 +1157,9 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         """
 
         return_dict = return_dict if return_dict is not None else self.return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         # flatten [bs x num_patch x d_model]. common_channel/mix_channel: [bs x n_vars x num_patch x d_model]
         patches = self.patcher(past_values)
@@ -1248,7 +1251,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         observed_mask: torch.Tensor | None = None,
-        output_hidden_states: bool | None = False,
+        output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
     ) -> PatchTSMixerModelOutput:
@@ -1267,6 +1270,9 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
             - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
         """
         return_dict = return_dict if return_dict is not None else self.return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         mask = None
         if observed_mask is None:
@@ -1358,7 +1364,7 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         observed_mask: torch.Tensor | None = None,
-        output_hidden_states: bool | None = False,
+        output_hidden_states: bool | None = None,
         return_loss: bool = True,
         return_dict: bool | None = None,
         **kwargs,
@@ -1380,6 +1386,9 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
             Whether to return the loss in the `forward` call.
         """
         return_dict = return_dict if return_dict is not None else self.return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if self.masked_loss is True:
             loss = torch.nn.MSELoss(reduction="none")
@@ -1570,7 +1579,7 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
         past_values: torch.Tensor,
         observed_mask: torch.Tensor | None = None,
         future_values: torch.Tensor | None = None,
-        output_hidden_states: bool | None = False,
+        output_hidden_states: bool | None = None,
         return_loss: bool = True,
         return_dict: bool | None = None,
         **kwargs,
@@ -1609,6 +1618,9 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
             raise ValueError("Invalid loss function: Allowed values: mse and nll")
 
         return_dict = return_dict if return_dict is not None else self.return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         # past_values: tensor [batch_size x context_length x num_input_channels]
         model_output = self.model(
@@ -1793,7 +1805,7 @@ class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         target_values: torch.Tensor | None = None,
-        output_hidden_states: bool | None = False,
+        output_hidden_states: bool | None = None,
         return_loss: bool = True,
         return_dict: bool | None = None,
         **kwargs,
@@ -1828,6 +1840,9 @@ class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
         loss = torch.nn.CrossEntropyLoss()
 
         return_dict = return_dict if return_dict is not None else self.return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         model_output = self.model(
             past_values,
@@ -1983,7 +1998,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         target_values: torch.Tensor | None = None,
-        output_hidden_states: bool | None = False,
+        output_hidden_states: bool | None = None,
         return_loss: bool = True,
         return_dict: bool | None = None,
         **kwargs,
@@ -2022,6 +2037,9 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             raise ValueError("Invalid loss function: Allowed values: mse and nll")
 
         return_dict = return_dict if return_dict is not None else self.return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         model_output = self.model(
             past_values,
             output_hidden_states=output_hidden_states,

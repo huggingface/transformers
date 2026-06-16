@@ -648,6 +648,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
             The hidden states of the image encoder after modality projection.
         """
 
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         if self.training and self.text_model.gradient_checkpointing and use_cache:
             logger.warning_once(
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."

@@ -1696,6 +1696,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         if input_ids is not None:
             inputs_embeds = self.embed_tokens(input_ids)
             per_layer_inputs = self.get_per_layer_inputs(input_ids)
@@ -2094,6 +2095,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         if input_ids is not None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
