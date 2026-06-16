@@ -62,7 +62,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 
 
 def get_dinov3_config(model_name: str) -> DINOv3ConvNextConfig:
-    # size of the architecture
+    # size of the architecture; EUPE reuses the DINOv3 ConvNeXt sizes
+    model_name = model_name.removeprefix("eupe_")
     if model_name == "convnext_tiny":
         return DINOv3ConvNextConfig(
             depths=[3, 3, 9, 3],
@@ -83,8 +84,6 @@ def get_dinov3_config(model_name: str) -> DINOv3ConvNextConfig:
             depths=[3, 3, 27, 3],
             hidden_sizes=[192, 384, 768, 1536],
         )
-    elif model_name in ("eupe_convnext_tiny", "eupe_convnext_small", "eupe_convnext_base"):
-        return get_dinov3_config(model_name.removeprefix("eupe_"))
     else:
         raise ValueError("Model not supported")
 
@@ -143,6 +142,12 @@ def convert_and_test_dinov3_checkpoint(args):
         "convnext_base_patch": [3.039118, 0.778155, -1.961322, -1.607147, -2.411941],
         "convnext_large_cls": [-2.219094, -0.594451, -2.300294, -0.957415, -0.520473],
         "convnext_large_patch": [-1.477349, -0.217038, -3.128137, 0.418962, 0.334949],
+        "eupe_convnext_tiny_cls": [-0.774586, -0.886207, -1.021357, -1.924071, -0.552521],
+        "eupe_convnext_tiny_patch": [-1.276298, -2.385907, -2.410059, -2.540072, -1.06118],
+        "eupe_convnext_small_cls": [-1.071585, 0.919747, 0.864007, 2.477376, -1.615796],
+        "eupe_convnext_small_patch": [-1.390516, -0.702689, 1.256055, 2.924099, -1.118395],
+        "eupe_convnext_base_cls": [0.468243, -0.494569, 0.081585, 0.368614, 0.065243],
+        "eupe_convnext_base_patch": [-0.066074, -0.725178, -0.274306, 0.126162, -1.053306],
     }
     model_name = args.model_name
     config = get_dinov3_config(model_name)
@@ -178,36 +183,35 @@ def convert_and_test_dinov3_checkpoint(args):
     torch.testing.assert_close(original_pixel_values, inputs["pixel_values"], atol=1e-6, rtol=1e-6)
     print("Preprocessing looks ok!")
 
-    if f"{model_name}_cls" in expected_outputs:
-        with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float):
-            model_output = model(**inputs)
+    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float):
+        model_output = model(**inputs)
 
-        last_layer_class_token = model_output.pooler_output
-        last_layer_patch_tokens = model_output.last_hidden_state[:, 1:]
+    last_layer_class_token = model_output.pooler_output
+    last_layer_patch_tokens = model_output.last_hidden_state[:, 1:]
 
-        actual_outputs = {}
-        actual_outputs[f"{model_name}_cls"] = last_layer_class_token[0, :5].tolist()
-        actual_outputs[f"{model_name}_patch"] = last_layer_patch_tokens[0, 0, :5].tolist()
+    actual_outputs = {}
+    actual_outputs[f"{model_name}_cls"] = last_layer_class_token[0, :5].tolist()
+    actual_outputs[f"{model_name}_patch"] = last_layer_patch_tokens[0, 0, :5].tolist()
 
-        print("Actual:  ", [round(x, 6) for x in actual_outputs[f"{model_name}_cls"]])
-        print("Expected:", expected_outputs[f"{model_name}_cls"])
+    print("Actual:  ", [round(x, 6) for x in actual_outputs[f"{model_name}_cls"]])
+    print("Expected:", expected_outputs[f"{model_name}_cls"])
 
-        torch.testing.assert_close(
-            torch.Tensor(actual_outputs[f"{model_name}_cls"]),
-            torch.Tensor(expected_outputs[f"{model_name}_cls"]),
-            atol=1e-3,
-            rtol=1e-3,
-        )
-        print("Actual:  ", [round(x, 6) for x in actual_outputs[f"{model_name}_patch"]])
-        print("Expected:", expected_outputs[f"{model_name}_patch"])
+    torch.testing.assert_close(
+        torch.Tensor(actual_outputs[f"{model_name}_cls"]),
+        torch.Tensor(expected_outputs[f"{model_name}_cls"]),
+        atol=1e-3,
+        rtol=1e-3,
+    )
+    print("Actual:  ", [round(x, 6) for x in actual_outputs[f"{model_name}_patch"]])
+    print("Expected:", expected_outputs[f"{model_name}_patch"])
 
-        torch.testing.assert_close(
-            torch.Tensor(actual_outputs[f"{model_name}_patch"]),
-            torch.Tensor(expected_outputs[f"{model_name}_patch"]),
-            atol=1e-3,
-            rtol=1e-3,
-        )
-        print("Forward pass looks ok!")
+    torch.testing.assert_close(
+        torch.Tensor(actual_outputs[f"{model_name}_patch"]),
+        torch.Tensor(expected_outputs[f"{model_name}_patch"]),
+        atol=1e-3,
+        rtol=1e-3,
+    )
+    print("Forward pass looks ok!")
 
     save_dir = os.path.join(args.save_dir, model_name)
     os.makedirs(save_dir, exist_ok=True)

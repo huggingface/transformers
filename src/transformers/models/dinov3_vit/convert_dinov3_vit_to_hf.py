@@ -246,6 +246,12 @@ def convert_and_test_dinov3_checkpoint(args):
         "vitl16_sat493m_patch": [0.18488, 0.30309, -0.20689, 0.12848, 0.06207],
         "vit7b16_sat493m_cls": [-0.19779, 0.11819, -0.00581, -0.21055, -0.03971],
         "vit7b16_sat493m_patch": [-0.12423, 0.07879, -0.10057, 0.02835, -0.11727],
+        "eupe_vitt16_cls": [0.355413, 0.298635, 0.394325, 0.505015, 1.562275],
+        "eupe_vitt16_patch": [0.36946, 0.43873, -0.344027, 0.991241, 0.732024],
+        "eupe_vits16_cls": [0.280715, 0.35844, 0.390659, -0.049203, -0.663395],
+        "eupe_vits16_patch": [0.372801, 0.128655, 1.046281, 0.1564, 1.069897],
+        "eupe_vitb16_cls": [-0.066237, 0.027697, -0.050193, 0.054482, -0.259635],
+        "eupe_vitb16_patch": [-0.056169, -0.238062, -0.343129, -0.250448, -0.088778],
     }
 
     model_name = args.model_name
@@ -292,33 +298,32 @@ def convert_and_test_dinov3_checkpoint(args):
     torch.testing.assert_close(original_pixel_values, inputs["pixel_values"], atol=1e-6, rtol=1e-6)
     print("Preprocessing looks ok!")
 
-    if f"{model_name}_cls" in expected_outputs:
-        with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float):
-            model_output = model(**inputs)
+    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float):
+        model_output = model(**inputs)
 
-        last_layer_class_token = model_output.pooler_output
-        last_layer_patch_tokens = model_output.last_hidden_state[:, config.num_register_tokens + 1 :]
+    last_layer_class_token = model_output.pooler_output
+    last_layer_patch_tokens = model_output.last_hidden_state[:, config.num_register_tokens + 1 :]
 
-        actual_outputs = {}
-        actual_outputs[f"{model_name}_cls"] = last_layer_class_token[0, :5].tolist()
-        actual_outputs[f"{model_name}_patch"] = last_layer_patch_tokens[0, 0, :5].tolist()
+    actual_outputs = {}
+    actual_outputs[f"{model_name}_cls"] = last_layer_class_token[0, :5].tolist()
+    actual_outputs[f"{model_name}_patch"] = last_layer_patch_tokens[0, 0, :5].tolist()
 
-        print("Actual:  ", [round(x, 6) for x in actual_outputs[f"{model_name}_cls"]])
-        print("Expected:", expected_outputs[f"{model_name}_cls"])
+    print("Actual:  ", [round(x, 6) for x in actual_outputs[f"{model_name}_cls"]])
+    print("Expected:", expected_outputs[f"{model_name}_cls"])
 
-        torch.testing.assert_close(
-            torch.Tensor(actual_outputs[f"{model_name}_cls"]),
-            torch.Tensor(expected_outputs[f"{model_name}_cls"]),
-            atol=1e-3,
-            rtol=1e-3,
-        )
-        torch.testing.assert_close(
-            torch.Tensor(actual_outputs[f"{model_name}_patch"]),
-            torch.Tensor(expected_outputs[f"{model_name}_patch"]),
-            atol=1e-3,
-            rtol=1e-3,
-        )
-        print("Forward pass looks ok!")
+    torch.testing.assert_close(
+        torch.Tensor(actual_outputs[f"{model_name}_cls"]),
+        torch.Tensor(expected_outputs[f"{model_name}_cls"]),
+        atol=1e-3,
+        rtol=1e-3,
+    )
+    torch.testing.assert_close(
+        torch.Tensor(actual_outputs[f"{model_name}_patch"]),
+        torch.Tensor(expected_outputs[f"{model_name}_patch"]),
+        atol=1e-3,
+        rtol=1e-3,
+    )
+    print("Forward pass looks ok!")
 
     save_dir = os.path.join(args.save_dir, model_name)
     os.makedirs(save_dir, exist_ok=True)
