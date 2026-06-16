@@ -244,8 +244,8 @@ class TestHubKernels(TestCasePlus):
                     ("RMSNorm", "model.layers.*.post_attention_layernorm"),
                     ("MLP", "model.layers.*.mlp"),
                 ): (
-                    "michaelbenayoun/dummy-rmsnorm-mlp-with-transformations-and-init:RMSNormMLP",
-                    {"revision": "7e6baa6358ebafeb3e1a15f3ce848d252d3c44af"},
+                    "AntonV/dummy-rmsnorm-mlp-with-transformations-and-init:RMSNormMLP",
+                    {"version": 0, "trust_remote_code": True},
                 ),
             }
         )
@@ -261,7 +261,7 @@ class TestHubKernels(TestCasePlus):
         del baseline
 
         fused = AutoModelForCausalLM.from_pretrained(
-            model_id, use_kernels=True, kernel_config=kernel_config, allow_all_kernels=True, device_map=torch_device
+            model_id, use_kernels=True, kernel_config=kernel_config, device_map=torch_device
         )
         fused.eval()
         with torch.no_grad():
@@ -339,8 +339,8 @@ class TestHubKernels(TestCasePlus):
                     ("RMSNorm", "layers.*.post_attention_layernorm"),
                     ("MLP", "layers.*.mlp"),
                 ): (
-                    "michaelbenayoun/dummy-rmsnorm-mlp-with-transformations-and-init:RMSNormMLP",
-                    {"revision": "7e6baa6358ebafeb3e1a15f3ce848d252d3c44af"},
+                    "AntonV/dummy-rmsnorm-mlp-with-transformations-and-init:RMSNormMLP",
+                    {"version": 0, "trust_remote_code": True},
                 ),
             }
         )
@@ -349,7 +349,6 @@ class TestHubKernels(TestCasePlus):
                 model_id,
                 use_kernels=True,
                 kernel_config=kernel_config,
-                allow_all_kernels=True,
                 device_map=torch_device,
             )
 
