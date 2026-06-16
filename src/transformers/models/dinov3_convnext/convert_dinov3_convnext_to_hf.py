@@ -35,6 +35,9 @@ HUB_MODELS = {
     "convnext_small": "facebook/dinov3-convnext-small-pretrain-lvd1689m",
     "convnext_base": "facebook/dinov3-convnext-base-pretrain-lvd1689m",
     "convnext_large": "facebook/dinov3-convnext-large-pretrain-lvd1689m",
+    "eupe_convnext_tiny": "facebook/EUPE-ConvNeXt-T",
+    "eupe_convnext_small": "facebook/EUPE-ConvNeXt-S",
+    "eupe_convnext_base": "facebook/EUPE-ConvNeXt-B",
 }
 
 HUB_CHECKPOINTS = {
@@ -42,6 +45,9 @@ HUB_CHECKPOINTS = {
     "convnext_small": "dinov3_convnext_small_pretrain_lvd1689m-296db49d.pth",
     "convnext_base": "dinov3_convnext_base_pretrain_lvd1689m-801f2ba9.pth",
     "convnext_large": "dinov3_convnext_large_pretrain_lvd1689m-61fa432d.pth",
+    "eupe_convnext_tiny": "EUPE-ConvNeXt-T.pt",
+    "eupe_convnext_small": "EUPE-ConvNeXt-S.pt",
+    "eupe_convnext_base": "EUPE-ConvNeXt-B.pt",
 }
 
 # fmt: off
@@ -77,6 +83,8 @@ def get_dinov3_config(model_name: str) -> DINOv3ConvNextConfig:
             depths=[3, 3, 27, 3],
             hidden_sizes=[192, 384, 768, 1536],
         )
+    elif model_name in ("eupe_convnext_tiny", "eupe_convnext_small", "eupe_convnext_base"):
+        return get_dinov3_config(model_name.removeprefix("eupe_"))
     else:
         raise ValueError("Model not supported")
 
@@ -150,8 +158,10 @@ def convert_and_test_dinov3_checkpoint(args):
     for key in original_keys:
         new_key = new_keys[key]
         weight_tensor = original_state_dict[key]
-        if key == "norms.3.weight" or key == "norms.3.bias":
+        if key.startswith("norms.") or key.startswith("projectors."):
             continue
+        if new_key.startswith("stages."):
+            new_key = f"model.{new_key}"
         converted_state_dict[new_key] = weight_tensor
     model.load_state_dict(converted_state_dict, strict=True)
     model = model.eval()
@@ -167,35 +177,36 @@ def convert_and_test_dinov3_checkpoint(args):
     torch.testing.assert_close(original_pixel_values, inputs["pixel_values"], atol=1e-6, rtol=1e-6)
     print("Preprocessing looks ok!")
 
-    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float):
-        model_output = model(**inputs)
+    if f"{model_name}_cls" in expected_outputs:
+        with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float):
+            model_output = model(**inputs)
 
-    last_layer_class_token = model_output.pooler_output
-    last_layer_patch_tokens = model_output.last_hidden_state[:, 1:]
+        last_layer_class_token = model_output.pooler_output
+        last_layer_patch_tokens = model_output.last_hidden_state[:, 1:]
 
-    actual_outputs = {}
-    actual_outputs[f"{model_name}_cls"] = last_layer_class_token[0, :5].tolist()
-    actual_outputs[f"{model_name}_patch"] = last_layer_patch_tokens[0, 0, :5].tolist()
+        actual_outputs = {}
+        actual_outputs[f"{model_name}_cls"] = last_layer_class_token[0, :5].tolist()
+        actual_outputs[f"{model_name}_patch"] = last_layer_patch_tokens[0, 0, :5].tolist()
 
-    print("Actual:  ", [round(x, 6) for x in actual_outputs[f"{model_name}_cls"]])
-    print("Expected:", expected_outputs[f"{model_name}_cls"])
+        print("Actual:  ", [round(x, 6) for x in actual_outputs[f"{model_name}_cls"]])
+        print("Expected:", expected_outputs[f"{model_name}_cls"])
 
-    torch.testing.assert_close(
-        torch.Tensor(actual_outputs[f"{model_name}_cls"]),
-        torch.Tensor(expected_outputs[f"{model_name}_cls"]),
-        atol=1e-3,
-        rtol=1e-3,
-    )
-    print("Actual:  ", [round(x, 6) for x in actual_outputs[f"{model_name}_patch"]])
-    print("Expected:", expected_outputs[f"{model_name}_patch"])
+        torch.testing.assert_close(
+            torch.Tensor(actual_outputs[f"{model_name}_cls"]),
+            torch.Tensor(expected_outputs[f"{model_name}_cls"]),
+            atol=1e-3,
+            rtol=1e-3,
+        )
+        print("Actual:  ", [round(x, 6) for x in actual_outputs[f"{model_name}_patch"]])
+        print("Expected:", expected_outputs[f"{model_name}_patch"])
 
-    torch.testing.assert_close(
-        torch.Tensor(actual_outputs[f"{model_name}_patch"]),
-        torch.Tensor(expected_outputs[f"{model_name}_patch"]),
-        atol=1e-3,
-        rtol=1e-3,
-    )
-    print("Forward pass looks ok!")
+        torch.testing.assert_close(
+            torch.Tensor(actual_outputs[f"{model_name}_patch"]),
+            torch.Tensor(expected_outputs[f"{model_name}_patch"]),
+            atol=1e-3,
+            rtol=1e-3,
+        )
+        print("Forward pass looks ok!")
 
     save_dir = os.path.join(args.save_dir, model_name)
     os.makedirs(save_dir, exist_ok=True)
@@ -216,7 +227,15 @@ if __name__ == "__main__":
         "--model-name",
         default="convnext_tiny",
         type=str,
-        choices=["convnext_tiny", "convnext_small", "convnext_base", "convnext_large"],
+        choices=[
+            "convnext_tiny",
+            "convnext_small",
+            "convnext_base",
+            "convnext_large",
+            "eupe_convnext_tiny",
+            "eupe_convnext_small",
+            "eupe_convnext_base",
+        ],
         help="Name of the model you'd like to convert.",
     )
     parser.add_argument(

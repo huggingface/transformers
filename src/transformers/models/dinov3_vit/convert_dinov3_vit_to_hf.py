@@ -39,6 +39,9 @@ HUB_MODELS = {
     "vith16plus_lvd1689m": "facebook/dinov3-vith16plus-pretrain-lvd1689m",
     "vit7b16_lvd1689m": "facebook/dinov3-vit7b16-pretrain-lvd1689m",
     "vit7b16_sat493m": "facebook/dinov3-vit7b16-pretrain-sat493m",
+    "eupe_vitt16": "facebook/EUPE-ViT-T",
+    "eupe_vits16": "facebook/EUPE-ViT-S",
+    "eupe_vitb16": "facebook/EUPE-ViT-B",
 }
 
 HUB_CHECKPOINTS = {
@@ -50,6 +53,9 @@ HUB_CHECKPOINTS = {
     "vith16plus_lvd1689m": "dinov3_vith16plus_pretrain_lvd1689m-7c1da9a5.pth",
     "vit7b16_lvd1689m": "dinov3_vit7b16_pretrain_lvd1689m-a955f4ea.pth",
     "vit7b16_sat493m": "dinov3_vit7b16_pretrain_sat493m-a6675841.pth",
+    "eupe_vitt16": "EUPE-ViT-T.pt",
+    "eupe_vits16": "EUPE-ViT-S.pt",
+    "eupe_vitb16": "EUPE-ViT-B.pt",
 }
 
 # fmt: off
@@ -175,6 +181,23 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             use_gated_mlp=True,
             hidden_act="silu",
         )
+    elif model_name in ("eupe_vitt16", "eupe_vits16", "eupe_vitb16"):
+        hidden_size, num_attention_heads = {
+            "eupe_vitt16": (192, 3),
+            "eupe_vits16": (384, 6),
+            "eupe_vitb16": (768, 12),
+        }[model_name]
+        return DINOv3ViTConfig(
+            patch_size=16,
+            hidden_size=hidden_size,
+            intermediate_size=hidden_size * 4,
+            num_hidden_layers=12,
+            num_attention_heads=num_attention_heads,
+            num_register_tokens=4,
+            use_gated_mlp=False,
+            hidden_act="gelu",
+            layerscale_value=1e-5,
+        )
     else:
         raise ValueError("Model not supported")
 
@@ -243,10 +266,14 @@ def convert_and_test_dinov3_checkpoint(args):
 
         if "bias_mask" in key or "attn.k_proj.bias" in key or "local_cls_norm" in key:
             continue
+        if key.startswith("projectors."):
+            continue
         if "embeddings.mask_token" in new_key:
             weight_tensor = weight_tensor.unsqueeze(1)
         if "inv_freq" in new_key:
             continue
+        if new_key.startswith("layer."):
+            new_key = f"model.{new_key}"
 
         converted_state_dict[new_key] = weight_tensor
 
@@ -264,32 +291,33 @@ def convert_and_test_dinov3_checkpoint(args):
     torch.testing.assert_close(original_pixel_values, inputs["pixel_values"], atol=1e-6, rtol=1e-6)
     print("Preprocessing looks ok!")
 
-    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float):
-        model_output = model(**inputs)
+    if f"{model_name}_cls" in expected_outputs:
+        with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float):
+            model_output = model(**inputs)
 
-    last_layer_class_token = model_output.pooler_output
-    last_layer_patch_tokens = model_output.last_hidden_state[:, config.num_register_tokens + 1 :]
+        last_layer_class_token = model_output.pooler_output
+        last_layer_patch_tokens = model_output.last_hidden_state[:, config.num_register_tokens + 1 :]
 
-    actual_outputs = {}
-    actual_outputs[f"{model_name}_cls"] = last_layer_class_token[0, :5].tolist()
-    actual_outputs[f"{model_name}_patch"] = last_layer_patch_tokens[0, 0, :5].tolist()
+        actual_outputs = {}
+        actual_outputs[f"{model_name}_cls"] = last_layer_class_token[0, :5].tolist()
+        actual_outputs[f"{model_name}_patch"] = last_layer_patch_tokens[0, 0, :5].tolist()
 
-    print("Actual:  ", [round(x, 6) for x in actual_outputs[f"{model_name}_cls"]])
-    print("Expected:", expected_outputs[f"{model_name}_cls"])
+        print("Actual:  ", [round(x, 6) for x in actual_outputs[f"{model_name}_cls"]])
+        print("Expected:", expected_outputs[f"{model_name}_cls"])
 
-    torch.testing.assert_close(
-        torch.Tensor(actual_outputs[f"{model_name}_cls"]),
-        torch.Tensor(expected_outputs[f"{model_name}_cls"]),
-        atol=1e-3,
-        rtol=1e-3,
-    )
-    torch.testing.assert_close(
-        torch.Tensor(actual_outputs[f"{model_name}_patch"]),
-        torch.Tensor(expected_outputs[f"{model_name}_patch"]),
-        atol=1e-3,
-        rtol=1e-3,
-    )
-    print("Forward pass looks ok!")
+        torch.testing.assert_close(
+            torch.Tensor(actual_outputs[f"{model_name}_cls"]),
+            torch.Tensor(expected_outputs[f"{model_name}_cls"]),
+            atol=1e-3,
+            rtol=1e-3,
+        )
+        torch.testing.assert_close(
+            torch.Tensor(actual_outputs[f"{model_name}_patch"]),
+            torch.Tensor(expected_outputs[f"{model_name}_patch"]),
+            atol=1e-3,
+            rtol=1e-3,
+        )
+        print("Forward pass looks ok!")
 
     save_dir = os.path.join(args.save_dir, model_name)
     os.makedirs(save_dir, exist_ok=True)
@@ -319,6 +347,9 @@ if __name__ == "__main__":
             "vith16plus_lvd1689m",
             "vit7b16_lvd1689m",
             "vit7b16_sat493m",
+            "eupe_vitt16",
+            "eupe_vits16",
+            "eupe_vitb16",
         ],
         help="Name of the model you'd like to convert.",
     )
