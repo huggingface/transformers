@@ -15,6 +15,7 @@ from pathlib import Path
 
 import torch
 
+
 warnings.filterwarnings("ignore")
 
 
@@ -67,6 +68,16 @@ def build_mini_config():
             "head_dim": 32,
         },
         pad_token_id=1,
+        # Exercise same if-condition branches as the full model config:
+        # use_rope_layers: triggers `self.use_rope = use_rope_layers[layer_idx]` in attention
+        use_rope_layers=[True, True, True, True],
+        # yarn_only_types: layer 0 ("full_attention") is in list → rope_parameters set;
+        # layers 1-3 ("sliding_attention") not in list → rope_parameters = None
+        yarn_only_types=["full_attention"],
+        # swiglu_limits[2,3]=1.0 exercises clamping in MoE layers (moe_layers_enum=(2,3))
+        swiglu_limits=[None, None, 1.0, 1.0],
+        # swiglu_limits_shared[2,3]=1.0 exercises shared expert clamping in MoE layers
+        swiglu_limits_shared=[None, None, 1.0, 1.0],
     )
 
     # image_size=56, patch_size=14 → 4×4 patch grid
