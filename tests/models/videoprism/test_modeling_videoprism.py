@@ -23,7 +23,6 @@ import numpy as np
 from transformers import VideoPrismConfig, VideoPrismTextConfig, VideoPrismVisionConfig
 from transformers.testing_utils import (
     Expectations,
-    require_tokenizers,
     require_torch,
     require_vision,
     slow,
@@ -59,9 +58,9 @@ if is_torch_available():
     )
     from transformers.models.videoprism.modeling_videoprism import VideoPrismLayerNorm
 
-    torch.set_printoptions(precision=10)
 if is_vision_available():
     from transformers import LlavaOnevisionVideoProcessor
+    from transformers.image_utils import PILImageResampling
 if is_tokenizers_available():
     from transformers import VideoPrismTokenizer
 
@@ -190,10 +189,10 @@ class VideoPrismVisionModelTester:
             result.last_hidden_state.shape, (self.batch_size, num_patches * self.num_frames, self.hidden_size)
         )
         self.parent.assertEqual(
-            result.spatial_hidden_state.shape, (self.batch_size * self.num_frames, num_patches, self.hidden_size)
+            result.last_spatial_hidden_state.shape, (self.batch_size * self.num_frames, num_patches, self.hidden_size)
         )
         self.parent.assertEqual(
-            result.temporal_hidden_state.shape, (self.batch_size * num_patches, self.num_frames, self.hidden_size)
+            result.last_temporal_hidden_state.shape, (self.batch_size * num_patches, self.num_frames, self.hidden_size)
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -781,6 +780,7 @@ class VideoPrismForVideoClassificationTest(VideoPrismModelTest, unittest.TestCas
 def prepare_tennis_frames():
     tennis_video = url_to_local_path(TENNIS_VIDEO_URL)
     video_processor = LlavaOnevisionVideoProcessor(
+        resample=PILImageResampling.LANCZOS,
         size={"height": INTEGRATION_FRAME_SIZE, "width": INTEGRATION_FRAME_SIZE},
         do_normalize=False,
     )
@@ -801,7 +801,6 @@ def prepare_texts():
 
 @require_vision
 @require_torch
-@require_tokenizers
 class VideoPrismModelIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -825,14 +824,14 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [
-                    [0.4354448914527893, 0.4073091447353363, -0.29193729162216187],
-                    [0.21557867527008057, 0.24542216956615448, 0.25062084197998047],
-                    [0.16283036768436432, 0.11620327830314636, 0.008987100794911385],
+                    [0.4207212030887604, 0.3732508718967438, -0.2386348992586136],
+                    [0.30371561646461487, 0.29156938195228577, 0.17279548943042755],
+                    [0.15283700823783875, 0.10430823266506195, 0.009455384686589241],
                 ],
                 ("cuda", 8): [
-                    [0.43544602394104004, 0.4073105454444885, -0.2919350862503052],
-                    [0.21557006239891052, 0.24542272090911865, 0.2506211996078491],
-                    [0.16283579170703888, 0.11620290577411652, 0.008984619751572609],
+                    [0.4207229018211365, 0.3732527792453766, -0.2386314570903778],
+                    [0.30371537804603577, 0.29157617688179016, 0.17279021441936493],
+                    [0.15284396708011627, 0.10430900007486343, 0.009451447986066341],
                 ],
             }
         )
@@ -864,26 +863,26 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
         video_expectation = Expectations(
             {
                 (None, None): [
-                    -0.0022147062700241804,
-                    -0.015442248433828354,
-                    0.026582615450024605,
-                    0.024988114833831787,
-                    0.023289205506443977,
-                    0.03686177730560303,
-                    -0.016299977898597717,
-                    0.010566001757979393,
-                    -0.016186168417334557,
+                    0.00044830681872554123,
+                    -0.01594417914748192,
+                    0.025617999956011772,
+                    0.028001835569739342,
+                    0.02511543780565262,
+                    0.03522724285721779,
+                    -0.018459202721714973,
+                    0.012107008136808872,
+                    -0.01778203248977661,
                 ],
                 ("cuda", 8): [
-                    -0.002214818261563778,
-                    -0.015442408621311188,
-                    0.026582621037960052,
-                    0.02498835325241089,
-                    0.023289136588573456,
-                    0.03686164692044258,
-                    -0.016299953684210777,
-                    0.010566022247076035,
-                    -0.016185807064175606,
+                    0.0004483825759962201,
+                    -0.015944069251418114,
+                    0.025618184357881546,
+                    0.028001854196190834,
+                    0.02511543594300747,
+                    0.035227347165346146,
+                    -0.018459301441907883,
+                    0.012106997892260551,
+                    -0.017782120034098625,
                 ],
             }
         )

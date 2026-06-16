@@ -1371,6 +1371,11 @@ class UdopConverter(SpmConverter):
         )
 
 
+class VideoPrismConverter(T5Converter):
+    def post_processor(self):
+        return None
+
+
 class WhisperConverter(Converter):
     def converted(self) -> Tokenizer:
         vocab = self.original_tokenizer.encoder
@@ -2099,8 +2104,8 @@ SLOW_TO_FAST_CONVERTERS = {
     "SeamlessM4TTokenizer": SeamlessM4TConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
-    "VideoPrismTokenizer": T5Converter,
     "UdopTokenizer": UdopConverter,
+    "VideoPrismTokenizer": VideoPrismConverter,
     "WhisperTokenizer": WhisperConverter,
     "XLMRobertaTokenizer": XLMRobertaConverter,
     "XLNetTokenizer": XLNetConverter,

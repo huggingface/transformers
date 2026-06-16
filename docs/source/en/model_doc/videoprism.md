@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was published in HF papers on 2024-02-20 and contributed to Hugging Face Transformers on 2026-06-08.*
+*This model was published in HF papers on 2024-02-20 and contributed to Hugging Face Transformers on 2026-06-16.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -40,11 +40,6 @@ Notes:
 This model was contributed by [MHRDYN7](https://github.com/MHRDYN7) and reviewed by [vasqu](https://github.com/vasqu) & [zucchini-nlp](https://github.com/zucchini-nlp).
 The original code can be found [here](https://github.com/google-deepmind/videoprism).
 
-<Tip warning={true}>
-
-The video processor loaded via AutoProcessor is LlavaOnevisionVideoProcessor which is recomended for sampling frames exactly as in the original repository. However, please note that the [original processor](https://github.com/google-deepmind/videoprism/blob/main/videoprism/colabs/videoprism_video_encoder_demo.ipynb) uses Lanczos interpolation for resizing the frames, but that is not supported in pytorch yet and therefore LlavaOnevisionVideoProcessor uses Bicubic interpolation. 
-
-</Tip>
 
 ## Usage example
 
@@ -58,7 +53,8 @@ processor = AutoVideoProcessor.from_pretrained("google/videoprism-base-f16r288")
 model = AutoModel.from_pretrained(
     "google/videoprism-base-f16r288",
     device_map="auto",
-    attn_implementation="eager" # use "flash_attention_2" for faster inference on supprted hardware
+    # use "flash_attention_2" for faster inference on supported hardware
+    # attn_implementation="flash_attention_2" 
 )
 
 video_url = "https://huggingface.co/datasets/nateraw/kinetics-mini/resolve/main/val/archery/-Qz25rXdMjE_000014_000024.mp4"
@@ -74,11 +70,6 @@ encoder_outputs = outputs.last_hidden_state
 
 ```
 
-<Tip warning={true}>
-
-The video processor loaded via AutoProcessor is LlavaOnevisionVideoProcessor which is recomended for sampling frames exactly as in the original repository. However, please note that the [original processor](https://github.com/google-deepmind/videoprism/blob/main/videoprism/colabs/videoprism_video_encoder_demo.ipynb) uses Lanczos interpolation for resizing the frames, but that is not supported in pytorch yet and therefore LlavaOnevisionVideoProcessor uses Bicubic interpolation. 
-
-</Tip>
 
 ## VideoPrismVisionConfig
 

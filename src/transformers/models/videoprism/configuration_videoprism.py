@@ -103,18 +103,7 @@ class VideoPrismTextConfig(PreTrainedConfig):
     attn_logit_softcapping: float = 50.0
 
 
-@auto_docstring(
-    checkpoint="google/videoprism-lvt-base-f16r288",
-    custom_intro="""
-    This is the configuration class to store the configuration of a [`VideoPrismClipModel`]. It is used to instantiate a
-    VideoPrismClipModel according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the VideoPrism
-    [google/videoprism-lvt-base-f16r288](https://huggingface.co/google/videoprism-lvt-base-f16r288) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-    """,
-)
+@auto_docstring(checkpoint="google/videoprism-lvt-base-f16r288")
 @strict
 class VideoPrismConfig(PreTrainedConfig):
     r"""

@@ -407,8 +407,6 @@ def get_tokenizer(spiece_path=None):
         extra_ids=100,
         _spm_precompiled_charsmap=tokenizer_kwargs.get("_spm_precompiled_charsmap"),
     )
-    # VideoPrism does not append </s> at the end of sequences (unlike default T5).
-    tokenizer._tokenizer.post_processor = None
     return tokenizer, text_queries
 
 
@@ -523,6 +521,7 @@ def convert_videoprism_checkpoint(
 
     if upload:
         from transformers import LlavaOnevisionVideoProcessor, VideoPrismProcessor
+        from transformers.image_utils import PILImageResampling
 
         if not inference:
             model, model_config = load_model(
@@ -530,6 +529,7 @@ def convert_videoprism_checkpoint(
             )
         model.push_to_hub(repo_id)
         video_processor = LlavaOnevisionVideoProcessor(
+            resample=PILImageResampling.LANCZOS,
             size={"height": 288, "width": 288},
             do_normalize=False,
             do_sample_frames=True,

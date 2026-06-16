@@ -16,7 +16,8 @@ import unittest
 
 import torch
 
-from transformers.testing_utils import require_tokenizers, require_torch, require_vision
+from transformers.image_utils import PILImageResampling
+from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
@@ -32,14 +33,13 @@ VIDEO_PRISM_LVT_CHECKPOINT = "MHRDYN7/videoprism-lvt-base-f16r288"
 
 EXPECTED_TENNIS_PIXEL_SLICE = torch.tensor(
     [
-        [0.05882353335618973, 0.0470588281750679, 0.3137255012989044],
-        [0.05098039656877518, 0.05882353335618973, 0.3137255012989044],
-        [0.06666667014360428, 0.062745101749897, 0.3019607961177826],
+        [0.0470588281750679, 0.03921568766236305, 0.32156863808631897],
+        [0.04313725605607033, 0.05098039656877518, 0.32549020648002625],
+        [0.06666667014360428, 0.0470588281750679, 0.3019607961177826],
     ]
 )
 
 
-@require_tokenizers
 @require_vision
 @require_torch
 class VideoPrismProcessorTest(ProcessorTesterMixin, unittest.TestCase):
@@ -58,6 +58,7 @@ class VideoPrismProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_video_processor(cls):
         return LlavaOnevisionVideoProcessor(
+            resample=PILImageResampling.LANCZOS,
             size={"height": FRAME_SIZE, "width": FRAME_SIZE},
             do_normalize=False,
         )
