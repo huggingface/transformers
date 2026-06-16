@@ -4329,7 +4329,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             docstring += set_min_indent(f"\n{docstring_init}", indent_level)
         elif is_dataclass or is_config:
             # No init function, we have a data class
-            docstring += docstring_args if docstring_args else "\nArgs:\n"
+            docstring += set_min_indent(f"\n{docstring_args}", indent_level) if docstring_args else "\nArgs:\n"
             source_args_dict = get_args_doc_from_source(ModelOutputArgs)
             doc_class = cls.__doc__ if cls.__doc__ else ""
             documented_kwargs = parse_docstring(doc_class)[0]
