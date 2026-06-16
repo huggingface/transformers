@@ -167,9 +167,7 @@ def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) 
         if strategy not in {"free_full_weight", "keep_full_weight"}:
             invalid_strategies[key] = strategy
             continue
-        if key not in name_lookup and not any(
-            replace_layer_number_by_wildcard(name) == key for name in name_lookup
-        ):
+        if key not in name_lookup and not any(replace_layer_number_by_wildcard(name) == key for name in name_lookup):
             unused_rules[key] = strategy
 
     if invalid_strategies:
