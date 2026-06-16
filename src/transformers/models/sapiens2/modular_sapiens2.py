@@ -526,9 +526,9 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
 
     def post_process_pose_estimation(
         self,
-        outputs: Sapiens2PoseEstimatorOutput,
+        outputs,
         boxes: list[list[list[float]]],
-        outputs_flipped: Sapiens2PoseEstimatorOutput | None = None,
+        outputs_flipped=None,
         kernel_size: int = 11,
         threshold: float | None = None,
         source_sizes: TensorType | list[tuple[int, int]] | None = None,
@@ -668,7 +668,7 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
 
     def post_process_normal_estimation(
         self,
-        outputs: Sapiens2NormalEstimatorOutput,
+        outputs,
         source_sizes: TensorType | list[tuple[int, int]] | None = None,
         target_sizes: TensorType | list[tuple[int, int]] | None = None,
         do_remove_padding: bool | None = None,
@@ -704,7 +704,7 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
 
     def post_process_pointmap_estimation(
         self,
-        outputs: Sapiens2PointmapEstimatorOutput,
+        outputs,
         source_sizes: TensorType | list[tuple[int, int]] | None = None,
         target_sizes: TensorType | list[tuple[int, int]] | None = None,
         do_remove_padding: bool | None = None,
@@ -741,7 +741,7 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
 
     def post_process_image_matting(
         self,
-        outputs: Sapiens2ImageMattingOutput,
+        outputs,
         target_sizes: TensorType | list[tuple[int, int]] | None = None,
         backgrounds: ImageInput | None = None,
     ) -> list[dict[str, torch.Tensor]]:

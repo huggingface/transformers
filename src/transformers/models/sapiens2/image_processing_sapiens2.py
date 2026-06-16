@@ -38,12 +38,6 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
-from .modeling_sapiens2 import (
-    Sapiens2ImageMattingOutput,
-    Sapiens2NormalEstimatorOutput,
-    Sapiens2PointmapEstimatorOutput,
-    Sapiens2PoseEstimatorOutput,
-)
 
 
 class Sapiens2ImageProcessorKwargs(ImagesKwargs, total=False):
@@ -500,9 +494,9 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
 
     def post_process_pose_estimation(
         self,
-        outputs: Sapiens2PoseEstimatorOutput,
+        outputs,
         boxes: list[list[list[float]]],
-        outputs_flipped: Sapiens2PoseEstimatorOutput | None = None,
+        outputs_flipped=None,
         kernel_size: int = 11,
         threshold: float | None = None,
         source_sizes: TensorType | list[tuple[int, int]] | None = None,
@@ -642,7 +636,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
 
     def post_process_normal_estimation(
         self,
-        outputs: Sapiens2NormalEstimatorOutput,
+        outputs,
         source_sizes: TensorType | list[tuple[int, int]] | None = None,
         target_sizes: TensorType | list[tuple[int, int]] | None = None,
         do_remove_padding: bool | None = None,
@@ -678,7 +672,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
 
     def post_process_pointmap_estimation(
         self,
-        outputs: Sapiens2PointmapEstimatorOutput,
+        outputs,
         source_sizes: TensorType | list[tuple[int, int]] | None = None,
         target_sizes: TensorType | list[tuple[int, int]] | None = None,
         do_remove_padding: bool | None = None,
@@ -715,7 +709,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
 
     def post_process_image_matting(
         self,
-        outputs: Sapiens2ImageMattingOutput,
+        outputs,
         target_sizes: TensorType | list[tuple[int, int]] | None = None,
         backgrounds: ImageInput | None = None,
     ) -> list[dict[str, torch.Tensor]]:
