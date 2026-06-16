@@ -3194,40 +3194,7 @@ class Qwen2_5OmniAntiAliasedActivation1d(nn.Module):
         return hidden_states
 
 
-# Alias for BC
-class Activation1d(Qwen2_5OmniAntiAliasedActivation1d):
-    """Deprecated alias for `Qwen2_5OmniAntiAliasedActivation1d`; will be removed in a future release."""
-
-    def __init__(self, *args, **kwargs):
-        logger.warning_once("`Activation1d` is deprecated; please use `Qwen2_5OmniAntiAliasedActivation1d` instead.")
-        super().__init__(*args, **kwargs)
-
-
-class UpSample1d(Qwen2_5OmniUpSample1d):
-    """Deprecated alias for `Qwen2_5OmniUpSample1d`; will be removed in a future release."""
-
-    def __init__(self, *args, **kwargs):
-        logger.warning_once("`UpSample1d` is deprecated; please use `Qwen2_5OmniUpSample1d` instead.")
-        super().__init__(*args, **kwargs)
-
-
-class DownSample1d(Qwen2_5OmniDownSample1d):
-    """Deprecated alias for `Qwen2_5OmniDownSample1d`; will be removed in a future release."""
-
-    def __init__(self, *args, **kwargs):
-        logger.warning_once("`DownSample1d` is deprecated; please use `Qwen2_5OmniDownSample1d` instead.")
-        super().__init__(*args, **kwargs)
-
-
-class SnakeBeta(Qwen2_5OmniSnakeBeta):
-    """Deprecated alias for `Qwen2_5OmniSnakeBeta`; will be removed in a future release."""
-
-    def __init__(self, *args, **kwargs):
-        logger.warning_once("`SnakeBeta` is deprecated; please use `Qwen2_5OmniSnakeBeta` instead.")
-        super().__init__(*args, **kwargs)
-
-
-class AMPBlock(torch.nn.Module):
+class Qwen2_5OmniAMPBlock(torch.nn.Module):
     def __init__(
         self,
         channels,
@@ -3319,6 +3286,47 @@ class AMPBlock(torch.nn.Module):
         return hidden_states
 
 
+# Alias for BC
+class Activation1d(Qwen2_5OmniAntiAliasedActivation1d):
+    """Deprecated alias for `Qwen2_5OmniAntiAliasedActivation1d`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`Activation1d` is deprecated; please use `Qwen2_5OmniAntiAliasedActivation1d` instead.")
+        super().__init__(*args, **kwargs)
+
+
+class UpSample1d(Qwen2_5OmniUpSample1d):
+    """Deprecated alias for `Qwen2_5OmniUpSample1d`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`UpSample1d` is deprecated; please use `Qwen2_5OmniUpSample1d` instead.")
+        super().__init__(*args, **kwargs)
+
+
+class DownSample1d(Qwen2_5OmniDownSample1d):
+    """Deprecated alias for `Qwen2_5OmniDownSample1d`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`DownSample1d` is deprecated; please use `Qwen2_5OmniDownSample1d` instead.")
+        super().__init__(*args, **kwargs)
+
+
+class SnakeBeta(Qwen2_5OmniSnakeBeta):
+    """Deprecated alias for `Qwen2_5OmniSnakeBeta`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`SnakeBeta` is deprecated; please use `Qwen2_5OmniSnakeBeta` instead.")
+        super().__init__(*args, **kwargs)
+
+
+class AMPBlock(Qwen2_5OmniAMPBlock):
+    """Deprecated alias for `Qwen2_5OmniAMPBlock`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`AMPBlock` is deprecated; please use `Qwen2_5OmniAMPBlock` instead.")
+        super().__init__(*args, **kwargs)
+
+
 @auto_docstring(
     custom_intro="""
     The full Qwen2.5Omni Token2WavBigVGAN model. Which take mel spectrogram as input and predict waveform.
@@ -3354,7 +3362,7 @@ class Qwen2_5OmniToken2WavBigVGANModel(Qwen2_5OmniPreTrainedModel):
 
         self.resblocks = nn.ModuleList(
             [
-                AMPBlock(config.upsample_initial_channel // (2 ** (layer_idx + 1)), kernel_size, dilation)
+                Qwen2_5OmniAMPBlock(config.upsample_initial_channel // (2 ** (layer_idx + 1)), kernel_size, dilation)
                 for layer_idx in range(self.num_upsample_layers)
                 for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes)
             ]

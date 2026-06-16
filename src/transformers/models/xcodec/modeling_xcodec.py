@@ -582,6 +582,8 @@ class XcodecModel(XcodecPreTrainedModel):
             Discrete code indices computed using `model.encode`.
         bandwidth (`float`, *optional*):
             Target bandwidth in kbps. Must be one of `config.target_bandwidths`. Defaults to the highest available bandwidth.
+        bandwidth (`float`, *optional*):
+            Target bandwidth in kbps. Must be one of `config.target_bandwidths`. Defaults to the highest available bandwidth.
 
         Returns:
             `XcodecOutput` or tuple `(audio_codes, audio_values)`:

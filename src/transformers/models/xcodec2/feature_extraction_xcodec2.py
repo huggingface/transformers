@@ -53,7 +53,7 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
             Needed for acoustic encoder input padding.
     """
 
-    model_input_names = ["audio_spectrogram", "audio", "padding_mask", "spectrogram_mask"]
+    model_input_names = ["input_features", "input_values", "padding_mask", "input_features_mask"]
 
     def __init__(
         self,
@@ -191,7 +191,7 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
             )
             features = (features - features.mean(0)) / torch.sqrt(features.var(0, unbiased=True) + 1e-7)
             mel_features.append(features)
-        encoded_inputs = BatchFeature({"audio_spectrogram": mel_features})
+        encoded_inputs = BatchFeature({"input_features": mel_features})
         padded_mel = self.pad(
             encoded_inputs,
             padding=padding,
@@ -201,7 +201,7 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=padding,
             return_tensors="pt",
         )
-        audio_spectrogram = padded_mel["audio_spectrogram"]
+        audio_spectrogram = padded_mel["input_features"]
         spectrogram_mask = padded_mel.get("attention_mask")
         trimmed_frames = audio_spectrogram.shape[1] - (audio_spectrogram.shape[1] % self.stride)
         audio_spectrogram = audio_spectrogram[:, :trimmed_frames, :].reshape(
@@ -217,10 +217,10 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
 
         return BatchFeature(
             {
-                "audio": padded_audio,
+                "input_values": padded_audio,
                 "padding_mask": padding_mask,
-                "audio_spectrogram": audio_spectrogram,
-                "spectrogram_mask": spectrogram_mask,
+                "input_features": audio_spectrogram,
+                "input_features_mask": spectrogram_mask,
             },
             tensor_type=return_tensors,
         )

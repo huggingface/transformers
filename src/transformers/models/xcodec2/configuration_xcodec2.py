@@ -87,7 +87,7 @@ class Xcodec2Config(PreTrainedConfig):
         if isinstance(self.semantic_model_config, dict):
             self.semantic_model_config["model_type"] = self.semantic_model_config.get("model_type", "wav2vec2-bert")
             self.semantic_model_config = CONFIG_MAPPING[self.semantic_model_config["model_type"]](
-                **{"num_hidden_layers": 16, **self.semantic_model_config}
+                **self.semantic_model_config
             )
         elif self.semantic_model_config is None:
             self.semantic_model_config = CONFIG_MAPPING["wav2vec2-bert"](num_hidden_layers=16)

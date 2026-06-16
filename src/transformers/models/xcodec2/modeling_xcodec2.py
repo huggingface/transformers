@@ -45,18 +45,17 @@ from .configuration_xcodec2 import Xcodec2Config
 @auto_docstring
 @dataclass
 class Xcodec2Output(ModelOutput):
-    """
-    Args:
-        audio_values (`torch.FloatTensor` of shape `(batch_size, 1, sequence_length)`, *optional*):
-            Decoded audio waveform values in the time domain, obtained using the decoder
-            part of Xcodec2. These represent the reconstructed audio signal.
-        audio_codes (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`, *optional*):
-            Discrete code embeddings computed using `model.encode`. These are the quantized
-            representations of the input audio used for further processing or generation.
-        latents (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
-            Quantized continuous representation of input's embedding.
-        audio_codes_mask (`torch.int32` of shape `(batch_size, 1, codes_length)`, *optional*):
-            Downsampled `padding_mask` for indicating valid audio codes in `audio_codes`.
+    r"""
+    audio_values (`torch.FloatTensor` of shape `(batch_size, 1, sequence_length)`, *optional*):
+        Decoded audio waveform values in the time domain, obtained using the decoder
+        part of Xcodec2. These represent the reconstructed audio signal.
+    audio_codes (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`, *optional*):
+        Discrete code embeddings computed using `model.encode`. These are the quantized
+        representations of the input audio used for further processing or generation.
+    latents (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
+        Quantized continuous representation of input's embedding.
+    audio_codes_mask (`torch.int32` of shape `(batch_size, 1, codes_length)`, *optional*):
+        Downsampled `padding_mask` for indicating valid audio codes in `audio_codes`.
     """
 
     audio_values: torch.FloatTensor | None = None
@@ -68,17 +67,15 @@ class Xcodec2Output(ModelOutput):
 @auto_docstring
 @dataclass
 class Xcodec2EncoderOutput(ModelOutput):
-    """
-    Args:
-        audio_codes (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`, *optional*):
-            Discrete code embeddings computed using `model.encode`. These represent
-            the compressed, quantized form of the input audio signal that can be
-            used for storage, transmission, or generation.
-        latents (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
-            Quantized continuous representation of input's embedding.
-        audio_codes_mask (`torch.int32` of shape `(batch_size, 1, codes_length)`, *optional*):
-            Downsampled `padding_mask` for indicating valid audio codes in `audio_codes`.
-
+    r"""
+    audio_codes (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`, *optional*):
+        Discrete code embeddings computed using `model.encode`. These represent
+        the compressed, quantized form of the input audio signal that can be
+        used for storage, transmission, or generation.
+    latents (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
+        Quantized continuous representation of input's embedding.
+    audio_codes_mask (`torch.int32` of shape `(batch_size, 1, codes_length)`, *optional*):
+        Downsampled `padding_mask` for indicating valid audio codes in `audio_codes`.
     """
 
     audio_codes: torch.LongTensor | None = None
@@ -89,12 +86,11 @@ class Xcodec2EncoderOutput(ModelOutput):
 @auto_docstring
 @dataclass
 class Xcodec2DecoderOutput(ModelOutput):
-    """
-    Args:
-        audio_values (`torch.FloatTensor` of shape `(batch_size, 1, segment_length)`, *optional*):
-            Decoded audio waveform values in the time domain, obtained by converting
-            the discrete codes back into continuous audio signals. This represents
-            the reconstructed audio that can be played back.
+    r"""
+    audio_values (`torch.FloatTensor` of shape `(batch_size, 1, segment_length)`, *optional*):
+        Decoded audio waveform values in the time domain, obtained by converting
+        the discrete codes back into continuous audio signals. This represents
+        the reconstructed audio that can be played back.
     """
 
     audio_values: torch.FloatTensor | None = None
@@ -498,6 +494,7 @@ class Xcodec2DownSample1d(nn.Module):
         hidden_states = F.pad(hidden_states, (self.pad_left, self.pad_right), mode="replicate")
         out = F.conv1d(
             hidden_states,
+            # add casting to avoid dtype mismatch for SDPA
             self.filter.to(hidden_states.dtype).expand(channels, -1, -1),
             stride=self.stride,
             groups=channels,
@@ -523,6 +520,7 @@ class Xcodec2UpSample1d(nn.Module):
         hidden_states = F.pad(hidden_states, (self.pad, self.pad), mode="replicate")
         hidden_states = self.ratio * F.conv_transpose1d(
             hidden_states,
+            # add casting to avoid dtype mismatch for SDPA
             self.filter.to(hidden_states.dtype).expand(channels, -1, -1),
             stride=self.stride,
             groups=channels,
@@ -658,6 +656,7 @@ class Xcodec2ResNetBlock(nn.Module):
         self.conv2 = nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=3, stride=1, padding=1)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = hidden_states.transpose(1, 2)
         residual = hidden_states
         hidden_states = self.norm1(hidden_states)
         hidden_states = self.activation1(hidden_states)
@@ -666,7 +665,7 @@ class Xcodec2ResNetBlock(nn.Module):
         hidden_states = self.activation2(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.conv2(hidden_states)
-        return hidden_states + residual
+        return (hidden_states + residual).transpose(1, 2)
 
 
 class Xcodec2FiniteScalarQuantization(nn.Module):
@@ -843,10 +842,11 @@ class Xcodec2Decoder(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
         hidden_states = self.fc(hidden_states)
-
-        # Conv ResNet: (batch, hidden, time)
         hidden_states = hidden_states.transpose(1, 2)
         hidden_states = self.embed(hidden_states)
+        hidden_states = hidden_states.transpose(1, 2)
+
+        # Conv ResNet
         for layer in self.prior_net:
             hidden_states = layer(hidden_states)
 
@@ -855,18 +855,15 @@ class Xcodec2Decoder(nn.Module):
         # which broadcasts correctly against q/k of shape (batch, num_heads, seq_len, head_dim) via unsqueeze_dim=2
         # in `apply_rotary_pos_emb`. NOTE: this is non-standard and could be unsafe under tensor parallelism
         # (TP shards see only a subset of heads), but TP is not used for this model in practice.
-        hidden_states = hidden_states.transpose(1, 2)
         position_ids = torch.arange(self.num_attention_heads, device=hidden_states.device).unsqueeze(0)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
         for layer in self.layers:
             hidden_states = layer(hidden_states, position_embeddings=position_embeddings, **kwargs)
 
-        # Conv ResNet: (batch, hidden, time)
-        hidden_states = hidden_states.transpose(1, 2)
+        # Conv ResNet
         for layer in self.post_net:
             hidden_states = layer(hidden_states)
 
-        hidden_states = hidden_states.transpose(1, 2)
         return self.head(self.norm(hidden_states))
 
 
@@ -930,7 +927,7 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_attention_backend = True
     _can_compile_fullgraph = True
-    main_input_name = "audio"
+    main_input_name = "input_values"
     _can_record_outputs = {
         "hidden_states": Xcodec2DecoderLayer,
         "attentions": Xcodec2DecoderLayer,
@@ -981,21 +978,21 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
     @can_return_tuple
     def encode(
         self,
-        audio: torch.Tensor,
-        audio_spectrogram: torch.Tensor,
+        input_values: torch.Tensor,
+        input_features: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
-        spectrogram_mask: torch.Tensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
         output_latents: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Xcodec2EncoderOutput:
         r"""
-        audio (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
             Input audio waveform.
-        audio_spectrogram (`torch.Tensor` of shape `(batch_size, mel_bins, time_steps)`):
+        input_features (`torch.Tensor` of shape `(batch_size, mel_bins, time_steps)`):
             Input audio mel spectrogram for semantic encoding.
         padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
-            Padding mask used to pad `audio`.
-        spectrogram_mask (`torch.Tensor` of shape `(batch_size, time_steps)`, *optional*):
+            Padding mask used to pad `input_values`.
+        input_features_mask (`torch.Tensor` of shape `(batch_size, time_steps)`, *optional*):
             Attention mask for the spectrogram input to the semantic encoder. `1` for valid frames, `0` for padding.
         output_latents (`bool`, *optional*, defaults to `False`):
             Whether to return the continuous latent representation from the quantizer.
@@ -1006,13 +1003,13 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         semantic_dtype = encoder_param.dtype if encoder_param is not None else torch.float32
         with torch.no_grad():
             semantic_output = self.semantic_encoder(
-                audio_spectrogram.to(semantic_dtype), attention_mask=spectrogram_mask
+                input_features.to(semantic_dtype), attention_mask=input_features_mask
             )
-        semantic_hidden_states = semantic_output.last_hidden_state.to(audio.dtype).transpose(1, 2)
+        semantic_hidden_states = semantic_output.last_hidden_state.to(input_values.dtype).transpose(1, 2)
         semantic_hidden_states = self.semantic_adapter(semantic_hidden_states)
 
         # Acoustic embedding and concatenate
-        acoustic_hidden_states = self.acoustic_encoder(audio)
+        acoustic_hidden_states = self.acoustic_encoder(input_values)
         hidden_states = torch.cat([semantic_hidden_states, acoustic_hidden_states], dim=1)
         hidden_states = self.fc_encoder(hidden_states.transpose(1, 2))
 
@@ -1064,21 +1061,21 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
     @can_return_tuple
     def forward(
         self,
-        audio: torch.Tensor,
-        audio_spectrogram: torch.Tensor,
+        input_values: torch.Tensor,
+        input_features: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
-        spectrogram_mask: torch.Tensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
         output_latents: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Xcodec2Output:
         r"""
-        audio (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
             Input audio waveform.
-        audio_spectrogram (`torch.Tensor` of shape `(batch_size, mel_bins, time_steps)`):
+        input_features (`torch.Tensor` of shape `(batch_size, mel_bins, time_steps)`):
             Input audio mel spectrogram for semantic encoding.
         padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
-            Padding mask used to pad `audio`.
-        spectrogram_mask (`torch.Tensor` of shape `(batch_size, time_steps)`, *optional*):
+            Padding mask used to pad `input_values`.
+        input_features_mask (`torch.Tensor` of shape `(batch_size, time_steps)`, *optional*):
             Attention mask for the spectrogram input to the semantic encoder. `1` for valid frames, `0` for padding.
         output_latents (`bool`, *optional*, defaults to `False`):
             Whether to return the continuous latent representation from the quantizer.
@@ -1103,13 +1100,13 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         >>> audio_values = outputs.audio_values
         ```"""
         # for truncating output audio to original length
-        length = audio.shape[-1]
+        length = input_values.shape[-1]
 
         encoder_outputs = self.encode(
-            audio,
-            audio_spectrogram=audio_spectrogram,
+            input_values,
+            input_features=input_features,
             padding_mask=padding_mask,
-            spectrogram_mask=spectrogram_mask,
+            input_features_mask=input_features_mask,
             output_latents=True,
             return_dict=True,
         )

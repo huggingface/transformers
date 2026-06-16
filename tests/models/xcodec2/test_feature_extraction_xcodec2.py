@@ -121,13 +121,9 @@ class Xcodec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         encoded_sequences_3 = feat_extract(
             torch_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np", device="cpu"
         )
-        self.assertTrue(np.allclose(encoded_sequences_1.audio, encoded_sequences_2.audio, atol=TOL))
-        self.assertTrue(
-            np.allclose(encoded_sequences_1.audio_spectrogram, encoded_sequences_2.audio_spectrogram, atol=TOL)
-        )
-        self.assertTrue(
-            np.allclose(encoded_sequences_1.audio_spectrogram, encoded_sequences_3.audio_spectrogram, atol=TOL)
-        )
+        self.assertTrue(np.allclose(encoded_sequences_1.input_values, encoded_sequences_2.input_values, atol=TOL))
+        self.assertTrue(np.allclose(encoded_sequences_1.input_features, encoded_sequences_2.input_features, atol=TOL))
+        self.assertTrue(np.allclose(encoded_sequences_1.input_features, encoded_sequences_3.input_features, atol=TOL))
 
         # Test batched
         encoded_sequences_1 = feat_extract(
@@ -143,11 +139,11 @@ class Xcodec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             return_tensors="np",
             device="cpu",
         )
-        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1.audio, encoded_sequences_2.audio):
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1.input_values, encoded_sequences_2.input_values):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=TOL))
-        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1.audio_spectrogram, encoded_sequences_2.audio_spectrogram):
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1.input_features, encoded_sequences_2.input_features):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=TOL))
-        for enc_seq_1, enc_seq_3 in zip(encoded_sequences_1.audio_spectrogram, encoded_sequences_3.audio_spectrogram):
+        for enc_seq_1, enc_seq_3 in zip(encoded_sequences_1.input_features, encoded_sequences_3.input_features):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_3, atol=TOL))
 
     @slow
@@ -165,10 +161,10 @@ class Xcodec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         encoded_sequences_gpu = feat_extract(
             torch_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np", device="cuda"
         )
-        self.assertEqual(encoded_sequences_cpu.audio.shape, encoded_sequences_gpu.audio.shape)
-        self.assertEqual(encoded_sequences_cpu.audio_spectrogram.shape, encoded_sequences_gpu.audio_spectrogram.shape)
-        self.assertEqual(encoded_sequences_cpu.audio.dtype, encoded_sequences_gpu.audio.dtype)
-        self.assertEqual(encoded_sequences_cpu.audio_spectrogram.dtype, encoded_sequences_gpu.audio_spectrogram.dtype)
+        self.assertEqual(encoded_sequences_cpu.input_values.shape, encoded_sequences_gpu.input_values.shape)
+        self.assertEqual(encoded_sequences_cpu.input_features.shape, encoded_sequences_gpu.input_features.shape)
+        self.assertEqual(encoded_sequences_cpu.input_values.dtype, encoded_sequences_gpu.input_values.dtype)
+        self.assertEqual(encoded_sequences_cpu.input_features.dtype, encoded_sequences_gpu.input_features.dtype)
 
         # Batched input: CPU vs GPU output should have same shape and dtype
         encoded_sequences_cpu = feat_extract(
@@ -177,10 +173,10 @@ class Xcodec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         encoded_sequences_gpu = feat_extract(
             torch_audio_inputs, sampling_rate=sampling_rate, padding=True, return_tensors="np", device="cuda"
         )
-        self.assertEqual(encoded_sequences_cpu.audio.shape, encoded_sequences_gpu.audio.shape)
-        self.assertEqual(encoded_sequences_cpu.audio_spectrogram.shape, encoded_sequences_gpu.audio_spectrogram.shape)
-        self.assertEqual(encoded_sequences_cpu.audio.dtype, encoded_sequences_gpu.audio.dtype)
-        self.assertEqual(encoded_sequences_cpu.audio_spectrogram.dtype, encoded_sequences_gpu.audio_spectrogram.dtype)
+        self.assertEqual(encoded_sequences_cpu.input_values.shape, encoded_sequences_gpu.input_values.shape)
+        self.assertEqual(encoded_sequences_cpu.input_features.shape, encoded_sequences_gpu.input_features.shape)
+        self.assertEqual(encoded_sequences_cpu.input_values.dtype, encoded_sequences_gpu.input_values.dtype)
+        self.assertEqual(encoded_sequences_cpu.input_features.dtype, encoded_sequences_gpu.input_features.dtype)
 
     def test_double_precision_pad(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
@@ -188,10 +184,10 @@ class Xcodec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         py_audio_inputs = np_audio_inputs.tolist()
 
         for inputs in [py_audio_inputs, np_audio_inputs]:
-            np_processed = feature_extractor.pad([{"audio_spectrogram": inputs}], return_tensors="np")
-            self.assertTrue(np_processed.audio_spectrogram.dtype == np.float32)
-            pt_processed = feature_extractor.pad([{"audio_spectrogram": inputs}], return_tensors="pt")
-            self.assertTrue(pt_processed.audio_spectrogram.dtype == torch.float32)
+            np_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="np")
+            self.assertTrue(np_processed.input_features.dtype == np.float32)
+            pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
+            self.assertTrue(pt_processed.input_features.dtype == torch.float32)
 
     @unittest.skip("Xcodec2 doesn't support stereo input")
     def test_integration_stereo(self):

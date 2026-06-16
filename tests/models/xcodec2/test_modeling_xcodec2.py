@@ -86,12 +86,12 @@ class Xcodec2ModelTester:
         self.semantic_intermediate_size = semantic_intermediate_size
 
     def prepare_config_and_inputs(self):
-        audio = floats_tensor([self.batch_size, self.num_channels, self.num_samples], scale=1.0)
-        audio_spectrogram = floats_tensor(
+        input_values = floats_tensor([self.batch_size, self.num_channels, self.num_samples], scale=1.0)
+        input_features = floats_tensor(
             [self.batch_size, self.num_samples // self.mel_hop_length, self.num_mel_bins * self.stride], scale=1.0
         )
         config = self.get_config()
-        inputs_dict = {"audio": audio, "audio_spectrogram": audio_spectrogram}
+        inputs_dict = {"input_values": input_values, "input_features": input_features}
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
@@ -130,9 +130,9 @@ class Xcodec2ModelTester:
 
     def create_and_check_model_forward(self, config, inputs_dict):
         model = Xcodec2Model(config=config).to(torch_device).eval()
-        audio = inputs_dict["audio"]
-        audio_spectrogram = inputs_dict["audio_spectrogram"]
-        result = model(audio, audio_spectrogram)
+        input_values = inputs_dict["input_values"]
+        input_features = inputs_dict["input_features"]
+        result = model(input_values, input_features)
         self.parent.assertEqual(
             result.audio_values.shape,
             (self.batch_size, self.num_channels, self.num_samples),
@@ -145,7 +145,7 @@ class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     test_resize_embeddings = False
     pipeline_model_mapping = {"feature-extraction": Xcodec2Model} if is_torch_available() else {}
-    additional_model_inputs = ["audio_spectrogram", "spectrogram_mask"]
+    additional_model_inputs = ["input_features", "input_features_mask"]
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not support returning hidden states
@@ -183,7 +183,7 @@ class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["audio", "audio_spectrogram", "padding_mask"]
+            expected_arg_names = ["input_values", "input_features", "padding_mask"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     @unittest.skip("XCodec2 does not have `inputs_embeds` logics")
@@ -234,7 +234,7 @@ class Xcodec2IntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         with torch.no_grad():
-            audio_codes = model.encode(inputs["audio"], inputs["audio_spectrogram"], return_dict=False)[0]
+            audio_codes = model.encode(inputs["input_values"], inputs["input_features"], return_dict=False)[0]
             n_codes = len(exp_code)
             self.assertTrue(torch.equal(audio_codes.squeeze().cpu().to(exp_code.dtype)[:n_codes], exp_code))
 
@@ -243,11 +243,11 @@ class Xcodec2IntegrationTest(unittest.TestCase):
             torch.testing.assert_close(dec.squeeze().cpu()[:n_recon], exp_recon, rtol=1e-3, atol=1e-3)
 
             # compare codec error
-            codec_error = compute_rmse(inputs["audio"], dec).item()
+            codec_error = compute_rmse(inputs["input_values"], dec).item()
             torch.testing.assert_close(codec_error, exp_codec_error, rtol=1e-5, atol=1e-5)
 
             # make sure forward and decode gives same result
-            enc_dec = model(inputs["audio"], inputs["audio_spectrogram"]).audio_values
+            enc_dec = model(inputs["input_values"], inputs["input_features"]).audio_values
             self.assertTrue(torch.equal(dec[..., : enc_dec.shape[-1]], enc_dec))
 
     def test_batch_integration(self):
@@ -280,10 +280,10 @@ class Xcodec2IntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             enc = model.encode(
-                inputs["audio"],
-                inputs["audio_spectrogram"],
+                inputs["input_values"],
+                inputs["input_features"],
                 padding_mask=inputs["padding_mask"],
-                spectrogram_mask=inputs.get("spectrogram_mask"),
+                input_features_mask=inputs.get("input_features_mask"),
                 return_dict=True,
             )
             batch_codes = enc.audio_codes
@@ -303,5 +303,5 @@ class Xcodec2IntegrationTest(unittest.TestCase):
             actual_recon = dec[i].squeeze().cpu()[:n_recon]
             torch.testing.assert_close(actual_recon, exp_recons[i], rtol=1e-3, atol=1e-3)
 
-            codec_error = compute_rmse(inputs["audio"][i : i + 1], dec[i : i + 1]).item()
+            codec_error = compute_rmse(inputs["input_values"][i : i + 1], dec[i : i + 1]).item()
             torch.testing.assert_close(codec_error, exp_codec_errors[i], rtol=1e-3, atol=1e-3)

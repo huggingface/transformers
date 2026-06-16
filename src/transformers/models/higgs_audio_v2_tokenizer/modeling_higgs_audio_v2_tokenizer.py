@@ -605,6 +605,8 @@ class HiggsAudioV2TokenizerModel(HiggsAudioV2TokenizerPreTrainedModel):
             Discrete code indices computed using `model.encode`.
         bandwidth (`float`, *optional*):
             Target bandwidth in kbps. Must be one of `config.target_bandwidths`. Defaults to the highest available bandwidth.
+        bandwidth (`float`, *optional*):
+            Target bandwidth in kbps. Must be one of `config.target_bandwidths`. Defaults to the highest available bandwidth.
 
         Returns:
             `HiggsAudioV2TokenizerOutput` or tuple `(audio_codes, audio_values)`:
