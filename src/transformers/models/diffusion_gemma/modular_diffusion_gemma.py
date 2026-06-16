@@ -1096,7 +1096,7 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
 
         # DiT module doesn't need a sliding mask and has to attend fully to prev context and itself
         # To enforce a full mask we pass `or_mask_function`, while keeping the functionality of
-        # `create_bidirectional_sliding_window_mask` to get correct the mask shape
+        # `create_bidirectional_sliding_window_mask` to get correct the mask shape and offsets
         LAYER_TYPE_TO_MASK_MAPPING = {
             "full_attention": create_bidirectional_mask,
             "sliding_attention": create_bidirectional_sliding_window_mask,

@@ -396,7 +396,7 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         canvas_length = 4
         concat_kv_length_full = prefill_length + canvas_length
         # -1 -> the DYNAMIC sliding window kv cache has len=window-1
-        concat_kv_length_sliding = sliding_window_length + canvas_length + 1
+        concat_kv_length_sliding = sliding_window_length + canvas_length - 1
         batch_size = 2
         left_padding_length = 2  # only applied on batch item 0
         expected_non_zero_full = (
@@ -509,7 +509,7 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
             + (total_input_length * canvas_length)  # batch item 1
         )
         expected_attention_mask_shape_full = (batch_size, 1, canvas_length, concat_kv_length_full)
-        expected_non_zero_sliding = (sliding_window_length + canvas_length - 1) * batch_size * canvas_length
+        expected_non_zero_sliding = concat_kv_length_sliding * batch_size * canvas_length
         expected_attention_mask_shape_sliding = (
             batch_size,
             1,
