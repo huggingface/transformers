@@ -30,7 +30,7 @@ import time
 from collections.abc import Callable, Sized
 from functools import partial
 from pathlib import Path
-from typing import Any, NamedTuple, TypeGuard
+from typing import TYPE_CHECKING, Any, NamedTuple, TypeGuard
 
 import numpy as np
 
@@ -57,6 +57,9 @@ from .utils import (
 
 logger = logging.get_logger(__name__)
 
+
+if TYPE_CHECKING:
+    import torch
 
 if is_torch_available():
     import torch
@@ -211,19 +214,24 @@ class EvalPrediction:
     """
     Evaluation output (always contains labels), to be used to compute metrics.
 
+    Note:
+        When `TrainingArguments.batch_eval_metrics` is `False` (the default), the fields below are `np.ndarray`.
+        When it is `True`, the per-batch predictions and labels are passed straight to `compute_metrics` without
+        being converted, so the fields are `torch.Tensor` (still on the accelerator device) instead of `np.ndarray`.
+
     Parameters:
-        predictions (`np.ndarray`): Predictions of the model.
-        label_ids (`np.ndarray`): Targets to be matched.
-        inputs (`np.ndarray`, *optional*): Input data passed to the model.
-        losses (`np.ndarray`, *optional*): Loss values computed during evaluation.
+        predictions (`np.ndarray` or `torch.Tensor`): Predictions of the model.
+        label_ids (`np.ndarray` or `torch.Tensor`): Targets to be matched.
+        inputs (`np.ndarray` or `torch.Tensor`, *optional*): Input data passed to the model.
+        losses (`np.ndarray` or `torch.Tensor`, *optional*): Loss values computed during evaluation.
     """
 
     def __init__(
         self,
-        predictions: np.ndarray | tuple[np.ndarray],
-        label_ids: np.ndarray | tuple[np.ndarray],
-        inputs: np.ndarray | tuple[np.ndarray] | None = None,
-        losses: np.ndarray | tuple[np.ndarray] | None = None,
+        predictions: "np.ndarray | torch.Tensor | tuple[np.ndarray | torch.Tensor]",
+        label_ids: "np.ndarray | torch.Tensor | tuple[np.ndarray | torch.Tensor]",
+        inputs: "np.ndarray | torch.Tensor | tuple[np.ndarray | torch.Tensor] | None" = None,
+        losses: "np.ndarray | torch.Tensor | tuple[np.ndarray | torch.Tensor] | None" = None,
     ):
         self.predictions = predictions
         self.label_ids = label_ids
