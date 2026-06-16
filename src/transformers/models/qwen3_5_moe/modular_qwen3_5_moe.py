@@ -20,7 +20,7 @@ from ... import initialization as init
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, logging, no_inherit_decorator
 from ..qwen3_5.configuration_qwen3_5 import Qwen3_5VisionConfig
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5GatedDeltaNet,
@@ -155,6 +155,7 @@ class Qwen3_5MoeGatedDeltaNet(Qwen3_5GatedDeltaNet):
     pass
 
 
+@no_inherit_decorator
 class Qwen3_5MoeAttention(Qwen3NextAttention):
     pass
 
