@@ -124,6 +124,7 @@ class DynamoExporter(HfExporter):
 # `patch_model_config` lives here too — it strips output flags from the inputs
 # and applies them onto `model.config` for the duration of the trace.
 
+
 # Output flags stripped from inputs and applied onto `model.config` for the trace.
 @contextmanager
 def patch_model_config(model: PreTrainedModel, output_flags: dict[str, Any]):
