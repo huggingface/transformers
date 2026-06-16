@@ -400,6 +400,7 @@ class ChatCompletionHandler(BaseHandler):
             `dict`: Serialized ``ChatCompletion`` ready for JSON response.
         """
         # reasoning_content is added as an extra field (base types set extra="allow")
+        # we use model_validate rather than __init__ to avoid ty raising errors for the extra field
         message = ChatCompletionMessage.model_validate(
             {"content": content, "role": "assistant", "tool_calls": tool_calls, "reasoning_content": reasoning_content}
         )
@@ -440,6 +441,7 @@ class ChatCompletionHandler(BaseHandler):
             `str`: A formatted SSE event string.
         """
         # reasoning_content is added as an extra field (base types set extra="allow")
+        # we use model_validate rather than __init__ to avoid ty raising errors for the extra field
         delta = ChoiceDelta.model_validate(
             {"content": content, "role": role, "tool_calls": tool_calls, "reasoning_content": reasoning_content}
         )
