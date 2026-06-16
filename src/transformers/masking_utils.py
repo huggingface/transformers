@@ -1021,7 +1021,6 @@ def create_bidirectional_mask(
     attention_mask: torch.Tensor | None,
     encoder_hidden_states: torch.Tensor | None = None,
     past_key_values: Cache | None = None,
-    position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
     **kwargs,
@@ -1051,9 +1050,15 @@ def create_bidirectional_mask(
             An optional mask function to combine with the base mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top, for example for image tokens handling.
     """
+    # If we have an hybrid cache structure, here we want to create the mask for the full layers
+    if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
+        layer_idx = past_key_values.is_sliding.index(False)
+    else:
+        layer_idx = 0
+
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
-        config, inputs_embeds, attention_mask, past_key_values, position_ids, 0, encoder_hidden_states
+        config, inputs_embeds, attention_mask, past_key_values, None, layer_idx, encoder_hidden_states
     )
     if early_exit:
         return attention_mask
@@ -1271,9 +1276,15 @@ def create_bidirectional_sliding_window_mask(
             An optional mask function to combine with the base mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top, for example for image tokens handling.
     """
+    # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
+    if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
+        layer_idx = past_key_values.is_sliding.index(True)
+    else:
+        layer_idx = 0
+
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
-        config, inputs_embeds, attention_mask, past_key_values, None, 0, encoder_hidden_states
+        config, inputs_embeds, attention_mask, past_key_values, None, layer_idx, encoder_hidden_states
     )
     if early_exit:
         return attention_mask
@@ -1447,6 +1458,8 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "chunked_attention": create_chunked_causal_mask,
     "compressed_sparse_attention": create_sliding_window_causal_mask,
     "heavily_compressed_attention": create_sliding_window_causal_mask,
+    "minimax_m3_sparse": create_causal_mask,
+    "deepseek_sparse_attention": create_causal_mask,
 }
 
 
@@ -1503,10 +1516,14 @@ def create_masks_for_generate(
         "block_sequence_ids": block_sequence_ids,
     }
 
-    # If the attribute exist, we need several masks
+    # If the attribute exist, we need several masks - unless every layer shares the same type, in which
+    # case we return a single mask.
     if hasattr(effective_config, "layer_types"):
+        layer_patterns = set(effective_config.layer_types)
+        if len(layer_patterns) == 1:
+            return LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[next(iter(layer_patterns))](**mask_kwargs)
         causal_masks = {}
-        for layer_pattern in set(effective_config.layer_types):
+        for layer_pattern in layer_patterns:
             causal_masks[layer_pattern] = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[layer_pattern](**mask_kwargs)
         return causal_masks
     # In this case, all layers are sliding

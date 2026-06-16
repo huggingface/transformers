@@ -145,9 +145,6 @@ class ParakeetRNNTConfig(PreTrainedConfig):
         The config object or dictionary of the encoder.
     blank_token_id (`int`, *optional*, defaults to 8192):
         Blank token id. Different from `pad_token_id` for RNN-T.
-    loss_reduction (`str`, *optional*, defaults to `"mean_volume"`):
-        Reduction applied to the loss. One of `"mean_volume"`, `"mean_batch"`, `"mean"`, `"sum"`, or
-        `"none"`.
 
     Example:
     ```python
@@ -175,7 +172,6 @@ class ParakeetRNNTConfig(PreTrainedConfig):
     encoder_config: dict | PreTrainedConfig | None = None
     pad_token_id: int = 2
     blank_token_id: int = 8192
-    loss_reduction: str = "mean_volume"
     is_encoder_decoder: bool = True
 
     def __post_init__(self, **kwargs):
@@ -209,9 +205,6 @@ class ParakeetTDTConfig(ParakeetRNNTConfig):
         The config object or dictionary of the encoder.
     blank_token_id (`int`, *optional*, defaults to 8192):
         Blank token id. Different from `pad_token_id` for TDT.
-    loss_reduction (`str`, *optional*, defaults to `"mean_volume"`):
-        Reduction applied to the loss. One of `"mean_volume"`, `"mean_batch"`, `"mean"`, `"sum"`, or
-        `"none"`.
 
     Example:
     ```python

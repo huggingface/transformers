@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "5.10.0.dev0"
+__version__ = "5.13.0.dev0"
 
 import importlib
 import sys
@@ -113,6 +113,7 @@ _import_structure = {
         "CompileConfig",
         "ContinuousBatchingConfig",
         "GenerationConfig",
+        "TextDiffusionStreamer",
         "TextIteratorStreamer",
         "TextStreamer",
         "WatermarkingConfig",
@@ -366,7 +367,9 @@ else:
     _import_structure["cache_utils"] = [
         "CacheLayerMixin",
         "DynamicLayer",
+        "DynamicIndexedLayer",
         "StaticLayer",
+        "StaticIndexedLayer",
         "StaticSlidingWindowLayer",
         "QuantoQuantizedLayer",
         "HQQQuantizedLayer",
@@ -486,12 +489,14 @@ if TYPE_CHECKING:
     from .backbone_utils import BackboneConfigMixin, BackboneMixin
     from .cache_utils import Cache as Cache
     from .cache_utils import DynamicCache as DynamicCache
+    from .cache_utils import DynamicIndexedLayer as DynamicIndexedLayer
     from .cache_utils import DynamicLayer as DynamicLayer
     from .cache_utils import EncoderDecoderCache as EncoderDecoderCache
     from .cache_utils import HQQQuantizedLayer as HQQQuantizedLayer
     from .cache_utils import QuantizedCache as QuantizedCache
     from .cache_utils import QuantoQuantizedLayer as QuantoQuantizedLayer
     from .cache_utils import StaticCache as StaticCache
+    from .cache_utils import StaticIndexedLayer as StaticIndexedLayer
     from .cache_utils import StaticLayer as StaticLayer
     from .cache_utils import StaticSlidingWindowLayer as StaticSlidingWindowLayer
     from .configuration_utils import PreTrainedConfig as PreTrainedConfig
@@ -592,6 +597,7 @@ if TYPE_CHECKING:
     from .generation import SynthIDTextWatermarkingConfig as SynthIDTextWatermarkingConfig
     from .generation import SynthIDTextWatermarkLogitsProcessor as SynthIDTextWatermarkLogitsProcessor
     from .generation import TemperatureLogitsWarper as TemperatureLogitsWarper
+    from .generation import TextDiffusionStreamer as TextDiffusionStreamer
     from .generation import TextIteratorStreamer as TextIteratorStreamer
     from .generation import TextStreamer as TextStreamer
     from .generation import TopHLogitsWarper as TopHLogitsWarper

@@ -117,7 +117,7 @@ from datasets import load_dataset, Audio
 model_id = "nvidia/parakeet-rnnt-0.6b"
 revision = "refs/pr/4"
 processor = AutoProcessor.from_pretrained(model_id, revision=revision)
-model = AutoModelForRNNT.from_pretrained(model_id, revision=revision, dtype="auto", device_map="auto")
+model = AutoModelForRNNT.from_pretrained(model_id, revision=revision, device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -141,7 +141,7 @@ from transformers import AutoModelForRNNT, AutoProcessor
 model_id = "nvidia/parakeet-rnnt-0.6b"
 revision = "refs/pr/4"
 processor = AutoProcessor.from_pretrained(model_id, revision=revision)
-model = AutoModelForRNNT.from_pretrained(model_id, revision=revision, dtype="auto", device_map="auto")
+model = AutoModelForRNNT.from_pretrained(model_id, revision=revision, device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -193,7 +193,7 @@ from datasets import load_dataset, Audio
 
 model_id = "nvidia/parakeet-tdt-0.6b-v3"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForTDT.from_pretrained(model_id, dtype="auto", device_map="auto")
+model = AutoModelForTDT.from_pretrained(model_id, device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -214,7 +214,7 @@ from transformers import AutoModelForTDT, AutoProcessor
 
 model_id = "nvidia/parakeet-tdt-0.6b-v3"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForTDT.from_pretrained(model_id, dtype="auto", device_map="auto")
+model = AutoModelForTDT.from_pretrained(model_id, device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -326,7 +326,6 @@ print(processor.decode(outputs))
 ### CTC Training
 
 ```python
-import torch
 from datasets import Audio, load_dataset
 from transformers import AutoModelForCTC, AutoProcessor
 
@@ -334,7 +333,7 @@ model_id = "nvidia/parakeet-ctc-1.1b"
 NUM_SAMPLES = 5
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForCTC.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForCTC.from_pretrained(model_id, device_map="auto")
 model.train()
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -353,6 +352,9 @@ outputs.loss.backward()
 
 ### RNN-T Training
 
+> [!NOTE]
+> Computing the RNN-T loss requires [torchaudio](https://pytorch.org/audio) (`pip install torchaudio`).
+
 ```py
 from datasets import Audio, load_dataset
 import torch
@@ -363,7 +365,7 @@ revision = "refs/pr/4"
 NUM_SAMPLES = 4
 
 processor = AutoProcessor.from_pretrained(model_id, revision=revision)
-model = AutoModelForRNNT.from_pretrained(model_id, revision=revision, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForRNNT.from_pretrained(model_id, revision=revision,  device_map="auto")
 model.train()
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -380,8 +382,6 @@ print("Loss:", outputs.loss.item())
 outputs.loss.backward()
 ```
 
-> [!NOTE]
-> Computing the RNN-T loss requires [torchaudio](https://pytorch.org/audio) (`pip install torchaudio`).
 
 ### TDT Training
 
@@ -394,7 +394,7 @@ model_id = "nvidia/parakeet-tdt-0.6b-v3"
 NUM_SAMPLES = 4
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForTDT.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForTDT.from_pretrained(model_id, device_map="auto")
 model.train()
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

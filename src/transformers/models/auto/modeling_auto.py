@@ -116,6 +116,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("deepseek_ocr2", "DeepseekOcr2Model"),
         ("deepseek_v2", "DeepseekV2Model"),
         ("deepseek_v3", "DeepseekV3Model"),
+        ("deepseek_v32", "DeepseekV32Model"),
         ("deepseek_v4", "DeepseekV4Model"),
         ("deepseek_vl", "DeepseekVLModel"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridModel"),
@@ -126,6 +127,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("detr", "DetrModel"),
         ("dia", "DiaModel"),
         ("diffllama", "DiffLlamaModel"),
+        ("diffusion_gemma", "DiffusionGemmaModel"),
         ("dinat", "DinatModel"),
         ("dinov2", "Dinov2Model"),
         ("dinov2_with_registers", "Dinov2WithRegistersModel"),
@@ -302,6 +304,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("minicpmv4_6", "MiniCPMV4_6Model"),
         ("minimax", "MiniMaxModel"),
         ("minimax_m2", "MiniMaxM2Model"),
+        ("minimax_m3_vl", "MiniMaxM3VLModel"),
+        ("minimax_m3_vl_text", "MiniMaxM3VLTextModel"),
         ("ministral", "MinistralModel"),
         ("ministral3", "Ministral3Model"),
         ("mistral", "MistralModel"),
@@ -333,8 +337,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mvp", "MvpModel"),
         ("nanochat", "NanoChatModel"),
         ("nemotron", "NemotronModel"),
-        ("nemotron_asr", "NemotronAsrForRNNT"),
-        ("nemotron_asr_encoder", "NemotronAsrEncoder"),
         ("nemotron_h", "NemotronHModel"),
         ("nllb-moe", "NllbMoeModel"),
         ("nomic_bert", "NomicBertModel"),
@@ -669,6 +671,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("dbrx", "DbrxForCausalLM"),
         ("deepseek_v2", "DeepseekV2ForCausalLM"),
         ("deepseek_v3", "DeepseekV3ForCausalLM"),
+        ("deepseek_v32", "DeepseekV32ForCausalLM"),
         ("deepseek_v4", "DeepseekV4ForCausalLM"),
         ("diffllama", "DiffLlamaForCausalLM"),
         ("doge", "DogeForCausalLM"),
@@ -740,6 +743,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mellum", "MellumForCausalLM"),
         ("minimax", "MiniMaxForCausalLM"),
         ("minimax_m2", "MiniMaxM2ForCausalLM"),
+        ("minimax_m3_vl_text", "MiniMaxM3VLForCausalLM"),
         ("ministral", "MinistralForCausalLM"),
         ("ministral3", "Ministral3ForCausalLM"),
         ("mistral", "MistralForCausalLM"),
@@ -1021,6 +1025,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("deepseek_ocr2", "DeepseekOcr2ForConditionalGeneration"),
         ("deepseek_vl", "DeepseekVLForConditionalGeneration"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridForConditionalGeneration"),
+        ("diffusion_gemma", "DiffusionGemmaForBlockDiffusion"),
         ("emu3", "Emu3ForConditionalGeneration"),
         ("ernie4_5_vl_moe", "Ernie4_5_VLMoeForConditionalGeneration"),
         ("evolla", "EvollaForProteinText2Text"),
@@ -1057,6 +1062,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("llava_next_video", "LlavaNextVideoForConditionalGeneration"),
         ("llava_onevision", "LlavaOnevisionForConditionalGeneration"),
         ("minicpmv4_6", "MiniCPMV4_6ForConditionalGeneration"),
+        ("minimax_m3_vl", "MiniMaxM3SparseForConditionalGeneration"),
         ("mistral3", "Mistral3ForConditionalGeneration"),
         ("mistral4", "Mistral4ForCausalLM"),
         ("mllama", "MllamaForConditionalGeneration"),
@@ -1711,7 +1717,6 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_RNNT_MAPPING_NAMES = OrderedDict(
     [
         # Model for RNN Transducer (RNN-T) mapping.
-        ("nemotron_asr", "NemotronAsrForRNNT"),
         ("parakeet_rnnt", "ParakeetForRNNT"),
     ]
 )

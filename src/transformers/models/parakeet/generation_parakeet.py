@@ -82,6 +82,10 @@ class ParakeetRNNTDecoderCache:
             self.cell_state = torch.where(mask_h, cell_state, self.cell_state)
 
 
+# BC: see #46331
+class ParakeetTDTDecoderCache(ParakeetRNNTDecoderCache): ...
+
+
 @dataclass
 class ParakeetRNNTGenerateOutput(ModelOutput):
     """
@@ -236,6 +240,7 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
         return model_inputs
 
     def generate(self, inputs=None, generation_config=None, **kwargs):
+        # TODO @eustlb: this is temporary — we're going to modularize generate to allow doing this cleanly.
         self._encoder_finished = None
         self._symbols_at_frame = None
         self._step_durations = []
