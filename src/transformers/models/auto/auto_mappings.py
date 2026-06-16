@@ -922,7 +922,6 @@ VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("video_llava", "VideoLlavaVideoProcessor"),
         ("videomae", "VideoMAEVideoProcessor"),
         ("videomt", "VideomtVideoProcessor"),
-        ("videoprism", "LlavaOnevisionVideoProcessor"),
         ("vivit", "VivitVideoProcessor"),
         ("vjepa2", "VJEPA2VideoProcessor"),
     ]
