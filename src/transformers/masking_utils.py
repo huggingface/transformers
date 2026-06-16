@@ -721,6 +721,16 @@ def flex_attention_mask(
         padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
         mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
 
+    # flex's mask_mod is vmapped over scalar `q_idx`/`kv_idx`, so the offsets must be Python ints.
+    # A cache may hand them back as 0-d tensors to avoid graph breaks on the eager/sdpa path (see
+    # `_preprocess_mask_arguments`), where they are only added to a 1-D `arange` and stay harmless.
+    # Here, adding a tensor to the scalar indices injects an extra dimension, making the resulting
+    # mask >4D and raising a `ValueError` inside `create_block_mask`.
+    if isinstance(q_offset, torch.Tensor):
+        q_offset = q_offset.item()
+    if isinstance(kv_offset, torch.Tensor):
+        kv_offset = kv_offset.item()
+
     # Add the offsets on top (because flex interface only allows length, not start and end indices)
     mask_function = add_offsets_to_mask_function(mask_function, q_offset, kv_offset)
 
