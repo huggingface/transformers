@@ -18,7 +18,6 @@ import math
 import textwrap
 
 import numpy as np
-from huggingface_hub import hf_hub_download
 from PIL import Image, ImageDraw, ImageFont
 
 from ...image_processing_backends import PilBackend
@@ -27,6 +26,7 @@ from ...image_transforms import to_channel_dimension_format, to_pil_image
 from ...image_utils import ChannelDimension, ImageInput, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
+from ...utils.hub import hf_api
 from ...utils.import_utils import requires
 
 
@@ -109,7 +109,7 @@ def render_text(
     elif font_path is not None:
         font = font_path
     else:
-        font = hf_hub_download(DEFAULT_FONT_PATH, "Arial.TTF")
+        font = hf_api().hf_hub_download(DEFAULT_FONT_PATH, "Arial.TTF")
     font = ImageFont.truetype(font, encoding="UTF-8", size=text_size)
 
     # Use a temporary canvas to determine the width and height in pixels when

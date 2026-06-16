@@ -27,7 +27,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..flex_olmo.modeling_flex_olmo import FlexOlmoAttention
 from ..glm4_moe.modeling_glm4_moe import (
@@ -174,6 +174,7 @@ class MiniMaxM2RotaryEmbedding(Glm4MoeRotaryEmbedding):
     pass
 
 
+@no_inherit_decorator
 class MiniMaxM2Attention(FlexOlmoAttention):
     def __init__(self, config: MiniMaxM2Config, layer_idx: int):
         super().__init__(config, layer_idx)
