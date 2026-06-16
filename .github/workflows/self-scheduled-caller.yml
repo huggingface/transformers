@@ -55,8 +55,8 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_models_gpu
-      # slack_report_channel: "#transformers-ci-daily-models"
-      slack_report_channel: "#transformers-ci-dummy"
+      slack_report_channel: "#transformers-ci-daily-models"
+      # slack_report_channel: "#transformers-ci-dummy"
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
       runner_type: "a10"
