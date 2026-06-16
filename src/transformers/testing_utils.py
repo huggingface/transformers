@@ -102,6 +102,7 @@ from .utils import (
     is_fsdp_available,
     is_g2p_en_available,
     is_galore_torch_available,
+    is_gefen_available,
     is_gguf_available,
     is_gptqmodel_available,
     is_grokadamw_available,
@@ -496,6 +497,13 @@ def require_grokadamw(test_case):
     Decorator marking a test that requires GrokAdamW. These tests are skipped when GrokAdamW isn't installed.
     """
     return unittest.skipUnless(is_grokadamw_available(), "test requires GrokAdamW")(test_case)
+
+
+def require_gefen(test_case):
+    """
+    Decorator marking a test that requires Gefen. These tests are skipped when Gefen isn't installed.
+    """
+    return unittest.skipUnless(is_gefen_available(), "test requires Gefen")(test_case)
 
 
 def require_schedulefree(test_case):

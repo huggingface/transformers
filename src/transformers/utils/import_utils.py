@@ -755,6 +755,11 @@ def is_galore_torch_available() -> bool:
 
 
 @lru_cache
+def is_gefen_available() -> bool:
+    return _is_package_available("gefen")[0]
+
+
+@lru_cache
 def is_apollo_torch_available() -> bool:
     return _is_package_available("apollo_torch")[0]
 

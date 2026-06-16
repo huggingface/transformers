@@ -35,6 +35,7 @@ from .utils import (
     is_apollo_torch_available,
     is_bitsandbytes_available,
     is_galore_torch_available,
+    is_gefen_available,
     is_grokadamw_available,
     is_lomo_available,
     is_schedulefree_available,
@@ -542,6 +543,26 @@ def _get_stable_adamw(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     return StableAdamW, ctx.optimizer_kwargs
 
 
+def _get_gefen(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
+    """Get Gefen optimizer."""
+    if not is_gefen_available():
+        raise ImportError(
+            "You need to install `gefen` in order to use the Gefen optimizer. Install it with `pip install gefen`."
+        )
+
+    from gefen import Gefen
+
+    ctx.adam_kwargs["weight_decay"] = ctx.args.weight_decay
+    gefen_kwargs = {
+        "fused": strtobool(ctx.optim_args.get("fused", "True")),
+        "verbose": strtobool(ctx.optim_args.get("verbose", "False")),
+    }
+
+    ctx.optimizer_kwargs.update(ctx.adam_kwargs)
+    ctx.optimizer_kwargs.update(gefen_kwargs)
+    return Gefen, ctx.optimizer_kwargs
+
+
 # =============================================================================
 # Dispatch table
 # =============================================================================
@@ -605,6 +626,7 @@ _OPTIMIZER_HANDLERS: dict[str, OptimizerHandler] = {
     OptimizerNames.RMSPROP: _get_rmsprop,
     OptimizerNames.GROKADAMW: _get_grokadamw,
     OptimizerNames.STABLE_ADAMW: _get_stable_adamw,
+    OptimizerNames.GEFEN: _get_gefen,
     OptimizerNames.LOMO: _get_lomo_optimizer,
     OptimizerNames.ADALOMO: _get_lomo_optimizer,
     **dict.fromkeys(_BITSANDBYTES_OPTIMIZERS, _get_bitsandbytes_optimizer),
