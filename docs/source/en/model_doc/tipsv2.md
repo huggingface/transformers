@@ -15,6 +15,8 @@ rendered properly in your Markdown viewer.
 -->
 *This model was published in HF papers on 2026-04-13 and contributed to Hugging Face Transformers on 2026-06-15.*
 
+# TIPSv2
+
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
@@ -22,13 +24,11 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# TIPSv2
-
 ## Overview
 
-[TIPSv2](https://huggingface.co/papers/2604.12012) (Text-Image Pre-training with Spatial awareness) is a family of
-contrastive vision-language encoders proposed in *TIPSv2: Advancing Vision-Language Pretraining with Enhanced
-Patch-Text Alignment* by Bingyi Cao et al.
+TIPSv2 (Text-Image Pre-training with Spatial awareness) is a family of
+contrastive vision-language encoders proposed in [TIPSv2: Advancing Vision-Language Pretraining with Enhanced
+Patch-Text Alignment]((https://huggingface.co/papers/2604.12012)) by Bingyi Cao, Koert Chen, Kevis-Kokitsi Maninis, Kaifeng Chen, Arjun Karpur, Ye Xia, Sahil Dua, Tanmaya Dabral, Guangxing Han, Bohyung Han, Joshua Ainslie, Alex Bewley, Mithun Jacob, René Wagner, Washington Ramos, Krzysztof Choromanski, Mojtaba Seyedhosseini, Howard Zhou, André Araujo.
 
 The abstract from the paper is the following:
 
@@ -40,9 +40,7 @@ The original code can be found [here](https://github.com/google-deepmind/tips).
 You can find all the original TIPSv2 checkpoints under the [TIPSv2](https://huggingface.co/collections/google/tipsv2) collection.
 
 > [!TIP]
-> Click on the TIPSv2 models in the right sidebar for more examples of how to apply TIPSv2 to image and text tasks.
-
-The example below demonstrates zero-shot image classification with [`Pipeline`] or the [`AutoModel`] class.
+> Check out [TIPSv2 DPT](./tipsv2_dpt) for depth estimation, normal estimation, and semantic segmentation on top of a TIPSv2 backbone.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -52,31 +50,30 @@ from transformers import pipeline
 
 
 image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-candidate_labels = ["a cat", "a dog", "a car"]
+candidate_labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
 
-classifier = pipeline(task="zero-shot-image-classification", model="google/tipsv2-b14", device=0)
-classifier(image, candidate_labels=candidate_labels)
+classifier = pipeline(task="zero-shot-image-classification", model="google/tipsv2-b14", device_map="auto")
+out = classifier(image, candidate_labels=candidate_labels)
+print(out)
+# [{'score': 0.997, 'label': 'a photo of a cat'}, {'score': 0.002, 'label': 'a photo of a dog'}, {'score': 0.001, 'label': 'a photo of a car'}]
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
 ```python
-import requests
 import torch
-from PIL import Image
 
 from transformers import AutoModel, AutoProcessor
+from transformers.utils import load_image
 
 
 model_id = "google/tipsv2-b14"
-model = AutoModel.from_pretrained(model_id, device_map="auto", attn_implementation="sdpa")
+model = AutoModel.from_pretrained(model_id, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id)
 
-url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-image = Image.open(requests.get(url, stream=True).raw)
-candidate_labels = ["a cat", "a dog", "a car"]
-texts = [f"This is a photo of {label}." for label in candidate_labels]
+image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+candidate_labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
 
 inputs = processor(text=texts, images=image, return_tensors="pt").to(model.device)
 
@@ -86,7 +83,102 @@ with torch.no_grad():
 probs = outputs.logits_per_image.softmax(dim=1)
 most_likely_idx = probs.argmax(dim=1).item()
 most_likely_label = candidate_labels[most_likely_idx]
-print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_likely_idx].item():.3f}")
+print(f"Most likely label: '{most_likely_label}' with probability: {probs[0][most_likely_idx].item():.3f}")
+# Most likely label: 'a photo of a cat' with probability: 0.997
+```
+
+</hfoption>
+<hfoption id="get_image_features and get_text_features">
+
+Use [`~Tipsv2Model.get_image_features`] and [`~Tipsv2Model.get_text_features`] to encode images and texts separately, which is useful for retrieval workflows where embeddings are computed independently (e.g., pre-indexing a large image database). The returned embeddings are *not* normalized, so apply L2 normalization before computing similarity.
+
+```python
+import torch
+import torch.nn.functional as F
+
+from transformers import AutoModel, AutoProcessor
+from transformers.utils import load_image
+
+
+model_id = "google/tipsv2-b14"
+model = AutoModel.from_pretrained(model_id, device_map="auto")
+processor = AutoProcessor.from_pretrained(model_id)
+
+image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+candidate_labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
+
+image_inputs = processor(images=image, return_tensors="pt").to(model.device)
+text_inputs = processor(text=candidate_labels, return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+    image_outputs = model.get_image_features(**image_inputs)
+    text_outputs = model.get_text_features(**text_inputs)
+
+image_embeds = F.normalize(image_outputs.pooler_output, dim=-1)
+text_embeds = F.normalize(text_outputs.pooler_output, dim=-1)
+
+probs = (image_embeds @ text_embeds.T / model.temperature).softmax(dim=-1)
+most_likely_idx = probs.argmax(dim=-1).item()
+most_likely_label = candidate_labels[most_likely_idx]
+print(f"Most likely label: '{most_likely_label}' with probability: {probs[0][most_likely_idx].item():.3f}")
+# Most likely label: 'a photo of a cat' with probability: 0.997
+```
+
+<hfoption id="AutoBackbone for vision feature maps">
+
+Use [`AutoBackbone`] to load the vision backbone directly and get spatial feature maps, without the text model. 
+
+```python
+import torch
+from transformers import AutoBackbone, AutoImageProcessor
+from transformers.utils import load_image
+
+
+model_id = "google/tipsv2-b14"
+backbone = AutoBackbone.from_pretrained(model_id, out_indices=[-1], device_map="auto")
+image_processor = AutoImageProcessor.from_pretrained(model_id)
+
+image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+inputs = image_processor(images=image, return_tensors="pt").to(backbone.device)
+
+with torch.no_grad():
+    outputs = backbone(**inputs)
+
+# feature_maps is a tuple of tensors, one per requested stage
+patch_features = outputs.feature_maps[-1]  # (batch, hidden_size, height, width)
+# shape: (1, 768, 32, 32) for tipsv2-b14 with a 448x448 input
+```
+
+</hfoption>
+
+</hfoption>
+<hfoption id="Tipsv2VisionModel">
+
+Use [`Tipsv2VisionModel`] if you only need access to the vision features. In particular, this allows you to access the two class tokens from Tipsv2 as shown below. Note that Tipsv2 repurposed the register token from [`Dinov2WithRegistersModel`] as a secondary class token. The two tokens differ in how they were trained:
+
+- Class token 1: Supervised by web alt-text captions
+- Class token 2: Supervised by PaliGemma synthetic captions
+
+```python
+import torch
+from transformers import AutoConfig, Tipsv2VisionModel, AutoImageProcessor
+from transformers.utils import load_image
+
+
+model_id = "google/tipsv2-b14"
+config = AutoConfig.from_pretrained(model_id)
+model = Tipsv2VisionModel.from_pretrained(model_id, config=config.vision_config, device_map="auto")
+image_processor = AutoImageProcessor.from_pretrained(model_id)
+
+image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+    outputs = model(**inputs)
+
+sequence = outputs.last_hidden_state  # (batch, 1 + num_register_tokens + num_patches, hidden_size)
+cls_token_1 = sequence[:, 0]
+cls_token_2 = sequence[:, 1 : 1 + model.config.num_register_tokens]
 ```
 
 </hfoption>
@@ -94,14 +186,11 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
 
 ## Notes
 
-- [`Tipsv2Processor`] applies the checkpoint-compatible preprocessing defaults: lowercase text, no BOS or EOS tokens,
-  text padding/truncation to length 64, image resizing to 448x448, pixel rescaling to `[0, 1]`, and no mean/std
-  normalization.
-- [`Tipsv2Model`] returns normalized `image_embeds` and `text_embeds`. `logits_per_image` and `logits_per_text` are
-  convenience outputs computed as cosine similarity divided by the checkpoint temperature.
-- Use [`~Tipsv2Model.get_image_features`] and [`~Tipsv2Model.get_text_features`] to retrieve image and text embeddings
-  for retrieval or similarity scoring.
-- Use [`Tipsv2VisionModel`] when you need raw vision tower outputs, including class, patch, and register tokens.
+- [`Tipsv2Model`] returns normalized `image_embeds` and `text_embeds`. `logits_per_image` and `logits_per_text` are convenience outputs computed as cosine similarity divided by the temperature.
+- Use [`~Tipsv2Model.get_image_features`] and [`~Tipsv2Model.get_text_features`] to retrieve image and text embeddings individually.
+- Use [`Tipsv2VisionBackbone`] if you need access to feature maps from all layers.
+- Use [`Tipsv2VisionModel`] if you need access to the two vision class tokens.
+
 
 ## Tipsv2Config
 
