@@ -663,20 +663,26 @@ def _process_flash_attention_kwargs(
     # There is a limitation of the flash attention API, as the function `flash_attn_varlen_func`
     # may require `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
     #
+    # We only need to keep them as tensors (avoiding a `.item()` device sync here) when we are
+    # actually tracing/compiling, since dynamo can otherwise graph-break on the sync. In normal
+    # eager-mode decoding (the common case, e.g. long-context generation) we must eagerly convert
+    # to `int` here - leaving them as tensors forces flash-attn itself to sync on every single
+    # decode step, which is significantly more costly once the KV cache is large.
+    #
     # You can either set
     #   - Env: `TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1`
     #   - Before compiling: `torch._dynamo.config.capture_scalar_outputs = True`
     # to allow torch compile to handle scalar outputs in those cases.
     same_max_seqlen = max_seqlen_q is max_seqlen_k  # to avoid 2x device syncs
     if supports_mapping["max_seqlen_q"] and max_seqlen_q is not None:
-        if not isinstance(max_seqlen_q, int) and is_tracing(max_seqlen_q):
+        if not isinstance(max_seqlen_q, int) and not is_tracing(max_seqlen_q):
             max_seqlen_q = max_seqlen_q.item()
         flash_kwargs["max_seqlen_q"] = max_seqlen_q
 
     if supports_mapping["max_seqlen_k"] and max_seqlen_k is not None:
         if same_max_seqlen and flash_kwargs["max_seqlen_q"] is not None:
             max_seqlen_k = flash_kwargs["max_seqlen_q"]
-        elif not isinstance(max_seqlen_k, int) and is_tracing(max_seqlen_k):
+        elif not isinstance(max_seqlen_k, int) and not is_tracing(max_seqlen_k):
             max_seqlen_k = max_seqlen_k.item()
         flash_kwargs["max_seqlen_k"] = max_seqlen_k
 
