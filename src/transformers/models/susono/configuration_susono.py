@@ -28,8 +28,6 @@ linear attention, MoE feed-forward) with two additional axes of capability:
      and beta (H_post) are input-dependent via lightweight linear projections.
 """
 
-from typing import List, Optional
-
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
@@ -67,7 +65,7 @@ class SusonoConfig(PreTrainedConfig):
             Maximum sequence length.
         initializer_range (`float`, *optional*, defaults to 0.02):
             Std of truncated normal weight initializer.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-6):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             Epsilon for RMSNorm layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether to return past key/values.
@@ -114,12 +112,18 @@ class SusonoConfig(PreTrainedConfig):
             expert balance. Default 0.0 preserves legacy behavior (sigmoid(0)=0.5).
         mlp_only_layers (`list[int]`, *optional*, defaults to `[]`):
             Layer indices that use dense MLP instead of MoE.
-        full_attention_interval (`int`, *optional*, defaults to 4):
-            When `layer_types` is `None`, insert a full-attention layer every
-            this many layers (i.e. at positions where `(i+1) % full_attention_interval == 0`).
         layer_types (`list[str]`, *optional*):
             Type of each layer: `"full_attention"` or `"linear_attention"`.
             If `None`, constructed using `full_attention_interval`.
+        full_attention_interval (`int`, *optional*, defaults to 4):
+            When `layer_types` is `None`, insert a full-attention layer every
+            this many layers (i.e. at positions where `(i+1) % full_attention_interval == 0`).
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 151643):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 151645):
+            End of stream token id.
         use_engram (`bool`, *optional*, defaults to `True`):
             Enable Engram conditional memory modules.
         engram_max_ngram_size (`int`, *optional*, defaults to 3):
@@ -147,6 +151,10 @@ class SusonoConfig(PreTrainedConfig):
             **Deprecated / unused.** Kept for checkpoint backward compatibility.
             MHC-Lite uses a convex combination of permutation matrices instead
             of iterative Sinkhorn-Knopp projection, so this value is ignored.
+        qk_layernorm (`bool`, *optional*, defaults to `True`):
+            Whether to apply RMSNorm to the query and key projections in full attention.
+        attention_output_gate (`bool`, *optional*, defaults to `True`):
+            Whether to apply a Qwen3-Next-style sigmoid output gate to attention outputs.
 
     Example:
     ```python
@@ -184,54 +192,54 @@ class SusonoConfig(PreTrainedConfig):
     def __init__(
         self,
         # Base architecture parameters
-        vocab_size: Optional[int] = 151680,
-        hidden_size: Optional[int] = 2048,
-        intermediate_size: Optional[int] = 5120,
-        num_hidden_layers: Optional[int] = 24,
-        num_attention_heads: Optional[int] = 8,
-        num_key_value_heads: Optional[int] = 2,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 262144,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 1e-6,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        head_dim: Optional[int] = 256,
+        vocab_size: int | None = 151680,
+        hidden_size: int | None = 2048,
+        intermediate_size: int | None = 5120,
+        num_hidden_layers: int | None = 24,
+        num_attention_heads: int | None = 8,
+        num_key_value_heads: int | None = 2,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 262144,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-6,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        head_dim: int | None = 256,
         # Linear attention (GatedDeltaNet)
-        linear_conv_kernel_dim: Optional[int] = 4,
-        linear_key_head_dim: Optional[int] = 128,
-        linear_value_head_dim: Optional[int] = 128,
-        linear_num_key_heads: Optional[int] = 16,
-        linear_num_value_heads: Optional[int] = 16,
+        linear_conv_kernel_dim: int | None = 4,
+        linear_key_head_dim: int | None = 128,
+        linear_value_head_dim: int | None = 128,
+        linear_num_key_heads: int | None = 16,
+        linear_num_value_heads: int | None = 16,
         # MoE parameters
-        decoder_sparse_step: Optional[int] = 1,
-        moe_intermediate_size: Optional[int] = 512,
-        shared_expert_intermediate_size: Optional[int] = 512,
-        num_experts_per_tok: Optional[int] = 4,
-        num_experts: Optional[int] = 96,
-        norm_topk_prob: Optional[bool] = True,
-        output_router_logits: Optional[bool] = False,
-        router_aux_loss_coef: Optional[float] = 0.002,
-        moe_shared_expert_gate_bias_init: Optional[float] = 2.0,
-        mlp_only_layers: Optional[List[int]] = None,
-        layer_types: Optional[List[str]] = None,
+        decoder_sparse_step: int | None = 1,
+        moe_intermediate_size: int | None = 512,
+        shared_expert_intermediate_size: int | None = 512,
+        num_experts_per_tok: int | None = 4,
+        num_experts: int | None = 96,
+        norm_topk_prob: bool | None = True,
+        output_router_logits: bool | None = False,
+        router_aux_loss_coef: float | None = 0.002,
+        moe_shared_expert_gate_bias_init: float | None = 2.0,
+        mlp_only_layers: list[int] | None = None,
+        layer_types: list[str] | None = None,
         full_attention_interval: int = 4,
         # Special tokens
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = 151643,
-        eos_token_id: Optional[int] = 151645,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 151643,
+        eos_token_id: int | None = 151645,
         # Engram
         use_engram: bool = True,
         engram_max_ngram_size: int = 3,
         engram_n_embed_per_ngram: int = 99991,
         engram_embed_dim: int = 672,
         engram_n_head_per_ngram: int = 8,
-        engram_layer_ids: Optional[List[int]] = None,
+        engram_layer_ids: list[int] | None = None,
         engram_seed: int = 0,
-        engram_base_vocab_size: Optional[int] = None,
+        engram_base_vocab_size: int | None = None,
         # mHC
         use_mhc: bool = True,
         mhc_num_streams: int = 4,
@@ -242,7 +250,7 @@ class SusonoConfig(PreTrainedConfig):
         attention_output_gate: bool = True,
         **kwargs,
     ):
-        # Special tokens 
+        # Special tokens
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
@@ -263,11 +271,15 @@ class SusonoConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim
-        self.rope_parameters = rope_parameters if rope_parameters is not None else {
-            "rope_type": "default",
-            "rope_theta": 10000000,
-            "partial_rotary_factor": 0.25,
-        }
+        self.rope_parameters = (
+            rope_parameters
+            if rope_parameters is not None
+            else {
+                "rope_type": "default",
+                "rope_theta": 10000000,
+                "partial_rotary_factor": 0.25,
+            }
+        )
         kwargs.setdefault("partial_rotary_factor", 0.25)
 
         # Layer types
@@ -308,15 +320,12 @@ class SusonoConfig(PreTrainedConfig):
         # Default: first and last full-attention layers (derived from layer_types)
         if engram_layer_ids is None:
             full_attn = [i for i, t in enumerate(self.layer_types) if t == "full_attention"]
-            self.engram_layer_ids = ([full_attn[0], full_attn[-1]] if len(full_attn) >= 2
-                                     else list(full_attn))
+            self.engram_layer_ids = [full_attn[0], full_attn[-1]] if len(full_attn) >= 2 else list(full_attn)
         else:
             self.engram_layer_ids = list(engram_layer_ids)
         self.engram_seed = engram_seed
         # Default to model vocab size if not specified
-        self.engram_base_vocab_size = (
-            engram_base_vocab_size if engram_base_vocab_size is not None else vocab_size
-        )
+        self.engram_base_vocab_size = engram_base_vocab_size if engram_base_vocab_size is not None else vocab_size
 
         # mHC-Lite
         self.use_mhc = use_mhc
