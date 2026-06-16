@@ -108,7 +108,9 @@ class KernelConfig(PushToHubMixin):
         self.registered_layer_names = {}
         self.use_local_kernel = use_local_kernel
 
-    def update_kernel(self, repo_id, registered_name, layer_name, device, mode, revision=None, version=1):
+    def update_kernel(
+        self, repo_id, registered_name, layer_name, device, mode, revision=None, version=1, trust_remote_code=False
+    ):
         from kernels import LayerRepository
 
         self.kernel_mapping[registered_name] = {
@@ -118,6 +120,7 @@ class KernelConfig(PushToHubMixin):
                     layer_name=layer_name,
                     revision=revision,
                     version=version,
+                    trust_remote_code=trust_remote_code,
                 )
             }
         }
