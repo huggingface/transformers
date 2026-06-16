@@ -1041,7 +1041,7 @@ class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
                 self.assertEqual(info["args_n_gpu"], 1)
                 self.assertEqual(info["accelerator_is_main_process"], rank == 0)
                 self.assertEqual(info["accelerator_is_local_main_process"], rank == 0)
-                self.assertIn(f"cuda:{rank}", info["accelerator_device"])
+                self.assertIn(f"{torch_device}:{rank}", info["accelerator_device"])
 
                 # Both should have DeepSpeed enabled with the correct stage
                 self.assertEqual(info["accelerator_distributed_type"], "DistributedType.DEEPSPEED")
