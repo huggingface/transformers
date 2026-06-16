@@ -152,6 +152,31 @@ class CacheTest(unittest.TestCase):
         cache = StaticCache(config=config, max_cache_len=8)
         self.assertEqual(cache.max_cache_len, 8)
 
+    def test_quantized_cache_respects_hybrid_layer_types(self):
+        """
+        Regression test: hybrid (SSM + attention) models must build a QuantizedCache from
+        config.layer_types, like DynamicCache, not a flat list of quantized key/value layers. Otherwise
+        the linear-attention / Mamba layers are treated as key/value caches and generation crashes.
+        """
+        if not is_optimum_quanto_available():
+            self.skipTest("Quanto is not available")
+
+        from transformers.cache_utils import (
+            LinearAttentionAndFullAttentionLayer,
+            LinearAttentionLayer,
+            QuantoQuantizedLayer,
+        )
+
+        config = LlamaConfig(num_hidden_layers=4)
+        config.layer_types = ["full_attention", "mamba", "hybrid", "full_attention"]
+        cache = QuantizedCache(backend="quanto", config=config, nbits=4, q_group_size=16, residual_length=4)
+
+        # Attention layers are quantized; the linear-attention / hybrid layers keep their own class.
+        self.assertIsInstance(cache.layers[0], QuantoQuantizedLayer)
+        self.assertIsInstance(cache.layers[1], LinearAttentionLayer)
+        self.assertIsInstance(cache.layers[2], LinearAttentionAndFullAttentionLayer)
+        self.assertIsInstance(cache.layers[3], QuantoQuantizedLayer)
+
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
     """Function to skip tests on failed cache prerequisites, given a cache implementation"""
