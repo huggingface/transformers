@@ -59,6 +59,13 @@ EXPORT_SKIP_MODEL_CLASSES = {
     # PPDocLayoutV3 passes a ModuleList as a forward argument (order_head), which is not supported
     # by get_auto_dynamic_shapes and torch.export. TODO: refactor to avoid passing modules as inputs.
     "PPDocLayoutV3ForObjectDetection",
+    # OpenAIPrivacyFilter overrides `get_correct_experts_implementation` to default to `eager` because
+    # the model is sensitive to accumulation order. The eager experts forward has a Python loop over
+    # `expert_hit.nonzero()` which torch.export can't trace (data-dependent shape). To export, the
+    # user has to opt in to `set_experts_implementation("batched_mm")` and accept the accuracy
+    # trade-off; we don't force that switch from the exporter side.
+    "OpenAIPrivacyFilterModel",
+    "OpenAIPrivacyFilterForTokenClassification",
 }
 
 

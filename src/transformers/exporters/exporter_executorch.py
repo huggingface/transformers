@@ -38,7 +38,8 @@ from __future__ import annotations
 
 import math
 import operator
-from typing import TYPE_CHECKING, Any
+from collections.abc import MutableMapping
+from typing import Any
 
 from ..utils import logging
 from ..utils.import_utils import is_executorch_available, is_torch_available
@@ -95,7 +96,7 @@ class ExecutorchExporter(DynamoExporter):
     def export(
         self,
         model: PreTrainedModel,
-        sample_inputs: dict[str, Any],
+        sample_inputs: MutableMapping[str, Any],
         config: ExecutorchConfig | dict[str, Any],
     ) -> ExecutorchProgramManager:
         """Export a model to ExecuTorch, applying backend preparation and torch op patches."""

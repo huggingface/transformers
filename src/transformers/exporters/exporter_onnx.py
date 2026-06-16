@@ -41,9 +41,11 @@ from __future__ import annotations
 import copy
 import functools
 import operator
-from collections.abc import Sequence
+from collections.abc import MutableMapping, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
+
+import numpy as np
 
 from ..utils import logging
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
@@ -102,7 +104,7 @@ class OnnxExporter(DynamoExporter):
     def export(
         self,
         model: PreTrainedModel,
-        sample_inputs: dict[str, Any],
+        sample_inputs: MutableMapping[str, Any],
         config: OnnxConfig | dict[str, Any],
     ) -> ONNXProgram:
         if isinstance(config, dict):
@@ -120,7 +122,7 @@ class OnnxExporter(DynamoExporter):
                 f=config.output_path,
                 input_names=inputs_names,
                 output_names=outputs_names,
-                kwargs=copy.deepcopy(sample_inputs),
+                kwargs=copy.deepcopy(dict(sample_inputs)),
                 custom_translation_table=_ONNX_TRANSLATION_TABLE,
                 opset_version=config.opset_version,
                 external_data=config.external_data,
@@ -285,6 +287,26 @@ def _patch_histc(original):
 
     def patch(input, bins=100, min=0, max=0, *, out=None):
         return original(input.float(), bins=bins, min=min, max=max, out=out)
+
+    return patch
+
+
+@register_patch("onnx", "onnxscript.onnx_opset._impl.opset13.Opset13.Constant")
+def _patch_opset13_constant(original):
+    """Substitute `op.Constant(value_ints=[])` with an explicit empty INT64 tensor.
+
+    Upstream onnxscript's `aten_index_put` does `op.Constant(value_ints=none_indices)`
+    where `none_indices` can be empty (when every input dim has an advanced index).
+    `onnx_ir` then logs an ambiguous-type warning because an empty Python list has no
+    derivable element type. Swap the empty-`value_ints` call for `value=ir.tensor([], INT64)`
+    — semantically identical, no ambiguity. Drop once onnxscript fixes the call site.
+    """
+
+    def patch(self, *args, **kwargs):
+        if kwargs.get("value_ints") == []:
+            kwargs.pop("value_ints")
+            kwargs["value"] = onnx_ir.tensor(np.array([], dtype=np.int64))
+        return original(self, *args, **kwargs)
 
     return patch
 
@@ -746,9 +768,7 @@ def _aten_grouped_mm(mat_a: TReal, mat_b: TReal, offs: INT64, bias=None, out_dty
     """
     G = mat_b.shape[0]
     if not isinstance(G, int):
-        raise ValueError(
-            "_aten_grouped_mm: number of experts (mat_b.shape[0]) must be static at translation time"
-        )
+        raise ValueError("_aten_grouped_mm: number of experts (mat_b.shape[0]) must be static at translation time")
 
     offs_i64 = op.Cast(offs, to=7)
     axes_0 = op.Constant(value_ints=[0])

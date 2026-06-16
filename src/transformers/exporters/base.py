@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import importlib.util
 from abc import ABC, abstractmethod
+from collections.abc import MutableMapping
 from typing import TYPE_CHECKING
 
 from ..utils.import_utils import is_torch_available
@@ -66,7 +67,7 @@ class HfExporter(ABC):
     def export(
         self,
         model: PreTrainedModel,
-        sample_inputs: dict[str, torch.Tensor | Cache],
+        sample_inputs: MutableMapping[str, torch.Tensor | Cache],
         config: ExportConfigMixin,
     ):
         """
@@ -97,7 +98,7 @@ class HfExporter(ABC):
     def export_for_generation(
         self,
         model: PreTrainedModel,
-        sample_inputs: dict[str, torch.Tensor | Cache],
+        sample_inputs: MutableMapping[str, torch.Tensor | Cache],
         config: ExportConfigMixin | dict[str, ExportConfigMixin],
     ) -> dict[str, object]:
         """

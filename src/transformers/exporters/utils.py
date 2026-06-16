@@ -41,6 +41,7 @@ import copy
 import enum
 import functools
 import inspect
+from collections.abc import MutableMapping
 from typing import Any
 
 from ..utils import logging
@@ -227,7 +228,9 @@ if is_torch_available():
 def _map_leaf_tensors(obj: Any, fn: callable) -> Any:
     """Apply `fn` to every tensor in a nested structure, preserving container types.
 
-    Traverses dicts, lists, tuples, sets, and objects with `__dict__` (e.g. cache objects).
+    Mutates dicts and `__dict__`-bearing objects in place (preserving identity — callers
+    rely on this so downstream pops/mutations propagate back to the original mapping);
+    rebuilds lists/tuples/sets/frozensets (immutable or order-sensitive containers).
     Skips non-traversable leaf types (enum, SymInt, etc.).
     """
     if isinstance(obj, _LEAF_SKIP_TYPES):
@@ -237,7 +240,9 @@ def _map_leaf_tensors(obj: Any, fn: callable) -> Any:
     if isinstance(obj, (list, tuple, set)):
         return type(obj)(_map_leaf_tensors(item, fn) for item in obj)
     if isinstance(obj, dict):
-        return type(obj)({k: _map_leaf_tensors(v, fn) for k, v in obj.items()})
+        for k in list(obj):
+            obj[k] = _map_leaf_tensors(obj[k], fn)
+        return obj
     if hasattr(obj, "__dict__"):
         for attr, attr_val in vars(obj).items():
             setattr(obj, attr, _map_leaf_tensors(attr_val, fn))
@@ -312,15 +317,20 @@ _OUTPUT_FLAGS = ("use_cache", "output_attentions", "output_hidden_states", "retu
 
 
 def prepare_for_export(
-    model: PreTrainedModel | torch.nn.Module, inputs: dict[str, Any]
-) -> tuple[PreTrainedModel | torch.nn.Module, dict[str, Any]]:
-    """Configure the model for export. Mutates both `model` and `inputs` in-place:
+    model: PreTrainedModel | torch.nn.Module, inputs: MutableMapping[str, Any]
+) -> tuple[PreTrainedModel | torch.nn.Module, MutableMapping[str, Any], dict[str, Any]]:
+    """Configure model and inputs for export. Mutates both `model` and `inputs` in place,
+    returning `(model, inputs, output_flags)` where `output_flags` holds the values popped
+    from `inputs` for `use_cache`, `return_dict`, etc. (to be applied reversibly onto
+    `model.config` by `patch_model_config` during the trace).
 
-    - Sets `sdpa` attention.
-    - Patches non-exportable module behaviours (mamba masks, classifier casts, …).
     - Strips label inputs (`labels`, `future_values`) — loss computation is unsupported.
-    - Strips output flags (`use_cache`, `return_dict`, …) from inputs and bakes non-`None`
-      values into `model.forward` via `functools.partial` so they are constant at trace time.
+    - Pops output flags (`use_cache`, `return_dict`, …) from `inputs` so they don't appear
+      as traced kwargs; the values are returned for the trace block to apply onto
+      `model.config`.
+    - Pre-computes data-dependent vision/audio kwargs registered via
+      `@register_export_input_preparer` and writes them into `inputs`.
+    - Casts input tensors to match the model's `dtype` / `device`.
     """
     # Strip label inputs — loss computation is not supported during export.
     for label_key in ("labels", "future_values"):
@@ -341,40 +351,9 @@ def prepare_for_export(
             "Please remove 'return_loss' from your inputs or set it to False."
         )
 
-    # Strip output flags from inputs. Set on config when possible, otherwise bake into
-    # the forward via functools.partial so the value is constant at trace time.
-    # Submodule captures often inject these from the parent model's forward; they must not
-    # appear as traced kwargs or the exported signature will mismatch at runtime.
-    for output_flag in _OUTPUT_FLAGS:
-        if output_flag in inputs:
-            value = inputs.pop(output_flag)
-            if value is not None:
-                model.forward = functools.partial(model.forward, **{output_flag: value})
-
-    # set attention implementation to sdpa for export
-    if isinstance(model, PreTrainedModel):
-        try:
-            model.set_attn_implementation("sdpa")
-        except Exception as e:
-            logger.warning("Could not set attention implementation to sdpa for %s: %s", model.config.model_type, e)
-
-    # Idefics2/3's vision encoder uses boolean indexing to filter padding images, creating
-    # an unbacked symbolic batch dim. SDPA's CPU kernel guards on Eq(batch, 1) when a mask
-    # is provided, which fails with unbacked dims. Keep the vision part on eager.
-    # https://github.com/pytorch/pytorch/issues/180202#issuecomment-4505713716
-    # TODO: check if this is fixed in pytorch 2.13
-    if (
-        isinstance(model, PreTrainedModel)
-        and model.config.model_type in ("idefics2", "idefics3", "smolvlm")
-        and model.device.type == "cpu"
-    ):
-        model.set_attn_implementation({"vision_config": "eager"})
-
-    for module in model.modules():
-        if hasattr(module, "config"):
-            # disable mamba kernels for every submodel (mamba, jamba)
-            if hasattr(module.config, "use_mamba_kernels"):
-                module.config.use_mamba_kernels = False
+    # Pop output flags from `inputs` and return them so the caller can decide how to
+    # honour them during the trace (we don't want them as traced kwargs).
+    output_flags = {flag: inputs.pop(flag) for flag in _OUTPUT_FLAGS if flag in inputs}
 
     # Pre-compute data-dependent vision/audio tensors that use loops, .tolist(),
     # repeat_interleave, or itertools.groupby — untraceable by dynamo.
@@ -395,7 +374,7 @@ def prepare_for_export(
         except StopIteration:
             pass
 
-    return model, inputs
+    return model, inputs, output_flags
 
 
 # ── Export input preparers ────────────────────────────────────────────────────

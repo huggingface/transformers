@@ -43,6 +43,7 @@ import copy
 import importlib
 import inspect
 import sys
+from collections.abc import MutableMapping
 from contextlib import contextmanager
 from typing import Any
 
@@ -50,7 +51,7 @@ from ..utils import logging
 from ..utils.import_utils import is_detectron2_available, is_torch_available, torch_compilable_check
 from .base import HfExporter
 from .configs import DynamoConfig
-from .utils import apply_patches, prepare_for_export, register_patch
+from .utils import apply_patches, patch_attributes, prepare_for_export, register_patch
 
 
 if is_torch_available():
@@ -83,7 +84,7 @@ class DynamoExporter(HfExporter):
     def export(
         self,
         model: PreTrainedModel,
-        sample_inputs: dict[str, Any],
+        sample_inputs: MutableMapping[str, Any],
         config: DynamoConfig | dict[str, Any],
     ) -> ExportedProgram:
         if isinstance(config, dict):
@@ -91,20 +92,26 @@ class DynamoExporter(HfExporter):
         elif not isinstance(config, DynamoConfig):
             raise TypeError(f"Expected config to be a DynamoConfig or dict, got {type(config)}")
 
-        model, sample_inputs = prepare_for_export(model, sample_inputs)
+        model, sample_inputs, output_flags = prepare_for_export(model, sample_inputs)
 
         dynamic_shapes = config.dynamic_shapes
         if config.dynamic and dynamic_shapes is None:
             dynamic_shapes = get_auto_dynamic_shapes(sample_inputs)
 
         register_cache_pytrees_for_model(model)
-        with apply_patches("dynamo"), reset_model_state(model), patch_forward_signature(model, sample_inputs):
+
+        with (
+            apply_patches("dynamo"),
+            reset_model_state(model),
+            patch_model_config(model, output_flags),
+            patch_forward_signature(model, sample_inputs),
+        ):
             exported_program: ExportedProgram = torch.export.export(
                 model,
                 args=(),
-                dynamic_shapes=dynamic_shapes,
+                kwargs=copy.deepcopy(dict(sample_inputs)),
                 strict=config.strict,
-                kwargs=copy.deepcopy(sample_inputs),
+                dynamic_shapes=dynamic_shapes,
                 prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
             )
 
@@ -114,6 +121,33 @@ class DynamoExporter(HfExporter):
 # ── Stage 1: Model signature patch ──────────────────────────────────────────
 # Replaces `model.forward` with a flat explicit signature derived from the
 # inputs dict so `torch.export` does not expand `**kwargs` into a large bundle.
+# `patch_model_config` lives here too — it strips output flags from the inputs
+# and applies them onto `model.config` for the duration of the trace.
+
+# Output flags stripped from inputs and applied onto `model.config` for the trace.
+@contextmanager
+def patch_model_config(model: PreTrainedModel, output_flags: dict[str, Any]):
+    """Reversibly tweak `model.config` for the trace:
+
+    - Applies `output_flags` (popped from inputs by `prepare_for_export`) onto
+      `model.config.<flag>` so the model picks them up via its usual `<flag> if <flag> is
+      not None else self.config.<flag>` fallback.
+    - Disables `use_mamba_kernels` on every submodel's config that declares it (mamba/jamba
+      kernels are not exportable).
+
+    Originals are restored on exit. Flags whose value is `None`, or that the config doesn't
+    declare, are silently skipped — useful for submodels that don't accept every parent flag.
+    """
+    config_patches = []
+    for flag, value in output_flags.items():
+        if value is None or not hasattr(model, "config") or not hasattr(model.config, flag):
+            continue
+        config_patches.append((model.config, flag, lambda _original, v=value: v))
+    for module in model.modules():
+        if hasattr(module, "config") and hasattr(module.config, "use_mamba_kernels"):
+            config_patches.append((module.config, "use_mamba_kernels", lambda _original: False))
+    with patch_attributes(config_patches):
+        yield
 
 
 @contextmanager

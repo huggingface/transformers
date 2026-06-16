@@ -29,6 +29,16 @@ Because the exporters live inside Transformers, they evolve with the models. Eve
 change, new attention pattern, or custom cache type is supported at export time from day one —
 no waiting for a downstream library to catch up.
 
+<Tip warning={true}>
+
+The exporters are **experimental**. Many of the patches in this module work around specific
+upstream bugs (torch, onnxscript, onnxruntime, executorch) and will be removed as soon as the
+fix lands upstream. Until the API stabilises, treat the patches as tied to the versions used in
+the test suite — pin those versions in production tooling, and expect both new patches and
+removals as we follow upstream.
+
+</Tip>
+
 | Exporter               | Output                     | Runtime                                       |
 | ---------------------- | -------------------------- | --------------------------------------------- |
 | [`DynamoExporter`]     | `ExportedProgram`          | Any PyTorch runtime, AOT compilation          |
@@ -73,9 +83,9 @@ Switch between runtimes by swapping the exporter class — nothing else changes.
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.exporters import DynamoExporter, DynamoConfig
 
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
+inputs = tokenizer("Hello, world!", return_tensors="pt")
 
 exporter = DynamoExporter()
 config = DynamoConfig(dynamic=True)
@@ -92,9 +102,9 @@ outputs = exported.module()(**inputs)
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.exporters import OnnxExporter, OnnxConfig
 
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
+inputs = tokenizer("Hello, world!", return_tensors="pt")
 
 exporter = OnnxExporter()
 config = OnnxConfig(dynamic=True)
@@ -117,9 +127,9 @@ outputs = session.run(None, ort_inputs)
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
+inputs = tokenizer("Hello, world!", return_tensors="pt")
 
 exporter = ExecutorchExporter()
 config = ExecutorchConfig(backend="xnnpack", dynamic=True)
@@ -134,9 +144,9 @@ et_program.save("model.pte")
 
 ## Dynamic shapes
 
-Set `dynamic=True` on any config to export with symbolic input shapes. All tensor dimensions
-are automatically marked as dynamic, so the exported graph accepts inputs of any size at
-runtime without retracing — see the quick-start example above.
+The quick-start examples above already pass `dynamic=True`, which marks every tensor
+dimension as dynamic so the exported graph accepts inputs of any size at runtime without
+retracing.
 
 For fine-grained control over which dimensions are dynamic, pass explicit `dynamic_shapes`
 instead. This is forwarded directly to `torch.export.export` — see the
@@ -150,9 +160,9 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.exporters import DynamoExporter, DynamoConfig
 
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt"))
+inputs = tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt")
 
 batch = torch.export.Dim("batch", min=1, max=32)
 seq = torch.export.Dim("seq", min=1, max=2048)
@@ -173,9 +183,9 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.exporters import OnnxExporter, OnnxConfig
 
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt"))
+inputs = tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt")
 
 batch = torch.export.Dim("batch", min=1, max=32)
 seq = torch.export.Dim("seq", min=1, max=2048)
@@ -196,9 +206,9 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt"))
+inputs = tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt")
 
 batch = torch.export.Dim("batch", min=1, max=32)
 seq = torch.export.Dim("seq", min=1, max=2048)
@@ -224,11 +234,10 @@ For multi-modal generative models it additionally splits the prefill into vision
 projector, language model, and `lm_head`. Encoder and language-model discovery uses the canonical
 [`~PreTrainedModel.get_encoder`] (`modality="image"` / `"audio"`) and
 [`~PreTrainedModel.get_decoder`] accessors, so any new architecture that wires those up
-correctly works out of the box. Projector lookup (`multi_modal_projector`, `connector`,
-`embed_vision`, `embed_audio`) is heuristic — see
-[`~transformers.exporters.utils._MULTIMODAL_PROJECTOR_NAMES`] in
-[exporters/utils.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/utils.py)
-and append a new attribute name there if needed.
+correctly works out of the box. Projector lookup falls back to a heuristic name list
+(`multi_modal_projector`, `connector`, `embed_vision`, `embed_audio`); new architectures
+should align their projector attribute to one of these canonical names rather than growing
+the list.
 
 <hfoptions id="generate">
 <hfoption id="Dynamo">
@@ -237,7 +246,7 @@ and append a new attribute name there if needed.
 from transformers import AutoModelForImageTextToText, AutoProcessor
 from transformers.exporters import DynamoExporter, DynamoConfig
 
-model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
+model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
 messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"}, {"type": "text", "text": "Describe this image."}]}]
 text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
@@ -256,7 +265,7 @@ components = exporter.export_for_generation(model, inputs, config=config)
 from transformers import AutoModelForImageTextToText, AutoProcessor
 from transformers.exporters import OnnxExporter, OnnxConfig
 
-model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
+model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
 messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"}, {"type": "text", "text": "Describe this image."}]}]
 text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
@@ -275,7 +284,7 @@ components = exporter.export_for_generation(model, inputs, config=config)
 from transformers import AutoModelForImageTextToText, AutoProcessor
 from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 
-model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
+model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
 messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"}, {"type": "text", "text": "Describe this image."}]}]
 text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
