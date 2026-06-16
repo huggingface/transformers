@@ -424,16 +424,26 @@ def load_and_register_attn_kernel(
         raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.")
 
     # correctly wrap the kernel
+    mask_implementation = "flash_attention_2"
     if hasattr(kernel, "flash_attn_varlen_func"):
         if attention_wrapper is None:
             attention_wrapper = flash_attention_forward
         kernel_function = attention_wrapper
+    elif hasattr(kernel, "sparse_atten_func"):
+        # Block-sparse kernels (e.g. `kernels-staging/msa`) expose `sparse_atten_func` instead of
+        # `flash_attn_varlen_func`; their call contract differs from the attention interface, so we
+        # bind the dedicated transformers-side wrapper that adapts the arguments and hides the
+        # prefill-kernel / decode-fallback dispatch.
+        from .msa_attention import msa_attention_forward
+
+        kernel_function = attention_wrapper if attention_wrapper is not None else msa_attention_forward
+        mask_implementation = "sdpa"
     elif kernel_name is not None:
         kernel_function = getattr(kernel, kernel_name)
 
     # Register the kernel as a valid attention
     ALL_ATTENTION_FUNCTIONS.register(attn_implementation, kernel_function)
-    ALL_MASK_ATTENTION_FUNCTIONS.register(attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"])
+    ALL_MASK_ATTENTION_FUNCTIONS.register(attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS[mask_implementation])
 
     return kernel
 
