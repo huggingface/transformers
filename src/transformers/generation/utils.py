@@ -1929,10 +1929,18 @@ class GenerationMixin(ContinuousMixin):
                     f"and will be removed in v5.13. Please only use one of {STATIC_CACHE_IMPLEMENTATIONS}, "
                     "and the layer structure will be inferred automatically."
                 )
+            # A user-supplied `cache_config={"max_cache_len": N}` pins the static cache size, so
+            # repeated `generate()` calls up to that ceiling reuse one cache instead of reallocating
+            # (and, under `torch.compile`, recompiling). This was previously honored only on the
+            # quantized path. `max(...)` guarantees we never under-size the cache for this call.
+            static_max_cache_len = max_cache_length
+            requested_max_cache_len = (generation_config.cache_config or {}).get("max_cache_len")
+            if requested_max_cache_len is not None:
+                static_max_cache_len = max(max_cache_length, requested_max_cache_len)
             model_kwargs[cache_name] = self._prepare_static_cache(
                 cache_implementation=generation_config.cache_implementation,
                 batch_size=max(generation_config.num_beams, generation_config.num_return_sequences) * batch_size,
-                max_cache_len=max_cache_length,
+                max_cache_len=static_max_cache_len,
                 model_kwargs=model_kwargs,
             )
         elif generation_config.cache_implementation == "quantized":

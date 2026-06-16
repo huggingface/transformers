@@ -108,6 +108,43 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
 
+    def test_static_cache_honors_cache_config_max_cache_len(self):
+        """
+        Regression test for #46424: on the static-cache path, an explicit
+        `cache_config={"max_cache_len": N}` must size the auto-allocated cache to (at least) N, so
+        repeated `generate()` calls up to that ceiling reuse a single cache instead of reallocating
+        (and, under `torch.compile`, recompiling). Before the fix `cache_config` was read only on the
+        quantized path, so the static cache was always sized to `max_length - 1` and the request was
+        silently ignored.
+        """
+        config = LlamaConfig(
+            vocab_size=256,
+            hidden_size=64,
+            intermediate_size=128,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            max_position_embeddings=4096,
+        )
+        model = AutoModelForCausalLM.from_config(config).to(torch_device).eval()
+
+        input_ids = torch.randint(0, config.vocab_size, (1, 32), device=torch_device)
+        requested_max_cache_len = 2048
+
+        model.generate(
+            input_ids,
+            max_new_tokens=16,
+            cache_implementation="static",
+            cache_config={"max_cache_len": requested_max_cache_len},
+            do_sample=False,
+            num_beams=1,
+            pad_token_id=0,
+            disable_compile=True,
+        )
+
+        # max_length - 1 here is 32 + 16 - 1 = 47; without the fix the cache is sized 47, not 2048.
+        self.assertEqual(model._cache.max_cache_len, requested_max_cache_len)
+
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
     """Function to skip tests on failed cache prerequisites, given a cache implementation"""
