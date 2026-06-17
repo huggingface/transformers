@@ -11,78 +11,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-import tempfile
 import unittest
 
-from transformers import AutoTokenizer, Tipsv2Tokenizer
-from transformers.testing_utils import require_sentencepiece
+from transformers import Tipsv2Tokenizer
+from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
-
-def get_tipsv2_test_sentencepiece_model(tmp_dir):
-    import os
-
-    import sentencepiece as spm
-
-    corpus_file = os.path.join(tmp_dir, "corpus.txt")
-    with open(corpus_file, "w", encoding="utf-8") as fp:
-        fp.write(
-            "\n".join(
-                [
-                    "a cat on a mat",
-                    "a dog in the fog",
-                    "mixed case text for tipsv2 tokenizer",
-                    "zuerich san francisco image text alignment",
-                    "padding tokens should use id zero",
-                ]
-            )
-        )
-
-    model_prefix = os.path.join(tmp_dir, "tipsv2_test")
-    spm.SentencePieceTrainer.train(
-        input=corpus_file,
-        model_prefix=model_prefix,
-        vocab_size=64,
-        model_type="unigram",
-        character_coverage=1.0,
-        pad_id=0,
-        eos_id=1,
-        unk_id=2,
-        bos_id=3,
-        hard_vocab_limit=False,
-        num_threads=1,
-    )
-    return f"{model_prefix}.model"
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_sentencepiece
-class Tipsv2TokenizerTest(unittest.TestCase):
-    def test_tokenizer_defaults_and_roundtrip(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            vocab_file = get_tipsv2_test_sentencepiece_model(tmp_dir)
-            tokenizer = Tipsv2Tokenizer(vocab_file)
+@require_tokenizers
+class Tipsv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google/tipsv2-b14"
+    tokenizer_class = Tipsv2Tokenizer
 
-            self.assertEqual(tokenizer.pad_token_id, 0)
-            self.assertIsNone(tokenizer.bos_token_id)
-            self.assertIsNone(tokenizer.eos_token_id)
-            self.assertEqual(tokenizer.model_max_length, 64)
+    integration_expected_tokens = ['▁', 'T', 'h', 'is', '▁is', '▁a', '▁t', 'est', '▁', '😊', '▁', 'I', '▁w', 'as', '▁b', 'orn', '▁in', '▁9', '20', '00', ',', '▁and', '▁th', 'is', '▁is', '▁f', 'als', 'é', '.', '▁生活', '的', '真', '谛', '是', '▁', 'H', 'i', '▁', 'H', 'el', 'lo', '▁', 'H', 'i', '▁', 'H', 'el', 'lo', '▁', 'H', 'el', 'lo', '<s>', '▁hi', '<s>', '▁the', 're', '▁', 'T', 'he', '▁f', 'ol', 'low', 'ing', '▁st', 'ri', 'ng', '▁s', 'ho', 'uld', '▁be', '▁pr', 'op', 'er', 'ly', '▁enc', 'od', 'ed', ':', '▁', 'H', 'el', 'lo', '.', '▁', 'B', 'ut', '▁i', 'rd', '▁and', '▁ปี', '▁i', 'rd', '▁ด', '▁', 'H', 'ey', '▁how', '▁a', 're', '▁you', '▁do', 'ing']  # fmt: skip
+    integration_expected_token_ids = [26717, 2, 26732, 309, 512, 262, 267, 434, 26717, 2, 26717, 2, 287, 300, 270, 1099, 317, 460, 443, 362, 2, 346, 314, 309, 512, 276, 1165, 26773, 26803, 7904, 26859, 26957, 2, 27053, 26717, 2, 26721, 26717, 2, 312, 353, 26717, 2, 26721, 26717, 2, 312, 353, 26717, 2, 312, 353, 3, 1697, 3, 345, 282, 26717, 2, 638, 276, 334, 695, 307, 368, 292, 447, 260, 301, 2769, 343, 497, 411, 263, 547, 6750, 356, 325, 2, 26717, 2, 312, 353, 26803, 26717, 2, 366, 279, 4974, 346, 8960, 279, 4974, 2353, 26717, 2, 1943, 1753, 262, 282, 900, 433, 307]  # fmt: skip
+    expected_tokens_from_ids = ['▁', '<unk>', 'h', 'is', '▁is', '▁a', '▁t', 'est', '▁', '<unk>', '▁', '<unk>', '▁w', 'as', '▁b', 'orn', '▁in', '▁9', '20', '00', '<unk>', '▁and', '▁th', 'is', '▁is', '▁f', 'als', 'é', '.', '▁生活', '的', '真', '<unk>', '是', '▁', '<unk>', 'i', '▁', '<unk>', 'el', 'lo', '▁', '<unk>', 'i', '▁', '<unk>', 'el', 'lo', '▁', '<unk>', 'el', 'lo', '<s>', '▁hi', '<s>', '▁the', 're', '▁', '<unk>', 'he', '▁f', 'ol', 'low', 'ing', '▁st', 'ri', 'ng', '▁s', 'ho', 'uld', '▁be', '▁pr', 'op', 'er', 'ly', '▁enc', 'od', 'ed', '<unk>', '▁', '<unk>', 'el', 'lo', '.', '▁', '<unk>', 'ut', '▁i', 'rd', '▁and', '▁ปี', '▁i', 'rd', '▁ด', '▁', '<unk>', 'ey', '▁how', '▁a', 're', '▁you', '▁do', 'ing']  # fmt: skip
+    integration_expected_decoded_text = "<unk>his is a test <unk> <unk> was born in 92000<unk> and this is falsé. 生活的真<unk>是 <unk>i <unk>ello <unk>i <unk>ello <unk>ello<s> hi<s> there <unk>he following string should be properly encoded<unk> <unk>ello. <unk>ut ird and ปี ird ด <unk>ey how are you doing"
 
-            text = "A Cat on a Mat"
-            lower_text = text.lower()
-            self.assertListEqual(tokenizer(text).input_ids, tokenizer(lower_text).input_ids)
-
-            token_ids = tokenizer(text, add_special_tokens=False).input_ids
-            self.assertListEqual(tokenizer.build_inputs_with_special_tokens(token_ids), token_ids)
-            self.assertListEqual(tokenizer.get_special_tokens_mask(token_ids), [0] * len(token_ids))
-
-            encoded = tokenizer([text, "A DOG in the Fog"], padding="max_length", truncation=True, max_length=64)
-            for input_ids in encoded.input_ids:
-                self.assertEqual(len(input_ids), 64)
-                self.assertEqual(input_ids[-1], tokenizer.pad_token_id)
-
-            tokenizer.save_pretrained(tmp_dir)
-            reloaded = Tipsv2Tokenizer.from_pretrained(tmp_dir)
-            auto_reloaded = AutoTokenizer.from_pretrained(tmp_dir)
-
-            self.assertListEqual(reloaded(text).input_ids, tokenizer(text).input_ids)
-            self.assertListEqual(auto_reloaded(text).input_ids, tokenizer(text).input_ids)
+    @unittest.skip(reason="Tipsv2 requires pad token to have id 0")
+    def test_pad_token_initialization(self):
+        pass

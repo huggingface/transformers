@@ -17,6 +17,8 @@ from collections.abc import Callable
 
 import torch
 from huggingface_hub.dataclasses import strict
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
+from tokenizers.models import Unigram
 from torch import nn
 
 from ... import initialization as init
@@ -28,7 +30,7 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, EmbeddingAccessMixin, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_sentencepiece import SentencePieceBackend
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import requires
@@ -61,19 +63,16 @@ VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
 
 @requires(backends=("sentencepiece",))
-class Tipsv2Tokenizer(SentencePieceBackend):
-    """Tipsv2 tokenizer based on SentencePiece.
-
-    The original Tipsv2 text pipeline lowercases inputs, does not add BOS/EOS tokens, pads to a maximum length of 64,
-    and uses padding token id 0.
-    """
+class Tipsv2Tokenizer(TokenizersBackend):
+    """Tipsv2 tokenizer backed by HuggingFace's *tokenizers* library, based on a Unigram (SentencePiece) model."""
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    model = Unigram
 
     def __init__(
         self,
-        vocab_file,
+        vocab: list[tuple[str, float]] | None = None,
         unk_token: str | None = "<unk>",
         pad_token: str | None = "<pad>",
         bos_token: str | None = None,
@@ -81,12 +80,36 @@ class Tipsv2Tokenizer(SentencePieceBackend):
         model_max_length: int = 64,
         do_lower_case: bool = True,
         token_type_ids_pattern: str = "all_zeros",
+        _spm_precompiled_charsmap=None,
         **kwargs,
     ) -> None:
-        self.do_lower_case = do_lower_case
+        if vocab is not None:
+            self._vocab_scores = vocab
+        else:
+            self._vocab_scores = [
+                (str(pad_token), 0.0),
+                (str(unk_token), 0.0),
+            ]
+        unk_id = next(index for index, (token, _) in enumerate(self._vocab_scores) if token == str(unk_token))
+
+        self._tokenizer = Tokenizer(Unigram(self._vocab_scores, unk_id=unk_id, byte_fallback=False))
+
+        list_normalizers = []
+        if do_lower_case:
+            list_normalizers.append(normalizers.Lowercase())
+        if _spm_precompiled_charsmap:
+            list_normalizers.append(normalizers.Precompiled(_spm_precompiled_charsmap))
+        self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
+
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.WhitespaceSplit(),
+                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always"),
+            ]
+        )
+        self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always")
 
         super().__init__(
-            vocab_file=vocab_file,
             unk_token=unk_token,
             pad_token=pad_token,
             bos_token=bos_token,
@@ -98,12 +121,7 @@ class Tipsv2Tokenizer(SentencePieceBackend):
         )
 
         if self.pad_token_id != 0:
-            raise ValueError(f"Expected the SentencePiece padding token to have id 0, but got {self.pad_token_id}.")
-
-    def _tokenize(self, text, **kwargs):
-        if self.do_lower_case:
-            text = text.lower()
-        return self.sp_model.encode(text, out_type=str)
+            raise ValueError(f"Expected the padding token to have id 0, but got {self.pad_token_id}.")
 
 
 @auto_docstring
