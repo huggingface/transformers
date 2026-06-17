@@ -78,14 +78,14 @@ def get_module_size_with_ties(
     tied_module_names = []
     tied_modules = []
 
-    for tied_param in tied_params:
-        tied_module_index = [i for i, (n, _) in enumerate(modules_to_treat) if tied_param.startswith(n + ".")][0]
-        tied_module_names.append(modules_to_treat[tied_module_index][0])
-        tied_modules.append(modules_to_treat[tied_module_index][1])
-
     module_size_with_ties = module_size
     for tied_param in tied_params:
-        module_size_with_ties += module_sizes[tied_param]
+        tied_module_index = [i for i, (n, _) in enumerate(modules_to_treat) if tied_param.startswith(n + ".")][0]
+        tied_module_name = modules_to_treat[tied_module_index][0]
+        if tied_module_name not in tied_module_names:
+            tied_module_names.append(tied_module_name)
+            tied_modules.append(modules_to_treat[tied_module_index][1])
+            module_size_with_ties += module_sizes[tied_module_name]
 
     return module_size_with_ties, tied_module_names, tied_modules
 
