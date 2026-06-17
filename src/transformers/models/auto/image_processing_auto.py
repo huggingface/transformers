@@ -33,7 +33,7 @@ from ...utils import (
     logging,
     safe_load_json_file,
 )
-from ...utils.import_utils import requires
+from ...utils.import_utils import is_torchvision_greater_or_equal, requires
 from .auto_factory import _LazyAutoMapping
 from .auto_mappings import IMAGE_PROCESSOR_MAPPING_NAMES
 from .configuration_auto import (
@@ -46,14 +46,18 @@ from .configuration_auto import (
 
 logger = logging.get_logger(__name__)
 
-# These image processors use Lanczos interpolation, which is not supported by fast image processors.
-# To avoid important differences in outputs, we default to using the PIL backend for these processors.
-DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS = [
+# These image processors use Lanczos interpolation, which is not supported by torchvision < 0.27.
+# To avoid important differences in outputs, we default to using the PIL backend for these processors
+# when running on older torchvision versions. With torchvision >= 0.27, Lanczos is natively supported
+# and these processors can use the torchvision backend directly.
+_LANCZOS_IMAGE_PROCESSORS = [
     "ChameleonImageProcessor",
     "FlavaImageProcessor",
     "Idefics3ImageProcessor",
     "SmolVLMImageProcessor",
 ]
+
+DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS = [] if is_torchvision_greater_or_equal("0.27") else _LANCZOS_IMAGE_PROCESSORS
 
 
 if TYPE_CHECKING:
@@ -74,6 +78,7 @@ else:
             ("colpali", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
             ("colqwen2", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("convnextv2", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
+            ("cosmos3_omni", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("cvt", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("data2vec-vision", {"torchvision": "BeitImageProcessor", "pil": "BeitImageProcessorPil"}),
             ("deimv2", {"torchvision": "RTDetrImageProcessor", "pil": "RTDetrImageProcessorPil"}),
@@ -84,10 +89,12 @@ else:
             ("edgetam", {"torchvision": "Sam2ImageProcessor"}),
             ("emu3", {"pil": "Emu3ImageProcessor"}),
             ("eomt_dinov3", {"torchvision": "EomtImageProcessor", "pil": "EomtImageProcessorPil"}),
+            ("exaone4_5", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("florence2", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("focalnet", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
             ("gemma3n", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
             ("git", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
+            ("granite4_vision", {"torchvision": "LlavaNextImageProcessor", "pil": "LlavaNextImageProcessorPil"}),
             ("groupvit", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("hiera", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
             ("ijepa", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
@@ -116,6 +123,9 @@ else:
             ("pixio", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
             ("pp_ocrv5_mobile_det", {"torchvision": "PPOCRV5ServerDetImageProcessor"}),
             ("pp_ocrv5_mobile_rec", {"torchvision": "PPOCRV5ServerRecImageProcessor"}),
+            ("pp_ocrv6_medium_det", {"torchvision": "PPOCRV5ServerDetImageProcessor"}),
+            ("pp_ocrv6_small_det", {"torchvision": "PPOCRV5ServerDetImageProcessor"}),
+            ("pp_ocrv6_tiny_rec", {"torchvision": "PPOCRV6SmallRecImageProcessor"}),
             ("pvt_v2", {"torchvision": "PvtImageProcessor", "pil": "PvtImageProcessorPil"}),
             ("qianfan_ocr", {"torchvision": "GotOcr2ImageProcessor", "pil": "GotOcr2ImageProcessorPil"}),
             ("qwen2_5_omni", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
@@ -311,8 +321,8 @@ def _resolve_backend(backend: str | None, use_fast: bool | None, base_class_name
       explicit backend is given.
     - Explicit backend string: returned as-is.
     - None resolution: forces 'pil' for processors in DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS
-      (Lanczos interpolation, unsupported by torchvision); otherwise picks 'torchvision' when
-      available, falling back to 'pil'.
+      (Lanczos interpolation, unsupported by torchvision < 0.27); otherwise picks 'torchvision'
+      when available, falling back to 'pil'.
     """
     if use_fast is not None:
         logger.warning_once(
@@ -583,8 +593,8 @@ class AutoImageProcessor:
                 feature_extractor_auto_map = config_dict["auto_map"]["AutoFeatureExtractor"]
                 image_processor_auto_map = feature_extractor_auto_map.replace("FeatureExtractor", "ImageProcessor")
 
-        # If not in image processor config, try the model config
-        if image_processor_type is None and image_processor_auto_map is None:
+        # If not in image processor config, try the model config (override image_processor_auto_map if trust_remote_code is False)
+        if image_processor_type is None and (image_processor_auto_map is None or trust_remote_code is False):
             if not isinstance(config, PreTrainedConfig):
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path,

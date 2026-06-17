@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-12-15 and added to Hugging Face Transformers on 2026-03-02.*
+*This model was published in HF papers on 2025-04-04 and contributed to Hugging Face Transformers on 2026-03-03.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -32,14 +32,13 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="nvidia/Nemotron-H-8B-Reasoning-128K",
-    dtype=torch.bfloat16,
 )
 pipe("Plants create energy through a process known as")
 ```
@@ -47,14 +46,13 @@ pipe("Plants create energy through a process known as")
 </hfoption>
 <hfoption id="AutoModelForCausalLM">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("nvidia/Nemotron-H-8B-Reasoning-128K")
 model = AutoModelForCausalLM.from_pretrained(
     "nvidia/Nemotron-H-8B-Reasoning-128K",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)

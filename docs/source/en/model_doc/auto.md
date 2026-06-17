@@ -24,7 +24,7 @@ Instantiating one of [`AutoConfig`], [`AutoModel`], and
 [`AutoTokenizer`] will directly create a class of the relevant architecture. For instance
 
 ```python
-model = AutoModel.from_pretrained("google-bert/bert-base-cased")
+model = AutoModel.from_pretrained("google-bert/bert-base-cased", device_map="auto")
 ```
 
 will create a model that is an instance of [`BertModel`].
@@ -39,6 +39,7 @@ classes like this:
 
 ```python
 from transformers import AutoConfig, AutoModel
+
 
 AutoConfig.register("new-model", NewModelConfig)
 AutoModel.register(NewModelConfig, NewModel)
@@ -149,6 +150,18 @@ The following auto classes are available for the following computer vision tasks
 
 [[autodoc]] AutoModelForDepthEstimation
 
+### AutoModelForNormalEstimation
+
+[[autodoc]] AutoModelForNormalEstimation
+
+### AutoModelForPointmapEstimation
+
+[[autodoc]] AutoModelForPointmapEstimation
+
+### AutoModelForImageMatting
+
+[[autodoc]] AutoModelForImageMatting
+
 ### AutoModelForTextRecognition
 
 [[autodoc]] AutoModelForTextRecognition
@@ -164,6 +177,10 @@ The following auto classes are available for the following computer vision tasks
 ### AutoModelForVideoClassification
 
 [[autodoc]] AutoModelForVideoClassification
+
+### AutoModelForPoseEstimation
+
+[[autodoc]] AutoModelForPoseEstimation
 
 ### AutoModelForKeypointDetection
 
@@ -224,6 +241,14 @@ The following auto classes are available for the following audio tasks.
 ### AutoModelForCTC
 
 [[autodoc]] AutoModelForCTC
+
+### AutoModelForTDT
+
+[[autodoc]] AutoModelForTDT
+
+### AutoModelForRNNT
+
+[[autodoc]] AutoModelForRNNT
 
 ### AutoModelForSpeechSeq2Seq
 

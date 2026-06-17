@@ -31,7 +31,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
-from ...utils.generic import TransformersKwargs
+from ...utils.generic import TransformersKwargs, no_inherit_decorator
 from ..afmoe.modeling_afmoe import AfmoeAttention
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
@@ -180,8 +180,8 @@ class LagunaRMSNorm(Qwen2MoeRMSNorm):
 
 
 class LagunaRotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: LagunaConfig, device=None, layer_type=None):
-        super().__init__(config, device, layer_type)
+    def __init__(self, config: LagunaConfig):
+        super().__init__(config)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -277,6 +277,7 @@ class LagunaSparseMoeBlock(Qwen3MoeSparseMoeBlock):
         return hidden_states
 
 
+@no_inherit_decorator
 class LagunaAttention(AfmoeAttention):
     """Afmoe-style SWA/GQA attention with Laguna-specific gating and per-layer head count."""
 

@@ -88,9 +88,10 @@ class OffloadingManager:
         # FIFO order favors contiguity when blocks are returned in bulk
         self._free_cpu_blocks = deque(range(self._num_cpu_blocks))
 
-        # Reusable int32 scratch for cpu_ids / gpu_ids (bounded by _num_cpu_blocks on both paths)
-        self._cpu_ids_scratch = torch.empty(self._num_cpu_blocks, dtype=torch.int32, pin_memory=True)
-        self._gpu_ids_scratch = torch.empty(self._num_cpu_blocks, dtype=torch.int32, device=cache.device)
+        # Reusable int64 scratch for cpu_ids / gpu_ids (bounded by _num_cpu_blocks on both paths).
+        # int64 is required by index_copy_ / index_select.
+        self._cpu_ids_scratch = torch.empty(self._num_cpu_blocks, dtype=torch.long, pin_memory=True)
+        self._gpu_ids_scratch = torch.empty(self._num_cpu_blocks, dtype=torch.long, device=cache.device)
 
         # Log the size of the CPU swap pool
         cache_tensor = self._cpu_key_cache[0]
@@ -229,15 +230,18 @@ class OffloadingManager:
             return None
 
         # Single batched copy for all requests (still, one copy per layer)
-        cpu_ids = self._cpu_ids_scratch[: len(all_cpu_indices)]
-        gpu_ids = self._gpu_ids_scratch[: len(all_cpu_indices)]
-        cpu_ids.copy_(torch.as_tensor(all_cpu_indices, dtype=torch.int32))  # cpu op, not in the stream
+        n = len(all_cpu_indices)
+        cpu_ids = self._cpu_ids_scratch[:n]
+        gpu_ids = self._gpu_ids_scratch[:n]
+        cpu_ids.copy_(torch.as_tensor(all_cpu_indices, dtype=torch.long))  # cpu op, not in the stream
         with self._stream_ctx():
-            gpu_ids.copy_(torch.as_tensor(all_gpu_indices, dtype=torch.int32))
+            gpu_ids.copy_(torch.as_tensor(all_gpu_indices, dtype=torch.long))
             for cpu_k, gpu_k in zip(self._cpu_key_cache, self._gpu_key_views):
-                gpu_k[gpu_ids].copy_(cpu_k[cpu_ids])
+                device_side_cpu_blocks = cpu_k.index_select(0, cpu_ids).to(gpu_k.device)
+                gpu_k.index_copy_(0, gpu_ids, device_side_cpu_blocks)
             for cpu_v, gpu_v in zip(self._cpu_value_cache, self._gpu_value_views):
-                gpu_v[gpu_ids].copy_(cpu_v[cpu_ids])
+                device_side_cpu_blocks = cpu_v.index_select(0, cpu_ids).to(gpu_v.device)
+                gpu_v.index_copy_(0, gpu_ids, device_side_cpu_blocks)
         self._free_cpu_blocks.extend(all_cpu_indices)
 
     def free_request_cpu_cache(self, state: RequestState) -> None:
@@ -281,17 +285,17 @@ class OffloadingManager:
         # Offload using the compute stream so it does not interfere with current generation
         cpu_ids = self._cpu_ids_scratch[:total_gpu_blocks]
         gpu_ids = self._gpu_ids_scratch[:total_gpu_blocks]
-        cpu_ids.copy_(torch.as_tensor(cpu_indices, dtype=torch.int32))  # cpu op, not in the stream
+        cpu_ids.copy_(torch.as_tensor(cpu_indices, dtype=torch.long))  # cpu op, not in the stream
         with self._stream_ctx():
-            gpu_ids.copy_(torch.as_tensor(gpu_indices, dtype=torch.int32))
-            # Keys
+            gpu_ids.copy_(torch.as_tensor(gpu_indices, dtype=torch.long))
             for cpu_key_cache, gpu_key_view in zip(self._cpu_key_cache, self._gpu_key_views):
-                cpu_key_cache[cpu_ids].copy_(gpu_key_view[gpu_ids])
-            # Values
+                host_side_gpu_blocks = gpu_key_view.index_select(0, gpu_ids).to(cpu_key_cache.device)
+                cpu_key_cache.index_copy_(0, cpu_ids, host_side_gpu_blocks)
             for cpu_value_cache, gpu_value_view in zip(self._cpu_value_cache, self._gpu_value_views):
-                cpu_value_cache[cpu_ids].copy_(gpu_value_view[gpu_ids])
-            # TODO: add asynchronous version of this
-            # TODO: can we get rid of this for loop? eg. by consolidating the cache.
+                host_side_gpu_blocks = gpu_value_view.index_select(0, gpu_ids).to(cpu_value_cache.device)
+                cpu_value_cache.index_copy_(0, cpu_ids, host_side_gpu_blocks)
+            # TODO: async path with a preallocated pinned scratch + non_blocking=True; current .to() materializes
+            # an unpinned intermediate per layer, so _stream_ctx() does not actually overlap.
 
         # No explicit sync needed: finish_request is logical, and the next forward pass serializes on the same stream.
         self._request_id_to_cpu_blocks[request_id] = cpu_indices

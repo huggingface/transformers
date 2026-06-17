@@ -27,6 +27,9 @@ env:
     other_workflow_run_id: ""
 
 
+permissions:
+  contents: read
+
 jobs:
   setup:
     name: Setup
@@ -42,7 +45,7 @@ jobs:
           echo "$other_workflow_run_id" > "setup_values/other_workflow_run_id.txt"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: setup_values
           path: setup_values

@@ -37,7 +37,7 @@ def patch_checkers_paths(repo_root: Path):
         stack.enter_context(patch.object(checkers, "REPO_ROOT", repo_root))
         stack.enter_context(patch.object(checkers, "CACHE_PATH", cache_path))
         stack.enter_context(patch.object(checkers, "CHECKERS", {"demo": ("Demo checker", "fake_checker.py", [], [])}))
-        stack.enter_context(patch.object(checkers, "CHECKER_FILE_GLOBS", {"demo": ["tracked/**/*.txt"]}))
+        stack.enter_context(patch.object(checkers, "CHECKER_CACHE_GLOBS", {"demo": ["tracked/**/*.txt"]}))
         yield cache_path
 
 
@@ -61,6 +61,19 @@ class CheckersCacheTest(unittest.TestCase):
         with (
             patch.object(sys, "argv", ["checkers.py", *args]),
             patch.object(sys, "stdout", new=stdout),
+            # checkers.main() is OTel-instrumented: with a live OTLP endpoint +
+            # TRACEPARENT in the env (as in CI, where configure-ci-otel wraps the
+            # pytest job), it would export real spans for the fake "demo" checker
+            # into production telemetry. Blank these out so the in-process run is
+            # a tracing no-op and the test never leaks spans.
+            patch.dict(
+                os.environ,
+                {
+                    "OTEL_EXPORTER_OTLP_ENDPOINT": "",
+                    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "",
+                    "TRACEPARENT": "",
+                },
+            ),
         ):
             exit_code = None
             try:

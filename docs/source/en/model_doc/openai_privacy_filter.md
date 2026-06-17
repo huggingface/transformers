@@ -13,13 +13,8 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-04-22 and added to Hugging Face Transformers on 2026-04-22.*
+*This model was contributed to Hugging Face Transformers on 2026-04-22.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # OpenAI Privacy Filter
 
@@ -40,8 +35,9 @@ The example below demonstrates how to detect privacy-sensitive tokens with [`Pip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 from transformers import pipeline
+
 
 classifier = pipeline(
     task="token-classification",
@@ -53,9 +49,11 @@ classifier("My name is Alice Smith")
 </hfoption>
 <hfoption id="AutoModelForTokenClassification">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForTokenClassification, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("openai/privacy-filter")
 model = AutoModelForTokenClassification.from_pretrained("openai/privacy-filter", device_map="auto")

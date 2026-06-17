@@ -58,6 +58,7 @@ from transformers.testing_utils import (
     SMALL_MODEL_IDENTIFIER,
     CaptureLogger,
     RequestCounter,
+    require_mistral_common,
     require_sentencepiece,
     require_tokenizers,
     slow,
@@ -235,6 +236,43 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
         self.assertTrue(tokenizer.is_fast)
         self.assertGreater(len(tokenizer("Voxtral")["input_ids"]), 0)
+
+    @require_tokenizers
+    @require_mistral_common
+    def test_mistral_common_backend_skips_incorrect_hub_tokenizer_class(self):
+        """Some Mistral checkpoint have tokenizer_class=LlamaTokenizer in its hub tokenizer_config.json.
+        When tekken.json is available, the wrong hub class should be ignored and MistralCommonBackend should be loaded."""
+        from transformers.tokenization_mistral_common import MistralCommonBackend
+
+        tokenizer = AutoTokenizer.from_pretrained("mistralai/Ministral-8B-Instruct-2410")
+        self.assertIsInstance(tokenizer, MistralCommonBackend)
+        self.assertGreater(len(tokenizer("Ministral")["input_ids"]), 0)
+
+    @require_tokenizers
+    def test_mistral_common_backend_skips_incorrect_hub_tokenizer_class_without_mistral_common(self):
+        """Some Mistral checkpoint have tokenizer_class=LlamaTokenizer in its hub tokenizer_config.json.
+        When mistral-common is unavailable and tokenizer.json exists, TokenizersBackend should be loaded."""
+        repo_id = "mistralai/Ministral-8B-Instruct-2410"
+        with (
+            mock.patch(
+                "transformers.models.auto.tokenization_auto.is_mistral_common_available",
+                return_value=False,
+            ),
+            mock.patch.dict(TOKENIZER_MAPPING_NAMES, {"ministral": "TokenizersBackend"}),
+        ):
+            tokenizer = AutoTokenizer.from_pretrained(repo_id)
+
+        self.assertIsInstance(tokenizer, TokenizersBackend)
+        self.assertGreater(len(tokenizer("Ministral")["input_ids"]), 0)
+
+    @require_tokenizers
+    @require_mistral_common
+    def test_mistral_sentencepiece_models_use_tokenizers_backend(self):
+        """Regression: legacy Mistral models with only tokenizer.model (no tekken.json) should keep
+        using TokenizersBackend even when mistral-common is installed."""
+        tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-beta")
+        self.assertIsInstance(tokenizer, TokenizersBackend)
+        self.assertGreater(len(tokenizer("zephyr")["input_ids"]), 0)
 
     @require_tokenizers
     def test_do_lower_case(self):
@@ -774,6 +812,13 @@ class NopConfig(PreTrainedConfig):
         self.assertIsInstance(tokenizer, TokenizersBackend)
         text = "hello world"
         self.assertEqual(tokenizer.decode(tokenizer.encode(text)), text)
+
+    @slow
+    @require_tokenizers
+    def test_deepseek_r1_distill_qwen_uses_qwen2_tokenizer(self):
+        """Regression: qwen2 model with wrong Hub tokenizer_class='LlamaTokenizerFast' must use Qwen2Tokenizer."""
+        tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")
+        self.assertIsInstance(tokenizer, Qwen2Tokenizer)
 
     @require_tokenizers
     @require_sentencepiece

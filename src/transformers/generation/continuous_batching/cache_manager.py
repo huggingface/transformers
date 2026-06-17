@@ -11,7 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import hashlib
 from abc import ABC, abstractmethod
+from array import array
 from collections import deque
 from collections.abc import Iterator
 from math import ceil
@@ -73,10 +75,11 @@ class BlockManager:
     it is in use.
     """
 
-    def __init__(self, num_blocks: int, block_size: int) -> None:
+    def __init__(self, num_blocks: int, block_size: int, tp_on: bool) -> None:
         """Initializes the block manager with a given number of blocks (num_blocks) of size (block_size)."""
         self.num_blocks = num_blocks
         self.block_size = block_size
+        self.tp_on = tp_on
         self._uninit_block_ids = deque(range(num_blocks))
         self._init_block_ids: dict[int, None] = {}  # effectively act as an ordered set
         self._hash_to_id: dict[int, int] = {}
@@ -109,7 +112,7 @@ class BlockManager:
     def get_free_blocks(
         self, n_blocks: int, last_block_id: int | None, shareable: bool, group_id: int
     ) -> list[int] | None:
-        """Returns a list of (n_blocks) free block and mark them as no longuer free in the internal data structures.
+        """Returns a list of (n_blocks) free block and mark them as no longer free in the internal data structures.
         If the (shareable) flag is set to True, a Block object is created to keep track of the block, with the
         (last_block_id) to indicate the last block id in the sequence, also named the parent block. If the manager
         cannot find enough free blocks, it returns None."""
@@ -276,7 +279,19 @@ class BlockManager:
     def compute_hash(self, parent_hash: int | None, tokens: list[int], group_id: int) -> int:
         """Computes the hash of a block identified by the (tokens) it contains, its (parent_hash) and the layer
         (group_id) it belong to. If the block has no parent, the parent hash is None."""
-        return hash((parent_hash, tuple(tokens), group_id))
+        # If TP is on, we cannot use python `hash` because it depends on the process (it's per-process salted)
+        # TODO: figure out if this is really a problem. Even if hashes diverge per-process, does that break anything?
+        if self.tp_on:
+            h = hashlib.blake2b(digest_size=8)
+            if parent_hash is not None:
+                h.update(parent_hash.to_bytes(8, "little", signed=False))
+            h.update(array("i", tokens).tobytes())
+            h.update(group_id.to_bytes(4, "little", signed=False))
+            hash_ = int.from_bytes(h.digest(), "little", signed=False)
+        # Otherwise, use `hash`
+        else:
+            hash_ = hash((parent_hash, tuple(tokens), group_id))
+        return hash_
 
 
 class CacheAllocator(ABC):

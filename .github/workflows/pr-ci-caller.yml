@@ -1,0 +1,22 @@
+name: PR CI
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches:
+      - main
+
+concurrency:
+  # Group by PR number, commit SHA (main) to avoid cross-branch cancellation, or branch ref for cancellation within each branch
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || (github.ref == 'refs/heads/main' && github.sha) || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pr-ci:
+    # DON'T use commit sha here before the CI migration is finished
+    uses: huggingface/transformers-test-ci/.github/workflows/pr-ci_dynamic_caller_example.yml@main # main
+

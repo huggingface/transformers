@@ -15,7 +15,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-12-08 and added to Hugging Face Transformers on 2025-12-24.*
+*This model was contributed to Hugging Face Transformers on 2025-12-24.*
 
 # GlmAsr
 
@@ -53,8 +53,9 @@ you can check the [model card](https://huggingface.co/zai-org/GLM-ASR-Nano-2512)
 # pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
 from transformers import AutoModelForSeq2SeqLM, AutoProcessor
 
+
 processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
-model = AutoModelForSeq2SeqLM.from_pretrained("zai-org/GLM-ASR-Nano-2512", dtype="auto", device_map="auto")
+model = AutoModelForSeq2SeqLM.from_pretrained("zai-org/GLM-ASR-Nano-2512", device_map="auto")
 
 inputs = processor.apply_transcription_request("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
 
@@ -75,10 +76,11 @@ The processor's `apply_transcription_request` is equivalent to using the chat te
 
 ```py runnable:test_advanced
 # pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
-from transformers import GlmAsrForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, GlmAsrForConditionalGeneration
+
 
 processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
-model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", dtype="auto", device_map="auto")
+model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", device_map="auto")
 
 inputs = processor.apply_transcription_request("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
 
@@ -112,13 +114,15 @@ print(decoded_outputs)
 
 One can also use audio arrays directly:
 
-```py runnable:test_audio_array
+```python runnable:test_audio_array
 # pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
-from transformers import GlmAsrForConditionalGeneration, AutoProcessor
-from datasets import load_dataset, Audio
+from datasets import Audio, load_dataset
+
+from transformers import AutoProcessor, GlmAsrForConditionalGeneration
+
 
 processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
-model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", dtype="auto", device_map="auto")
+model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", device_map="auto")
 
 # loading audio directly from dataset
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -138,10 +142,12 @@ print(decoded_outputs)
 
 You can process multiple audio files at once:
 
-```py runnable:test_batched
+```python runnable:test_batched
 # pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
 import torch
+
 from transformers import AutoProcessor, GlmAsrForConditionalGeneration
+
 
 checkpoint_name = "zai-org/GLM-ASR-Nano-2512"
 processor = AutoProcessor.from_pretrained(checkpoint_name)
@@ -173,7 +179,7 @@ conversation = [
     ],
 ]
 
-model = GlmAsrForConditionalGeneration.from_pretrained(checkpoint_name, device_map="auto", dtype="auto")
+model = GlmAsrForConditionalGeneration.from_pretrained(checkpoint_name, device_map="auto")
 
 inputs = processor.apply_chat_template(
     conversation, tokenize=True, add_generation_prompt=True, return_dict=True
@@ -223,6 +229,11 @@ assert decoded_outputs == EXPECTED_OUTPUT
 ## GlmAsrEncoder
 
 [[autodoc]] GlmAsrEncoder
+    - forward
+
+## GlmAsrModel
+
+[[autodoc]] GlmAsrModel
     - forward
 
 ## GlmAsrForConditionalGeneration
