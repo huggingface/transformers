@@ -292,9 +292,10 @@ class PagedAttentionCache:
         # For block table support, we lazy init the name of the block table key
         self._block_table_key = None
 
-    def will_allocation_be_successful(self, num_requested_blocks: int, allocated_blocks: int) -> bool:
-        """Returns a boolean indicating if the allocation of (num_requested_blocks) blocks will be successful. The
-        number of newly allocated blocks needed is predicted by the following rules:
+    def blocks_needed(self, num_requested_blocks: int, allocated_blocks: int) -> int:
+        """Returns the number of physical blocks needed to allocate (num_requested_blocks) blocks to a request that
+        already has (allocated_blocks) blocks. The number of newly allocated blocks needed is predicted by the
+        following rules:
         - for full attention groups: since there is no sliding window for full attention layers, one requested block is
             always equivalent to one newly allocated block for EACH full attention group
         - for sliding window groups: because of the sliding window, the number of blocks allocated to a request is
@@ -308,7 +309,15 @@ class PagedAttentionCache:
         if self.num_sliding_attention_groups:
             blocks_left = max(self.max_sliding_window_blocks_per_request - allocated_blocks, 0)
             needed_blocks += min(blocks_left, num_requested_blocks) * self.num_sliding_attention_groups
-        return needed_blocks <= self.get_num_free_blocks()
+        return needed_blocks
+
+    def will_allocation_be_successful(self, num_requested_blocks: int, allocated_blocks: int) -> bool:
+        """Returns a boolean indicating if the allocation of (num_requested_blocks) blocks will be successful."""
+        return self.blocks_needed(num_requested_blocks, allocated_blocks) <= self.get_num_free_blocks()
+
+    def blocks_in_use(self, request_id: str) -> int:
+        """Returns the total number of physical blocks currently referenced by a request across all layer groups."""
+        return sum(len(cm.block_table.get(request_id, ())) for cm in self.group_cache_managers)
 
     def allocate_blocks(self, n_blocks: int, request_id: str, allocated_blocks: int) -> int | None:
         """Allocate cache blocks across all layer groups for a given request. Actual allocation is done by the cache

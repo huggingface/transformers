@@ -54,6 +54,9 @@ class Scheduler(ABC):
         self._requests_to_cancel: set[str] = set()
         self._requests_to_fork: list[RequestState] = []
         self.block_new_requests = False
+        # Active requests that failed block allocation in the last scheduled batch, with their physical block demand.
+        # The offloading manager uses this to size bulk evictions.
+        self.starved_requests: list[tuple[RequestState, int]] = []
 
     def add_waiting_request(self, state: RequestState):
         """Adds a request to the waiting list."""
@@ -81,14 +84,6 @@ class Scheduler(ABC):
         """
         self.cache.free_blocks(request_id)
         self.active_requests.pop(request_id, None)
-
-    def pop_request_to_evict(self) -> tuple[str, RequestState]:
-        """Remove and return an active request chosen as the eviction victim for cache-pressure offload or soft reset.
-        Picks the newest active request when `block_new_requests` is set, else the oldest."""
-        if self.block_new_requests:
-            return self.active_requests.popitem()
-        request_id = next(iter(self.active_requests))
-        return request_id, self.active_requests.pop(request_id)
 
     def get_active_request_static_outputs(self, request_id: str) -> list[int]:
         """Gets generated tokens for an active request."""
@@ -138,6 +133,11 @@ class Scheduler(ABC):
             blocks_needed = ((len_next_tokens - occupancy + 1) // self.cache.block_size) + 1
             allocated = self.cache.allocate_blocks(blocks_needed, state.request_id, state.allocated_blocks)
             if allocated is None:
+                # Starved active requests are tracked so the offloading manager can size bulk evictions. Waiting
+                # requests are not: they hold no cache and can simply keep waiting.
+                if state.request_id in self.active_requests:
+                    physical_blocks = self.cache.blocks_needed(blocks_needed, state.allocated_blocks)
+                    self.starved_requests.append((state, physical_blocks))
                 return False
             state.allocated_blocks += allocated
         return True
@@ -220,6 +220,7 @@ class Scheduler(ABC):
         """
         scheduled_requests = []
         one_allocation_failed = False
+        self.starved_requests = []
         decode_fast_path = self.cache.max_blocks_per_request > 0  # best way to check if decode fast path availability
         safety_margins = self.safety_margin * self.cache.num_blocks
         original_token_budget, original_cache_budget = token_budget, cache_budget
