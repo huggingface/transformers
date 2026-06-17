@@ -2860,6 +2860,37 @@ class GenerationIntegrationTests(unittest.TestCase):
             model.generation_config.use_cache = None
             model.save_pretrained(tmpdirname)
 
+    @require_torch_accelerator
+    def test_generate_with_inputs_on_cpu(self):
+        """
+        Inputs deliberately kept on CPU must be moved onto the model device by `prepare_inputs_for_generation`
+        right before the forward, so generation works and matches passing on-device inputs. This lets callers keep
+        the loop's growing-tensor bookkeeping off-device (e.g. Neuron/TPU). Regression test for #44742.
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        encoded = tokenizer("Hello", return_tensors="pt")
+        generation_kwargs = {"max_new_tokens": 5, "do_sample": False}
+
+        # Reference run with inputs already on the model device.
+        on_device = model.generate(
+            input_ids=encoded.input_ids.to(torch_device),
+            attention_mask=encoded.attention_mask.to(torch_device),
+            **generation_kwargs,
+        )
+
+        # Inputs left on CPU; generate must move them before the forward and produce the same tokens.
+        on_cpu = model.generate(
+            input_ids=encoded.input_ids.to("cpu"),
+            attention_mask=encoded.attention_mask.to("cpu"),
+            **generation_kwargs,
+        )
+
+        # The growing-tensor bookkeeping stays on CPU (only the forward's inputs are moved to the model device),
+        # so the output is on CPU; the generated tokens must still match the on-device run.
+        self.assertEqual(on_cpu.device.type, "cpu")
+        self.assertTrue(torch.equal(on_cpu, on_device.cpu()))
+
     def test_generation_config_deprecation(self):
         import logging as pylogging
 
