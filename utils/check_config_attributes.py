@@ -64,6 +64,9 @@ SPECIAL_CASES_TO_ALLOW = {
     "Lfm2Config": ["full_attn_idxs"],
     "DiaConfig": ["delay_pattern"],
     "BambaConfig": ["attn_layer_indices"],
+    # layer_group_size builds `layer_types` in __post_init__ (and drives weight conversion); scoring_func/topk_method
+    # describe the router behavior the model hardcodes (sigmoid + noaux_tc), kept for checkpoint config compatibility.
+    "BailingHybridConfig": ["layer_group_size", "scoring_func", "topk_method"],
     "Dots1Config": ["max_window_layers"],
     "JambaConfig": ["attn_layer_offset", "attn_layer_period", "expert_layer_offset", "expert_layer_period"],
     "JetMoeConfig": ["output_router_logits"],

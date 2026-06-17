@@ -501,6 +501,8 @@
         title: Apertus
       - local: model_doc/arcee
         title: Arcee
+      - local: model_doc/bailing_hybrid
+        title: BailingHybrid
       - local: model_doc/bamba
         title: Bamba
       - local: model_doc/bart

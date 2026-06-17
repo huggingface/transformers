@@ -868,6 +868,31 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.self_attn\.norm_q\.", target_patterns=".self_attn.q_norm."),
             WeightRenaming(source_patterns=r"\.self_attn\.norm_k\.", target_patterns=".self_attn.k_norm."),
         ],
+        "bailing_hybrid": [
+            # Embedding rename.
+            WeightRenaming(r"word_embeddings", "embed_tokens"),
+            # NOTE: full-attention (MLA) layer indices (where (i + 1) % layer_group_size == 0)
+            # are injected dynamically in `extract_weight_conversions_for_model` based on the
+            # model config, so the mapping works for any num_hidden_layers / layer_group_size.
+            WeightRenaming(r"\.attention\.", ".linear_attn."),
+            WeightRenaming(r"\.dense\.weight", ".o_proj.weight"),
+            # MoE router bias rename.
+            WeightRenaming(r"mlp\.gate\.expert_bias", "mlp.gate.e_score_correction_bias"),
+            # Pack per-expert gate_proj and up_proj into a single 3D tensor.
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight",
+                    "mlp.experts.*.up_proj.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
         "phimoe": [
             WeightRenaming(".block_sparse_moe.", ".mlp."),
             WeightRenaming(".gate.weight", ".router.weight"),
@@ -1516,6 +1541,20 @@ def extract_weight_conversions_for_model(
     conversions = get_checkpoint_conversion_mapping(class_name)
     if conversions is None and model_type:
         conversions = get_checkpoint_conversion_mapping(model_type)
+
+    if model_type == "bailing_hybrid" and conversions is not None:
+        # Inject `attention -> self_attn` renames for full-attention layer indices,
+        # derived from the model config rather than hardcoded.
+        num_hidden_layers = getattr(model.config, "num_hidden_layers", 0)
+        layer_group_size = getattr(model.config, "layer_group_size", 0) or 0
+        if layer_group_size > 0:
+            full_attn_layers = [i for i in range(num_hidden_layers) if (i + 1) % layer_group_size == 0]
+            self_attn_renames = [
+                WeightRenaming(rf"layers\.{i}\.attention\.", f"layers.{i}.self_attn.") for i in full_attn_layers
+            ]
+            # These must run before the generic `.attention. -> .linear_attn.` rule.
+            conversions = self_attn_renames + conversions
+
     return conversions
 
 
