@@ -40,13 +40,10 @@ class DistributedConfig:
             Select ``base_model_tp_ep_plan`` or ``base_model_sp_ep_plan`` when combined with SP flag.
         fsdp_size (`int`, *optional*):
             Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.
-        fsdp_plan (`dict`, *optional*):
-            FSDP wrapping plan. Leave as `None` to wrap each transformer layer + root.
-
-    Typical flag combinations (plan is fixed at ``from_pretrained``, not on ``train()``/``eval()``):
-
-    * Training: ``enable_sequence_parallel=True``, ``enable_expert_parallel=True``, ``fsdp_size > 1``
-    * Inference: ``enable_sequence_parallel=False``, ``enable_expert_parallel=True``, ``fsdp_size=1``
+        fsdp_cpu_offload (`bool`, *optional*, defaults to `False`):
+            Whether to enable CPU offloading for FSDP2.
+        fsdp_mixed_precision (`bool`, *optional*, defaults to `False`):
+            Whether to enable mixed precision for FSDP2.
     """
 
     tp_size: int | None = None
@@ -54,7 +51,8 @@ class DistributedConfig:
     enable_sequence_parallel: bool = False
     enable_expert_parallel: bool = False
     fsdp_size: int | None = None
-    fsdp_plan: dict | None = None
+    fsdp_cpu_offload: bool = False
+    fsdp_mixed_precision: bool = False
 
     def __post_init__(self):
         if self.tp_size is None and self.fsdp_size is None:
