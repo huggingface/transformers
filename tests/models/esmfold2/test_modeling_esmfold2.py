@@ -104,15 +104,22 @@ def get_tiny_config(**overrides) -> "ESMFold2Config":
     return ESMFold2Config(**kwargs)
 
 
+class ESMFold2ConfigTester(ConfigTester):
+    def create_and_test_config_from_and_save_pretrained_composite(self):
+        # ESMFold2's sub-configs are internal architecture details (no model_type,
+        # not in the auto mappings), so they can't be reloaded standalone from the
+        # parent config dir — skip this check. (A no-op rather than SkipTest so the
+        # remaining run_common_tests checks still run.)
+        pass
+
+
 @require_torch
 class ESMFold2ConfigTest(unittest.TestCase):
     def setUp(self):
         # ESMFold2Config is composite (sub_configs) with no vocab/hidden_size.
-        self.config_tester = ConfigTester(self, config_class=ESMFold2Config, has_text_modality=False, num_loops=5)
-        # ESMFold2's sub-configs are internal architecture details (no model_type,
-        # not in the auto mappings), so the composite "load each sub-config
-        # standalone from the parent dir" check does not apply.
-        self.config_tester.create_and_test_config_from_and_save_pretrained_composite = lambda: None
+        self.config_tester = ESMFold2ConfigTester(
+            self, config_class=ESMFold2Config, has_text_modality=False, num_loops=5
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -233,20 +240,6 @@ class ESMFold2IntegrationTest(TestCasePlus):
 
     @slow
     def test_inference_deterministic_cpu_fp32(self):
-        # The test above runs in the intended bf16/GPU regime, but GPU bf16 is not
-        # reproducible run-to-run (matmul nondeterminism amplified through the deep
-        # trunk swings the distogram logits by O(1)), so it can only assert loose
-        # confidence floors. CPU/fp32 is bit-exact run-to-run, so here we lock in
-        # the actual values to a tight tolerance to catch *small* drift from future
-        # changes. distogram_logits is the cleanest signal: it is computed from the
-        # trunk with no diffusion sampling, so it is RNG-independent and exercises
-        # the ESMC-6B backbone + LM projection + pairformer trunk end-to-end.
-        #
-        # Baked from biohub/ESMFold2 @ dd1eae4fb2 (torch 2.11+cu130). A standalone
-        # multi-sequence version of this check lives in esmfold2_regression.py. The
-        # distogram is a trunk output (no pair-bias attention); ``ptm`` is fed by
-        # the diffusion sampler, which now runs the pair-bias attention through
-        # SDPA on CPU too (~1e-8 vs the old eager path, amplified to ~1e-4 in ptm).
         model = ESMFold2Model.from_pretrained(_INTEGRATION_CKPT, dtype=torch.float32).eval()
 
         seq = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG"
@@ -254,41 +247,15 @@ class ESMFold2IntegrationTest(TestCasePlus):
         with torch.no_grad():
             output = model.infer_protein(seq, num_loops=4, num_diffusion_samples=2, num_sampling_steps=32)
 
-        # TODO(pre-merge): EXACT (atol=0) values are bit-exact only on the machine
-        # they were baked on (RTX 4090, torch 2.11+cu130); fp32 bits can differ across
-        # CPUs/BLAS. Before merging, loosen to a rounded slice with rtol/atol ~1e-3
-        # (e.g. [6.5849, 7.9825, 9.6068, 9.6403, 16.5200, 18.9912, 19.9698, 23.0489]).
-        expected_distogram = torch.tensor(
-            [
-                6.584877014160156,
-                7.982535362243652,
-                9.60677433013916,
-                9.640305519104004,
-                16.519989013671875,
-                18.99123764038086,
-                19.96978187561035,
-                23.04886817932129,
-            ]
+        expected_distogram = torch.tensor([6.5849, 7.9825, 9.6068, 9.6403, 16.5200, 18.9912, 19.9698, 23.0489])
+        torch.testing.assert_close(
+            output["distogram_logits"][0, 0, 1, :8].float(), expected_distogram, rtol=1e-3, atol=1e-3
         )
-        torch.testing.assert_close(output["distogram_logits"][0, 0, 1, :8].float(), expected_distogram, rtol=0, atol=0)
-        self.assertEqual(output["ptm"].max().item(), 0.7427499890327454)
+        self.assertAlmostEqual(output["ptm"].max().item(), 0.7427, delta=1e-2)
 
     @slow
     @require_torch_accelerator
     def test_inference_deterministic_bf16(self):
-        # bf16/GPU is the production regime AND the one most exposed to dtype bugs
-        # (an op run in bf16 where the fork uses fp32, or vice-versa). Such bugs only
-        # surface in bf16, so we lock this path too. bf16/GPU with default kernels is
-        # not reproducible run-to-run, but with deterministic algorithms it becomes
-        # bit-exact (run-to-run AND cross-process), so we can baked-compare it tightly:
-        # a representative dtype regression (an fp32-pinned norm computing in bf16)
-        # shifts these distogram values by ~0.4-2.0, far above the deterministic floor.
-        #
-        # Baked from biohub/ESMFold2 @ dd1eae4fb2 on an RTX 4090 (torch 2.11+cu130).
-        # The exact bf16 bits are hardware-specific; the tolerance is loose enough to
-        # catch dtype drift but a different GPU may need a re-bake. esmfold2_regression.py
-        # locks all four sequences this way on the local box (CUBLAS_WORKSPACE_CONFIG=:4096:8
-        # may be needed on some builds for fully deterministic cuBLAS).
         prev = (
             torch.are_deterministic_algorithms_enabled(),
             torch.is_deterministic_algorithms_warn_only_enabled(),
@@ -308,17 +275,11 @@ class ESMFold2IntegrationTest(TestCasePlus):
             with torch.no_grad():
                 output = model.infer_protein(seq, num_loops=4, num_diffusion_samples=2, num_sampling_steps=32)
 
-            # TODO(pre-merge): EXACT (atol=0) values are bit-exact only on the machine
-            # they were baked on (RTX 4090, torch 2.11+cu130); bf16 bits differ across
-            # GPUs. Before merging, loosen to atol~0.2 (catches dtype-swap drift of
-            # ~0.4-2.0 while absorbing cross-GPU variation). The diffusion pair-bias
-            # attention runs through SDPA on GPU, so ``ptm`` (but not the trunk
-            # distogram) also depends on which SDPA backend the box selects.
-            expected_distogram = torch.tensor([6.46875, 7.71875, 9.4375, 9.3125, 16.125, 18.625, 19.625, 22.625])
+            expected_distogram = torch.tensor([6.47, 7.72, 9.44, 9.31, 16.12, 18.62, 19.62, 22.62])
             torch.testing.assert_close(
-                output["distogram_logits"][0, 0, 1, :8].float().cpu(), expected_distogram, rtol=0, atol=0
+                output["distogram_logits"][0, 0, 1, :8].float().cpu(), expected_distogram, rtol=0, atol=0.2
             )
-            self.assertEqual(output["ptm"].max().item(), 0.7416768074035645)
+            self.assertAlmostEqual(output["ptm"].max().item(), 0.742, delta=0.05)
         finally:
             torch.use_deterministic_algorithms(prev[0], warn_only=prev[1])
             torch.backends.cudnn.deterministic = prev[2]
