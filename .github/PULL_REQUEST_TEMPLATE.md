@@ -52,7 +52,7 @@ members/contributors who may be interested in your PR.
 
 Models:
 
-- text models: @ArthurZucker @Cyrilvallez
+- text models: @ArthurZucker @Cyrilvallez @vasqu
 - vision models: @yonigozlan @molbap
 - audio models: @eustlb @ebezzam @vasqu
 - multimodal models: @zucchini-nlp
@@ -60,7 +60,7 @@ Models:
 
 Library:
 
-- generate: @zucchini-nlp (visual-language models) or @gante (all others)
+- generate: @zucchini-nlp (visual-language models) or @Cyrilvallez (all others)
 - continuous batching: @remi-or @ArthurZucker @McPatate
 - pipelines: @Rocketknight1
 - tokenizers: @ArthurZucker and @itazap
@@ -75,7 +75,7 @@ Integrations:
 - ray/raytune: @richardliaw, @amogkam
 - Big Model Inference: @SunMarc
 - quantization: @SunMarc
-- kernels: @drbh
+- kernels: @vasqu @drbh
 - peft: @BenjaminBossan @githubnemo
 
 Devices/Backends:
