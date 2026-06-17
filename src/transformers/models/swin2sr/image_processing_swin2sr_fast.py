@@ -65,8 +65,8 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
             `torch.Tensor`: The padded images.
         """
         height, width = get_image_size(images, ChannelDimension.FIRST)
-        pad_height = (height // size_divisor + 1) * size_divisor - height
-        pad_width = (width // size_divisor + 1) * size_divisor - width
+        pad_height = (size_divisor - height % size_divisor) % size_divisor
+        pad_width = (size_divisor - width % size_divisor) % size_divisor
 
         return tvF.pad(
             images,

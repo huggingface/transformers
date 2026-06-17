@@ -79,8 +79,8 @@ class Swin2SRImageProcessingTester:
         else:
             input_height, input_width = img.shape[-2:]
 
-        pad_height = (input_height // self.size_divisor + 1) * self.size_divisor - input_height
-        pad_width = (input_width // self.size_divisor + 1) * self.size_divisor - input_width
+        pad_height = (self.size_divisor - input_height % self.size_divisor) % self.size_divisor
+        pad_width = (self.size_divisor - input_width % self.size_divisor) % self.size_divisor
 
         return self.num_channels, input_height + pad_height, input_width + pad_width
 
@@ -122,8 +122,8 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         old_height, old_width = get_image_size(image)
         size = self.image_processor_tester.size_divisor
 
-        pad_height = (old_height // size + 1) * size - old_height
-        pad_width = (old_width // size + 1) * size - old_width
+        pad_height = (size - old_height % size) % size
+        pad_width = (size - old_width % size) % size
         return old_height + pad_height, old_width + pad_width
 
     # Swin2SRImageProcessor does not support batched input
@@ -186,6 +186,15 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
         self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
+    def test_aligned_image_is_not_padded(self):
+        image = np.zeros((16, 16, 3), dtype=np.uint8)
+
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            encoded_images = image_processing(image, return_tensors="pt").pixel_values
+
+            self.assertEqual(tuple(encoded_images.shape), (1, 3, 16, 16))
 
     def test_slow_fast_equivalence_batched(self):
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
