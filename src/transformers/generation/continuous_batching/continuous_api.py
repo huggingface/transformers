@@ -91,15 +91,19 @@ class OutputRouter:
     def __init__(self) -> None:
         self.output_queue = queue.Queue()
         self.result_handlers: dict[str, tuple[Callable, asyncio.AbstractEventLoop]] = {}
+        self.sync_queues: dict[str, queue.Queue] = {}
         self._lock = threading.Lock()
 
     def deliver(self, output: GenerationOutput) -> None:
         """Route a single output to its registered handler or the output_queue."""
         with self._lock:
             entry = self.result_handlers.get(output.request_id)
+            sync_q = self.sync_queues.get(output.request_id)
         if entry is not None:
             callback, loop = entry
             loop.call_soon_threadsafe(callback, output)
+        elif sync_q is not None:
+            sync_q.put(output)
         else:
             self.output_queue.put(output)
 
@@ -113,9 +117,12 @@ class OutputRouter:
         with self._lock:
             for output in outputs:
                 entry = self.result_handlers.get(output.request_id)
+                sync_q = self.sync_queues.get(output.request_id)
                 if entry is not None:
                     callback, loop = entry
                     callbacks.append((callback, output))
+                elif sync_q is not None:
+                    sync_q.put(output)
                 else:
                     self.output_queue.put(output)
         if callbacks and loop is not None:
@@ -820,17 +827,40 @@ class ContinuousBatchingManager:
             self._has_new_requests.set()
 
     # TODO:handle benchmarking properly when updating / fixing the requeue logic
-    # TODO (remi-or) : this NEEDS to get fixed in a future PR -- it's quite wasteful
     def get_result(self, request_id: str | None = None, timeout: float | None = None) -> GenerationOutput | None:
         """Retrieve one result from the output queue. If an ID is provided, returns the first matching request. If a
         timeout is provided, returns None after the timeout (in seconds)."""
         if self._generation_thread is None and self.output_router.output_queue.empty():
             return None
-        try:
-            result = self.output_router.output_queue.get(block=True, timeout=timeout)
-            if request_id is not None and result.request_id != request_id:
-                self.output_router.output_queue.put(result)
+
+        if request_id is None:
+            try:
+                return self.output_router.output_queue.get(block=True, timeout=timeout)
+            except queue.Empty:
                 return None
+
+        # Targeted retrieval: ensure a dedicated queue exists for this request
+        with self.output_router._lock:
+            if request_id not in self.output_router.sync_queues:
+                self.output_router.sync_queues[request_id] = queue.Queue()
+                # Scour the existing shared queue for items belonging to this request
+                out_q = self.output_router.output_queue
+                with out_q.mutex:
+                    import collections
+
+                    new_queue = collections.deque()
+                    for item in out_q.queue:
+                        if item.request_id == request_id:
+                            self.output_router.sync_queues[request_id].put(item)
+                        else:
+                            new_queue.append(item)
+                    out_q.queue = new_queue
+
+        try:
+            result = self.output_router.sync_queues[request_id].get(block=True, timeout=timeout)
+            if result.is_finished():
+                with self.output_router._lock:
+                    self.output_router.sync_queues.pop(request_id, None)
             return result
         except queue.Empty:
             return None
