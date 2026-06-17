@@ -512,9 +512,7 @@ class AriaImageProcessor(TorchvisionBackend):
 
         resized_height, resized_width = select_best_resolution((height, width), self.split_resolutions)
         num_patches = (
-            1
-            if not split_image
-            else -(-resized_height // max_image_size) * -(-resized_width // max_image_size)
+            1 if not split_image else -(-resized_height // max_image_size) * -(-resized_width // max_image_size)
         )
         return num_patches
 
