@@ -60,7 +60,7 @@ if is_accelerate_available():
     from accelerate.utils import get_balanced_memory, infer_auto_device_map
 
 # Minimum PEFT version supported for the integration
-MIN_PEFT_VERSION = "0.18.2"
+MIN_PEFT_VERSION = "0.19.0"
 
 
 logger = logging.get_logger(__name__)
@@ -417,7 +417,7 @@ class PeftAdapterMixin:
     prompt tuning, prompt learning are out of scope as these adapters are not "injectable" into a torch module. For
     using these methods, please refer to the usage guide of PEFT library.
 
-    With this mixin, if the correct PEFT version is installed (>= 0.18.0), it is possible to:
+    With this mixin, if the correct PEFT version is installed (>= 0.19.0), it is possible to:
 
     - Load an adapter stored on a local path or in a remote Hub repository, and inject it in the model
     - Attach new adapters in the model and train them with Trainer or by your own.

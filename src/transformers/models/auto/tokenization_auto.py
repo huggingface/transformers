@@ -33,7 +33,7 @@ from ...utils import (
     is_tokenizers_available,
     logging,
 )
-from ...utils.hub import cached_file
+from ...utils.hub import cached_file, has_file
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -109,6 +109,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("deberta", "DebertaTokenizer" if is_tokenizers_available() else None),
         ("deberta-v2", "DebertaV2Tokenizer" if is_tokenizers_available() else None),
         ("dia", "DiaTokenizer"),
+        ("diffusion_gemma", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("distilbert", "BertTokenizer" if is_tokenizers_available() else None),
         ("dpr", "DPRQuestionEncoderTokenizer" if is_tokenizers_available() else None),
         ("electra", "BertTokenizer" if is_tokenizers_available() else None),
@@ -248,6 +249,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("owlv2", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("owlvit", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("parakeet_ctc", "ParakeetTokenizer" if is_tokenizers_available() else None),
+        ("parakeet_rnnt", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("parakeet_tdt", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("pegasus", "PegasusTokenizer" if is_tokenizers_available() else None),
         ("pegasus_x", "PegasusTokenizer" if is_tokenizers_available() else None),
@@ -354,6 +356,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "chatlm",
     "deepseek_v2",
     "deepseek_v3",
+    "deepseek_v32",
     "deepseek_v4",
     "deepseek_vl",
     "deepseek_vl_hybrid",
@@ -364,7 +367,6 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "h2ovl_chat",
     "hyperclovax_vlm",
     "internlm2",
-    "internvl_chat",
     "jamba",
     "janus",
     "llava",
@@ -412,6 +414,25 @@ def load_merges(merges_file):
             if line and not line.startswith("#"):
                 merges.append(tuple(line.split()))
     return merges
+
+
+def _has_tekken_tokenizer_file(
+    pretrained_model_name_or_path: str | os.PathLike[str],
+    **kwargs,
+) -> bool:
+    subfolder = kwargs.get("subfolder", "")
+    tekken_filename = os.path.join(subfolder, "tekken.json") if subfolder else "tekken.json"
+    try:
+        return has_file(
+            pretrained_model_name_or_path,
+            tekken_filename,
+            revision=kwargs.get("revision"),
+            token=kwargs.get("token"),
+            cache_dir=kwargs.get("cache_dir"),
+            local_files_only=kwargs.get("local_files_only", False),
+        )
+    except OSError:
+        return False
 
 
 def tokenizer_class_from_name(class_name: str) -> type[Any] | None:
@@ -699,6 +720,7 @@ class AutoTokenizer:
                 config = PreTrainedConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         config_model_type = config.model_type
+        config_model_name = config.model_name if hasattr(config, "model_name") else None
 
         # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
@@ -715,22 +737,32 @@ class AutoTokenizer:
 
         # if there is a config, we can check that the tokenizer class != than model class.
         # Use the config class if it's a specialized tokenizer, otherwise fall back to TokenizersBackend.
+        # Hub class should prioritize tokenizer_config.json or fallback to config.tokenizer_class.
+        _hub_class = tokenizer_config_class or getattr(config, "tokenizer_class", None)
         if (
             tokenizer_auto_map is None
-            and tokenizer_config_class is not None
+            and _hub_class is not None
             and config_model_type is not None
             and config_model_type != ""
             and TOKENIZER_MAPPING_NAMES.get(config_model_type) is not None
             and (TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast"))
-            != (tokenizer_config_class.removesuffix("Fast"))
+            != (_hub_class.removesuffix("Fast"))
         ):
             registered_class_name = TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast")
-            if registered_class_name not in ("TokenizersBackend", "PythonBackend", "PreTrainedTokenizerFast"):
+            if registered_class_name not in (
+                "TokenizersBackend",
+                "PythonBackend",
+                "PreTrainedTokenizerFast",
+                "MistralCommonBackend",
+            ):
                 # If the hub class is known incorrect for this model type, use the registered class; otherwise trust the hub.
                 class_name = (
                     registered_class_name
-                    if config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
-                    else tokenizer_config_class
+                    if (
+                        config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
+                        or config_model_name in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
+                    )
+                    else _hub_class
                 )
                 tokenizer_class = tokenizer_class_from_name(class_name)
                 if tokenizer_class is not None and tokenizer_class.__name__ not in (
@@ -740,11 +772,21 @@ class AutoTokenizer:
                 ):
                     return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
+            if (
+                registered_class_name == "MistralCommonBackend"
+                and is_mistral_common_available()
+                and "fix_mistral_regex" not in kwargs
+                and _has_tekken_tokenizer_file(pretrained_model_name_or_path, **kwargs)
+            ):
+                tokenizer_class = tokenizer_class_from_name("MistralCommonBackend")
+                if tokenizer_class is not None:
+                    return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
             if TokenizersBackend is not None:
                 return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
             raise ValueError(
-                f"Tokenizer class '{tokenizer_config_class}' specified in the tokenizer config was not found. "
+                f"Tokenizer class '{_hub_class}' specified in the tokenizer config was not found. "
                 f"The tokenizer may need to be converted or re-saved."
             )
 
@@ -774,7 +816,11 @@ class AutoTokenizer:
             )
         )
         # V5: Skip remote tokenizer for custom models with incorrect hub tokenizer class
-        if has_remote_code and config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
+        if (
+            has_remote_code
+            and config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
+            and trust_remote_code is not True
+        ):
             has_remote_code = False
             tokenizer_auto_map = None
 
@@ -837,6 +883,11 @@ class AutoTokenizer:
         if model_type is not None:
             tokenizer_class = TOKENIZER_MAPPING.get(type(config), TokenizersBackend)
             if tokenizer_class is not None:
+                if getattr(tokenizer_class, "__name__", None) == "MistralCommonBackend" and (
+                    "fix_mistral_regex" in kwargs
+                    or not _has_tekken_tokenizer_file(pretrained_model_name_or_path, **kwargs)
+                ):
+                    tokenizer_class = TokenizersBackend
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # Fallback: try tokenizer_class from tokenizer_config.json
