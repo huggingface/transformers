@@ -43,6 +43,12 @@ if is_torch_available():
     from transformers import ESMFold2Model
     from transformers.models.esmfold2.modeling_esmfold2 import ESMFold2SWA3DRoPEAttention
 
+# TEMP: the public ``biohub/ESMFold2`` snapshot does not yet bundle the ESMC-6B
+# backbone under ``esmc.*`` (it loads random → garbage outputs). Point the slow
+# integration tests at the locally-bundled checkpoint for now. REVERT to
+# "biohub/ESMFold2" once the backbone is bundled there.
+_INTEGRATION_CKPT = "Rocketknight1/ESMFold2-merged-temp"
+
 
 def get_tiny_config(**overrides) -> "ESMFold2Config":
     """A minimal but internally consistent ESMFold2 config for CPU testing.
@@ -202,7 +208,7 @@ class ESMFold2IntegrationTest(TestCasePlus):
     def test_inference_protein_folding(self):
         # bf16 is the intended inference regime; the ESMC backbone is bundled in the
         # checkpoint and loaded with the model.
-        model = ESMFold2Model.from_pretrained("biohub/ESMFold2", dtype=torch.bfloat16).to(torch_device).eval()
+        model = ESMFold2Model.from_pretrained(_INTEGRATION_CKPT, dtype=torch.bfloat16).to(torch_device).eval()
 
         # Ubiquitin (PDB 1UBQ), a textbook well-folding 76-residue domain. These
         # diffusion folders draw several samples and the best-ranked is the
@@ -237,8 +243,11 @@ class ESMFold2IntegrationTest(TestCasePlus):
         # the ESMC-6B backbone + LM projection + pairformer trunk end-to-end.
         #
         # Baked from biohub/ESMFold2 @ dd1eae4fb2 (torch 2.11+cu130). A standalone
-        # multi-sequence version of this check lives in esmfold2_regression.py.
-        model = ESMFold2Model.from_pretrained("biohub/ESMFold2", dtype=torch.float32).eval()
+        # multi-sequence version of this check lives in esmfold2_regression.py. The
+        # distogram is a trunk output (no pair-bias attention); ``ptm`` is fed by
+        # the diffusion sampler, which now runs the pair-bias attention through
+        # SDPA on CPU too (~1e-8 vs the old eager path, amplified to ~1e-4 in ptm).
+        model = ESMFold2Model.from_pretrained(_INTEGRATION_CKPT, dtype=torch.float32).eval()
 
         seq = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG"
         torch.manual_seed(0)
@@ -262,7 +271,7 @@ class ESMFold2IntegrationTest(TestCasePlus):
             ]
         )
         torch.testing.assert_close(output["distogram_logits"][0, 0, 1, :8].float(), expected_distogram, rtol=0, atol=0)
-        self.assertEqual(output["ptm"].max().item(), 0.7425990104675293)
+        self.assertEqual(output["ptm"].max().item(), 0.7427499890327454)
 
     @slow
     @require_torch_accelerator
@@ -293,7 +302,7 @@ class ESMFold2IntegrationTest(TestCasePlus):
             torch.backends.cudnn.benchmark = False
             torch.backends.cuda.matmul.allow_tf32 = False
 
-            model = ESMFold2Model.from_pretrained("biohub/ESMFold2", dtype=torch.bfloat16).to(torch_device).eval()
+            model = ESMFold2Model.from_pretrained(_INTEGRATION_CKPT, dtype=torch.bfloat16).to(torch_device).eval()
             seq = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG"
             torch.manual_seed(0)
             with torch.no_grad():
@@ -302,12 +311,14 @@ class ESMFold2IntegrationTest(TestCasePlus):
             # TODO(pre-merge): EXACT (atol=0) values are bit-exact only on the machine
             # they were baked on (RTX 4090, torch 2.11+cu130); bf16 bits differ across
             # GPUs. Before merging, loosen to atol~0.2 (catches dtype-swap drift of
-            # ~0.4-2.0 while absorbing cross-GPU variation).
+            # ~0.4-2.0 while absorbing cross-GPU variation). The diffusion pair-bias
+            # attention runs through SDPA on GPU, so ``ptm`` (but not the trunk
+            # distogram) also depends on which SDPA backend the box selects.
             expected_distogram = torch.tensor([6.46875, 7.71875, 9.4375, 9.3125, 16.125, 18.625, 19.625, 22.625])
             torch.testing.assert_close(
                 output["distogram_logits"][0, 0, 1, :8].float().cpu(), expected_distogram, rtol=0, atol=0
             )
-            self.assertEqual(output["ptm"].max().item(), 0.7421817183494568)
+            self.assertEqual(output["ptm"].max().item(), 0.7416768074035645)
         finally:
             torch.use_deterministic_algorithms(prev[0], warn_only=prev[1])
             torch.backends.cudnn.deterministic = prev[2]
