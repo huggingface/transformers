@@ -24,7 +24,13 @@ from ..conversion_mapping import get_checkpoint_conversion_mapping, register_che
 from ..monkey_patching import register_patch_mapping
 from ..utils import ENV_VARS_TRUE_VALUES, logging
 from ..utils.generic import is_flash_attention_requested
-from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION, is_kernels_available, is_torch_available
+from ..utils.import_utils import (
+    KERNELS_MAX_VERSION,
+    KERNELS_MIN_VERSION,
+    is_kernels_available,
+    is_rocm_platform,
+    is_torch_available,
+)
 from .flash_attention import flash_attention_forward
 
 
@@ -543,12 +549,16 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
         model.apply(attach_hidden_kernels)
 
         mode = Mode.INFERENCE if not model.training else Mode.TRAINING if mode is None else mode
+        device_type = model.device.type
+        if device_type == "cuda" and is_rocm_platform():
+            device_type = "rocm"
+        device = Device(type=device_type)
         if model.kernel_config is not None:
             inherit_mapping = not model.kernel_config.use_local_kernel
             with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
-                _kernels_kernelize(model, device=Device(type=model.device.type), mode=mode)
+                _kernels_kernelize(model, device=device, mode=mode)
         else:
-            _kernels_kernelize(model, device=Device(type=model.device.type), mode=mode)
+            _kernels_kernelize(model, device=device, mode=mode)
 
         model._use_kernels = True
     finally:

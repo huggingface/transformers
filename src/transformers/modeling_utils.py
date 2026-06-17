@@ -128,7 +128,6 @@ from .utils.import_utils import (
     KERNELS_MIN_VERSION,
     is_flash_attn_greater_or_equal,
     is_huggingface_hub_greater_or_equal,
-    is_rocm_platform,
     is_sagemaker_mp_enabled,
     is_torch_cuda_available,
     is_tracing,
