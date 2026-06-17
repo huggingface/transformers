@@ -300,7 +300,7 @@ class NemotronAsrProcessor(ProcessorMixin):
         return round((self.default_num_lookahead_tokens + 1) * self._encoder_frame_ms)
 
     @property
-    def supported_streaming_latencies(self) -> dict[int, int]:
+    def supported_streaming_latencies_ms(self) -> dict[int, int]:
         """
         Mapping from each supported right attention context (`supported_num_lookahead_tokens`) to its streaming
         latency in milliseconds (`(num_lookahead_tokens + 1) * encoder_frame_ms`).
