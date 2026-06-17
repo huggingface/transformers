@@ -1776,16 +1776,17 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not hasattr(config.get_text_config(), "output_router_logits"):
             self.skipTest(reason="Model does not support `output_router_logits`")
+        config.get_text_config().output_router_logits = True
 
         checked = False
         for model_class in self.all_generative_model_classes:
-            model = model_class(config).to(torch_device)
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            outputs = model(**inputs, output_router_logits=True)
-            if getattr(outputs, "aux_loss", None) is None:
+            set_seed(0)
+            model = model_class(config).to(torch_device).eval()
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            aux_loss = getattr(model(**inputs), "aux_loss", None)
+            if not torch.is_tensor(aux_loss):
                 continue
-            self.assertNotEqual(outputs.aux_loss.item(), 0.0)
+            self.assertNotEqual(aux_loss.item(), 0.0)
             checked = True
         if not checked:
             self.skipTest(reason="Model does not return an `aux_loss`")

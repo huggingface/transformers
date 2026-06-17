@@ -1462,11 +1462,11 @@ class DiffusionGemmaBlockDiffusionOutputWithPast(CausalLMOutputWithPast):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
         Language modeling loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, canvas_length, config.text_config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     aux_loss (`torch.FloatTensor`, *optional*, returned when `output_router_logits=True` is passed):
         Load balancing loss for the MoE experts, already weighted by `router_aux_loss_coef` and ready to be added
         to the training loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, canvas_length, config.text_config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Sequence of hidden states at the output of the last layer of the encoder. Only set when `input_ids` is
         provided, e.g. to compute an autoregressive loss on the encoder during training.
