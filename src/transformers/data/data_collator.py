@@ -685,6 +685,8 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     mlm_probability: float | None = 0.15
     mask_replace_prob: float = 0.8
     random_replace_prob: float = 0.1
+    padding: bool | str | PaddingStrategy = True
+    max_length: int | None = None
     pad_to_multiple_of: int | None = None
     return_tensors: str = "pt"
     seed: int | None = None
@@ -772,12 +774,22 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
         if isinstance(examples[0], Mapping):
             batch = pad_without_fast_tokenizer_warning(
-                self.tokenizer, examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of
+                self.tokenizer,
+                examples,
+                return_tensors="pt",
+                pad_to_multiple_of=self.pad_to_multiple_of,
+                padding=self.padding,
+                max_length=self.max_length,
             )
         else:
-            batch = {
-                "input_ids": _torch_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
-            }
+            batch = pad_without_fast_tokenizer_warning(
+                self.tokenizer,
+                [{"input_ids": e} for e in examples],
+                return_tensors="pt",
+                pad_to_multiple_of=self.pad_to_multiple_of,
+                padding=self.padding,
+                max_length=self.max_length,
+            )
 
         # If special token mask has been preprocessed, pop it from the dict.
         special_tokens_mask = batch.pop("special_tokens_mask", None)
@@ -866,12 +878,22 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
         if isinstance(examples[0], Mapping):
             batch = pad_without_fast_tokenizer_warning(
-                self.tokenizer, examples, return_tensors="np", pad_to_multiple_of=self.pad_to_multiple_of
+                self.tokenizer,
+                examples,
+                return_tensors="np",
+                pad_to_multiple_of=self.pad_to_multiple_of,
+                padding=self.padding,
+                max_length=self.max_length,
             )
         else:
-            batch = {
-                "input_ids": _numpy_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
-            }
+            batch = pad_without_fast_tokenizer_warning(
+                self.tokenizer,
+                [{"input_ids": e} for e in examples],
+                return_tensors="np",
+                pad_to_multiple_of=self.pad_to_multiple_of,
+                padding=self.padding,
+                max_length=self.max_length,
+            )
 
         # If special token mask has been preprocessed, pop it from the dict.
         special_tokens_mask = batch.pop("special_tokens_mask", None)
