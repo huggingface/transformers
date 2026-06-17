@@ -13,6 +13,8 @@
 # limitations under the License.
 """Image processor class for Aria."""
 
+import math
+
 import numpy as np
 
 from ...image_processing_backends import PilBackend
@@ -223,7 +225,11 @@ class AriaImageProcessorPil(PilBackend):
         max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
 
         resized_height, resized_width = select_best_resolution((height, width), self.split_resolutions)
-        num_patches = 1 if not split_image else resized_height // max_image_size * resized_width // max_image_size
+        num_patches = (
+            1
+            if not split_image
+            else math.ceil(resized_height / max_image_size) * math.ceil(resized_width / max_image_size)
+        )
         return num_patches
 
 
