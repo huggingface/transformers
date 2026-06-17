@@ -65,7 +65,7 @@ print(processor.decode(output.sequences, skip_special_tokens=True))
 > [!NOTE]
 > This is an experimental feature and the API is subject to change.
 
-For real-time transcription, each chunk of raw audio is passed straight to the processor with `is_streaming=True` and `is_first_audio_chunk=...` as it arrives; the processor runs the per-chunk STFT (`center=True` for the first chunk, `center=False` afterwards) so the features reproduce, frame-for-frame, a single full-utterance pass. The processor exposes the exact chunk sizes the cache-aware encoder requires for a given lookahead. Call `processor.set_num_lookahead_tokens(...)` to pick the right attention context (lookahead, in subsampled encoder frames) — this re-derives the chunk-size properties below — and pass the same `num_lookahead_tokens` to `generate` so the forward matches the chunk sizes (streaming `generate` raises if it is omitted).
+For real-time transcription, audio is split into chunks following:
 
 ```python
 from threading import Thread
@@ -99,7 +99,6 @@ first_chunk_inputs = first_chunk_inputs.to(model.device, dtype=model.dtype)
 
 
 def input_features_generator():
-    # `center=True` yields one extra (partial) STFT frame; keep the exact number of valid frames.
     yield first_chunk_inputs.input_features[:, : processor.num_mel_frames_first_audio_chunk, :]
 
     mel_frame_idx = processor.num_mel_frames_first_audio_chunk
