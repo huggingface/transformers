@@ -244,7 +244,6 @@ class RecurrentGemmaAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        use_cache: bool | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
