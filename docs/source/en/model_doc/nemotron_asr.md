@@ -69,17 +69,13 @@ For real-time transcription, audio is split into chunks following:
 
 ```python
 from threading import Thread
-
 from transformers import AutoModelForRNNT, AutoProcessor, TextIteratorStreamer
 from transformers.audio_utils import load_audio
-
 
 model_id = "nvidia/nemotron-speech-streaming-en-0.6b"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForRNNT.from_pretrained(model_id, device_map="auto")
 
-# Select the streaming right attention context (lookahead). Higher = better accuracy but more latency.
-# This sizes the chunks the processor emits; the same value is passed to `generate` below.
 processor.set_num_lookahead_tokens(6)
 
 sampling_rate = processor.feature_extractor.sampling_rate
