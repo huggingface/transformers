@@ -280,13 +280,30 @@ def _patch_randperm(original):
 
 @register_patch("onnx", "torch.histc")
 def _patch_histc(original):
-    """Default `aten_histc` translation rejects integer inputs (`AssertionError: torch.histc
-    only works on float`), but transformers' MoE forward calls `histc` with int32 on CUDA
-    (see `grouped_mm_experts_forward`). Cast to float so the ONNX decomposition accepts it.
+    """Replace `torch.histc` with a statically-shaped, deterministic equivalent.
+
+    The default torchlib `aten_histc` translation rejects integer input (`torch.histc only
+    works on float`), and the obvious workaround — casting to float — calls `_histc_cuda`
+    which has no deterministic implementation on CUDA. `bincount`'s output is an unbacked
+    SymInt under torch.export and trips downstream meta-shape guards (e.g. grouped_mm's
+    `offs` size check). Pre-allocating `torch.zeros(bins)` + `scatter_add_` keeps the output
+    shape pinned to `bins` (a Python int), and `scatter_add_` is deterministic on integer
+    indices.
     """
 
     def patch(input, bins=100, min=0, max=0, *, out=None):
-        return original(input.float(), bins=bins, min=min, max=max, out=out)
+        flat = input.reshape(-1)
+        if max == min == 0:
+            min_val = flat.min().float()
+            max_val = flat.max().float()
+        else:
+            min_val = torch.tensor(float(min), device=flat.device)
+            max_val = torch.tensor(float(max), device=flat.device)
+        bin_width = (max_val - min_val) / bins
+        idx = ((flat.float() - min_val) / bin_width).long().clamp_(0, bins - 1)
+        out_dtype = input.dtype if input.is_floating_point() else torch.float
+        counts = torch.zeros(bins, dtype=out_dtype, device=input.device)
+        return counts.scatter_add_(0, idx, torch.ones_like(idx, dtype=out_dtype))
 
     return patch
 
@@ -788,6 +805,83 @@ def _aten_grouped_mm(mat_a: TReal, mat_b: TReal, offs: INT64, bias=None, out_dty
     return op.Concat(*outputs, axis=0)  # (M, N)
 
 
+def _aten_repeat_interleave_self_int(self, repeats, dim=None, output_size=None):
+    """ONNX implementation of `aten.repeat_interleave.self_int`.
+
+    Torchlib's translation raises on `dim is None` and broadcasts incorrectly for the
+    1-D + symbolic-repeats case (its tile shape is `[r, 1]` instead of `[1, r]`). We
+    always rewrite: flatten when `dim is None`, then `Unsqueeze + Tile + Reshape` along
+    the chosen axis. Handles both Python-int and 0-D-tensor `repeats`.
+    """
+    if dim is None:
+        flat = op.Reshape(self, op.Constant(value_ints=[-1]))
+        unsq = op.Unsqueeze(flat, op.Constant(value_ints=[1]))
+        if isinstance(repeats, int):
+            tile_shape = op.Constant(value_ints=[1, repeats])
+        else:
+            r = op.Reshape(op.Cast(repeats, to=7), op.Constant(value_ints=[-1]))
+            tile_shape = op.Concat(op.Constant(value_ints=[1]), r, axis=0)
+        return op.Reshape(op.Tile(unsq, tile_shape), op.Constant(value_ints=[-1]))
+
+    self_rank = len(self.shape)
+    pos_dim = (dim + self_rank) % self_rank
+    unsq = op.Unsqueeze(self, op.Constant(value_ints=[pos_dim + 1]))
+    if isinstance(repeats, int):
+        tiles = [1] * (self_rank + 1)
+        tiles[pos_dim + 1] = repeats
+        tile_shape = op.Constant(value_ints=tiles)
+    else:
+        r = op.Reshape(op.Cast(repeats, to=7), op.Constant(value_ints=[-1]))
+        tile_shape = op.Concat(
+            op.Constant(value_ints=[1] * (pos_dim + 1)),
+            r,
+            op.Constant(value_ints=[1] * (self_rank - pos_dim - 1)),
+            axis=0,
+        )
+    tiled = op.Tile(unsq, tile_shape)
+    final_shape = op.Concat(
+        op.Shape(self, start=0, end=pos_dim),
+        op.Constant(value_ints=[-1]),
+        op.Shape(self, start=pos_dim + 1),
+        axis=0,
+    )
+    return op.Reshape(tiled, final_shape)
+
+
+def _operator_floordiv(self, other):
+    """Correct floor division (toward -inf) for signed integer SymInts.
+
+    Torchlib's `operator_floordiv` translation only handles positive operands (plain `Div`,
+    which truncates). For signed ints — including SymInt shape arithmetic — apply the
+    offset correction `floor(a/b) = trunc(a/b) - (sign(a) != sign(b) AND a mod b != 0)`,
+    matching `aten_floor_divide`. Without this, the Python ceil-div idiom `-(-x // y)`
+    produces `1 + trunc((y - 1 - x) / y)` instead of `ceil(x / y)`, which silently breaks
+    any shape arithmetic that crosses zero.
+    """
+    offset = op.And(
+        op.Not(op.Equal(op.Sign(self), op.Sign(other))),
+        op.Cast(op.Mod(self, other), to=onnx_ir.DataType.BOOL.value),
+    )
+    return op.Sub(op.Div(self, other), op.Cast(offset, to=self.dtype.value))
+
+
+def _aten_masked_fill(self, mask, value):
+    """ONNX implementation of `aten.masked_fill.{Scalar,Tensor}`.
+
+    Upstream torchlib lowers this to `Where(mask, value, self)`. ORT's CPU EP has no
+    `Where(16)` kernel for BOOL inputs, so when `self` is BOOL we rewrite the op using
+    boolean primitives: `masked_fill(self, mask, True)` → `self | mask`,
+    `masked_fill(self, mask, False)` → `self & ~mask`. Non-bool `self` keeps the default.
+    """
+    if self.dtype == onnx_ir.DataType.BOOL:
+        fill_true = bool(value) if isinstance(value, (bool, int, float)) else bool(value.const_value.numpy())
+        if fill_true:
+            return op.Or(self, mask)
+        return op.And(self, op.Not(mask))
+    value_cast = op.CastLike(value, self)
+    return op.Where(mask, value_cast, self)
+
+
 _ONNX_TRANSLATION_TABLE: dict[Any, Any] = {}
 if is_onnxscript_available():
     _ONNX_TRANSLATION_TABLE.update(
@@ -796,6 +890,10 @@ if is_onnxscript_available():
             torch.ops.aten.index_put.default: _aten_index_put,
             torch.ops.aten._grouped_mm.default: _aten_grouped_mm,
             torch.ops.transformers.grouped_mm_fallback.default: _aten_grouped_mm,
+            torch.ops.aten.repeat_interleave.self_int: _aten_repeat_interleave_self_int,
+            torch.ops.aten.masked_fill.Scalar: _aten_masked_fill,
+            torch.ops.aten.masked_fill.Tensor: _aten_masked_fill,
+            operator.floordiv: _operator_floordiv,
         }
     )
 

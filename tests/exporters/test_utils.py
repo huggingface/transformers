@@ -48,17 +48,6 @@ EXPORT_SKIP_MODEL_CLASSES = {
     # VideoMAE computes loss even when return_loss=False, hitting a data-dependent guard in mse_loss.
     # TODO: fix VideoMAE to skip loss computation when labels are not provided.
     "VideoMAEForPreTraining",
-    # CHMv2 hits two torch.export bugs: detach_ nodes surviving into run_decompositions, and
-    # constant tensors (lifted_tensor) missing from the constants dictionary (SpecViolationError).
-    # TODO: fix upstream in PyTorch.
-    "CHMv2ForDepthEstimation",
-    # VoxtralRealtime passes t_cond=None to decoder layers when time_tensor is not in test inputs,
-    # causing AdaRMSNorm to receive None and fail in linear(). TODO: fix model to skip ada_rms_norm
-    # when t_cond is None, or ensure test inputs always provide a time_tensor.
-    "VoxtralRealtimeForConditionalGeneration",
-    # PPDocLayoutV3 passes a ModuleList as a forward argument (order_head), which is not supported
-    # by get_auto_dynamic_shapes and torch.export. TODO: refactor to avoid passing modules as inputs.
-    "PPDocLayoutV3ForObjectDetection",
     # OpenAIPrivacyFilter overrides `get_correct_experts_implementation` to default to `eager` because
     # the model is sensitive to accumulation order. The eager experts forward has a Python loop over
     # `expert_hit.nonzero()` which torch.export can't trace (data-dependent shape). To export, the
@@ -66,6 +55,30 @@ EXPORT_SKIP_MODEL_CLASSES = {
     # trade-off; we don't force that switch from the exporter side.
     "OpenAIPrivacyFilterModel",
     "OpenAIPrivacyFilterForTokenClassification",
+}
+
+
+# Model classes skipped for ONNX export (both static and dynamic). Other backends work.
+ONNX_SKIP_MODEL_CLASSES = {
+    # `run_decompositions` retraces through aot_autograd, which produces a `detach_(alias(...))`
+    # pair that the functional-graph assertion rejects (verified independent of any source
+    # `.detach()` in the model). Torch export works in both static and dynamic.
+    # TODO: file an upstream torch.export issue.
+    "CHMv2ForDepthEstimation",
+}
+
+
+# Model classes skipped for ONNX dynamic-shape export only (static export works).
+ONNX_DYNAMIC_SKIP_MODEL_CLASSES = {
+    # Under dynamic shapes, run_decompositions retraces through aot_autograd which emits a
+    # `detach_(alias(...))` pair from its own decomposition pipeline (independent of any
+    # source `.detach()` calls in the model — verified by guarding all three modeling-side
+    # detaches with `if self.training` and observing the same failure). Same shape as the
+    # CHMv2 failure above. Static export works. TODO: file an upstream torch.export issue.
+    "GroundingDinoModel",
+    "GroundingDinoForObjectDetection",
+    "MMGroundingDinoModel",
+    "MMGroundingDinoForObjectDetection",
 }
 
 
@@ -113,6 +126,11 @@ EXPORT_GENERATE_SKIP_MODEL_CLASSES = {
     # due to a mismatch in how the encoder cross-attention mask flows through the generate decomposition.
     # TODO: investigate UDOP's encoder-decoder output structure in the context of decomposed export.
     "UdopForConditionalGeneration",
+    # VoxtralRealtime's exported prefill drops the past_key_values tensors that eager returns
+    # (`Missing keys: past_key_values.layers.*.{keys,values,_sliding_window_tensor}`), so the
+    # output-shape check in test_torch_export_generate fails. Plain forward exports work.
+    # TODO: align the generate-decomposition path with the realtime KV-cache shape.
+    "VoxtralRealtimeForConditionalGeneration",
 }
 
 
@@ -189,11 +207,16 @@ class ExportTesterMixin:
             if "for expert" in source_code and "use_experts_implementation" not in source_code:
                 self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
 
-    def _should_skip(self, model_class, generate=False):
+    def _should_skip(self, model_class, generate=False, dynamic=False, backend=None):
         """Return True if this model class should be skipped for export tests."""
-        if model_class.__name__ in EXPORT_SKIP_MODEL_CLASSES:
+        name = model_class.__name__
+        if name in EXPORT_SKIP_MODEL_CLASSES:
             return True
-        if generate and model_class.__name__ in EXPORT_GENERATE_SKIP_MODEL_CLASSES:
+        if generate and name in EXPORT_GENERATE_SKIP_MODEL_CLASSES:
+            return True
+        if backend == "onnx" and name in ONNX_SKIP_MODEL_CLASSES:
+            return True
+        if backend == "onnx" and dynamic and name in ONNX_DYNAMIC_SKIP_MODEL_CLASSES:
             return True
         return False
 
@@ -291,7 +314,7 @@ class ExportTesterMixin:
         self._skip_if_not_exportable()
 
         for model_class in self.all_model_classes:
-            if self._should_skip(model_class):
+            if self._should_skip(model_class, dynamic=dynamic, backend="onnx"):
                 continue
 
             optimize = model_class.__name__ not in ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES
@@ -412,7 +435,7 @@ class ExportGenerateTesterMixin:
         self._skip_if_not_exportable()
 
         for model_class in self.all_generative_model_classes:
-            if self._should_skip(model_class, generate=True):
+            if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="onnx"):
                 continue
 
             optimize = model_class.__name__ not in ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES
