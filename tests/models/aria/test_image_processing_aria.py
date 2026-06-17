@@ -313,9 +313,7 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # actually produces.
         for image_processing_class in self.image_processing_classes.values():
             # Use the full default split_resolutions so odd-multiple slots are reachable.
-            image_processing = image_processing_class(
-                **{**self.image_processor_dict, "split_resolutions": None}
-            )
+            image_processing = image_processing_class(**{**self.image_processor_dict, "split_resolutions": None})
 
             # Portrait image -> best_resolution = [490, 980] -> ceil(490/980)*ceil(980/980) = 1*1 = 1
             num_patches = image_processing.get_number_of_image_patches(

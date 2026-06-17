@@ -17,8 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
-
 import torch
 from torchvision.transforms.v2 import functional as tvF
 
@@ -224,7 +222,7 @@ class AriaImageProcessor(TorchvisionBackend):
         num_patches = (
             1
             if not split_image
-            else math.ceil(resized_height / max_image_size) * math.ceil(resized_width / max_image_size)
+            else -(-resized_height // max_image_size) * -(-resized_width // max_image_size)
         )
         return num_patches
 

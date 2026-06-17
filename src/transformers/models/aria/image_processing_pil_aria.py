@@ -13,8 +13,6 @@
 # limitations under the License.
 """Image processor class for Aria."""
 
-import math
-
 import numpy as np
 
 from ...image_processing_backends import PilBackend
@@ -228,7 +226,7 @@ class AriaImageProcessorPil(PilBackend):
         num_patches = (
             1
             if not split_image
-            else math.ceil(resized_height / max_image_size) * math.ceil(resized_width / max_image_size)
+            else -(-resized_height // max_image_size) * -(-resized_width // max_image_size)
         )
         return num_patches
 
