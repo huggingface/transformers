@@ -105,6 +105,9 @@ class Qwen3TTSForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestC
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    # base_model (the talker text encoder) carries a sub-config, not the composite Qwen3TTSConfig,
+    # so it cannot round-trip through Qwen3TTSForConditionalGeneration.from_pretrained.
+    test_missing_keys = False
 
     def setUp(self):
         self.model_tester = Qwen3TTSModelTester(self)
@@ -117,6 +120,7 @@ class Qwen3TTSForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestC
             "test_model_forward_default_config_values",
             "test_retain_grad_hidden_states_attentions",
             "test_inputs_embeds",
+            "test_capture_outputs_decorator",
         )
         if any(name in self._testMethodName for name in _no_forward_tests):
             self.skipTest("Qwen3TTSForConditionalGeneration has no standard forward()")
