@@ -135,6 +135,7 @@ _import_structure = {
         "is_trackio_available",
         "is_wandb_available",
     ],
+    "integrations.hub_kernels": ["kernelize"],
     "loss": [],
     "pipelines": [
         "AnyToAnyPipeline",
@@ -632,6 +633,7 @@ if TYPE_CHECKING:
     from .integrations import is_wandb_available as is_wandb_available
     from .integrations.executorch import TorchExportableModuleWithStaticCache as TorchExportableModuleWithStaticCache
     from .integrations.executorch import convert_and_export_with_cache as convert_and_export_with_cache
+    from .integrations.hub_kernels import kernelize as kernelize
     from .masking_utils import AttentionMaskInterface as AttentionMaskInterface
     from .model_debugging_utils import model_addition_debugger_context as model_addition_debugger_context
     from .modeling_layers import GradientCheckpointingLayer as GradientCheckpointingLayer
