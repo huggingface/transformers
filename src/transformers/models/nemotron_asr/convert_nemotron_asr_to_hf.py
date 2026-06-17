@@ -211,9 +211,10 @@ def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=
             raise ValueError(f"Key {key} not found in feature_extractor_config_keys_mapping")
 
     feature_extractor = NemotronAsrFeatureExtractor(**converted_feature_extractor_config)
-    # Carry the model's supported right attention contexts onto the processor so it can validate
-    # `set_num_lookahead_tokens` and emit `num_lookahead_tokens`. NeMo stores a single [left, right] pair, a
-    # list of pairs (multi-lookahead), or [-1, -1] for full (offline) context.
+    # Carry the model's supported right attention contexts onto the processor — the single source of truth for
+    # the supported set, which `set_num_lookahead_tokens` validates against and which `__call__` emits as
+    # `num_lookahead_tokens`. NeMo stores a single [left, right] pair, a list of pairs (multi-lookahead), or
+    # [-1, -1] for full (offline) context.
     att_context_size = nemo_config["encoder"].get("att_context_size")
     supported_num_lookahead_tokens = default_num_lookahead_tokens = None
     if att_context_size is not None and att_context_size not in ([-1, -1], [[-1, -1]]):

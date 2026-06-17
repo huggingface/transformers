@@ -1031,14 +1031,13 @@ class NemotronAsrEncoder(NemotronAsrPreTrainedModel):
         )
 
     def _resolve_attn_context(self, num_lookahead_tokens: int | None = None) -> tuple[int, int]:
-        supported = self.config.supported_num_lookahead_tokens
         if num_lookahead_tokens is None:
             num_lookahead_tokens = self.config.default_num_lookahead_tokens
-        elif num_lookahead_tokens not in supported:
             logger.warning_once(
-                f"num_lookahead_tokens {num_lookahead_tokens} was not used during training "
-                f"(trained right contexts: {supported}). The model may still produce reasonable "
-                f"output, but quality is not guaranteed."
+                f"`num_lookahead_tokens` was not provided. "
+                f"Falling back to `config.default_num_lookahead_tokens={num_lookahead_tokens}`. "
+                f"Consider preparing inputs with [`~NemotronAsrProcessor.__call__`] which automatically sets "
+                f"this parameter."
             )
 
         left_context = self.config.sliding_window - 1
@@ -1247,18 +1246,6 @@ class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin)
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             decoder_cache=decoder_cache,
-        )
-
-    def loss_function(self, logits, labels, encoder_outputs, **kwargs):
-        logit_lengths = encoder_outputs.attention_mask.sum(-1)
-        logits = logits[:, : int(logit_lengths.max())]
-        return super().loss_function(
-            logits=logits,
-            labels=labels,
-            logit_lengths=logit_lengths,
-            label_lengths=(labels != self.config.blank_token_id).sum(-1),
-            blank_token_id=self.config.blank_token_id,
-            reduction=self.config.loss_reduction,
         )
 
 

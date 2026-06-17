@@ -119,8 +119,8 @@ def input_features_generator():
 
 streamer = TextIteratorStreamer(processor.tokenizer, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 generate_kwargs = {
+    **first_chunk_inputs,
     "input_features": input_features_generator(),
-    "num_lookahead_tokens": processor.default_num_lookahead_tokens,
     "streamer": streamer,
 }
 thread = Thread(target=model.generate, kwargs=generate_kwargs)

@@ -95,13 +95,9 @@ class NemotronAsrEncoderConfig(ParakeetEncoderConfig):
         Size of the K/V attention sliding window (in subsampled encoder frames). It equals
         `left_context + 1` (the current frame plus the left context), so the left attention context is
         `sliding_window - 1` — the same across all supported lookaheads.
-    supported_num_lookahead_tokens (`list[int]`, *optional*, defaults to `(13, 6, 1, 0)`):
-        Supported right attention contexts (lookaheads, in subsampled encoder frames) the model was
-        trained with — a multi-lookahead cache-aware model. The streaming delay of a right context `r` is
-        `(r + 1)` encoder frames.
     default_num_lookahead_tokens (`int`, *optional*, defaults to 13):
-        The right attention context used when none is passed to the forward. Must be one of
-        `supported_num_lookahead_tokens`.
+        The right attention context (lookahead, in subsampled encoder frames) used when none is passed to the
+        forward. The supported set the model was trained with lives on [`NemotronAsrProcessor`].
 
     Example:
     ```python
@@ -122,18 +118,10 @@ class NemotronAsrEncoderConfig(ParakeetEncoderConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
 
     sliding_window: int = 71
-    supported_num_lookahead_tokens: list[int] | tuple[int, ...] = (13, 6, 1, 0)
     default_num_lookahead_tokens: int = 13
 
     def __post_init__(self, **kwargs):
         self.num_key_value_heads = self.num_attention_heads
-        # The left attention context is carried by `sliding_window` (== left_context + 1); the right
-        # contexts are the supported lookaheads, and the default must be one of them.
-        if self.default_num_lookahead_tokens not in self.supported_num_lookahead_tokens:
-            raise ValueError(
-                f"default_num_lookahead_tokens ({self.default_num_lookahead_tokens}) must be one of "
-                f"supported_num_lookahead_tokens ({self.supported_num_lookahead_tokens})."
-            )
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
@@ -287,10 +275,9 @@ class NemotronAsrProcessor(ParakeetProcessor):
             Decoding/timestamp emission mode (e.g. `"ctc"`, `"rnnt"`, `"tdt"`). If `None` (older checkpoints)
             the decoder type is inferred automatically for backward compatibility.
         supported_num_lookahead_tokens (`list[int]`, *optional*):
-            Supported right attention contexts (lookaheads, in subsampled encoder frames), mirroring
-            `NemotronAsrEncoderConfig.supported_num_lookahead_tokens`. Used to validate
-            [`~NemotronAsrProcessor.set_num_lookahead_tokens`]. Defaults to the NeMo cache-aware set
-            `[13, 6, 1, 0]`.
+            Right attention contexts (lookaheads, in subsampled encoder frames) the model was trained with.
+            The processor is the single source of truth for this set: [`~NemotronAsrProcessor.set_num_lookahead_tokens`]
+            validates against it. Defaults to the NeMo cache-aware set `[13, 6, 1, 0]`.
         default_num_lookahead_tokens (`int`, *optional*):
             The right context used to size streaming chunks and emitted by [`~NemotronAsrProcessor.__call__`];
             change it with [`~NemotronAsrProcessor.set_num_lookahead_tokens`]. Defaults to the first entry of
@@ -1204,14 +1191,13 @@ class NemotronAsrEncoder(ParakeetEncoder):
         )
 
     def _resolve_attn_context(self, num_lookahead_tokens: int | None = None) -> tuple[int, int]:
-        supported = self.config.supported_num_lookahead_tokens
         if num_lookahead_tokens is None:
             num_lookahead_tokens = self.config.default_num_lookahead_tokens
-        elif num_lookahead_tokens not in supported:
             logger.warning_once(
-                f"num_lookahead_tokens {num_lookahead_tokens} was not used during training "
-                f"(trained right contexts: {supported}). The model may still produce reasonable "
-                f"output, but quality is not guaranteed."
+                f"`num_lookahead_tokens` was not provided. "
+                f"Falling back to `config.default_num_lookahead_tokens={num_lookahead_tokens}`. "
+                f"Consider preparing inputs with [`~NemotronAsrProcessor.__call__`] which automatically sets "
+                f"this parameter."
             )
 
         left_context = self.config.sliding_window - 1

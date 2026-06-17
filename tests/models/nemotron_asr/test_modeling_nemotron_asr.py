@@ -437,8 +437,9 @@ class NemotronAsrForRNNTIntegrationTest(unittest.TestCase):
     @slow
     def test_processor_set_num_lookahead_tokens(self):
         """`set_num_lookahead_tokens` is the only way to select the right attention context: it re-derives
-        every streaming chunk-size property and the `num_lookahead_tokens` emitted by `__call__`. Unsupported
-        values are rejected, and `streaming_latency_ms` is no longer accepted by `__call__`."""
+        every streaming chunk-size property and the `num_lookahead_tokens` emitted by `__call__`. The processor
+        is the single source of truth for the supported set, so it rejects unsupported values, and
+        `streaming_latency_ms` is no longer accepted by `__call__`."""
         import inspect
 
         processor = self.processor
@@ -456,6 +457,7 @@ class NemotronAsrForRNNTIntegrationTest(unittest.TestCase):
             inputs = processor(sample, sampling_rate=processor.feature_extractor.sampling_rate)
             self.assertEqual(inputs["num_lookahead_tokens"], right)
 
+        # The processor owns the supported set and rejects unsupported values.
         with self.assertRaises(ValueError):
             processor.set_num_lookahead_tokens(max(processor.supported_num_lookahead_tokens) + 1)
 

@@ -70,10 +70,9 @@ class NemotronAsrProcessor(ProcessorMixin):
             Decoding/timestamp emission mode (e.g. `"ctc"`, `"rnnt"`, `"tdt"`). If `None` (older checkpoints)
             the decoder type is inferred automatically for backward compatibility.
         supported_num_lookahead_tokens (`list[int]`, *optional*):
-            Supported right attention contexts (lookaheads, in subsampled encoder frames), mirroring
-            `NemotronAsrEncoderConfig.supported_num_lookahead_tokens`. Used to validate
-            [`~NemotronAsrProcessor.set_num_lookahead_tokens`]. Defaults to the NeMo cache-aware set
-            `[13, 6, 1, 0]`.
+            Right attention contexts (lookaheads, in subsampled encoder frames) the model was trained with.
+            The processor is the single source of truth for this set: [`~NemotronAsrProcessor.set_num_lookahead_tokens`]
+            validates against it. Defaults to the NeMo cache-aware set `[13, 6, 1, 0]`.
         default_num_lookahead_tokens (`int`, *optional*):
             The right context used to size streaming chunks and emitted by [`~NemotronAsrProcessor.__call__`];
             change it with [`~NemotronAsrProcessor.set_num_lookahead_tokens`]. Defaults to the first entry of

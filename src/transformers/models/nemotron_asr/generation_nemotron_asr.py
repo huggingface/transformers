@@ -228,8 +228,7 @@ class NemotronAsrGenerationMixin(ParakeetRNNTGenerationMixin):
                     "Streaming `generate` (when `input_features` is a generator of mel chunks) requires "
                     "`num_lookahead_tokens`: it must be passed explicitly. It must match the right attention context "
                     "used to size the chunks (e.g. `processor.set_num_lookahead_tokens(...)`, then pass the same "
-                    "`num_lookahead_tokens=...` here). Supported values: "
-                    f"{list(self.config.encoder_config.supported_num_lookahead_tokens)}."
+                    "`num_lookahead_tokens=...` here)."
                 )
             self._streaming_num_lookahead_tokens = self.encoder._resolve_attn_context(num_lookahead_tokens)[1]
         try:

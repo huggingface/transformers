@@ -50,13 +50,9 @@ class NemotronAsrEncoderConfig(PreTrainedConfig):
         Size of the K/V attention sliding window (in subsampled encoder frames). It equals
         `left_context + 1` (the current frame plus the left context), so the left attention context is
         `sliding_window - 1` — the same across all supported lookaheads.
-    supported_num_lookahead_tokens (`list[int]`, *optional*, defaults to `(13, 6, 1, 0)`):
-        Supported right attention contexts (lookaheads, in subsampled encoder frames) the model was
-        trained with — a multi-lookahead cache-aware model. The streaming delay of a right context `r` is
-        `(r + 1)` encoder frames.
     default_num_lookahead_tokens (`int`, *optional*, defaults to 13):
-        The right attention context used when none is passed to the forward. Must be one of
-        `supported_num_lookahead_tokens`.
+        The right attention context (lookahead, in subsampled encoder frames) used when none is passed to the
+        forward. The supported set the model was trained with lives on [`NemotronAsrProcessor`].
 
     Example:
     ```python
@@ -99,18 +95,10 @@ class NemotronAsrEncoderConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
     sliding_window: int = 71
-    supported_num_lookahead_tokens: list[int] | tuple[int, ...] = (13, 6, 1, 0)
     default_num_lookahead_tokens: int = 13
 
     def __post_init__(self, **kwargs):
         self.num_key_value_heads = self.num_attention_heads
-        # The left attention context is carried by `sliding_window` (== left_context + 1); the right
-        # contexts are the supported lookaheads, and the default must be one of them.
-        if self.default_num_lookahead_tokens not in self.supported_num_lookahead_tokens:
-            raise ValueError(
-                f"default_num_lookahead_tokens ({self.default_num_lookahead_tokens}) must be one of "
-                f"supported_num_lookahead_tokens ({self.supported_num_lookahead_tokens})."
-            )
         super().__post_init__(**kwargs)
 
 
@@ -160,7 +148,6 @@ class NemotronAsrRNNTConfig(PreTrainedConfig):
     encoder_config: dict | PreTrainedConfig | None = None
     pad_token_id: int = 2
     blank_token_id: int = 8192
-    loss_reduction: str = "mean_volume"
     is_encoder_decoder: bool = True
 
     def __post_init__(self, **kwargs):
