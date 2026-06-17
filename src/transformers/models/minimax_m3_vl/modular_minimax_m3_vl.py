@@ -731,7 +731,9 @@ class MiniMaxM3VLForCausalLM(MiniMaxM2ForCausalLM):
     config: MiniMaxM3VLTextConfig
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
+    _tp_ep_plan = AttributeError()
     _sp_plan = AttributeError()
+    _sp_ep_plan = AttributeError()
     _fsdp_plan = AttributeError()
 
     def __init__(self, config: MiniMaxM3VLTextConfig):

@@ -113,6 +113,7 @@ class DiffusionGemmaTextConfig(Gemma4TextConfig):
         "layers.*.experts.down_proj": "grouped_gemm",
         "layers.*.experts": "moe_tp_experts",
     }
+    base_model_tp_ep_plan = AttributeError()
 
     base_model_pp_plan = {
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),

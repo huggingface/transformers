@@ -456,6 +456,7 @@ class Gemma4UnifiedTextConfig(Gemma4TextConfig):
         "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_ep_plan = None  # No MoE
+    base_model_tp_ep_plan = AttributeError()
     base_model_fsdp_plan = AttributeError()
 
     sliding_window: int = 1024
@@ -759,7 +760,9 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
 
 class Gemma4UnifiedForCausalLM(Gemma4ForCausalLM):
     _tp_plan = {"lm_head": "colwise_gather_output"}
+    _tp_ep_plan = AttributeError()
     _sp_plan = AttributeError()
+    _sp_ep_plan = AttributeError()
     _fsdp_plan = AttributeError()
 
     def forward(

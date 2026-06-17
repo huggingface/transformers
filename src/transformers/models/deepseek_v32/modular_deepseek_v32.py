@@ -371,7 +371,9 @@ class DeepseekV32Model(DeepseekV3Model):
 
 class DeepseekV32ForCausalLM(DeepseekV3ForCausalLM):
     _tp_plan = {"lm_head": "colwise_gather_output"}
+    _tp_ep_plan = AttributeError()
     _sp_plan = AttributeError()
+    _sp_ep_plan = AttributeError()
     _fsdp_plan = AttributeError()
 
 
