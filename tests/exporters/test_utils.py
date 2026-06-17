@@ -102,6 +102,12 @@ ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES = {
     # small-node graphs.
     "YolosModel",
     "YolosForObjectDetection",
+    # Pixio (ViT-based) and SegGpt — same shape as YOLOS: `optimize=True` takes ~100–290s for a
+    # graph that `optimize=False` exports in ~2s. Verified with a static/dynamic × opt-on/off
+    # bench; ORT load times are unaffected. TODO: revisit when onnxscript's optimizer improves.
+    "PixioModel",
+    "SegGptModel",
+    "SegGptForImageSegmentation",
 }
 
 
