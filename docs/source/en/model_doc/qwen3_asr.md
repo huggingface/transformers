@@ -257,7 +257,8 @@ aligner_model = AutoModelForTokenClassification.from_pretrained(
 audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
 
 # Step 1: Transcribe
-inputs = asr_processor.apply_transcription_request(audio=audio_url).to(asr_model.device, asr_model.dtype)
+inputs = asr_processor.apply_transcription_request(audio=audio_url)
+inputs = inputs.to(asr_model.device, asr_model.dtype)
 output_ids = asr_model.generate(**inputs, max_new_tokens=256)
 generated_ids = output_ids[:, inputs["input_ids"].shape[1]:]
 parsed = asr_processor.decode(generated_ids, return_format="parsed")[0]

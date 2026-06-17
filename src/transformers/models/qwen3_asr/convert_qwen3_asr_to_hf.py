@@ -287,10 +287,13 @@ def write_asr_model(src_root: Path, dst_root: Path):
         raise ValueError(f"Unexpected keys: {load_res.unexpected_keys}")
 
     model.to(torch.bfloat16)
+    # max_new_tokens=512 matches the default in the original Qwen3-ASR library:
+    # https://github.com/QwenLM/Qwen3-ASR/blob/c17a131fe028b2e428b6e80a33d30bb4fa57b8df/qwen_asr/inference/qwen3_asr.py#L153
     model.generation_config = GenerationConfig(
         eos_token_id=(151643, 151645),
         pad_token_id=151645,
         do_sample=False,
+        max_new_tokens=512,
     )
     model.save_pretrained(str(dst_root))
     logger.info("ASR model saved to %s", dst_root)
