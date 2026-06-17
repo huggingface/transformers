@@ -100,6 +100,7 @@ class OnnxExporter(DynamoExporter):
     """
 
     required_packages = ["torch", "onnx", "onnxscript"]
+    tested_versions = {"torch": "2.12.0", "onnx": "1.21.0", "onnxscript": "0.7.0"}
 
     def export(
         self,

@@ -64,6 +64,7 @@ if is_torch_available():
     from torch.utils._sympy.numbers import IntInfinity
     from torch.utils._sympy.value_ranges import ValueRanges
 
+    from .. import masking_utils
     from ..modeling_utils import PreTrainedModel
 
 
@@ -94,6 +95,7 @@ class ExecutorchExporter(DynamoExporter):
     """
 
     required_packages = ["torch", "executorch"]
+    tested_versions = {"torch": "2.12.0", "executorch": "1.3.1"}
 
     def export(
         self,
@@ -299,6 +301,23 @@ def _patch_avg_pool2d(original):
         divisor = divisor_override if divisor_override is not None else actual_kh * actual_kw
         weight = input.new_ones(channels, 1, actual_kh, actual_kw) / divisor
         return torch.nn.functional.conv2d(input, weight, bias=None, stride=stride, padding=padding, groups=channels)
+
+    return patch
+
+
+@register_patch("executorch", "transformers.masking_utils._vmap_expansion_sdpa")
+def _patch_broadcast_mask_expansion(_original):
+    """Replace vmap-based mask expansion with broadcast expansion. `aot_autograd` and
+    `gen_vmap_plumbing` reject vmap-built masks under ExecuTorch's lowering passes."""
+
+    def patch(mask_function):
+        def _expanded(batch_arange, head_arange, q_arange, kv_arange):
+            broadcasted = masking_utils._non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
+            return mask_function(*broadcasted).expand(
+                batch_arange.shape[0], head_arange.shape[0], q_arange.shape[0], kv_arange.shape[0]
+            )
+
+        return _expanded
 
     return patch
 

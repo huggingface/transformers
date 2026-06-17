@@ -21,9 +21,13 @@ from abc import ABC, abstractmethod
 from collections.abc import MutableMapping
 from typing import TYPE_CHECKING
 
-from ..utils.import_utils import is_torch_available
+from ..utils import logging
+from ..utils.import_utils import _is_package_available, is_torch_available
 from .configs import ExportConfigMixin
 from .utils import decompose_for_generation
+
+
+logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
@@ -41,27 +45,38 @@ class HfExporter(ABC):
     Subclass and implement [`~HfExporter.export`] to add a new export backend.
     """
 
-    required_packages: list[str] | None = None
+    required_packages: list[str] = []
+    tested_versions: dict[str, str] = {}
 
     def __init__(self):
         self.validate_environment()
 
     def validate_environment(self, *args, **kwargs):
-        """
-        Check that all packages listed in `required_packages` are installed.
-        Override to add exporter-specific environment checks.
-        """
+        """Check `required_packages` are installed and warn on version drift from `tested_versions`."""
 
-        if self.required_packages is not None:
-            missing_dependencies = []
-            for package in self.required_packages:
-                if importlib.util.find_spec(package) is None:
-                    missing_dependencies.append(package)
+        missing_dependencies = [pkg for pkg in self.required_packages if importlib.util.find_spec(pkg) is None]
+        if missing_dependencies:
+            raise ImportError(
+                f"To use {self.__class__.__name__}, please install the following dependencies: {', '.join(missing_dependencies)}"
+            )
 
-            if missing_dependencies:
-                raise ImportError(
-                    f"To use {self.__class__.__name__}, please install the following dependencies: {', '.join(missing_dependencies)}"
-                )
+        # Warn when installed versions diverge from the tested baseline. The local-version
+        # suffix (`+cu126`, `+cpu`) is stripped — patches target the public API, not the build.
+        drift = []
+        for pkg, tested in self.tested_versions.items():
+            exists, installed = _is_package_available(pkg, return_version=True)
+            if not exists or installed == "N/A":
+                continue
+            if installed.split("+", 1)[0] != tested.split("+", 1)[0]:
+                drift.append((pkg, installed, tested))
+
+        if drift:
+            details = ", ".join(f"{pkg}: installed {got}, tested {want}" for pkg, got, want in drift)
+            logger.warning(
+                f"{type(self).__name__} is experimental and patches many backend internals; "
+                f"behaviour may differ from what was validated. Version drift detected — {details}. "
+                f"If you hit issues, try the tested versions."
+            )
 
     @abstractmethod
     def export(
