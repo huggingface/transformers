@@ -26,7 +26,7 @@ from PIL import Image
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
 from transformers.conversion_mapping import register_checkpoint_conversion_mapping
-from transformers.core_model_loading import Chunk, WeightConverter
+from transformers.core_model_loading import Chunk, Concatenate, WeightConverter
 from transformers.generation import GenerationMixin
 from transformers.masking_utils import (
     create_causal_mask,
@@ -38,12 +38,13 @@ from transformers.modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.processing_utils import Unpack
-from transformers.utils import TransformersKwargs, can_return_tuple, logging
+from transformers.utils import TransformersKwargs, can_return_tuple, logging, no_inherit_decorator
 
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MLP, DeepseekV3MoE
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MLP
+from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
 from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, StepRoboticsVisionEncoderConfig
 from ..mimi.modeling_mimi import MimiLayerScale
-from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLAttention, MiniMaxM3VLModel, MiniMaxM3VLTextModel, MiniMaxM3VLDecoderLayer, MiniMaxM3VLRotaryEmbedding, MiniMaxM3VLCausalLMOutputWithPast, MiniMaxM3VLDenseMLP, MiniMaxM3VLRMSNorm, MiniMaxM3VLVisionMLP, MiniMaxM3VLVisionAttention, MiniMaxM3VLVisionEncoderLayer, rotate_half, apply_rotary_pos_emb, repeat_kv, eager_attention_forward
+from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLAttention, MiniMaxM3VLModel, MiniMaxM3VLTextModel, MiniMaxM3VLDecoderLayer, MiniMaxM3VLRotaryEmbedding, MiniMaxM3VLCausalLMOutputWithPast, MiniMaxM3VLDenseMLP, MiniMaxM3VLRMSNorm, MiniMaxM3VLSparseMoeBlock, MiniMaxM3VLTopKRouter, MiniMaxM3VLVisionMLP, MiniMaxM3VLVisionAttention, MiniMaxM3VLVisionEncoderLayer, rotate_half, apply_rotary_pos_emb, repeat_kv, eager_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -175,19 +176,6 @@ class Step3p7VisionAttention(MiniMaxM3VLVisionAttention):
     def __init__(self, config: StepRoboticsVisionEncoderConfig):
         super().__init__(config)
 
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
-        # Split fused in_proj_{weight,bias} from original checkpoints into separate q/k/v projections
-        for suffix, proj_names in [
-            ("in_proj_weight", ("q_proj.weight", "k_proj.weight", "v_proj.weight")),
-            ("in_proj_bias", ("q_proj.bias", "k_proj.bias", "v_proj.bias")),
-        ]:
-            fused_key = prefix + suffix
-            if fused_key in state_dict:
-                fused = state_dict.pop(fused_key)
-                for chunk, name in zip(fused.chunk(3, dim=0), proj_names):
-                    state_dict[prefix + name] = chunk
-        nn.Module._load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -258,6 +246,7 @@ class EncoderVisionTransformer(nn.Module):
 
 
 class StepRoboticsVisionEncoder(nn.Module):
+    # both absolute position_embeddings (Clip, siglip) + 2d rope (like minimax)
     def __init__(self, config: StepRoboticsVisionEncoderConfig):
         super().__init__()
         self.config = config
@@ -278,7 +267,8 @@ class StepRoboticsVisionEncoder(nn.Module):
         self.positional_embedding = nn.Parameter(
             (self.hidden_size**-0.5) * torch.randn(self.posemb_grid_size**2, self.hidden_size)
         )
-
+        
+        # downsmapling
         self.transformer = EncoderVisionTransformer(config)
         self.vit_downsampler1 = nn.Conv2d(self.hidden_size, self.hidden_size * 2, kernel_size=3, stride=2, padding=1)
         self.vit_downsampler2 = nn.Conv2d(
@@ -346,12 +336,7 @@ class Step3p7PreTrainedModel(PreTrainedModel):
 
 
 class Step3p7RotaryEmbedding(MiniMaxM3VLRotaryEmbedding):
-    def __init__(self, config: Step3p7TextConfig, device=None, layer_idx=None):
-        # Always copy to prevent shared-config mutations from later layers corrupting this
-        # layer's stored rope_parameters (Step3p7Attention mutates config.rope_parameters in-place).
-        config = copy.copy(config)
-        if getattr(config, "rope_parameters", None) is None:
-            config.rope_parameters = {"rope_type": "default", "rope_theta": config.rope_theta}
+    def __init__(self, config: Step3p7TextConfig, device=None):
         super().__init__(config, device=device)
 
     @staticmethod
@@ -399,159 +384,92 @@ class Step3p7RMSNorm(MiniMaxM3VLRMSNorm):
 
 
 class Step3p7MLP(DeepseekV3MLP):
-    def __init__(self, config, intermediate_size=None, swiglu_limit=None):
-        super().__init__(config, intermediate_size=intermediate_size)
+    def __init__(self, config, swiglu_limit=None):
+        super().__init__(config)
+        self.intermediate_size = config.intermediate_size
         self.act_fn = ACT2FN["silu"]
         self.limit = swiglu_limit
 
     def forward(self, x):
-        up = self.up_proj(x)
         gate = self.act_fn(self.gate_proj(x))
+        up = self.up_proj(x)
         if self.limit is not None:
             gate = gate.clamp(min=None, max=self.limit)
             up = up.clamp(min=-self.limit, max=self.limit)
-
         return self.down_proj(gate * up)
 
 
-def sigmoid_routing_function(gating_output: torch.Tensor, topk: int, renormalize: bool):
-    gating_output = gating_output.float()
-    gate_prob = torch.sigmoid(gating_output)
-    gate_prob = gate_prob / gate_prob.sum(dim=-1, keepdim=True)
-    topk_prob, indices = torch.topk(gate_prob, k=topk, dim=1)
-    expert_topk_weight = topk_prob
-    if renormalize:
-        expert_topk_weight = expert_topk_weight / torch.sum(expert_topk_weight, dim=-1, keepdim=True)
-    return expert_topk_weight, indices
+class Step3p7SharedExpert(Step3p7MLP):
+    def __init__(self, config, swiglu_limit=None):
+        super().__init__(config, swiglu_limit=swiglu_limit)
+        self.intermediate_size = config.share_expert_dim
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
 
-class MoELinear(nn.Module):
-    def __init__(self, num_experts, in_features, out_features):
-        super().__init__()
-        self.num_experts = num_experts
-        self.in_features = in_features
-        self.out_features = out_features
-        self.weight = nn.Parameter(torch.empty(num_experts, out_features, in_features))
-
-    def forward(self, x, expert_id):
-        x = F.linear(x.float(), self.weight[expert_id].float())
-        return x
+class Step3p7TopKRouter(MiniMaxM3VLTopKRouter):
+    def __init__(self, config):
+        nn.Module.__init__(self)
+        self.top_k = config.moe_top_k
+        self.num_experts = config.moe_num_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts, dtype=torch.float32))
+    # forward() inherited from MiniMaxM3VLTopKRouter
 
 
-class Step3p7MoE(DeepseekV3MoE):
+@no_inherit_decorator
+class Step3p7Experts(DeepseekV4Experts):
     def __init__(self, config, swiglu_limit=None):
         nn.Module.__init__(self)
         self.num_experts = config.moe_num_experts
-        self.top_k = config.moe_top_k
-        self.hidden_size = config.hidden_size
-        self.moe_intermediate_size = config.moe_intermediate_size
-
-        self.router_bias = nn.Parameter(
-            torch.zeros(config.moe_num_experts, dtype=torch.float32), requires_grad=False
-        )
-        self.routed_scaling_factor = getattr(config, "moe_router_scaling_factor", 1.0)
-
-        # gating
-        self.gate = nn.Linear(self.hidden_size, self.num_experts, bias=False)
-
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.moe_intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN["silu"]
         self.limit = swiglu_limit
 
-        self.up_proj = MoELinear(self.num_experts, self.hidden_size, self.moe_intermediate_size)
-        self.gate_proj = MoELinear(self.num_experts, self.hidden_size, self.moe_intermediate_size)
-        self.down_proj = MoELinear(self.num_experts, self.moe_intermediate_size, self.hidden_size)
-
-    def router_bias_func(self, gating_output: torch.Tensor, topk: int, renormalize: bool):
-        gate_prob = torch.sigmoid(gating_output.float())
-        gate_prob_with_bias = gate_prob + self.router_bias.unsqueeze(0)
-        _, indices = torch.topk(gate_prob_with_bias, k=topk, dim=1)
-        topk_prob = torch.gather(gate_prob, 1, indices)
-        expert_topk_weight = topk_prob
-        if renormalize:
-            expert_topk_weight = expert_topk_weight / (torch.sum(expert_topk_weight, dim=-1, keepdim=True) + 1e-20)
-        return expert_topk_weight, indices
-
-    def get_expert_output(self, inputs: torch.Tensor, expert_id):
-        up = self.up_proj(inputs, expert_id)
-        gate = self.act_fn(self.gate_proj(inputs, expert_id))
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        # silu-then-clamp (Step3p7 order), vs DeepseekV4's clamp-then-silu
+        gate, up = gate_up.chunk(2, dim=-1)
+        gate = self.act_fn(gate)
         if self.limit is not None:
             gate = gate.clamp(min=None, max=self.limit)
             up = up.clamp(min=-self.limit, max=self.limit)
+        return gate * up
+    # forward() inherited from DeepseekV4Experts
 
-        return self.down_proj(gate * up, expert_id)
 
-    def forward(self, hidden_states):
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        router_logits = torch.matmul(
-            hidden_states.to(torch.float32),
-            self.gate.weight.t().to(torch.float32),
-        )
-        routing_weights, selected_experts = self.router_bias_func(router_logits, self.top_k, renormalize=True)
-        routing_weights = routing_weights * self.routed_scaling_factor
-
-        final_hidden_states = torch.zeros(
-            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
-        )
-
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
-
-        for expert_idx in range(self.num_experts):
-            idx, top_x = torch.where(expert_mask[expert_idx])
-
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
-            current_hidden_states = (
-                self.get_expert_output(current_state, expert_idx) * routing_weights[top_x, idx, None]
-            )
-
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
-        final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return final_hidden_states
+class Step3p7SparseMoeBlock(MiniMaxM3VLSparseMoeBlock):
+    def __init__(self, config, swiglu_limit=None, swiglu_limit_shared=None):
+        nn.Module.__init__(self)
+        self.gate = Step3p7TopKRouter(config)
+        self.experts = Step3p7Experts(config, swiglu_limit=swiglu_limit)
+        self.shared_experts = Step3p7SharedExpert(config, swiglu_limit=swiglu_limit_shared)
+        self.routed_scaling_factor = getattr(config, "moe_router_scaling_factor", 1.0)
+    # forward() inherited from MiniMaxM3VLSparseMoeBlock
 
 
 class Step3p7Attention(MiniMaxM3VLAttention):
     def __init__(self, config: Step3p7TextConfig, layer_idx):
-        nn.Module.__init__(self)
-        self.config = config
-        self.layer_idx = layer_idx
+        self.layer_type = config.layer_types[layer_idx]
+        config = copy.copy(config)
+        if self.layer_type == "sliding_attention":
+            config.num_attention_heads = config.num_sliding_attention_heads
+            config.rope_parameters = {"rope_type": "default", "rope_theta": config.rope_theta}
+        else:
+            config.rope_parameters = config.rope_scaling or {"rope_type": "default", "rope_theta": config.rope_theta}
+        super().__init__(config, layer_idx)
         self.num_attention_heads = config.num_attention_heads
         self.num_key_value_heads = config.num_attention_groups
-
-        enable_sliding_window = config.layer_types[self.layer_idx] == "sliding_attention"
-
-        yarn_only_types = getattr(config, "yarn_only_types", None)
-        if yarn_only_types and config.layer_types[self.layer_idx] not in yarn_only_types:
-            config.rope_parameters = None
-        else:
-            config.rope_parameters = getattr(config, "rope_scaling", None)
-
-        self.sliding_window = config.sliding_window
-        if enable_sliding_window:
-            self.num_attention_heads = config.attention_other_setting["num_attention_heads"]
-            self.num_key_value_heads = config.attention_other_setting["num_attention_groups"]
-
-        if self.sliding_window is not None and enable_sliding_window:
-            self.sliding_window = self.sliding_window
-        else:
-            self.sliding_window = None
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // self.num_attention_heads)
-        self.num_key_value_groups = self.num_attention_heads // self.num_key_value_heads
-
-        self.rotary_emb = Step3p7RotaryEmbedding(config, layer_idx=layer_idx)
-
-        self.q_size = self.num_attention_heads * self.head_dim
-        self.kv_size = self.num_key_value_heads * self.head_dim
-        self.scaling = self.head_dim**-0.5
-
-        self.q_proj = nn.Linear(config.hidden_size, self.q_size, bias=False)
-        self.k_proj = nn.Linear(config.hidden_size, self.kv_size, bias=False)
-        self.v_proj = nn.Linear(config.hidden_size, self.kv_size, bias=False)
-        self.o_proj = nn.Linear(self.q_size, config.hidden_size, bias=False)
-        self.attention_dropout = getattr(config, "attention_dropout", 0.0)
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.q_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-
+        self.rotary_emb = Step3p7RotaryEmbedding(config)
         self.g_proj = nn.Linear(config.hidden_size, self.num_attention_heads, bias=False)
+        self.indexer = None
 
     def forward(
         self,
@@ -568,6 +486,8 @@ class Step3p7Attention(MiniMaxM3VLAttention):
         query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        # per-head scalar gate_states (afmoe per-token, more fine-grained)
         gate_states = self.g_proj(hidden_states)
         cos, sin = self.rotary_emb(hidden_states, position_ids)
 
@@ -619,32 +539,25 @@ class Step3p7DecoderLayer(MiniMaxM3VLDecoderLayer):
         else:
             moe_layers_idx = [i for i in range(1, config.num_hidden_layers)]
         self.is_moe_layer = layer_idx in moe_layers_idx
-        self.use_moe = False
 
-        if (
-            config.swiglu_limits_shared
+        swiglu_limit_shared = (
+            config.swiglu_limits_shared[layer_idx]
+            if config.swiglu_limits_shared
             and config.swiglu_limits_shared[layer_idx] is not None
             and config.swiglu_limits_shared[layer_idx] != 0
-        ):
-            swiglu_limit_shared = config.swiglu_limits_shared[layer_idx]
-        else:
-            swiglu_limit_shared = None
-        if (
-            config.swiglu_limits
+            else None
+        )
+        swiglu_limit = (
+            config.swiglu_limits[layer_idx]
+            if config.swiglu_limits
             and config.swiglu_limits[layer_idx] is not None
             and config.swiglu_limits[layer_idx] != 0
-        ):
-            swiglu_limit = config.swiglu_limits[layer_idx]
-        else:
-            swiglu_limit = None
+            else None
+        )
         if self.is_moe_layer:
-            self.moe = Step3p7MoE(config, swiglu_limit=swiglu_limit)
-            self.share_expert = Step3p7MLP(
-                config, intermediate_size=config.share_expert_dim, swiglu_limit=swiglu_limit_shared
-            )
-            self.use_moe = True
+            self.mlp = Step3p7SparseMoeBlock(config, swiglu_limit=swiglu_limit, swiglu_limit_shared=swiglu_limit_shared)
         else:
-            self.mlp = Step3p7MLP(config, intermediate_size=config.intermediate_size, swiglu_limit=swiglu_limit_shared)
+            self.mlp = Step3p7MLP(config, swiglu_limit=swiglu_limit_shared)
 
         self.input_layernorm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -673,18 +586,7 @@ class Step3p7DecoderLayer(MiniMaxM3VLDecoderLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        if self.use_moe:
-            share_output = self.share_expert(hidden_states)
-            moe_output = self.moe(hidden_states)
-            ffn_output = moe_output + share_output
-        else:
-            ffn_output = self.mlp(hidden_states)
-        if isinstance(ffn_output, tuple):
-            hidden_states, _ = ffn_output
-        else:
-            hidden_states = ffn_output
-
-        hidden_states = residual + hidden_states
+        hidden_states = residual + self.mlp(hidden_states)
         return hidden_states
 
 
@@ -974,6 +876,16 @@ class Step3p7Model(Step3p7PreTrainedModel):
 
 
 class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
+    # Extend parent's vision-attn converters with MoE weight fusing:
+    # original checkpoints store routed-expert gate and up as separate 3-D tensors;
+    # Step3p7Experts (like DeepseekV4Experts) expects them fused as gate_up_proj.
+    _vision_attn_converters = Step3p7PreTrainedModel._vision_attn_converters + [
+        WeightConverter(
+            source_patterns=["moe.gate_proj.weight", "moe.up_proj.weight"],
+            target_patterns=["mlp.experts.gate_up_proj"],
+            operations=[Concatenate(dim=1)],
+        ),
+    ]
     _checkpoint_conversion_mapping = {
         "^vision_model": "model.vision_model",
         r"^model(?!\.(language_model|vision_model))": "model.language_model",
@@ -985,6 +897,11 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         r"\.attn\.": ".self_attn.",
         r"\.ln_1\.": ".layer_norm1.",
         r"\.ln_2\.": ".layer_norm2.",
+        # MoE block restructure: moe.* + share_expert.* → mlp.{gate,experts,shared_experts}
+        ".moe.gate.weight": ".mlp.gate.weight",
+        ".moe.router_bias": ".mlp.gate.e_score_correction_bias",
+        ".moe.down_proj.weight": ".mlp.experts.down_proj",
+        ".share_expert.": ".mlp.shared_experts.",
     }
     _tied_weights_keys = ["lm_head.weight"]
     config: Step3p7Config
@@ -1117,3 +1034,4 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
             return key[len("language_model.") :], True
 
         return key, False
+
