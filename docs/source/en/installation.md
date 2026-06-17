@@ -162,3 +162,47 @@ from transformers import LlamaForCausalLM
 
 model = LlamaForCausalLM.from_pretrained("./path/to/local/directory", local_files_only=True)
 ```
+
+### Loading weights from S3-compatible object storage
+
+[`~PreTrainedModel.from_pretrained`] expects either a Hub repo id or a local directory. It does not fetch weights over `s3://` directly. To keep private checkpoints or fine-tune outputs in an S3-compatible bucket, such as Amazon S3 or [Backblaze B2](https://www.backblaze.com/cloud-storage?utm_source=transformers-docs&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=installation), download the model snapshot to a local directory with the [`s3fs`](https://s3fs.readthedocs.io/) [`fsspec`](https://filesystem-spec.readthedocs.io/) backend, then point `from_pretrained` at that local path.
+
+```bash
+pip install s3fs
+```
+
+`s3fs` is built on `boto3`, so it reads the standard `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` credentials. For a non-AWS endpoint, pass the bucket's S3 URL through the `endpoint_url` argument (or the `AWS_ENDPOINT_URL` environment variable). The Backblaze B2 endpoint follows `https://s3.<region>.backblazeb2.com`, and a B2 application key maps onto the AWS access key id and secret access key.
+
+```bash
+export AWS_ACCESS_KEY_ID="$B2_APPLICATION_KEY_ID"
+export AWS_SECRET_ACCESS_KEY="$B2_APPLICATION_KEY"
+export B2_ENDPOINT_URL="https://s3.us-west-004.backblazeb2.com"
+```
+
+```py
+import os
+import s3fs
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+fs = s3fs.S3FileSystem(endpoint_url=os.environ["B2_ENDPOINT_URL"])
+fs.get("my-bucket/models/llama-2-7b/", "./llama-2-7b/", recursive=True)
+
+model = AutoModelForCausalLM.from_pretrained("./llama-2-7b")
+tokenizer = AutoTokenizer.from_pretrained("./llama-2-7b")
+```
+
+The same credentials work for streaming a training dataset stored in the bucket with the [`datasets`](https://hf.co/docs/datasets) library, which also uses `fsspec`. Pass the endpoint through `storage_options` so the request reaches the right backend.
+
+```py
+import os
+from datasets import load_dataset
+
+dataset = load_dataset(
+    "parquet",
+    data_files="s3://my-bucket/datasets/wikitext/train-*.parquet",
+    storage_options={"endpoint_url": os.environ["B2_ENDPOINT_URL"]},
+    streaming=True,
+)
+```
+
+Only the endpoint value changes between providers, so the same script runs against Amazon S3 by dropping `endpoint_url` and against Backblaze B2 by setting it to the bucket's region URL.
