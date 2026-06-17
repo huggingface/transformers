@@ -1103,6 +1103,10 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
                 "The diffusion mask requires `past_key_values` to construct the next attention mask correctly"
             )
 
+        # Shortcut: not compiling for sure AND no padding -> delegate mask creation to the inner functions by returning None
+        if decoder_attention_mask is None or (not past_key_values.is_compileable and decoder_attention_mask.all()):
+            return {"full_attention": None, "sliding_attention": None}
+
         # DiT module doesn't need a sliding mask and has to attend fully to prev context and itself
         # To enforce a full mask we pass `or_mask_function`, while keeping the functionality of
         # `create_bidirectional_sliding_window_mask` to get correct the mask shape and offsets
