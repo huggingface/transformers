@@ -24,7 +24,7 @@ from torch.utils.data import Dataset
 
 from .generation.configuration_utils import GenerationConfig
 from .integrations.deepspeed import is_deepspeed_zero3_enabled
-from .integrations.fsdp import is_fsdp_managed_module
+from .distributed.fsdp import is_fsdp_managed_module
 from .trainer import Trainer
 from .utils import is_datasets_available, logging
 

@@ -34,7 +34,7 @@ from ..utils import (
 )
 from ..utils.quantization_config import QuantizationMethod
 from .deepspeed import is_deepspeed_zero3_enabled
-from .fsdp import is_fsdp_enabled
+from ..distributed.fsdp import is_fsdp_enabled
 
 
 if is_torch_available():
