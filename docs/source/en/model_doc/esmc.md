@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-06-15.*
+*This model was contributed to Hugging Face Transformers on 2026-06-17.*
 
 # ESMC
 
