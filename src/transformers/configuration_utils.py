@@ -296,7 +296,15 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         # Attention/Experts implementation to use, if relevant (it sets it recursively on sub-configs)
         self._output_attentions: bool | None = kwargs.pop("output_attentions", False)
-        self._attn_implementation: str | None = kwargs.pop("attn_implementation", None)
+        _attn_from_config = kwargs.pop("attn_implementation", None)
+        if _attn_from_config is not None and "/" in str(_attn_from_config):
+            logger.warning_once(
+                f"Ignoring `attn_implementation='{_attn_from_config}'` from config as it looks like a Hub repo. "
+                "Kernel-style attention implementations must be set explicitly via "
+                "`from_pretrained(attn_implementation=...)`."
+            )
+            _attn_from_config = None
+        self._attn_implementation: str | None = _attn_from_config
         self._experts_implementation: str | None = kwargs.pop("experts_implementation", None)
 
         # Additional attributes without default values
