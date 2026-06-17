@@ -691,7 +691,7 @@ class Tipsv2PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Tipsv2Model):
-            init.copy_(module.temperature, torch.tensor(module.config.temperature_init_value))
+            init.constant_(module.temperature, module.config.temperature_init_value)
 
 
 @auto_docstring
