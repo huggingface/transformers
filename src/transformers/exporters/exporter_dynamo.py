@@ -192,41 +192,6 @@ def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
 # swapped on several classes (e.g. `_update_mamba_mask` on Jamba/Bamba/…).
 
 
-def _exportable_update_mask(self, attention_mask, past_key_values_or_cache_position=None, *args, **kwargs):
-    """Export-safe mamba/linear-attn mask: keeps only `has_previous_state` (a Python bool)."""
-    has_previous_state = getattr(past_key_values_or_cache_position, "has_previous_state", False)
-    if callable(has_previous_state):
-        has_previous_state = has_previous_state()
-    if has_previous_state:
-        return None
-    return attention_mask
-
-
-@register_patch(
-    "dynamo",
-    "transformers.models.jamba.modeling_jamba.JambaModel._update_mamba_mask",
-    "transformers.models.bamba.modeling_bamba.BambaModel._update_mamba_mask",
-    "transformers.models.falcon_h1.modeling_falcon_h1.FalconH1Model._update_mamba_mask",
-    "transformers.models.granitemoehybrid.modeling_granitemoehybrid.GraniteMoeHybridModel._update_mamba_mask",
-    "transformers.models.nemotron_h.modeling_nemotron_h.NemotronHModel._update_mamba_mask",
-)
-def _patch_mamba_mask(_original):
-    """Replace data-dependent `torch.all(mask == 1)` in mamba mask update."""
-    return _exportable_update_mask
-
-
-@register_patch(
-    "dynamo",
-    "transformers.models.qwen3_5.modeling_qwen3_5.Qwen3_5TextModel._update_linear_attn_mask",
-    "transformers.models.qwen3_5_moe.modeling_qwen3_5_moe.Qwen3_5MoeTextModel._update_linear_attn_mask",
-    "transformers.models.qwen3_next.modeling_qwen3_next.Qwen3NextModel._update_linear_attn_mask",
-    "transformers.models.olmo_hybrid.modeling_olmo_hybrid.OlmoHybridModel._update_linear_attn_mask",
-)
-def _patch_linear_attn_mask(_original):
-    """Replace data-dependent mask check in linear attention (qwen3_next, olmo_hybrid, …)."""
-    return _exportable_update_mask
-
-
 @register_patch("dynamo", "transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeTop2Router._cast_classifier")
 def _patch_classifier_cast(_original):
     """Disable classifier dtype cast in nllb-moe (not traceable)."""

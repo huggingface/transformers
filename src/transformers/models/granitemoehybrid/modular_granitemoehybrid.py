@@ -269,17 +269,10 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
         )
 
     def _update_mamba_mask(self, attention_mask, past_key_values):
-        """
-        No need for zeroing states when
-            1. Cached forward
-            2. Attending to all inputs
-        """
-        mamba_mask = attention_mask
-        if (past_key_values is not None and past_key_values.has_previous_state()) or (
-            attention_mask is not None and torch.all(attention_mask == 1)
-        ):
-            mamba_mask = None
-        return mamba_mask
+        """No-op the mask on cached forwards — earlier tokens are already in the SSM state."""
+        if past_key_values is not None and past_key_values.has_previous_state():
+            return None
+        return attention_mask
 
 
 class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
