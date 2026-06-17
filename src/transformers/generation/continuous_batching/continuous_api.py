@@ -16,6 +16,7 @@ import asyncio
 import gc
 import queue
 import threading
+import collections
 from abc import abstractmethod
 from collections.abc import Callable, Generator
 from contextlib import contextmanager, nullcontext
@@ -80,6 +81,56 @@ class ProtoPretrainedModel(nn.Module):
         pass
 
 
+class TargetedQueue:
+    """A thread-safe queue that supports both global FIFO and O(1) targeted retrieval by request_id."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.cond = threading.Condition(self.lock)
+        self.items_by_id = collections.defaultdict(collections.deque)
+        self.arrival_queue = collections.deque()
+        self.consumed_ids = set()
+
+    def put(self, item: GenerationOutput):
+        with self.cond:
+            self.items_by_id[item.request_id].append(item)
+            self.arrival_queue.append(item)
+            self.cond.notify_all()
+
+    def get(self, request_id: str | None = None, timeout: float | None = None) -> GenerationOutput:
+        with self.cond:
+            while True:
+                if request_id is None:
+                    # Clean up consumed items at the front of the arrival queue
+                    while self.arrival_queue and id(self.arrival_queue[0]) in self.consumed_ids:
+                        consumed_item = self.arrival_queue.popleft()
+                        self.consumed_ids.remove(id(consumed_item))
+
+                    if self.arrival_queue:
+                        item = self.arrival_queue.popleft()
+                        self.items_by_id[item.request_id].popleft()
+                        if not self.items_by_id[item.request_id]:
+                            del self.items_by_id[item.request_id]
+                        return item
+                else:
+                    if self.items_by_id[request_id]:
+                        item = self.items_by_id[request_id].popleft()
+                        if not self.items_by_id[request_id]:
+                            del self.items_by_id[request_id]
+                        self.consumed_ids.add(id(item))
+                        return item
+
+                if not self.cond.wait(timeout):
+                    raise queue.Empty
+
+    def empty(self) -> bool:
+        with self.lock:
+            while self.arrival_queue and id(self.arrival_queue[0]) in self.consumed_ids:
+                consumed_item = self.arrival_queue.popleft()
+                self.consumed_ids.remove(id(consumed_item))
+            return len(self.arrival_queue) == 0
+
+
 class OutputRouter:
     """Dedicated object for routing generation outputs to the right destination.
 
@@ -89,21 +140,17 @@ class OutputRouter:
     """
 
     def __init__(self) -> None:
-        self.output_queue = queue.Queue()
+        self.output_queue = TargetedQueue()
         self.result_handlers: dict[str, tuple[Callable, asyncio.AbstractEventLoop]] = {}
-        self.sync_queues: dict[str, queue.Queue] = {}
         self._lock = threading.Lock()
 
     def deliver(self, output: GenerationOutput) -> None:
         """Route a single output to its registered handler or the output_queue."""
         with self._lock:
             entry = self.result_handlers.get(output.request_id)
-            sync_q = self.sync_queues.get(output.request_id)
         if entry is not None:
             callback, loop = entry
             loop.call_soon_threadsafe(callback, output)
-        elif sync_q is not None:
-            sync_q.put(output)
         else:
             self.output_queue.put(output)
 
@@ -117,12 +164,9 @@ class OutputRouter:
         with self._lock:
             for output in outputs:
                 entry = self.result_handlers.get(output.request_id)
-                sync_q = self.sync_queues.get(output.request_id)
                 if entry is not None:
                     callback, loop = entry
                     callbacks.append((callback, output))
-                elif sync_q is not None:
-                    sync_q.put(output)
                 else:
                     self.output_queue.put(output)
         if callbacks and loop is not None:
@@ -833,35 +877,8 @@ class ContinuousBatchingManager:
         if self._generation_thread is None and self.output_router.output_queue.empty():
             return None
 
-        if request_id is None:
-            try:
-                return self.output_router.output_queue.get(block=True, timeout=timeout)
-            except queue.Empty:
-                return None
-
-        # Targeted retrieval: ensure a dedicated queue exists for this request
-        with self.output_router._lock:
-            if request_id not in self.output_router.sync_queues:
-                self.output_router.sync_queues[request_id] = queue.Queue()
-                # Scour the existing shared queue for items belonging to this request
-                out_q = self.output_router.output_queue
-                with out_q.mutex:
-                    import collections
-
-                    new_queue = collections.deque()
-                    for item in out_q.queue:
-                        if item.request_id == request_id:
-                            self.output_router.sync_queues[request_id].put(item)
-                        else:
-                            new_queue.append(item)
-                    out_q.queue = new_queue
-
         try:
-            result = self.output_router.sync_queues[request_id].get(block=True, timeout=timeout)
-            if result.is_finished():
-                with self.output_router._lock:
-                    self.output_router.sync_queues.pop(request_id, None)
-            return result
+            return self.output_router.output_queue.get(request_id=request_id, timeout=timeout)
         except queue.Empty:
             return None
 
