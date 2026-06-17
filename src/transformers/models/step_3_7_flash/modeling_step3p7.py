@@ -30,7 +30,7 @@ import torch.nn.functional as F
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
 from transformers.conversion_mapping import register_checkpoint_conversion_mapping
-from transformers.core_model_loading import Chunk, WeightConverter
+from transformers.core_model_loading import Chunk, Concatenate, WeightConverter
 from transformers.generation import GenerationMixin
 from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
@@ -220,23 +220,6 @@ class Step3p7VisionAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2).reshape(*input_shape, -1).contiguous()
         return self.out_proj(attn_output), None
 
-    def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-    ):
-        # Split fused in_proj_{weight,bias} from original checkpoints into separate q/k/v projections
-        for suffix, proj_names in [
-            ("in_proj_weight", ("q_proj.weight", "k_proj.weight", "v_proj.weight")),
-            ("in_proj_bias", ("q_proj.bias", "k_proj.bias", "v_proj.bias")),
-        ]:
-            fused_key = prefix + suffix
-            if fused_key in state_dict:
-                fused = state_dict.pop(fused_key)
-                for chunk, name in zip(fused.chunk(3, dim=0), proj_names):
-                    state_dict[prefix + name] = chunk
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-        )
-
 
 class Step3p7VisionBlock(GradientCheckpointingLayer):
     def __init__(self, config: StepRoboticsVisionEncoderConfig):
@@ -289,6 +272,7 @@ class EncoderVisionTransformer(nn.Module):
 
 
 class StepRoboticsVisionEncoder(nn.Module):
+    # both absolute position_embeddings (Clip, siglip) + 2d rope (like minimax)
     def __init__(self, config: StepRoboticsVisionEncoderConfig):
         super().__init__()
         self.config = config
@@ -310,6 +294,7 @@ class StepRoboticsVisionEncoder(nn.Module):
             (self.hidden_size**-0.5) * torch.randn(self.posemb_grid_size**2, self.hidden_size)
         )
 
+        # downsmapling
         self.transformer = EncoderVisionTransformer(config)
         self.vit_downsampler1 = nn.Conv2d(self.hidden_size, self.hidden_size * 2, kernel_size=3, stride=2, padding=1)
         self.vit_downsampler2 = nn.Conv2d(
@@ -379,13 +364,8 @@ class Step3p7PreTrainedModel(PreTrainedModel):
 class Step3p7RotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: Step3p7TextConfig, device=None, layer_idx=None):
+    def __init__(self, config: Step3p7TextConfig, device=None):
         super().__init__()
-        # Always copy to prevent shared-config mutations from later layers corrupting this
-        # layer's stored rope_parameters (Step3p7Attention mutates config.rope_parameters in-place).
-        config = copy.copy(config)
-        if getattr(config, "rope_parameters", None) is None:
-            config.rope_parameters = {"rope_type": "default", "rope_theta": config.rope_theta}
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
@@ -490,11 +470,11 @@ class Step3p7RMSNorm(nn.Module):
 
 
 class Step3p7MLP(nn.Module):
-    def __init__(self, config, intermediate_size=None, swiglu_limit=None):
+    def __init__(self, config, swiglu_limit=None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.intermediate_size = config.intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
@@ -502,124 +482,105 @@ class Step3p7MLP(nn.Module):
         self.limit = swiglu_limit
 
     def forward(self, x):
-        up = self.up_proj(x)
         gate = self.act_fn(self.gate_proj(x))
+        up = self.up_proj(x)
         if self.limit is not None:
             gate = gate.clamp(min=None, max=self.limit)
             up = up.clamp(min=-self.limit, max=self.limit)
-
         return self.down_proj(gate * up)
 
 
-class MoELinear(nn.Module):
-    def __init__(self, num_experts, in_features, out_features):
+class Step3p7SharedExpert(Step3p7MLP):
+    def __init__(self, config, swiglu_limit=None):
+        super().__init__(config, swiglu_limit=swiglu_limit)
+        self.intermediate_size = config.share_expert_dim
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+
+
+class Step3p7TopKRouter(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        self.num_experts = num_experts
-        self.in_features = in_features
-        self.out_features = out_features
-        self.weight = nn.Parameter(torch.empty(num_experts, out_features, in_features))
+        self.top_k = config.moe_top_k
+        self.num_experts = config.moe_num_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts, dtype=torch.float32))
 
-    def forward(self, x, expert_id):
-        x = F.linear(x.float(), self.weight[expert_id].float())
-        return x
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)
+        # Sigmoid scoring (not softmax), as in M2.
+        routing_weights = F.sigmoid(router_logits.float())
+        scores_for_choice = routing_weights + self.e_score_correction_bias
+        _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
+        top_k_weights = routing_weights.gather(1, top_k_index)
+        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        return router_logits, top_k_weights, top_k_index
 
 
-class Step3p7MoE(nn.Module):
-    """
-    A mixed expert module containing shared experts.
-    """
+class Step3p7Experts(nn.Module):
+    """Collection of expert weights stored as 3D tensors."""
 
     def __init__(self, config, swiglu_limit=None):
         super().__init__()
         self.num_experts = config.moe_num_experts
-        self.top_k = config.moe_top_k
-        self.hidden_size = config.hidden_size
-        self.moe_intermediate_size = config.moe_intermediate_size
-
-        self.router_bias = nn.Parameter(torch.zeros(config.moe_num_experts, dtype=torch.float32), requires_grad=False)
-        self.routed_scaling_factor = getattr(config, "moe_router_scaling_factor", 1.0)
-
-        # gating
-        self.gate = nn.Linear(self.hidden_size, self.num_experts, bias=False)
-
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.moe_intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN["silu"]
         self.limit = swiglu_limit
 
-        self.up_proj = MoELinear(self.num_experts, self.hidden_size, self.moe_intermediate_size)
-        self.gate_proj = MoELinear(self.num_experts, self.hidden_size, self.moe_intermediate_size)
-        self.down_proj = MoELinear(self.num_experts, self.moe_intermediate_size, self.hidden_size)
+    def forward(
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+    ) -> torch.Tensor:
+        final = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(mask[expert_idx])
+            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
+            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
+            final.index_add_(0, token_idx, current.to(final.dtype))
+        return final
 
-    def route_tokens_to_experts(self, router_logits):
-        router_logits = router_logits.sigmoid()
-        router_logits_for_choice = router_logits + self.gate.e_score_correction_bias
-        group_scores = (
-            router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .topk(2, dim=-1)[0]
-            .sum(dim=-1)
-        )
-        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
-        group_mask = torch.zeros_like(group_scores)
-        group_mask.scatter_(1, group_idx, 1)
-        score_mask = (
-            group_mask.unsqueeze(-1)
-            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .reshape(-1, self.n_routed_experts)
-        )
-        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = router_logits.gather(1, topk_indices)
-        if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return topk_indices, topk_weights
-
-    def forward(self, hidden_states):
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        router_logits = torch.matmul(
-            hidden_states.to(torch.float32),
-            self.gate.weight.t().to(torch.float32),
-        )
-        routing_weights, selected_experts = self.router_bias_func(router_logits, self.top_k, renormalize=True)
-        routing_weights = routing_weights * self.routed_scaling_factor
-
-        final_hidden_states = torch.zeros(
-            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
-        )
-
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
-
-        for expert_idx in range(self.num_experts):
-            idx, top_x = torch.where(expert_mask[expert_idx])
-
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
-            current_hidden_states = (
-                self.get_expert_output(current_state, expert_idx) * routing_weights[top_x, idx, None]
-            )
-
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
-        final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return final_hidden_states
-
-    def router_bias_func(self, gating_output: torch.Tensor, topk: int, renormalize: bool):
-        gate_prob = torch.sigmoid(gating_output.float())
-        gate_prob_with_bias = gate_prob + self.router_bias.unsqueeze(0)
-        _, indices = torch.topk(gate_prob_with_bias, k=topk, dim=1)
-        topk_prob = torch.gather(gate_prob, 1, indices)
-        expert_topk_weight = topk_prob
-        if renormalize:
-            expert_topk_weight = expert_topk_weight / (torch.sum(expert_topk_weight, dim=-1, keepdim=True) + 1e-20)
-        return expert_topk_weight, indices
-
-    def get_expert_output(self, inputs: torch.Tensor, expert_id):
-        up = self.up_proj(inputs, expert_id)
-        gate = self.act_fn(self.gate_proj(inputs, expert_id))
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        # silu-then-clamp (Step3p7 order), vs DeepseekV4's clamp-then-silu
+        gate, up = gate_up.chunk(2, dim=-1)
+        gate = self.act_fn(gate)
         if self.limit is not None:
             gate = gate.clamp(min=None, max=self.limit)
             up = up.clamp(min=-self.limit, max=self.limit)
+        return gate * up
 
-        return self.down_proj(gate * up, expert_id)
+
+class Step3p7SparseMoeBlock(nn.Module):
+    def __init__(self, config, swiglu_limit=None, swiglu_limit_shared=None):
+        super().__init__()
+        self.gate = Step3p7TopKRouter(config)
+        self.experts = Step3p7Experts(config, swiglu_limit=swiglu_limit)
+        self.shared_experts = Step3p7SharedExpert(config, swiglu_limit=swiglu_limit_shared)
+        self.routed_scaling_factor = getattr(config, "moe_router_scaling_factor", 1.0)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states = hidden_states.view(-1, hidden_dim)
+        shared_output = self.shared_experts(hidden_states)
+
+        _, routing_weights, selected_experts = self.gate(hidden_states)
+        hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
+        # Additional scaling
+        hidden_states = hidden_states * self.routed_scaling_factor
+        hidden_states = hidden_states + shared_output
+
+        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        return hidden_states
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -709,45 +670,31 @@ class Step3p7Attention(nn.Module):
 
     def __init__(self, config: Step3p7TextConfig, layer_idx):
         super().__init__()
+        self.layer_type = config.layer_types[layer_idx]
+        config = copy.copy(config)
+        if self.layer_type == "sliding_attention":
+            config.num_attention_heads = config.num_sliding_attention_heads
+            config.rope_parameters = {"rope_type": "default", "rope_theta": config.rope_theta}
+        else:
+            config.rope_parameters = config.rope_scaling or {"rope_type": "default", "rope_theta": config.rope_theta}
         self.config = config
         self.layer_idx = layer_idx
-        self.num_attention_heads = config.num_attention_heads
-        self.num_key_value_heads = config.num_attention_groups
-
-        enable_sliding_window = config.layer_types[self.layer_idx] == "sliding_attention"
-
-        yarn_only_types = getattr(config, "yarn_only_types", None)
-        if yarn_only_types and config.layer_types[self.layer_idx] not in yarn_only_types:
-            config.rope_parameters = None
-        else:
-            config.rope_parameters = getattr(config, "rope_scaling", None)
-
-        self.sliding_window = config.sliding_window
-        if enable_sliding_window:
-            self.num_attention_heads = config.attention_other_setting["num_attention_heads"]
-            self.num_key_value_heads = config.attention_other_setting["num_attention_groups"]
-
-        if self.sliding_window is not None and enable_sliding_window:
-            self.sliding_window = self.sliding_window
-        else:
-            self.sliding_window = None
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // self.num_attention_heads)
-        self.num_key_value_groups = self.num_attention_heads // self.num_key_value_heads
-
-        self.rotary_emb = Step3p7RotaryEmbedding(config, layer_idx=layer_idx)
-
-        self.q_size = self.num_attention_heads * self.head_dim
-        self.kv_size = self.num_key_value_heads * self.head_dim
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
-
-        self.q_proj = nn.Linear(config.hidden_size, self.q_size, bias=False)
-        self.k_proj = nn.Linear(config.hidden_size, self.kv_size, bias=False)
-        self.v_proj = nn.Linear(config.hidden_size, self.kv_size, bias=False)
-        self.o_proj = nn.Linear(self.q_size, config.hidden_size, bias=False)
-        self.attention_dropout = getattr(config, "attention_dropout", 0.0)
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.q_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-
+        self.indexer = None
+        self.num_attention_heads = config.num_attention_heads
+        self.num_key_value_heads = config.num_attention_groups
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
+        self.rotary_emb = Step3p7RotaryEmbedding(config)
         self.g_proj = nn.Linear(config.hidden_size, self.num_attention_heads, bias=False)
 
     def forward(
@@ -765,6 +712,8 @@ class Step3p7Attention(nn.Module):
         query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        # per-head scalar gate_states (afmoe per-token, more fine-grained)
         gate_states = self.g_proj(hidden_states)
         cos, sin = self.rotary_emb(hidden_states, position_ids)
 
@@ -818,32 +767,27 @@ class Step3p7DecoderLayer(GradientCheckpointingLayer):
         else:
             moe_layers_idx = [i for i in range(1, config.num_hidden_layers)]
         self.is_moe_layer = layer_idx in moe_layers_idx
-        self.use_moe = False
 
-        if (
-            config.swiglu_limits_shared
+        swiglu_limit_shared = (
+            config.swiglu_limits_shared[layer_idx]
+            if config.swiglu_limits_shared
             and config.swiglu_limits_shared[layer_idx] is not None
             and config.swiglu_limits_shared[layer_idx] != 0
-        ):
-            swiglu_limit_shared = config.swiglu_limits_shared[layer_idx]
-        else:
-            swiglu_limit_shared = None
-        if (
-            config.swiglu_limits
+            else None
+        )
+        swiglu_limit = (
+            config.swiglu_limits[layer_idx]
+            if config.swiglu_limits
             and config.swiglu_limits[layer_idx] is not None
             and config.swiglu_limits[layer_idx] != 0
-        ):
-            swiglu_limit = config.swiglu_limits[layer_idx]
-        else:
-            swiglu_limit = None
+            else None
+        )
         if self.is_moe_layer:
-            self.moe = Step3p7MoE(config, swiglu_limit=swiglu_limit)
-            self.share_expert = Step3p7MLP(
-                config, intermediate_size=config.share_expert_dim, swiglu_limit=swiglu_limit_shared
+            self.mlp = Step3p7SparseMoeBlock(
+                config, swiglu_limit=swiglu_limit, swiglu_limit_shared=swiglu_limit_shared
             )
-            self.use_moe = True
         else:
-            self.mlp = Step3p7MLP(config, intermediate_size=config.intermediate_size, swiglu_limit=swiglu_limit_shared)
+            self.mlp = Step3p7MLP(config, swiglu_limit=swiglu_limit_shared)
 
         self.input_layernorm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -872,18 +816,7 @@ class Step3p7DecoderLayer(GradientCheckpointingLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        if self.use_moe:
-            share_output = self.share_expert(hidden_states)
-            moe_output = self.moe(hidden_states)
-            ffn_output = moe_output + share_output
-        else:
-            ffn_output = self.mlp(hidden_states)
-        if isinstance(ffn_output, tuple):
-            hidden_states, _ = ffn_output
-        else:
-            hidden_states = ffn_output
-
-        hidden_states = residual + hidden_states
+        hidden_states = residual + self.mlp(hidden_states)
         return hidden_states
 
 
@@ -1174,6 +1107,16 @@ class Step3p7Model(Step3p7PreTrainedModel):
 
 
 class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
+    # Extend parent's vision-attn converters with MoE weight fusing:
+    # original checkpoints store routed-expert gate and up as separate 3-D tensors;
+    # Step3p7Experts (like DeepseekV4Experts) expects them fused as gate_up_proj.
+    _vision_attn_converters = Step3p7PreTrainedModel._vision_attn_converters + [
+        WeightConverter(
+            source_patterns=["moe.gate_proj.weight", "moe.up_proj.weight"],
+            target_patterns=["mlp.experts.gate_up_proj"],
+            operations=[Concatenate(dim=1)],
+        ),
+    ]
     _checkpoint_conversion_mapping = {
         "^vision_model": "model.vision_model",
         r"^model(?!\.(language_model|vision_model))": "model.language_model",
@@ -1185,6 +1128,11 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         r"\.attn\.": ".self_attn.",
         r"\.ln_1\.": ".layer_norm1.",
         r"\.ln_2\.": ".layer_norm2.",
+        # MoE block restructure: moe.* + share_expert.* → mlp.{gate,experts,shared_experts}
+        ".moe.gate.weight": ".mlp.gate.weight",
+        ".moe.router_bias": ".mlp.gate.e_score_correction_bias",
+        ".moe.down_proj.weight": ".mlp.experts.down_proj",
+        ".share_expert.": ".mlp.shared_experts.",
     }
     _tied_weights_keys = ["lm_head.weight"]
     config: Step3p7Config
