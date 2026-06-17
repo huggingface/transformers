@@ -3823,7 +3823,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             register_kernel_mapping_transformers()
 
-            if kernel_config is not None and isinstance(kernel_config, KernelConfig):
+            if kernel_config is not None:
+                if isinstance(kernel_config, KernelConfig):
+                    raise ValueError(f"Expeced `kernel_config` to be of type `KernelConfig` but got {type(kernel_config)}")
+
                 # Since kernel_config is a correct value, set it as an attribute of the model so it can be used.
                 self.kernel_config = kernel_config
 
@@ -3834,12 +3837,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 kernel_config.create_compatible_mapping(self)
 
                 self.kernelize(mode=mode)
+                self.use_kernels = True
             # We use the default kernel mapping in .integrations.hub_kernels
             else:
-                self.kernel_config = None
                 self.kernelize(mode=mode)
+                self.use_kernels = True
         else:
-            self.kernel_config = None
             self.use_kernels = False
 
     @classmethod
@@ -4715,7 +4718,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
 
         if value:
-            self.kernelize()
+            self._use_kernels = True
+            self.set_use_kernels(True)
         else:
             if getattr(self, "_use_kernels", False):
                 logger.warning_once(
@@ -4945,7 +4949,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         out = super().train(mode)
         # Avoid recasting kernels if not necessary
         if self.use_kernels and changed_mode:
-            self.kernelize()
+            self.set_use_kernels(True)
         return out
 
     def eval(self):
