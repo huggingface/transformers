@@ -520,7 +520,7 @@ class BailingHybridPreTrainedModel(PreTrainedModel):
             # Reinitialize the slope buffer from config
             slopes = _build_slope_tensor(module.num_heads)
             layer_scale = 1 - (module.layer_idx - 1) / (self.config.num_hidden_layers - 1) + 1e-5
-            module.slope.copy_((-slopes * layer_scale).to(module.slope.dtype))
+            init.copy_(module.slope, (-slopes * layer_scale).to(module.slope.dtype))
 
 
 class BailingHybridModel(BailingHybridPreTrainedModel):
