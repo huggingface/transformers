@@ -26,7 +26,12 @@ from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import logging
-from ..utils.import_utils import is_kernels_available, is_torchdynamo_compiling
+from ..utils.import_utils import (
+    KERNELS_MAX_VERSION,
+    KERNELS_MIN_VERSION,
+    is_kernels_available,
+    is_torchdynamo_compiling,
+)
 from .deepgemm import (
     deepgemm_fp8_fp4_experts_forward,
     deepgemm_fp8_fp4_linear,
@@ -83,7 +88,9 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
     if not is_torchdynamo_compiling():
         if not is_kernels_available():
             raise ImportError(
-                "finegrained-fp8 kernel requires the `kernels` package. Install it with `pip install -U kernels`."
+                "finegrained-fp8 kernel requires the `kernels` package. "
+                f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+                f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
             )
 
     kernel = lazy_load_kernel("finegrained-fp8")
@@ -109,7 +116,8 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
     if missing:
         raise ImportError(
             f"finegrained-fp8 kernel is missing required symbols: {', '.join(missing)}. "
-            "Please update the `kernels` package (`pip install -U kernels`)."
+            f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+            f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
         )
 
     return FineGrainedFP8(
