@@ -22,15 +22,10 @@ rendered properly in your Markdown viewer.
 ESMFold2 is an all-atom protein structure prediction model. It predicts 3D coordinates and per-residue confidence
 (pLDDT, PAE, PDE) directly from an amino-acid sequence, using the [ESMC](./esmc) protein language model as its
 backbone. The architecture combines a sliding-window atom encoder with 3D rotary position embeddings, a pairwise
-folding trunk applied iteratively (the "parcae" recurrence), a diffusion-based structure head, and a confidence head.
+folding trunk applied iteratively, a diffusion-based structure head, and a confidence head.
 
-The ESMC backbone is a bundled submodule: it is built from `config.esmc_config` (defaulting to the ESMC-6B
-configuration) and its weights are part of the ESMFold2 checkpoint under `esmc.*`, so a single
-[`ESMFold2Model.from_pretrained`](#transformers.ESMFold2Model) loads the whole model — no separate backbone download.
-You can still bypass the backbone by supplying precomputed `lm_hidden_states` to `forward`.
-
-The model checkpoint is available on the Hugging Face Hub at
-[`biohub/ESMFold2`](https://huggingface.co/biohub/ESMFold2).
+The model checkpoints are available on the Hugging Face Hub at
+[`biohub/ESMFold2`](https://huggingface.co/biohub/ESMFold2) and [`biohub/ESMFold2-Fast`](https://huggingface.co/biohub/ESMFold2-Fast) 
 
 ## Usage example
 
@@ -49,8 +44,9 @@ with open("prediction.pdb", "w") as f:
 ```
 
 `infer_protein` returns the raw outputs (atom coordinates, distogram logits and confidence metrics) as an
-[`~models.esmfold2.modeling_esmfold2.ESMFold2Output`] if you need them instead of a PDB string. Generation is
-stochastic — set a manual seed for reproducible structures.
+[`~models.esmfold2.modeling_esmfold2.ESMFold2Output`] if you need them instead of a PDB string. You may get
+slightly different predictions if you run the same sequence multiple times. Set a manual seed if you want exactly
+reproducible structures.
 
 ## Faster inference with a fused kernel
 

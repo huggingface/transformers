@@ -19,17 +19,17 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-ESMC (ESM Cambrian) is a family of protein language models released by [EvolutionaryScale](https://www.evolutionaryscale.ai/).
-It is a bidirectional Transformer encoder trained with a masked-language-modelling objective over amino-acid sequences,
-using rotary position embeddings (RoPE), query/key LayerNorm and a SwiGLU feed-forward network. Like [ESM-2](./esm),
-ESMC produces per-residue representations that are useful for downstream protein modelling tasks; unlike ESMFold it is a
-sequence model only and does not predict structure.
+ESMC (ESM Cambrian) is a family of protein language models released by [BioHub](https://biohub.org/).
+It is a bidirectional Transformer encoder trained with a masked-language-modelling objective over amino-acid sequences.
+Like [ESM-2](./esm), ESMC produces per-residue representations that are useful for downstream protein modelling tasks.
+
+ESMC is suitable for fine-tuning on protein classification or token classification tasks. It is also used as the
+backbone of [ESMFold2](./esmfold2), where it generates representations that are used as input to the folding head.
 
 Pre-trained checkpoints are available on the Hugging Face Hub, including
 [`biohub/ESMC-300M`](https://huggingface.co/biohub/ESMC-300M),
 [`biohub/ESMC-600M`](https://huggingface.co/biohub/ESMC-600M) and
-[`biohub/ESMC-6B`](https://huggingface.co/biohub/ESMC-6B). The original code is available in the
-[`evolutionaryscale/esm`](https://github.com/evolutionaryscale/esm) repository.
+[`biohub/ESMC-6B`](https://huggingface.co/biohub/ESMC-6B).
 
 ## Usage example
 
