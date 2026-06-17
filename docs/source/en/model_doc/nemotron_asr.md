@@ -77,6 +77,7 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForRNNT.from_pretrained(model_id, device_map="auto")
 
 processor.set_num_lookahead_tokens(6)
+print(f"Streaming latency: {processor.streaming_latency_ms} ms")
 
 sampling_rate = processor.feature_extractor.sampling_rate
 audio = load_audio(
@@ -132,6 +133,29 @@ for text_chunk in streamer:
     print(text_chunk, end="", flush=True)
 thread.join()
 ```
+
+#### Streaming latency
+
+The latency is set by `num_lookahead_tokens`, the right attention context (lookahead, in subsampled encoder frames) each chunk waits for before it is emitted. A larger value lets each chunk see more future audio: better accuracy at the cost of higher latency. Inspect the supported trade-offs, select one, and read back the resulting latency:
+
+```python
+from transformers import AutoProcessor
+
+processor = AutoProcessor.from_pretrained("nvidia/nemotron-speech-streaming-en-0.6b")
+
+# Each supported `num_lookahead_tokens` mapped to its streaming latency in milliseconds:
+print(processor.supported_streaming_latencies_ms)
+# {13: 1120, 6: 560, 1: 160, 0: 80}
+
+# Select a right attention context (this also re-derives the streaming chunk sizes used above):
+processor.set_num_lookahead_tokens(6)
+
+# Latency of the current selection:
+print(processor.streaming_latency_ms)
+# 560
+```
+
+`set_num_lookahead_tokens` sizes the chunks the processor emits, and the matching `num_lookahead_tokens` must reach `generate` (in the snippet above it travels through `**inputs`/`**first_chunk_inputs`, which carries `num_lookahead_tokens`). Streaming `generate` raises if it is omitted.
 
 ## NemotronAsrConfig
 

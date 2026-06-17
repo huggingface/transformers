@@ -464,9 +464,9 @@ class NemotronAsrForRNNTIntegrationTest(unittest.TestCase):
     @slow
     def test_processor_streaming_latencies(self):
         """`streaming_latency_ms` reports the latency of the currently-selected right context, and
-        `supported_streaming_latencies` maps every supported right context to its latency. The streaming delay
-        of a right context `r` is `(r + 1)` encoder frames, each `subsampling_factor * hop_length / sampling_rate`
-        seconds long."""
+        `supported_streaming_latencies_ms` maps every supported right context to its latency. The streaming
+        delay of a right context `r` is `(r + 1)` encoder frames, each `subsampling_factor * hop_length /
+        sampling_rate` seconds long."""
         processor = self.processor
         fe = processor.feature_extractor
         frame_ms = processor._subsampling_factor * fe.hop_length / fe.sampling_rate * 1000
@@ -476,7 +476,7 @@ class NemotronAsrForRNNTIntegrationTest(unittest.TestCase):
             self.assertEqual(processor.streaming_latency_ms, round((right + 1) * frame_ms))
 
         self.assertEqual(
-            processor.supported_streaming_latencies,
+            processor.supported_streaming_latencies_ms,
             {right: round((right + 1) * frame_ms) for right in processor.supported_num_lookahead_tokens},
         )
 
