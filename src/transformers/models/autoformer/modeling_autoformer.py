@@ -55,18 +55,6 @@ class AutoFormerDecoderOutput(ModelOutput):
         hidden_size)` is output.
     trend (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Trend tensor for each time series.
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-        `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-        input) to speed up sequential decoding.
-    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`.
-
-        Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
-        weighted average in the cross-attention heads.
     """
 
     last_hidden_state: torch.FloatTensor | None = None
