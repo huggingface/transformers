@@ -49,6 +49,8 @@ from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
     apply_patches,
+    module_device,
+    module_dtype,
     register_fx_node_fix,
     register_fx_program_fix,
     register_patch,
@@ -164,7 +166,8 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     """CPU inference via XNNPACK. Moves the model to CPU and uses the default XnnpackPartitioner."""
 
     model.requires_grad_(False)
-    if model.device.type != "cpu":
+    device = module_device(model)
+    if device is not None and device.type != "cpu":
         model = model.to(device="cpu")
     # XNNPACK has no `_grouped_mm.out` kernel — force MoE experts to `batched_mm`.
     if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
@@ -179,10 +182,12 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     Moves the model to CUDA and upcasts to bfloat16 — required by the CUDA backend.
     """
     model.requires_grad_(False)
-    if model.device.type != "cuda":
+    dtype = module_dtype(model)
+    device = module_device(model)
+    if device is not None and device.type != "cuda":
         model = model.to(device="cuda")
-    if model.dtype != torch.bfloat16:
-        logger.warning(f"ExecuTorch CUDA backend requires bfloat16; upcasting model from {model.dtype}.")
+    if dtype is not None and dtype != torch.bfloat16:
+        logger.warning(f"ExecuTorch CUDA backend requires bfloat16; upcasting model from {dtype}.")
         model = model.to(dtype=torch.bfloat16)
     partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model.__class__.__name__)])]
     return model, sample_inputs, partitioner
@@ -344,16 +349,6 @@ def _patch_scaled_dot_product_attention(original):
         return original(
             query, key, value, attn_mask=attn_mask, dropout_p=dropout_p, is_causal=is_causal, scale=scale, **kwargs
         )
-
-    return patch
-
-
-@register_patch("executorch", "torch.nn.functional.dropout")
-def _patch_dropout(_original):
-    """No-op dropout for inference export."""
-
-    def patch(input, p=0.5, training=True, inplace=False):
-        return input
 
     return patch
 

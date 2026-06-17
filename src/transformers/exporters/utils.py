@@ -312,6 +312,28 @@ def cast_leaf_tensors(obj: Any, dtype: torch.dtype, device: torch.device) -> Any
     return _map_leaf_tensors(obj, _cast)
 
 
+def module_device(model: torch.nn.Module) -> torch.device | None:
+    """`.device` for any `nn.Module`. `PreTrainedModel` exposes it directly via `ModuleUtilsMixin`;
+    for plain submodules (e.g. a `Linear` or `MultiModalProjector` from a decomposed multimodal model)
+    we fall back to the first parameter. Returns `None` if the module has no parameters at all."""
+    if hasattr(model, "device"):
+        return model.device
+    try:
+        return next(model.parameters()).device
+    except StopIteration:
+        return None
+
+
+def module_dtype(model: torch.nn.Module) -> torch.dtype | None:
+    """`.dtype` for any `nn.Module`. Same fallback story as `module_device`."""
+    if hasattr(model, "dtype"):
+        return model.dtype
+    try:
+        return next(model.parameters()).dtype
+    except StopIteration:
+        return None
+
+
 # Output flags that should be set on `model.config`, not passed as forward() kwargs.
 _OUTPUT_FLAGS = ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss")
 
@@ -363,16 +385,10 @@ def prepare_for_export(
 
     # Cast all input tensors to match the model's dtype and device (e.g. cache objects
     # created before the model was moved to bfloat16/CUDA by a backend preparation step).
-    # `PreTrainedModel` exposes `.dtype` / `.device` via `ModuleUtilsMixin`; for a plain
-    # `nn.Module` we fall back to the first parameter (and skip if there are none).
-    if isinstance(model, PreTrainedModel):
-        inputs = cast_leaf_tensors(inputs, dtype=model.dtype, device=model.device)
-    else:
-        try:
-            param = next(model.parameters())
-            inputs = cast_leaf_tensors(inputs, dtype=param.dtype, device=param.device)
-        except StopIteration:
-            pass
+    dtype = module_dtype(model)
+    device = module_device(model)
+    if dtype is not None or device is not None:
+        inputs = cast_leaf_tensors(inputs, dtype=dtype, device=device)
 
     return model, inputs, output_flags
 
