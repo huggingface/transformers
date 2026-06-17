@@ -245,7 +245,7 @@ class TestHubKernels(TestCasePlus):
                     ("MLP", "model.layers.*.mlp"),
                 ): (
                     "AntonV/dummy-rmsnorm-mlp-with-transformations-and-init:RMSNormMLP",
-                    {"version": 0, "trust_remote_code": True},
+                    {"revision": "d582b66bea8e567dd06e683eca611648cfe53a7b", "trust_remote_code": True},
                 ),
             }
         )
@@ -296,7 +296,7 @@ class TestHubKernels(TestCasePlus):
             {
                 "RMSNorm": (
                     "AntonV/dummy-rmsnorm-kernel-with-init:CustomRMSNorm",
-                    {"version": 0, "trust_remote_code": True},
+                    {"revision": "e5dcd4fe743b81fa2b065964ef9a108107496c4f", "trust_remote_code": True},
                 )
             }
         )
@@ -340,7 +340,7 @@ class TestHubKernels(TestCasePlus):
                     ("MLP", "layers.*.mlp"),
                 ): (
                     "AntonV/dummy-rmsnorm-mlp-with-transformations-and-init:RMSNormMLP",
-                    {"version": 0, "trust_remote_code": True},
+                    {"revision": "d582b66bea8e567dd06e683eca611648cfe53a7b", "trust_remote_code": True},
                 ),
             }
         )
