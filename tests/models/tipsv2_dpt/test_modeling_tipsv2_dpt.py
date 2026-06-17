@@ -271,8 +271,8 @@ def prepare_img():
 class Tipsv2DptModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        # TODO: switch to Auto
-        return Tipsv2DptImageProcessor()
+        # TODO: switch to google repo before merge
+        return Tipsv2DptImageProcessor.from_pretrained("guarin/tipsv2-b14-dpt")
 
     @slow
     def test_inference_model(self):

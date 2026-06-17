@@ -416,10 +416,8 @@ def prepare_img():
 class Tipsv2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        # Hub repo does not ship a processor config yet — instantiate both components explicitly.
-        image_processor = Tipsv2ImageProcessor()
-        tokenizer = Tipsv2Tokenizer.from_pretrained("google/tipsv2-b14")
-        return Tipsv2Processor(image_processor=image_processor, tokenizer=tokenizer)
+        # TODO: switch to google repo before merge
+        return Tipsv2Processor.from_pretrained("guarin/tipsv2-b14")
 
     @slow
     @require_sentencepiece
