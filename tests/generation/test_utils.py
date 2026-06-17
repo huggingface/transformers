@@ -93,6 +93,7 @@ if is_torch_available():
         GenerateDecoderOnlyOutput,
         GenerateEncoderDecoderOutput,
         GenerationConfig,
+        GenerationMixin,
         LogitsProcessorList,
         MaxLengthCriteria,
         MinLengthLogitsProcessor,
@@ -2825,6 +2826,45 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 @pytest.mark.generate
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase):
+    def test_beam_search_reorders_non_default_cache_key(self):
+        class DummyCache:
+            beam_idx = None
+
+            def reorder_cache(self, beam_idx):
+                self.beam_idx = beam_idx
+
+        cache = DummyCache()
+        beam_idx = torch.tensor([2, 0, 1])
+        model_kwargs = {"past_key_values": None, "cache_params": cache}
+
+        GenerationMixin()._reorder_cache_for_beam_search(model_kwargs, beam_idx)
+
+        self.assertIs(cache.beam_idx, beam_idx)
+        self.assertIs(model_kwargs["cache_params"], cache)
+
+    def test_beam_search_uses_model_reorder_for_non_default_cache_key(self):
+        class DummyModel(GenerationMixin):
+            def _reorder_cache(self, cache, beam_idx):
+                return {"cache": cache, "beam_idx": beam_idx}
+
+        cache = object()
+        beam_idx = torch.tensor([1, 0])
+        model_kwargs = {"mems": cache}
+
+        DummyModel()._reorder_cache_for_beam_search(model_kwargs, beam_idx)
+
+        self.assertIs(model_kwargs["mems"]["cache"], cache)
+        self.assertIs(model_kwargs["mems"]["beam_idx"], beam_idx)
+
+    def test_beam_search_skips_non_default_cache_without_reorder(self):
+        cache = object()
+        beam_idx = torch.tensor([1, 0])
+        model_kwargs = {"past_key_values": None, "cache_params": cache}
+
+        GenerationMixin()._reorder_cache_for_beam_search(model_kwargs, beam_idx)
+
+        self.assertIs(model_kwargs["cache_params"], cache)
+
     def test_generation_config_defaults(self):
         "Tests that we can set config value to a global default. See https://github.com/huggingface/transformers/issues/42762"
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)

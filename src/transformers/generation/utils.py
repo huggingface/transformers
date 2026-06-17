@@ -2909,6 +2909,18 @@ class GenerationMixin(ContinuousMixin):
         shape = list(tensor.shape)
         return torch.reshape(tensor, [batch_size, num_beams] + shape[1:])
 
+    def _reorder_cache_for_beam_search(self, model_kwargs: dict[str, Any], beam_idx: torch.Tensor) -> None:
+        cache_key = next((key for key in ALL_CACHE_NAMES if model_kwargs.get(key) is not None), None)
+        if cache_key is None:
+            return
+        if hasattr(self, "_reorder_cache"):
+            model_kwargs[cache_key] = self._reorder_cache(model_kwargs[cache_key], beam_idx)
+        elif hasattr(model_kwargs[cache_key], "reorder_cache"):
+            model_kwargs[cache_key].reorder_cache(beam_idx)
+        elif cache_key == "past_key_values":
+            # Preserve the legacy default-cache failure mode, but allow linear-state caches under custom names.
+            model_kwargs[cache_key].reorder_cache(beam_idx)
+
     @staticmethod
     def _gather_beams(tensor: torch.Tensor, beam_indices: torch.Tensor) -> torch.Tensor:
         """
@@ -3401,12 +3413,8 @@ class GenerationMixin(ContinuousMixin):
 
             # pluck the cache from the beam indices that will be used in the next iteration
             # NOTE: we need to check if `self._reorder_cache` exists for special models like RAG, RecurrentGemma etc.
-            if model_kwargs.get("past_key_values") is not None:
-                beam_idx = self._flatten_beam_dim(running_beam_indices[..., cur_len - decoder_prompt_len])
-                if hasattr(self, "_reorder_cache"):
-                    model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
-                else:
-                    model_kwargs["past_key_values"].reorder_cache(beam_idx)
+            beam_idx = self._flatten_beam_dim(running_beam_indices[..., cur_len - decoder_prompt_len])
+            self._reorder_cache_for_beam_search(model_kwargs, beam_idx)
 
             cur_len = cur_len + 1
             is_early_stop_heuristic_unsatisfied = self._check_early_stop_heuristic(
