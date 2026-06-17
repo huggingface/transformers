@@ -26,7 +26,7 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, EmbeddingAccessMixin, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_sentencepiece import SentencePieceBackend
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
@@ -614,7 +614,7 @@ class Tipsv2TextPreTrainedModel(PreTrainedModel):
     The TIPSv2 text tower without any projection head on top.
     """
 )
-class Tipsv2TextModel(Tipsv2TextPreTrainedModel):
+class Tipsv2TextModel(Tipsv2TextPreTrainedModel, EmbeddingAccessMixin):
     _input_embed_layer = "token_embedding"
 
     def __init__(self, config: Tipsv2TextConfig):
@@ -625,12 +625,6 @@ class Tipsv2TextModel(Tipsv2TextPreTrainedModel):
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pooler = None
         self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.embeddings.token_embedding
-
-    def set_input_embeddings(self, value):
-        self.embeddings.token_embedding = value
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
