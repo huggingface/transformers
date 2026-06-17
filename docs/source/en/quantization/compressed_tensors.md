@@ -49,7 +49,7 @@ pip install -e .
 
 Search using the compressed-tensors [tag](https://huggingface.co/models?other=compressed-tensors) to find a compatible model on the Hugging Face Hub.
 
-Pre-quantized models can be loaded directly, or BF16 models can be quantized to FP8 on-the-fly during loading (see [Online FP8 quantization](#online-fp8-quantization)). To quantize a model into the compressed-tensors format, see [llm-compressor](https://github.com/vllm-project/llm-compressor). Alternatively, models can be created independently and serialized with a compressed-tensors config.
+Pre-quantized models can be loaded directly. To quantize a model into the compressed-tensors format, see [llm-compressor](https://github.com/vllm-project/llm-compressor). Alternatively, models can be created independently and serialized with a compressed-tensors config.
 
 ```python
 from transformers import AutoModelForCausalLM
@@ -97,27 +97,16 @@ outputs = model.generate(**inputs, max_new_tokens=20)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
-### Online FP8 quantization
+### Loading without the FP8 kernels
 
-Quantize a BF16 model to FP8 during loading by passing a [`CompressedTensorsConfig`] with an FP8 quantization scheme.
+To skip the FP8 kernels and load the model in its original precision (e.g. BF16), pass a [`CompressedTensorsConfig`] with `dequantize=True`. The weights are dequantized by compressed-tensors during loading, which is useful for fine-tuning or saving the model in BF16.
 
 ```python
 from transformers import AutoModelForCausalLM, CompressedTensorsConfig
-from compressed_tensors.quantization import QuantizationScheme, QuantizationArgs, QuantizationType, QuantizationStrategy
 
-ct_config = CompressedTensorsConfig(
-    config_groups={
-        "group_0": QuantizationScheme(
-            weights=QuantizationArgs(
-                num_bits=8, type=QuantizationType.FLOAT, strategy=QuantizationStrategy.CHANNEL,
-            ),
-        ),
-    },
-    run_compressed=True,
-)
 model = AutoModelForCausalLM.from_pretrained(
-    "Qwen/Qwen2.5-7B-Instruct",
-    quantization_config=ct_config,
+    "RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic",
+    quantization_config=CompressedTensorsConfig(dequantize=True),
     device_map="auto",
 )
 ```

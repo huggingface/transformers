@@ -146,12 +146,9 @@ class CompressedTensorsFP8Linear(nn.Linear):
 
 
 def replace_with_compressed_tensors_fp8_linear(
-    model, modules_to_not_convert=None, activation_scheme="dynamic", dequantize=False, pre_quantized=False
+    model, modules_to_not_convert=None, activation_scheme="dynamic", pre_quantized=False
 ):
     """Replace all nn.Linear modules with CompressedTensorsFP8Linear for compressed-tensors FP8 loading."""
-    if dequantize:
-        return model
-
     has_been_replaced = False
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
@@ -253,17 +250,6 @@ class CompressedTensorsFp8Dequantize(ConversionOps):
         return dequantized.to(torch.bfloat16)
 
     def convert(self, input_dict, full_layer_name=None, **kwargs):
-        # Terminal plain-Linear case (dequantize=True): the simple "weight$" pattern
-        # maps 1:1 onto a single target weight. Fold the scale in and emit a single
-        # BF16 tensor under the resolved target name.
-        if "weight$" in input_dict:
-            weight = input_dict["weight$"][0]
-            scale_key = next((k for k in input_dict if "weight_scale" in k), None)
-            if scale_key is None:
-                return {full_layer_name: weight}
-            scale = input_dict[scale_key][0]
-            return {full_layer_name: self._dequantize_one(weight, scale)}
-
         weight_keys = [k for k in input_dict if "weight" in k and "weight_scale" not in k]
         scale_keys = [k for k in input_dict if "weight_scale" in k]
 
