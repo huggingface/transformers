@@ -230,7 +230,7 @@ class Tipsv2Config(PreTrainedConfig):
         Dictionary of configuration options used to initialize [`Tipsv2TextConfig`].
     vision_config (`dict`, *optional*):
         Dictionary of configuration options used to initialize [`Tipsv2VisionConfig`].
-    temperature_init_value (`float`, *optional*, defaults to `0.01`):
+    temperature_init_value (`float`, *optional*, defaults to `0.005065968260169029`):
         Initial value for the learnable temperature parameter used to scale cosine-similarity logits in [`Tipsv2Model`].
 
     Example:
