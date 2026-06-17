@@ -223,6 +223,8 @@
       title: Accelerator selection
     - local: accelerate
       title: Accelerate
+    - local: distributed_config
+      title: DistributedConfig
     - local: ddp
       title: DDP
     - local: fsdp
