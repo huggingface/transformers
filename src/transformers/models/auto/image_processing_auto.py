@@ -30,6 +30,7 @@ from ...utils import (
     is_timm_config_dict,
     is_timm_local_checkpoint,
     is_torchvision_available,
+    is_vision_available,
     logging,
     safe_load_json_file,
 )
@@ -382,6 +383,29 @@ def _load_class_with_fallback(mapping, backend):
     return None
 
 
+def _format_unavailable_image_processor_error(pretrained_model_name_or_path, mapping):
+    available_backends = {backend: class_name for backend, class_name in mapping.items() if class_name is not None}
+    missing_dependencies = []
+    if "torchvision" in available_backends and not is_torchvision_available():
+        missing_dependencies.append("torchvision")
+    if "pil" in available_backends and not is_vision_available():
+        missing_dependencies.append("Pillow")
+
+    processor_options = ", ".join(f"{backend}: {class_name}" for backend, class_name in available_backends.items())
+    error_message = (
+        f"Could not load any image processor class for {pretrained_model_name_or_path}. "
+        f"The model configuration resolves to the following image processor classes: {processor_options}. "
+        "None of these classes could be imported."
+    )
+    if missing_dependencies:
+        error_message += f" Missing optional dependencies: {', '.join(missing_dependencies)}."
+    error_message += (
+        " Please install the missing dependencies or select a backend that is available in your environment."
+    )
+
+    return error_message
+
+
 def _find_mapping_for_image_processor(base_class_name: str) -> dict | None:
     """
     Find the backend->class mapping that contains base_class_name in its values.
@@ -621,9 +645,15 @@ class AutoImageProcessor:
         # Handle remote code
         has_remote_code = image_processor_auto_map is not None
         has_local_code = image_processor_class is not None or type(config) in IMAGE_PROCESSOR_MAPPING
-        explicit_local_code = has_local_code and not (
-            image_processor_class or _load_class_with_fallback(IMAGE_PROCESSOR_MAPPING[type(config)], backend)
-        ).__module__.startswith("transformers.")
+        local_image_processor_class = None
+        if has_local_code:
+            local_image_processor_class = image_processor_class or _load_class_with_fallback(
+                IMAGE_PROCESSOR_MAPPING[type(config)], backend
+            )
+        explicit_local_code = (
+            local_image_processor_class is not None
+            and not local_image_processor_class.__module__.startswith("transformers.")
+        )
         if has_remote_code:
             class_ref = _resolve_auto_map_class_ref(image_processor_auto_map, backend)
             upstream_repo = class_ref.split("--")[0] if "--" in class_ref else None
@@ -646,8 +676,14 @@ class AutoImageProcessor:
             if image_processor_class is not None:
                 return image_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-            available = [k for k, v in image_processor_mapping.items() if v is not None]
-            raise ValueError(f"Could not find image processor class. Available backends: {', '.join(available)}")
+            raise ValueError(
+                _format_unavailable_image_processor_error(pretrained_model_name_or_path, image_processor_mapping)
+            )
+        elif base_class_name is not None:
+            mapping = _find_mapping_for_image_processor(base_class_name)
+            if mapping is None:
+                mapping = {"torchvision": base_class_name, "pil": base_class_name + "Pil"}
+            raise ValueError(_format_unavailable_image_processor_error(pretrained_model_name_or_path, mapping))
         raise ValueError(
             f"Unrecognized image processor in {pretrained_model_name_or_path}. Should have a "
             f"`image_processor_type` key in its {IMAGE_PROCESSOR_NAME} of {CONFIG_NAME}, or one of the following "
