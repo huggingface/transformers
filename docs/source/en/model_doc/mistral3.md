@@ -194,8 +194,8 @@ model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 model = AutoModelForImageTextToText.from_pretrained(
-     model_checkpoint, quantization_config=quantization_config
- device_map="auto")
+     model_checkpoint, quantization_config=quantization_config,
+     device_map="auto")
 
 messages = [
      [

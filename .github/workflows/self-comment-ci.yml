@@ -55,7 +55,7 @@ jobs:
             COMMENT_TIMESTAMP=$(date -d "${COMMENT_DATE}" +"%s")
             echo "COMMENT_DATE: $COMMENT_DATE"
             echo "COMMENT_TIMESTAMP: $COMMENT_TIMESTAMP"
-            if [ $COMMENT_TIMESTAMP -le $PR_MERGE_COMMIT_TIMESTAMP ]; then
+            if [ "$COMMENT_TIMESTAMP" -le "$PR_MERGE_COMMIT_TIMESTAMP" ]; then
               echo "Last commit on the pull request is newer than the issue comment triggering this run! Abort!";
               exit -1;
             fi
@@ -79,7 +79,7 @@ jobs:
           VERIFIED_PR_MERGE_SHA: ${{ needs.check-timestamps.outputs.PR_MERGE_SHA }}
         run: |
             PR_MERGE_SHA=$(git log -1 --format=%H)
-            if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
+            if [ "$PR_MERGE_SHA" != "$VERIFIED_PR_MERGE_SHA" ]; then
               echo "The merged commit SHA is not the same as the verified one! Security issue detected, abort the workflow!";
               exit -1;
             fi
@@ -124,7 +124,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "repos/${github_repository}/issues/${pr_number}/comments" \
-            -f body="$(echo -e "$PREFIX")💔 This comment contains \`run-slow\`, but unknown error occurred and [the workflow run]($GITHUB_RUN_URL) aborted!"
+            -f body="$(echo -e "${PREFIX}💔 This comment contains \`run-slow\`, but unknown error occurred and the workflow run aborted!")"
 
   reply_to_comment:
     name: Reply to the comment
@@ -148,7 +148,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "repos/${github_repository}/issues/${pr_number}/comments" \
-            -f body="$(echo -e "$PREFIX")$(echo -e "$INFO"): $(echo -e "$BODY")"
+            -f body="$(echo -e "${PREFIX}${INFO}: ${BODY}")"
 
   create_run:
     name: Create run
@@ -287,7 +287,7 @@ jobs:
                     # Add tests to model lines
                     for idx, failure in enumerate(filtered_failures):
                         if idx == 0:
-                            job_link = failure['job_link']
+                            job_link = failure.get('job_link', '')
                             model_lines.append(f"- [{model}]({job_link}):")
         
                         test_name = failure['test']
