@@ -146,7 +146,7 @@ def distribute_model(model, distributed_config: DistributedConfig, device_mesh) 
     mesh_dim_names = device_mesh.mesh_dim_names or ()
     if "tp" in mesh_dim_names:
         tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
-        model = apply_tensor_parallel(model, tp_mesh, distributed_config.tp_plan)
+        model = apply_tensor_parallel(model, tp_mesh)
     if "fsdp" in mesh_dim_names:
         fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
         model = apply_fully_shard_data_parallel(model, fsdp_mesh)

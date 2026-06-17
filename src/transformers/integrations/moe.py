@@ -443,6 +443,12 @@ def grouped_mm_experts_forward(
     proj_out = _grouped_linear(
         selected_hidden_states_g, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, 2 * intermediate_dim) or  (S, intermediate_dim) depending on whether we have gating
+    # Mid-mask (bwd path). The up grouped_mm leaves sentinel rows of `proj_out` uninit. This
+    # matters in BACKWARD: the masked_fill_ backward zeros the gradient at sentinel rows (select,
+    # so even NaN → 0) before the non-linearity bwd's garbage can reach grad(gate_up_proj[_bias]).
+    # Forward needs no masking here (the down grouped_mm skips these rows) — the value-zeroing is
+    # just a harmless side effect.
+    proj_out.masked_fill_(sentinel_mask, 0.0)
 
     # Apply gating or activation
     if self.has_gate:

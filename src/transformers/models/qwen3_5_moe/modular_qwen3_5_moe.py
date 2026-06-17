@@ -90,6 +90,8 @@ class Qwen3_5MoeTextConfig(Qwen3NextConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
+        "layers.*.mlp.experts.down_proj": "moe_tp_down_rowwise",
         "layers.*.mlp.experts": "moe_experts_allreduce",
         "layers.*.mlp.shared_expert.gate_proj": "colwise",
         "layers.*.mlp.shared_expert.up_proj": "colwise",
@@ -249,6 +251,8 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3VLMoeForConditionalGeneration):
     _tp_plan = {"lm_head": "colwise_allgather"}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
     _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _tp_ep_plan = {"lm_head": "colwise_allgather"}
+    _sp_ep_plan = {"lm_head": "colwise_loss_parallel"}
 
     def forward(self, **super_kwargs):
         r"""
