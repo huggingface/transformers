@@ -475,15 +475,18 @@ class MiniMaxM3VLIndexer(nn.Module):
     The `index_local_blocks` boosting their score so they always win key slots, the
     same way the deployment block-sparse kernel (MiniMax `topk_sparse`) does it.
 
-    `forward` returns the per-query selected key-block indices
-    `[B, S_q, index_topk_blocks]`. Valid indices are left-packed and `-1`
+    `forward` returns the per-query, per-head selected key-block indices
+    `[B, index_n_heads, S_q, index_topk_blocks]` -- one independent block
+    selection per indexer head (`index_n_heads == num_key_value_heads`, so one
+    per KV / GQA group), matching the deployment kernel rather than a single
+    selection shared across all heads. Valid indices are left-packed and `-1`
     right-pads the unused slots (future/empty blocks), and the local boost makes
     selections deduplicated -- the exact contract the block-sparse attention
     kernel consumes (it counts the valid entries, then reads them sequentially
     and would double-count a repeated block). The eager/SDPA path instead calls
     `build_block_mask`, which expands the indices into the dense
-    `[B, 1, S_q, S_k]` additive mask the standard attention interface expects
-    (`0` at every allowed (query, key) pair, `-inf` elsewhere).
+    `[B, num_attention_heads, S_q, S_k]` additive mask the standard attention
+    interface expects (`0` at every allowed (query, key) pair, `-inf` elsewhere).
 
     Like DeepSeek-V4's indexer this is purely a *selection* branch: it has no
     value projection and produces no residual output of its own (the upstream
@@ -547,20 +550,25 @@ class MiniMaxM3VLIndexer(nn.Module):
         if pad:
             scores = F.pad(scores, (0, pad), value=float("-inf"))
         scores = scores.view(batch, self.num_heads, q_len, num_key_blocks, self.block_size)
-        block_scores = scores.amax(dim=-1).amax(dim=1)  # -> [B, S_q, num_key_blocks]
+        # Max-pool keys within each block, but keep the indexer-head axis. Each indexer head maps to
+        # one KV / GQA group (`index_n_heads == num_key_value_heads`) and selects its own blocks, the
+        # same per-head selection the deployment kernel does. Collapsing heads here (e.g. a second
+        # `amax(dim=1)` -> one shared selection) would diverge from that reference.
+        block_scores = scores.amax(dim=-1)  # -> [B, H_idx, S_q, num_key_blocks]
 
         q_block = position_ids // self.block_size  # [B, S_q]
 
         if self.local_blocks > 0:
             local = torch.arange(self.local_blocks, device=idx_q.device)
             local_idx = (q_block[..., None] - local.view(1, 1, -1)).clamp(min=0)  # [B, S_q, local]
+            local_idx = local_idx.unsqueeze(1).expand(-1, self.num_heads, -1, -1)  # [B, H_idx, S_q, local]
             block_scores.scatter_(-1, local_idx, float("inf"))
 
         # Slots that fall on a future/empty block keep their `-inf`
         # score, which top-k sorts to the end, so tagging them `-1` yields left-packed block indices
         # with `-1` right-padding which is the format expect by block-sparse attention kernel.
         topk = min(self.topk_blocks, num_key_blocks)
-        topk_scores, topk_indices = block_scores.topk(topk, dim=-1)  # [B, S_q, topk]
+        topk_scores, topk_indices = block_scores.topk(topk, dim=-1)  # [B, H_idx, S_q, topk]
         return topk_indices.masked_fill(topk_scores == float("-inf"), -1)
 
     def build_block_mask(
@@ -575,17 +583,20 @@ class MiniMaxM3VLIndexer(nn.Module):
         """
         We build the full 4D attention mask (Batch, query, key, head)
         """
-        batch, q_len, _ = block_indices.shape
+        batch, n_idx_heads, q_len, _ = block_indices.shape
         num_key_blocks = -(-key_length // self.block_size)
 
         # Scatter the kept blocks to `0`; `-1` slots land in a throwaway column we drop afterwards.
         safe = block_indices.masked_fill(block_indices < 0, num_key_blocks)
-        bias = block_indices.new_full((batch, q_len, num_key_blocks + 1), float("-inf"), dtype=dtype)
+        bias = block_indices.new_full((batch, n_idx_heads, q_len, num_key_blocks + 1), float("-inf"), dtype=dtype)
         bias.scatter_(-1, safe, 0.0)
         bias = bias[..., :num_key_blocks]
 
-        # Broadcast the per-block keep/drop verdict back onto every key (block granularity), add head axis.
-        block_keep = (bias == 0.0).repeat_interleave(self.block_size, dim=-1)[..., :key_length].unsqueeze(1)
+        # Broadcast the per-block keep/drop verdict back onto every key (block granularity). The indexer
+        # head axis carries one selection per KV / GQA group; expand it up to the full query-head count
+        # so each attention head sees its own group's block selection (not a single shared one).
+        block_keep = (bias == 0.0).repeat_interleave(self.block_size, dim=-1)[..., :key_length]
+        block_keep = block_keep.repeat_interleave(self.config.num_attention_heads // n_idx_heads, dim=1)
 
         # Compose block-selection with the existing mask, then emit a single additive float mask.
         if attention_mask is not None:

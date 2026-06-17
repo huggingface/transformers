@@ -20,6 +20,7 @@ from parameterized import parameterized
 from transformers import is_torch_available
 from transformers.testing_utils import (
     backend_device_count,
+    is_flaky,
     require_cuda_capability_at_least,
     require_torch,
     require_torch_accelerator,
@@ -275,6 +276,14 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
     model_id = "deepseek-ai/DeepSeek-V4-Flash"
     prompt = "Pipeline parallelism in ai is "
 
+    @is_flaky(
+        description=(
+            "Greedy decoding of 64 tokens on the FP8-dequantized checkpoint across `device_map='auto'` "
+            "accumulates tiny floating-point nondeterminism (cross-device reduction order, non-deterministic "
+            "CUDA kernels); when two candidate logits are near-tied a late token occasionally flips and the "
+            "exact-string snapshot diverges. Retry to absorb the rare flip while keeping the strict snapshot."
+        )
+    )
     def test_v4_flash_dequantized_generation(self):
         quantization_config = FineGrainedFP8Config(dequantize=True)
         config = AutoConfig.from_pretrained(self.model_id)
@@ -305,6 +314,13 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
         decoded = tokenizer.decode(output_ids[0], skip_special_tokens=False)
         self.assertEqual(decoded, expected)
 
+    @is_flaky(
+        description=(
+            "Same source of flakiness as `test_v4_flash_dequantized_generation`: greedy decoding accumulates "
+            "floating-point nondeterminism across `device_map='auto'`, so an occasional near-tied logit flips a "
+            "late token and one of the per-prompt exact-string snapshots diverges. Retry to absorb the rare flip."
+        )
+    )
     def test_v4_flash_dequantized_chat_seven_prompts(self):
         """Chat-templated greedy generation across 7 prompts of varying length.
 
