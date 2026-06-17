@@ -837,27 +837,24 @@ class ESMFold2AttentionPairBias(nn.Module):
         if attention_mask is not None and attention_mask.shape[0] != bsz and num_diffusion_samples > 1:
             attention_mask = attention_mask.repeat_interleave(num_diffusion_samples, dim=0)
 
-        # Standard attention with pair bias
         g = torch.sigmoid(self.g_proj(x)).view(bsz, n_queries, self.num_heads, self.head_dim)
-
-        logits = torch.einsum("... i h d, ... j h d -> ... i j h", q, k) * self.scale
 
         # ``pair_bias`` is step-invariant; the diffusion sampler precomputes and
         # caches it across steps. Compute inline when not supplied (e.g. uncached).
         if pair_bias is None:
             pair_bias = self.compute_pair_bias(z, bsz, num_diffusion_samples)
-        logits = logits + pair_bias.to(dtype=logits.dtype)
 
+        attn_bias = pair_bias.permute(0, 3, 1, 2)  # [B,Q,K,H]->[B,H,Q,K] (H may be 1)
         if attention_mask is not None:
-            min_val = torch.finfo(logits.dtype).min
-            mask_bias = torch.where(attention_mask.bool()[:, None, :, None], 0.0, min_val)
-            logits = logits + mask_bias.to(dtype=logits.dtype)
+            min_val = torch.finfo(q.dtype).min
+            mask_bias = torch.where(attention_mask.bool()[:, None, None, :], 0.0, min_val)
+            attn_bias = attn_bias + mask_bias
+        qh, kh, vh = (t.transpose(1, 2) for t in (q, k, v))  # [B,H,Q,D]
+        ctx = F.scaled_dot_product_attention(qh, kh, vh, attn_mask=attn_bias.to(qh.dtype), scale=self.scale)
+        ctx = ctx.transpose(1, 2)  # [B,H,Q,D]->[B,Q,H,D]
 
-        attn = torch.softmax(logits, dim=-2, dtype=torch.float32).to(dtype=v.dtype)
-        ctx = torch.einsum("... i j h, ... j h d -> ... i h d", attn, v)
         ctx = g * ctx
         out = self.out_proj(ctx.reshape(bsz, n_queries, d_model).to(v.dtype))
-
         out = torch.sigmoid(self.out_gate(s)) * out
         return out
 
