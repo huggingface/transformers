@@ -293,6 +293,11 @@ if is_kernels_available():
             "cuda": FuncRepository(
                 repo_id="kernels-community/rotary", func_name="apply_rotary_transformers", version=1
             ),
+            "rocm": {
+                Mode.INFERENCE: FuncRepository(
+                    repo_id="kernels-community/aiter-rope", func_name="apply_rotary_transformers", version=1
+                )
+            },
         },
         "ForCausalLMLoss": {
             "cuda": {
