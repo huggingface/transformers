@@ -3839,9 +3839,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 kernel_config.create_compatible_mapping(self)
 
             self.kernelize(mode=mode)
-            self.use_kernels = True
+            self._use_kernels = True
         else:
-            self.use_kernels = False
+            self._use_kernels = False
 
     @classmethod
     def from_pretrained(
@@ -4716,7 +4716,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
 
         if value:
-            self._use_kernels = True
             self.set_use_kernels(True)
         else:
             if getattr(self, "_use_kernels", False):
