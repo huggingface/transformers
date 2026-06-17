@@ -37,7 +37,7 @@ body:
         Models:
 
           - text models: @ArthurZucker @Cyrilvallez
-          - vision models: @yonigozlan @molbap
+          - vision models: @molbap @guarin
           - audio models: @eustlb @ebezzam @vasqu
           - multimodal models: @zucchini-nlp
           - graph models: @clefourrier
