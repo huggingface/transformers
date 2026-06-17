@@ -462,6 +462,25 @@ class NemotronAsrForRNNTIntegrationTest(unittest.TestCase):
             processor.set_num_lookahead_tokens(max(processor.supported_num_lookahead_tokens) + 1)
 
     @slow
+    def test_processor_streaming_latencies(self):
+        """`streaming_latency_ms` reports the latency of the currently-selected right context, and
+        `supported_streaming_latencies` maps every supported right context to its latency. The streaming delay
+        of a right context `r` is `(r + 1)` encoder frames, each `subsampling_factor * hop_length / sampling_rate`
+        seconds long."""
+        processor = self.processor
+        fe = processor.feature_extractor
+        frame_ms = processor._subsampling_factor * fe.hop_length / fe.sampling_rate * 1000
+
+        for right in processor.supported_num_lookahead_tokens:
+            processor.set_num_lookahead_tokens(right)
+            self.assertEqual(processor.streaming_latency_ms, round((right + 1) * frame_ms))
+
+        self.assertEqual(
+            processor.supported_streaming_latencies,
+            {right: round((right + 1) * frame_ms) for right in processor.supported_num_lookahead_tokens},
+        )
+
+    @slow
     def test_rnnt_model_integration(self):
         # NeMo `nvidia/nemotron-speech-streaming-en-0.6b` reference; HF matches it exactly.
         # reproducer: https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb#file-reproducer_single_rnnt-py

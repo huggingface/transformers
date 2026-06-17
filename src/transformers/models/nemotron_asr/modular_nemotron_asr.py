@@ -322,6 +322,31 @@ class NemotronAsrProcessor(ParakeetProcessor):
         return output_kwargs["audio_kwargs"]["subsampling_factor"]
 
     @property
+    def _encoder_frame_ms(self) -> float:
+        """Duration in milliseconds of one subsampled encoder frame (`subsampling_factor * hop_length / sampling_rate`)."""
+        return self._subsampling_factor * self.feature_extractor.hop_length / self.feature_extractor.sampling_rate * 1000
+
+    @property
+    def streaming_latency_ms(self) -> int:
+        """
+        Streaming latency (ms) of the currently-selected right attention context
+        (`default_num_lookahead_tokens`, settable via [`~NemotronAsrProcessor.set_num_lookahead_tokens`]).
+
+        The model emits a chunk only once its last frame has its full lookahead, so the delay of a right
+        context `r` is `(r + 1)` encoder frames, i.e. `(r + 1) * encoder_frame_ms`.
+        """
+        return round((self.default_num_lookahead_tokens + 1) * self._encoder_frame_ms)
+
+    @property
+    def supported_streaming_latencies(self) -> dict[int, int]:
+        """
+        Mapping from each supported right attention context (`supported_num_lookahead_tokens`) to its streaming
+        latency in milliseconds (`(num_lookahead_tokens + 1) * encoder_frame_ms`).
+        """
+        frame_ms = self._encoder_frame_ms
+        return {right: round((right + 1) * frame_ms) for right in self.supported_num_lookahead_tokens}
+
+    @property
     def num_mel_frames_first_audio_chunk(self) -> int:
         """
         Number of mel frames the first cache-aware streaming chunk must carry, for the model's
